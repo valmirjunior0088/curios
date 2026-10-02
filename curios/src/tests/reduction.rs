@@ -16,7 +16,7 @@ use {
     curios_core::{Consumption, Cost},
     curios_pipeline::{
         DEFAULT_STEP_BUDGET, recheck_with_prelude, recheck_with_prelude_measured,
-        typecheck_with_prelude, typecheck_with_prelude_measured,
+        typecheck_with_prelude,
     },
     curios_text::{Entrypoint, RootSource},
     std::time::{Duration, Instant},
@@ -144,9 +144,9 @@ fn elaborator_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
 ///
 /// Elaborating once at the default budget and re-certifying the result is what separates the two counters: the module does not change with the budget the kernel is then given, so the sweep measures the kernel's own spend rather than a compile that fails earlier.
 fn kernel_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
-    let (module, _obligations) =
-        typecheck_with_prelude(DEFAULT_STEP_BUDGET, entrypoint, &RootSource::none())
-            .expect("the arm elaborates within the default budget");
+    let module = typecheck_with_prelude(DEFAULT_STEP_BUDGET, entrypoint, &RootSource::none())
+        .expect("the arm elaborates within the default budget")
+        .program;
 
     let module = curios_core::Zonked::project(&module).expect("the checked module is zonked");
     floor(|budget| recheck_with_prelude(&module, budget).is_empty())
@@ -380,10 +380,11 @@ fn bytes_literal(n: usize) -> String {
 /// Reported rather than bisected. A budget floor found from outside costs one whole compile per probe, reports only the larger of the two checkers, and cannot separate depth from the rest at all — which is the separation that matters, because depth is the one row whose size is set by the reduction *strategy* rather than by the term.
 fn declaration_cost(source: &str) -> (Consumption, Consumption) {
     let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
-    let (module, _obligations, elaborator) =
-        typecheck_with_prelude_measured(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
-            .expect("the program elaborates within the default budget");
-    let module = curios_core::Zonked::project(&module).expect("the checked module is zonked");
+    let checked = typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+        .expect("the program elaborates within the default budget");
+    let elaborator = checked.consumption;
+    let module =
+        curios_core::Zonked::project(&checked.program).expect("the checked module is zonked");
     let (verdicts, kernel) = recheck_with_prelude_measured(&module, DEFAULT_STEP_BUDGET);
 
     assert!(verdicts.is_empty(), "the kernel accepts it: {verdicts:?}");
@@ -454,8 +455,8 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 
     let elaborated = |source: &str, budget: u64| {
         let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
-        typecheck_with_prelude_measured(budget, &entrypoint, &RootSource::none())
-            .map(|(module, _, heaviest)| (module, heaviest.units()))
+        typecheck_with_prelude(budget, &entrypoint, &RootSource::none())
+            .map(|checked| (checked.program, checked.consumption.units()))
     };
     let (alone_module, alone_units) =
         elaborated(&alone, DEFAULT_STEP_BUDGET).expect("`_b` elaborates alone");
@@ -814,11 +815,10 @@ fn a_recursive_call_read_twice_is_evaluated_once() {
     let units = |width: usize, paired: bool| {
         let source = paired_fold(width, paired);
         let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
-        let (_, _, consumption) =
-            typecheck_with_prelude_measured(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
-                .expect("the fold elaborates within the default budget");
-
-        consumption.units()
+        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+            .expect("the fold elaborates within the default budget")
+            .consumption
+            .units()
     };
 
     let paired = [4usize, 8, 12, 16].map(|width| units(width, true));

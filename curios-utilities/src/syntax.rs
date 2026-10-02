@@ -324,6 +324,8 @@ pub struct ProofSyntax {
     pub true_qed: SyntaxName,
     /// The trivially true proposition itself. Named beside its constructor because discharging an obligation needs both halves: this one recognises a goal worth discharging, `true_qed` inhabits it.
     pub true_type: SyntaxName,
+    /// The proposition nothing inhabits: what an entry put as a proof is judged at, the claim being that no closed term has it.
+    pub false_type: SyntaxName,
     /// The reflection of a decided comparison into a proposition — `Holds(b)`, which reduces to [`ProofSyntax::true_type`] on a refined scrutinee, and that is what lets an obligation be discharged without a written proof.
     ///
     /// **Every bound stated over an intrinsic comparison is built from this one rather than named.** A comparison is a term the table already holds the operands of, so naming five separate propositions — `Lt`, `Le`, `NonZero`, `NonNeg`, `EightBytes` — would make the roster reach into a root above it for what it can spell itself.
@@ -335,10 +337,11 @@ impl ProofSyntax {
         let Self {
             true_qed,
             true_type,
+            false_type,
             holds,
         } = self;
 
-        [true_qed, true_type, holds].into_iter()
+        [true_qed, true_type, false_type, holds].into_iter()
     }
 }
 

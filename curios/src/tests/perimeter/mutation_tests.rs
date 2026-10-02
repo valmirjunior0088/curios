@@ -77,7 +77,11 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
         let entrypoint = source
             .parse::<Entrypoint>()
             .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-        let (program, obligations) = curios_pipeline::typecheck_with_prelude(
+        let curios_pipeline::Typechecked {
+            program,
+            obligations,
+            ..
+        } = curios_pipeline::typecheck_with_prelude(
             curios_pipeline::DEFAULT_STEP_BUDGET,
             &entrypoint,
             &RootSource::none(),
@@ -132,12 +136,13 @@ fn every_type_replaced_by_another_item_s_is_refused() {
         let entrypoint = source
             .parse::<Entrypoint>()
             .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-        let (program, _) = curios_pipeline::typecheck_with_prelude(
+        let program = curios_pipeline::typecheck_with_prelude(
             curios_pipeline::DEFAULT_STEP_BUDGET,
             &entrypoint,
             &RootSource::none(),
         )
-        .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
+        .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"))
+        .program;
 
         let declared = lets(&program.module)
             .into_iter()
@@ -215,14 +220,13 @@ fn elaborated(description: &str, source: &str) -> Program {
     let entrypoint = source
         .parse::<Entrypoint>()
         .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-    let (program, _) = curios_pipeline::typecheck_with_prelude(
+    curios_pipeline::typecheck_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
     )
-    .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
-
-    program
+    .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"))
+    .program
 }
 
 /// A body grafted from a program that differs only in an index must be refused by the host.

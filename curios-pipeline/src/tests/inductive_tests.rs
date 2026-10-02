@@ -14,10 +14,11 @@ fn omitted_motive_mentioning_a_type_param_lowers() {
             | false => a
             | true => b
             end;
-        pick(/std/Nat, 1, 2, true)
+        let subject : /std/Nat = pick(/std/Nat, 1, 2, true);
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Nat")).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -28,7 +29,7 @@ fn projection_through_a_stuck_inductive_payload_lowers() {
         Fmt/print("% is %")("a")(1)
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -40,19 +41,19 @@ fn checked_constructor_postpones_a_tuple_under_a_holed_type_arg() {
         let f(a : Nat) -> Result(Nat, { Nat, Nat }) =
             Result/success((a, a));
         let r : Result(Nat, { Nat, Nat }) = f(7);
-        0
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Nat")).is_ok());
+    assert!(compile(source).is_ok());
 
     // In infer position nothing pins the holes, so the postponed tuple is re-checked against a still-unsolved metavar and rejected — graceful degradation, no new acceptance of un-annotated constructors. The infer position is a typeless local `let`: the entrypoint tail is always checked.
     let unpinned = r#"
         use /std/{Result};
         let bad = Result/success((1, 1));
-        0
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(unpinned, Some("/std/Nat")).is_err());
+    assert!(compile(unpinned).is_err());
 }
 
 #[test]
@@ -69,7 +70,7 @@ fn match_arm_arity_is_checked_statically() {
         f(Result/success(7))
     "#;
 
-    let error = compile(source, None).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("constructor 'success' takes 1 argument(s) but the match arm binds 2"),
@@ -86,13 +87,14 @@ fn non_pub_inductive_constructors_are_usable_in_the_declaring_module() {
         | none()
         | some(Nat)
         end
-        match Opt/some(7) : (_) => Nat
+        let subject : /std/Nat = match Opt/some(7) : (_) => Nat
         | none() => 0
         | some(n) => n
-        end
+        end;
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Nat")).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -107,7 +109,7 @@ fn non_pub_inductive_constructors_stay_private_across_modules() {
         m/Secret/hide(7)
     "#;
 
-    assert!(compile(source, None).is_err());
+    assert!(compile(source).is_err());
 }
 
 #[test]
@@ -120,7 +122,7 @@ fn match_on_a_non_inductive_scrutinee_is_rejected_directly() {
         end
     "#;
 
-    let error = compile(source, None).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("matched inductive constructors on a non-inductive type"),
@@ -139,10 +141,11 @@ fn new_style_inductive_match_lowers_end_to_end() {
             | success(value) => value
             | failure(_) => 0
             end;
-        f(Result/success(7))
+        let subject : /std/Nat = f(Result/success(7));
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Nat")).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -160,10 +163,11 @@ fn indexed_inductive_declares_constructs_and_matches() {
             | cons(@m, x, xs) => Nat/add(len(xs), 1)
             end;
         let v : Vec(Nat)(2) = Vec/cons(10, Vec/cons(20, Vec/nil()));
-        len(v)
+        let subject : /std/Nat = len(v);
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Nat")).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -176,13 +180,14 @@ fn indexed_inductive_without_params_and_unnamed_index_lowers() {
         | b() : (7)
         end
         let t : Tag(7) = Tag/b();
-        match t : (_, _) => Bytes
+        let subject : /std/Bytes = match t : (_, _) => Bytes
         | a() => /std/Str/to_bytes("a")
         | b() => /std/Str/to_bytes("b")
-        end
+        end;
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Bytes")).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -202,10 +207,10 @@ fn indexed_inductive_motive_binds_the_index() {
         let a : Vec(Nat)(2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
         let b : Vec(Nat)(1) = Vec/cons(3, Vec/nil());
         let c : Vec(Nat)(3) = append(a, b);
-        0
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Nat")).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -229,7 +234,7 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
         0
     "#
     );
-    let error = compile(&under, None).unwrap_err();
+    let error = compile(&under).unwrap_err();
     assert!(
         error.contains("motive binds 1 name(s)") && error.contains("needs 2"),
         "unexpected error: {error}"
@@ -245,7 +250,7 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
         0
     "#
     );
-    let error = compile(&over, None).unwrap_err();
+    let error = compile(&over).unwrap_err();
     assert!(
         error.contains("motive binds 3 name(s)") && error.contains("needs 2"),
         "unexpected error: {error}"
@@ -259,10 +264,10 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
             | nil() => 0
             | cons(@m, x, xs) => 1
             end;
-        0
+        /std/Io/pure(())
     "#
     );
-    let error = compile(&wrong_annotation, Some("/std/Nat")).unwrap_err();
+    let error = compile(&wrong_annotation).unwrap_err();
     assert!(error.contains("mismatch"), "unexpected error: {error}");
 }
 
@@ -299,10 +304,11 @@ fn index_refinement_learns_inside_the_arm() {
         let p : Eq(Nat)(0, 0) = Eq/refl(0);
         let b : Vec(Bytes)(0) = subst(p, a);
         let q : Eq(Nat)(3, 3) = sym(Eq/refl(3));
-        f(Vec/nil(@Bytes), Vec/nil())
+        let subject : /std/Nat = f(Vec/nil(@Bytes), Vec/nil());
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Nat")).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -314,10 +320,11 @@ fn empty_inductive_lowers_and_vacuous_match_eliminates_it() {
         let absurd(A : Type, v : False) -> A =
             match v : (_) => A
             end;
-        5
+        let subject : /std/Nat = 5;
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Nat")).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -339,15 +346,16 @@ fn inversion_prunes_impossible_arms_and_solves_binders() {
             end;
         let v : Vec(Bytes)(2) = Vec/cons(/std/Str/to_bytes("a"), Vec/cons(/std/Str/to_bytes("b"), Vec/nil()));
         let w : Vec(Bytes)(1) = rest(v);
-        first(w)
+        let subject : /std/Bytes = first(w);
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Bytes")).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
 fn impossible_inductive_arm_lowers_to_unreachable() {
-    // The element is a lambda parameter so the scrutinee stays runtime — a fully-constant vector would be folded whole by ersd's `evaluate` pass, and the pruned arm would never reach the lowering this pins.
+    // The element is a line read at run time so the scrutinee stays runtime — a fully-constant vector would be folded whole by ersd's `evaluate` pass, and the pruned arm would never reach the lowering this pins.
     let source = r#"
         use /std/{Nat, Bytes};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -358,10 +366,14 @@ fn impossible_inductive_arm_lowers_to_unreachable() {
             match v : (_, _) => T
             | cons(@j, x, xs) => x
             end;
-        (b : Bytes) => first(Vec/cons(b, Vec/nil()))
+        /std/Io/bind(/std/Io/read_line(/std/Io/stdin), (line) =>
+            match line
+            | some(b) => /std/Io/write(/std/Io/stdout, first(Vec/cons(b, Vec/nil())))
+            | none() => /std/Io/pure(())
+            end)
     "#;
 
-    let (ersd, cont) = compile_printed_stages(source, Some("(/std/Bytes) -> /std/Bytes")).unwrap();
+    let (ersd, cont) = compile_printed_stages(source).unwrap();
 
     assert!(
         ersd.contains("unreachable"),
@@ -386,9 +398,9 @@ fn omission_requires_a_definite_clash() {
             match v : (_, _) => Nat
             | cons(@j, x, xs) => 1
             end;
-        0
+        /std/Io/pure(())
     "#;
-    let error = compile(opaque, Some("/std/Nat")).unwrap_err();
+    let error = compile(opaque).unwrap_err();
     assert!(
         error.contains("not provably impossible"),
         "unexpected error: {error}"
@@ -405,9 +417,9 @@ fn omission_requires_a_definite_clash() {
             match q : (_, _, _) => Bytes
             | diff() => /std/Str/to_bytes("d")
             end;
-        0
+        /std/Io/pure(())
     "#;
-    let error = compile(open_forcing, Some("/std/Nat")).unwrap_err();
+    let error = compile(open_forcing).unwrap_err();
     assert!(
         error.contains("missing arm 'same'"),
         "unexpected error: {error}"
@@ -424,9 +436,9 @@ fn omission_requires_a_definite_clash() {
             match q : (_, _, _) => Bytes
             | diff() => /std/Str/to_bytes("d")
             end;
-        0
+        /std/Io/pure(())
     "#;
-    assert!(compile(twice_forced, Some("/std/Nat")).is_ok());
+    assert!(compile(twice_forced).is_ok());
 
     let prunes = r#"
         use /std/{Nat, Bytes};
@@ -438,9 +450,10 @@ fn omission_requires_a_definite_clash() {
             match q : (_, _, _) => Bytes
             | same(z) => /std/Str/to_bytes("s")
             end;
-        g(Foo/same(5))
+        let subject : /std/Bytes = g(Foo/same(5));
+        /std/Io/pure(())
     "#;
-    assert!(compile(prunes, Some("/std/Bytes")).is_ok());
+    assert!(compile(prunes).is_ok());
 }
 
 #[test]
@@ -453,10 +466,10 @@ fn indexed_inductive_index_mismatch_is_rejected() {
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
         let v : Vec(Nat)(3) = Vec/cons(10, Vec/cons(20, Vec/nil()));
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("type mismatch"), "unexpected error: {error}");
 }
@@ -516,9 +529,9 @@ fn payload_relying_on_implicit_insertion_is_rebuilt() {
         induct Box : Type
         | mk(p : Eq()(0, 1))
         end
-        0
+        /std/Io/pure(())
     "#;
-    assert!(typecheck(payload, Some("/std/Nat")).is_ok());
+    assert!(typecheck(payload).is_ok());
 
     // Index types take the same path — and left lowered would panic even earlier, while the type-constructor binding itself elaborated (its body's `InductiveType` node checks against the index telescope).
     let index = r#"
@@ -528,9 +541,9 @@ fn payload_relying_on_implicit_insertion_is_rebuilt() {
         induct Tag : (p : Eq()(0, 0)) -> Type
         | mk() : (Eq/refl(0))
         end
-        0
+        /std/Io/pure(())
     "#;
-    assert!(typecheck(index, Some("/std/Nat")).is_ok());
+    assert!(typecheck(index).is_ok());
 
     // End to end: construct and eliminate through the rebuilt registry — the match arm's binder is typed from the rebuilt payload type, and the whole program lowers to wasm.
     let through = r#"
@@ -542,11 +555,12 @@ fn payload_relying_on_implicit_insertion_is_rebuilt() {
         | mk(p : Eq()(0, 0))
         end
         let b : Box = Box/mk(Eq/refl(0));
-        match b : (_) => Nat
+        let subject : /std/Nat = match b : (_) => Nat
         | mk(p) => 7
-        end
+        end;
+        /std/Io/pure(())
     "#;
-    assert!(compile(through, Some("/std/Nat")).is_ok());
+    assert!(compile(through).is_ok());
 }
 
 #[test]
@@ -559,10 +573,10 @@ fn an_indexed_familys_type_takes_its_parameters_and_then_its_indices() {
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (m + 1)
         end
         let t : ? = Vec;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("? = (T: Type) -> (n: Nat) -> Type"),
@@ -581,10 +595,10 @@ fn an_indexed_family_at_its_parameters_is_a_family_of_its_own() {
         end
         let family : (Nat) -> Type = Vec(Nat);
         let v : family(1) = Vec/cons(7, Vec/nil());
-        0
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Nat")).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -597,10 +611,10 @@ fn an_indexed_family_applied_in_one_call_is_refused() {
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (m + 1)
         end
         let v : Vec(Nat, 0) = Vec/nil();
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("wrong number of arguments: expected 1, got 2"),
@@ -615,16 +629,16 @@ fn a_familys_implicit_parameters_still_take_a_call_of_their_own() {
         use /std/{Nat, Eq};
         let a : Eq()(0, 0) = Eq/refl();
         let b : Eq(@Nat)(0, 0) = Eq/refl();
-        0
+        /std/Io/pure(())
     "#;
-    assert!(compile(accepted, Some("/std/Nat")).is_ok());
+    assert!(compile(accepted).is_ok());
 
     let refused = r#"
         use /std/{Nat, Eq};
         let a : Eq(0, 0) = Eq/refl();
-        0
+        /std/Io/pure(())
     "#;
-    let error = compile(refused, Some("/std/Nat")).unwrap_err();
+    let error = compile(refused).unwrap_err();
     assert!(
         error.contains("wrong number of arguments: expected 0, got 2"),
         "unexpected error: {error}"

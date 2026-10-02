@@ -1139,7 +1139,7 @@ pub(super) enum Verdict {
 
 /// Put `source` to each checker independently, and report what each said.
 ///
-/// The elaborator's erasure obligations are *reported* rather than raised (`typecheck_reporting`), so a program only it refuses still yields a module for the kernel to judge. Without that the kernel's column would read whatever the elaborator's short circuit left behind, which is exactly the disagreement this exists to expose.
+/// The elaborator's erasure obligations are *reported* rather than raised (`curios_pipeline::typecheck_entrypoint`), so a program only it refuses still yields a module for the kernel to judge. Without that the kernel's column would read whatever the elaborator's short circuit left behind, which is exactly the disagreement this exists to expose.
 pub(super) fn both_checkers(source: &str) -> (Verdict, Verdict) {
     // A rule enforced by the grammar refuses here, before either checker exists. `foreign`'s wire contract is the standing example, and recording it is more honest than asserting the fixture parses: it says plainly that the rule is the parser's.
     //
@@ -1155,10 +1155,14 @@ pub(super) fn both_checkers(source: &str) -> (Verdict, Verdict) {
         &RootSource::none(),
     ) {
         // Refused before a module existed: type-checking proper, not an erasure obligation.
-        Err(error) => (Verdict::Refuses(error.into()), Verdict::NotAsked),
-        Ok((module, obligations)) => {
+        Err(refused) => (Verdict::Refuses(refused.reported.into()), Verdict::NotAsked),
+        Ok(curios_pipeline::Typechecked {
+            program: module,
+            obligations,
+            ..
+        }) => {
             let elaborator = match obligations.into_iter().next() {
-                Some(error) => Verdict::Refuses(error),
+                Some(obligation) => Verdict::Refuses(obligation.reported),
                 None => Verdict::Accepts,
             };
             // Exactly as the compile path judges it: the archived prelude arrives as scope on the archive's word rather than being re-walked, which is both what production does and what keeps a fixture cheap.

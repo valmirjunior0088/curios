@@ -411,11 +411,10 @@ impl fmt::Display for Module {
     }
 }
 
-/// A whole program as written: a module of top-level items followed by one tail expression — the value the program computes. Parsed via `FromStr` (inline source) or [`Entrypoint::from_path`]; the grammar has no position for `type_`, which is only ever attached afterwards via [`Entrypoint::with_type`].
+/// A whole program as written: a module of top-level items followed by one tail expression — the value the program computes. Parsed via `FromStr` (inline source) or [`Entrypoint::from_path`]. It carries no type: the grammar has no position for one, and what an entry is judged at is whoever compiles it's to state.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entrypoint {
     pub module: Module,
-    pub type_: Option<Term>,
     pub tail: Term,
 }
 
@@ -423,16 +422,7 @@ impl Entrypoint {
     pub(crate) fn new(items: Vec<TopItem>, tail: Term) -> Self {
         Self {
             module: Module { items },
-            type_: None,
             tail,
-        }
-    }
-
-    /// Attaches an expected type to the tail expression. The entrypoint grammar has no annotation position for the tail, so this is how embedders (the test suites) request `Check` rather than `Infer` mode — `into_core` lowers the annotation alongside the tail and the pipeline elaborates against it.
-    pub fn with_type(self, type_: Term) -> Self {
-        Self {
-            type_: Some(type_),
-            ..self
         }
     }
 }
@@ -560,7 +550,6 @@ impl Entrypoint {
     pub fn trivial() -> Self {
         Self {
             module: Module { items: Vec::new() },
-            type_: None,
             tail: Term::from(Subterm::Intrinsic(Intrinsic::IoPure {
                 result: Term::from(Subterm::TupleType(TupleType { fields: Vec::new() })),
                 value: Term::from(Subterm::Tuple(Tuple { fields: Vec::new() })),

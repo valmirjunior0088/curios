@@ -252,25 +252,25 @@ fn granted(prelude: &[&Unit], withheld: usize, unit: &RootSource) -> Vec<Qualifi
     prefixes
 }
 
-/// Lower and type-check `entrypoint` against the fixed prelude, reporting the erasure obligations rather than raising them. See [`typecheck_reporting`](crate::typecheck_reporting).
+/// Lower and type-check `entrypoint` against the fixed prelude, stopping short of the kernel. See [`typecheck_entrypoint`](crate::typecheck_entrypoint).
 pub fn typecheck_with_prelude(
     budget: u64,
     entrypoint: &curios_text::Entrypoint,
     loader: &curios_text::RootSource,
-) -> Result<(curios_core::Program, Vec<String>), CompileError> {
+) -> Result<crate::Typechecked, crate::Refused> {
     with_prelude(|prelude| {
-        crate::typecheck_reporting(budget, Prefix::over(prelude), &SYNTAX, entrypoint, loader)
+        crate::typecheck_entrypoint(budget, Prefix::over(prelude), &SYNTAX, entrypoint, loader)
     })
 }
 
-/// [`typecheck_with_prelude`], reporting what elaboration consumed as well. See [`typecheck_measured`](crate::typecheck_measured).
-pub fn typecheck_with_prelude_measured(
+/// Put `entrypoint` to both checkers against the fixed prelude and hand back what each said. See [`examine_entrypoint`](crate::examine_entrypoint).
+pub fn examine_with_prelude(
     budget: u64,
     entrypoint: &curios_text::Entrypoint,
     loader: &curios_text::RootSource,
-) -> Result<(curios_core::Program, Vec<String>, curios_core::Consumption), CompileError> {
+) -> Result<crate::Examined, crate::Refused> {
     with_prelude(|prelude| {
-        crate::typecheck_measured(budget, Prefix::over(prelude), &SYNTAX, entrypoint, loader)
+        crate::examine_entrypoint(budget, Prefix::over(prelude), &SYNTAX, entrypoint, loader)
     })
 }
 

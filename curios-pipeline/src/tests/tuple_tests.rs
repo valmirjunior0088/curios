@@ -12,7 +12,7 @@ fn let_bound_tuple_with_an_effectful_field_lowers() {
         /std/print(/std/Nat/to_str(n))
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 // --- Named tuple fields --------------------------------------------------
@@ -25,10 +25,10 @@ fn proj_by_label_resolves_to_its_position() {
         let r : { status : Nat, payload : Bytes } = (0, /std/Str/to_bytes("ok"));
         let by_label : Bytes = r.payload;
         let by_index : Bytes = r.1;
-        by_index
+        /std/Io/pure(())
     "#;
 
-    assert!(typecheck(source, Some("/std/Bytes")).is_ok());
+    assert!(typecheck(source).is_ok());
 }
 
 #[test]
@@ -36,10 +36,11 @@ fn proj_unknown_label_names_the_available_fields() {
     let source = r#"
         use /std/{Nat, Bytes};
         let r : { status : Nat, payload : Bytes } = (0, /std/Str/to_bytes("ok"));
-        r.body
+        let subject : /std/Bytes = r.body;
+        /std/Io/pure(())
     "#;
 
-    let error = typecheck(source, Some("/std/Bytes")).unwrap_err();
+    let error = typecheck(source).unwrap_err();
     assert!(
         error.contains("no field named 'body'") && error.contains("status"),
         "unexpected error: {error}"
@@ -51,10 +52,11 @@ fn duplicate_tuple_label_is_rejected() {
     let source = r#"
         use /std/{Nat};
         let r : { x : Nat, x : Nat } = (0, 1);
-        r.x
+        let subject : /std/Nat = r.x;
+        /std/Io/pure(())
     "#;
 
-    let error = typecheck(source, Some("/std/Nat")).unwrap_err();
+    let error = typecheck(source).unwrap_err();
     assert!(
         error.contains("duplicate field label 'x'"),
         "unexpected error: {error}"
@@ -68,18 +70,20 @@ fn labels_are_part_of_type_identity() {
         use /std/{Nat};
         let p : { width : Nat, height : Nat } = (640, 480);
         let q : { height : Nat, width : Nat } = p;
-        q.width
+        let subject : /std/Nat = q.width;
+        /std/Io/pure(())
     "#;
-    assert!(typecheck(reordered, Some("/std/Nat")).is_err());
+    assert!(typecheck(reordered).is_err());
 
     // Labeled and unlabeled spellings are distinct types too.
     let unlabeled = r#"
         use /std/{Nat};
         let p : { width : Nat, height : Nat } = (640, 480);
         let q : { Nat, Nat } = p;
-        q.0
+        let subject : /std/Nat = q.0;
+        /std/Io/pure(())
     "#;
-    assert!(typecheck(unlabeled, Some("/std/Nat")).is_err());
+    assert!(typecheck(unlabeled).is_err());
 }
 
 #[test]
@@ -89,16 +93,18 @@ fn named_construction_checks_against_the_labels() {
         use /std/{Nat, Bytes};
         let r : { status : Nat, payload : Bytes } = (status = 0, payload = /std/Str/to_bytes("ok"));
         let mixed : { status : Nat, payload : Bytes } = (status = 0, /std/Str/to_bytes("ok"));
-        r.status
+        let subject : /std/Nat = r.status;
+        /std/Io/pure(())
     "#;
-    assert!(typecheck(source, Some("/std/Nat")).is_ok());
+    assert!(typecheck(source).is_ok());
 
     let wrong_name = r#"
         use /std/{Nat, Bytes};
         let r : { status : Nat, payload : Bytes } = (code = 0, payload = /std/Str/to_bytes("ok"));
-        r.status
+        let subject : /std/Nat = r.status;
+        /std/Io/pure(())
     "#;
-    let error = typecheck(wrong_name, Some("/std/Nat")).unwrap_err();
+    let error = typecheck(wrong_name).unwrap_err();
     assert!(
         error.contains("'code'") && error.contains("'status'"),
         "unexpected error: {error}"
@@ -107,9 +113,10 @@ fn named_construction_checks_against_the_labels() {
     let unlabeled_type = r#"
         use /std/{Nat, Bytes};
         let r : { Nat, Bytes } = (status = 0, /std/Str/to_bytes("ok"));
-        r.0
+        let subject : /std/Nat = r.0;
+        /std/Io/pure(())
     "#;
-    assert!(typecheck(unlabeled_type, Some("/std/Nat")).is_err());
+    assert!(typecheck(unlabeled_type).is_err());
 }
 
 #[test]
@@ -121,5 +128,5 @@ fn dependent_record_projects_by_label() {
         /std/print(/std/Nat/to_str(v))
     "#;
 
-    assert!(typecheck(source, None).is_ok());
+    assert!(typecheck(source).is_ok());
 }

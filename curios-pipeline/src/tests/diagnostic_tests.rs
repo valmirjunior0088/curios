@@ -13,7 +13,7 @@ fn a_proposition_where_a_proof_belongs_is_named_and_its_metavariables_are_not_nu
 
         Io/pure(())
     "#;
-    let error = compile(source, None).map(|_| ()).unwrap_err();
+    let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
         error.contains("inferred: Prop") && error.contains("expected: Eq(@?)(?, ?)"),
         "unexpected report: {error}"
@@ -35,7 +35,7 @@ fn an_unbound_name_is_offered_its_reachable_spelling_or_its_import() {
 
         Io/pure(())
     "#;
-    let error = compile(source, None).map(|_| ()).unwrap_err();
+    let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
         error.contains("unbound variable: cong")
             && error.contains(
@@ -51,7 +51,7 @@ fn an_unbound_name_is_offered_its_reachable_spelling_or_its_import() {
 
         Io/pure(())
     "#;
-    let error = compile(source, None).map(|_| ()).unwrap_err();
+    let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
         error.contains("unbound variable: Bool")
             && error.contains("`Bool` is `/std/Bool`: write it absolute, or `use /std/{Bool};`"),
@@ -76,7 +76,7 @@ fn a_rigid_mismatch_still_reports_as_a_mismatch() {
 
         Io/pure(())
     "#;
-    let error = compile(source, None).map(|_| ()).unwrap_err();
+    let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
         error.contains("type mismatch"),
         "unexpected report: {error}"
@@ -98,10 +98,11 @@ fn goal_reports_spell_no_universe_instances() {
             | 0 => ?
             | p + 1; ih => ?
             end;
-        double(21)
+        let subject : /std/Nat = double(21);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert_eq!(
         error.matches("goal `?`").count(),
@@ -118,10 +119,10 @@ fn mismatch_reports_spell_no_universe_instances() {
     let source = r#"
         use /std/{Nat, Str, Option};
         let bad : Str = Option/some(1);
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("type mismatch"), "unexpected error: {error}");
     assert!(
@@ -139,10 +140,10 @@ fn a_mismatch_over_a_polymorphic_head_spells_no_universe_metas() {
         use /std/{Nat};
         let g(A : Type) -> Nat = 0;
         let f : ((Type) -> Type) -> Nat = g;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("type mismatch"), "unexpected error: {error}");
     assert!(
@@ -159,10 +160,10 @@ fn a_mismatch_keeps_a_concrete_universe_level() {
         use /std/{Str};
         let f : Type = Type;
         let g : Str = f;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("type mismatch"), "unexpected error: {error}");
     assert!(
@@ -177,10 +178,10 @@ fn a_mismatch_marks_an_implicit_nominal_parameter() {
     let source = r#"
         use /std/{Nat, Eq};
         let claim : Eq()(2 + 3, 6) = Eq/refl();
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("inferred: Eq(@Nat)(5, 5)"),
@@ -198,10 +199,10 @@ fn a_mismatch_leaves_an_explicit_nominal_parameter_unmarked() {
     let source = r#"
         use /std/{Nat, Option, Bool};
         let o : Option(Nat) = Option/some(true);
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("inferred: Option(Bool)") && error.contains("expected: Option(Nat)"),
@@ -216,10 +217,10 @@ fn a_mismatch_marks_an_implicit_struct_parameter() {
         use /std/{Nat, Str};
         pub struct Box(@A : Type) : pub Type { it : A }
         let f : Str = Box { it = 1 };
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("inferred: Box(@Nat)"),
@@ -233,10 +234,10 @@ fn a_mismatch_over_an_applied_head_is_located() {
     let source = r#"
         use /std/{Nat, Str, Option};
         let bad : Str = Option/some(1);
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("Option/some(1)"),
@@ -251,10 +252,10 @@ fn an_abstract_witness_folds_back_to_its_operator() {
         use /std/ops/{Add};
         use /std/{Nat, Eq};
         let bad(@A : Type, use Add(A), a : A) -> Eq()(a + a, a + a) = ?;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(error.contains("a + a"), "operator not folded: {error}");
@@ -271,10 +272,10 @@ fn an_abstract_witness_folds_back_in_a_mismatch_too() {
         use /std/ops/{Add};
         use /std/{Nat, Eq};
         let bad(@A : Type, use Add(A), a : A) -> Eq()(a + a, a) = Eq/refl();
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("type mismatch"), "unexpected error: {error}");
     assert!(error.contains("a + a"), "operator not folded: {error}");
@@ -290,10 +291,10 @@ fn goal_types_spell_negated_equality_as_neq() {
     let source = r#"
         use /std/{Nat, Bool, Eq};
         let claim : Eq()(1 != 2, true) = ?;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(error.contains("1 != 2"), "unexpected error: {error}");
@@ -306,10 +307,11 @@ fn a_wide_goal_type_breaks_across_lines_in_the_report() {
     let source = r#"
         use /std/{Nat};
         let f : (first_argument : Nat, second_argument : Nat, third_argument : Nat, fourth_argument : Nat, fifth_argument : Nat) -> Nat = ?;
-        f(1, 2, 3, 4, 5)
+        let subject : /std/Nat = f(1, 2, 3, 4, 5);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(
@@ -325,10 +327,10 @@ fn a_hard_error_beside_a_goal_is_reported_with_it() {
         use /std/{Nat};
         let m : Nat = ?;
         let bad : Nat = true;
-        m
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("type mismatch"), "unexpected error: {error}");
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
@@ -345,10 +347,10 @@ fn a_mismatch_at_a_polymorphic_reference_keeps_its_caret() {
         use /std/{Nat};
         let g(A : Type) -> Nat = 0;
         let f : ((Type) -> Type) -> Nat = g;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     let snippet = error
         .lines()

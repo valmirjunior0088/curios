@@ -78,6 +78,7 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     proof: ProofSyntax {
         true_qed: registry_name(&["std", "Bool", "True", "qed"]),
         true_type: registry_name(&["std", "Bool", "True"]),
+        false_type: registry_name(&["std", "Bool", "False"]),
         holds: registry_name(&["std", "Bool", "Holds"]),
     },
     test: TestSyntax {

@@ -13,20 +13,13 @@ use {
     std::fs,
 };
 
-/// A fixture's entrypoint, stating its own type when the fixture is a bare *term* rather than a program.
-///
-/// A program's tail describes doing something and yielding nothing, so an entrypoint carrying no type is checked against `Io({})` (`elaborate_and_zonk`). Most fixtures here are terms — they end in the `Nat` or `List` the feature under test produces — and stating the type is exactly the embedder path that contract leaves open, so each keeps compiling the term it was written to compile rather than acquiring a tail that would change what it measures.
-pub(super) fn with_entrypoint_type(source: &str, type_: Option<&str>) -> Entrypoint {
-    let entrypoint = source.parse::<Entrypoint>().unwrap();
-
-    match type_ {
-        Some(type_) => entrypoint.with_type(type_.parse().unwrap()),
-        None => entrypoint,
-    }
+/// A fixture's entrypoint. Every fixture is a program, so its final term describes doing something and yielding nothing: one whose subject is a term binds it in a `let` at the type under test and closes with `Io/pure(())`.
+pub(super) fn entrypoint_of(source: &str) -> Entrypoint {
+    source.parse::<Entrypoint>().unwrap()
 }
 
-pub(super) fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, String> {
-    let entrypoint = with_entrypoint_type(source, type_);
+pub(super) fn compile(source: &str) -> Result<curios_wasm::Module, String> {
+    let entrypoint = entrypoint_of(source);
 
     compile_with_prelude(
         DEFAULT_STEP_BUDGET,
@@ -38,11 +31,8 @@ pub(super) fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::
     .map_err(String::from)
 }
 
-pub(super) fn compile_printed_stages(
-    source: &str,
-    type_: Option<&str>,
-) -> Result<(String, String), String> {
-    let entrypoint = with_entrypoint_type(source, type_);
+pub(super) fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
+    let entrypoint = entrypoint_of(source);
     let mut ersd = String::new();
     let mut cont = String::new();
 
@@ -70,8 +60,8 @@ pub(super) fn mentions_metavar_id(report: &str) -> bool {
 
 // --- A: typecheck-only (stop after zonk, no lowering) ---------------------
 
-pub(super) fn typecheck(source: &str, type_: Option<&str>) -> Result<(), String> {
-    let entrypoint = with_entrypoint_type(source, type_);
+pub(super) fn typecheck(source: &str) -> Result<(), String> {
+    let entrypoint = entrypoint_of(source);
     with_prelude(|prelude| {
         crate::elaborate_and_zonk(
             DEFAULT_STEP_BUDGET,
@@ -90,8 +80,8 @@ pub(super) fn typecheck(source: &str, type_: Option<&str>) -> Result<(), String>
 /// Elaborate `source` to its meta-free Core program and erase it as `compile_entrypoint` does — the archived erased prelude replayed, the program's own items erased onto it and its entry sealed — short of marking its functions' termination flags, which takes the kernel's records and is `erase_checked`'s.
 ///
 /// Replayed rather than erased fresh: a compiled module carries the entry's own items alone, so a from-scratch erasure of it would leave every prelude name unbound. Replaying is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
-pub(super) fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::Module {
-    let entrypoint = with_entrypoint_type(source, type_);
+pub(super) fn erase_to_ersd(source: &str) -> curios_ersd::Module {
+    let entrypoint = entrypoint_of(source);
     let (program, _foreigns, _records) = with_prelude(|prelude| {
         crate::elaborate_and_zonk(
             DEFAULT_STEP_BUDGET,
@@ -140,7 +130,7 @@ pub(crate) fn compile_with_units(
             modules
         })
         .collect::<Vec<_>>();
-    let entry = with_entrypoint_type(entrypoint, None);
+    let entry = entrypoint_of(entrypoint);
 
     with_prelude(|prelude| {
         let sources = parsed

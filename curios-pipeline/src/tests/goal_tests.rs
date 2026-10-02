@@ -7,13 +7,13 @@ use super::test_support::*;
 #[test]
 fn a_goal_batch_classifies_as_incomplete_and_a_hard_error_as_failure() {
     // The typed split the CLI's exit codes rest on: a written-goal batch is incomplete development state, a type mismatch a hard failure.
-    let goals = with_entrypoint_type("let m : /std/Nat = ?; m", Some("/std/Nat"));
+    let goals = entrypoint_of("let m : /std/Nat = ?; /std/Io/pure(())");
     assert!(matches!(
         compile_with_prelude(DEFAULT_STEP_BUDGET, &goals, &RootSource::none(), |_| {}),
         Err(CompileError::Incomplete(_))
     ));
 
-    let mismatch = with_entrypoint_type("let bad : /std/Nat = true; bad", Some("/std/Nat"));
+    let mismatch = entrypoint_of("let bad : /std/Nat = true; /std/Io/pure(())");
     assert!(matches!(
         compile_with_prelude(DEFAULT_STEP_BUDGET, &mismatch, &RootSource::none(), |_| {}),
         Err(CompileError::Failure(_))
@@ -25,10 +25,11 @@ fn solved_goal_reports_its_solution() {
     // `id ? 5`: the type argument `?` is solved to `Nat` from the value `5` (`id ? x`) — but a written goal never compiles: the module still elaborates fully, then zonk reports what it determined.
     let source = r#"
         let id(A : Type, a : A) -> A = a;
-        id(?, 5)
+        let subject : /std/Nat = id(?, 5);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(error.contains("? : Type"), "unexpected error: {error}");
@@ -44,10 +45,11 @@ fn pinned_through_the_expected_type_reports_the_pin() {
     let source = r#"
         use /std/{Bool};
         let id(A : Type, a : A) -> A = a;
-        id(?, true)
+        let subject : /std/Bool = id(?, true);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Bool")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(
@@ -62,10 +64,10 @@ fn unconstrained_goal_reports_undetermined() {
     let source = r#"
         use /std/{Nat};
         let m : Nat = ?;
-        m
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(error.contains("? : Nat"), "unexpected error: {error}");
@@ -79,10 +81,11 @@ fn report_includes_the_local_scope() {
     let source = r#"
         use /std/{Nat};
         let f(x : Nat) -> Nat = ?;
-        f(1)
+        let subject : /std/Nat = f(1);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(error.contains("x : Nat"), "unexpected error: {error}");
@@ -95,10 +98,10 @@ fn goal_in_synthesis_position_reports_a_meta_type() {
     // The synthesis position is a typeless local `let`, not the entrypoint tail: the tail is always *checked* — against the fixture's stated type here, against `Io({})` in a real program — so it cannot host a term with nothing to check against.
     let source = r#"
         let anything = ?;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(error.contains("? : ?"), "unexpected error: {error}");
@@ -113,10 +116,10 @@ fn several_goals_report_together_in_declaration_order() {
         use /std/{Nat, Bool};
         let m : Nat = ?;
         let b : Bool = ?;
-        m
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert_eq!(
         error.matches("goal `?`").count(),
@@ -134,10 +137,11 @@ fn item_and_entrypoint_tail_goals_share_one_batch() {
     let source = r#"
         use /std/{Nat};
         let m : Nat = ?;
-        /std/Nat/add(m, ?)
+        let subject : /std/Nat = /std/Nat/add(m, ?);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert_eq!(
         error.matches("goal `?`").count(),
@@ -153,10 +157,11 @@ fn solved_and_unsolved_goals_share_one_batch() {
         use /std/{Nat};
         let id(A : Type, a : A) -> A = a;
         let m : Nat = ?;
-        id(?, 5)
+        let subject : /std/Nat = id(?, 5);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert_eq!(
         error.matches("goal `?`").count(),
@@ -178,7 +183,7 @@ fn each_goal_in_a_batch_names_its_binders_as_written() {
         /std/print("")
     "#;
 
-    let error = compile(source, None).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert_eq!(
         error.matches("  n : Nat").count(),
@@ -194,10 +199,10 @@ fn types_spell_operators_as_infix_not_witness_projections() {
     let source = r#"
         use /std/{Nat, Eq};
         let claim : Eq()((1 + 2) * 3, 9) = ?;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(error.contains("(1 + 2) * 3"), "unexpected error: {error}");
@@ -215,10 +220,10 @@ fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obliga
             | 0 => Eq/refl()
             | p + 1; ih => Eq/cong(?, ih)
             end;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(
@@ -240,7 +245,7 @@ fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obliga
     // `subst`'s result `P(y)` meets any goal once `ih` fills its proof slot; an undecided fit of a parameter-headed result is refused.
     assert!(!error.contains("Eq/subst("), "vacuous fit offered: {error}");
 
-    let entrypoint = with_entrypoint_type(source, Some("/std/Nat"));
+    let entrypoint = entrypoint_of(source);
     assert!(matches!(
         compile_with_prelude(
             DEFAULT_STEP_BUDGET,
@@ -259,9 +264,8 @@ fn typecheck_rejects_a_goal() {
         r#"
         use /std/{Nat};
         let m : Nat = ?;
-        m
+        /std/Io/pure(())
         "#,
-        Some("/std/Nat"),
     )
     .unwrap_err();
 
@@ -271,10 +275,7 @@ fn typecheck_rejects_a_goal() {
 /// A refusal beside a written goal is the refusal's exit and both reports: the refused item's first, then the goal at its occurrence.
 #[test]
 fn a_goal_beside_a_refusal_classifies_as_mixed() {
-    let mixed = with_entrypoint_type(
-        "let bad : /std/Nat = true; let m : /std/Nat = ?; m",
-        Some("/std/Nat"),
-    );
+    let mixed = entrypoint_of("let bad : /std/Nat = true; let m : /std/Nat = ?; /std/Io/pure(())");
     let Err(error) = compile_with_prelude(DEFAULT_STEP_BUDGET, &mixed, &RootSource::none(), |_| {})
     else {
         panic!("a refused item compiles nothing");

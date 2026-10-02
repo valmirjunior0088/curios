@@ -12,13 +12,14 @@ fn arguments_can_all_be_supplied_explicitly() {
         | none()
         end
         let id(@T : Type, x : T) -> T = x;
-        match Opt/some(@Nat, id(@Nat, 1)) : (_) => Nat
+        let subject : /std/Nat = match Opt/some(@Nat, id(@Nat, 1)) : (_) => Nat
         | some(value) => value
         | none() => 0
-        end
+        end;
+        /std/Io/pure(())
     "#;
 
-    compile(source, Some("/std/Nat")).unwrap();
+    compile(source).unwrap();
 }
 
 #[test]
@@ -30,13 +31,14 @@ fn argument_is_inserted_and_inferred() {
         | some(A)
         | none()
         end
-        match Opt/some(1) : (_) => Nat
+        let subject : /std/Nat = match Opt/some(1) : (_) => Nat
         | some(value) => value
         | none() => 0
-        end
+        end;
+        /std/Io/pure(())
     "#;
 
-    compile(source, Some("/std/Nat")).unwrap();
+    compile(source).unwrap();
 }
 
 #[test]
@@ -45,10 +47,11 @@ fn interleaved_implicit_with_partial_override() {
     let source = r#"
         use /std/{Nat, Bytes};
         let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-        std/Bytes/len(second(@Nat, 1, /std/Str/to_bytes("abc")))
+        let subject : /std/Nat = std/Bytes/len(second(@Nat, 1, /std/Str/to_bytes("abc")));
+        /std/Io/pure(())
     "#;
 
-    compile(source, Some("/std/Nat")).unwrap();
+    compile(source).unwrap();
 }
 
 #[test]
@@ -57,16 +60,18 @@ fn argument_queues_are_order_insensitive() {
     let at_first = r#"
         use /std/{Nat, Bytes};
         let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-        std/Bytes/len(second(@Nat, 1, /std/Str/to_bytes("abc")))
+        let subject : /std/Nat = std/Bytes/len(second(@Nat, 1, /std/Str/to_bytes("abc")));
+        /std/Io/pure(())
     "#;
     let at_last = r#"
         use /std/{Nat, Bytes};
         let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
-        std/Bytes/len(second(1, /std/Str/to_bytes("abc"), @Nat))
+        let subject : /std/Nat = std/Bytes/len(second(1, /std/Str/to_bytes("abc"), @Nat));
+        /std/Io/pure(())
     "#;
 
-    compile(at_first, Some("/std/Nat")).unwrap();
-    compile(at_last, Some("/std/Nat")).unwrap();
+    compile(at_first).unwrap();
+    compile(at_last).unwrap();
 }
 
 #[test]
@@ -80,13 +85,14 @@ fn trailing_implicit_is_pinned_by_the_expected_type() {
         end
         let nothing(n : Nat, @T : Type) -> Opt(T) = Opt/none(@T);
         let r : Opt(Nat) = nothing(0);
-        match r : (_) => Nat
+        let subject : /std/Nat = match r : (_) => Nat
         | some(value) => value
         | none() => 9
-        end
+        end;
+        /std/Io/pure(())
     "#;
 
-    compile(source, Some("/std/Nat")).unwrap();
+    compile(source).unwrap();
 }
 
 #[test]
@@ -106,7 +112,7 @@ fn an_all_implicit_parameter_list_takes_a_call_of_its_own() {
             pure(@A, x) = Id/wrap(x),
             bind(@A, @B, m, f) = bind(@A, @B)(m, f)
         }
-        let direct = bind()(Id/wrap(1), (x) => Id/wrap(Nat/succ(x)));
+        let subject : /std/Nat = let direct = bind()(Id/wrap(1), (x) => Id/wrap(Nat/succ(x)));
         -- The lambda body is its own region root: the `!` sequences inside
         -- it instead of hoisting into the entrypoint tail (which returns a
         -- bare `Nat`, not an `Id`). The annotation is what names the region's
@@ -122,10 +128,11 @@ fn an_all_implicit_parameter_list_takes_a_call_of_its_own() {
             match direct : (_) => Nat
             | wrap(other) => Nat/add(value, other)
             end
-        end
+        end;
+        /std/Io/pure(())
     "#;
 
-    compile(source, Some("/std/Nat")).unwrap();
+    compile(source).unwrap();
 }
 
 #[test]
@@ -134,10 +141,11 @@ fn plain_arguments_do_not_pass_through_an_all_implicit_parameter_list() {
     let source = r#"
         use /std/{Nat};
         let pair : (@A : Type) -> (A, A) -> Nat = (@A) => (a, b) => 0;
-        pair(1, 2)
+        let subject : /std/Nat = pair(1, 2);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("wrong number of arguments: expected 0, got 2"),
@@ -151,10 +159,11 @@ fn uninferred_implicit_names_the_binder_and_function() {
     let source = r#"
         use /std/{Nat};
         let cast(x : Nat, @T : Type) -> Nat = x;
-        cast(5)
+        let subject : /std/Nat = cast(5);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("implicit argument 'T' of 'cast' was not inferred"),
@@ -175,7 +184,7 @@ fn surplus_implicit_arguments_are_rejected() {
         id(@Nat, @Nat, 1)
     "#;
 
-    let error = compile(source, None).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("2 '@' argument(s) but the function has only 1 implicit parameter(s)"),
@@ -196,7 +205,7 @@ fn bare_polymorphic_function_inserts_implicits_in_value_position() {
         /std/print(/std/Nat/to_str(List/len(result)))
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -211,5 +220,5 @@ fn polymorphic_value_assignment_keeps_its_implicit() {
         /std/print(/std/Nat/to_str(List/len(result)))
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source).is_ok());
 }

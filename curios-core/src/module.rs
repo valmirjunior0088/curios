@@ -362,7 +362,7 @@ impl Item {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entrypoint {
     pub body: Term,
-    /// The type the body is judged at. Before elaboration it is what whoever built the entry states — a written annotation, or the program contract a compile supplies — and absent only where nothing is stated, for elaboration to infer. Elaboration writes the type the body was judged at either way, so every stage after it reads the entry's type off the entry: [`Zonked::project`] refuses a program whose entry states none, and [`Zonked::entry`] hands it back beside the body.
+    /// The type the body is judged at. Before elaboration it is what whoever compiles the entry states — the program contract, or the empty proposition for an entry put as a proof — and absent only where nothing is stated, for elaboration to infer. Elaboration writes the type the body was judged at either way, so every stage after it reads the entry's type off the entry: [`Zonked::project`] refuses a program whose entry states none, and [`Zonked::entry`] hands it back beside the body.
     pub type_: Option<Term>,
 }
 

@@ -49,9 +49,10 @@ const TWO_INSTANCES_OF_ZIP: &str = r#"
 /// Every definition's finalized universe parameter count, keyed by the name its item describes itself with.
 fn universe_parameters(source: &str) -> BTreeMap<String, usize> {
     let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
-    let (program, _): (Program, _) =
+    let program: Program =
         typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
-            .expect("the fixture type-checks");
+            .expect("the fixture type-checks")
+            .program;
 
     program
         .module

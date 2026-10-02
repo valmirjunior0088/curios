@@ -74,6 +74,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     proof: ProofSyntax {
         true_qed: name(&["std", "Bool", "True", "qed"]),
         true_type: name(&["std", "Bool", "True"]),
+        false_type: name(&["std", "Bool", "False"]),
         holds: name(&["std", "Bool", "Holds"]),
     },
     test: TestSyntax {

@@ -13,10 +13,11 @@ fn a_computed_equality_goal_suggests_refl() {
             | 0 => ?
             | p + 1; ih => ?
             end;
-        double(21)
+        let subject : /std/Nat = double(21);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("? \u{2248} Eq/refl()"),
@@ -40,10 +41,10 @@ fn impossible_constructors_are_not_suggested() {
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (m + 1)
         end
         let v : Vec(Nat)(0) = ?;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("? \u{2248} Vec/nil()"),
@@ -57,10 +58,11 @@ fn a_scope_binder_fitting_the_goal_is_suggested() {
     let source = r#"
         use /std/{Nat};
         let f(x : Nat) -> Nat = ?;
-        f(1)
+        let subject : /std/Nat = f(1);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("? \u{2248} x"), "unexpected error: {error}");
 }
@@ -70,10 +72,11 @@ fn a_solved_goal_gets_no_suggestions() {
     // A suggestion beside a `? =` answer is noise; solved goals carry none.
     let source = r#"
         let id(A : Type, a : A) -> A = a;
-        id(?, 5)
+        let subject : /std/Nat = id(?, 5);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("? ="), "unexpected error: {error}");
     assert!(!error.contains('\u{2248}'), "unexpected error: {error}");
@@ -86,10 +89,10 @@ fn a_module_function_fitting_the_goal_is_suggested_with_pinned_arguments() {
         use /std/{Nat, Eq};
         let mk(n : Nat) -> Eq()(n, n) = Eq/refl();
         let claim : Eq()(3, 3) = ?;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("? \u{2248} Eq/refl()"),
@@ -108,10 +111,10 @@ fn an_application_fit_mentioning_a_scope_binder_is_suggested() {
         use /std/{Nat, Eq};
         let mk(n : Nat) -> Eq()(n, n) = Eq/refl();
         let claim(k : Nat) -> Eq()(k, k) = ?;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("mk(k)"), "unexpected error: {error}");
 }
@@ -122,10 +125,10 @@ fn an_imported_lemma_is_suggested_with_its_proof_slot_filled_from_the_scope() {
     let source = r#"
         use /std/{Nat, Eq};
         let flip(k : Nat, h : Eq()(k, 7)) -> Eq()(7, k) = ?;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("? \u{2248} Eq/sym(h)"),
@@ -151,10 +154,10 @@ fn a_hypothesis_fills_an_imported_lemmas_proof_slot_under_an_open_function() {
             | 0 => Eq/refl()
             | p + 1; ih => ?
             end;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("? \u{2248} Eq/cong(?, ih)"),
@@ -175,10 +178,10 @@ fn an_application_fit_nothing_pinned_is_not_suggested() {
         use /std/{Nat, Eq};
         let touch(@x : Nat, @y : Nat, e : Eq()(x, y)) -> Eq()(y + 1, x + 1) = Eq/sym(Eq/cong((z) => z + 1, e));
         let claim : Eq()(3, 3) = ?;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("? \u{2248} Eq/refl()"),
@@ -193,10 +196,10 @@ fn a_suggested_imported_candidate_compiles_when_pasted() {
     let source = r#"
         use /std/{Nat, Eq};
         let flip(k : Nat, h : Eq()(k, 7)) -> Eq()(7, k) = Eq/sym(h);
-        0
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Nat")).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -207,10 +210,10 @@ fn an_import_is_offered_only_below_its_use() {
         let above(k : Nat, h : /std/Eq/Eq()(k, 7)) -> /std/Eq/Eq()(7, k) = ?;
         use /std/{Eq};
         let below(k : Nat, h : Eq()(k, 7)) -> Eq()(7, k) = ?;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
     let reports: Vec<&str> = error.split("goal `?`").collect();
     let above = reports
         .iter()
@@ -241,10 +244,10 @@ fn a_nested_modules_import_stays_in_its_body() {
             pub let inner(k : Nat, h : Eq()(k, 7)) -> Eq()(7, k) = ?;
         end
         let outer(k : Nat, h : /std/Eq/Eq()(k, 7)) -> /std/Eq/Eq()(7, k) = ?;
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
     let reports: Vec<&str> = error.split("goal `?`").collect();
     let inner = reports
         .iter()
@@ -271,10 +274,11 @@ fn the_goals_own_definition_is_not_suggested() {
     let source = r#"
         use /std/{Nat};
         let f(x : Nat) -> Nat = ?;
-        f(1)
+        let subject : /std/Nat = f(1);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("? \u{2248} x"), "unexpected error: {error}");
     assert!(!error.contains("/f("), "own definition suggested: {error}");
@@ -286,10 +290,10 @@ fn a_suggested_complete_candidate_compiles_when_pasted() {
     let source = r#"
         use /std/{Nat, Eq};
         let claim : Eq()(1 + 2, 3) = Eq/refl();
-        0
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Nat")).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 /// A goal inside an arm is offered what fits it under the arm's guard, as a paste there would be checked: `Eq/refl()` fits `Eq()(b, true)` only where the arm has `b` as `true`. Suggestions are computed after elaboration, with the arm long closed, so they reinstall the refinements the goal was born under beside its telescope; without them the fit would never be offered.
@@ -304,10 +308,11 @@ fn a_goal_in_an_arm_is_offered_what_fits_under_its_guard() {
                 0
             | false => 1
             end;
-        f(true)
+        let subject : /std/Nat = f(true);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("? \u{2248} Eq/refl()"),

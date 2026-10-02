@@ -1749,11 +1749,8 @@ fn into_core_unit_within(
         match source.entrypoint() {
             Some(entrypoint) => Some(curios_core::Entrypoint {
                 body: lower.value(&entrypoint.tail)?,
-                type_: entrypoint
-                    .type_
-                    .as_ref()
-                    .map(|type_| lower.term(type_))
-                    .transpose()?,
+                // The grammar has no position for the type an entry is judged at: whoever compiles it states one.
+                type_: None,
             }),
             None => None,
         }

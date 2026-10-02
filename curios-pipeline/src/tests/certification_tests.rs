@@ -1,7 +1,7 @@
 //! The certifier's record a compiled unit files beside its definitions: what it covers, what it says, what it read, what an item-level recompile keeps of the baseline's, and the termination flags it marks on a sealed program.
 
 use {
-    super::test_support::{recompile_over, reuses_body, unit_of, with_entrypoint_type},
+    super::test_support::{entrypoint_of, recompile_over, reuses_body, unit_of},
     crate::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
     curios_core::{Enter, Free, Global, Reads, Subterm, Term, Totality},
     curios_prelude::with_prelude,
@@ -241,12 +241,13 @@ let double(n: Nat) -> Nat = n + n;
 
 let spin(n: Nat) -> Nat = spin(n);
 
-double(2) + spin(0)
+let subject : /std/Nat = double(2) + spin(0);
+/std/Io/pure(())
 ";
     let mut functions = Vec::new();
     compile_with_prelude(
         DEFAULT_STEP_BUDGET,
-        &with_entrypoint_type(source, Some("/std/Nat")),
+        &entrypoint_of(source),
         &RootSource::none(),
         |stage| {
             if let Stage::Ersd(module) = stage {

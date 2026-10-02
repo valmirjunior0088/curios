@@ -11,7 +11,6 @@ fn declaration_produces_a_wasm_import() {
             let n = frobnicate(5, x[0x00, 0x01])!;
             /std/print(/std/Nat/to_str(n))
         "#,
-        None,
     )
     .unwrap();
 
@@ -35,7 +34,6 @@ fn sys_and_foreign_calls_import_under_separate_namespaces() {
             let n = frobnicate(5)!;
             /std/print(/std/Nat/to_str(n))
         "#,
-        None,
     )
     .unwrap();
 

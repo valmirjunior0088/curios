@@ -6,7 +6,7 @@
 
 use {
     super::ersd_optm,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude, typecheck_with_prelude_measured},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     std::{fmt::Write, time::Instant},
 };
@@ -95,9 +95,9 @@ match input: (_) => Io({})
 end
 "#;
 
-/// The tail every measured program here shares: one that *infers*.
+/// The tail every measured program here shares.
 ///
-/// No `!`, unlike [`ENTRY`]: these programs are put to the two checkers through `typecheck_with_prelude_measured`, which elaborates an unannotated entrypoint in `Mode::Infer` where the compile path checks it against `Io({})` — so a top-level `!` has no region type to read its monad from. Nothing measured here needs the runtime taint either, since both checkers walk every declaration whether the entry reaches it or not.
+/// No `!`, unlike [`ENTRY`]: nothing measured here needs the runtime taint, since both checkers walk every declaration whether the entry reaches it or not.
 const TAIL: &str = "/std/print(\"ok\")\n";
 
 /// How many emitted functions carry `needle` in their debug name — one copy of a source function per hit.
@@ -386,10 +386,10 @@ fn a_symbolic_web_compares_against_zero_in_linear_units() {
     let units = |rules: usize| {
         let source = numerics(rules);
         let entrypoint = source.parse::<Entrypoint>().expect("the web parses");
-        let (_, _, consumption) =
-            typecheck_with_prelude_measured(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
-                .expect("the web elaborates within the default budget");
-        consumption.units()
+        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+            .expect("the web elaborates within the default budget")
+            .consumption
+            .units()
     };
 
     let curve = [6usize, 7, 8, 9].map(units);

@@ -1560,7 +1560,7 @@ fn finalize_and_check(
     })
 }
 
-/// The erasure-obligation verdicts, as one error — how every caller but the two-checker fixture harness consumes [`finalize_and_check`]'s report. Both obligations are reported when both fail: they are decided independently, and a reader fixing one is owed the other.
+/// The erasure-obligation verdicts, as one error — how every caller but the path that reports them beside the kernel's verdicts consumes [`finalize_and_check`]'s report. Both obligations are reported when both fail: they are decided independently, and a reader fixing one is owed the other.
 fn raise(outcome: Finalized) -> Result<(Module, Option<Entrypoint>), Error> {
     let Finalized {
         module,

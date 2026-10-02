@@ -10,7 +10,7 @@ use super::test_support::*;
 /// Compile `source`, whose every `?` a goal report determines, write each goal's reported solution over the goal's own span, and compile the result. An error names the program as rewritten, so a failure shows the spelling that did not read back.
 fn reads_back(source: &str) -> Result<(), String> {
     let rewritten = pasted(source)?;
-    compile(&rewritten, None)
+    compile(&rewritten)
         .map(|_| ())
         .map_err(|error| format!("{rewritten}\ndoes not compile:\n{error}"))
 }
@@ -19,7 +19,7 @@ fn reads_back(source: &str) -> Result<(), String> {
 fn pasted(source: &str) -> Result<String, String> {
     let reports = match compile_with_prelude(
         DEFAULT_STEP_BUDGET,
-        &with_entrypoint_type(source, None),
+        &entrypoint_of(source),
         &RootSource::none(),
         |_| {},
     ) {
@@ -360,7 +360,7 @@ fn sweep(header: &str, spell: impl Fn(&Qualifier) -> String, tail: &str) -> Stri
 fn every_public_standard_declaration_reads_back_by_its_absolute_path() {
     let source = sweep("", Qualifier::join, "/std/print(\"\")");
 
-    compile(&pasted(&source).unwrap(), None).unwrap();
+    compile(&pasted(&source).unwrap()).unwrap();
 }
 
 #[test]
@@ -372,5 +372,5 @@ fn every_public_standard_declaration_reads_back_under_a_glob_import() {
         "print(\"\")",
     );
 
-    compile(&pasted(&source).unwrap(), None).unwrap();
+    compile(&pasted(&source).unwrap()).unwrap();
 }

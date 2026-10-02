@@ -7,7 +7,7 @@ use {
         Globals, Kernel, Rechecked, Verdict, certify_module, certify_program,
         recheck_program_measured,
     },
-    curios_core::{Certification, Consumption, Intrinsic, Program, Term},
+    curios_core::{Certification, Consumption, Free, Global, Intrinsic, Program, Term},
     curios_elab::{
         Context, Established, FinalizedProgram, Resumed, Tail, elaborate_and_zonk_program,
         elaborate_and_zonk_program_reporting, elaborate_and_zonk_unit, erase_program, erase_unit,
@@ -227,92 +227,85 @@ pub(crate) fn kernel_refusal(
     })
 }
 
-/// Lower and type-check `entrypoint`, reporting the erasure obligations rather than raising them.
-///
-/// The elaborated module comes back even when this stage's own (T)/(V) verdicts refuse it, which is what lets one fixture be put to *both* checkers: `curios-cert` decides the same two obligations independently, and a program only this side refuses would otherwise yield no module for the kernel to judge — leaving the most consequential disagreement, the trusted base resting on an elaborator-only analysis, unobservable. Nothing else about type-checking is relaxed; every other error still short-circuits.
-///
-/// The verdicts are rendered against the lowered module, so they read as they would on the compile path. A caller that wants the kernel's opinion on the result puts it to [`recheck`], which supplies the same environment `compile_entrypoint` does rather than re-walking the standard library.
-pub fn typecheck_reporting(
-    budget: u64,
-    scope: Prefix<'_>,
-    syntax: &SyntaxRegistry,
-    entrypoint: &Entrypoint,
-    loader: &RootSource,
-) -> Result<(Program, Vec<String>), CompileError> {
-    typecheck_measured(budget, scope, syntax, entrypoint, loader)
-        .map(|(module, obligations, _)| (module, obligations))
+/// What type-checking refused a program with: the elaborator's own error where it was the elaborator that refused, beside the refusal as a compilation reports it.
+#[derive(Debug)]
+pub struct Refused {
+    /// The elaborator's error as it raised it. Absent where the program never reached a verdict of the elaborator's alone: it did not lower, or holds an item the parser could not read and nothing else failed.
+    pub error: Option<Box<curios_elab::Error>>,
+    pub reported: CompileError,
 }
 
-/// [`typecheck_reporting`], reporting what elaboration consumed as well: the heaviest declaration.
+impl fmt::Display for Refused {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.reported.fmt(formatter)
+    }
+}
+
+/// One erasure obligation the elaborator raised over a program it built: its error as raised, and the diagnostic a compilation prints for it.
+#[derive(Debug)]
+pub struct Obligation {
+    pub error: curios_elab::Error,
+    pub reported: String,
+}
+
+/// A program type-checked and not yet put to the kernel.
+#[derive(Debug)]
+pub struct Typechecked {
+    pub program: Program,
+    /// The (T) and (V) obligations the elaborator decided over the program, reported rather than raised. Empty when it carries none.
+    pub obligations: Vec<Obligation>,
+    /// What the heaviest declaration consumed: the units and peak depth `DEFAULT_STEP_BUDGET` is set against, and the only figures that say whether a program's cost is depth or work. A measurement's, which nothing in the compiler reads.
+    pub consumption: Consumption,
+}
+
+/// Lower and type-check `entrypoint` as a compilation does, stopping short of the kernel, with the erasure obligations reported rather than raised.
 ///
-/// The measurement entry point on this side of the seam, matching `curios-cert`'s `recheck_module_measured` on the other. The heaviest declaration's units and peak depth are what `DEFAULT_STEP_BUDGET` is set against and the only figures that say whether a program's cost is depth or work.
+/// The elaborated program comes back even when this stage's own (T)/(V) verdicts refuse it, which is what lets one program be put to *both* checkers: `curios-cert` decides the same two obligations independently, and a program only this side refuses would otherwise yield no module for the kernel to judge — leaving the most consequential disagreement, the trusted base resting on an elaborator-only analysis, unobservable. Nothing else about type-checking differs from the compile path, the entry's `Io({})` contract included: both elaborate through `elaborate_entry`, so there is one statement of what a program's tail is checked against.
 ///
-/// A measurement's entry point, never a control. Nothing in the compiler reads the last component, and [`typecheck_reporting`] drops it.
-pub fn typecheck_measured(
+/// Each refusal carries the elaborator's error as it raised it beside the diagnostic a compilation prints, since rendering is where a consumer that matches the error's variant would lose it. A caller that wants the kernel's opinion on the result puts it to [`recheck`], which supplies the same environment `compile_entrypoint` does rather than re-walking the standard library.
+pub fn typecheck_entrypoint(
     budget: u64,
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: &RootSource,
-) -> Result<(Program, Vec<String>, Consumption), CompileError> {
-    let text = scope.text();
-    let cores = scope.cores();
-    let LoweredEntry {
-        program: lowered,
-        minted,
-        unbound,
-        spellings,
-        broken,
-        ..
-    } = into_core_with_prelude(entrypoint, loader, &text, syntax)
-        .map_err(|error| CompileError::Failure(vec![error.report()]))?;
+) -> Result<Typechecked, Refused> {
+    let lowered =
+        lower_entry(scope, syntax, entrypoint, loader, &mut |_| {}).map_err(|reported| {
+            Refused {
+                error: None,
+                reported,
+            }
+        })?;
 
     let mut context = Context::new(budget, *syntax);
-    context.set_imports(spellings.imports.clone());
-    context.set_broken(broken.iter().filter_map(|item| item.declares).collect());
-    let FinalizedProgram {
-        module,
-        entry,
-        obligations,
-    } = with_broken(
-        &broken,
-        elaborate_and_zonk_program_reporting(
-            &mut context,
-            Established::over(&cores),
-            &lowered.module,
-            &minted,
-            Tail::Entry(&lowered.entry),
-        )
-        .map_err(|error| {
-            CompileError::of(&error, |member| {
-                member.reports_with_hints(&lowered.module, &cores, syntax, &unbound, &spellings)
-            })
-        }),
+    let ((program, _, _), obligations) = elaborate_entry(
+        &mut context,
+        scope,
+        syntax,
+        lowered,
+        EntryTail::Authored,
+        Obligations::Reported,
+        &mut |_| {},
     )?;
 
-    let obligations = obligations
-        .into_iter()
-        .map(|error| error.format_with_hints(&lowered.module, &cores, syntax, &unbound, &spellings))
-        .collect();
-
-    Ok((
-        Program {
-            module,
-            entry: entry.expect(WITHHELD_ONLY_WHEN_BROKEN),
-        },
+    Ok(Typechecked {
+        program,
         obligations,
-        context.heaviest_declaration(),
-    ))
+        consumption: context.heaviest_declaration(),
+    })
 }
 
 /// Why a program's elaborated entry is present wherever it is read: elaboration withholds an entry, recording no refusal, only when it reaches an item the lowering could not read, and `with_broken` turns any such item into a failure first.
 const WITHHELD_ONLY_WHEN_BROKEN: &str = "an entry is withheld only for reaching an item that did not parse, which fails the compile first";
 
-/// Which final term a compilation checks: the one the author wrote, or the test tail synthesized from a unit's registered tests. A policy rather than a boolean at each call site, so the program shapes a unit can compile to are named where they diverge.
+/// Which final term a compilation checks, and what it is judged at: the one the author wrote, as a program or as a proof, or the test tail synthesized from a unit's registered tests. A policy rather than a boolean at each call site, so the program shapes a unit can compile to are named where they diverge — and the whole of what an entry can be judged at, since nothing else states its type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryTail {
-    /// The authored entrypoint, exactly as parsed — the ordinary program.
+    /// The authored entrypoint, exactly as parsed — the ordinary program, judged at `Io({})`.
     Authored,
+    /// The authored entrypoint as an alleged proof of the empty proposition, judged at `False`, through [`examine_entrypoint`].
+    Proof,
     /// The synthesized `Test/main([...])` over the entry unit's own registered tests, replacing an executable's authored tail. A unit with no tests gets `Test/main([])`, which runs nothing and exits 0.
     Tests,
     /// The same synthesized tail over the last mounted unit's registered tests — the library-under-test case, where the entry is an empty program and the subject is the scope's final unit.
@@ -396,7 +389,18 @@ where
     O: FnMut(Stage<'_>),
 {
     let lowered = lower_entry(scope, syntax, entrypoint, loader, observe)?;
-    elaborate_lowered(budget, scope, syntax, lowered, tail, observe).1
+    elaborate_lowered(
+        budget,
+        scope,
+        syntax,
+        lowered,
+        tail,
+        Obligations::Raised,
+        observe,
+    )
+    .1
+    .map(|(elaborated, _)| elaborated)
+    .map_err(|refused| refused.reported)
 }
 
 /// The lowering half of the prologue: the surface tree to a core module, observed as the `text` rung.
@@ -427,8 +431,9 @@ fn elaborate_lowered<O>(
     syntax: &SyntaxRegistry,
     mut lowered: LoweredEntry,
     tail: EntryTail,
+    obligations: Obligations,
     observe: &mut O,
-) -> (Findings, Result<Elaborated, CompileError>)
+) -> (Findings, Result<(Elaborated, Vec<Obligation>), Refused>)
 where
     O: FnMut(Stage<'_>),
 {
@@ -436,20 +441,36 @@ where
 
     let mut findings = Findings::take(&mut lowered);
     let mut context = Context::new(budget, *syntax);
-    let verdict = elaborate_entry(&mut context, scope, syntax, lowered, tail, observe);
+    let verdict = elaborate_entry(
+        &mut context,
+        scope,
+        syntax,
+        lowered,
+        tail,
+        obligations,
+        observe,
+    );
     findings.credit(&context.credited());
     (findings, verdict)
 }
 
-/// [`elaborate_lowered`]'s elaboration, in `context`, which the caller reads its credits from however this ends.
+/// Whether the erasure obligations elaboration decides stop it, as a compilation has them, or come back beside the program, for a caller that puts the same program to the kernel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Obligations {
+    Raised,
+    Reported,
+}
+
+/// The one elaboration of an entry, in `context`, which the caller reads its credits and its consumption from however this ends: the compile path's and the type-checking path's alike, so the entry's contract is stated once. Beside the program come the obligations it reported, none where they are raised.
 fn elaborate_entry<O>(
     context: &mut Context,
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
     lowered: LoweredEntry,
     tail: EntryTail,
+    obligations: Obligations,
     observe: &mut O,
-) -> Result<Elaborated, CompileError>
+) -> Result<(Elaborated, Vec<Obligation>), Refused>
 where
     O: FnMut(Stage<'_>),
 {
@@ -467,7 +488,7 @@ where
 
     // A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules; the elaborator states the synthesized entry's `Io({})` type, as this stage states an authored entry's below. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
     let scheduled = match tail {
-        EntryTail::Authored => Vec::new(),
+        EntryTail::Authored | EntryTail::Proof => Vec::new(),
         EntryTail::Tests => scheduled_tests(&lowered.module.tests, &lowered.module.items),
         EntryTail::LastUnitTests => match cores.last() {
             Some(core) => scheduled_tests(&core.tests, &core.items),
@@ -478,37 +499,78 @@ where
 
     observe(Stage::Core(&lowered));
 
-    // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry that states no type of its own states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry. An embedder that states its own type keeps it; that is how the typecheck-only fixtures reach both checkers with deliberately odd tails. A test program's tail replaces the written entry, annotation included, and the elaborator that synthesizes it states its type.
+    // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry. An entry put as a proof states the empty proposition instead, and those two are the whole choice: the surface entry carries no type, so no caller states another. A test program's tail replaces the written entry, and the elaborator that synthesizes it states its type.
     //
     // `Io({})` is closed, which is what lets it be stated before elaboration at all. `Io(?T)` would need a metavariable minted before the elaboration context exists, which would leave the contract a post-hoc head test on the inferred type. Stating the unit payload removes the metavariable, and checking rather than inferring is what lets a tail spell itself `Io/pure(())` — the payload comes from the expectation exactly as it does under a written match motive.
-    if let EntryTail::Authored = tail {
-        lowered
-            .entry
-            .type_
-            .get_or_insert_with(|| Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit())));
+    match tail {
+        EntryTail::Authored => {
+            lowered.entry.type_ =
+                Some(Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit())));
+        }
+        EntryTail::Proof => {
+            let empty = Global::Authored(syntax.proof.false_type.qualifier());
+            lowered.entry.type_ = Some(Term::free_var(&Free::from(&empty)));
+        }
+        EntryTail::Tests | EntryTail::LastUnitTests => {}
     }
     let elab_tail = match tail {
-        EntryTail::Authored => Tail::Entry(&lowered.entry),
+        EntryTail::Authored | EntryTail::Proof => Tail::Entry(&lowered.entry),
         EntryTail::Tests | EntryTail::LastUnitTests => Tail::Tests(&scheduled),
     };
 
     context.set_imports(spellings.imports.clone());
     context.set_broken(broken.iter().filter_map(|item| item.declares).collect());
-    let (module, entry) = with_broken(
-        &broken,
-        elaborate_and_zonk_program(
+    let elaborated = match obligations {
+        Obligations::Raised => elaborate_and_zonk_program(
             context,
             Established::over(&cores),
             &lowered.module,
             &minted,
             elab_tail,
         )
-        .map_err(|error| {
-            CompileError::of(&error, |member| {
+        .map(|(module, entry)| (module, entry, Vec::new())),
+        Obligations::Reported => elaborate_and_zonk_program_reporting(
+            context,
+            Established::over(&cores),
+            &lowered.module,
+            &minted,
+            elab_tail,
+        )
+        .map(
+            |FinalizedProgram {
+                 module,
+                 entry,
+                 obligations,
+             }| (module, entry, obligations),
+        ),
+    };
+    // The error is kept as raised beside what it renders to: rendering is where its variant is lost.
+    let (error, elaborated) = match elaborated {
+        Ok(built) => (None, Ok(built)),
+        Err(error) => {
+            let reported = CompileError::of(&error, |member| {
                 member.reports_with_hints(&lowered.module, &cores, syntax, &unbound, &spellings)
-            })
-        }),
-    )?;
+            });
+
+            (Some(Box::new(error)), Err(reported))
+        }
+    };
+    let (module, entry, obligations) =
+        with_broken(&broken, elaborated).map_err(|reported| Refused { error, reported })?;
+
+    let obligations = obligations
+        .into_iter()
+        .map(|error| Obligation {
+            reported: error.format_with_hints(
+                &lowered.module,
+                &cores,
+                syntax,
+                &unbound,
+                &spellings,
+            ),
+            error,
+        })
+        .collect();
     let program = Program {
         module,
         entry: entry.expect(WITHHELD_ONLY_WHEN_BROKEN),
@@ -516,7 +578,7 @@ where
 
     observe(Stage::CoreElab(&program));
 
-    Ok((program, user_foreigns, records))
+    Ok(((program, user_foreigns, records), obligations))
 }
 
 /// Everything [`compile_entrypoint`] decides *about* a program before it builds anything from it: lowered, elaborated, zonked, judged by the kernel, and **erased**, with a refusal from any of them reported as the compile path reports it. What a question about a program's correctness is answered by.
@@ -615,46 +677,140 @@ fn check_lowered<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    let (findings, elaborated) = elaborate_lowered(budget, scope, syntax, lowered, tail, observe);
+    let (findings, put) = put_lowered(
+        budget,
+        scope,
+        syntax,
+        lowered,
+        tail,
+        Obligations::Raised,
+        observe,
+    );
     (
         findings,
-        elaborated.and_then(|elaborated| judge(budget, scope, syntax, elaborated)),
+        put.map_err(|refused| refused.reported)
+            .and_then(|put| put.accepted(scope, syntax)),
     )
 }
 
-/// Put an elaborated program to the kernel.
-fn judge(
-    budget: u64,
-    scope: Prefix<'_>,
-    syntax: &SyntaxRegistry,
-    (program, foreigns, records): Elaborated,
-) -> Result<Judged, CompileError> {
-    // The zonk evidence the kernel and erasure consume, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.
-    let program = curios_core::Zonked::project(&program)
-        .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
+/// An entry put to the elaborator and then to the kernel: the program, with the zonk evidence the kernel and erasure consume, and what each said of it beyond building it.
+struct Put {
+    program: curios_core::Zonked<Program>,
+    foreigns: ForeignStore,
+    records: Vec<TestRecord>,
+    /// The erasure obligations the elaborator reported: none where they are raised.
+    obligations: Vec<Obligation>,
+    /// Every refusal the kernel reached.
+    verdicts: Vec<Verdict>,
+    certification: Certification,
+}
 
-    // The independent kernel's second opinion, on the compile path: each unit in scope was walked when it was built and arrives here as environment, so only what it does not already answer for is judged — a refusal fails the compile.
-    let certification = {
-        curios_profile::profile!("recheck");
-        let rechecked = certify_program(&program, budget, &globals(scope), *syntax);
-        if let Some(verdict) = rechecked.verdicts.first() {
-            let refusal =
-                verdict
-                    .error
-                    .format_with(&program.as_program().module, &scope.cores(), syntax);
+impl Put {
+    /// The entry as the compile path takes it on: refused by the kernel's first verdict, or judged.
+    fn accepted(self, scope: Prefix<'_>, syntax: &SyntaxRegistry) -> Result<Judged, CompileError> {
+        if let Some(verdict) = self.verdicts.first() {
+            let refusal = verdict.error.format_with(
+                &self.program.as_program().module,
+                &scope.cores(),
+                syntax,
+            );
             return Err(CompileError::failure(match &verdict.name {
                 Some(name) => format!("the kernel refused {name}: {refusal}"),
                 None => format!("the kernel refused the entrypoint: {refusal}"),
             }));
         }
-        rechecked.certification
-    };
 
-    Ok(Judged {
-        program,
-        foreigns,
-        records,
-        certification,
+        Ok(Judged {
+            program: self.program,
+            foreigns: self.foreigns,
+            records: self.records,
+            certification: self.certification,
+        })
+    }
+}
+
+/// The one sequence every path that decides about a program takes, from a lowered entry: elaborate, zonk, and put the result to the kernel — beside the lowering's findings, credited by elaboration. `obligations` is the only thing a caller chooses: whether the elaborator's erasure obligations stop it, as a compilation has them, or come back beside the kernel's verdicts.
+fn put_lowered<O>(
+    budget: u64,
+    scope: Prefix<'_>,
+    syntax: &SyntaxRegistry,
+    lowered: LoweredEntry,
+    tail: EntryTail,
+    obligations: Obligations,
+    observe: &mut O,
+) -> (Findings, Result<Put, Refused>)
+where
+    O: FnMut(Stage<'_>),
+{
+    let (findings, elaborated) =
+        elaborate_lowered(budget, scope, syntax, lowered, tail, obligations, observe);
+    (
+        findings,
+        elaborated.and_then(|((program, foreigns, records), obligations)| {
+            // The zonk evidence the kernel and erasure consume, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.
+            let program = curios_core::Zonked::project(&program).map_err(|refusal| Refused {
+                error: None,
+                reported: CompileError::failure(refusal.to_string()),
+            })?;
+
+            // The independent kernel's second opinion: each unit in scope was walked when it was built and arrives here as environment, so only what it does not already answer for is judged.
+            let rechecked = {
+                curios_profile::profile!("recheck");
+                certify_program(&program, budget, &globals(scope), *syntax)
+            };
+
+            Ok(Put {
+                program,
+                foreigns,
+                records,
+                obligations,
+                verdicts: rechecked.verdicts,
+                certification: rechecked.certification,
+            })
+        }),
+    )
+}
+
+/// What each checker said of a program the elaborator built.
+#[derive(Debug)]
+pub struct Examined {
+    /// The (T) and (V) obligations the elaborator decided over the program, reported rather than raised.
+    pub obligations: Vec<Obligation>,
+    /// Every refusal the kernel reached over the same program.
+    pub verdicts: Vec<Verdict>,
+}
+
+/// Put `entrypoint` to both checkers as a proof of the empty proposition — lowering, elaboration at `False`, the kernel — and hand back what each said rather than stopping at the first refusal.
+///
+/// The steps are the compile path's own, taken in its order through `put_lowered`, with one difference: the elaborator's erasure obligations are reported rather than raised, so a program only it refuses still reaches the kernel. That is what a consumer asking which checker refused a program needs, and what [`check_entrypoint`] cannot say, since it stops at the first refusal. It stops under the kernel: erasure decides whether a program can be built, which is no part of whether its entry has the type it states.
+pub fn examine_entrypoint(
+    budget: u64,
+    scope: Prefix<'_>,
+    syntax: &SyntaxRegistry,
+    entrypoint: &Entrypoint,
+    loader: &RootSource,
+) -> Result<Examined, Refused> {
+    let lowered =
+        lower_entry(scope, syntax, entrypoint, loader, &mut |_| {}).map_err(|reported| {
+            Refused {
+                error: None,
+                reported,
+            }
+        })?;
+    let (_, put) = put_lowered(
+        budget,
+        scope,
+        syntax,
+        lowered,
+        EntryTail::Proof,
+        Obligations::Reported,
+        &mut |_| {},
+    );
+    let put = put?;
+
+    Ok(Examined {
+        obligations: put.obligations,
+        verdicts: put.verdicts,
     })
 }
 

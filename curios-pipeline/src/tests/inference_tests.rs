@@ -1,39 +1,13 @@
 //! What postpones until a sibling pins it, and what an unannotated binding infers.
 
-use {
-    crate::*,
-    curios_text::{Entrypoint, RootSource},
-};
-
 use super::test_support::*;
 
 #[test]
-fn entrypoint_type_is_used_as_expected_type() {
-    // A `Str` literal, because a numeral does not serve: `0` realizes at an expected `Bool`, numerals being the packed literals' constant-atom spelling, so the mismatch needs a shape no expectation can absorb.
-    let entrypoint =
-        r#""zero""#.parse::<Entrypoint>().unwrap().with_type("/std/Bool".parse().unwrap());
-
-    let error = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .map_err(String::from)
-    .unwrap_err();
+fn an_entry_that_describes_nothing_is_a_type_mismatch() {
+    // A program describes doing something and yielding nothing, so its entry is checked against `Io({})` and no caller states another type for it. A `Str` literal, because a numeral does not serve: numerals are the packed literals' constant-atom spelling, so the mismatch needs a shape no expectation can absorb.
+    let error = compile(r#""zero""#).unwrap_err();
 
     assert!(error.contains("type mismatch"));
-}
-
-#[test]
-fn an_entrypoint_type_may_apply_a_type_former() {
-    // The annotation is elaborated before it becomes the expectation (`elaborate_module_suffix`), so an application of a type former reduces to the intrinsic it denotes. Left raw it would reach conversion as an `Apply` that no unfolding could reconcile with the inferred `Intrinsic::ListType`, and the mismatch would be reported between two spellings of one type — `List Nat` against `List(Nat)`.
-    let source = r#"
-        use /std/{List, Nat};
-        [1]
-    "#;
-
-    assert!(compile(source, Some("/std/List(/std/Nat)")).is_ok());
 }
 
 #[test]
@@ -48,7 +22,7 @@ fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
 
         Io/pure(())
     "#;
-    let error = compile(source, None).map(|_| ()).unwrap_err();
+    let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
         error.contains("cannot decide a postponed conversion"),
         "unexpected report: {error}"
@@ -78,7 +52,7 @@ fn a_conversion_parked_under_refinements_notes_the_dependence() {
 
         Io/pure(())
     "#;
-    let error = compile(source, None).map(|_| ()).unwrap_err();
+    let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
         error.contains("cannot decide a postponed conversion"),
         "unexpected report: {error}"
@@ -104,7 +78,7 @@ fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
 
         Io/pure(())
     "#;
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -137,7 +111,7 @@ fn a_packed_literal_decomposes_against_its_folded_spine() {
 
         Io/pure(())
     "#;
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -154,7 +128,7 @@ fn a_dependent_result_action_auto_lifts_through_bang() {
 
         Io/pure(())
     "#;
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -168,7 +142,7 @@ fn a_list_element_lambda_body_solves_against_the_element_metavariable() {
 
         /std/Io/pure(())
     "#;
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -182,7 +156,7 @@ fn a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade() {
             Io/pure(());
         probe
     "#;
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -192,10 +166,10 @@ fn a_conversion_held_up_by_a_goal_and_an_implicit_still_reports_postponement() {
         use /std/{Nat, Eq};
         let f(@A : Type, a : A) -> {} = ();
         let stuck(k : Nat, h : Eq()(k, 7)) -> {} = f((n : Nat) => Eq/cong(?, h));
-        0
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("cannot decide a postponed conversion"),
@@ -222,10 +196,10 @@ fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
             List/map(xs, f);
         let first(xs : List({ Nat, Nat })) -> List(Nat) =
             with((pair) => pair.0, xs);
-        0
+        /std/Io/pure(())
     "#;
 
-    assert!(typecheck(source, Some("/std/Nat")).is_ok());
+    assert!(typecheck(source).is_ok());
 }
 
 #[test]
@@ -239,20 +213,20 @@ fn empty_array_postpones_until_a_sibling_pins_its_element_type() {
             combine(fallback, fallback);
         let go : List(Nat) =
             pick([], cat);
-        0
+        /std/Io/pure(())
     "#;
 
-    assert!(typecheck(source, Some("/std/Nat")).is_ok());
+    assert!(typecheck(source).is_ok());
 
     // With no sibling to ground the element type and no result type to pin it, the postponed `[]` re-checks against a bare metavar and is rejected — graceful degradation, no new acceptance.
     let unpinned = r#"
         use /std/{List};
         let id(@A : Type, x : A) -> A = x;
         let bad = id([]);
-        0
+        /std/Io/pure(())
     "#;
 
-    assert!(typecheck(unpinned, Some("/std/Nat")).is_err());
+    assert!(typecheck(unpinned).is_err());
 }
 
 #[test]
@@ -264,10 +238,10 @@ fn continuation_postpones_until_the_result_type_pins_its_codomain() {
         let pair : Parse(Bytes, { Byte, Byte }) =
             let x = Parse/bytes/byte!;
             Parse/pure((x, x));
-        0
+        /std/Io/pure(())
     "#;
 
-    assert!(typecheck(source, Some("/std/Nat")).is_ok());
+    assert!(typecheck(source).is_ok());
 
     // The `expected_ground` gate: with no concrete result type to pin `?B`, the codomain stays a metavar, the continuation is *not* postponed, and the bare tuple is rejected — graceful degradation, no new acceptance. The unpinned region is a typeless local `let`'s body, which is where a region's type is still inferred: the entrypoint tail is always checked.
     let unpinned = r#"
@@ -275,10 +249,10 @@ fn continuation_postpones_until_the_result_type_pins_its_codomain() {
         let bad =
             let x = Parse/bytes/byte!;
             Parse/pure((x, x));
-        0
+        /std/Io/pure(())
     "#;
 
-    assert!(typecheck(unpinned, Some("/std/Nat")).is_err());
+    assert!(typecheck(unpinned).is_err());
 }
 
 #[test]
@@ -291,18 +265,19 @@ fn closure_returning_a_bare_projection_lowers() {
         /std/print(/std/Nat/to_str(List/len(mapped)))
     "#;
 
-    assert!(compile(source, None).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
 fn typeless_let_infers_a_literal_body() {
     // A local `let` with no type annotation infers the body's type (`Nat` here) and lowers end-to-end.
     let source = r#"
-        let n = 5;
-        n
+        let subject : /std/Nat = let n = 5;
+        n;
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Nat")).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -310,11 +285,12 @@ fn typeless_let_binds_an_annotated_closure() {
     // The composite feature: a typeless local `let` binds an annotated closure. The closure's type is synthesized from its annotation (Infer-mode `elaborate_func`), the let's type is inferred from it, and `f(5)` checks and lowers all the way to wasm.
     let source = r#"
         use /std/{Nat};
-        let f = (x : Nat) => x;
-        f(5)
+        let subject : /std/Nat = let f = (x : Nat) => x;
+        f(5);
+        /std/Io/pure(())
     "#;
 
-    assert!(compile(source, Some("/std/Nat")).is_ok());
+    assert!(compile(source).is_ok());
 }
 
 #[test]
@@ -323,10 +299,11 @@ fn closure_annotation_must_match_the_expected_domain() {
     let source = r#"
         use /std/{Nat, Bool};
         let f : (Nat) -> Nat = (x : Bool) => x;
-        f(5)
+        let subject : /std/Nat = f(5);
+        /std/Io/pure(())
     "#;
 
-    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(error.contains("mismatch"), "unexpected error: {error}");
 }
@@ -339,7 +316,7 @@ fn bare_typeless_let_closure_cannot_be_inferred() {
         f
     "#;
 
-    let error = compile(source, None).unwrap_err();
+    let error = compile(source).unwrap_err();
 
     assert!(
         error.contains("the type of parameter 'x' was never determined"),
@@ -350,5 +327,5 @@ fn bare_typeless_let_closure_cannot_be_inferred() {
 #[test]
 fn typecheck_accepts_a_well_typed_program() {
     // The fast path stops after `elaborate → zonk`; a well-typed program passes without running erase/cont/optimize/wasm.
-    assert!(typecheck("/std/print(/std/Nat/to_str(0))", None).is_ok());
+    assert!(typecheck("/std/print(/std/Nat/to_str(0))").is_ok());
 }
