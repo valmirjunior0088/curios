@@ -230,7 +230,7 @@ pub use Tty/{let Tty};
 --- The filesystem beyond a file's contents: what is at a path, a directory's entries, and making, moving and removing things. Every operation is `Io`, and `Try` over it where it can fail.
 pub mod fs;
 
---- A serial device: a port opened at its speed and frame, read and written as a stream, its DTR and RTS lines driven and its unread input dropped, and the devices the host names listed.
+--- A serial device: a port opened at its speed and frame, read and written as a stream and drained, its DTR and RTS lines driven and its unread input dropped, and the devices the host has listed.
 pub mod Serial;
 pub use Serial/{let Serial};
 

@@ -2,7 +2,7 @@
 
 use {
     super::{super::host::*, EBUSY, ENOTTY, MockHost},
-    curios_abi::event,
+    curios_abi::{errno, event},
     std::num::NonZeroU32,
 };
 
@@ -309,6 +309,93 @@ fn a_serial_discard_drops_only_what_arrived() {
     host.handle_poll(vec![port.clone()], vec![Poll::from_bits(event::READ)], 0)
         .unwrap();
     assert_eq!(host.handle_read(port, 16), Ok(Some(b"ready".to_vec())));
+}
+
+// The scripted devices are what the host has: listed in byte order, whatever order they were scripted in, and a host scripted with none lists none.
+#[test]
+fn the_serial_devices_listed_are_the_scripted_ones_in_byte_order() {
+    let (host, _io) = MockHost::builder()
+        .serial([
+            ("/dev/ttyUSB1", Vec::<&str>::new()),
+            ("/dev/ttyS0", Vec::<&str>::new()),
+        ])
+        .build();
+
+    assert_eq!(
+        host.serial_list(),
+        Ok(vec![b"/dev/ttyS0".to_vec(), b"/dev/ttyUSB1".to_vec()])
+    );
+
+    let (bare, _io) = MockHost::builder().build();
+
+    assert_eq!(bare.serial_list(), Ok(vec![]));
+}
+
+// A speed no setting holds is refused before the device is looked for, as the native host refuses it.
+#[test]
+fn a_serial_open_refuses_a_speed_no_setting_holds() {
+    let (host, io) = MockHost::builder()
+        .serial([("/dev/ttyUSB0", Vec::<&str>::new())])
+        .build();
+
+    for baud in [0, u64::from(u32::MAX) + 1] {
+        assert_eq!(
+            host.serial_open(
+                b"/dev/ttyUSB0".to_vec(),
+                baud,
+                8,
+                SerialParity::None,
+                1,
+                SerialFlow::None
+            ),
+            Err(Failure::Other(errno::EINVAL))
+        );
+    }
+
+    assert_eq!(io.serial_opens(), []);
+}
+
+// A scripted port takes every write whole, so its drain is over as it starts: the handle reads its end, and the port is recorded as drained. A handle that is not a port has nothing to drain.
+#[test]
+fn a_serial_drain_is_over_as_it_starts() {
+    let (host, io) = MockHost::builder()
+        .serial([("/dev/ttyUSB0", Vec::<&str>::new())])
+        .build();
+
+    let port = host
+        .serial_open(
+            b"/dev/ttyUSB0".to_vec(),
+            9600,
+            8,
+            SerialParity::None,
+            1,
+            SerialFlow::None,
+        )
+        .unwrap();
+
+    let wait = host.serial_drain(port).unwrap();
+    assert_eq!(host.handle_read(wait, 1), Ok(None));
+    assert_eq!(io.serial_drains(), [b"/dev/ttyUSB0".to_vec()]);
+
+    let file = host.file_open(b"f".to_vec(), Mode::Write).unwrap();
+    assert_eq!(host.serial_drain(file), Err(Failure::NotFound));
+    assert_eq!(host.serial_drain(Handle::Stdin), Err(Failure::NotFound));
+}
+
+// A file and a standard stream have no lines to drive, and are `NotFound` as the native host answers them.
+#[test]
+fn a_control_on_a_handle_that_is_not_a_port_is_not_found() {
+    let (host, io) = MockHost::builder().build();
+    let file = host.file_open(b"f".to_vec(), Mode::Write).unwrap();
+
+    for handle in [file, Handle::Stdin] {
+        assert_eq!(
+            host.serial_control(handle, SerialOp::Dtr, true),
+            Err(Failure::NotFound)
+        );
+    }
+
+    assert_eq!(io.serial_controls(), []);
 }
 
 /// Spawn `program` with its standard output piped and the rest inherited.

@@ -343,7 +343,7 @@ struct MockSerial {
     bytes: Chunked,
 }
 
-/// A non-stdio handle in [`MockHost`]'s unified table — the scripted, in-memory mirror of `OsHost`'s `OsResource`. The BSD lifecycle moves a handle between states: `socket_open` mints a `Socket`, `socket_connect` turns it into an `Outbound` stream, `socket_listen` turns it into a `Listener` that `socket_accept` pulls `Inbound` streams from; `file_open` files a `File`; `proc_spawn` files a `Child` with a `Piped` stream per piped output and a `Sink` for a piped stdin; `serial_open` files a `Serial` port. `handle_close` drops any kind.
+/// A non-stdio handle in [`MockHost`]'s unified table — the scripted, in-memory mirror of `OsHost`'s `OsResource`. The BSD lifecycle moves a handle between states: `socket_open` mints a `Socket`, `socket_connect` turns it into an `Outbound` stream, `socket_listen` turns it into a `Listener` that `socket_accept` pulls `Inbound` streams from; `file_open` files a `File`; `proc_spawn` files a `Child` with a `Piped` stream per piped output and a `Sink` for a piped stdin; `serial_open` files a `Serial` port and `serial_drain` a `Piped` stream already at its end. `handle_close` drops any kind.
 enum MockResource {
     File(MockFile),
     Child(MockChild),
@@ -410,7 +410,7 @@ pub struct MockHost {
     children: HashMap<Vec<u8>, MockChildScript>,
     /// The program names of every child `proc_kill` ended, in order — a child that had already ended is not signaled, so it is not recorded. Shared with [`MockIo::kills`], so a test can see that a cancelled task killed what it spawned.
     kills: Arc<Mutex<Vec<Vec<u8>>>>,
-    /// Scripted serial devices by path: the chunks a port serves while it is open. Opening an unscripted path is `NotFound`.
+    /// Scripted serial devices by path: the chunks a port serves while it is open, and the paths `serial_list` names. Opening an unscripted path is `NotFound`.
     serial_devices: HashMap<Vec<u8>, Vec<Vec<u8>>>,
     /// Every serial open that reached a scripted device, in order: its path and `[baud, data_bits, parity, stop_bits, flow]`. Shared with [`MockIo::serial_opens`].
     serial_opens: Arc<Mutex<Vec<SerialOpen>>>,
@@ -418,6 +418,8 @@ pub struct MockHost {
     serial_controls: Arc<Mutex<Vec<(u64, bool)>>>,
     /// What the program wrote to each serial port, by path. Shared with [`MockIo::serial_written`].
     serial_written: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
+    /// Every drain started on an open serial port, in order, by the port's path. Shared with [`MockIo::serial_drains`].
+    serial_drains: Arc<Mutex<Vec<Vec<u8>>>>,
 }
 
 /// `SIGKILL`, the signal a killed child ends by — `9` on both release targets, Linux and macOS.
@@ -888,8 +890,10 @@ impl HostOps for MockHost {
         stop_bits: u64,
         flow: SerialFlow,
     ) -> Result<Handle, Failure> {
-        // Refused in the native host's order: a frame outside the row's ranges before the device is looked for.
-        if serial_frame(data_bits, parity, stop_bits, flow).is_none() {
+        // Refused in the native host's order: a frame or a speed outside the row's ranges before the device is looked for.
+        if serial_frame(data_bits, parity, stop_bits, flow).is_none()
+            || serial_speed(baud).is_none()
+        {
             return Err(Failure::Other(errno::EINVAL));
         }
 
@@ -911,11 +915,9 @@ impl HostOps for MockHost {
     fn serial_control(&self, io: Handle, op: SerialOp, on: bool) -> Result<(), Failure> {
         let mut table = self.table.lock().unwrap();
 
-        let port = match table.get_mut(&io) {
-            Some(MockResource::Serial(port)) => port,
-            // A descriptor that is a file, a pipe or a socket has no modem lines, and the native host's ioctl says so through the errno lane.
-            Some(_) => return Err(Failure::Other(ENOTTY)),
-            None => return Err(Failure::NotFound),
+        // A handle that is not a port — closed, a standard stream, or a file, a pipe or a socket — is `NotFound`, as the native host answers by the kind it filed.
+        let Some(MockResource::Serial(port)) = table.get_mut(&io) else {
+            return Err(Failure::NotFound);
         };
 
         if op == SerialOp::DiscardInput {
@@ -925,6 +927,28 @@ impl HostOps for MockHost {
         self.serial_controls.lock().unwrap().push((op.code(), on));
 
         Ok(())
+    }
+
+    fn serial_drain(&self, io: Handle) -> Result<Handle, Failure> {
+        let mut table = self.table.lock().unwrap();
+
+        let Some(MockResource::Serial(port)) = table.get(&io) else {
+            return Err(Failure::NotFound);
+        };
+
+        self.serial_drains.lock().unwrap().push(port.path.clone());
+
+        // The in-memory port takes every write whole, so nothing is ever left to send: the wait is over as it starts, a stream with no chunks.
+        Ok(table.mint(MockResource::Piped(Chunked::new(vec![]))))
+    }
+
+    fn serial_list(&self) -> Result<Vec<Vec<u8>>, Failure> {
+        // In byte order, as the native host sorts what the system has.
+        let mut paths = self.serial_devices.keys().cloned().collect::<Vec<_>>();
+
+        paths.sort();
+
+        Ok(paths)
     }
 
     fn file_stat(&self, path: Vec<u8>) -> Result<FileStat, Failure> {
@@ -1065,6 +1089,7 @@ pub struct MockIo {
     serial_opens: Arc<Mutex<Vec<SerialOpen>>>,
     serial_controls: Arc<Mutex<Vec<(u64, bool)>>>,
     serial_written: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
+    serial_drains: Arc<Mutex<Vec<Vec<u8>>>>,
 }
 
 impl MockIo {
@@ -1106,6 +1131,11 @@ impl MockIo {
     /// Every control the guest applied to an open serial port, in order: the [`serial_op`](curios_abi::serial_op) tag and the level.
     pub fn serial_controls(&self) -> Vec<(u64, bool)> {
         self.serial_controls.lock().unwrap().clone()
+    }
+
+    /// Every drain the guest started on an open serial port, in order, by the port's path.
+    pub fn serial_drains(&self) -> Vec<Vec<u8>> {
+        self.serial_drains.lock().unwrap().clone()
     }
 
     /// What the guest wrote to the serial port at `path`, concatenated in write order.
@@ -1280,7 +1310,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Script the serial devices `serial_open` finds: `(path, chunks)`, each port serving its chunks as `net_chunks` serves a response — the first arrived by the open, each later one once a `handle_poll` arms it. Opening an unscripted path is `NotFound`.
+    /// Script the serial devices `serial_list` names and `serial_open` finds: `(path, chunks)`, each port serving its chunks as `net_chunks` serves a response — the first arrived by the open, each later one once a `handle_poll` arms it. Opening an unscripted path is `NotFound`.
     pub fn serial<P, C, I>(mut self, devices: I) -> Self
     where
         P: AsRef<[u8]>,
@@ -1372,6 +1402,7 @@ impl MockHostBuilder {
         let serial_opens = Arc::new(Mutex::new(Vec::new()));
         let serial_controls = Arc::new(Mutex::new(Vec::new()));
         let serial_written = Arc::new(Mutex::new(HashMap::new()));
+        let serial_drains = Arc::new(Mutex::new(Vec::new()));
 
         let io = MockIo {
             output: output.clone(),
@@ -1383,6 +1414,7 @@ impl MockHostBuilder {
             serial_opens: serial_opens.clone(),
             serial_controls: serial_controls.clone(),
             serial_written: serial_written.clone(),
+            serial_drains: serial_drains.clone(),
         };
 
         let host = MockHost {
@@ -1411,6 +1443,7 @@ impl MockHostBuilder {
             serial_opens,
             serial_controls,
             serial_written,
+            serial_drains,
         };
 
         (host, io)

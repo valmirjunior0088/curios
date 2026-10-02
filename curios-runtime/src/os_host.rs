@@ -1,15 +1,12 @@
 use {
-    super::{OsResolver, Running, Slot, Spawned, Table, host::*, os_child},
+    super::{
+        OsResolver, Running, SerialPort, Slot, Spawned, Table, host::*, os_child, serial_devices,
+    },
     curios_abi::event,
     rustix::{
         event::{PollFd, PollFlags, Timespec, poll},
-        fs::OFlags,
         io::Errno,
-        ioctl::{Opcode, Setter, ioctl},
-        termios::{
-            ControlModes, OptionalActions, QueueSelector, Termios, tcflush, tcgetattr,
-            tcgetwinsize, tcsetattr,
-        },
+        termios::{OptionalActions, Termios, tcgetattr, tcgetwinsize, tcsetattr},
     },
     rustls::{
         ClientConfig, ClientConnection, ConnectionCommon, RootCertStore, ServerConfig,
@@ -18,7 +15,7 @@ use {
     socket2::{Domain, SockAddr, Socket, Type},
     std::{
         env,
-        ffi::{OsStr, c_int},
+        ffi::OsStr,
         fs::{self, File, OpenOptions},
         io::{self, Error, ErrorKind, Read, Write, stderr, stdin, stdout},
         net::SocketAddr,
@@ -50,7 +47,7 @@ static CLIENT_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
     )
 });
 
-/// A non-stdio handle in [`OsHost`]'s unified table, tracking the BSD lifecycle with one concrete type per state: `file_open` files a `File`; `socket_open` mints an `Unconnected` socket, `socket_connect` turns it into a `Connected` one at once or into a `Connecting` one that `socket_finish_connect` settles (`socket_accept` mints a `Connected` one directly), and `socket_listen` turns it into a `Listener`. `tls_start` / `tls_start_server` upgrade a `Connected` socket in place to a `ClientTls` / `ServerTls` stream; `tls_server_config` files a host-owned `TlsConfig` token. `handle_read`/`handle_write` serve `File`, `Connected`, and both TLS streams alike (all are `Read + Write`); `handle_close` drops any kind, releasing its descriptor.
+/// A non-stdio handle in [`OsHost`]'s unified table, tracking the BSD lifecycle with one concrete type per state: `file_open` files a `File`; `socket_open` mints an `Unconnected` socket, `socket_connect` turns it into a `Connected` one at once or into a `Connecting` one that `socket_finish_connect` settles (`socket_accept` mints a `Connected` one directly), and `socket_listen` turns it into a `Listener`. `tls_start` / `tls_start_server` upgrade a `Connected` socket in place to a `ClientTls` / `ServerTls` stream; `tls_server_config` files a host-owned `TlsConfig` token; `serial_open` files a `Serial` port. `handle_read`/`handle_write` serve `File`, `Connected`, both TLS streams, a `Descriptor` and a `Serial` port alike; `handle_close` drops any kind, releasing its descriptor.
 ///
 /// Every kind on which a peer decides — a socket in any state, an accepted stream, a pipe to a child, a serial port — is filed non-blocking at the moment it is minted, so no row waits on a peer: a `handle_read`, `handle_write`, `socket_connect` or `socket_accept` that cannot progress answers `WouldBlock` and `handle_poll` is the one place the host sleeps. A regular file is synchronous, since the disk rather than a peer answers it.
 enum OsResource {
@@ -60,8 +57,10 @@ enum OsResource {
         done: OwnedFd,
         slot: Slot,
     },
-    /// A bare owned descriptor — one end of a pipe to a child, filed by `proc_spawn`, or a serial port, filed by `serial_open`. Named by what it holds, as `File` and `Listener` are, and the one thing separating it from `File` is that it is non-blocking for real: whoever files one makes it so first — `proc_spawn` through `fcntl`, `serial_open` at the open itself — so a fiber draining it yields on `WouldBlock` instead of blocking the scheduler, while `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve it as they serve a file.
+    /// A bare owned descriptor — one end of a pipe to a child, filed by `proc_spawn`, or the pipe a serial drain ends, filed by `serial_drain`. Named by what it holds, as `File` and `Listener` are, and the one thing separating it from `File` is that it is non-blocking for real: whoever files one makes it so through `fcntl` first, so a fiber draining it yields on `WouldBlock` instead of blocking the scheduler, while `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve it as they serve a file.
     Descriptor(OwnedFd),
+    /// A serial port filed by `serial_open`, non-blocking from its open. The stream rows serve it as they serve a `Descriptor`, it is the one kind `serial_control` and `serial_drain` serve, and dropping it discards its unsent output before its descriptor closes.
+    Serial(SerialPort),
     /// A running child minted by `proc_spawn`: its `done` pipe end becomes `READ`-ready when the reaper has recorded the end, `proc_wait` answers it, and `proc_kill` addresses its pid while it runs. Its piped streams are `Descriptor`s of their own, handed back beside it, so closing the child leaves them filed, and the reaper still reaps the process.
     Child {
         running: Running,
@@ -112,7 +111,7 @@ impl OsHost {
         }
     }
 
-    /// Run `apply` over the descriptor behind `handle` — a standard stream's, or an open file's out of the table. `None` for a handle with no descriptor a terminal `ioctl` could address, which the callers report as `NotFound`.
+    /// Run `apply` over the descriptor behind `handle` — a standard stream's, or an open file's, pipe's or serial port's out of the table. `None` for a handle with no descriptor a terminal `ioctl` could address, which the callers report as `NotFound`.
     fn with_fd<R>(&self, handle: &Handle, apply: impl FnOnce(BorrowedFd<'_>) -> R) -> Option<R> {
         match handle {
             Handle::Stdin => Some(apply(stdin().as_fd())),
@@ -121,6 +120,7 @@ impl OsHost {
             Handle::Other(_) => match self.table.lock().unwrap().get(handle)? {
                 OsResource::File(file) => Some(apply(file.as_fd())),
                 OsResource::Descriptor(fd) => Some(apply(fd.as_fd())),
+                OsResource::Serial(port) => Some(apply(port.as_fd())),
                 _ => None,
             },
         }
@@ -138,7 +138,8 @@ impl OsHost {
                     | OsResource::Connected(_)
                     | OsResource::ClientTls(_)
                     | OsResource::ServerTls(_)
-                    | OsResource::Descriptor(_),
+                    | OsResource::Descriptor(_)
+                    | OsResource::Serial(_),
                 ) => Ok(()),
                 _ => Err(Failure::NotFound),
             },
@@ -194,10 +195,11 @@ impl OsHost {
                 // A TLS stream forwards setters to its underlying socket.
                 Some(OsResource::ClientTls(stream)) => &stream.sock,
                 Some(OsResource::ServerTls(stream)) => &stream.sock,
-                // A file, a pipe, a child, a config token, and an in-flight lookup have no socket options: record nothing.
+                // A file, a pipe, a serial port, a child, a config token, and an in-flight lookup have no socket options: record nothing.
                 Some(
                     OsResource::File(_)
                     | OsResource::Descriptor(_)
+                    | OsResource::Serial(_)
                     | OsResource::Child { .. }
                     | OsResource::TlsConfig(_)
                     | OsResource::Resolving { .. },
@@ -558,6 +560,7 @@ impl HostOps for OsHost {
                     // The lookup's pipe read end: `READ`-ready once the worker has written its wakeup byte, which is the completion signal.
                     OsResource::Resolving { done, .. } => Some((done.as_fd(), requested)),
                     OsResource::Descriptor(fd) => Some((fd.as_fd(), requested)),
+                    OsResource::Serial(port) => Some((port.as_fd(), requested)),
                     // The reaper's pipe read end: `READ`-ready once the child's end is recorded, which is when `proc_wait` answers.
                     OsResource::Child { running, .. } => Some((running.done.as_fd(), requested)),
                     // A TLS stream is watched through its socket, for the interest `rustls` itself has while the handshake is under way and the guest's own afterwards; the config token has no descriptor.
@@ -686,6 +689,11 @@ impl HostOps for OsHost {
 
                         return read_outcome(result.map_err(Error::from), buffer);
                     }
+                    Some(OsResource::Serial(port)) => {
+                        let result = rustix::io::read(&*port, &mut buffer[..]);
+
+                        return read_outcome(result.map_err(Error::from), buffer);
+                    }
                     // A missing or non-stream handle is a fault, not an exhausted stream — mirror write's `NotFound` so use-after-close stays loud.
                     _ => return Err(Failure::NotFound),
                 };
@@ -726,6 +734,9 @@ impl HostOps for OsHost {
             Some(OsResource::ServerTls(tls)) => tls_write(|| tls.write(&bytes)),
             Some(OsResource::Descriptor(fd)) => {
                 write_once(|| rustix::io::write(&*fd, &bytes).map_err(Error::from))
+            }
+            Some(OsResource::Serial(port)) => {
+                write_once(|| rustix::io::write(&*port, &bytes).map_err(Error::from))
             }
             _ => Err(Failure::NotFound),
         }
@@ -854,51 +865,42 @@ impl HostOps for OsHost {
         stop_bits: u64,
         flow: SerialFlow,
     ) -> Result<Handle, Failure> {
-        // A frame outside the row's ranges is refused before the device is touched, so it can neither leave a half-configured port behind nor reset a board through the open's DTR.
-        let Some(frame) = serial_frame(data_bits, parity, stop_bits, flow) else {
+        // A frame or a speed outside the row's ranges is refused before the device is touched, so it can neither leave a half-configured port behind nor reset a board through the open's DTR.
+        let (Some(frame), Some(speed)) = (
+            serial_frame(data_bits, parity, stop_bits, flow),
+            serial_speed(baud),
+        ) else {
             return Err(failure_from_error(Error::from(Errno::INVAL)));
         };
 
-        // Non-blocking from the open rather than switched after it, because opening a port whose carrier line is down waits for carrier until `CLOCAL` is set, and `CLOCAL` is set on a descriptor already open. `NOCTTY` keeps the port from becoming this process's controlling terminal, and `CLOEXEC` keeps a spawned child from holding it past the program's own close. No exclusive hold is taken: whether `TIOCEXCL` refuses a second open differs by kernel, by device and by privilege, so the row promises only what every kernel does.
-        let opened = rustix::fs::open(
-            path.as_slice(),
-            OFlags::RDWR | OFlags::NOCTTY | OFlags::NONBLOCK | OFlags::CLOEXEC,
-            rustix::fs::Mode::empty(),
-        )
-        .and_then(|fd| {
-            let mut termios = tcgetattr(&fd)?;
-
-            termios.make_raw();
-            termios.control_modes -= ControlModes::CSIZE
-                | ControlModes::PARENB
-                | ControlModes::PARODD
-                | ControlModes::CSTOPB
-                | ControlModes::CRTSCTS;
-            termios.control_modes |= frame | ControlModes::CLOCAL | ControlModes::CREAD;
-            termios.set_speed(u32::try_from(baud).map_err(|_| Errno::INVAL)?)?;
-
-            tcsetattr(&fd, OptionalActions::Now, &termios)?;
-
-            Ok(fd)
-        });
-
-        opened
-            .map(|fd| self.mint(OsResource::Descriptor(fd)))
+        SerialPort::open(&path, speed, frame)
+            .map(|port| self.mint(OsResource::Serial(port)))
             .map_err(|errno| failure_from_error(Error::from(errno)))
     }
 
     fn serial_control(&self, io: Handle, op: SerialOp, on: bool) -> Result<(), Failure> {
-        let outcome = self.with_fd(&io, |fd| match op {
-            SerialOp::Dtr => set_modem_lines(fd, TIOCM_DTR, on),
-            SerialOp::Rts => set_modem_lines(fd, TIOCM_RTS, on),
-            SerialOp::DiscardInput => tcflush(fd, QueueSelector::IFlush),
-        });
-
-        match outcome {
-            None => Err(Failure::NotFound),
-            Some(Ok(())) => Ok(()),
-            Some(Err(errno)) => Err(failure_from_error(Error::from(errno))),
+        // Decided by the kind filed rather than by asking the kernel, so a handle that is not a port — a standard stream among them — is `NotFound` whatever its descriptor's driver would say.
+        match self.table.lock().unwrap().get(&io) {
+            Some(OsResource::Serial(port)) => port
+                .control(op, on)
+                .map_err(|errno| failure_from_error(Error::from(errno))),
+            _ => Err(Failure::NotFound),
         }
+    }
+
+    fn serial_drain(&self, io: Handle) -> Result<Handle, Failure> {
+        let mut table = self.table.lock().unwrap();
+
+        let done = match table.get(&io) {
+            Some(OsResource::Serial(port)) => port.drain()?,
+            _ => return Err(Failure::NotFound),
+        };
+
+        Ok(table.mint(OsResource::Descriptor(done)))
+    }
+
+    fn serial_list(&self) -> Result<Vec<Vec<u8>>, Failure> {
+        serial_devices().map_err(failure_from_error)
     }
 
     fn file_stat(&self, path: Vec<u8>) -> Result<FileStat, Failure> {
@@ -1046,29 +1048,6 @@ fn readable_now(fd: BorrowedFd<'_>) -> bool {
             .revents()
             .intersects(PollFlags::IN | PollFlags::HUP | PollFlags::ERR),
         Err(_) => true,
-    }
-}
-
-// The modem-line ioctls rustix does not wrap, as each platform numbers them: Linux's generic tty numbers, which both release architectures use, and the BSD family's `_IOW('t', 108, int)` and `_IOW('t', 107, int)`, which macOS keeps. The line bits agree across all of them.
-#[cfg(target_os = "linux")]
-const TIOCMBIS: Opcode = 0x5416;
-#[cfg(target_os = "linux")]
-const TIOCMBIC: Opcode = 0x5417;
-#[cfg(not(target_os = "linux"))]
-const TIOCMBIS: Opcode = 0x8004_746C;
-#[cfg(not(target_os = "linux"))]
-const TIOCMBIC: Opcode = 0x8004_746B;
-const TIOCM_DTR: c_int = 0x002;
-const TIOCM_RTS: c_int = 0x004;
-
-/// Raise (`on`) or lower the modem lines `mask` names on `fd`. `TIOCMBIS` and `TIOCMBIC` touch only those lines, where a `TIOCMGET` read back and a `TIOCMSET` of the lot would race whatever else drives the port between the two.
-fn set_modem_lines(fd: BorrowedFd<'_>, mask: c_int, on: bool) -> rustix::io::Result<()> {
-    // SAFETY: both opcodes take a pointer to an `int` holding the line mask and write nothing back, which is the opcode and input type `Setter` is built for.
-    unsafe {
-        match on {
-            true => ioctl(fd, Setter::<TIOCMBIS, c_int>::new(mask)),
-            false => ioctl(fd, Setter::<TIOCMBIC, c_int>::new(mask)),
-        }
     }
 }
 

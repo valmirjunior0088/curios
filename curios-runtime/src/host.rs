@@ -13,7 +13,7 @@ use {
     std::io::{Error, ErrorKind},
 };
 
-/// The control-mode bits a serial frame sets, or `None` for a setting `serial/open` refuses: 7 or 8 data bits and 1 or 2 stop bits, beside the parity and flow control a closed code has already decided. Both hosts ask it, so a frame the native host refuses is one the scripted host refuses too.
+/// The control-mode bits a serial frame sets, or `None` for a setting `serial/open` refuses: 7 or 8 data bits and 1 or 2 stop bits, beside the parity and flow control a closed code has already decided. Both hosts ask it and [`serial_speed`], so a setting the native host refuses before it opens anything is one the scripted host refuses too.
 pub(crate) fn serial_frame(
     data_bits: u64,
     parity: SerialParity,
@@ -44,6 +44,11 @@ pub(crate) fn serial_frame(
     };
 
     Some(size | parity | stop | flow)
+}
+
+/// The speed a serial open sets, or `None` for one `serial/open` refuses: zero, which a terminal reads as hanging the line up rather than as a speed, and anything past what a speed setting holds. Both hosts ask it, as they ask [`serial_frame`].
+pub(crate) fn serial_speed(baud: u64) -> Option<u32> {
+    u32::try_from(baud).ok().filter(|&speed| speed != 0)
 }
 
 /// Which way a stream row moves bytes: what a request of nothing is checked against without moving any, and what a stream open only the other way refuses with `EBADF`.
@@ -121,3 +126,6 @@ pub(crate) fn poll_from_flags(flags: PollFlags) -> Poll {
 
     Poll::from_bits(bits)
 }
+
+#[cfg(test)]
+mod tests;

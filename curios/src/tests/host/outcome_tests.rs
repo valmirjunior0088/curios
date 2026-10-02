@@ -178,6 +178,13 @@ fn a_device_row_s_failure_is_the_error_it_names() {
                 vec![(HostOp::SerialOpen, denied(vec![bytes(b"")]))],
             ),
             (
+                "let _ = Serial/list!; Try/pure(())",
+                vec![(
+                    HostOp::SerialList,
+                    denied(vec![RawValue::BytesList(vec![])]),
+                )],
+            ),
+            (
                 &format!("let s = {open}!; Serial/set_dtr(s, true)"),
                 vec![
                     (HostOp::SerialOpen, ok(vec![bytes(&[7])])),
@@ -185,6 +192,20 @@ fn a_device_row_s_failure_is_the_error_it_names() {
                 ],
             ),
         ],
+    );
+}
+
+#[test]
+fn a_serial_drain_s_failure_is_the_error_it_names() {
+    each_fails(
+        In::Async,
+        vec![(
+            r#"let s = Serial/open(Path/of_str("/dev/x"), Serial/config(9600))!; Serial/drain(s)"#,
+            vec![
+                (HostOp::SerialOpen, ok(vec![bytes(&[7])])),
+                (HostOp::SerialDrain, denied(vec![bytes(b"")])),
+            ],
+        )],
     );
 }
 

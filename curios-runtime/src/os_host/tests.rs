@@ -3,11 +3,22 @@ use {
     curios_abi::errno,
     curios_utilities::test_support::Temporary,
     rustix::{
+        fs::OFlags,
         pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt},
-        termios::LocalModes,
+        termios::{ControlModes, InputModes, LocalModes},
     },
-    std::{num::NonZeroU32, thread, time::Duration},
+    std::{num::NonZeroU32, path::Path, thread, time::Duration},
 };
+
+/// A pseudo-terminal: its near end, and the name its far end opens by.
+fn pseudo_terminal() -> (OwnedFd, Vec<u8>) {
+    let near = openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY).expect("a pseudo-terminal");
+    grantpt(&near).expect("its far end granted");
+    unlockpt(&near).expect("its far end unlocked");
+    let name = ptsname(&near, Vec::new()).expect("its far end's name");
+
+    (near, name.into_bytes())
+}
 
 /// Every entry in the handle table is one [`OsResource`], so the enum's size is what a plain file or an unconnected socket costs to hold. The two TLS variants are boxed because a `rustls` connection carries its record buffers inline, and unboxed it would set the size of every other kind.
 ///
@@ -426,20 +437,17 @@ fn open_takes_a_listed_name_back_as_the_bytes_it_was_given() {
     host.handle_close(handle);
 }
 
-/// A serial port opened on the far end of a pseudo-terminal: a frame outside the row's ranges opens nothing, the open takes the raw frame, a byte the near end writes arrives through `handle_read` once `handle_poll` has reported it, the input discard is served, and a closed port misses loudly. A pty forces its own character size and keeps no modem lines, so what is under test is the open's shape rather than a wire: Linux refuses the lines through the errno lane, and the speed is never exercised.
+/// A serial port opened on the far end of a pseudo-terminal: a frame outside the row's ranges opens nothing, the open takes the raw frame, a byte the near end writes arrives through `handle_read` once `handle_poll` has reported it, the input discard is served, and a closed port misses loudly. A pty forces its own character size and keeps no modem lines, so what is under test is the open's shape rather than a wire: Linux refuses the lines through the errno lane.
 #[test]
 fn a_serial_port_opens_raw_on_a_pseudo_terminal() {
     const EINVAL: u32 = 22;
 
-    let near = openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY).expect("a pseudo-terminal");
-    grantpt(&near).expect("its far end granted");
-    unlockpt(&near).expect("its far end unlocked");
-    let name = ptsname(&near, Vec::new()).expect("its far end's name");
+    let (near, name) = pseudo_terminal();
 
     let host = OsHost::with_args(vec![]);
     let open = |data_bits| {
         host.serial_open(
-            name.as_bytes().to_vec(),
+            name.clone(),
             115_200,
             data_bits,
             SerialParity::None,
@@ -494,6 +502,159 @@ fn a_serial_port_opens_raw_on_a_pseudo_terminal() {
         host.serial_control(port, SerialOp::DiscardInput, false),
         Err(Failure::NotFound)
     );
+}
+
+/// The listing names devices an open could be handed: in byte order, each a path that is there. What a machine has is its own, so the list itself is not pinned.
+#[test]
+fn the_serial_devices_listed_are_sorted_paths_that_exist() {
+    let host = OsHost::with_args(vec![]);
+    let devices = host.serial_list().unwrap();
+
+    assert!(devices.is_sorted());
+
+    for device in devices {
+        let path = Path::new(OsStr::from_bytes(&device));
+
+        assert!(path.exists(), "{} is listed and absent", path.display());
+    }
+}
+
+/// A speed no setting holds opens nothing, as a frame outside the row's ranges opens nothing: zero is how a terminal hangs the line up, and a setting is 32 bits wide.
+#[test]
+fn a_serial_open_refuses_a_speed_no_setting_holds() {
+    let (_near, name) = pseudo_terminal();
+    let host = OsHost::with_args(vec![]);
+
+    for baud in [0, u64::from(u32::MAX) + 1] {
+        assert_eq!(
+            host.serial_open(
+                name.clone(),
+                baud,
+                8,
+                SerialParity::None,
+                1,
+                SerialFlow::None
+            ),
+            Err(Failure::Other(errno::EINVAL))
+        );
+    }
+}
+
+/// What the port's last user left in its input modes is gone after an open: software flow control and parity checking set beforehand are cleared, so what the device sends arrives as it was sent whichever program held the port before. The far end is held open across the open, since a pseudo-terminal keeps its settings only while it is.
+#[test]
+fn a_serial_open_clears_the_input_modes_it_finds() {
+    let (_near, name) = pseudo_terminal();
+    let far = rustix::fs::open(
+        name.as_slice(),
+        OFlags::RDWR | OFlags::NOCTTY,
+        rustix::fs::Mode::empty(),
+    )
+    .expect("the far end");
+
+    let mut left = tcgetattr(&far).expect("its settings");
+    left.input_modes |= InputModes::IXOFF | InputModes::INPCK;
+    tcsetattr(&far, OptionalActions::Now, &left).expect("its settings set");
+
+    let host = OsHost::with_args(vec![]);
+    let port = host
+        .serial_open(name, 115_200, 8, SerialParity::None, 1, SerialFlow::None)
+        .unwrap();
+
+    let termios = host
+        .with_fd(&port, |fd| tcgetattr(fd))
+        .expect("a filed descriptor")
+        .expect("its settings");
+    assert!(
+        !termios
+            .input_modes
+            .intersects(InputModes::IXOFF | InputModes::INPCK)
+    );
+}
+
+/// The open reads back what the device took. A Linux pseudo-terminal keeps two stop bits, hardware flow control and its speed, and forces eight data bits with no parity, so the first frame opens with its modes set and the second is refused as one the device did not take.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_serial_open_is_refused_a_frame_the_device_did_not_take() {
+    let (_near, name) = pseudo_terminal();
+    let host = OsHost::with_args(vec![]);
+
+    let port = host
+        .serial_open(
+            name.clone(),
+            9600,
+            8,
+            SerialParity::None,
+            2,
+            SerialFlow::Hardware,
+        )
+        .unwrap();
+
+    let termios = host
+        .with_fd(&port, |fd| tcgetattr(fd))
+        .expect("a filed descriptor")
+        .expect("its settings");
+    assert!(
+        termios
+            .control_modes
+            .contains(ControlModes::CSTOPB | ControlModes::CRTSCTS)
+    );
+    assert_eq!(termios.output_speed(), 9600);
+    host.handle_close(port);
+
+    assert_eq!(
+        host.serial_open(name, 9600, 7, SerialParity::Even, 1, SerialFlow::None),
+        Err(Failure::Other(errno::EINVAL))
+    );
+}
+
+/// A drain is a handle to a wait that holds nothing: ready once the port has sent what it accepted — at once on a pseudo-terminal, whose far end has no wire to wait on — and then at its end, with the output arrived rather than discarded. Only a port has output to wait for. Linux alone, since `tcdrain` on a macOS pseudo-terminal can wait for good.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_serial_drain_ends_once_the_output_has_left() {
+    let (near, name) = pseudo_terminal();
+
+    let host = OsHost::with_args(vec![]);
+    let port = host
+        .serial_open(name, 115_200, 8, SerialParity::None, 1, SerialFlow::None)
+        .unwrap();
+
+    assert_eq!(host.handle_write(port.clone(), b"ok".to_vec()), Ok(2));
+
+    let wait = host.serial_drain(port.clone()).unwrap();
+    let ready = host
+        .handle_poll(
+            vec![wait.clone()],
+            vec![Poll::from_bits(event::READ)],
+            5_000,
+        )
+        .unwrap();
+    assert_ne!(ready[0].bits() & (event::READ | event::HUP), 0);
+    assert_eq!(host.handle_read(wait.clone(), 1), Ok(None));
+    host.handle_close(wait);
+
+    let mut arrived = [0; 8];
+    assert_eq!(rustix::io::read(&near, &mut arrived), Ok(2));
+    assert_eq!(&arrived[..2], b"ok");
+
+    host.handle_close(port.clone());
+    assert_eq!(host.serial_drain(port), Err(Failure::NotFound));
+    assert_eq!(host.serial_drain(Handle::Stdin), Err(Failure::NotFound));
+}
+
+/// Only a serial port has lines to drive: a file and a standard stream are `NotFound` by the kind the host filed, whatever an `ioctl` on their descriptors would answer.
+#[test]
+fn a_control_on_a_handle_that_is_not_a_port_is_not_found() {
+    let host = OsHost::with_args(vec![]);
+    let file = host.file_open(b"/dev/null".to_vec(), Mode::Read).unwrap();
+
+    for handle in [file, Handle::Stdin] {
+        for op in [SerialOp::Dtr, SerialOp::Rts, SerialOp::DiscardInput] {
+            assert_eq!(
+                host.serial_control(handle.clone(), op, true),
+                Err(Failure::NotFound)
+            );
+        }
+    }
 }
 
 /// Spawn `argv` with every stream on the null device, and the child's handle.

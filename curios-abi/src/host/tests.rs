@@ -68,6 +68,8 @@ fn names_are_the_wire_abi() {
             "tty_size",
             "serial_open",
             "serial_control",
+            "serial_drain",
+            "serial_list",
             "file_stat",
             "file_remove",
             "file_rename",
@@ -132,6 +134,8 @@ fn result_records_keep_their_labels() {
     assert_eq!(labels("proc_env"), ["status", "value"]);
     assert_eq!(labels("tty_size"), ["status", "cols", "rows"]);
     assert_eq!(labels("serial_open"), ["status", "handle"]);
+    assert_eq!(labels("serial_drain"), ["status", "handle"]);
+    assert_eq!(labels("serial_list"), ["status", "paths"]);
     assert_eq!(
         labels("file_stat"),
         ["status", "kind", "size", "mtime_secs", "mtime_nanos"]

@@ -241,6 +241,8 @@ export async function run(config) {
     // No serial devices either: Web Serial asks the user to pick a port, which no row can do, so opening one is denied as `file_open` is.
     serial_open: deniedHandle,
     serial_control: denied,
+    serial_drain: deniedHandle,
+    serial_list: deniedList,
     // No filesystem either: every filesystem row is denied as `file_open` is, listing a directory among them.
     file_stat: () => [status.PERMISSION_DENIED, 0n, 0n, 0n, 0n],
     file_remove: denied,

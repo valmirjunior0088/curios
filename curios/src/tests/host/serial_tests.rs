@@ -1,4 +1,4 @@
-//! A serial port through `/std/Serial`, against scripted devices: the frame an open asks for, a command written and a line read under the bracket, the lines and the input discard, the refusals, and the devices the host lists.
+//! A serial port through `/std/Serial`, against scripted devices: the frame an open asks for, a command written and a line read under the bracket, the drain the bracket ends a good body with, the lines and the input discard, the refusals, and the devices the host lists.
 //!
 //! The host's tags are spelled as numbers, since this crate names no `curios-abi` constant: parity none is 0 and even 1, flow control none is 0 and hardware 1, and the controls DTR, RTS and the input discard are 0, 1 and 2.
 
@@ -45,7 +45,7 @@ fn an_open_asks_the_host_for_the_configured_speed_and_frame() {
     );
 }
 
-// Under `with`, a command lands on the device whole and the reply is read as one line across two arrivals: the fiber parks between the carriage return and the newline, `poll` brings the second, and the line ending is dropped whole.
+// Under `with`, a command lands on the device whole and the reply is read as one line across two arrivals: the fiber parks between the carriage return and the newline, `poll` brings the second, and the line ending is dropped whole. The body ended well, so the port is drained before it closes.
 #[test]
 fn with_writes_a_command_and_reads_its_reply_line_across_arrivals() {
     let source = r#"
@@ -69,6 +69,33 @@ fn with_writes_a_command_and_reads_its_reply_line_across_arrivals() {
     run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"OK");
     assert_eq!(io.serial_written(b"/dev/ttyUSB0"), b"AT\r\n");
+    assert_eq!(io.serial_drains(), vec![b"/dev/ttyUSB0".to_vec()]);
+}
+
+// A body that fails is closed over without a drain: its failure is the answer, and what it wrote is the close's to discard.
+#[test]
+fn with_does_not_drain_after_a_body_that_fails() {
+    let source = r#"
+        use /std/{Str, Show, Try, Async, Io, Path, Serial};
+        let failing(s: Serial) -> Try(Async, Io/Error, {}) =
+            let _ = Try/attempt(Serial/write(s, Str/to_bytes("AT\r\n")))!;
+            Try/raise(Io/Error/not_found());
+        let fiber: Async({}) =
+            let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), failing))!;
+            match r
+            | success(_) => /std/print("drained")
+            | failure(e) => /std/print(Show/show(e))
+            end;
+        Async/run(fiber)
+        "#;
+
+    let (system, io) = MockHost::builder()
+        .serial([("/dev/ttyUSB0", Vec::<&str>::new())])
+        .build();
+    run_text(source, system).expect("expected result");
+    assert_eq!(io.output(), b"not_found");
+    assert_eq!(io.serial_written(b"/dev/ttyUSB0"), b"AT\r\n");
+    assert!(io.serial_drains().is_empty());
 }
 
 // The lines are driven in the order the program asks, and a discard once the board has booted drops its banner, so the first line read is the one that arrives after it.
@@ -103,7 +130,7 @@ fn the_lines_are_driven_in_order_and_a_discard_drops_the_boot_banner() {
     );
 }
 
-// An unscripted device is `not_found`, and a frame outside the row's ranges is `other(22)` before any device is looked for.
+// An unscripted device is `not_found`, and a frame or a speed outside the row's ranges is `other(22)` before any device is looked for.
 #[test]
 fn opens_are_refused_by_name() {
     let source = r#"
@@ -114,7 +141,8 @@ fn opens_are_refused_by_name() {
         let fiber: Async({}) =
             let missing = Try/run(Serial/open(elsewhere, Serial/config(9600)))!;
             let framed = Try/run(Serial/open(elsewhere, Serial/Config { ..Serial/config(9600), data_bits = 5 }))!;
-            /std/print(Str/join(" ", [shown(missing), shown(framed)]));
+            let stalled = Try/run(Serial/open(elsewhere, Serial/config(0)))!;
+            /std/print(Str/join(" ", [shown(missing), shown(framed), shown(stalled)]));
         Async/run(fiber)
         "#;
 
@@ -122,12 +150,12 @@ fn opens_are_refused_by_name() {
         .serial([("/dev/ttyUSB0", Vec::<&str>::new())])
         .build();
     run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"not_found other(22)");
+    assert_eq!(io.output(), b"not_found other(22) other(22)");
 }
 
-// `list` names every entry of `/dev/serial/by-id` under the directory, in byte order, and a host with no such directory has no devices rather than a failure.
+// `list` names the devices the host has by the paths it gives them, in byte order, and a host with none has an empty list rather than a failure.
 #[test]
-fn list_names_the_devices_by_id_and_is_empty_without_the_directory() {
+fn list_names_the_devices_the_host_has_and_is_empty_without_any() {
     let source = r#"
         use /std/{Str, List, Show, Try, Io, Serial};
         match Try/run(Serial/list)!
@@ -137,15 +165,18 @@ fn list_names_the_devices_by_id_and_is_empty_without_the_directory() {
         "#;
 
     let (system, io) = MockHost::builder()
-        .files([
-            ("/dev/serial/by-id/usb-FTDI_FT232R_A5-if00-port0", ""),
-            ("/dev/serial/by-id/usb-Arduino_Uno_85-if00", ""),
+        .serial([
+            ("/dev/ttyS0", Vec::<&str>::new()),
+            (
+                "/dev/serial/by-id/usb-Arduino_Uno_85-if00",
+                Vec::<&str>::new(),
+            ),
         ])
         .build();
     run_text(source, system).expect("expected result");
     assert_eq!(
         io.output(),
-        b"/dev/serial/by-id/usb-Arduino_Uno_85-if00,/dev/serial/by-id/usb-FTDI_FT232R_A5-if00-port0"
+        b"/dev/serial/by-id/usb-Arduino_Uno_85-if00,/dev/ttyS0"
     );
 
     let (system, io) = MockHost::builder().build();

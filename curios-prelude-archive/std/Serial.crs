@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Bool, List, Result, Path, Try, Async, Io, Handle, fs};
+use /std/{Bytes, Nat, Bool, List, Result, Path, Try, Async, Io, Handle};
 
 --- An open serial port.
 pub struct Serial: Type {
@@ -23,7 +23,7 @@ pub induct Flow: pub Type
 | hardware()
 end
 
---- How a port is opened: its speed and its frame. `data_bits` is 7 or 8 and `stop_bits` 1 or 2; the host refuses any other as `other(22)`.
+--- How a port is opened: its speed and its frame. `baud` is from 1 through 4294967295, `data_bits` is 7 or 8 and `stop_bits` 1 or 2; the host refuses any other as `other(22)`, before it touches the device.
 pub struct Config: pub Type {
     baud: Nat,
     data_bits: Nat,
@@ -52,9 +52,9 @@ let of_parity(parity: Parity) -> Nat =
 let of_flow(flow: Flow) -> Nat =
     match flow | none() => /sys/serial_flow/none | hardware() => /sys/serial_flow/hardware end;
 
---- The port at `path`, opened raw at `c`'s speed and frame. Nothing holds it exclusively, so whether another open of the same device is refused is the device's to say.
+--- The port at `path`, opened raw at `c`'s speed and frame, or `other(22)` when the device takes another. Nothing holds it exclusively, so whether another open of the same device is refused is the device's to say. A character that fails its parity check arrives as it was received, and a break as a zero byte.
 ---
---- Linux raises DTR as a port opens whatever the program wants, so a board that resets on DTR resets here; `discard_input` once it has booted drops the banner it printed.
+--- The system raises DTR as a port opens whatever the program wants, so a board that resets on DTR resets here; `discard_input` once it has booted drops the banner it printed.
 pub let open(path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
     let h =
         Io/Error/of_result(
@@ -67,7 +67,7 @@ pub let open(path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
                 of_flow(c.flow))!)!;
     Try/pure(Serial { h });
 
---- Close `s`.
+--- Close `s`. What it accepted and has not sent is discarded, so the close never waits on the wire: `drain` first to send it, as `with` does.
 pub let close(s: Serial) -> Io({}) =
     Handle/close(s.0);
 
@@ -83,9 +83,20 @@ satisfy Async/Read(Async, Serial) {
     read(s, n, @positive) = read(s, n, @positive),
 }
 
+let draining(s: Serial) -> Try(Io, Io/Error, Handle) =
+    let wait = Io/Error/of_result(/sys/serial/drain(s.0)!)!;
+    Try/pure(wait);
+
+--- Park until `s` has sent what it accepted, or can no longer send it. A device that never takes the output — hardware flow control with nothing asking for more — parks the fiber for good, so bound it with a timeout where that can happen; a cancelled drain leaves the output where it was.
+pub let drain(s: Serial) -> Try(Async, Io/Error, {}) =
+    let wait = draining(s)!;
+    let outcome = Async/using(Handle/close(wait), Async/read_all(wait))!;
+    let _ = outcome!;
+    Try/pure(());
+
 satisfy Async/Write(Async, Serial) {
     write(s, b) = write(s, b),
-    flush(s) = Async/Write/flush(s.0),
+    flush(s) = Try/run(drain(s)),
 }
 
 let control(s: Serial, op: Nat, on: Bool) -> Try(Io, Io/Error, {}) =
@@ -104,7 +115,7 @@ pub let set_rts(s: Serial, on: Bool) -> Try(Io, Io/Error, {}) =
 pub let discard_input(s: Serial) -> Try(Io, Io/Error, {}) =
     control(s, /sys/serial_op/discard_input, false);
 
---- `body` over the port at `path`, closed whichever way the task ends, a cancellation included; the body's own failure is the answer after the close.
+--- `body` over the port at `path`, closed whichever way the task ends, a cancellation included; the body's own failure is the answer after the close. A body that ends well is followed by a `drain`, so what it wrote has left before the close discards the rest.
 pub let with(
     @A: Type,
     path: Path,
@@ -112,17 +123,17 @@ pub let with(
     body: (Serial) -> Try(Async, Io/Error, A),
 ) -> Try(Async, Io/Error, A) =
     let s = open(path, c)!;
-    let outcome = Async/using(close(s), Try/run(body(s)))!;
+    let outcome = Async/using(close(s), Try/run(drained(s, body(s))))!;
     let a = outcome!;
     Try/pure(a);
 
-let by_id: Path =
-    Path/of_str("/dev/serial/by-id");
+--- `body`, then `s` drained; a failure to drain is the task's.
+let drained(@A: Type, s: Serial, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
+    let a = body!;
+    let _ = drain(s)!;
+    Try/pure(a);
 
-let entries: Try(Io, Io/Error, List(Path)) =
-    let names = fs/list(by_id)!;
-    Try/pure(List/map(names, (name) => Path/join(by_id, name)));
-
---- The serial devices the host names by what they are: on Linux, every entry of `/dev/serial/by-id`, whose names carry each device's vendor, product and serial number and which `open` follows to the port. Empty where there is no such directory — no device plugged in, or a host that keeps none.
+--- The serial devices the host has, each by a path `open` takes, in byte order, and none where it has none. On Linux a device is named by its entry of `/dev/serial/by-id` where the system keeps one — a name that carries its vendor, product and serial number, and outlives the order devices were plugged in — and by its node otherwise, as an onboard port is `/dev/ttyS0`; on macOS by its callout device, `/dev/cu.` and its name.
 pub let list: Try(Io, Io/Error, List(Path)) =
-    Try/rescue(entries, (e) => match e | not_found() => Try/pure([]) | _ => Try/raise(e) end);
+    let paths = Io/Error/of_result(/sys/serial/list!)!;
+    Try/pure(List/map(paths, Path/of_bytes));
