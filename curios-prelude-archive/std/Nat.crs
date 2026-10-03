@@ -5,6 +5,43 @@ use /std/{Str, Option, Char, Bool, Ordering, Show, Spell, Ord, Eq};
 use /std/Bool/{Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
+-- Ahead of every operator this file uses: a use elaborated before the row it dispatches through loses the row's bound.
+satisfy Eql(Nat) {
+    eql = eql,
+    neq = neq,
+}
+
+satisfy Cmp(Nat) {
+    lt = lt,
+    le = le,
+    gt = gt,
+    ge = ge,
+}
+
+satisfy Add(Nat) {
+    add = add,
+}
+
+satisfy Sub(Nat) {
+    sub = sub,
+}
+
+satisfy Mul(Nat) {
+    mul = mul,
+}
+
+--- The divisor must be positive: `Holds(0 < b)`.
+satisfy Div(Nat) {
+    Ok(b) = Holds(0 < b),
+    div = div,
+}
+
+--- The divisor must be positive: `Holds(0 < b)`.
+satisfy Rem(Nat) {
+    Ok(b) = Holds(0 < b),
+    rem = rem,
+}
+
 --- The decimal digit of `d` modulo ten.
 let single_digit(d: Nat) -> Str =
     Str/of_char(Char/hex_digit(d % 10));
@@ -107,42 +144,6 @@ pub let eq_of_eql(a: Nat, b: Nat, h: Holds(a == b)) -> Eq()(a, b) =
 --- The order of the two.
 pub let ord(x: Nat, y: Nat) -> Ordering =
     choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
-
-satisfy Eql(Nat) {
-    eql = eql,
-    neq = neq,
-}
-
-satisfy Cmp(Nat) {
-    lt = lt,
-    le = le,
-    gt = gt,
-    ge = ge,
-}
-
-satisfy Add(Nat) {
-    add = add,
-}
-
-satisfy Sub(Nat) {
-    sub = sub,
-}
-
-satisfy Mul(Nat) {
-    mul = mul,
-}
-
---- The divisor must be positive: `Holds(0 < b)`.
-satisfy Div(Nat) {
-    Ok(b) = Holds(lt(0, b)),
-    div = div,
-}
-
---- The divisor must be positive: `Holds(0 < b)`.
-satisfy Rem(Nat) {
-    Ok(b) = Holds(lt(0, b)),
-    rem = rem,
-}
 
 satisfy Show(Nat) {
     show = to_str,

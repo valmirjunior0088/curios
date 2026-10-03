@@ -33,17 +33,18 @@ pub use Spell/{let Spell};
 pub mod Ord;
 pub use Ord/{let Ord, Ordering};
 
---- A value's encoding as the bytes that identify it, and the digest of one.
----
---- The encoding is stable and is what `Key` proves injective; the digest over it is not, and is for dedup and cache keys rather than for anything written down. A declared type derives its witness with `satisfy Hash(T);`.
-pub mod Hash;
-pub use Hash/{let Hash};
-
+-- Ahead of `Hash`, whose digest takes a remainder at `Nat` and must elaborate after the row that bounds it.
 --- Natural numbers, unbounded: a machine word while a value is small, and a run of limbs once it outgrows one.
 ---
 --- Subtraction truncates at zero. Division and remainder carry the precondition `Holds(0 < b)`. `lt` and `le` beneath hold the order lemmas a bound's proof is built from.
 pub mod Nat;
 pub use Nat/{let Nat};
+
+--- A value's encoding as the bytes that identify it, and the digest of one.
+---
+--- The encoding is stable and is what `Key` proves injective; the digest over it is not, and is for dedup and cache keys rather than for anything written down. A declared type derives its witness with `satisfy Hash(T);`.
+pub mod Hash;
+pub use Hash/{let Hash};
 
 --- One octet, `0` through `255`.
 pub mod Byte;

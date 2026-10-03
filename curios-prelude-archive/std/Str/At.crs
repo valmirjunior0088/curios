@@ -87,17 +87,19 @@ let run(rest: Bytes) -> Nat =
     | x[h, ..t] => match Str/continues(h) | true => run(t) + 1 | false => 0 end
     end;
 
+-- Not grouped with `run_starts`: a group's signatures elaborate together, and `run_starts` would read this bound before its comparison is settled.
+--- The continuing bytes that open `rest` lie within it.
+let run_within(rest: Bytes) -> Holds(run(rest) <= Bytes/len(rest)) =
+    match rest
+    | x[] => True/qed()
+    | x[h, ..t] => match Str/continues(h) | true => run_within(t) | false => True/qed() end
+    end;
+
 --- Past the continuing bytes that open `rest`, a character may begin.
 let run_starts(rest: Bytes) -> Holds(starts(Bytes/drop(rest, run(rest), @run_within(rest)))) =
     match rest
     | x[] => True/qed()
     | x[h, ..t] => match Str/continues(h) | true => run_starts(t) | false => True/qed() end
-    end
---- The continuing bytes that open `rest` lie within it.
-and run_within(rest: Bytes) -> Holds(Nat/le(run(rest), Bytes/len(rest))) =
-    match rest
-    | x[] => True/qed()
-    | x[h, ..t] => match Str/continues(h) | true => run_within(t) | false => True/qed() end
     end;
 
 --- How many bytes the first character of `b` takes — its lead and the bytes continuing it — with the bound and the boundary past them. The character is not decoded: the one-byte rule is all a step needs.
