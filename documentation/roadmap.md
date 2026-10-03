@@ -136,4 +136,5 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 - [x] [Explicit invariants](../curios-prelude-archive/README.md#std-invents-no-value-where-a-proof-belongs-and-text-is-addressed-by-position): decoding and encoding carry their certificates, indices carry their bounds, and a host's facts arrive first-order
 - [x] [A fallible operation returns `Try`, and `!` lifts along declared edges](design/standard-library/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md), with `Result` error first and its own monad
 - [x] [Only a fiber waits](design/standard-library/only-a-fiber-waits.md): every peer-facing handle non-blocking, single-attempt writes and an explicit flush, write-once cells, bounded channels and level waiting in the guest heap
+- [x] [A `Bits` encoding is injective by its extent](design/standard-library/a-bits-encoding-is-injective-by-its-extent.md): one byte per bit, so a run's extent is its length and no field beside the bytes states it
 - [x] Structured concurrency in `/std/Async`: fibers and tasks, `race`, `select` and `join_all`, `sleep` and `timeout`, scoped resources, and deadlock detection
