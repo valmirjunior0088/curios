@@ -17,13 +17,13 @@ pub enum Severity {
 
 /// One thing the compiler said about a program, where it said it.
 #[derive(Debug, Clone)]
-pub struct Diagnostic {
+pub struct Diagnosis {
     pub severity: Severity,
     /// The message and its span — `None` for a refusal about the program as a whole or something outside it, such as a manifest or a store.
     pub report: Report,
 }
 
-impl Diagnostic {
+impl Diagnosis {
     pub fn lint(lint: Lint) -> Self {
         Self {
             severity: Severity::Lint,

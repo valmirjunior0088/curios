@@ -301,7 +301,7 @@ fn folded_reusing(root: &Path, overlay: &Overlay, session: &Session) -> Vec<Stri
 }
 
 /// Every record the second package reports over `overlay`, compiled over what `session` kept — the question the language server asks about a library.
-fn checked(root: &Path, overlay: &Overlay, session: &Session) -> Vec<crate::Diagnostic> {
+fn checked(root: &Path, overlay: &Overlay, session: &Session) -> Vec<crate::Diagnosis> {
     let mut store = Verdicts::at(root.to_path_buf());
     store.reuse(session.clone());
 

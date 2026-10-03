@@ -3,7 +3,7 @@
 //! The rungs are [`Stage::NAMES`], observed exactly where the driver emits them; the last, `wasm-optm`, is emitted by the native product where Binaryen runs rather than by the driver, so the engine cannot render it and hands the module back for the transport to finish — the one rung `curios` can reach and `curios-js` cannot.
 
 use {
-    crate::{Diagnostic, Origin, ReadOnly, of_error, open, overlaid},
+    crate::{Diagnosis, Origin, ReadOnly, of_error, open, overlaid},
     curios_pipeline::{Cache, Fold, Stage},
     curios_text::{Overlay, RootSource},
     curios_utilities::Qualifier,
@@ -16,7 +16,7 @@ pub struct Rendering {
     pub name: &'static str,
     pub text: String,
     /// What stopped the compilation *after* this rung was reached, if anything. A rung the driver already emitted is an answer, and a later failure does not unmake it — the transport prints these beside the rendering rather than in place of it.
-    pub diagnostics: Vec<Diagnostic>,
+    pub diagnostics: Vec<Diagnosis>,
 }
 
 /// What asking for a rung reached.
@@ -33,7 +33,7 @@ pub enum Refusal {
     /// No rung of that name — the question could not be asked.
     NoSuchStage { asked: String },
     /// The program did not compile *as far as* the rung: what stopped it. A failure past the rung is not a refusal — see [`Rendering::diagnostics`].
-    Diagnostics(Vec<Diagnostic>),
+    Diagnostics(Vec<Diagnosis>),
 }
 
 /// `program`'s representation at the rung `name`, compiled against `units` and the prelude.

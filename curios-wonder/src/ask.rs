@@ -6,7 +6,7 @@
 
 use {
     crate::{
-        Diagnosed, Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Severity, Subject, cost,
+        Diagnosed, Diagnosis, Origin, Reached, Refusal, STDIN_LABEL, Severity, Subject, cost,
         declared_tests, diagnosed, diagnostics, stage,
     },
     curios_cont::Outcome,
@@ -86,7 +86,7 @@ impl Asked {
     }
 
     /// Every diagnostic, goal and lint the subject reports.
-    pub fn diagnostics(self, budget: u64, overlay: &Overlay) -> Vec<Diagnostic> {
+    pub fn diagnostics(self, budget: u64, overlay: &Overlay) -> Vec<Diagnosis> {
         diagnostics(budget, self.subject, overlay, self.store.as_ref())
     }
 
@@ -224,7 +224,7 @@ pub fn wonder_cost(budget: u64, program: Program) -> Result<(), CompileError> {
 }
 
 /// What stopped a question before it could answer, classified as the compile path classifies a build's failure — so goals alone are the incomplete state that exits 2, and anything refused beside them the failure that exits 1. The refusals come first, which is how a mixed failure says which reports are which; it renders as the reports did, a blank line between each.
-fn stopped(diagnostics: Vec<Diagnostic>) -> CompileError {
+fn stopped(diagnostics: Vec<Diagnosis>) -> CompileError {
     let (refused, goals): (Vec<_>, Vec<_>) = diagnostics
         .into_iter()
         .partition(|diagnostic| diagnostic.severity != Severity::Goal);

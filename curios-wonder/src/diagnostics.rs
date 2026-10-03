@@ -1,7 +1,7 @@
 //! The `diagnostics` query: every diagnostic and goal one compilation of a program reports.
 
 use {
-    crate::{Diagnostic, STDIN_MOUNT, Severity},
+    crate::{Diagnosis, STDIN_MOUNT, Severity},
     curios_package::Unlinked,
     curios_pipeline::{Cache, Checked, CompileError, EntryTail, Findings, Fold},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
@@ -13,7 +13,7 @@ use {
 
 /// What one compilation of a subject reports, and what it reached: every diagnostic, goal and lint, and the prefix of every mount some reference of the subject was *written* under — what `curios lint` reads a package's unused dependencies off.
 pub struct Diagnosed {
-    pub diagnostics: Vec<Diagnostic>,
+    pub diagnostics: Vec<Diagnosis>,
     pub reached: BTreeSet<Qualifier>,
 }
 
@@ -38,7 +38,7 @@ pub enum Subject {
 
 impl Subject {
     /// The note a program selected loose from inside a package opens with, located at its file's start so an editor places it on the document asked about — the text the overlay's where it holds one, as every read is.
-    fn note(&self, overlay: &Overlay) -> Option<Diagnostic> {
+    fn note(&self, overlay: &Overlay) -> Option<Diagnosis> {
         let Subject::Entry {
             unlinked: Some(unlinked),
             ..
@@ -56,7 +56,7 @@ impl Subject {
             None => Report::unlocated(unlinked.message.clone()),
         };
 
-        Some(Diagnostic {
+        Some(Diagnosis {
             severity: Severity::Note,
             report,
         })
@@ -117,7 +117,7 @@ pub fn diagnostics(
     subject: Subject,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
-) -> Vec<Diagnostic> {
+) -> Vec<Diagnosis> {
     diagnosed(budget, subject, overlay, cache).diagnostics
 }
 
@@ -195,7 +195,7 @@ impl Diagnosed {
     fn found(stopped: Option<CompileError>, findings: Findings) -> Self {
         let Findings { lints, reached } = findings;
         let mut diagnostics = stopped.map(of_error).unwrap_or_default();
-        diagnostics.extend(lints.into_iter().map(Diagnostic::lint));
+        diagnostics.extend(lints.into_iter().map(Diagnosis::lint));
 
         Self {
             diagnostics,
@@ -217,7 +217,7 @@ pub(crate) fn open(
     origin: Origin,
     declares: Option<Vec<Qualifier>>,
     overlay: &Overlay,
-) -> Result<(Entrypoint, RootSource), Vec<Diagnostic>> {
+) -> Result<(Entrypoint, RootSource), Vec<Diagnosis>> {
     let opened = match origin {
         Origin::File(path) => match overlay.get(&path) {
             Some(text) => Entrypoint::overlaid(&path, text).map_err(|error| error.report()),
@@ -238,7 +238,7 @@ pub(crate) fn open(
             }
             .with_overlay(overlay.clone()),
         )),
-        Err(report) => Err(vec![Diagnostic {
+        Err(report) => Err(vec![Diagnosis {
             severity: Severity::Error,
             report,
         }]),
@@ -246,7 +246,7 @@ pub(crate) fn open(
 }
 
 /// A compile failure as records: the classification the compile path made, on every report it carries — for a mixed failure, the first `failures` reports as errors and the rest as goals, which is how it says which is which.
-pub(crate) fn of_error(error: CompileError) -> Vec<Diagnostic> {
+pub(crate) fn of_error(error: CompileError) -> Vec<Diagnosis> {
     let (reports, failures) = match error {
         CompileError::Incomplete(reports) => (reports, 0),
         CompileError::Failure(reports) => {
@@ -259,7 +259,7 @@ pub(crate) fn of_error(error: CompileError) -> Vec<Diagnostic> {
     reports
         .into_iter()
         .enumerate()
-        .map(|(index, report)| Diagnostic {
+        .map(|(index, report)| Diagnosis {
             severity: match index < failures {
                 true => Severity::Error,
                 false => Severity::Goal,

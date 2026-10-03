@@ -5,7 +5,7 @@
 //! **Nothing here judges.** A row states what became of a declaration and stops; whether an absorbed helper or a threefold specialization is good news is the author's to decide, and a rule that decided it for them would be the heuristic the lint decision spent a paragraph refusing.
 
 use {
-    crate::{Diagnostic, Origin, ReadOnly, of_error, open, overlaid},
+    crate::{Diagnosis, Origin, ReadOnly, of_error, open, overlaid},
     curios_cont::{Fate, descendants, fates},
     curios_pipeline::{Cache, Fold, Stage},
     curios_text::{Overlay, RootSource},
@@ -26,7 +26,7 @@ pub fn cost(
     declares: Option<Vec<Qualifier>>,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
-) -> Result<Vec<Fate>, Vec<Diagnostic>> {
+) -> Result<Vec<Fate>, Vec<Diagnosis>> {
     let (entrypoint, loader) = open(origin, declares, overlay)?;
     let units = overlaid(units, overlay);
     let read_only = cache.map(|cache| ReadOnly { cache, overlay });

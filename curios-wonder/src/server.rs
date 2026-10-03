@@ -17,7 +17,7 @@
 //! **UTF-16 exists only here.** The engine's coordinates are bytes; a `Position` is derived from the span's own text at the boundary, in both directions, and nothing below this file knows the protocol's unit.
 
 use {
-    crate::{Asked, Severity},
+    crate::{Asked, Diagnosis, Severity},
     curios_package::{Selection, Spelling},
     curios_text::{Formatted, Overlay},
     curios_utilities::{Report, Source, Span},
@@ -396,7 +396,7 @@ impl Analyst {
                 .flat_map(|asked| asked.reusing(session).diagnostics(self.budget, overlay))
                 .collect(),
             // A scope that cannot be assembled is an answer about the document, not a server failure: the manifest is what is wrong, and the document is where the editor is looking.
-            Err(message) => vec![crate::Diagnostic {
+            Err(message) => vec![Diagnosis {
                 severity: Severity::Error,
                 report: Report::unlocated(message),
             }],
@@ -449,7 +449,7 @@ fn workspace_root(params: &InitializeParams) -> Option<PathBuf> {
 }
 
 /// One record as the protocol's diagnostic, and the path it belongs to — the span's source when it has one, and the checked document itself, at its first position, when it has none.
-fn adapt(document: &Path, record: &crate::Diagnostic) -> (PathBuf, Diagnostic) {
+fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
     let severity = match record.severity {
         Severity::Error => DiagnosticSeverity::ERROR,
         Severity::Goal => DiagnosticSeverity::INFORMATION,

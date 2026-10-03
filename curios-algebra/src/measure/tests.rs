@@ -2,9 +2,7 @@
 
 use {
     crate::{
-        Concatenated, Cut,
-        Joining::{Empty, Fusible, Standing},
-        Seam, Span, Split, join, locate, seam_window, split,
+        Concatenated, Cut, Joining, Seam, Span, Split, join, locate, seam_window, split,
         test_support::{Number, Toy, n},
     },
     std::convert::Infallible,
@@ -97,12 +95,21 @@ fn a_window_off_the_seams_declines() {
 #[test]
 fn a_concatenation_drops_the_identity_and_fuses_only_all_literal_survivors() {
     assert_eq!(
-        join(&[Empty, Fusible, Fusible]),
+        join(&[Joining::Empty, Joining::Fusible, Joining::Fusible]),
         Concatenated::Fused(vec![1, 2])
     );
-    assert_eq!(join(&[Empty, Empty]), Concatenated::Fused(vec![]));
-    assert_eq!(join(&[Empty, Standing, Empty]), Concatenated::Lone(1));
-    assert_eq!(join(&[Fusible, Standing]), Concatenated::Kept(vec![0, 1]));
+    assert_eq!(
+        join(&[Joining::Empty, Joining::Empty]),
+        Concatenated::Fused(vec![])
+    );
+    assert_eq!(
+        join(&[Joining::Empty, Joining::Standing, Joining::Empty]),
+        Concatenated::Lone(1)
+    );
+    assert_eq!(
+        join(&[Joining::Fusible, Joining::Standing]),
+        Concatenated::Kept(vec![0, 1])
+    );
 }
 
 #[test]

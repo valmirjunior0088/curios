@@ -7,7 +7,7 @@ use {
     curios_text::Overlay,
 };
 
-fn of(text: &str) -> Vec<crate::Diagnostic> {
+fn of(text: &str) -> Vec<crate::Diagnosis> {
     diagnostics(
         DEFAULT_STEP_BUDGET,
         Subject::Entry {
