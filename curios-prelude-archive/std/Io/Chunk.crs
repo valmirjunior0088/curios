@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Io};
+use /std/{Bytes, Io};
 use /std/Bool/{Holds};
 
 --- One read's answer: bytes, the end of the stream, or a failure.

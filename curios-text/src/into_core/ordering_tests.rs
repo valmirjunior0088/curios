@@ -260,7 +260,7 @@ fn every_item_the_proof_vocabulary_does_not_need_follows_it() {
         pub let user : Type = Type;
         pub mod std
             pub mod Nat
-                pub mod Le
+                pub mod le
                     pub let add : Type = helper;
                     pub let helper : Type = Type;
                 end

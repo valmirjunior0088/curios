@@ -104,7 +104,10 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes, Bytes) =
         run(input, at) =
             let (taken, at_stop, _) =
                 match Bytes/len(input) - at.offset: (_) =>
-                    {taken: Nat, within: Holds(at.offset + taken <= Bytes/len(input)), stopped: Bool}
+                    {
+                        taken: Nat,
+                        within: Holds(at.offset + taken <= Bytes/len(input)),
+                        stopped: Bool}
                 | 0 => (0, at.holds, false)
                 | _ + 1; ih =>
                     let (taken, at_cur, stopped) = ih;

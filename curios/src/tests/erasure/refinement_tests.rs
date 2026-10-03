@@ -2,29 +2,27 @@
 
 use crate::tests::run;
 
-// The successor arm ignores its hypothesis, so it erases as a case split rather than a fold. The proof `Lt(xp, x)` holds only because `x` is `xp + 1` in the arm, and the curried call makes erasure infer `ih(xp, …)` again: a predecessor spelled `x - 1`, with nothing refined, would leave it asking for `x - 1 < x`.
+// The successor arm ignores its hypothesis, so it erases as a case split rather than a fold. The proof `Holds(xp < x)` holds only because `x` is `xp + 1` in the arm, and the curried call makes erasure infer `ih(xp, …)` again: a predecessor spelled `x - 1`, with nothing refined, would leave it asking for `x - 1 < x`.
 #[test]
 fn a_nat_case_split_is_erased_under_its_successor() {
     let source = r#"
         use /std/{Nat};
-        use /std/Bool/{True};
-        use /std/Nat/{lt};
-        let f(x: Nat, ih: (y: Nat, r: Lt(y, x)) -> (Nat) -> Nat, m: Nat) -> Nat =
+        use /std/Bool/{True, Holds};
+        let f(x: Nat, ih: (y: Nat, r: Holds(y < x)) -> (Nat) -> Nat, m: Nat) -> Nat =
             match x | 0 => m | xp + 1 => ih(xp, True/qed())(m) end;
         /std/print(Nat/to_str(f(5, (y, _) => (m) => y + m, 10)))
         "#;
     assert_eq!(run(source), b"14");
 }
 
-// An expression scrutinee is refined under its own spelling, which is the one the arm's proof mentions. Refining an alias for it instead — a fresh variable defined as `count(x)` — would leave `Lt(xp, count(x))` undecided even in a fold's step.
+// An expression scrutinee is refined under its own spelling, which is the one the arm's proof mentions. Refining an alias for it instead — a fresh variable defined as `count(x)` — would leave `Holds(xp < count(x))` undecided even in a fold's step.
 #[test]
 fn a_nat_fold_over_an_expression_is_erased_under_its_successor() {
     let source = r#"
         use /std/{Nat};
-        use /std/Bool/{True};
-        use /std/Nat/{lt};
+        use /std/Bool/{True, Holds};
         let count(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => count(k) + 1 end;
-        let f(x: Nat, ih: (y: Nat, r: Lt(y, count(x))) -> (Nat) -> Nat, m: Nat) -> Nat =
+        let f(x: Nat, ih: (y: Nat, r: Holds(y < count(x))) -> (Nat) -> Nat, m: Nat) -> Nat =
             match count(x) | 0 => m | xp + 1; h => h + ih(xp, True/qed())(m) end;
         /std/print(Nat/to_str(f(3, (y, _) => (m) => y + m, 10)))
         "#;
@@ -36,10 +34,9 @@ fn a_nat_fold_over_an_expression_is_erased_under_its_successor() {
 fn a_nat_case_split_over_an_expression_is_erased_under_its_successor() {
     let source = r#"
         use /std/{Nat};
-        use /std/Bool/{True};
-        use /std/Nat/{lt};
+        use /std/Bool/{True, Holds};
         let count(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => count(k) + 1 end;
-        let f(x: Nat, ih: (y: Nat, r: Lt(y, count(x))) -> (Nat) -> Nat, m: Nat) -> Nat =
+        let f(x: Nat, ih: (y: Nat, r: Holds(y < count(x))) -> (Nat) -> Nat, m: Nat) -> Nat =
             match count(x) | 0 => m | xp + 1 => ih(xp, True/qed())(m) end;
         /std/print(Nat/to_str(f(5, (y, _) => (m) => y + m, 10)))
         "#;
@@ -51,9 +48,8 @@ fn a_nat_case_split_over_an_expression_is_erased_under_its_successor() {
 fn a_list_case_split_is_erased_under_its_cons() {
     let source = r#"
         use /std/{Nat, List};
-        use /std/Bool/{True};
-        use /std/Nat/{lt};
-        let f(l: List(Nat), g: (t: List(Nat), r: Lt(List/len(t), List/len(l))) -> (Nat) -> Nat) -> Nat =
+        use /std/Bool/{True, Holds};
+        let f(l: List(Nat), g: (t: List(Nat), r: Holds(List/len(t) < List/len(l))) -> (Nat) -> Nat) -> Nat =
             match l | [] => 0 | [_, ..t] => g(t, True/qed())(1) end;
         /std/print(Nat/to_str(f([1, 2, 3], (t, _) => (m) => List/len(t) + m)))
         "#;
@@ -65,9 +61,8 @@ fn a_list_case_split_is_erased_under_its_cons() {
 fn a_bytes_case_split_is_erased_under_its_cons() {
     let source = r#"
         use /std/{Nat, Bytes};
-        use /std/Bool/{True};
-        use /std/Nat/{lt};
-        let f(b: Bytes, g: (t: Bytes, r: Lt(Bytes/len(t), Bytes/len(b))) -> (Nat) -> Nat) -> Nat =
+        use /std/Bool/{True, Holds};
+        let f(b: Bytes, g: (t: Bytes, r: Holds(Bytes/len(t) < Bytes/len(b))) -> (Nat) -> Nat) -> Nat =
             match b | x[] => 0 | x[_, ..t] => g(t, True/qed())(1) end;
         /std/print(Nat/to_str(f(x[1, 2, 3], (t, _) => (m) => Bytes/len(t) + m)))
         "#;
@@ -79,9 +74,8 @@ fn a_bytes_case_split_is_erased_under_its_cons() {
 fn a_list_fold_over_an_expression_is_erased_under_its_cons() {
     let source = r#"
         use /std/{Nat, List};
-        use /std/Bool/{True};
-        use /std/Nat/{lt};
-        let f(l: List(Nat), g: (t: List(Nat), r: Lt(List/len(t), List/len(List/reverse(l)))) -> (Nat) -> Nat) -> Nat =
+        use /std/Bool/{True, Holds};
+        let f(l: List(Nat), g: (t: List(Nat), r: Holds(List/len(t) < List/len(List/reverse(l)))) -> (Nat) -> Nat) -> Nat =
             match List/reverse(l) | [] => 0 | [_, ..t]; h => h + g(t, True/qed())(1) end;
         /std/print(Nat/to_str(f([1, 2, 3], (t, _) => (m) => List/len(t) + m)))
         "#;

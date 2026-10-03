@@ -411,7 +411,7 @@ fn a_tail_with_no_edge_reports_the_lift_witness() {
 
     let error = typecheck(source).expect_err("a missing edge must refuse");
     assert!(
-        error.contains("no witness of /std/Monad/Lift(Async, Job)"),
+        error.contains("no witness of Monad/Lift(Async, Job)"),
         "expected the embedding report, got: {error}"
     );
 }
@@ -456,7 +456,7 @@ fn a_missing_edge_reports_the_lift_witness() {
     let error = typecheck(source).expect_err("a missing edge must refuse");
     // The former-eta display fold renders the goal's monads as bare heads, and the embedding diagnosis speaks in terms of the sequencing rather than the synthesized wrapper.
     assert!(
-        error.contains("no witness of /std/Monad/Lift(Async, Job)")
+        error.contains("no witness of Monad/Lift(Async, Job)")
             && error.contains("needed to sequence an Async action in this Job region"),
         "expected the embedding report with folded formers, got: {error}"
     );

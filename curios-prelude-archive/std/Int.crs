@@ -20,6 +20,7 @@ pub mod lt;
 
 --- The laws of `a <= b`.
 pub mod le;
+
 --- An integer is a natural widened, or one below the negation of one: the two canonical forms, as the family's indices.
 ---
 --- Matching on [`view`] refines `i` to its form in each arm, which is how a proof takes an integer apart — `Int` has no constructors of its own, and this is the case split it would have. Nothing here is primitive: the view is built from `Int/to_nat`, and the order laws in `Lt` and `Le` go through it and through `Nat`.

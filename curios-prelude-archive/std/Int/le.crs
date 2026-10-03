@@ -24,7 +24,14 @@ pub let trans(@a: Int, @b: Int, @c: Int, p: Holds(a <= b), q: Holds(b <= c)) -> 
 --- `a <= b` and `c <= d` give `a + c <= b + d`: two bounds added side by side.
 ---
 --- The step a proof the elaborator writes from the facts in scope is summed with, one fact at a time. It is [`trans`] alone, because `a + c <= b + c` cancels to `a <= b` and `b + c <= b + d` to `c <= d`.
-pub let add(@a: Int, @b: Int, @c: Int, @d: Int, p: Holds(a <= b), q: Holds(c <= d)) -> Holds(a + c <= b + d) =
+pub let add(
+    @a: Int,
+    @b: Int,
+    @c: Int,
+    @d: Int,
+    p: Holds(a <= b),
+    q: Holds(c <= d),
+) -> Holds(a + c <= b + d) =
     trans(@a + c, @b + c, @b + d, p, q);
 
 --- An equation's bound: `a = b` gives `a <= b`.
@@ -34,7 +41,13 @@ pub let of_eq(@a: Int, @b: Int, e: Eq()(a, b)) -> Holds(a <= b) =
     Eq/subst((x: Int) => Holds(a <= x), e, refl(a));
 
 --- `a <= b` gives `a * k <= b * k` for a `k` no smaller than zero.
-pub let mul_mono_r(@a: Int, @b: Int, k: Int, p: Holds(a <= b), q: Holds(+0 <= k)) -> Holds(a * k <= b * k) =
+pub let mul_mono_r(
+    @a: Int,
+    @b: Int,
+    k: Int,
+    p: Holds(a <= b),
+    q: Holds(+0 <= k),
+) -> Holds(a * k <= b * k) =
     floor_mul(Int/to_nat(b - a, @p), Int/to_nat(k, @q));
 
 --- `a <= b` and `c <= d` give `a * d + b * c <= a * c + b * d`: the product of two bounds' differences is not negative.

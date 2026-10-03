@@ -401,8 +401,8 @@ fn type_level_operator_indices_stay_convertible() {
             | s(@a : Nat, @b : Nat, prev : Le(a, b)): (a + 1, b + 1)
             end
             pub let step(@a : Nat, @b : Nat, p : Le(a, b)) -> Le(a + 1, b + 1) =
-                le/s(p);
-            let base : Le(0, 1) = le/z();
+                Le/s(p);
+            let base : Le(0, 1) = Le/z();
             let bumped : Le(1, 2) = step(base);
             let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
             /std/Io/pure(())

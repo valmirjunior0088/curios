@@ -53,7 +53,12 @@ let zero_of_eql(x: Nat, h: Holds(x == 0)) -> Eq()(x, 0) =
     end;
 
 --- A zero remainder is a divisor: `n % d == 0` gives `Divides(d, n)`, the quotient as the witness.
-pub let of_rem(n: Nat, d: Nat, @ok: Holds(0 < d), h: Holds(Nat/rem(n, d, @ok) == 0)) -> Divides(d, n) =
+pub let of_rem(
+    n: Nat,
+    d: Nat,
+    @ok: Holds(0 < d),
+    h: Holds(Nat/rem(n, d, @ok) == 0),
+) -> Divides(d, n) =
     let joined: Eq()(n, Nat/div(n, d, @ok) * d + Nat/rem(n, d, @ok)) = Eq/refl();
     Divides/intro(
         Nat/div(n, d, @ok),

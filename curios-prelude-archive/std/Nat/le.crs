@@ -68,7 +68,14 @@ pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Holds(a <= b)) -> Holds(n + a <=
 --- `a <= b` and `c <= d` give `a + c <= b + d`: two bounds added side by side.
 ---
 --- The step a proof the elaborator writes from the facts in scope is summed with, one fact at a time. It is [`trans`] alone, because `a + c <= b + c` cancels to `a <= b` and `b + c <= b + d` to `c <= d`.
-pub let add(@a: Nat, @b: Nat, @c: Nat, @d: Nat, p: Holds(a <= b), q: Holds(c <= d)) -> Holds(a + c <= b + d) =
+pub let add(
+    @a: Nat,
+    @b: Nat,
+    @c: Nat,
+    @d: Nat,
+    p: Holds(a <= b),
+    q: Holds(c <= d),
+) -> Holds(a + c <= b + d) =
     trans(@a + c, @b + c, @b + d, p, q);
 
 --- `a <= b` gives `a * k <= b * k`.

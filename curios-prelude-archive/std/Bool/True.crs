@@ -1,6 +1,5 @@
 pub use /sys/Bool/{True};
 pub use /sys/Bool/True/{qed};
-use /std/Bool/{Holds};
 
 --- `P`, a fact a term needs that no bound demands: the elaborator proves it from the facts in scope, or the program is refused naming them.
 ---

@@ -135,7 +135,7 @@ fn an_operators_undischarged_bound_names_the_operator_and_what_establishes_it() 
     );
     assert!(
         report.contains(
-            "the bound of the '/' operator was not discharged\n  nothing discharged /std/ops/Div/Div/Ok(@Nat, n)"
+            "the bound of the '/' operator was not discharged\n  nothing discharged /std/ops/Div/Ok(@Nat, n)"
         ) && report.contains(
             "decide the bound with a guard before the operation, or call /std/ops/Div/div(@T, a, b, @proof)"
         ) && !report.contains("/(@")

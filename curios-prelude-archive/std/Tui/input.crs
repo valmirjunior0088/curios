@@ -150,7 +150,8 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
         let find(
             j: Nat,
             @onward: Holds(start <= j),
-        ) -> Option({at: Nat, onward: Holds(start <= at), room: Holds(at + 6 <= Bytes/len(input))}) =
+        ) -> Option(
+            {at: Nat, onward: Holds(start <= at), room: Holds(at + 6 <= Bytes/len(input))}) =
             match Nat/le/try(j + 6, Bytes/len(input))
             | none() => Option/none()
             | some(room) =>

@@ -326,7 +326,6 @@ fn an_undischarged_bound_is_named_in_the_refusal() {
     let error = typecheck(
         r#"
         use /std/{Str, Bytes, Nat, Bool};
-        use /std/Bool/{Holds};
         let unguarded(b : Bytes, k : Nat) -> Bytes =
             Bytes/slice(b, 2, k);
         /std/print("unreachable")
@@ -480,7 +479,7 @@ fn a_bound_whose_proposition_is_pinned_later_is_filled_on_retry() {
     .expect_err("a proposition that reduces to False is not filled");
 
     assert!(
-        error.contains("nothing discharged Holds(n + 1 <= n), which reduces to Bool/False"),
+        error.contains("nothing discharged Holds((n + 1) <= n), which reduces to Bool/False"),
         "expected the undischarged bound, got: {error}"
     );
 }
