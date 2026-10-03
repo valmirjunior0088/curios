@@ -29,9 +29,9 @@ pub use Show/{let Show};
 pub mod Spell;
 pub use Spell/{let Spell};
 
---- A total order, over an `Eql` superclass: what sorting and ordered collections ask for.
+--- A total order, over an `Eql` superclass: what sorting and ordered collections ask for, and the three-way answer it gives.
 pub mod Ord;
-pub use Ord/{let Ord};
+pub use Ord/{let Ord, Ordering};
 
 --- A value's encoding as the bytes that identify it, and the digest of one.
 ---
@@ -122,10 +122,6 @@ pub use Try/{let Try};
 --- A value that may be absent, with `IsSome` as the decided proposition that says which.
 pub mod Option;
 pub use Option/{let Option};
-
---- The three-way answer a comparison gives.
-pub mod Ordering;
-pub use Ordering/{let Ordering};
 
 --- A list that carries its length in its type.
 pub mod Vec;

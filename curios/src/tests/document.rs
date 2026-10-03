@@ -53,7 +53,7 @@ fn the_standard_library_documents_from_the_archive() {
     let ordering = documentation
         .modules
         .iter()
-        .find(|module| module.path.join() == "/std/Ordering")
+        .find(|module| module.path.join() == "/std/Ord/Ordering")
         .expect("an Ordering module");
     let induct = ordering
         .declarations
@@ -134,7 +134,7 @@ fn the_standard_library_documents_from_the_archive() {
         flip.signature
             .marks
             .iter()
-            .any(|mark| mark.referent.join() == "/std/Ordering/Ordering" && mark.within),
+            .any(|mark| mark.referent.join() == "/std/Ord/Ordering/Ordering" && mark.within),
         "{:?}",
         flip.signature
     );
@@ -156,10 +156,10 @@ fn the_standard_library_documents_from_the_archive() {
         .iter()
         .find(|declaration| declaration.name == "lt")
         .expect("the constructor beside its type");
-    assert_eq!(constructor.home.join(), "/std/Ordering");
+    assert_eq!(constructor.home.join(), "/std/Ord/Ordering");
     assert_eq!(
         constructor.source.as_ref().map(Qualifier::join).as_deref(),
-        Some("/std/Ordering/Ordering"),
+        Some("/std/Ord/Ordering/Ordering"),
         "a member's card names the declaration that holds it, and links to the row inside it"
     );
     assert!(

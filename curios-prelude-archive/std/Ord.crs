@@ -1,5 +1,9 @@
-use /std/{Ordering, Nat, List};
+use /std/{Nat, List};
 use /std/ops/{Eql};
+
+--- The three-way answer a comparison gives, with its distinctness proofs.
+pub mod Ordering;
+pub use Ordering/{let Ordering};
 
 --- A total order: `ord` decides `lt`, `eq` or `gt`, and `Eql` is its superclass.
 pub concept Ord(A: Type): pub Type {
