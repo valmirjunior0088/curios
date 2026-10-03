@@ -1,4 +1,5 @@
-use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Lift, Io, Handle};
+use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Io, Handle};
+use /std/Monad/{Lift};
 use /std/time/{Duration};
 use /std/Handle/{Interest, Readiness};
 

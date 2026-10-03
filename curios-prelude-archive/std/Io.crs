@@ -1,6 +1,7 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
-use /std/{Monad, Lift, Bytes, Byte, Nat, Option, Result, Async, Handle};
+use /std/{Monad, Bytes, Byte, Nat, Option, Result, Async, Handle};
+use /std/Monad/{Lift};
 
 --- The failure every host operation reports.
 pub mod Error;

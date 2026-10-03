@@ -88,7 +88,8 @@ fn read_pulls_bytes_inside_the_bracket() {
 #[test]
 fn with_async_reads_through_the_stream_witness_inside_a_fiber() {
     let source = r#"
-        use /std/{File, Path, Str, Bytes, Try, Lift, Async, Io};
+        use /std/{File, Path, Str, Bytes, Try, Async, Io};
+        use /std/Monad/{Lift};
         let program: Try(Async, Io/Error, Bytes) =
             File/with_async(Path/of_str("lines.txt"), File/Mode/read(), (f) =>
                 let _ = Async/yield_now!;

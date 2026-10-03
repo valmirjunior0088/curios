@@ -7,12 +7,6 @@ pub mod ops;
 pub mod Monad;
 pub use Monad/{let Monad};
 
---- The embedding of one monad into another, inserted by a `!` on an action of a monad other than its region's.
----
---- One witness per ordered pair of monads across a program, and embeddings never chain: a composite embedding is declared by the author of the outer monad.
-pub mod Lift;
-pub use Lift/{let Lift};
-
 --- Pure state threading: a computation that reads and writes a state and performs nothing.
 ---
 --- The value parameter sits last so the family partially applies as a monad. There is no edge from `Io` into a `State` region.

@@ -45,7 +45,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         bind: name(&["std", "Monad", "Monad", "bind"]),
     },
     lift: LiftSyntax {
-        lift: field(&["std", "Lift", "Lift"], "lift"),
+        lift: field(&["std", "Monad", "Lift"], "lift"),
     },
     operator: OperatorSyntax {
         add: field(&["std", "ops", "Add", "Add"], "add"),

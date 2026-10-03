@@ -1,6 +1,6 @@
 //! The `/std` effect vocabularies and how a `!` region sequences each: `Io` descriptions, `State` threading, `Result`'s early return, and the `Lift` edges between them.
 //!
-//! What each vocabulary *is* stays with its own section below. What they share is the shape these tests pin: a region's monad is read from its expected type, never inferred from the action, and an embedding across monads exists only where a `/std/Lift` witness declares one.
+//! What each vocabulary *is* stays with its own section below. What they share is the shape these tests pin: a region's monad is read from its expected type, never inferred from the action, and an embedding across monads exists only where a `/std/Monad/Lift` witness declares one.
 
 use super::{error, run, typecheck};
 
@@ -162,7 +162,7 @@ fn a_state_region_cannot_perform_io() {
 
     let error = typecheck(source).expect_err("a State region must refuse Io");
     assert!(
-        error.contains("no witness of /std/Lift(/std/Io, State(Nat))"),
+        error.contains("no witness of /std/Monad/Lift(/std/Io, State(Nat))"),
         "expected the missing Io edge, got: {error}"
     );
 }
@@ -411,17 +411,17 @@ fn a_tail_with_no_edge_reports_the_lift_witness() {
 
     let error = typecheck(source).expect_err("a missing edge must refuse");
     assert!(
-        error.contains("no witness of /std/Lift(Async, Job)"),
+        error.contains("no witness of /std/Monad/Lift(Async, Job)"),
         "expected the embedding report, got: {error}"
     );
 }
 
-/// The explicit spelling stays available and means the same embedding: `lift` is `/std/Lift`'s method, its target inferred from the region.
+/// The explicit spelling stays available and means the same embedding: `lift` is `/std/Monad/Lift`'s method, its target inferred from the region.
 #[test]
 fn an_explicit_lift_spells_the_same_embedding() {
     let source = r#"
         use /std/{Async, print};
-        use /std/Lift/{lift};
+        use /std/Monad/Lift/{lift};
         pub let fiber: Async({}) =
             let _ = lift(print("x"))!;
             Async/pure(());
@@ -456,7 +456,7 @@ fn a_missing_edge_reports_the_lift_witness() {
     let error = typecheck(source).expect_err("a missing edge must refuse");
     // The former-eta display fold renders the goal's monads as bare heads, and the embedding diagnosis speaks in terms of the sequencing rather than the synthesized wrapper.
     assert!(
-        error.contains("no witness of /std/Lift(Async, Job)")
+        error.contains("no witness of /std/Monad/Lift(Async, Job)")
             && error.contains("needed to sequence an Async action in this Job region"),
         "expected the embedding report with folded formers, got: {error}"
     );
@@ -475,7 +475,7 @@ fn a_missing_edge_between_aliased_monads_reports_them_as_written() {
 
     let error = typecheck(source).expect_err("a byte action in a text region must refuse");
     assert!(
-        error.contains("no witness of /std/Lift(Parse(/std/Bytes), Parse(Str)) found")
+        error.contains("no witness of /std/Monad/Lift(Parse(/std/Bytes), Parse(Str)) found")
             && error.contains(
                 "needed to sequence a Parse(/std/Bytes) action in this Parse(Str) region"
             ),
@@ -487,7 +487,8 @@ fn a_missing_edge_between_aliased_monads_reports_them_as_written() {
 #[test]
 fn a_missing_composite_reports_the_declared_chain() {
     let source = r#"
-        use /std/{Monad, Lift, Io, print};
+        use /std/{Monad, Io, print};
+        use /std/Monad/{Lift};
         pub struct Job(A: Type): pub Type {
             Io(A),
         }
@@ -570,7 +571,8 @@ fn a_flex_action_still_sequences_without_lifting() {
 #[test]
 fn embeddings_do_not_chain_through_a_middle_monad() {
     let source = r#"
-        use /std/{Monad, Lift, Io, Async};
+        use /std/{Monad, Io, Async};
+        use /std/Monad/{Lift};
         pub struct Job(A: Type): pub Type {
             Io(A),
         }

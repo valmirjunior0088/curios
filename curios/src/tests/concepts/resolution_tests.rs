@@ -186,7 +186,8 @@ fn forward_declared_witness_resolves() {
 #[test]
 fn a_premise_naming_a_constant_beside_a_binder_resolves_through_the_constant_edge() {
     let source = r#"
-        use /std/{Monad, Lift, Result, Io, Async, Nat, Str, print};
+        use /std/{Monad, Result, Io, Async, Nat, Str, print};
+        use /std/Monad/{Lift};
         pub struct Try(M: (Type) -> Type, E: Type, A: Type): Type { M(Result(E, A)) }
         let pure(@M: (Type) -> Type, @E: Type, @A: Type, use Monad(M), a: A) -> Try(M, E, A) =
             Try { Monad/pure(Result/success(a)) };

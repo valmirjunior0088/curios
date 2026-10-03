@@ -1,4 +1,5 @@
-use /std/{Monad, Lift, Result, Io, Async};
+use /std/{Monad, Result, Io, Async};
+use /std/Monad/{Lift};
 
 --- An `M(Result(E, A))` sequenced so that a failure stops the region.
 pub struct Try(M: (Type) -> Type, E: Type, A: Type): Type {

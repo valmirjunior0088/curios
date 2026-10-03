@@ -201,7 +201,7 @@ impl MonadSyntax {
     }
 }
 
-/// The embedding concept auto-lift resolves at a postfix `!` whose action's monad differs from its region's: `/std/Lift`'s `lift` method, projected from the witness keyed by the two monads. Consulted by `elaborate_bang` only — lowering never reads it.
+/// The embedding concept auto-lift resolves at a postfix `!` whose action's monad differs from its region's: `/std/Monad/Lift`'s `lift` method, projected from the witness keyed by the two monads. Consulted by `elaborate_bang` only — lowering never reads it.
 #[derive(Debug, Clone, Copy)]
 pub struct LiftSyntax {
     pub lift: ConceptField,

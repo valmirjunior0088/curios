@@ -514,7 +514,7 @@ pub(super) fn elaborate_bang(
         return park_checking(context, term, expected);
     }
 
-    // Auto-lift, decided before anything elaborates by reading declared shapes: both monads keyable and different means the action is wrapped in `/std/Lift`'s `lift`, whose `use` slot resolves the declared embedding — or reports the missing edge. An unreadable action stays unwrapped and keeps the ordinary mismatch; the explicit `lift(action)` spelling always remains.
+    // Auto-lift, decided before anything elaborates by reading declared shapes: both monads keyable and different means the action is wrapped in `/std/Monad/Lift`'s `lift`, whose `use` slot resolves the declared embedding — or reports the missing edge. An unreadable action stays unwrapped and keeps the ordinary mismatch; the explicit `lift(action)` spelling always remains.
     let region_shape = monad_shape(context, &region)?;
     let action_shape = action_result_shape(context, &bang.action)?;
     let action = match (region_shape, action_shape) {
@@ -617,7 +617,7 @@ fn abstracted_monad(
     )))
 }
 
-/// `action` wrapped in `/std/Lift`'s `lift`, whose `use` slot resolves the declared embedding into the region or reports the missing edge; the wrapper takes the action's own span, or `fallback`, so the report anchors where the action was written.
+/// `action` wrapped in `/std/Monad/Lift`'s `lift`, whose `use` slot resolves the declared embedding into the region or reports the missing edge; the wrapper takes the action's own span, or `fallback`, so the report anchors where the action was written.
 fn lift_wrapped(context: &Context, action: &Term, fallback: Option<Span>) -> Term {
     let field = context.syntax().lift.lift;
     let wrapper = Term::free_var(&Free::global(field.concept.qualifier().with(field.field)));
