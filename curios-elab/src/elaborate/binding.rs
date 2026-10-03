@@ -580,7 +580,7 @@ fn region_monad(
 
 /// The region's monad read off the application directly, by abstracting its final argument — the fallback for a region whose *value slot* is still unsolved.
 ///
-/// **Which is not the same as a region with no monad, and reporting it as one would refuse a program the language accepts.** A lambda handed to `File/with` checks against `(File) -> Try(Io, Io/Error, A)` with `A` the caller's implicit, so its region is `Try(Io, Io/Error, ?)`: head rigid, both context arguments rigid, only the slot the `!` itself will solve still open. Asking [`convert`] for it leaves both the abstracted slot and the argument flexible and it declines, so `Try(Io, Io/Error, ?), which is no monad` would be reported at the `!` — while annotating the enclosing type, which changes nothing about the monad, makes the same program compile.
+/// **Which is not the same as a region with no monad, and reporting it as one would refuse a program the language accepts.** A lambda handed to `File/with` checks against `(File) -> Try(Io, Io/Error, A)` with `A` the caller's implicit, so its region is `Try(Io, Io/Error, ?)`: head rigid, both context arguments rigid, only the slot the `!` itself will solve still open. Asking [`convert`](convert()) for it leaves both the abstracted slot and the argument flexible and it declines, so `Try(Io, Io/Error, ?), which is no monad` would be reported at the `!` — while annotating the enclosing type, which changes nothing about the monad, makes the same program compile.
 ///
 /// The rule is the one `documentation/syntax.md` already states for witness resolution — "an under-applied shape such as `M(A) = State(S, Nat)` infers `M` right-biasedly, as `(A) => State(S, A)`: the final argument is the abstracted one". This applies it where conversion could not guess it.
 ///
@@ -634,7 +634,7 @@ fn lift_wrapped(context: &Context, action: &Term, fallback: Option<Span>) -> Ter
     }
 }
 
-/// Record what an auto-lift names as written, for the report on a missing embedding — see [`EmbeddingSite`](crate::EmbeddingSite). A region that applies no name records nothing: a nominal region, `Job(A)`, is spelled by its reduced form already.
+/// Record what an auto-lift names as written, for the report on a missing embedding — see [`EmbeddingSite`]. A region that applies no name records nothing: a nominal region, `Job(A)`, is spelled by its reduced form already.
 fn note_embedding_site(context: &mut Context, wrapped: &Term, action: &Term, region: &Term) {
     let (Some(span), Some(region)) = (wrapped.span(), written_monad(region)) else {
         return;

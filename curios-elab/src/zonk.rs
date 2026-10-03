@@ -798,7 +798,7 @@ fn zonk_definition(context: &Zonk, def: &Definition) -> Result<Definition, Error
 ///
 /// The walk mirrors [`zonk_module`]'s coverage in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once with its first occurrence's span. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
 ///
-/// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms; universe instances are then erased ([`project_erased_universes`]) and operator witness projections folded back to infix, so every reported term is spelled the way the source could write it. An unsolved goal additionally carries sandboxed candidate suggestions ([`suggest_candidates`](super::suggest_candidates)), displayed through the same pipeline.
+/// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms; universe instances are then erased ([`project_erased_universes`]) and operator witness projections folded back to infix, so every reported term is spelled the way the source could write it. An unsolved goal additionally carries sandboxed candidate suggestions ([`suggest_candidates`]), displayed through the same pipeline.
 pub(crate) fn collect_goal_reports(
     context: &mut Context,
     module: &Module,

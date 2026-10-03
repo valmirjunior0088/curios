@@ -254,7 +254,7 @@ fn granted(prelude: &[&Unit], withheld: usize, unit: &RootSource) -> Vec<Qualifi
     prefixes
 }
 
-/// Lower and type-check `entrypoint` against the fixed prelude, stopping short of the kernel. See [`typecheck_entrypoint`](crate::typecheck_entrypoint).
+/// Lower and type-check `entrypoint` against the fixed prelude, stopping short of the kernel. See [`typecheck_entrypoint`].
 pub fn typecheck_with_prelude(
     budget: u64,
     entrypoint: &curios_text::Entrypoint,
@@ -271,7 +271,7 @@ pub fn typecheck_with_prelude(
     })
 }
 
-/// Put `entrypoint` to both checkers against the fixed prelude and hand back what each said. See [`examine_entrypoint`](crate::examine_entrypoint).
+/// Put `entrypoint` to both checkers against the fixed prelude and hand back what each said. See [`examine_entrypoint`].
 pub fn examine_with_prelude(
     budget: u64,
     entrypoint: &curios_text::Entrypoint,

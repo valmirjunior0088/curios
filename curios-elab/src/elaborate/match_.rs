@@ -178,7 +178,7 @@ fn check_fold_arm(
         .map_err(|error| from_arm(context, head, value, error))
 }
 
-/// `error`, raised in the arm at `value`, reported as one in a dead arm where the guard is always another case — see [`unreachable_arm`](crate::unreachable_arm).
+/// `error`, raised in the arm at `value`, reported as one in a dead arm where the guard is always another case — see [`unreachable_arm`].
 fn from_arm(context: &mut Context, head: &Term, value: &Term, error: Error) -> Error {
     match unreachable_arm(context, head, value) {
         Some(case) => error.in_unreachable_arm(head.clone(), case),

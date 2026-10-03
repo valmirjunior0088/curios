@@ -1,6 +1,6 @@
 //! Synthesizing the type of a neutral spine, and the universe-level identification that decides a problem whose sides differ in nothing else.
 //!
-//! Both are the *non*-structural half of conversion: [`synth_neutral`] answers what type a head-and-arguments term inhabits, which is what type-directed comparison needs before it can compare anything, and [`identify_universe_levels`] disposes of a problem by committing level equalities rather than by descending. The structural comparison that calls them lives with [`Convert`].
+//! Both are the *non*-structural half of conversion: [`synth_neutral`] answers what type a head-and-arguments term inhabits, which is what type-directed comparison needs before it can compare anything, and [`identify_universe_levels`] disposes of a problem by committing level equalities rather than by descending. The structural comparison that calls them lives with [`Convert`](super::Convert).
 
 use {
     super::instantiate_bound_at,
@@ -118,7 +118,7 @@ pub(super) enum Identification {
     UnderBinder,
 }
 
-/// Binders opened locally by [`Sort::of`] while walking a telescope, innermost last.
+/// Binders opened locally by [`Sort::of`](super::Sort::of) while walking a telescope, innermost last.
 ///
 /// These deliberately do *not* go into the [`Context`]. `Sort::of` runs on every conversion problem (through `is_prop`), and `Context::assume` bumps `mutation_stamp`, which is what validates the memoization caches — assuming here would invalidate them continuously and starve a coinductive comparison of its budget. Keeping the binders local also keeps `Sort::of` observationally read-only, which the conversion history relies on: labels minted here are never recorded in `Convert::minted`, so they must never reach a problem. They cannot, because `Sort::of` returns a `Sort`.
 pub(crate) type Opened = [(Free, Term)];

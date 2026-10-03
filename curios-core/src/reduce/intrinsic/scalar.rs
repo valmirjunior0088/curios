@@ -1,6 +1,6 @@
 //! The per-carrier operand folds: reduce both sides, and answer from the values when both are literals.
 //!
-//! One function per carrier and arity, each doing the same three things — reduce, match a literal pair, rebuild the redex when the match fails. What a failed match falls through to is the caller's business: the laws in [`laws`], or nothing.
+//! One function per carrier and arity, each doing the same three things — reduce, match a literal pair, rebuild the redex when the match fails. What a failed match falls through to is the caller's business: the laws in [`laws`](super::laws), or nothing.
 
 use {
     super::operand_bound,
@@ -47,7 +47,7 @@ pub(super) fn reduce_bool_binary(
     }))
 }
 
-/// `Int/shl` and `Int/shr`: a signed value over a `Nat` count, the signed twins of [`reduce_nat_shl`] and its right shift. `cost` is what the fold may construct from the value's width and the count — [`shift_bound`] for a left shift, whose result grows by the count, and [`operand_bound`] for a right shift, whose result never does — and `fold` declines only a left shift by a count too large to be a shift count at all; the right shift is total, a count past the width answering the sign.
+/// `Int/shl` and `Int/shr`: a signed value over a `Nat` count, the signed twins of [`reduce_nat_shl`](super::reduce_nat_shl) and its right shift. `cost` is what the fold may construct from the value's width and the count — [`shift_bound`](super::shift_bound) for a left shift, whose result grows by the count, and [`operand_bound`] for a right shift, whose result never does — and `fold` declines only a left shift by a count too large to be a shift count at all; the right shift is total, a count past the width answering the sign.
 pub(super) fn reduce_int_shift(
     reducer: &mut impl Reducer,
     left: &Term,
@@ -74,7 +74,7 @@ pub(super) fn reduce_int_shift(
     }))
 }
 
-/// `Int` counterpart of [`reduce_nat_binary`]: fold both literal operands or rebuild the neutral term. The fold is partial for the same reason — the shifts decline a negative or oversized literal shift count (`None`); the total ops just wrap their result in `Some`.
+/// `Int` counterpart of [`reduce_nat_binary`](super::reduce_nat_binary): fold both literal operands or rebuild the neutral term. The fold is partial for the same reason — the shifts decline a negative or oversized literal shift count (`None`); the total ops just wrap their result in `Some`.
 pub(super) fn reduce_int_binary(
     reducer: &mut impl Reducer,
     left: &Term,
@@ -178,7 +178,7 @@ pub(super) fn reduce_flt_ternary(
     }))
 }
 
-/// `Int` counterpart of [`reduce_nat_unary`]. The fold's `None` rebuilds the neutral term: with `Int` unbounded at the type level, a conversion of a value the target cannot represent simply stays stuck.
+/// `Int` counterpart of [`reduce_nat_unary`](super::reduce_nat_unary). The fold's `None` rebuilds the neutral term: with `Int` unbounded at the type level, a conversion of a value the target cannot represent simply stays stuck.
 pub(super) fn reduce_int_unary(
     reducer: &mut impl Reducer,
     inner: &Term,
