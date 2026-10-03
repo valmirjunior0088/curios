@@ -13,7 +13,7 @@ pub(super) const FORMATION: Part = Part {
     tickets: &[Ticket {
         title: "A parameter named through an instance is an occurrence positivity does not see",
         found_on: Date::new(2026, 10, 3),
-        status: Status::Open,
+        status: Status::Fixed,
         witnesses: &[Witness {
             what: "Curry's paradox through a record whose negative use of its parameter is an instance of it",
             proof: Proof::Module(a_parameter_named_through_an_instance),
