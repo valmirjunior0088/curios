@@ -1,5 +1,5 @@
 use {
-    super::{Handle, engine::ExitTrap},
+    super::{ExitTrap, Handle},
     curios_abi::{Encoded, HostOp, WireLeaf, WireReply, WireType, WireValue},
     wasmtime::{
         ArrayRef, ArrayRefPre, ArrayType, Caller, Engine, FieldType, HeapType, Mutability, RefType,

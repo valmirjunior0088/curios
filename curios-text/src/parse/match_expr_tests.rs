@@ -1,8 +1,10 @@
 //! Inductive and matrix matches, motives, patterns, and `choose`.
 
 use {
-    super::test_support::*, crate::*, curios_num::Natural, curios_utilities::Plicity,
-    curios_utilities::Sign,
+    super::test_support::*,
+    crate::*,
+    curios_num::Natural,
+    curios_utilities::{Plicity, Sign},
 };
 
 #[test]

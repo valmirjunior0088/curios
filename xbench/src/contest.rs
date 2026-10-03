@@ -432,7 +432,7 @@ fn recorded(number: usize, sitting: &Sitting) -> String {
         unpadded(&taken[8..10]),
     );
     let mut module = format!(
-        "//! Reading {number:02}, taken {taken}.\n\nuse super::*;\n\npub(super) const READING_{number:02}: Reading = Reading {{\n    taken: Date::new({year}, {month}, {day}),\n    subject: {subject:?},\n    platform: Platform {{\n        machine: {:?},\n        state: {:?},\n        software: {:?},\n    }},\n    pinned: &[\n",
+        "//! Reading {number:02}, taken {taken}.\n\nuse xbench::{{Date, Platform, Reading, took, weighed}};\n\npub(super) const READING_{number:02}: Reading = Reading {{\n    taken: Date::new({year}, {month}, {day}),\n    subject: {subject:?},\n    platform: Platform {{\n        machine: {:?},\n        state: {:?},\n        software: {:?},\n    }},\n    pinned: &[\n",
         platform.machine, platform.state, platform.software
     );
 

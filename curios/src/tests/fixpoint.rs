@@ -3,7 +3,7 @@
 //! Behind the `profile` feature for the reason `churn` is: the per-pass spans and fired-samples `curios_cont::optimize` carries exist only there. It reports and does not assert, in the shape of `unfolding.rs`'s measurements, and its subject is the census's `TOML_DRIVER`, so the program a figure is taken over is named.
 
 use {
-    super::codegen::TOML_DRIVER,
+    super::TOML_DRIVER,
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_profile::{Destination, fold, trace},
     curios_text::{Entrypoint, RootSource},

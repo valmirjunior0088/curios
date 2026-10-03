@@ -18,4 +18,6 @@ use map_wall::*;
 
 mod parity;
 mod shapes;
+
 mod structural;
+use structural::*;

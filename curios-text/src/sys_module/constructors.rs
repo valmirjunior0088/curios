@@ -3,7 +3,7 @@
 //! Split from the roster itself so that `sys_module.rs` reads as *what `/sys` declares* and this reads as *how a declaration is built*. Nothing here knows what is in the roster; everything here is a shape. Its sibling `helpers.rs` sits one rung below: that builds terms, this builds declarations out of them.
 
 use {
-    super::{helpers::*, host_fn},
+    super::{host_fn, intrinsic, name},
     crate::{
         Doc, FuncSugarParam, GroupItem, Intrinsic, LetSignature, Module, Name, Pattern, Term,
         TopItem, TopLet, TopMod, TopUse, UseGroup,

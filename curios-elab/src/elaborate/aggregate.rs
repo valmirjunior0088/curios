@@ -1,7 +1,14 @@
 use {
-    super::*,
-    crate::{FrozenFrame, ParkedProjection},
-    curios_core::{SelfReference, stamp_declaration_instance},
+    super::{FieldSource, check_dependent_fields, park_checking},
+    crate::{
+        Context, Error, FrozenFrame, Mode, ParkedProjection, ParkedWork, check, elaborate, expect,
+        reduce_with, sort_term,
+    },
+    curios_core::{
+        Bound, Field, InductType, Proj, SelfReference, StructType, Subterm, Telescope, Term, Tuple,
+        TupleType, Variant, instantiate_universe_levels_scoped, stamp_declaration_instance,
+    },
+    std::collections::BTreeSet,
 };
 
 pub(super) fn elaborate_tuple_type(

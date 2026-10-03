@@ -1,8 +1,7 @@
 //! The guest's own checks of a host's reply: a host that answers outside its row — a status the row never answers, a success its checks refuse, a value its wire type cannot be — is refused by the program itself, whichever host it is, while a failure's inert padding is accepted. Each reply is written raw, past the native adapter, which would refuse it first.
 
 use {
-    super::super::compile,
-    crate::to_cwasm,
+    crate::{tests::compile, to_cwasm},
     curios_abi::{ChildExit, HostOp, status},
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_runtime::{

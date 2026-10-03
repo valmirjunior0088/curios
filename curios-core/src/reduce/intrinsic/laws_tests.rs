@@ -7,8 +7,7 @@ use {
         peel_nat_terms, peel_position,
     },
     curios_algebra::Deduction,
-    curios_num::Grain,
-    curios_num::Integer,
+    curios_num::{Grain, Integer},
 };
 
 // Soundness gate for the peel's own verdicts over values: `Nat::cancel_common` decides all three, and the law behind them is otherwise argued only in code comments.

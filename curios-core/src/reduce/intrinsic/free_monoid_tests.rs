@@ -1,8 +1,7 @@
 //! Lengths, windows, indices and equality over a spine, which may not depend on how its run is grouped.
 
 use {
-    super::reduce_intrinsic,
-    super::test_support::*,
+    super::{reduce_intrinsic, test_support::*},
     crate::{FUSION_CAP, Free, Intrinsic, Nat, Subterm, Term},
     curios_num::{Binary, Grain},
 };

@@ -1,5 +1,10 @@
 use {
-    super::{Table, host::*},
+    super::Table,
+    crate::{
+        ChildExit, ChildHandles, Direction, Failure, FileKind, FileStat, Handle, HostOps, Mode,
+        Poll, Refusal, SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp,
+        TtySize, lookup_address, names_a_variable, serial_frame, serial_speed,
+    },
     curios_abi::{ClosedCode, errno, event},
     std::{
         collections::{BTreeSet, HashMap, VecDeque},

@@ -4,12 +4,13 @@
 
 use {
     super::{Occurrences, close},
-    curios_core::{Global, Polarity},
+    curios_core::{
+        Global,
+        Polarity::{self, Mixed, Neg, Pos, Strict, Unused},
+    },
     curios_utilities::Qualifier,
     std::collections::BTreeMap,
 };
-
-use Polarity::{Mixed, Neg, Pos, Strict, Unused};
 
 const EVERY: [Polarity; 5] = [Unused, Strict, Pos, Neg, Mixed];
 fn declaration(name: &str) -> Global {

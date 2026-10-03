@@ -5,8 +5,11 @@
 //! **Two readers here stay one per carrier, for reasons that are not drift.** [`bin_shape`] and [`list_shape`] answer different types — `Shape<u8>` against `Shape<Term>` — and only the first is fallible, because only it materializes a run to charge for. [`bin_piece`] and [`list_piece`] differ in what they need from outside the value: a grain is a `Copy` tag [`FreeMonoid`] already carries, while a `List`'s element type is a *term* it does not, and every narrowed piece has to restate it. The readers that did fold into the carrier — the spine walk, the joined walk, the one-generator read — needed nothing from outside that the carrier did not already hold, which is the line between the two groups.
 
 use {
-    super::*,
-    crate::{Intrinsic, Nat, Piece, ReduceError, Reducer, Sequence, Subterm, Term, Words},
+    super::as_index,
+    crate::{
+        Cost, FreeMonoid, Intrinsic, Nat, Piece, ReduceError, Reducer, Sequence, Subterm, Term,
+        Words,
+    },
     curios_algebra::{Alphabet, Seam, seam_window},
     curios_num::{Binary, Grain},
 };

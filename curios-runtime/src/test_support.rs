@@ -12,10 +12,8 @@
 
 use {
     super::{
-        ForeignBindings, HostOps, Lower,
-        engine::{instantiate, sys_impls},
-        lower::{lower_scalars, words_array_type},
-        shared_engine,
+        ForeignBindings, HostOps, Lower, instantiate, lower_scalars, shared_engine, sys_impls,
+        words_array_type,
     },
     curios_abi::HostOp,
     std::sync::Arc,

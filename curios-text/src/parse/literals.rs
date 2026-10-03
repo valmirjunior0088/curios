@@ -1,4 +1,16 @@
-use super::*;
+use {
+    super::{parse_keyword, parse_literal},
+    crate::{
+        BinSegment, Intrinsic, ListEntry, NatLiteral, NumLit, ProofLiteral, Radix, StrLit, Subterm,
+        Term, parse_term, parse_whitespace,
+    },
+    curios_num::{Floating, Grain, Natural},
+    curios_parse::{
+        Parser, commit, fail, fail_from, lazy, look_ahead, many0, mark, not_ahead, pure,
+        sep_by0_trailing, take_exact, take_n, take_while,
+    },
+    curios_utilities::Sign,
+};
 
 pub(super) fn parse_type<'a>() -> Parser<'a, Term> {
     parse_keyword("Type")

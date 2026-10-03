@@ -1,8 +1,7 @@
 use {
     super::evaluate_closed_terms,
     crate::*,
-    curios_num::Natural,
-    curios_num::{Binary, Grain},
+    curios_num::{Binary, Grain, Natural},
 };
 
 /// `make(x) = (y) => x + y`, bound as an item.

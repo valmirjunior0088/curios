@@ -5,7 +5,10 @@
 //! **[`host_fn`] wraps every store row's result in `Io`, at this one site.** That is load-bearing rather than incidental: it is half of what narrows `documentation/design/soundness/elimination/a-term-outside-io-performs-no-effect.md` from an argument about the whole library to a check over two Rust tables — a foreign row cannot introduce an eliminator for the effect type, because every row's result is built here and [`WireType`] is a closed enum with no case that could name an `Io` in a domain. A second site building a row's result would end it.
 
 use {
-    super::{Decl, helpers::*},
+    super::{
+        Decl, applied, bin, bool_, branch, byte, flt, handle, int, intrinsic, io_of, lambda,
+        list_of, name, nat, nat_lit, project, record, sys_op, tuple, type_, unit,
+    },
     crate::{Doc, Intrinsic, LetSignature, Subterm, Term, TopForeign},
     curios_abi::{
         Check, DeclaredForeign, ForeignFunction, ForeignStore, Outcome, ResultShape, WireType,

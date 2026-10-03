@@ -1,4 +1,22 @@
-use super::*;
+use {
+    super::{
+        MEMO_MATCH_PATTERN, MEMO_PATTERN, parse_char_value, parse_cons_ih, parse_identifier,
+        parse_keyword, parse_label, parse_literal, parse_name, parse_nat_digits, parse_plicity,
+        parse_qualified_name, require_space,
+    },
+    crate::{
+        BinPattern, FuncParam, FuncType, FuncTypeParam, Label, ListPattern, MatchPattern,
+        MatchPatternField, NatLiteral, NatPattern, Pattern, PatternField, Subterm, Term,
+        parse_term, parse_whitespace,
+    },
+    curios_num::Grain,
+    curios_parse::{
+        Parser, commit, fail, fail_from, lazy, look_ahead, mark, memoize, not_ahead,
+        preceded_by_space, pure, sep_by0_trailing, take_exact, take_while, uncommit,
+    },
+    curios_utilities::Plicity,
+    std::iter,
+};
 
 pub(super) fn parse_use_func_type_param<'a>() -> Parser<'a, FuncTypeParam> {
     parse_keyword("use")

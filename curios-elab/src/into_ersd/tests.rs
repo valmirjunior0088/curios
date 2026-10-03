@@ -1,10 +1,8 @@
 use {
-    crate::reduce::test_support::qed,
-    crate::*,
+    crate::{reduce::test_support::qed, *},
     curios_abi::{ForeignFunction, HostOp},
     curios_analysis::fixture::SYNTAX,
-    curios_core::*,
-    curios_core::{Program, Zonked},
+    curios_core::{Program, Zonked, *},
     curios_ersd::{FieldShape, test_support::shape},
     curios_utilities::{Plicity, Qualifier},
     std::{

@@ -1,6 +1,10 @@
 use {
-    super::{
-        OsResolver, Running, SerialPort, Slot, Spawned, Table, host::*, os_child, serial_devices,
+    super::{OsResolver, Running, SerialPort, Slot, Spawned, Table, os_child, serial_devices},
+    crate::{
+        ChildExit, ChildHandles, Direction, Failure, FileKind, FileStat, Handle, HostOps, Mode,
+        Poll, Refusal, SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp,
+        TtySize, failure_from_error, lookup_address, names_a_variable, poll_from_flags,
+        poll_to_flags, serial_frame, serial_speed,
     },
     curios_abi::event,
     rustix::{

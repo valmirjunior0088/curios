@@ -1,6 +1,6 @@
 //! Reading 00, taken 2026-10-03.
 
-use super::*;
+use xbench::{Date, Platform, Reading, took, weighed};
 
 pub(super) const READING_00: Reading = Reading {
     taken: Date::new(2026, 10, 3),

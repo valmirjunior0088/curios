@@ -1,8 +1,7 @@
 //! The closed machine, checked against the strategy it accelerates.
 
 use {
-    super::test_support::*,
-    super::unfold_rec,
+    super::{test_support::*, unfold_rec},
     crate::Kernel,
     curios_core::{Free, Global, Intrinsic, Many, Reducer, Scope, Subterm, Term},
     curios_num::{Binary, Grain},

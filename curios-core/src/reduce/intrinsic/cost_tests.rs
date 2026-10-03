@@ -1,8 +1,7 @@
 //! What a fold is charged for what it builds, and the shifts refused before they are built at all.
 
 use {
-    super::Reducer,
-    super::test_support::*,
+    super::{Reducer, test_support::*},
     crate::{Category, Cost, Intrinsic, Nat, ReduceError, Term},
     curios_num::{Binary, Grain, Integer, Natural},
 };

@@ -1,8 +1,9 @@
 //! `Nat` bounds and Euclidean split, and the cancellation a symbolic operand admits.
 
 use {
-    super::test_support::*,
-    super::{Comparison, compare_nat, nat_bound, nat_dominators, nat_euclid_split},
+    super::{
+        Comparison, compare_nat, nat_bound, nat_dominators, nat_euclid_split, test_support::*,
+    },
     crate::{Free, Intrinsic, Subterm, Term, peel_nat_terms},
     curios_algebra::Deduction,
     curios_num::Natural,

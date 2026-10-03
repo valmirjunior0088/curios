@@ -11,7 +11,7 @@
 //! The ABI is the raw one every wasm toolchain already emits: a scalar crosses as itself, a byte string as a `(ptr, len)` pair into the plugin's memory, and a byte-string result comes back as the same pair through wasm's multi-value return. The plugin exports its `memory` and an allocator; what it is called and what it takes are [`ALLOC`] and the conformance check below.
 
 use {
-    super::{Lift, Lower, engine::ForeignBindings, shared_engine},
+    super::{ForeignBindings, Lift, Lower, shared_engine},
     curios_abi::{ForeignFunction, ForeignStore, ResultShape, WireType},
     std::{
         collections::{BTreeMap, BTreeSet},

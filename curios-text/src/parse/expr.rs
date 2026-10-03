@@ -1,4 +1,23 @@
-use super::*;
+use {
+    super::{
+        MEMO_ATOMIC_TERM, MEMO_TERM, comment_ending_at, parse_choose, parse_func, parse_func_type,
+        parse_intrinsic, parse_keyword, parse_let_binder, parse_literal, parse_match, parse_name,
+        parse_parens, parse_pattern, parse_plicity, parse_prop, parse_qualified_name,
+        parse_struct_lit, parse_tuple, parse_tuple_type, parse_type, parse_usize_raw,
+    },
+    crate::{
+        Apply, Argument, Field, FuncSugarParam, Infix, Label, Let, LetBinding, LetGroup,
+        LetSignature, Pattern, Proj, Subterm, Term, Tuple, declared, parse_identifier_raw,
+        parse_whitespace,
+    },
+    curios_parse::{
+        Parser, commit, fail, fail_from, lazy, look_ahead, many0, many1, mark, memoize, not_ahead,
+        preceded_by_space, pure, sep_by0_trailing, spanned, take_eof, take_exact, take_n,
+        take_while,
+    },
+    curios_utilities::{InfixOp, Plicity, Span, is_identifier_char},
+    std::iter,
+};
 
 // A plain-label binding with a mandatory type: every top-level member, and every member of a local group after the first.
 pub(super) fn parse_binding<'a>() -> Parser<'a, (Label, LetSignature)> {

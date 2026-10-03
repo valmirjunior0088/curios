@@ -3,9 +3,9 @@
 //! [`compare_nat`] cancels what the two sides share before it looks at what is left, so `x + a < x + b` decides on `a` and `b` rather than stalling on the whole spine. `curios-algebra`'s `Comparison` is the verdict — which of the three orderings the operands may still take, so an undecided answer is carried back rather than guessed — and every fact that narrows it is the algebra's: the floors, a bound against a literal, a dominator, divisibility. What is decided here is what to observe and in what order: which terms to normalize, which side is bare, which operand bounds which.
 
 use {
-    super::*,
-    crate::{Nat, ReduceError, Reducer, Subterm, Term},
-    curios_algebra::{Side, apart_modulo},
+    super::{nat_bound, nat_dominators},
+    crate::{Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, project_erased_universes},
+    curios_algebra::{Comparison, Side, apart_modulo},
     curios_num::Natural,
 };
 

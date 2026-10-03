@@ -3,8 +3,7 @@
 use {
     super::test_support::*,
     crate::{Error, Globals},
-    curios_analysis::Erased,
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::{Erased, fixture::SYNTAX},
     curios_core::{Atom, Global, InductParam, Module, Telescope, Term},
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},

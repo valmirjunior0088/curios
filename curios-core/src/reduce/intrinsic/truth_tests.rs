@@ -1,8 +1,7 @@
 //! The truth table over two `Bool` terms' atoms: what it decides equal, what it leaves alone, and where it stops.
 
 use {
-    super::decide_bool,
-    super::test_support::*,
+    super::{decide_bool, test_support::*},
     crate::{Intrinsic, Term},
     curios_algebra::BOOL_ATOM_CAP,
 };

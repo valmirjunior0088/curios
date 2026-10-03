@@ -7,8 +7,7 @@
 use {
     crate::into_wasm,
     curios_abi::{ForeignFunction, HostOp, host_ops},
-    curios_num::{Binary, Floating, Grain},
-    curios_num::{Integer, Natural},
+    curios_num::{Binary, Floating, Grain, Integer, Natural},
     std::{collections::BTreeMap, sync::Arc},
 };
 

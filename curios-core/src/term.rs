@@ -24,15 +24,14 @@ pub use subterm::*;
 
 use {
     super::{
-        Atom, Bound, CalleeId, Enter, Free, Global, Intrinsic, Level, LevelHead, Many,
-        MaskedLevels, Nat, Scope, SelfReference, Spelled, Spelling, Telescope, Three, Two,
-        UniverseContext, UniverseError, UniverseMetaId, UniverseScheme, Var, Visit,
-        instantiate_universe_levels_scoped, print_term, project_erased_universes,
+        Atom, Bound, Enter, Free, Global, Intrinsic, Level, LevelHead, Many, MaskedLevels, Scope,
+        SelfReference, Spelled, Spelling, Telescope, Three, Two, UniverseMetaId, Var, Visit,
+        print_term, project_erased_universes,
     },
     curios_abi::ForeignFunction,
-    curios_num::{Floating, Grain, Integer, Natural},
+    curios_num::{Grain, Natural},
     curios_print::{run_printer, run_printer_within},
-    curios_utilities::{InfixOp, Mint, Plicity, Sign, Span, recurse},
+    curios_utilities::{Plicity, Span, recurse},
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         fmt,

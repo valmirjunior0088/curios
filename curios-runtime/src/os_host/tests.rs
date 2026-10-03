@@ -1,5 +1,9 @@
 use {
     super::*,
+    crate::{
+        ChildExit, ChildHandles, Failure, Handle, Mode, Poll, SerialFlow, SerialOp, SerialParity,
+        StdioMode,
+    },
     curios_abi::errno,
     curios_utilities::test_support::Temporary,
     rustix::{

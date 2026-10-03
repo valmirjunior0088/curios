@@ -3,12 +3,12 @@
 //! ℤ under `+` is a group, so every relation reads through the difference: `a ⋈ b` iff `a - b ⋈ 0`. [`int_cancel_common`] moves that difference to the two sides by sign, and a pair whose residuals are both constants is decided by comparing them; anything else is undecided and rebuilt from the residuals, so `i + a < i + b` and `a < b` reduce to one term, which conversion needs.
 
 use {
-    super::*,
+    super::compare_nat,
     crate::{
-        ReduceError, Reducer, Term, int_cancel_common, int_has_stuck_product, int_monomial,
-        int_normalize, int_preimage, int_split_by_sign, int_terms,
+        Intrinsic, ReduceError, Reducer, Subterm, Term, int_cancel_common, int_has_stuck_product,
+        int_monomial, int_normalize, int_preimage, int_split_by_sign, int_terms,
     },
-    curios_algebra::apart_modulo,
+    curios_algebra::{Comparison, apart_modulo},
     curios_num::Natural,
 };
 

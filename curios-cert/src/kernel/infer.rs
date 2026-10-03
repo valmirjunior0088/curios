@@ -35,8 +35,7 @@ mod typing_tests;
 
 use {
     super::{
-        Counted, Error, Kernel, Sort, check_group, convert::convert, sort::as_sort,
-        sort::infer_sort, synth_neutral,
+        Counted, Error, Kernel, Sort, as_sort, check_group, convert, infer_sort, synth_neutral,
     },
     curios_analysis::spine,
     curios_core::{

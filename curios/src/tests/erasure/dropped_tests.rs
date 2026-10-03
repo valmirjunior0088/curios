@@ -2,8 +2,7 @@
 
 use {
     crate::tests::run,
-    curios_pipeline::Stage,
-    curios_pipeline::compile_with_prelude,
+    curios_pipeline::{Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
 };
 

@@ -1,4 +1,15 @@
-use super::*;
+use {
+    super::{
+        parse_func_pattern_param, parse_keyword, parse_literal, parse_match_pattern, parse_pattern,
+    },
+    crate::{
+        Choose, ChooseArm, ChooseTest, Func, Match, MatrixArm, Pattern, Subterm, Term, parse_term,
+        parse_whitespace,
+    },
+    curios_parse::{
+        Parser, commit, fail, lazy, many0, not_ahead, pure, sep_by0_trailing, take_exact,
+    },
+};
 
 pub(super) fn parse_func<'a>() -> Parser<'a, Term> {
     parse_literal("(")

@@ -5,18 +5,22 @@
 //! **A library is documented for its consumers.** That is the one audience this record knows: a constructor appears only when the representation is public, a field likewise, and a test never. A program has no consumer, so nothing here documents one; which mount is documented, and with what description, is the resolver's to say.
 
 use {
-    super::*,
+    super::{ModuleInfo, PublicInterface, Scoped, visible_binding, visible_child},
     crate::{
-        print_case_head, print_case_result_head, print_concept_field_head, print_concept_head,
-        print_foreign_head, print_induct_head, print_let_head, print_struct_field_head,
-        print_struct_head, print_witness_head,
+        ConceptField, Doc, FuncSugarParam, LetSignature, Module, Pattern, StructField, Term,
+        TopCase, TopItem, UseGroup, print_case_head, print_case_result_head,
+        print_concept_field_head, print_concept_head, print_foreign_head, print_induct_head,
+        print_let_head, print_struct_field_head, print_struct_head, print_witness_head,
     },
-    curios_core::{Global, Imports},
     curios_document::{
         Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Signature,
     },
     curios_print::{Printer, render_annotated},
-    std::collections::{HashMap, HashSet},
+    curios_utilities::{Mount, Plicity, Qualifier, RootKind},
+    std::{
+        collections::{HashMap, HashSet},
+        rc::Rc,
+    },
 };
 
 /// The width a signature is rendered within — the formatter's, so a page and a file agree on where a long telescope breaks.
@@ -58,7 +62,7 @@ pub(super) fn document(
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &Scoped<'_, ModuleInfo>,
     public: &Scoped<'_, PublicInterface>,
-    imports: &Imports,
+    imports: &curios_core::Imports,
     prefix: &Qualifier,
     mounts: &[Mount],
     records: &[&Documentation],
@@ -93,7 +97,7 @@ struct Reader<'a> {
     modules: &'a HashMap<Qualifier, Rc<Module>>,
     table: &'a Scoped<'a, ModuleInfo>,
     public: &'a Scoped<'a, PublicInterface>,
-    imports: &'a Imports,
+    imports: &'a curios_core::Imports,
     prefix: &'a Qualifier,
     /// The unit's own roots that no consumer may name — its internal mounts. Their declarations reach a consumer only through a `pub use` in the documented mount, so a page shows them and no page names where they were written.
     adopted: &'a [(Qualifier, Option<String>)],
@@ -853,15 +857,15 @@ impl Reader<'_> {
         for (owner, indices) in &self.imports.by_item {
             // A witness is anonymous, so it is placed by the module its identity names rather than by a qualifier it does not have; every other declaration is placed by the module its own name lies in.
             let declaring = match owner {
-                Global::Authored(owner) => owner.without_last(),
-                Global::Witness(id) => *id.module(),
+                curios_core::Global::Authored(owner) => owner.without_last(),
+                curios_core::Global::Witness(id) => *id.module(),
             };
             if declaring != *module {
                 continue;
             }
             for index in indices {
                 let import = &self.imports.entries[*index];
-                let Global::Authored(target) = &import.global else {
+                let curios_core::Global::Authored(target) = &import.global else {
                     continue;
                 };
                 spellings

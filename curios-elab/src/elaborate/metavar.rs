@@ -1,4 +1,9 @@
-use {super::*, curios_core::CalleeId};
+use {
+    super::insert_auto_argument,
+    crate::{Context, Error, Mode, SlotPositions, attempt_witness_goal, expect, reduce_with},
+    curios_core::{CalleeId, Free, Metavar, MetavarOrigin, Subterm, Term},
+    curios_utilities::Plicity,
+};
 
 pub(super) fn elaborate_metavar(
     context: &mut Context,

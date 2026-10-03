@@ -1,12 +1,9 @@
 use {
     super::{
         FuncSugarParam, FuncType, FuncTypeParam, Intrinsic, Label, LetSignature, LoadError, Name,
-        RootSource, Subterm, Term, Tuple, TupleType, TupleTypeParam, print_module_items,
-        print_term,
-    },
-    crate::parse::{
-        clear_comments, parse_optional_term, parse_program_end, parse_term, parse_top_item,
-        parse_whitespace, take_comments,
+        RootSource, Subterm, Term, Tuple, TupleType, TupleTypeParam, clear_comments,
+        parse_optional_term, parse_program_end, parse_term, parse_top_item, parse_whitespace,
+        print_module_items, print_term, take_comments,
     },
     curios_abi::WireSignature,
     curios_parse::{

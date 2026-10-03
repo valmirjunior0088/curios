@@ -9,8 +9,7 @@ use {
         Apply, Context, Error, Func, FuncType, Lowering, Outcome, Subterm, Term, emitted,
         erasure_mask, infer, is_erasable, reduce_with,
     },
-    curios_core::Global,
-    curios_core::{DefinitionKind, Lockstep, Step},
+    curios_core::{DefinitionKind, Global, Lockstep, Step},
 };
 
 impl Lowering {

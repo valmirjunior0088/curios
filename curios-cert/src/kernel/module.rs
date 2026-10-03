@@ -12,11 +12,7 @@
 mod tests;
 
 use {
-    super::{
-        Counted, Error, Kernel, Sort, carries_information,
-        convert::convert,
-        infer::{check, infer_type},
-    },
+    super::{Counted, Error, Kernel, Sort, carries_information, check, convert, infer_type},
     curios_analysis::yields_a_sort,
     curios_core::{
         Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term, Totality,

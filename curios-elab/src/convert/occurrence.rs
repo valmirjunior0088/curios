@@ -1,8 +1,8 @@
 //! Reading a term for the shapes solving branches on: an abstraction of a subject's occurrences, and the three metavariable tests that decide whether a problem can be attempted at all.
 
 use {
-    super::*,
-    curios_core::{Free, Metavar, Subterm, Term},
+    crate::Context,
+    curios_core::{Bound, Free, Metavar, Subterm, Term, Visit},
 };
 
 /// Replace every occurrence of a subject term in `t` — matched by the same term equality conversion uses, at any depth (binder names are entropy-fresh, so a free-named subject cannot be captured by an inner scope) — with its birth binder's name. Top-down: an outer match wins and is not descended into. Subjects are pairwise distinct by construction, so the match is unambiguous.

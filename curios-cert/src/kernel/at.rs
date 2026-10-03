@@ -17,7 +17,7 @@
 //! Reading a declaration as **data** — positivity walking its telescopes, inversion reading its `result_sort`, `check_induct_decl` verifying the entry itself. No occurrence is involved there, so there is nothing to check against, and those go on reading `Globals::induct_decl` directly. The distinction is the whole of when to use which: *what does this occurrence mean* takes a handle, *what does this declaration say* does not.
 
 use {
-    super::{Counted, Error, Kernel, sort::arity_matches},
+    super::{Counted, Error, Kernel, arity_matches},
     curios_core::{
         Atom, Global, InductDecl, InductType, Level, StructDecl, Telescope, Term,
         instantiate_universe_levels_scoped,

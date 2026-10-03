@@ -1,6 +1,10 @@
 //! Variance and cumulativity of a function type, the bare-sort head rules, and the sigma and pi rules at an argument position.
 
-use {super::subsumes, super::test_support::*, crate::infer, curios_core::Term};
+use {
+    super::{subsumes, test_support::*},
+    crate::infer,
+    curios_core::Term,
+};
 
 /// The subsumption fork, which the soundness board records as having no fixture in either direction.
 ///

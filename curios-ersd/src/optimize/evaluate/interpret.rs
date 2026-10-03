@@ -11,8 +11,7 @@ use {
         FunctionId, Intrinsic, Module, Operation, Rhs, Semantics, SequenceGrain, SequenceOp,
         Statement, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
-    curios_num::Grain,
-    curios_num::Natural,
+    curios_num::{Grain, Natural},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},

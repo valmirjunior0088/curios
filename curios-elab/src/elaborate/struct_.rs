@@ -1,7 +1,10 @@
 use {
-    super::*,
+    super::{binder_name, check_args_against},
+    crate::{Context, Error, Mode, attempt_witness_goal, check, elaborate, expect, reduce_with},
     curios_core::{
-        CalleeId, Global, Level, Probe, UniverseContext, instantiate_universe_levels_scoped,
+        CalleeId, Free, Global, ImplicitOrigin, Level, Probe, Struct, StructDecl, StructEntry,
+        StructType, Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
+        instantiate_universe_levels_scoped,
     },
 };
 

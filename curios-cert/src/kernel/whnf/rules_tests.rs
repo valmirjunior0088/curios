@@ -1,8 +1,7 @@
 //! Beta, delta, zeta, iota, projection, eta and the switch arms — one reduction rule each.
 
 use {
-    super::test_support::*,
-    super::{unfold_rec, unfold_rec_apply},
+    super::{test_support::*, unfold_rec, unfold_rec_apply},
     crate::whnf,
     curios_core::{Apply, Free, Global, Intrinsic, Level, Reducer, Subterm, Term},
     curios_utilities::Qualifier,

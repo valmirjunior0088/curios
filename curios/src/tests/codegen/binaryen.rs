@@ -1,7 +1,6 @@
 use {
     curios_binaryen::optimize,
-    curios_pipeline::DEFAULT_STEP_BUDGET,
-    curios_pipeline::{Stage, compile_with_prelude},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_wasm::{Module, to_bytes},
 };

@@ -1,4 +1,22 @@
-use super::*;
+use {
+    super::{
+        parse_bin_literal, parse_block_string_literal, parse_bool_intrinsic, parse_char_lit,
+        parse_flt_value, parse_func_param, parse_func_type_param, parse_identifier, parse_keyword,
+        parse_label, parse_list_literal, parse_literal, parse_name, parse_num_lit,
+        parse_string_literal, refuse_dangling_dot,
+    },
+    crate::{
+        FuncTypeParam, Label, StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField,
+        TupleType, TupleTypeParam, parse_identifier_raw, parse_term, parse_whitespace,
+        reserved_keyword,
+    },
+    curios_parse::{
+        Parser, commit, fail, fail_from, lazy, look_ahead, mark, not_ahead, pure, sep_by0_trailing,
+        take_exact,
+    },
+    curios_utilities::{Plicity, is_keyword},
+    std::iter,
+};
 
 pub(super) fn parse_intrinsic<'a>() -> Parser<'a, Term> {
     parse_bool_intrinsic()

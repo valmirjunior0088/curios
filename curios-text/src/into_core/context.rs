@@ -1,6 +1,5 @@
 use {
-    super::PublicInterface,
-    super::Scoped,
+    super::{PublicInterface, Scoped},
     crate::{Error, Label, Lint, Name},
     curios_utilities::{Entropy, InfixOp, Mount, Qualifier, Span, SyntaxRegistry},
     std::{

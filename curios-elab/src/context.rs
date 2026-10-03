@@ -18,11 +18,10 @@ use {
         Error, HeadKey, Provenance, UniverseMark, UniverseSolver, UniverseStateToken, Witness,
         WitnessKey,
     },
-    curios_core::ReduceError,
     curios_core::{
         Advance, Bound, ConceptDecl, Consumption, Cost, DefinitionKind, Free, Global, HeadTag,
         ImplicitOrigin, Imports, InductDecl, Level, Metavar, MetavarId, MetavarOrigin, Probe,
-        RecGroup, StructDecl, Subterm, Term, Totality, UniverseConstraintKind,
+        RecGroup, ReduceError, StructDecl, Subterm, Term, Totality, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
         UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped,
     },

@@ -1,6 +1,9 @@
 //! [`Telescope`], the dependent context function types, function literals and tuple types share, and the [`Cursor`] every walk that opens one entry by entry reads it through.
 
-use super::*;
+use {
+    crate::{Bound, Free, Global, Label, MetavarId, One, Scope, Subterm, Term, Var, Visit},
+    std::{collections::BTreeSet, fmt, hash::Hash},
+};
 
 /// A dependent context: a chain of entry types where each `Cons` tail is a one-binder [`Scope`], so every later entry — and the final `Done` payload — may mention the binders before it. Function types, function literals, and tuple types all reuse it and differ only in the payload: a `Term` (the return type or body) for Π/λ, `()` for Σ, where the fields themselves are the point.
 #[curios_archive::archived(recursive)]

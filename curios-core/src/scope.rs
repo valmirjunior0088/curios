@@ -4,8 +4,7 @@
 
 use {
     super::{
-        Free, Global, Level, LevelHead, MetavarId, Subterm, Term, UniverseError, UniverseMetaId,
-        UniverseParam,
+        Free, Global, Level, LevelHead, Subterm, Term, UniverseError, UniverseMetaId, UniverseParam,
     },
     curios_utilities::{Span, Symbol},
     std::{

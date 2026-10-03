@@ -5,7 +5,7 @@
 //! The census follows exactly three shapes of indirection and no others: a computation-free alias; an argument of a saturated known call, which fares as the receiving parameter fares — without which every read would be poisoned, since the surface reaches `ListGet` through the `/sys/List/get` wrapper and an `Apply` is what a read looks like at this level — and a store back into a constructor or product field, which is safe exactly when that field is safe, because a persistent rebuild reads a field and stores it unchanged into the fresh construction, and poisoning that move would unmark every functional update in the program. The field dependencies resolve by a greatest fixpoint: every field starts safe, a hard poison demotes its field, and demotion propagates to the fields whose reads flow there, so a value escaping the safe system demotes everything on its path. Everything else — a closure call, a return, a scrutinee — poisons outright, because following it would be the interprocedural demand analysis this fact deliberately is not. Recursion is read coinductively: a value revisited during classification is assumed to hold, the same greatest-fixpoint reading. A field is settled only when it is safe *and* at least one of its own reads carries *list* evidence — a `List`-shaped use — so a field the program never reads, or one holding a packed binary, is never wrapped in a list operation it cannot carry.
 
 use {
-    super::super::{
+    crate::{
         Atom, Block, ConstructorId, Intrinsic, Module, ProductId, Rhs, SequenceGrain, SequenceOp,
         Statement, Terminator, ValueId,
     },

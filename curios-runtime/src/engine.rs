@@ -1,7 +1,7 @@
 use {
     super::{
-        Handle, HostOps, Lift, Lower, Mode, Poll, SerialFlow, SerialOp, SerialParity, StdioMode,
-        lower::{Replied, anyref_array_type, i8_array_type, longs_array_type, words_array_type},
+        Handle, HostOps, Lift, Lower, Mode, Poll, Replied, SerialFlow, SerialOp, SerialParity,
+        StdioMode, anyref_array_type, i8_array_type, longs_array_type, words_array_type,
     },
     curios_abi::{
         ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireLeaf, WireOperand,

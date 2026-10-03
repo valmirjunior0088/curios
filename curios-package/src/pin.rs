@@ -8,10 +8,7 @@
 mod tests;
 
 use {
-    crate::{
-        FileHash, Governing, MANIFEST, Manifest, Store, TreeHash,
-        curate::{deliver, deliver_module},
-    },
+    crate::{FileHash, Governing, MANIFEST, Manifest, Store, TreeHash, deliver, deliver_module},
     std::{
         fs,
         path::{Component, Path, PathBuf},

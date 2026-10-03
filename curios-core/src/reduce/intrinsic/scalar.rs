@@ -3,7 +3,7 @@
 //! One function per carrier and arity, each doing the same three things — reduce, match a literal pair, rebuild the redex when the match fails. What a failed match falls through to is the caller's business: the laws in [`laws`], or nothing.
 
 use {
-    super::*,
+    super::operand_bound,
     crate::{Cost, Intrinsic, ReduceError, Reducer, Subterm, Term},
     curios_num::{Floating, Integer, Natural},
 };

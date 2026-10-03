@@ -15,7 +15,7 @@
 //! A change that moves this ladder owes a reading of the two harness workloads beside it, because "moved the column it aimed at" is only a claim if the other columns were looked at.
 
 use {
-    super::structural::{compile_raw, functions, user_allocations, wat},
+    super::{compile_raw, functions, user_allocations, wat},
     curios_runtime::{ForeignBindings, MockHost, precompile, run_bytes},
     curios_wasm::to_bytes,
     std::time::Instant,

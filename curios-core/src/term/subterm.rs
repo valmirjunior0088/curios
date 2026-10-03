@@ -2,7 +2,25 @@
 //!
 //! [`Term`] is the reference-counted handle and [`Subterm`] is what it points at, which is why the two are separate files rather than separate concepts. Everything that asks *what a term is* — its head, its children, whether it is a value — is answered here, and so is [`Bound`], the traversal that opens and closes every binder in the language exactly once per shape.
 
-use super::*;
+use {
+    super::FreeVars,
+    crate::{
+        Apply, Argument, Bound, Carrier, Cases, Free, Func, FuncType, Global, InductType, Infix,
+        Instance, InstanceHead, Intrinsic, Let, LetBinding, Level, Match, MatchResult, Metavar,
+        Nat, Proj, Rec, RecGroup, Spelling, Struct, StructType, Term, Transient, Tuple, TupleType,
+        UniverseContext, UniverseMetaId, Var, Variant, Visit, print_term,
+    },
+    curios_abi::ForeignFunction,
+    curios_num::{Floating, Integer},
+    curios_print::run_printer,
+    curios_utilities::InfixOp,
+    std::{
+        collections::{BTreeSet, HashSet},
+        fmt,
+        rc::Rc,
+        sync::Arc,
+    },
+};
 
 /// The actual node of the core term language — one variant per term former. [`Term`] wraps a `Subterm` in an `Rc` with cached hash/reach and an optional span, and `Deref`s here, so pattern matches are written against `Subterm` while construction goes through `Term`'s smart constructors. The final variant groups the elaboration-transient constructors under [`Transient`]: born in `into_core`, consumed by `elaborate`, never seen by reduce/convert/zonk/erase.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

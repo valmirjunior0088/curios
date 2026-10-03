@@ -4,8 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_num::Floating,
-    curios_utilities::Sign,
-    curios_utilities::{InfixOp, Plicity},
+    curios_utilities::{InfixOp, Plicity, Sign},
 };
 
 #[test]

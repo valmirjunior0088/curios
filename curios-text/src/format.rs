@@ -11,8 +11,7 @@
 //! **One document for the whole file**, built and rendered once by [`emit`], which says why.
 
 use {
-    super::{FormatInput, TopItem, parse_for_format},
-    crate::print::{between_items, print_term, print_top_item},
+    super::{FormatInput, TopItem, between_items, parse_for_format, print_term, print_top_item},
     curios_print::{Owed, Printer, begins, flat, hard_line, reaches, run_printer_placing},
     curios_utilities::{Source, Span},
     std::{cell::RefCell, fmt, path::Path, sync::Arc},

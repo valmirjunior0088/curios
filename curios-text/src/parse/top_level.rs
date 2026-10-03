@@ -1,4 +1,24 @@
-use super::*;
+use {
+    super::{
+        parse_binding, parse_func_sugar_param, parse_func_type_param, parse_identifier,
+        parse_keyword, parse_literal, parse_name, parse_plicity, parse_prop,
+        parse_tuple_field_prefix, parse_tuple_type_field, parse_type,
+    },
+    crate::{
+        CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem, Label,
+        Module, Name, StructField, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
+        TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, UseGroup, WitnessField, declared,
+        parse_declared_label, parse_doc, parse_identifier_raw, parse_term, parse_whitespace,
+        text_after, word_after,
+    },
+    curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
+    curios_parse::{
+        Mark, Parser, commit, fail, fail_from, lazy, many0, mark, not_ahead, pure,
+        sep_by0_trailing, sep_by1_trailing, spanned, tagging, take_exact,
+    },
+    curios_utilities::{Plicity, Qualifier, is_keyword},
+    std::iter,
+};
 
 pub(super) fn parse_pub<'a>() -> Parser<'a, bool> {
     parse_keyword("pub").map(|()| true).or(pure(false))

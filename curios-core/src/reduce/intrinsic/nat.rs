@@ -3,12 +3,13 @@
 //! `Nat` division is the one arithmetic family whose fold reaches past literals: [`nat_bound`] states how large a shape can be, and [`nat_euclid_split`] uses that to peel a quotient off a sum whose remainder cannot reach the divisor. The bound must never under-report — the split turns it into a definitional equation.
 
 use {
-    super::*,
+    super::{operand_bound, shift_bound},
     crate::{Declaration, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term},
     curios_algebra::{
         Carrier, Divided, FloorSplit, Half, Observed, Operation, cofactor, euclid_split, floor_law,
         power_of_two,
     },
+    curios_num::Natural,
 };
 
 /// Which half of a Euclidean division a fold computes. One enum rather than the pair of closures the other families take: the symbolic laws below build the quotient and the remainder out of the *same* split, so the two halves cannot be parameterized independently.

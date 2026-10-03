@@ -1,6 +1,5 @@
 use {
-    super::{Intrinsic, Label, Name, Radix, print_term},
-    crate::parse::{parse_term, parse_whitespace},
+    super::{Intrinsic, Label, Name, Radix, parse_term, parse_whitespace, print_term},
     curios_abi::ForeignFunction,
     curios_num::{Grain, Natural},
     curios_parse::{ParserError, run_parser, take_eof},

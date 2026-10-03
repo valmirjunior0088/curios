@@ -1,8 +1,12 @@
 //! The scripted host's contract: handles miss loudly after close, and a chunked stream — standard input among them — hands the wait back to its reader between chunks.
 
 use {
-    super::{super::host::*, EBUSY, ENOTTY, MockHost},
-    curios_abi::{errno, event},
+    super::{EBUSY, ENOTTY, MockHost},
+    crate::{
+        ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, Mode, Poll, SerialFlow,
+        SerialOp, SerialParity, StdioMode, TtySize,
+    },
+    curios_abi::{HostOps, errno, event},
     std::num::NonZeroU32,
 };
 

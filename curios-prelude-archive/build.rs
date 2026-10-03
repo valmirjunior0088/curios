@@ -1,6 +1,5 @@
 use {
-    curios_core::Item,
-    curios_core::{Global, Sharing, Zonked, validate_stored_identities},
+    curios_core::{Global, Item, Sharing, Zonked, validate_stored_identities},
     curios_elab::{
         Context, ErasedArena, Established, Resumed, elaborate_and_zonk_unit, erase_unit,
         validate_lowered_universe_seeds, validate_universes,

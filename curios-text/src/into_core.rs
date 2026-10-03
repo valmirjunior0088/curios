@@ -36,16 +36,19 @@ use scoped::*;
 mod document;
 use document::*;
 use {
-    super::*,
+    crate::{
+        Apply, Argument, Entrypoint, Error, GroupItem, Label, LetSignature, Lint, LintedBinder,
+        Module, Name, RootSource, StructLit, StructLitEntry, Subterm, Term, TopItem, TupleField,
+        UseGroup, foreign_signature, func_sugar_lambda, func_sugar_type_params, ordered,
+    },
     curios_abi::ForeignStore,
-    curios_core::Bound,
     curios_document::Documentation,
     curios_utilities::{
         Entropy, Mount, Plicity, Qualifier, Report, RootKind, Span, SyntaxRegistry,
     },
     std::{
         cell::{Cell, RefCell},
-        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
     },
 };

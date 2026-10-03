@@ -1,10 +1,16 @@
 use {
-    super::*,
+    super::{check_witness_domain, insert_auto_argument},
     crate::{
-        HeadKey, WitnessKey, convert::convert, typing::display_mismatch, zonk_solved_term_metas,
+        Context, DomainScope, Error, HeadKey, Mode, ParkedWork, SlotPositions, WitnessKey,
+        attempt_witness_goal, check, convert, display_mismatch, elaborate, expect, reduce_with,
+        zonk_solved_term_metas,
     },
-    curios_core::{Advance, CalleeId, Global, Probe},
-    curios_utilities::Span,
+    curios_core::{
+        Advance, Bang, Bound, CalleeId, Free, Func, Global, Infix, Intrinsic, Let, Metavar,
+        MetavarId, Nat, NumLit, Probe, Rec, Subterm, Telescope, Term, Transient, WitnessOrigin,
+    },
+    curios_num::{Floating, Integer, Rounding},
+    curios_utilities::{InfixOp, Plicity, Span},
 };
 
 /// Elaborate a local `let` block. The bindings are a flat `Vec` in one node, so this loops over them — elaborating each binding's type/body, minting its binder, and defining it in a single frame — rather than recursing once per binding, which a long straight-line sequence of `let`s would overflow the stack with. The tail continues with one ordinary (recursive) `elaborate`, its depth bounded by how often `let` and `rec` alternate, not by chain length. Rebuilding is one `Term::let_block`, which closes the bindings back into a single flat `Let` in one pass. The whole block is one source term with one span, stamped by `elaborate`'s wrapper — no per-binding span bookkeeping.

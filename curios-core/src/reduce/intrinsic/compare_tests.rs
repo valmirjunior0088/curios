@@ -1,8 +1,9 @@
 //! Symbolic `Nat` comparison: shared addends, commuted sums, and the bound an indexed loop walks under.
 
 use {
-    super::test_support::*,
-    super::{Comparison, align_comparisons, compare_int, compare_nat, reduce_intrinsic},
+    super::{
+        Comparison, align_comparisons, compare_int, compare_nat, reduce_intrinsic, test_support::*,
+    },
     crate::{Aligned, Intrinsic, Nat, ReduceError, Subterm, Term},
     curios_num::Integer,
 };

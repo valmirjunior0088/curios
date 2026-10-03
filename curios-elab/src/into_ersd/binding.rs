@@ -4,8 +4,7 @@
 
 use {
     super::{BTreeMap, BTreeSet, Bound, Context, Error, Lowering, Outcome, Subterm},
-    curios_core::Free,
-    curios_core::{Item, Module},
+    curios_core::{Free, Item, Module},
 };
 
 impl Lowering {

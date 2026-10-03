@@ -1,6 +1,9 @@
 use {
-    crate::*, curios_analysis::fixture::SYNTAX, curios_core::CalleeId, curios_core::*,
-    curios_utilities::Qualifier, std::collections::BTreeSet,
+    crate::*,
+    curios_analysis::fixture::SYNTAX,
+    curios_core::{CalleeId, *},
+    curios_utilities::Qualifier,
+    std::collections::BTreeSet,
 };
 
 fn context() -> Context {

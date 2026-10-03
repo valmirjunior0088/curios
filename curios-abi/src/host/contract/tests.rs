@@ -1,9 +1,6 @@
 //! The contract evaluator: which statuses a row may answer, and what a success answers to — never the padding a failure carries.
 
-use {
-    super::super::{Handle, HostOp, WireValue},
-    crate::{status, stdio_mode},
-};
+use crate::{Handle, HostOp, WireValue, status, stdio_mode};
 
 fn nat(value: u64) -> WireValue {
     WireValue::Nat(value)

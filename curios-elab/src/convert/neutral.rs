@@ -3,10 +3,12 @@
 //! Both are the *non*-structural half of conversion: [`synth_neutral`] answers what type a head-and-arguments term inhabits, which is what type-directed comparison needs before it can compare anything, and [`identify_universe_levels`] disposes of a problem by committing level equalities rather than by descending. The structural comparison that calls them lives with [`Convert`].
 
 use {
-    super::*,
+    super::instantiate_bound_at,
+    crate::{Context, reduce},
     curios_core::{
-        Argument, Free, FuncType, Instance, InstanceHead, Proj, StructType, Subterm, Term,
-        UniverseConstraintKind, UniverseConstraintOrigin,
+        Argument, Field, Free, FuncType, Instance, InstanceHead, Level, Proj, ReduceError,
+        StructType, Subterm, Term, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
+        instantiate_universe_levels_scoped,
     },
 };
 

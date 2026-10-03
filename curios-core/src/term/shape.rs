@@ -2,7 +2,20 @@
 //!
 //! Nothing here judges or reduces. The types are plain records with the binder discipline spelled in their field types — a [`Scope`] where one binder is bound, a [`Telescope`] where several are — and the handful of impls are the operations that discipline forces: [`RecGroup`]'s member arithmetic, [`InductArm`]'s and [`LetBinding`]'s accessors, and the two hand-written [`TupleType`] instances that make an anonymous product compare by its fields.
 
-use {super::*, crate::Label};
+use {
+    crate::{
+        Atom, Bound, CalleeId, Free, Global, Label, Level, Many, Scope, Subterm, Telescope, Term,
+        Three, Two, UniverseContext, UniverseError, UniverseScheme, Var, Visit,
+        instantiate_universe_levels_scoped,
+    },
+    curios_num::{Grain, Natural},
+    curios_utilities::{InfixOp, Mint, Plicity, Sign},
+    std::{
+        fmt,
+        hash::{Hash, Hasher},
+        rc::Rc,
+    },
+};
 
 /// An unresolved infix application `left <op> right`. Elaboration infers a shared operand type for the two sides and rebuilds the node as a concept method call (`a + b` ≙ `Add/add(a, b)`, `&&`/`||` included — see `elaborate_infix`); the node never survives elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

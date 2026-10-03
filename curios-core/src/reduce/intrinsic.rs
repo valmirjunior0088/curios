@@ -31,7 +31,7 @@ use {
         Aligned, Cost, Declaration, Element, FUSION_CAP, FreeMonoid, Func, Intrinsic, LinearViews,
         Nat, Operands, Probe, Subterm, Telescope, Term, Words, int_cancel_common, int_negate,
         int_of_nat, int_preimage, int_product, int_sum, int_terms, normalize_concat, peel_bin,
-        peel_first_atom, peel_first_elem, project_erased_universes,
+        peel_first_atom, peel_first_elem,
     },
     curios_algebra::{Carrier, Comparison, Deduction, distribution_size},
     curios_num::{Binary, Floating, Grain, Integer, Natural},

@@ -3,9 +3,8 @@
 //! The walk produces operands under the operand law rather than terms: [`Outcome::Emitted`] carries the atom a subexpression erased to, [`Outcome::Diverged`] carries the terminator that seals the innermost block when the subexpression provably never yields a value. Every non-atomic computation is bound by the builder at the point the walk reaches it, so evaluation order is statement order by construction.
 
 use {
-    super::Resumed,
     super::{
-        Binding, Bound, Context, Environment, Error, InductDecl, Intrinsic, Let, Subterm,
+        Binding, Bound, Context, Environment, Error, InductDecl, Intrinsic, Let, Resumed, Subterm,
         Telescope, Term, emitted, intrinsic, reduce_with,
     },
     crate::{validate_entry_universes, validate_universes},

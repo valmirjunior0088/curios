@@ -1,8 +1,7 @@
 //! Forcing what the carriers' readers read: an atom's arguments brought to one spelling, and nothing a reader does not read moved.
 
 use {
-    super::force_atoms,
-    super::test_support::*,
+    super::{force_atoms, test_support::*},
     crate::{Free, Intrinsic, Nat, Term, int_same},
 };
 

@@ -1,8 +1,12 @@
 //! The universe a type inhabits, as conversion classifies it: `Prop` for a strict proposition, `Type` otherwise.
 
 use {
-    super::*,
-    curios_core::{MatchResult, Subterm, Term},
+    super::probe_level_fallback,
+    crate::{Context, reduce, reduce_forced, synth_neutral},
+    curios_core::{
+        Free, FuncType, InductType, Intrinsic, Level, MatchResult, ReduceError, StructType,
+        Subterm, Term, TupleType,
+    },
 };
 
 /// The universe a type inhabits — `Prop` for a strict proposition, `Type` otherwise.

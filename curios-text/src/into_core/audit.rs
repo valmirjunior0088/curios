@@ -4,11 +4,12 @@
 
 use {
     super::{
-        order::{AliasEdge, flat_aliases},
-        *,
+        AliasEdge, Audiences, Entry, FlatItem, ModuleInfo, PublicInterface, Scoped, flat_aliases,
     },
+    crate::Error,
+    curios_core::Bound,
     curios_utilities::Qualifier,
-    std::collections::HashMap,
+    std::collections::{BTreeMap, HashMap, HashSet},
 };
 
 /// Follow a directly attached representation provenance or a chain of bare, transparent type aliases to the underlying nominal registry entry.

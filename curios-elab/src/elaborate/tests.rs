@@ -2,8 +2,7 @@ use {
     crate::*,
     curios_analysis::fixture::SYNTAX,
     curios_core::*,
-    curios_num::Floating,
-    curios_num::Natural,
+    curios_num::{Floating, Natural},
     curios_utilities::{Plicity, Qualifier},
 };
 

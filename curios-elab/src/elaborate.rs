@@ -32,23 +32,13 @@ mod intrinsic_tests;
 mod tests;
 
 use {
-    super::{
-        Context, DomainScope, Error, ParkedWork, attempt_witness_goal, blocked_on_metavar, check,
-        elaborate_derive, expect, reduce_with, sort_term, transitively_ground,
-    },
+    super::{Context, Error, check, elaborate_derive, expect},
     curios_core::{
-        Apply, Bang, Bound, Field, Free, Func, FuncType, ImplicitOrigin, InductType, Infix,
-        InstanceHead, Intrinsic, Let, Metavar, MetavarId, MetavarOrigin, Nat, NumLit, One, Proj,
-        Rec, Scope, Struct, StructDecl, StructEntry, StructType, Subterm, Telescope, Term,
-        Transient, Tuple, TupleType, Variant, WitnessOrigin, foreign_operands, foreign_produced,
+        Func, InstanceHead, Subterm, Term, Transient, foreign_operands, foreign_produced,
         instantiate_universe_levels_scoped,
     },
-    curios_num::{Floating, Integer, Rounding},
-    curios_utilities::{InfixOp, Plicity, recurse},
-    std::{
-        collections::{BTreeSet, VecDeque},
-        sync::Arc,
-    },
+    curios_utilities::recurse,
+    std::sync::Arc,
 };
 
 /// The elaboration mode. `Infer` synthesizes a type; `Check(expected)` drives the term against a known type, hitting `expect` at each synthesizable node's turnaround and consuming `expected` directly at naturally-checked nodes (`Func`, `Tuple`, `Metavar`).

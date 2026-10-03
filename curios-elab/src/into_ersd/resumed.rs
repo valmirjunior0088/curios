@@ -7,7 +7,7 @@
 //! The two halves scale differently, and deliberately. The cores are borrowed **one per unit**, because merging them would copy every predecessor's items into every compilation. The arena is **one, threaded**: each unit's erasure resumes over the arena the previous one produced, so what it accumulates is already the whole scope and there is nothing to combine.
 
 use {
-    super::{ErasedArena, lower::UniverseErased},
+    super::{ErasedArena, UniverseErased},
     curios_core::Module,
 };
 

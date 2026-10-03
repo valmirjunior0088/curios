@@ -5,7 +5,9 @@
 //! **One partition, over the unit's own items.** A unit holds its own items and nothing else, so every item here is under one mount and every name from outside it is satisfied by a predecessor rather than by a node in this graph. A cycle is a cycle whoever wrote it, and it is reported as one.
 
 use {
-    super::*,
+    super::{FlatItem, FlatLet},
+    crate::Error,
+    curios_core::Bound,
     curios_utilities::{Qualifier, SyntaxRegistry},
     std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
 };

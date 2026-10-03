@@ -5,7 +5,12 @@ mod binders;
 mod bounds;
 mod characters;
 mod cli;
+
 mod codegen;
+// Only the fixpoint probe reads the driver the census keeps.
+#[cfg(feature = "profile")]
+use codegen::*;
+
 mod concepts;
 
 #[cfg(feature = "profile")]

@@ -5,9 +5,7 @@
 use {
     super::{
         Atom, BlockId, Constant, FunctionId, Module, RecGroupId, Rhs, Statement, StatementId,
-        Terminator,
-        into_cont::sequence_census,
-        print::{spell_function, spell_value},
+        Terminator, sequence_census, spell_function, spell_value,
     },
     curios_utilities::ArenaId,
 };

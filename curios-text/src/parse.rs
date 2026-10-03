@@ -39,24 +39,12 @@ mod top_level_tests;
 mod tuples_tests;
 
 use {
-    super::{
-        Apply, Argument, BinPattern, BinSegment, CasePayloadParam, Choose, ChooseArm, ChooseTest,
-        ConceptField, Doc, Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam,
-        GroupItem, Infix, Intrinsic, Label, Let, LetBinding, LetGroup, LetSignature, ListEntry,
-        ListPattern, Match, MatchPattern, MatchPatternField, MatrixArm, Module, Name, NatLiteral,
-        NatPattern, NumLit, Pattern, PatternField, Proj, ProofLiteral, Radix, StrLit, StructField,
-        StructLit, StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign, TopInduct,
-        TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField,
-        TupleType, TupleTypeParam, UseGroup, WitnessField,
-    },
-    curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
-    curios_num::{Floating, Grain, Natural},
+    super::{Doc, Label, Name, Term},
     curios_parse::{
-        Mark, Parser, commit, fail, fail_from, lazy, look_ahead, many0, many1, mark, memoize,
-        not_ahead, preceded_by_space, pure, sep_by0_trailing, sep_by1_trailing, spanned, tagging,
-        take_eof, take_exact, take_n, take_while, uncommit,
+        Parser, commit, fail, fail_from, lazy, look_ahead, many0, mark, not_ahead, pure, spanned,
+        tagging, take_eof, take_exact, take_while,
     },
-    curios_utilities::{InfixOp, Plicity, Qualifier, Sign, Span, is_identifier_char, is_keyword},
+    curios_utilities::{Qualifier, Span, is_identifier_char, is_keyword},
     std::{cell::RefCell, collections::BTreeMap, iter},
 };
 

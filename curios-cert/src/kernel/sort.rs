@@ -18,7 +18,7 @@
 mod tests;
 
 use {
-    super::{Counted, Error, Kernel, infer::infer_type, whnf::whnf},
+    super::{Counted, Error, Kernel, infer_type, whnf},
     curios_core::{
         Bound, Field, FuncType, Instance, InstanceHead, Intrinsic, Level, MatchResult, Proj,
         Reducer, StructType, Subterm, Telescope, Term, TupleType,

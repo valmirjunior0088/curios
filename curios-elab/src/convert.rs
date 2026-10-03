@@ -30,12 +30,11 @@ use {
     },
     curios_analysis::connectives_agree,
     curios_core::{
-        Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Field, Free, Func,
-        FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, Lockstep, Many, Match,
-        MatchResult, Metavar, Probe, Proj, Rec, ReduceError, Scope, Step, Struct, StructType,
-        Subterm, Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, Variant, Visit,
-        instantiate_universe_levels_scoped,
+        Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Free, Func, FuncType,
+        InductType, Instance, InstanceHead, Intrinsic, Level, Lockstep, Many, Match, MatchResult,
+        Metavar, Probe, Proj, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm,
+        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, Variant,
     },
     curios_utilities::Plicity,
     std::{

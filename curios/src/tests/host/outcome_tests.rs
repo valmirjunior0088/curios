@@ -1,7 +1,7 @@
 //! How a row's outcome reaches a program: `/sys` reads the status before any payload, and `/std` hands the failure on as the error it names. Every fallible row is scripted to fail, and the program ends with the code its failure maps to; the two failures `/std` absorbs by design are absorbed; and the payload shapes no other suite reaches arrive whole. Each reply is written raw, past the native adapter, as any host could answer it.
 
 use {
-    super::super::compile,
+    crate::tests::compile,
     curios_abi::{HostOp, status},
     curios_runtime::{
         ForeignBindings, MockHost,

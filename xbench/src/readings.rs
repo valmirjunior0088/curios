@@ -8,6 +8,6 @@ mod tests;
 mod reading_00;
 use reading_00::*;
 
-use xbench::{Date, Platform, Reading, took, weighed};
+use xbench::Reading;
 
 pub(super) const READINGS: &[&Reading] = &[&READING_00];

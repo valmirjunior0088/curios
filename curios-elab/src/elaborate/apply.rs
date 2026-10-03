@@ -1,7 +1,16 @@
 use {
-    super::*,
-    crate::{ArgumentSite, FrozenFrame, SettleTier, callee, exhausted_bound},
-    curios_core::{Advance, CalleeId, Cursor, Probe, Spelling},
+    super::{flexible, trivially_inhabited},
+    crate::{
+        ArgumentSite, Context, Error, FrozenFrame, Mode, ParkedWork, SettleTier,
+        attempt_witness_goal, blocked_on_metavar, callee, check, elaborate, exhausted_bound,
+        expect, reduce_with, sort_term, transitively_ground,
+    },
+    curios_core::{
+        Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, InstanceHead, Intrinsic,
+        MetavarId, One, Probe, Scope, Spelling, Subterm, Telescope, Term, WitnessOrigin,
+    },
+    curios_utilities::Plicity,
+    std::collections::{BTreeSet, VecDeque},
 };
 
 pub(super) fn elaborate_func_type(
