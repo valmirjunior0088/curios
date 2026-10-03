@@ -11,7 +11,7 @@ use {
     crate::refine_head,
     curios_analysis::test_support::SYNTAX,
     curios_cert::Kernel,
-    curios_core::*,
+    curios_core::{Free, Intrinsic, Reducer, Term, UniverseContext},
 };
 
 /// The kernel these fixtures are put to.

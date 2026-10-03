@@ -1,5 +1,5 @@
 use {
-    super::{Hoisted, Lowerer},
+    super::{Binder, Hoisted, Lowerer},
     crate::{
         BinPattern, Choose, ChooseArm, ChooseTest, Error, Label, ListPattern, Match, MatchPattern,
         MatrixArm, NatPattern, Pattern, PatternField, Term,
@@ -19,7 +19,7 @@ type InductCase = (
 /// One in-progress row of the matrix compiler's recursion (see [`MatchCompiler::compile_matrix`]): the still-unconsumed column patterns (left to right, one per not-yet-retired column, borrowed from the original [`MatrixArm`]), the `let` bindings accumulated so far from retired all-[`MatchPattern::Binder`] columns — applied at the leaf, outermost first, matching [`Lowerer::lower_pattern_fields`]'s "first field's let ends up outermost" convention — and the row's own (still-surface) body. A name already bound directly by an enclosing core binder (see [`MatchCompiler::compile_ctor`]'s single-row fast path) needs no entry here at all — [`Lowerer::bound`] is called inline, right where that binder's name is decided, instead of threading a second bookkeeping list through the recursion for it.
 struct MatrixRow<'t> {
     patterns: Vec<&'t MatchPattern>,
-    binds: Vec<(super::lowerer::Binder, curios_core::Term)>,
+    binds: Vec<(Binder, curios_core::Term)>,
     body: &'t Term,
 }
 
@@ -917,11 +917,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     }
 
     /// The single-row hypothesis slot: a plain-name pattern keeps the fast path — its spelling becomes the core node's binder hint directly — while a compound pattern mints an unwritten binder for the node and binds each written leaf to its projection chain off it through the row-binds mechanism (`finish_row` materializes the `let`s), the same projection sugar an irrefutable `let` pattern lowers to.
-    fn cons_ih_pattern(
-        &self,
-        row: &mut MatrixRow<'_>,
-        ih: &Option<Pattern>,
-    ) -> super::lowerer::Binder {
+    fn cons_ih_pattern(&self, row: &mut MatrixRow<'_>, ih: &Option<Pattern>) -> Binder {
         match ih {
             Some(Pattern::Binder(name)) => self.cons_ih_binder(name),
             None => self.cons_ih_binder(&None),

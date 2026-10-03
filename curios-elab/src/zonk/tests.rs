@@ -1,7 +1,10 @@
 use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
-    curios_core::*,
+    curios_core::{
+        Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, MetavarId, Module, Nat,
+        Subterm, Term, Totality, Tuple, UniverseContext, UniverseMetaId, UniverseParam,
+    },
     curios_utilities::{Qualifier, Source, Span},
     std::sync::Arc,
 };

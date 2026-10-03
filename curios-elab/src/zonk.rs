@@ -2,7 +2,10 @@
 mod tests;
 
 use {
-    super::{Context, Error, GoalReport, UniverseSolver, universe_context_validate},
+    super::{
+        Context, Error, GoalReport, Suggestions, UniverseSolver, callee, refold_recs,
+        suggest_candidates, universe_context_validate,
+    },
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind,
         Entrypoint, Free, Func, FuncType, Global, InductDecl, InductParam, InductType, Instance,
@@ -13,7 +16,7 @@ use {
         project_erased_universes, rewrite_universe_levels_scoped_shared, shift_universe_params,
         universe_metas,
     },
-    curios_utilities::Span,
+    curios_utilities::{Span, recurse},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
@@ -911,10 +914,10 @@ pub(crate) fn collect_goal_reports(
     // Suggestions run first, on the mutable context — each attempt sandboxed and rolled back — before the display phase borrows it immutably. Solved goals get none: a suggestion beside a `? =` answer is noise. `restore_budget` puts the attempts on the same footing as the finalization passes.
     let goal_sites: Vec<(MetavarId, Option<Span>, Option<Global>)> = goals.borrow().clone();
     context.restore_budget();
-    let mut all_candidates: Vec<super::Suggestions> = Vec::with_capacity(goal_sites.len());
+    let mut all_candidates: Vec<Suggestions> = Vec::with_capacity(goal_sites.len());
     for (id, _, owner) in &goal_sites {
         if context.metavar_solution(*id).is_some() {
-            all_candidates.push(super::Suggestions {
+            all_candidates.push(Suggestions {
                 candidates: Vec::new(),
                 refusal: None,
             });
@@ -930,7 +933,7 @@ pub(crate) fn collect_goal_reports(
                 entry.result.clone(),
             )
         };
-        all_candidates.push(super::suggest_candidates(
+        all_candidates.push(suggest_candidates(
             context,
             &telescope,
             &refinements,
@@ -944,7 +947,7 @@ pub(crate) fn collect_goal_reports(
     // Materialize committed substitutions tolerantly and erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved). How a witness reads is the printer's, against the witness binders the goal was written under (axis (h)).
     let context = &*context;
     let display = |term: &Term| {
-        super::refold_recs(
+        refold_recs(
             context,
             &project_erased_universes(&zonk_solved_term_metas(context, term)),
         )
@@ -1029,7 +1032,7 @@ fn zonk_term(context: &Zonk, term: &Term) -> Result<Term, Error> {
 
 /// The one choke point of the zonk walk's mutual recursion, guarded so a deeply nested term — a long sequencing chain's elaborated tail — buys depth with stack instead of overflowing the default test thread.
 fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
-    curios_utilities::recurse(|| {
+    recurse(|| {
         // A metavariable node *is* the substitution site: replace it by its solution, recursively zonked (the solution may itself mention solved metavariables).
         if let Subterm::Metavar(Metavar { id, spine, origin }) = &**term {
             // A written goal `?` never splices — the whole point of writing it was the report. Solved or not, error with what elaboration determined: the frozen scope, the goal's type, and the solution when one landed.
@@ -1058,7 +1061,7 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                         let bound = zonk_term(context, &bound).unwrap_or(bound);
                         // Spelled for the scope the hole was born in, as a goal report's terms are, so a concept method projected off a witness reads as the method's call rather than as the witness's minted name.
                         Error::uninferred_implicit(
-                            super::callee(context, &origin.func),
+                            callee(context, &origin.func),
                             origin.binder.clone(),
                             bound,
                             entry.is_some_and(|entry| entry.proposition),
@@ -1081,7 +1084,7 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                         // No embedding or shape diagnosis on this path: both read the witness table through a mutable context to reduce, zonk holds it immutably, and a goal that survives to the splice report has already been reported richer by the resolution drains.
                         Error::no_witness(
                             goal,
-                            super::callee(context, &origin.func),
+                            callee(context, &origin.func),
                             origin.binder.clone(),
                             None,
                             None,

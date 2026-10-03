@@ -26,7 +26,7 @@ use {
     super::{
         Atom, Bound, Enter, Free, Global, Intrinsic, Level, LevelHead, Many, MaskedLevels, Scope,
         SelfReference, Spelled, Spelling, Telescope, Three, Two, UniverseMetaId, Var, Visit,
-        print_term, project_erased_universes,
+        print_term, project_erased_universes, stamp_declaration_instance, universe_metas,
     },
     curios_abi::ForeignFunction,
     curios_num::{Grain, Natural},
@@ -175,7 +175,7 @@ impl Term {
     }
 
     pub fn universe_metas(&self) -> BTreeSet<UniverseMetaId> {
-        super::universe_metas(self)
+        universe_metas(self)
     }
 
     /// Whether any universe metavariable in this subtree satisfies `pred`.
@@ -286,7 +286,7 @@ impl Term {
         ) -> Vec<Term> {
             terms
                 .iter()
-                .map(|term| super::stamp_declaration_instance(term, names, self_reference, levels))
+                .map(|term| stamp_declaration_instance(term, names, self_reference, levels))
                 .collect()
         }
 

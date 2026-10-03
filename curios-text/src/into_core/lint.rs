@@ -5,7 +5,9 @@
 //! A private module none of whose declarations is reachable is reported once, at the `mod`, and its members are not: the fix is one deletion, and one line says so.
 
 use {
-    super::{FlatItem, ModuleInfo, PublicInterface, Scoped, node_reference_names, owner_of},
+    super::{
+        FlatItem, FlatLet, ModuleInfo, PublicInterface, Scoped, node_reference_names, owner_of,
+    },
     crate::Lint,
     curios_utilities::{Mount, Qualifier, Span, SyntaxRegistry},
     std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -155,7 +157,7 @@ fn kept(name: &Qualifier) -> bool {
 }
 
 /// Whether a definition is one the reader declared under its own name: a `let`, a `foreign`, or the type former of an `induct`, `struct` or `concept`. A constructor, a method wrapper, a witness and a test are reached through their owner or are roots, and are never reported.
-fn is_reportable(let_: &super::FlatLet) -> bool {
+fn is_reportable(let_: &FlatLet) -> bool {
     matches!(
         let_.kind,
         curios_core::DefinitionKind::Authored

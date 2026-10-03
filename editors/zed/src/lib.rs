@@ -7,7 +7,10 @@
 #[cfg(test)]
 mod tests;
 
-use zed_extension_api::{self as zed, settings::LspSettings, LanguageServerId, Result};
+use zed_extension_api::{
+    process, register_extension, settings::LspSettings, Command, Extension, LanguageServerId,
+    Result, Worktree,
+};
 
 struct Curios;
 
@@ -51,7 +54,7 @@ fn does_not_run(path: &str) -> String {
 
 impl Curios {
     /// The binary to spawn, sought in the order that costs the least to be wrong about: what the user said, then what the environment says, then where the installer would have put it.
-    fn server_path(id: &LanguageServerId, worktree: &zed::Worktree) -> Result<String> {
+    fn server_path(id: &LanguageServerId, worktree: &Worktree) -> Result<String> {
         let configured = LspSettings::for_worktree(id.as_ref(), worktree)
             .ok()
             .and_then(|settings| settings.binary)
@@ -68,7 +71,7 @@ impl Curios {
     /// The installer's directory, checked before it is offered, because unlike the two steps above it is a guess: nobody named this path, so a wrong one would reach Zed as a spawn failure for a location the user never mentioned.
     ///
     /// `$HOME` comes from the shell environment because there is nowhere else to get it: Zed builds an extension's WASI environment with `PWD` and `RUST_BACKTRACE` alone, so the process holds none. A project whose loaded environment names no `$HOME` therefore cannot reach this step at all, which is a different report from finding nothing there.
-    fn installed_path(worktree: &zed::Worktree) -> Result<String> {
+    fn installed_path(worktree: &Worktree) -> Result<String> {
         let Some(home) = worktree
             .shell_env()
             .into_iter()
@@ -82,10 +85,7 @@ impl Curios {
         // Spawning is what fails when there is no file, so the error case is the one that means absence; a process that ran and refused is a binary that exists and cannot serve.
         //
         // That reading holds only while `extension.toml` grants `process:exec`. Without the grant the host refuses the call before reaching the file, and the refusal arrives here as the same error a missing binary does — which is how this line once reported a working compiler as absent.
-        match zed::process::Command::new(&candidate)
-            .arg("--version")
-            .output()
-        {
+        match process::Command::new(&candidate).arg("--version").output() {
             Err(_) => Err(not_found(&candidate)),
             Ok(output) if output.status == Some(0) => Ok(candidate),
             Ok(_) => Err(does_not_run(&candidate)),
@@ -93,7 +93,7 @@ impl Curios {
     }
 }
 
-impl zed::Extension for Curios {
+impl Extension for Curios {
     fn new() -> Self {
         Self
     }
@@ -101,11 +101,11 @@ impl zed::Extension for Curios {
     fn language_server_command(
         &mut self,
         id: &LanguageServerId,
-        worktree: &zed::Worktree,
-    ) -> Result<zed::Command> {
+        worktree: &Worktree,
+    ) -> Result<Command> {
         let command = Self::server_path(id, worktree)?;
 
-        Ok(zed::Command {
+        Ok(Command {
             command,
             args: vec!["wonder".to_string(), "server".to_string()],
             env: Vec::new(),
@@ -113,4 +113,4 @@ impl zed::Extension for Curios {
     }
 }
 
-zed::register_extension!(Curios);
+register_extension!(Curios);

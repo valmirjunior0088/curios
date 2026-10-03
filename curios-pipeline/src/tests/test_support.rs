@@ -122,7 +122,7 @@ pub(crate) fn compile_with_units(
             let mut modules = curios_text::RootSource::supplied();
             modules.insert_root(
                 prefix,
-                curios_utilities::RootKind::Ordinary,
+                RootKind::Ordinary,
                 source
                     .parse::<curios_text::Module>()
                     .expect("a unit parses"),

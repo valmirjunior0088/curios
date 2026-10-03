@@ -1,9 +1,13 @@
 use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
-    curios_core::*,
+    curios_core::{
+        Atom, Cases, Exhaustion, Free, Global, InductArm, InductDecl, InductParam, Intrinsic, Many,
+        Match, MatchResult, MetavarId, MetavarOrigin, Nat, Scope, StructType, Subterm, Telescope,
+        Term, UniverseContext,
+    },
     curios_num::{Floating, Natural},
-    curios_utilities::{Plicity, Qualifier},
+    curios_utilities::{Plicity, Qualifier, Sign},
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
@@ -463,17 +467,14 @@ fn a_num_lit_that_overflows_flt_is_refused() {
     let flt = || Term::intrinsic(Intrinsic::FltType);
 
     // 2^2048 rounds to infinity in the model, a value no literal spells — refused like an out-of-range Byte.
-    let huge = Term::num_lit(
-        Natural::from(2u32).pow(2048),
-        curios_utilities::Sign::Unmarked,
-    );
+    let huge = Term::num_lit(Natural::from(2u32).pow(2048), Sign::Unmarked);
     assert!(matches!(
         elaborate(&mut context, &huge, Mode::Check(flt())),
         Err(Error::FltLiteralOutOfRange { .. })
     ));
 
     // A magnitude inside the finite range still resolves at `Flt`.
-    let small = Term::num_lit(Natural::from(42u32), curios_utilities::Sign::Unmarked);
+    let small = Term::num_lit(Natural::from(42u32), Sign::Unmarked);
     let (term, _) = elaborate(&mut context, &small, Mode::Check(flt())).unwrap();
     assert_eq!(term, Term::intrinsic(Intrinsic::Flt(Floating::from(42.0))));
 }
@@ -484,23 +485,23 @@ fn a_num_lit_realizes_at_bool_only_for_zero_and_one() {
     let bool_ = || Term::intrinsic(Intrinsic::BoolType);
 
     // `0` and `1` are the two bits, selected only by an expected `Bool` — the rule that lets a packed literal's constant atoms be numerals.
-    let zero = Term::num_lit(Natural::from(0u32), curios_utilities::Sign::Unmarked);
+    let zero = Term::num_lit(Natural::from(0u32), Sign::Unmarked);
     let (term, _) = elaborate(&mut context, &zero, Mode::Check(bool_())).unwrap();
     assert_eq!(term, Term::intrinsic(Intrinsic::Bool(false)));
 
-    let one = Term::num_lit(Natural::from(1u32), curios_utilities::Sign::Unmarked);
+    let one = Term::num_lit(Natural::from(1u32), Sign::Unmarked);
     let (term, _) = elaborate(&mut context, &one, Mode::Check(bool_())).unwrap();
     assert_eq!(term, Term::intrinsic(Intrinsic::Bool(true)));
 
     // Anything past a bit is refused, like an out-of-range Byte.
-    let two = Term::num_lit(Natural::from(2u32), curios_utilities::Sign::Unmarked);
+    let two = Term::num_lit(Natural::from(2u32), Sign::Unmarked);
     assert!(matches!(
         elaborate(&mut context, &two, Mode::Check(bool_())),
         Err(Error::BoolLiteralOutOfRange { .. })
     ));
 
     // A negative literal has no `Bool` realization: it reports a mismatch rather than realizing.
-    let negative = Term::num_lit(Natural::from(1u32), curios_utilities::Sign::Negative);
+    let negative = Term::num_lit(Natural::from(1u32), Sign::Negative);
     assert!(elaborate(&mut context, &negative, Mode::Check(bool_())).is_err());
 }
 

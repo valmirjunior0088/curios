@@ -4,7 +4,7 @@ use {
     super::test_support::qed,
     crate::{Context, reduce},
     curios_analysis::test_support::SYNTAX,
-    curios_core::*,
+    curios_core::{Intrinsic, Nat, Subterm, Term},
     curios_num::{Binary, Grain, Natural},
 };
 

@@ -7,7 +7,8 @@ mod tests;
 
 use {
     crate::{
-        Access, Heading, Line, Subject, drained, fact, open, processing, report, step, supplied,
+        Access, Heading, Line, Subject, bindings_of, drained, fact, open, processing, report, step,
+        supplied,
     },
     curios::{engine, to_cwasm},
     curios_abi::ForeignStore,
@@ -445,7 +446,7 @@ fn run_selected(
         let arguments = vec![argv0.clone(), index.to_string().into_bytes()];
         // SAFETY: the payload was precompiled in this process, or read back from the project's own store where a compilation of this compiler filed it.
         // Built per test rather than once: `run_bytes` takes the registry by value, and a fresh set is a fresh plugin instance — which is what keeps one test's marks in a plugin's memory out of the next one's, the isolation a test run is entitled to.
-        let bindings = crate::bindings_of(root, foreigns.clone()).map_err(CompileError::failure)?;
+        let bindings = bindings_of(root, foreigns.clone()).map_err(CompileError::failure)?;
 
         let outcome = unsafe { run_bytes(cwasm, OsHost::with_args(arguments), bindings) };
         match outcome {

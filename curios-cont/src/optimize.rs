@@ -38,7 +38,7 @@ pub(crate) use uncurry::*;
 use super::{Module, known_values};
 // Only the instrument below reads the demand lattice, and it compiles away without the feature.
 #[cfg(feature = "profile")]
-use super::{Demand, demand_of, demands};
+use super::{Callee, Demand, Node, demand_of, demands};
 
 /// How many live nodes a callee with more than one call site may have and still be inlined into each of them.
 ///
@@ -192,8 +192,8 @@ fn sample_droppable_dead_calls(module: &Module) {
         let mut dead = 0u64;
         let demands = demands(module);
         for node in module.nodes().iter().flatten() {
-            let super::Node::ApplyFun {
-                callee: super::Callee::Known(callee),
+            let Node::ApplyFun {
+                callee: Callee::Known(callee),
                 return_to,
                 ..
             } = node

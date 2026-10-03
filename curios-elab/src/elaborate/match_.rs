@@ -2,7 +2,7 @@ use {
     super::{Context, Error, Mode, check, elaborate, expect},
     crate::{
         FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_intrinsic_head, check_motive,
-        is_prop, reduce_with, refine_head,
+        fill_placeholder, is_prop, reduce_with, refine_head, stuck_on_metavar, unreachable_arm,
     },
     curios_analysis::{
         Invert, invert_indices, pinned_by_targets, retyped, scrutinee_solution, solve_indices,
@@ -180,7 +180,7 @@ fn check_fold_arm(
 
 /// `error`, raised in the arm at `value`, reported as one in a dead arm where the guard is always another case — see [`unreachable_arm`](crate::unreachable_arm).
 fn from_arm(context: &mut Context, head: &Term, value: &Term, error: Error) -> Error {
-    match crate::unreachable_arm(context, head, value) {
+    match unreachable_arm(context, head, value) {
         Some(case) => error.in_unreachable_arm(head.clone(), case),
         None => error,
     }
@@ -521,7 +521,7 @@ pub(crate) fn elaborate_match(
     };
 
     // No carrier *yet*: a scrutinee type stuck on an unsolved metavariable has decided nothing, and what decides it — tuple arms of an unannotated match the drain settles, a projection waiting on them — may still be coming. The match waits for it rather than refusing its scrutinee one step early.
-    if !context.parking_suppressed() && crate::stuck_on_metavar(context, &scrutinee.type_) {
+    if !context.parking_suppressed() && stuck_on_metavar(context, &scrutinee.type_) {
         return Ok(park_match(context, term, mode, scrutinee));
     }
 
@@ -570,7 +570,7 @@ pub(crate) fn retry_match(
 ) -> Result<(), Error> {
     let rebuilt = context.with_retry_frame(&frame, |context| -> Result<Option<Term>, Error> {
         let type_ = reduce_with(context, &parked.scrutinee_type)?;
-        if crate::stuck_on_metavar(context, &type_) {
+        if stuck_on_metavar(context, &type_) {
             return Ok(None);
         }
         let Subterm::Match(m) = &*parked.term else {
@@ -589,7 +589,7 @@ pub(crate) fn retry_match(
     })?;
 
     match rebuilt {
-        Some(rebuilt) => crate::fill_placeholder(
+        Some(rebuilt) => fill_placeholder(
             context,
             parked.placeholder,
             &parked.result,

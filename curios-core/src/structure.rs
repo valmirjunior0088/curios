@@ -1,5 +1,6 @@
 use {
     super::{Polarity, Telescope, Term, UniverseContext},
+    crate::Sharing,
     curios_utilities::Qualifier,
 };
 
@@ -52,7 +53,7 @@ impl StructDecl {
     }
 
     /// This declaration with every term hash-consed against `sharing`. See [`Module::shared`](crate::Module::shared).
-    pub fn shared(&self, sharing: &crate::Sharing) -> Self {
+    pub fn shared(&self, sharing: &Sharing) -> Self {
         Self {
             universe_context: self.universe_context.clone(),
             arity: sharing.share(&self.arity),

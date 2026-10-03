@@ -28,8 +28,7 @@ use {
     curios_abi::ForeignStore,
     curios_document::write_documentation,
     curios_package::{
-        Entry, Governing, Repoint, Spelling, Store, Subject as PinSubject, curate,
-        declared_modules, pin, scaffold,
+        Entry, Governing, Repoint, Spelling, Store, curate, declared_modules, pin, scaffold,
     },
     curios_pipeline::CompileError,
     curios_runtime::{
@@ -146,7 +145,7 @@ fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<Resolv
 /// What a `pin` subcommand asks for: which table, which row, where it should point, and whether to write it.
 ///
 /// The exclusivity is clap's — the delivery flags are one required group, and the ones that cannot stand together say so — so what is left here is reading which of them was given. A dependency fetched with no revision to pin, which `requires` already refuses for `--url`, is `curios_package::pin`'s to refuse for a caller that reaches it another way.
-fn asked(row: Pinned) -> (PinSubject, String, Repoint, bool) {
+fn asked(row: Pinned) -> (curios_package::Subject, String, Repoint, bool) {
     let repoint = |path: Option<PathBuf>,
                    url: Option<String>,
                    rev: Option<String>,
@@ -166,7 +165,7 @@ fn asked(row: Pinned) -> (PinSubject, String, Repoint, bool) {
             check,
             ..
         } => (
-            PinSubject::Foreign,
+            curios_package::Subject::Foreign,
             name,
             repoint(path, url, None, refresh),
             check.check,
@@ -180,7 +179,7 @@ fn asked(row: Pinned) -> (PinSubject, String, Repoint, bool) {
             check,
             ..
         } => (
-            PinSubject::Dependency,
+            curios_package::Subject::Dependency,
             name,
             repoint(path, url, rev, refresh),
             check.check,

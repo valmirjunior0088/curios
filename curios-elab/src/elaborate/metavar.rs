@@ -202,7 +202,7 @@ pub(super) fn trivially_inhabited(
     let truth = context.syntax().proof.true_type.qualifier();
     let qed = context.syntax().proof.true_qed.qualifier();
 
-    let reduced = crate::reduce_with(context, type_)?;
+    let reduced = reduce_with(context, type_)?;
     let Subterm::InductType(induct) = &*reduced else {
         return Ok((reduced, None));
     };

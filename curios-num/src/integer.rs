@@ -8,11 +8,14 @@ use {
     },
 };
 
+#[cfg(feature = "archive")]
+use crate::BigIntBytes;
+
 /// A type-level integer. Unbounded — the type level pretends ℤ, the way [`Natural`] pretends ℕ; the running program is unbounded too, an i31 while a value is small and a boxed magnitude past it.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
 pub struct Integer {
-    #[archived_with(crate::BigIntBytes)]
+    #[archived_with(BigIntBytes)]
     value: BigInt,
 }
 

@@ -5,13 +5,13 @@ use {
     curios_utilities::test_support::Temporary,
     std::{
         io::Read,
-        sync::{Arc, Mutex as StdMutex},
+        sync::{Arc, Mutex},
     },
 };
 
 /// A destination that keeps its rows in memory, so a test can read what was written without a file.
 #[derive(Clone, Default)]
-struct Buffer(Arc<StdMutex<Vec<u8>>>);
+struct Buffer(Arc<Mutex<Vec<u8>>>);
 
 impl Buffer {
     fn rows(&self) -> String {

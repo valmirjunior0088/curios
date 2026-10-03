@@ -1,5 +1,5 @@
 use {
-    super::{PublicInterface, Scoped},
+    super::{PublicInterface, Reach, Scoped, visible_binding, visible_child},
     crate::{Error, Label, Lint, Name},
     curios_utilities::{Entropy, InfixOp, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
@@ -7,6 +7,9 @@ use {
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     },
 };
+
+#[cfg(feature = "archive")]
+use crate::OrderedMap;
 
 /// One `use` selector or glob as resolution met it: what it imports, whether it re-exports, and whether any reference resolved through it — the fact the `unused-import` lint reads. Shared across the unit's contexts as the import table is, since a lint is about the unit.
 pub(super) struct UseSite {
@@ -152,9 +155,9 @@ impl ChildInfo {
 #[derive(Clone)]
 #[curios_archive::archived]
 pub(crate) struct ModuleInfo {
-    #[archived_with(crate::OrderedMap)]
+    #[archived_with(OrderedMap)]
     children: HashMap<String, ChildInfo>,
-    #[archived_with(crate::OrderedMap)]
+    #[archived_with(OrderedMap)]
     bindings: HashMap<String, bool>,
 }
 
@@ -258,7 +261,7 @@ pub(super) struct UseResolved {
 pub(super) struct Context<'a> {
     prefix: Qualifier,
     // Every prefix this compilation mounts and which of them this unit may name — see `super::Reach`. Shared read-only by every nested context, like `table`/`public`: which mount owns a module is `Mount::owning` over its qualifier, so nesting carries nothing about roots and nothing re-derives one from a string.
-    reach: super::Reach<'a>,
+    reach: Reach<'a>,
     table: &'a Scoped<'a, ModuleInfo>,
     public: &'a Scoped<'a, PublicInterface>,
     qualifiers: HashMap<String, Qualifier>,
@@ -295,7 +298,7 @@ impl<'a> Context<'a> {
     pub(super) fn new(
         table: &'a Scoped<'a, ModuleInfo>,
         public: &'a Scoped<'a, PublicInterface>,
-        reach: super::Reach<'a>,
+        reach: Reach<'a>,
         metavars: &'a Entropy,
         universes: &'a Entropy,
         universe_role: &'a Cell<curios_core::UniverseRole>,
@@ -576,13 +579,7 @@ impl<'a> Context<'a> {
         let mut current = start;
 
         for segment in segments {
-            match super::interface::visible_child(
-                self.public,
-                self.table,
-                &self.prefix,
-                &current,
-                segment,
-            ) {
+            match visible_child(self.public, self.table, &self.prefix, &current, segment) {
                 Some(target) => current = target,
                 None => return Err(self.child_error(&current, segment)),
             }
@@ -647,8 +644,7 @@ impl<'a> Context<'a> {
 
     // Import the module child `label` out of `parent`, registering it as a qualifier in the current lexical scope.
     fn import_module_label(&mut self, parent: &Qualifier, label: &str) -> Result<Qualifier, Error> {
-        match super::interface::visible_child(self.public, self.table, &self.prefix, parent, label)
-        {
+        match visible_child(self.public, self.table, &self.prefix, parent, label) {
             Some(target) => {
                 self.insert_scope(label.to_string(), target)?;
                 if let Some(site) = self.current_site {
@@ -678,13 +674,7 @@ impl<'a> Context<'a> {
         parent: &Qualifier,
         label: &str,
     ) -> Result<Qualifier, Error> {
-        match super::interface::visible_binding(
-            self.public,
-            self.table,
-            &self.prefix,
-            parent,
-            label,
-        ) {
+        match visible_binding(self.public, self.table, &self.prefix, parent, label) {
             Some(target) => {
                 self.insert_binding(label.to_string(), target)?;
                 if let Some(site) = self.current_site {
@@ -710,11 +700,9 @@ impl<'a> Context<'a> {
 
     // Import both the module and binding slots of `label` — used by glob and the `Both` group item. Either or both may be absent.
     fn import_dual_label(&mut self, parent: &Qualifier, label: &str) -> Result<UseResolved, Error> {
-        let module =
-            super::interface::visible_child(self.public, self.table, &self.prefix, parent, label);
+        let module = visible_child(self.public, self.table, &self.prefix, parent, label);
 
-        let binding =
-            super::interface::visible_binding(self.public, self.table, &self.prefix, parent, label);
+        let binding = visible_binding(self.public, self.table, &self.prefix, parent, label);
 
         let mut result = UseResolved {
             module: None,
@@ -769,13 +757,9 @@ impl<'a> Context<'a> {
         let mut labels = interface.bindings.keys().cloned().collect::<Vec<_>>();
         labels.sort();
         for binding in labels {
-            if let Some(target) = super::interface::visible_binding(
-                self.public,
-                self.table,
-                &self.prefix,
-                module,
-                &binding,
-            ) {
+            if let Some(target) =
+                visible_binding(self.public, self.table, &self.prefix, module, &binding)
+            {
                 self.record_import(&target, format!("{label}/{binding}"));
             }
         }
@@ -814,22 +798,10 @@ impl<'a> Context<'a> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
 
-            let has_module = super::interface::visible_child(
-                self.public,
-                self.table,
-                &self.prefix,
-                &parent,
-                &label,
-            )
-            .is_some();
-            let has_binding = super::interface::visible_binding(
-                self.public,
-                self.table,
-                &self.prefix,
-                &parent,
-                &label,
-            )
-            .is_some();
+            let has_module =
+                visible_child(self.public, self.table, &self.prefix, &parent, &label).is_some();
+            let has_binding =
+                visible_binding(self.public, self.table, &self.prefix, &parent, &label).is_some();
 
             if !has_module && !has_binding {
                 let child = self.table.get(&parent).and_then(|i| i.get_child(&label));
@@ -894,13 +866,7 @@ impl<'a> Context<'a> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
 
-            match super::interface::visible_binding(
-                self.public,
-                self.table,
-                &self.prefix,
-                &parent,
-                &label,
-            ) {
+            match visible_binding(self.public, self.table, &self.prefix, &parent, &label) {
                 Some(target) => {
                     self.note_spelled(&parent);
                     Ok(target)

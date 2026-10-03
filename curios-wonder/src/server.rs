@@ -17,12 +17,12 @@
 //! **UTF-16 exists only here.** The engine's coordinates are bytes; a `Position` is derived from the span's own text at the boundary, in both directions, and nothing below this file knows the protocol's unit.
 
 use {
-    crate::{Asked, Diagnostic as Record, Severity},
+    crate::{Asked, Severity},
     curios_package::{Selection, Spelling},
     curios_text::{Formatted, Overlay},
     curios_utilities::{Report, Source, Span},
     curios_verdicts::Session,
-    lsp_server::{Connection, Message, Notification, Request, RequestId, Response},
+    lsp_server::{Connection, Message, RequestId, Response},
     lsp_types::{
         Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
         DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentFormattingParams,
@@ -30,9 +30,9 @@ use {
         TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
         notification::{
             DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, DidSaveTextDocument,
-            Notification as NotificationTrait, PublishDiagnostics,
+            Notification, PublishDiagnostics,
         },
-        request::{Formatting, Request as RequestTrait},
+        request::{Formatting, Request},
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -161,7 +161,7 @@ impl Server {
         match message {
             Message::Notification(notification) => self.notified(notification),
             Message::Request(request) => {
-                let Request { id, method, params } = request;
+                let lsp_server::Request { id, method, params } = request;
                 match method.as_str() {
                     Formatting::METHOD => {
                         // One request the editor got wrong is that request failing, with the protocol's own code for it — never the session ending, which costs every open document its diagnostics until the editor restarts the server.
@@ -206,8 +206,8 @@ impl Server {
     }
 
     /// A notification whose params do not deserialize is dropped, with a line on stderr for the editor's log: it has no reply to fail, and the session is not what is wrong.
-    fn notified(&mut self, notification: Notification) -> Result<(), String> {
-        let Notification { method, params } = notification;
+    fn notified(&mut self, notification: lsp_server::Notification) -> Result<(), String> {
+        let lsp_server::Notification { method, params } = notification;
         let dropped = |error: &serde_json::Error| eprintln!("{method}: {error}; ignored");
         match method.as_str() {
             DidOpenTextDocument::METHOD => {
@@ -396,7 +396,7 @@ impl Analyst {
                 .flat_map(|asked| asked.reusing(session).diagnostics(self.budget, overlay))
                 .collect(),
             // A scope that cannot be assembled is an answer about the document, not a server failure: the manifest is what is wrong, and the document is where the editor is looking.
-            Err(message) => vec![Record {
+            Err(message) => vec![crate::Diagnostic {
                 severity: Severity::Error,
                 report: Report::unlocated(message),
             }],
@@ -449,7 +449,7 @@ fn workspace_root(params: &InitializeParams) -> Option<PathBuf> {
 }
 
 /// One record as the protocol's diagnostic, and the path it belongs to — the span's source when it has one, and the checked document itself, at its first position, when it has none.
-fn adapt(document: &Path, record: &Record) -> (PathBuf, Diagnostic) {
+fn adapt(document: &Path, record: &crate::Diagnostic) -> (PathBuf, Diagnostic) {
     let severity = match record.severity {
         Severity::Error => DiagnosticSeverity::ERROR,
         Severity::Goal => DiagnosticSeverity::INFORMATION,
@@ -528,7 +528,7 @@ fn publish(
         version: None,
     };
 
-    sender(Message::Notification(Notification::new(
+    sender(Message::Notification(lsp_server::Notification::new(
         PublishDiagnostics::METHOD.to_string(),
         params,
     )))

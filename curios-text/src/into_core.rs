@@ -44,7 +44,7 @@ use {
     curios_abi::ForeignStore,
     curios_document::Documentation,
     curios_utilities::{
-        Entropy, Mount, Plicity, Qualifier, Report, RootKind, Span, SyntaxRegistry,
+        Entropy, Mount, Plicity, Qualifier, Report, RootKind, Source, Span, SyntaxRegistry, grown,
     },
     std::{
         cell::{Cell, RefCell},
@@ -1521,7 +1521,7 @@ impl<'a> UnitSource<'a> {
     }
 
     /// Every file this unit has read. See [`RootSource::reads`].
-    pub fn reads(&self) -> Vec<(std::path::PathBuf, std::sync::Arc<curios_utilities::Source>)> {
+    pub fn reads(&self) -> Vec<(std::path::PathBuf, std::sync::Arc<Source>)> {
         self.source.reads()
     }
 
@@ -1591,7 +1591,7 @@ fn lower_unit(
     syntax: &SyntaxRegistry,
 ) -> Result<(PreparedText, Option<curios_core::Entrypoint>), Error> {
     curios_profile::profile!("into_core_unit");
-    curios_utilities::grown(|| into_core_unit_within(source, predecessors, syntax))
+    grown(|| into_core_unit_within(source, predecessors, syntax))
 }
 
 fn into_core_unit_within(

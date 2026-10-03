@@ -1,7 +1,10 @@
 use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
-    curios_core::{CalleeId, *},
+    curios_core::{
+        CalleeId, Free, Global, Intrinsic, Level, MetavarId, Nat, Term, UniverseContext,
+        UniverseMetaId, WitnessOrigin,
+    },
     curios_utilities::Qualifier,
     std::collections::BTreeSet,
 };

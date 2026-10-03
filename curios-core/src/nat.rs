@@ -1,5 +1,6 @@
 use {
     super::{Atoms, Cost, Intrinsic, ReduceError, Reducer, Subterm, Term},
+    crate::project_erased_universes,
     curios_algebra::{
         Cancelled, Combination, Deduction, Monomial, Progress, Recombination, Summand, Wanted,
         distribute, distribution_size,
@@ -420,7 +421,7 @@ impl Nat {
 
     /// One factor against another up to universe instances, as [`Nat::linear`] keys them, and a quotient against a quotient up to its proof.
     fn same_factor(left: &Term, right: &Term) -> bool {
-        let project = crate::project_erased_universes::<Term>;
+        let project = project_erased_universes::<Term>;
         match (&**left, &**right) {
             (
                 Subterm::Intrinsic(Intrinsic::NatDiv {

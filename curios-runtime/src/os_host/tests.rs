@@ -4,7 +4,7 @@ use {
         ChildExit, ChildHandles, Failure, Handle, Mode, Poll, SerialFlow, SerialOp, SerialParity,
         StdioMode,
     },
-    curios_abi::errno,
+    curios_abi::{errno, event},
     curios_utilities::test_support::Temporary,
     rustix::{
         fs::OFlags,
@@ -103,11 +103,11 @@ fn a_piped_child_stream_is_filed_non_blocking() {
     let ready = host
         .handle_poll(
             vec![stdout.clone()],
-            vec![Poll::from_bits(curios_abi::event::READ)],
+            vec![Poll::from_bits(event::READ)],
             5_000,
         )
         .unwrap();
-    assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
+    assert_ne!(ready[0].bits() & event::READ, 0);
     assert_eq!(
         host.handle_read(stdout.clone(), 8),
         Ok(Some(b"abc".to_vec()))
@@ -128,11 +128,11 @@ fn a_piped_child_stream_is_filed_non_blocking() {
     let ready = host
         .handle_poll(
             vec![child.clone()],
-            vec![Poll::from_bits(curios_abi::event::READ)],
+            vec![Poll::from_bits(event::READ)],
             5_000,
         )
         .unwrap();
-    assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
+    assert_ne!(ready[0].bits() & event::READ, 0);
     assert_eq!(host.proc_wait(child), Ok(ChildExit::Code(0)));
 
     host.handle_close(stdout);
@@ -205,11 +205,11 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
             let ready = host
                 .handle_poll(
                     vec![client.clone()],
-                    vec![Poll::from_bits(curios_abi::event::WRITE)],
+                    vec![Poll::from_bits(event::WRITE)],
                     5_000,
                 )
                 .unwrap();
-            assert_ne!(ready[0].bits() & curios_abi::event::WRITE, 0);
+            assert_ne!(ready[0].bits() & event::WRITE, 0);
             assert_eq!(host.socket_finish_connect(client.clone()), Ok(()));
         }
         Err(failure) => panic!("connect answered {failure:?}"),
@@ -219,11 +219,11 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
     let ready = host
         .handle_poll(
             vec![listener.clone()],
-            vec![Poll::from_bits(curios_abi::event::READ)],
+            vec![Poll::from_bits(event::READ)],
             5_000,
         )
         .unwrap();
-    assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
+    assert_ne!(ready[0].bits() & event::READ, 0);
     let server = host.socket_accept(listener.clone()).unwrap();
 
     assert_eq!(
@@ -234,11 +234,11 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
     let ready = host
         .handle_poll(
             vec![server.clone()],
-            vec![Poll::from_bits(curios_abi::event::READ)],
+            vec![Poll::from_bits(event::READ)],
             5_000,
         )
         .unwrap();
-    assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
+    assert_ne!(ready[0].bits() & event::READ, 0);
     assert_eq!(
         host.handle_read(server.clone(), 8),
         Ok(Some(b"ping".to_vec()))
@@ -257,7 +257,7 @@ fn loopback_pair(host: &OsHost) -> (Handle, Handle, Handle) {
     if host.socket_connect(client.clone(), blob) == Err(Failure::WouldBlock) {
         host.handle_poll(
             vec![client.clone()],
-            vec![Poll::from_bits(curios_abi::event::WRITE)],
+            vec![Poll::from_bits(event::WRITE)],
             5_000,
         )
         .unwrap();
@@ -265,7 +265,7 @@ fn loopback_pair(host: &OsHost) -> (Handle, Handle, Handle) {
     }
     host.handle_poll(
         vec![listener.clone()],
-        vec![Poll::from_bits(curios_abi::event::READ)],
+        vec![Poll::from_bits(event::READ)],
         5_000,
     )
     .unwrap();
@@ -296,11 +296,11 @@ fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
     let ready = host
         .handle_poll(
             vec![server.clone()],
-            vec![Poll::from_bits(curios_abi::event::READ)],
+            vec![Poll::from_bits(event::READ)],
             5_000,
         )
         .unwrap();
-    assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
+    assert_ne!(ready[0].bits() & event::READ, 0);
     let hello = host
         .handle_read(server.clone(), 4096)
         .unwrap()
@@ -314,11 +314,11 @@ fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
     let ready = host
         .handle_poll(
             vec![client.clone()],
-            vec![Poll::from_bits(curios_abi::event::READ)],
+            vec![Poll::from_bits(event::READ)],
             5_000,
         )
         .unwrap();
-    assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
+    assert_ne!(ready[0].bits() & event::READ, 0);
     assert_eq!(host.handle_read(client.clone(), 8), Err(Failure::TlsError));
     assert_ne!(host.handle_read(client.clone(), 8), Err(Failure::NotFound));
 
@@ -354,13 +354,12 @@ fn a_refused_connect_reports_and_drops_the_socket() {
             let ready = host
                 .handle_poll(
                     vec![client.clone()],
-                    vec![Poll::from_bits(curios_abi::event::WRITE)],
+                    vec![Poll::from_bits(event::WRITE)],
                     5_000,
                 )
                 .unwrap();
             // A settled connect is reported as the platform reports it: Linux answers a refused one `WRITE`, macOS `HUP`, and `ERR` rides either. `/std`'s scheduler resumes a park on any of the three for the same reason — a handle in one of those states will never become ready.
-            let settled =
-                curios_abi::event::WRITE | curios_abi::event::ERR | curios_abi::event::HUP;
+            let settled = event::WRITE | event::ERR | event::HUP;
             assert_ne!(
                 ready[0].bits() & settled,
                 0,
@@ -401,11 +400,11 @@ fn a_child_is_reaped_through_its_handle_and_its_piped_output_read() {
     let ready = host
         .handle_poll(
             vec![child.clone()],
-            vec![Poll::from_bits(curios_abi::event::READ)],
+            vec![Poll::from_bits(event::READ)],
             5_000,
         )
         .unwrap();
-    assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
+    assert_ne!(ready[0].bits() & event::READ, 0);
     assert_eq!(host.proc_wait(child), Ok(ChildExit::Code(0)));
     assert_eq!(
         host.handle_read(stdout.clone(), 64),

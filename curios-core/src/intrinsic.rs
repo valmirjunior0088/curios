@@ -6,6 +6,7 @@ pub use signature::*;
 
 use {
     super::{Bound, Free, Level, Nat, Subterm, Term, Var, Visit},
+    crate::Global,
     curios_abi::{ForeignFunction, ResultShape, WireResults, WireType},
     curios_num::{Binary, Floating, Grain, Integer, Rounding},
     std::collections::BTreeSet,
@@ -1148,7 +1149,7 @@ impl Intrinsic {
     }
 
     // Recurse into every operand `Term` so a construction nested inside an intrinsic (e.g. `List(Str)`'s element type) still contributes its head name. Intrinsics own no head names of their own.
-    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<crate::Global>) {
+    pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         self.for_each_operand(&mut |term| term.collect_construction_names(names));
     }
 

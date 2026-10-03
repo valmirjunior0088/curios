@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    curios_core::*,
+    curios_core::{Free, InstanceHead, Intrinsic, Level, Nat, ReduceError, Subterm, Term, Var},
     curios_num::{Binary, Grain},
 };
 

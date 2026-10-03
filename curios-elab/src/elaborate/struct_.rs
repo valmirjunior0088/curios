@@ -1,6 +1,8 @@
 use {
     super::{binder_name, check_args_against},
-    crate::{Context, Error, Mode, attempt_witness_goal, check, elaborate, expect, reduce_with},
+    crate::{
+        Context, Error, Mode, attempt_witness_goal, check, elaborate, expect, is_prop, reduce_with,
+    },
     curios_core::{
         CalleeId, Free, Global, ImplicitOrigin, Level, Probe, Struct, StructDecl, StructEntry,
         StructType, Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
@@ -70,7 +72,7 @@ pub(super) fn elaborate_struct_type(
         let mut cursor = struct_decl.arity.cursor();
         while let Some((hint, ty)) = cursor.entry() {
             let binder = binder_name(hint);
-            let proposition = crate::is_prop(context, &ty).probed()?.unwrap_or(false);
+            let proposition = is_prop(context, &ty).probed()?.unwrap_or(false);
             let (_, arg) = context.fresh_metavar(
                 ty,
                 term.span(),
@@ -362,7 +364,7 @@ pub(super) fn resolve_struct_params(
             Some(arg) => check(context, arg, ty.clone())?,
             None => {
                 let binder = binder_name(hint);
-                let proposition = crate::is_prop(context, &ty).probed()?.unwrap_or(false);
+                let proposition = is_prop(context, &ty).probed()?.unwrap_or(false);
                 context
                     .fresh_metavar(
                         ty.clone(),

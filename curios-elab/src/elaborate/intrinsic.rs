@@ -1,6 +1,6 @@
 use {
     super::{Context, Error, Mode, elaborate, expect},
-    crate::{SettleTier, exhausted_bound, reduce_with, settle_against},
+    crate::{SettleTier, check_is_sort, exhausted_bound, reduce_with, settle_against, sort_term},
     curios_core::{Intrinsic, Operand, Produced, Subterm, Term, Var, Visit},
 };
 
@@ -59,8 +59,8 @@ fn synth_intrinsic(
 
         let Some(demand) = signature.operands.get(done.len()) else {
             let type_ = match signature.produced {
-                Produced::Fixed(type_) => crate::check_is_sort(context, &type_)?.0,
-                Produced::Sort => crate::sort_term(context, &Term::intrinsic(current.clone()))?,
+                Produced::Fixed(type_) => check_is_sort(context, &type_)?.0,
+                Produced::Sort => sort_term(context, &Term::intrinsic(current.clone()))?,
             };
 
             if let Some(universes) = current.result_universes_mut() {
@@ -107,7 +107,7 @@ pub(super) fn elaborate_demand(
                     .0
             }
         },
-        Operand::IsType => crate::check_is_sort(context, operand)?.0,
+        Operand::IsType => check_is_sort(context, operand)?.0,
         Operand::Function { domains, codomain } => {
             let params = domains
                 .iter()
@@ -158,7 +158,7 @@ pub(crate) fn elaborate_intrinsic(
     ) = (intrinsic, &mode)
         && let Subterm::Intrinsic(Intrinsic::ListType(_)) = &*reduce_with(context, expected)?
     {
-        let type_slot = crate::check_is_sort(context, type_slot)?.0;
+        let type_slot = check_is_sort(context, type_slot)?.0;
         expect(context, term, &list_type(type_slot.clone()), expected)?;
 
         let mut elaborated = Vec::with_capacity(operands.len());

@@ -3,7 +3,10 @@
 use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
-    curios_core::*,
+    curios_core::{
+        Definition, DefinitionKind, Free, Global, InductDecl, Intrinsic, Item, Level, Minted,
+        Module, Nat, Telescope, Term, Totality, UniverseContext, UniverseParam,
+    },
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
 };

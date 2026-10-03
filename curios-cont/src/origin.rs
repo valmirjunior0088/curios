@@ -11,7 +11,9 @@
 //! Boundaries are stated by injection rather than by omission: a resume parameter receives whatever an unsplit return interface delivers, an escaping function's parameters receive whatever unknown callers pass, the entry's parameters belong to the host, and a knot-tied value is a closure — each is seeded `Opaque` so a bottom that survives the round means *unreached*, never *assumed constructed*.
 
 use {
-    super::{Atom, Callee, Edge, Lattice, Module, Node, Solver, ValueExpr, ValueId, analyze_calls},
+    super::{
+        Atom, Callee, Edge, Lattice, Module, Node, RowId, Solver, ValueExpr, ValueId, analyze_calls,
+    },
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -23,7 +25,7 @@ pub(crate) enum Origin {
     /// Every flow reaching it is a tuple construction, or an alias of one, and these are the widths they carry. One width is an exact product; several are a merged flow, which travels as its widest construction with each narrower edge filled.
     Constructed(BTreeSet<usize>),
     /// Every flow reaching it is a [`ValueExpr::Row`] of this row, or an alias of one — all at the row's width, carried here so the rewrite needs no module access. Always settled, because the door pads every construction; a merge with a different row or with a structural tuple is `Opaque`, which upstream typing makes unreachable and this lattice makes safe anyway.
-    Row(super::RowId, usize),
+    Row(RowId, usize),
     /// Some flow is not a visible construction — a call result, a literal, a closure, a projection.
     Opaque,
 }
@@ -63,7 +65,7 @@ impl Origin {
     }
 
     /// The row this origin's flows construct, where they are row constructions at all.
-    pub(crate) fn row(&self) -> Option<super::RowId> {
+    pub(crate) fn row(&self) -> Option<RowId> {
         match self {
             Origin::Row(row, _) => Some(*row),
             Origin::Unreached | Origin::Constructed(_) | Origin::Opaque => None,

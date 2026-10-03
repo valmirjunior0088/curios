@@ -28,6 +28,7 @@ use {
         Context, applied_head, check, infer, reduce, reduce_forced, stalled_unfolding, unfold_rec,
         unfold_rec_apply,
     },
+    crate::{metavar_origins, metavar_spines, zonk_solved_term_metas},
     curios_analysis::connectives_agree,
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Free, Func, FuncType,
@@ -1077,7 +1078,7 @@ impl Convert {
         }
 
         // Materialize committed solutions in the candidate before any analysis. A solved metavariable's occurrence still spells the metavariable, and its spine names the frame it was born under — which may hold binders `id`'s frame lacks. Left unmaterialized, those spine names surface in `free_vars` and the scope check refuses a candidate whose *resolution* is perfectly scoped (a ground `Cell(Option(Nat))` refused for a continuation binder riding an already-solved metavariable's spine — `a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade` holds the case). Materializing also lets the occurs check see a cycle hidden behind a solved metavariable's solution, which the raw spelling conceals.
-        let t = &crate::zonk_solved_term_metas(context, t);
+        let t = &zonk_solved_term_metas(context, t);
         let metavars = t.metavars();
 
         // Occurs check: a candidate mentioning `id` itself is an infinite solution.
@@ -1098,12 +1099,12 @@ impl Convert {
             })
             .collect::<Vec<_>>();
         if !blocking.is_empty() {
-            let occurrences = crate::metavar_origins(&[t]);
+            let occurrences = metavar_origins(&[t]);
             let restrictions = blocking
                 .iter()
                 .map(|other| {
                     let provenance = occurrences.get(other)?;
-                    let spines = crate::metavar_spines(t, *other);
+                    let spines = metavar_spines(t, *other);
                     let restriction =
                         context.metavar_restriction(*other, &provenance.0, &spines, metavar)?;
                     Some((*other, provenance.clone(), restriction))
@@ -1180,7 +1181,7 @@ impl Convert {
         let entries = metavar
             .spine
             .iter()
-            .map(|term| crate::zonk_solved_term_metas(context, term))
+            .map(|term| zonk_solved_term_metas(context, term))
             .collect::<Vec<_>>();
 
         // Invert the spine through its *pattern* entries — a syntactic free variable whose name no other entry shares. A non-variable or duplicated entry is simply not invertible; the solution then may not depend on that slot, which the scope check below enforces — pruning in its simplest form.
@@ -2051,8 +2052,8 @@ fn level_question(
     this: &Term,
     that: &Term,
 ) -> Result<LevelQuestion, ReduceError> {
-    let this = crate::zonk_solved_term_metas(context, this);
-    let that = crate::zonk_solved_term_metas(context, that);
+    let this = zonk_solved_term_metas(context, this);
+    let that = zonk_solved_term_metas(context, that);
 
     match identify_universe_levels(context, &this, &that)? {
         Identification::Identified => return Ok(LevelQuestion::Identified),

@@ -2,7 +2,13 @@
 mod tests;
 
 use {
-    super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate},
+    super::{
+        Context, Error, FrozenFrame, Mode, Outcome, ParkedProblem, ParkedWork, Problem, Sort,
+        callee, convert, convert_outcome, diagnose_embedding, diagnose_shape, elaborate,
+        elaborate_func_settle, embeds, is_monad, monad_shape, normalize, reduce_forced,
+        refold_recs, refused_scrutinee, retry_discharge, retry_match, retry_projection,
+        retry_witness, shallow_scrutinee, zonk_solved_term_metas,
+    },
     curios_analysis::{RESOLVED_SPELLING_LAYERS, Unfolding, records_case_equation},
     curios_core::{
         Advance, Apply, Bound, Field, Free, Func, FuncType, Global, ImplicitOrigin, Intrinsic,
@@ -29,7 +35,7 @@ pub(crate) fn check(context: &mut Context, term: &Term, ty: Term) -> Result<Term
 }
 
 pub(crate) fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
-    super::reduce_forced(context, term.clone()).map_err(|error| {
+    reduce_forced(context, term.clone()).map_err(|error| {
         Error::from_reduce(error, |refusal| {
             Error::reduce_exhausted(term.clone(), refusal)
         })
@@ -43,7 +49,7 @@ pub(crate) fn convert_at(
     this: &Term,
     that: &Term,
 ) -> Result<bool, Error> {
-    super::convert(context, type_, this, that).map_err(|error| {
+    convert(context, type_, this, that).map_err(|error| {
         Error::from_reduce(error, |refusal| {
             Error::convert_exhausted(this.clone(), that.clone(), refusal)
         })
@@ -102,9 +108,9 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
 /// Normalization is the whole story only while the operand type is concrete. Under a `use Add(A)` parameter the projection is stuck on an abstract witness and no amount of reduction reaches the operator; the printer spells it, against the witness binders the report carries (axis (h)).
 pub(crate) fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
     // Refolded on both sides of normalization. Before: a committed solution spells a stuck recursive call as its canonical neutral, the `Rec` node itself, and `normalize` keeps a name only where the *written* head is one (`stalled_unfolding`) — so the node is first given back its name, which the stall rule then holds. After: whatever normalization exposed elsewhere.
-    let zonked = super::refold_recs(context, &super::zonk_solved_term_metas(context, term));
-    let resolved = super::normalize(context, zonked.clone()).unwrap_or(zonked);
-    super::refold_recs(context, &resolved)
+    let zonked = refold_recs(context, &zonk_solved_term_metas(context, term));
+    let resolved = normalize(context, zonked.clone()).unwrap_or(zonked);
+    refold_recs(context, &resolved)
 }
 
 /// A `type_mismatch` error naming both sides in their best-effort display form (see [`resolved_for_display`]) — unless `term`, the node the conversion was about, is the `/std/Monad/bind` application a postfix `!` desugars to and the region it hoisted to has nothing to sequence in.
@@ -131,13 +137,13 @@ pub(crate) fn display_mismatch(
 
 /// The specialized report for a mismatch between two monad applications that differ in their head or a context argument: an action of one monad where another is expected. The `!` and tail oracles embed such an action through the declared `Lift` witness when its monad can be read from its head's declaration, so this is the case they could not read — a projection, a computed head — or a position they never look at, and the explicit `lift` spelling is the remedy the report names. `None` for every other mismatch, which keeps the generic report — and for one whose shapes cannot be read, exhaustion included, since the refusal this decorates is already the verdict.
 fn unembedded_action(context: &mut Context, this: &Term, that: &Term) -> Option<Error> {
-    let this_whnf = super::reduce_forced(context, this.clone()).ok()?;
-    let that_whnf = super::reduce_forced(context, that.clone()).ok()?;
-    let action = super::monad_shape(context, &this_whnf).ok().flatten()?;
-    let expected = super::monad_shape(context, &that_whnf).ok().flatten()?;
-    let differ = super::embeds(&expected, &action)
-        && super::is_monad(context, &action.head)
-        && super::is_monad(context, &expected.head);
+    let this_whnf = reduce_forced(context, this.clone()).ok()?;
+    let that_whnf = reduce_forced(context, that.clone()).ok()?;
+    let action = monad_shape(context, &this_whnf).ok().flatten()?;
+    let expected = monad_shape(context, &that_whnf).ok().flatten()?;
+    let differ = embeds(&expected, &action)
+        && is_monad(context, &action.head)
+        && is_monad(context, &expected.head);
 
     differ.then(|| Error::unembedded_action(this.clone(), that.clone()))
 }
@@ -238,7 +244,7 @@ fn subsume(
         }
     }
 
-    super::convert_outcome(context, &Term::type_ground(), inferred, expected).map_err(|error| {
+    convert_outcome(context, &Term::type_ground(), inferred, expected).map_err(|error| {
         Error::from_reduce(error, |refusal| {
             Error::convert_exhausted(inferred.clone(), expected.clone(), refusal)
         })
@@ -261,7 +267,7 @@ fn subsume_telescope(
     loop {
         match walk.step() {
             Step::Entries { left, right, .. } => {
-                let outcome = super::convert_outcome(context, &Term::type_ground(), &left, &right)
+                let outcome = convert_outcome(context, &Term::type_ground(), &left, &right)
                     .map_err(|error| {
                         Error::from_reduce(error, |refusal| {
                             Error::convert_exhausted(left.clone(), right.clone(), refusal)
@@ -372,7 +378,7 @@ pub(crate) fn settle_against(
     }
 
     let (rebuilt, inferred) = match &**term {
-        Subterm::Func(func) => super::elaborate_func_settle(context, func, term)?,
+        Subterm::Func(func) => elaborate_func_settle(context, func, term)?,
         _ => elaborate(context, term, Mode::Infer)?,
     };
     expect(context, term, &inferred, expected)?;
@@ -496,7 +502,7 @@ impl Context {
     fn settle_synthesizable(&mut self) -> Result<bool, Error> {
         let mut settled = false;
         for parked in self.take_parked() {
-            let super::ParkedProblem {
+            let ParkedProblem {
                 work,
                 origin,
                 frame,
@@ -564,7 +570,7 @@ impl Context {
                 }
 
                 for parked in self.take_parked() {
-                    let super::ParkedProblem {
+                    let ParkedProblem {
                         work,
                         origin: parked_origin,
                         frame,
@@ -586,15 +592,15 @@ impl Context {
                                 .or_else(|| self.witness_hole(&goal.that))
                             {
                                 Some((origin, witness_goal)) => {
-                                    let embedding = super::diagnose_embedding(
+                                    let embedding = diagnose_embedding(
                                         self,
                                         &witness_goal,
                                         parked_origin.span().as_ref(),
                                     );
-                                    let shape = super::diagnose_shape(self, &witness_goal);
+                                    let shape = diagnose_shape(self, &witness_goal);
                                     Error::no_witness(
                                         resolved_for_display(self, &witness_goal),
-                                        super::callee(self, &origin.func),
+                                        callee(self, &origin.func),
                                         origin.binder,
                                         embedding,
                                         shape,
@@ -645,15 +651,12 @@ impl Context {
                         ParkedWork::Witness {
                             goal, provenance, ..
                         } => {
-                            let embedding = super::diagnose_embedding(
-                                self,
-                                &goal,
-                                parked_origin.span().as_ref(),
-                            );
-                            let shape = super::diagnose_shape(self, &goal);
+                            let embedding =
+                                diagnose_embedding(self, &goal, parked_origin.span().as_ref());
+                            let shape = diagnose_shape(self, &goal);
                             Error::no_witness(
                                 resolved_for_display(self, &goal),
-                                super::callee(self, &provenance.func),
+                                callee(self, &provenance.func),
                                 provenance.binder,
                                 embedding,
                                 shape,
@@ -666,7 +669,7 @@ impl Context {
                                 .at_opt(parked_origin.span())
                         }
                         // A scrutinee whose type never reached a carrier is what the match refused before it could wait.
-                        ParkedWork::Match(parked) => super::refused_scrutinee(
+                        ParkedWork::Match(parked) => refused_scrutinee(
                             &parked.term,
                             resolved_for_display(self, &parked.scrutinee_type),
                         )
@@ -685,7 +688,7 @@ impl Context {
 fn blocked_on_written_goals(
     context: &Context,
     watching: &BTreeSet<MetavarId>,
-    goal: &super::Problem,
+    goal: &Problem,
 ) -> Option<BTreeSet<MetavarId>> {
     let origins = metavar_origins(&[&goal.this, &goal.that]);
     let unsolved: BTreeSet<MetavarId> = watching
@@ -716,13 +719,12 @@ fn watched_blockers(
         .iter()
         .filter(|id| context.metavar_solution(**id).is_none())
         .map(|id| match origins.get(id) {
-            Some((MetavarOrigin::Implicit(origin), _)) => super::callee(context, &origin.func)
-                .slot("implicit argument", &origin.binder, &spelling),
-            Some((MetavarOrigin::Witness(origin), _)) => super::callee(context, &origin.func).slot(
-                "witness argument",
-                &origin.binder,
-                &spelling,
-            ),
+            Some((MetavarOrigin::Implicit(origin), _)) => {
+                callee(context, &origin.func).slot("implicit argument", &origin.binder, &spelling)
+            }
+            Some((MetavarOrigin::Witness(origin), _)) => {
+                callee(context, &origin.func).slot("witness argument", &origin.binder, &spelling)
+            }
             // Named by the span the goal was born with, never by an occurrence's: substituted into a declaration's type, the goal rides the span of the binder it replaced, which would name the declaration rather than the `?`.
             Some((MetavarOrigin::Goal, _)) => match context.goal_span(*id) {
                 Some(span) => {
@@ -793,8 +795,8 @@ pub(crate) fn metavar_spines(term: &Term, id: MetavarId) -> Vec<Rc<Vec<Term>>> {
         .unwrap_or_else(|shared| shared.borrow().clone())
 }
 
-fn retry_one(context: &mut Context, parked: super::ParkedProblem) -> Result<(), Error> {
-    let super::ParkedProblem {
+fn retry_one(context: &mut Context, parked: ParkedProblem) -> Result<(), Error> {
+    let ParkedProblem {
         work,
         origin,
         frame,
@@ -812,27 +814,27 @@ fn retry_one(context: &mut Context, parked: super::ParkedProblem) -> Result<(), 
             slot,
             goal,
             provenance,
-        } => return super::retry_witness(context, slot, goal, provenance, origin, frame),
+        } => return retry_witness(context, slot, goal, provenance, origin, frame),
         ParkedWork::Discharge {
             slot,
             bound,
             provenance,
-        } => return super::retry_discharge(context, slot, bound, provenance, origin, frame),
+        } => return retry_discharge(context, slot, bound, provenance, origin, frame),
         ParkedWork::Projection(projection) => {
-            return super::retry_projection(context, projection, origin, frame);
+            return retry_projection(context, projection, origin, frame);
         }
-        ParkedWork::Match(parked) => return super::retry_match(context, parked, origin, frame),
+        ParkedWork::Match(parked) => return retry_match(context, parked, origin, frame),
     };
 
     enum Retry {
         Converts,
         Mismatch(Error),
-        Blocked(Vec<super::Problem>),
+        Blocked(Vec<Problem>),
     }
 
     let outcome = context.with_retry_frame(&frame, |context| {
         Ok(
-            match super::convert_outcome(context, &goal.type_, &goal.this, &goal.that)? {
+            match convert_outcome(context, &goal.type_, &goal.this, &goal.that)? {
                 Outcome::Converts => Retry::Converts,
                 // Built here, inside the restored frame, rather than at the report below: `display_mismatch` reads the sides through whatever solutions have landed, so they name the actual disagreement rather than the metavariables it arrived wrapped in (see `resolved_for_display`). A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
                 Outcome::Mismatch => {
@@ -874,7 +876,7 @@ pub(crate) fn fill_placeholder(
         context.solve_metavar(placeholder, rebuilt);
         return Ok(());
     };
-    let outcome = super::convert_outcome(context, type_, &rebuilt, &existing).map_err(|error| {
+    let outcome = convert_outcome(context, type_, &rebuilt, &existing).map_err(|error| {
         Error::from_reduce(error, |refusal| {
             Error::convert_exhausted(rebuilt.clone(), existing.clone(), refusal)
         })
@@ -900,7 +902,7 @@ fn retry_checking(
     expected: Term,
     placeholder: MetavarId,
     origin: Term,
-    frame: super::FrozenFrame,
+    frame: FrozenFrame,
 ) -> Result<(), Error> {
     // Discharged already — by the force tier at its own apply (the same obligation's check, run in the richer live context), or by a unification commitment downstream checking will judge. Re-running the check here would re-elaborate a term whose lowering-minted holes are already birthed, and the rebuilt occurrence would drop their spines.
     if context.metavar_solution(placeholder).is_some() {
@@ -1009,13 +1011,13 @@ pub(crate) fn unreachable_arm(context: &mut Context, head: &Term, value: &Term) 
 /// The spellings a scrutinee that is neither a variable nor a projection is met by, each with the term it was registered from: as written, and resolved through a concept dispatch where it has one.
 fn scrutinee_spellings(context: &mut Context, head: &Term) -> Result<Vec<(Term, Term)>, Error> {
     // Registered on the *cheap* key: the scrutinee as written, with metas and universes normalized. Canonicalizing here would make a guard cost its operand's evaluation before any use of the fact — see `shallow_scrutinee`. The reducer's probe escalates on a miss, so a spelling this does not collapse is still found, and found by reducing at the site that needs it rather than at every site that records one.
-    let canonical = super::shallow_scrutinee(context, head);
+    let canonical = shallow_scrutinee(context, head);
 
     // A concept-dispatched scrutinee (`a <= hi`) elaborates to the method projected out of the witness — `(?w).1(a, hi)` — which is not the shape the reducer probes: by then it has become the intrinsic normal form `NatLe(a, hi)`. Registering only the verbatim key leaves the arm unrefined, silently, while the equivalent `Nat/le(a, hi)` spelling refines. Register the probed form alongside it so both spellings agree.
     let resolved = match canonical.head_key().is_none() {
         true => spine_whnf(context, head)?
             .map(|spined| {
-                let key = super::shallow_scrutinee(context, &spined);
+                let key = shallow_scrutinee(context, &spined);
                 (key, spined)
             })
             .filter(|(resolved, _)| resolved.head_key().is_some() && *resolved != canonical),
@@ -1359,7 +1361,7 @@ fn root_blocker_error(
 
     Some(
         Error::uninferred_implicit(
-            super::callee(context, &origin.func),
+            callee(context, &origin.func),
             origin.binder,
             resolved_for_display(context, &bound),
             true,

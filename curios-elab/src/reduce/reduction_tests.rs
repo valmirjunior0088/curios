@@ -4,7 +4,10 @@ use {
     super::test_support::{context, nat, nominal, qed},
     crate::*,
     curios_analysis::test_support::SYNTAX,
-    curios_core::*,
+    curios_core::{
+        Apply, Bound, Exhaustion, Free, Intrinsic, Level, MetavarId, MetavarOrigin, Nat,
+        ReduceError, Subterm, Term, UniverseContext, UniverseMetaId, UniverseParam,
+    },
     curios_num::{Binary, Floating, Grain, Integer, Rounding},
 };
 

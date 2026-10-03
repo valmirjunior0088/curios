@@ -1,6 +1,10 @@
 //! Metavariable solving: flex-rigid, occurs and scope checks, pattern inversion and pruning, flex-flex, revalidation, and the goal history key.
 
-use {super::test_support::*, crate::*, curios_core::*};
+use {
+    super::test_support::*,
+    crate::*,
+    curios_core::{Free, Intrinsic, MetavarId, MetavarOrigin, Nat, Subterm, Term},
+};
 
 // === Metavariables / unification ===========================================
 

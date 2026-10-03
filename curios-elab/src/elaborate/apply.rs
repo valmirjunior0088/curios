@@ -1,9 +1,10 @@
 use {
     super::{flexible, trivially_inhabited},
     crate::{
-        ArgumentSite, Context, Error, FrozenFrame, Mode, ParkedWork, SettleTier,
-        attempt_witness_goal, blocked_on_metavar, callee, check, elaborate, exhausted_bound,
-        expect, reduce_with, sort_term, transitively_ground,
+        ArgumentSite, Context, Entailed, Error, FrozenFrame, Mode, ParkedWork, SettleTier,
+        attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort, elaborate, entail,
+        exhausted_bound, expect, is_prop, reduce_with, settle_against, sort_term,
+        transitively_ground,
     },
     curios_core::{
         Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, InstanceHead, Intrinsic,
@@ -22,7 +23,7 @@ pub(super) fn elaborate_func_type(
     let output = context.with_frame(|context| {
         let mut cursor = ft.telescope.cursor();
         while let Some((_, ty)) = cursor.entry() {
-            let domain = crate::check_is_sort(context, &ty)?.0;
+            let domain = check_is_sort(context, &ty)?.0;
             // A definition sugar's parameter is one written binder in its type and in its lambda, so a proof written under it here credits it as one written in the body does.
             let written = cursor.written();
             let name = cursor.advance_fresh(|hint| context.fresh_for(hint, written));
@@ -38,7 +39,7 @@ pub(super) fn elaborate_func_type(
         }
 
         let output = cursor.body().expect("a cursor past every entry");
-        crate::check_is_sort(context, &output).map(|(term, _)| term)
+        check_is_sort(context, &output).map(|(term, _)| term)
     })?;
 
     let rebuilt = Term::func_type_marked(
@@ -67,7 +68,7 @@ pub(super) fn check_witness_domain(context: &mut Context, domain: &Term) -> Resu
     }
 
     // Only a hint: a sort that cannot be computed must not hide the refusal it decorates.
-    let proposition = crate::is_prop(context, domain).unwrap_or(false);
+    let proposition = is_prop(context, domain).unwrap_or(false);
     Err(Error::use_parameter_not_a_concept(domain.clone(), proposition).at_opt(domain.span()))
 }
 
@@ -141,15 +142,15 @@ pub(super) fn insert_auto_argument(
             }
 
             // Whether the slot is a bound or a value is decided here, where the sort can still be asked, and kept on the birth record for the report an unsolved one becomes — with what the bound reduced to, when that is an inductive type the report can name.
-            let proposition = crate::is_prop(context, type_).probed()?.unwrap_or(false);
+            let proposition = is_prop(context, type_).probed()?.unwrap_or(false);
             let waiting = proposition && waits_on_metavariable(context, &reduced);
             let mut refusal = None;
             if proposition && !waits_past_its_group(context, &reduced) {
-                match crate::entail(context, type_, &reduced)
+                match entail(context, type_, &reduced)
                     .map_err(|error| bound_exhausted(context, error, type_, &provenance))?
                 {
-                    crate::Entailed::Proved(proof) => return Ok(proof),
-                    crate::Entailed::Refused(refused) => refusal = Some(refused),
+                    Entailed::Proved(proof) => return Ok(proof),
+                    Entailed::Refused(refused) => refusal = Some(refused),
                 }
             }
             let reduct =
@@ -217,14 +218,14 @@ pub(crate) fn attempt_discharge(
         return Ok(true);
     }
     match context
-        .with_refinements(&birth, |context| crate::entail(context, bound, &reduced))
+        .with_refinements(&birth, |context| entail(context, bound, &reduced))
         .map_err(|error| bound_exhausted(context, error, bound, provenance))?
     {
-        crate::Entailed::Proved(proof) => {
+        Entailed::Proved(proof) => {
             context.solve_metavar(slot, proof);
             return Ok(false);
         }
-        crate::Entailed::Refused(refusal) => context.note_refusal(slot, refusal),
+        Entailed::Refused(refusal) => context.note_refusal(slot, refusal),
     }
     // Waiting on the group's own members alone: reduction may yet decide the bound once they are defined.
     if waits_on_metavariable(context, &reduced) {
@@ -468,11 +469,10 @@ pub(super) fn elaborate_apply(
                     .nth(*slot, |k| elaborated[k].clone())
                     .expect("pending slot is within the telescope");
                 // A form that can be synthesized takes its product *here* rather than at the item's drain, so the rest of the item sees a real type — a projection off the result would otherwise check against a metavariable that only settles after every expression around it.
-                let checked =
-                    match crate::settle_against(context, written, &slot_ty, SettleTier::Force)? {
-                        Some(settled) => settled,
-                        None => check(context, written, slot_ty)?,
-                    };
+                let checked = match settle_against(context, written, &slot_ty, SettleTier::Force)? {
+                    Some(settled) => settled,
+                    None => check(context, written, slot_ty)?,
+                };
                 context.solve_metavar(*placeholder, checked.clone());
                 elaborated[*slot] = checked;
             }

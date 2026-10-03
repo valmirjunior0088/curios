@@ -360,7 +360,7 @@ pub(super) fn lower_declaring(declared: &[&str], src: &str) -> Result<(), String
         &super::UnitSource::entry(&entrypoint, &loader).seeing(
             declared
                 .iter()
-                .map(|prefix| curios_utilities::Qualifier::from([*prefix]))
+                .map(|prefix| Qualifier::from([*prefix]))
                 .collect(),
         ),
         std::slice::from_ref(&&prepared),

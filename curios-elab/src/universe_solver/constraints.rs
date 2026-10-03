@@ -11,6 +11,7 @@
 //! Change detection therefore cannot read the journal's length, which does not count every rewrite. An [`Entropy`] counts them instead — monotonically, and independently of whether a pre-image was stored — and its count is what a [`StoreMark`] compares. That is the same currency the cache stamp above this store already ticks, rather than a second bespoke counter beside it.
 
 use {
+    super::{UniverseError, bare_meta},
     curios_core::{Level, LevelHead, UniverseConstraint, UniverseMetaId},
     curios_utilities::Entropy,
     std::collections::{BTreeMap, BTreeSet},
@@ -210,7 +211,7 @@ impl ConstraintStore {
         &mut self,
         head: LevelHead,
         solution: &Level,
-    ) -> Result<Vec<UniverseMetaId>, super::UniverseError> {
+    ) -> Result<Vec<UniverseMetaId>, UniverseError> {
         curios_profile::profile!("universe::substitute");
         let positions = self.mentioning(head).collect::<Vec<_>>();
         let mut floored = Vec::new();
@@ -238,7 +239,7 @@ impl ConstraintStore {
                 match lower.structurally_leq(&upper) {
                     true => {
                         if lower.atoms().next().is_none()
-                            && let Some(meta) = super::bare_meta(&upper)
+                            && let Some(meta) = bare_meta(&upper)
                         {
                             floored.push(meta);
                         }

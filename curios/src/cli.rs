@@ -1,13 +1,14 @@
 //! The clap command-line surface: the `Cli` root and its `Mode` subcommands. Parsing only — the dispatch on the parsed value lives in `main.rs`, and what a TARGET's help says is computed from its command's contract, so the help cannot describe an argument its command admits another way.
 
-#[cfg(feature = "profile")]
-use curios_profile::ROTATION_CAP;
 use {
     crate::{COMPILE, COST, DIAGNOSTICS, DOCUMENT, FORMAT, LINT, RUN, STAGE, TEST, TESTS},
     clap::{ArgGroup, Args, Parser, Subcommand, builder::PossibleValuesParser},
     curios_pipeline::Stage,
     std::{ffi::OsString, path::PathBuf, sync::LazyLock},
 };
+
+#[cfg(feature = "profile")]
+use curios_profile::ROTATION_CAP;
 
 /// [`curios_pipeline::Stage::NAMES`] joined with `, `, computed once on first use — `wonder stage`'s help text.
 static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(", "));

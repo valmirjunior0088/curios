@@ -20,7 +20,7 @@
 //! **Every file stands alone.** A rotation re-emits the header and every `D` row seen so far, so the surviving file is readable without the one that was discarded — which is the point of rotating rather than capping, since a hang's tail is what names the loop it is stuck in.
 
 use {
-    crate::{allocated_bytes, allocation_count, live_bytes, peak_bytes},
+    crate::{allocated_bytes, allocation_count, fold_at, live_bytes, peak_bytes},
     std::{
         collections::HashMap,
         fmt,
@@ -110,7 +110,7 @@ pub fn trace_build_script<T>(operation: impl FnOnce() -> T) -> T {
     )
     .expect("the build profile opens");
 
-    let report = crate::fold_at(&path).expect("the build profile folds");
+    let report = fold_at(&path).expect("the build profile folds");
     println!(
         "cargo:warning=build profile written to {} (peak {:.1} MiB)",
         path.display(),

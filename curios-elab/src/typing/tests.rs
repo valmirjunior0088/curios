@@ -2,7 +2,10 @@ use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_cert::{Kernel, carries_information},
-    curios_core::*,
+    curios_core::{
+        Free, Global, InductDecl, Intrinsic, Level, MetavarId, Subterm, Telescope, Term,
+        UniverseContext,
+    },
     curios_utilities::Qualifier,
 };
 

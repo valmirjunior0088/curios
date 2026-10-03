@@ -3,7 +3,10 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across `convert`, and nothing outside it.
 
 use {
-    crate::*, curios_analysis::test_support::SYNTAX, curios_core::*, curios_utilities::Qualifier,
+    crate::*,
+    curios_analysis::test_support::SYNTAX,
+    curios_core::{Free, FuncType, Global, Intrinsic, Nat, ReduceError, Subterm, Term},
+    curios_utilities::Qualifier,
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.

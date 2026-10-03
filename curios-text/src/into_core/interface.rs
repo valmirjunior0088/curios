@@ -1,5 +1,5 @@
 use {
-    super::{ModuleInfo, Scoped},
+    super::{ModuleInfo, Reach, Scoped, UnitSource},
     crate::{Error, GroupItem, Module, Name, TopItem, UseGroup},
     curios_utilities::{Mount, Qualifier},
     std::{
@@ -8,13 +8,16 @@ use {
     },
 };
 
+#[cfg(feature = "archive")]
+use crate::OrderedMap;
+
 // The export view of a module: public names only, each pointing at the canonical declaration site. Built to a fixed point before any body is elaborated.
 #[derive(Clone)]
 #[curios_archive::archived]
 pub(crate) struct PublicInterface {
-    #[archived_with(crate::OrderedMap)]
+    #[archived_with(OrderedMap)]
     pub children: HashMap<String, Entry>,
-    #[archived_with(crate::OrderedMap)]
+    #[archived_with(OrderedMap)]
     pub bindings: HashMap<String, Entry>,
 }
 
@@ -209,11 +212,11 @@ pub(crate) fn visible_binding(
 ///
 /// **One resolution for every unit.** What differs is which items are seeded at which prefix: the entry's at the empty qualifier, a mounted unit's under each prefix it claims — with the synthetic compilation root seeded empty in that case, since absolute references resolve through it even though it has no source items of its own. Each prefix takes an explicit `seed` call, since `seed`'s own recursion follows only the `TopItem::Mod` items it is handed.
 pub(super) fn resolve_unit<'a>(
-    source: &super::UnitSource<'_>,
+    source: &UnitSource<'_>,
     own: &[Mount],
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &mut Scoped<'_, ModuleInfo>,
-    reach: super::Reach<'_>,
+    reach: Reach<'_>,
     scope: Scoped<'a, PublicInterface>,
 ) -> Result<Scoped<'a, PublicInterface>, Error> {
     let mut public = scope;
@@ -407,7 +410,7 @@ fn seed(
 fn fixed_point(
     public: &mut Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
-    reach: super::Reach<'_>,
+    reach: Reach<'_>,
     pub_uses: &[PubUse],
 ) -> Result<(), Error> {
     loop {
@@ -435,7 +438,7 @@ fn fixed_point(
 fn resolvable(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
-    reach: super::Reach<'_>,
+    reach: Reach<'_>,
     use_: &PubUse,
 ) -> Vec<(Ns, String, Qualifier, Option<Qualifier>)> {
     let Some(provider) = provider(public, table, reach, &use_.module, &use_.name) else {
@@ -505,7 +508,7 @@ fn resolvable(
 fn provider(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
-    reach: super::Reach<'_>,
+    reach: Reach<'_>,
     module: &Qualifier,
     name: &Name,
 ) -> Option<Qualifier> {
@@ -541,7 +544,7 @@ fn insert(
 fn classify_dead(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
-    reach: super::Reach<'_>,
+    reach: Reach<'_>,
     pub_uses: &[PubUse],
 ) -> Result<(), Error> {
     for use_ in pub_uses {
@@ -591,7 +594,7 @@ fn classify_dead(
 fn classify_label(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
-    reach: super::Reach<'_>,
+    reach: Reach<'_>,
     pub_uses: &[PubUse],
     module: &Qualifier,
     ns: Ns,
@@ -623,7 +626,7 @@ fn classify_label(
 fn producer(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
-    reach: super::Reach<'_>,
+    reach: Reach<'_>,
     pub_uses: &[PubUse],
     module: &Qualifier,
     ns: Ns,
@@ -655,7 +658,7 @@ fn producer(
 fn resolve_provider(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
-    reach: super::Reach<'_>,
+    reach: Reach<'_>,
     module: &Qualifier,
     name: &Name,
 ) -> Result<Qualifier, Error> {

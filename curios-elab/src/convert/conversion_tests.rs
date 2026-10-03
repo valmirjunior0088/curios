@@ -4,7 +4,10 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::SYNTAX,
-    curios_core::*,
+    curios_core::{
+        Atom, Exhaustion, Free, InductDecl, InductParam, Intrinsic, Level, MetavarId, ReduceError,
+        Subterm, Telescope, Term, UniverseContext, UniverseMetaId, UniverseRole,
+    },
     curios_num::{Binary, Grain, Integer},
     curios_utilities::{Plicity, Qualifier},
 };

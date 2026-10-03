@@ -1,6 +1,6 @@
 //! Trailing commas across every comma list, and the comments a parse captures as a product.
 
-use {super::test_support::*, crate::*};
+use {super::test_support::*, crate::*, curios_utilities::Source};
 
 #[test]
 fn a_comment_banner_parses_without_native_recursion() {
@@ -203,7 +203,7 @@ fn backtracked_positions_record_a_comment_once() {
 
 #[test]
 fn entrypoint_parses_capture_tail_comments() {
-    let source = curios_utilities::Source::inline("let x : Nat = 5; -- item\nx -- tail\n");
+    let source = Source::inline("let x : Nat = 5; -- item\nx -- tail\n");
     let (_, comments) = Entrypoint::parse_with_comments(&source).expect("fixture parses");
     let texts = comments
         .iter()

@@ -11,6 +11,7 @@ pub(crate) mod test_support;
 
 use {
     super::{Context, Settled, levels_clash_on_a_decided_instance, zonk_solved_term_metas},
+    crate::{Error, convert_at, reduce_with},
     curios_analysis::could_reduce_to,
     curios_core::{
         Advance, Apply, Argument, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free,
@@ -62,10 +63,10 @@ impl Reducer for Context {
 ///
 /// Both methods are `typing`'s wrappers: they exist so a failure reaches the user as a spanned diagnostic naming the offending term rather than as a bare `ReduceError`, which is precisely the split [`Env::Error`](curios_analysis::Env::Error) formalizes.
 impl curios_analysis::Env for Context {
-    type Error = crate::Error;
+    type Error = Error;
 
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {
-        crate::reduce_with(self, term)
+        reduce_with(self, term)
     }
 
     fn assumption(&self, name: &Free) -> Option<&Term> {
@@ -97,7 +98,7 @@ impl curios_analysis::Env for Context {
 
 impl curios_analysis::Judge for Context {
     fn convert_at(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, Self::Error> {
-        crate::convert_at(self, type_, this, that)
+        convert_at(self, type_, this, that)
     }
 }
 

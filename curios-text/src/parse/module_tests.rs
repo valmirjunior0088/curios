@@ -1,6 +1,9 @@
 //! Modules, entrypoints, qualified paths, and the `use` forms that reach across them.
 
-use {crate::*, curios_utilities::Qualifier};
+use {
+    crate::*,
+    curios_utilities::{Qualifier, Span},
+};
 
 #[test]
 fn a_path_admits_no_whitespace_and_division_requires_it() {
@@ -407,7 +410,7 @@ fn a_use_selector_spans_its_word_and_the_declaration_spans_through_the_semicolon
         .collect::<Vec<_>>();
     assert_eq!(selectors, ["Nat", "Bool", "List"]);
 
-    let text = |span: &curios_utilities::Span| span.source.text[span.start..span.end].to_string();
+    let text = |span: &Span| span.source.text[span.start..span.end].to_string();
     assert_eq!(
         text(named.span.as_ref().unwrap()),
         "use /std/{ Nat , mod Bool, let List };"

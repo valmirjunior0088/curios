@@ -8,6 +8,7 @@
 
 use {
     super::{Atoms, Cost, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term},
+    crate::project_erased_universes,
     curios_algebra::{
         Cancelled, Combination, Deduction, Progress, Recombination, Summand, Wanted, distribute,
         distribution_size,
@@ -228,7 +229,7 @@ fn int_euclid_pair(
 
 /// Whether two monomials' factors are one multiset, a quotient matching a quotient on its dividend and divisor alone, as `Nat::same_monomial` compares them.
 fn int_same_factors(left: &[Term], right: &[Term]) -> bool {
-    let project = crate::project_erased_universes::<Term>;
+    let project = project_erased_universes::<Term>;
     let same = |left: &Term, right: &Term| match (&**left, &**right) {
         (
             Subterm::Intrinsic(Intrinsic::IntDiv {

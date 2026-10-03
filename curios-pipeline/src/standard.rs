@@ -7,9 +7,11 @@ mod tests;
 
 use {
     crate::{
-        Cache, Checked, CompileError, EntryTail, Progress, Stage, TestRecord, check_entrypoint,
-        compile_entrypoint, compile_unit_as_tests, compile_units, declared_test_paths, recheck,
+        Cache, Checked, CompileError, EntryTail, Examined, Progress, Refused, Stage, TestRecord,
+        Typechecked, check_entrypoint, compile_entrypoint, compile_unit_as_tests, compile_units,
+        declared_test_paths, examine_entrypoint, recheck, recheck_measured, typecheck_entrypoint,
     },
+    curios_abi::ForeignStore,
     curios_prelude::with_prelude,
     curios_text::{RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
@@ -24,7 +26,7 @@ pub fn compile_with_prelude<O>(
     entrypoint: &curios_text::Entrypoint,
     loader: &curios_text::RootSource,
     observe: O,
-) -> Result<(curios_wasm::Module, curios_abi::ForeignStore), CompileError>
+) -> Result<(curios_wasm::Module, ForeignStore), CompileError>
 where
     O: FnMut(Stage<'_>),
 {
@@ -60,7 +62,7 @@ impl<'a> Fold<'a> {
         loader: &RootSource,
         observe: O,
         progress: P,
-    ) -> Result<(curios_wasm::Module, curios_abi::ForeignStore), CompileError>
+    ) -> Result<(curios_wasm::Module, ForeignStore), CompileError>
     where
         O: FnMut(Stage<'_>),
         P: FnMut(Progress<'_>),
@@ -85,14 +87,7 @@ impl<'a> Fold<'a> {
         tail: EntryTail,
         observe: O,
         progress: P,
-    ) -> Result<
-        (
-            curios_wasm::Module,
-            curios_abi::ForeignStore,
-            Vec<TestRecord>,
-        ),
-        CompileError,
-    >
+    ) -> Result<(curios_wasm::Module, ForeignStore, Vec<TestRecord>), CompileError>
     where
         O: FnMut(Stage<'_>),
         P: FnMut(Progress<'_>),
@@ -264,9 +259,9 @@ pub fn typecheck_with_prelude(
     budget: u64,
     entrypoint: &curios_text::Entrypoint,
     loader: &curios_text::RootSource,
-) -> Result<crate::Typechecked, crate::Refused> {
+) -> Result<Typechecked, Refused> {
     with_prelude(|prelude| {
-        crate::typecheck_entrypoint(
+        typecheck_entrypoint(
             budget,
             Predecessors::over(prelude),
             &SYNTAX,
@@ -281,9 +276,9 @@ pub fn examine_with_prelude(
     budget: u64,
     entrypoint: &curios_text::Entrypoint,
     loader: &curios_text::RootSource,
-) -> Result<crate::Examined, crate::Refused> {
+) -> Result<Examined, Refused> {
     with_prelude(|prelude| {
-        crate::examine_entrypoint(
+        examine_entrypoint(
             budget,
             Predecessors::over(prelude),
             &SYNTAX,
@@ -298,9 +293,7 @@ pub fn recheck_with_prelude_measured(
     program: &curios_core::Zonked<curios_core::Program>,
     budget: u64,
 ) -> (Vec<curios_cert::Verdict>, curios_cert::Kernel) {
-    with_prelude(|prelude| {
-        crate::recheck_measured(program, budget, Predecessors::over(prelude), &SYNTAX)
-    })
+    with_prelude(|prelude| recheck_measured(program, budget, Predecessors::over(prelude), &SYNTAX))
 }
 
 /// Put `program` to the independent kernel with the fixed prelude in scope. See [`recheck`].

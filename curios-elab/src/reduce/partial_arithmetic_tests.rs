@@ -5,7 +5,7 @@
 use {
     super::test_support::{context, qed},
     crate::*,
-    curios_core::*,
+    curios_core::{Intrinsic, Nat, ReduceError, Subterm, Term, Var},
     curios_num::{Floating, Integer},
 };
 

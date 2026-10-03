@@ -1,7 +1,7 @@
 //! The `document` engine: a unit's interface as a [`Documentation`] record, read off the unit the compilation builds — what a `wonder document` transport would print. Nothing executes, and the store is read as every query reads it and never written; `curios document` is a build, and reads the same record off a compilation that files what it compiled, in `curios`'s pipeline. [`std_documentation`] is the same record read off the standard library this compiler was built with, which is how `curios document --std` documents it: it has no package a build would compile it from, and the prelude every compilation starts from already carries its record.
 
 use {
-    crate::ReadOnly,
+    crate::{ReadOnly, overlaid},
     curios_document::Documentation,
     curios_pipeline::{Cache, CompileError, DEFAULT_STEP_BUDGET, Fold},
     curios_text::{Overlay, RootSource},
@@ -42,7 +42,7 @@ pub fn documentation(
 ) -> Result<Documentation, CompileError> {
     let read_only = cache.map(|cache| ReadOnly { cache, overlay });
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
-    let units = crate::overlaid(units, overlay);
+    let units = overlaid(units, overlay);
 
     Fold::new(budget, &units, cache).units(
         |_| {},

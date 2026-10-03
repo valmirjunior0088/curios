@@ -498,7 +498,7 @@ pub enum Error {
     /// Two witnesses registered under the same `(concept, key)` — global coherence admits exactly one witness per key, program-wide.
     DuplicateWitness {
         concept: Global,
-        key: super::WitnessKey,
+        key: WitnessKey,
         /// The two declaring modules. Witnesses are anonymous, so the module is the coordinate that locates them for a reader — carried from each declaration's `island` rather than recovered by splitting the compiler-minted name.
         first: Qualifier,
         second: Qualifier,
@@ -506,7 +506,7 @@ pub enum Error {
     /// A witness registered by a root that owns neither the concept nor any key head's declaring root — the orphan rule: a coherence-relevant registration must happen where the concept or a type it mentions is already declared, so two unrelated roots cannot independently `satisfy` the same concept+type and collide unfixably downstream.
     OrphanWitness {
         concept: Global,
-        key: super::WitnessKey,
+        key: WitnessKey,
         /// The declaring module — see [`Error::DuplicateWitness`].
         witness: Qualifier,
     },
@@ -1147,7 +1147,7 @@ impl Error {
 
     pub(crate) fn duplicate_witness(
         concept: Global,
-        key: super::WitnessKey,
+        key: WitnessKey,
         first: Qualifier,
         second: Qualifier,
     ) -> Self {
@@ -1159,11 +1159,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn orphan_witness(
-        concept: Global,
-        key: super::WitnessKey,
-        witness: Qualifier,
-    ) -> Self {
+    pub(crate) fn orphan_witness(concept: Global, key: WitnessKey, witness: Qualifier) -> Self {
         Self::OrphanWitness {
             concept,
             key,

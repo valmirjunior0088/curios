@@ -6,7 +6,7 @@ use {
     crate::{
         Atom, Bound, CalleeId, Free, Global, Label, Level, Many, Scope, Subterm, Telescope, Term,
         Three, Two, UniverseContext, UniverseError, UniverseScheme, Var, Visit,
-        instantiate_universe_levels_scoped,
+        instantiate_universe_levels_scoped, project_erased_universes,
     },
     curios_num::{Grain, Natural},
     curios_utilities::{InfixOp, Mint, Plicity, Sign},
@@ -598,7 +598,7 @@ impl RecGroup {
 
     /// This group with universe data projected out of every member and its context cleared — the shape under which a generalized group and any instance of it are one group, which is what lets a diagnostic recognize an unfolded `rec` as the definition it came from.
     pub fn projected(&self) -> Self {
-        self.map_members(crate::project_erased_universes)
+        self.map_members(project_erased_universes)
             .with_universe_context(UniverseContext::empty())
     }
 

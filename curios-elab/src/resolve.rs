@@ -11,9 +11,11 @@
 
 use {
     super::{
-        Callee, Context, EmbeddingDiagnosis, Error, HeadKey, ItemStamp, Outcome, ParkedProblem,
-        ParkedWork, ShapeDiagnosis, Witness, WitnessKey, convert_outcome, reduce_with,
+        Callee, Context, EmbeddingDiagnosis, Error, FrozenFrame, HeadKey, ItemStamp, Outcome,
+        ParkedProblem, ParkedWork, ShapeDiagnosis, Witness, WitnessKey, attempt_discharge,
+        convert_outcome, reduce_with, resolved_for_display,
     },
+    crate::{SlotPositions, is_prop, premise_label},
     curios_core::{
         Advance, CalleeId, ConceptDecl, Enter, Field, Free, Global, ImplicitOrigin, Instance,
         InstanceHead, Level, Metavar, MetavarId, StructType, Subterm, Term, UniverseContext,
@@ -45,7 +47,7 @@ pub(crate) struct DeferredRefusal {
 
 /// Best-effort display form of a goal for diagnostics — the renderer every mismatch report uses (`resolved_for_display`), so a goal is spelled as the rest of the reports spell a type. A bare strict zonk would render a nominal type through its recursive-group projection — `no witness of Spell(rec #0: Type = Opaque; #0) found` — because a zonked solution spells a stuck recursive call as the `Rec` node itself until the refold gives it back its name.
 fn display_goal(context: &mut Context, goal: &Term) -> Term {
-    super::resolved_for_display(context, goal)
+    resolved_for_display(context, goal)
 }
 
 /// Read an insertion provenance back into who it names ([`Callee`]). The discrimination is the [`CalleeId`]'s own, so this is a total match rather than a parse: an operator carries its [`InfixOp`](curios_utilities::InfixOp), and a witness carries the identity the coherence table is keyed by, which the report renames to a concept and key. Error-path only: the witness lookup scans the table.
@@ -618,7 +620,7 @@ fn instantiate(
             let mut args: Vec<(Plicity, Term)> = Vec::with_capacity(ft.plicities().len());
             let mut premises: Vec<(MetavarId, Term, WitnessOrigin)> = Vec::new();
             let mut bounds: Vec<(MetavarId, Term, ImplicitOrigin)> = Vec::new();
-            let mut positions = crate::SlotPositions::default();
+            let mut positions = SlotPositions::default();
             let mut cursor = ft.telescope.cursor();
             for plicity in ft.plicities() {
                 let (hint, ty) = cursor.entry().expect("plicities parallel the telescope");
@@ -626,8 +628,8 @@ fn instantiate(
                 let binder = hint.unwrap_or("_").to_string();
                 let arg = match plicity {
                     Plicity::Implicit => {
-                        let proposition = curios_core::Probe::probed(crate::is_prop(context, &ty))?
-                            .unwrap_or(false);
+                        let proposition =
+                            curios_core::Probe::probed(is_prop(context, &ty))?.unwrap_or(false);
                         let provenance = ImplicitOrigin {
                             func: CalleeId::Witness(witness.name),
                             binder,
@@ -647,7 +649,7 @@ fn instantiate(
                     Plicity::Witness => {
                         let provenance = WitnessOrigin {
                             func: CalleeId::Witness(witness.name),
-                            binder: crate::premise_label(position),
+                            binder: premise_label(position),
                         };
                         let (id, metavar) = context.fresh_witness_metavar(
                             ty.clone(),
@@ -707,9 +709,7 @@ fn instantiate(
     }
     // A bound in the telescope is decided by the parameters the goal just pinned, so it is tried only now; one still waiting on a metavariable is parked like a premise on a flex key.
     for (slot, bound, provenance) in bounds {
-        if super::attempt_discharge(context, slot, &bound, &provenance)?
-            && !context.parking_suppressed()
-        {
+        if attempt_discharge(context, slot, &bound, &provenance)? && !context.parking_suppressed() {
             context.park(
                 ParkedWork::Discharge {
                     slot,
@@ -785,7 +785,7 @@ pub(crate) fn retry_witness(
     goal: Term,
     provenance: WitnessOrigin,
     origin: Term,
-    frame: super::FrozenFrame,
+    frame: FrozenFrame,
 ) -> Result<(), Error> {
     let resolution =
         context.with_retry_frame(&frame, |context| resolve_witness(context, &goal, &origin))?;

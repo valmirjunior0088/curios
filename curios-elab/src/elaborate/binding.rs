@@ -1,9 +1,9 @@
 use {
     super::{check_witness_domain, insert_auto_argument},
     crate::{
-        Context, DomainScope, Error, HeadKey, Mode, ParkedWork, SlotPositions, WitnessKey,
-        attempt_witness_goal, check, convert, display_mismatch, elaborate, expect, reduce_with,
-        zonk_solved_term_metas,
+        Context, DomainScope, EmbeddingSite, Error, HeadKey, Mode, ParkedWork, SlotPositions,
+        WitnessKey, attempt_witness_goal, check, check_is_sort, check_rec_totality, convert,
+        display_mismatch, elaborate, expect, reduce_with, written_monad, zonk_solved_term_metas,
     },
     curios_core::{
         Advance, Bang, Bound, CalleeId, Free, Func, Global, Infix, Intrinsic, Let, Metavar,
@@ -41,7 +41,7 @@ pub(super) fn elaborate_let(
                 }
                 // The body is checked against — and the binder assumed at — the *rebuilt* annotation: insertion saturates applications during elaboration, and a lowered (under-applied) type reaching the reducer would open a telescope at the wrong arity.
                 _ => {
-                    let type_elaborated = crate::check_is_sort(context, &type_)?.0;
+                    let type_elaborated = check_is_sort(context, &type_)?.0;
                     let body_elaborated = check(context, &body, type_elaborated.clone())?;
                     (type_elaborated, body_elaborated)
                 }
@@ -98,7 +98,7 @@ pub(super) fn elaborate_rec(
 
         let mut types_elaborated = Vec::with_capacity(items.len());
         for (type_, _) in &items {
-            types_elaborated.push(crate::check_is_sort(context, type_)?.0);
+            types_elaborated.push(check_is_sort(context, type_)?.0);
         }
 
         // Upgrade the assumptions to the *rebuilt* signatures before any body is checked: a lowered (under-applied) type reaching the reducer would open a telescope at the wrong arity.
@@ -156,7 +156,7 @@ pub(super) fn elaborate_rec(
             .hint_iter()
             .map(|hint| hint.unwrap_or("_").to_string())
             .collect::<Vec<_>>();
-        crate::check_rec_totality(context, &group, &names)?;
+        check_rec_totality(context, &group, &names)?;
         for (index, (label, type_)) in labels.iter().zip(&types_elaborated).enumerate() {
             context.reassume(label, type_);
             context.define(label, &Term::rec_proj(group.clone(), index), None);
@@ -636,12 +636,12 @@ fn lift_wrapped(context: &Context, action: &Term, fallback: Option<Span>) -> Ter
 
 /// Record what an auto-lift names as written, for the report on a missing embedding — see [`EmbeddingSite`](crate::EmbeddingSite). A region that applies no name records nothing: a nominal region, `Job(A)`, is spelled by its reduced form already.
 fn note_embedding_site(context: &mut Context, wrapped: &Term, action: &Term, region: &Term) {
-    let (Some(span), Some(region)) = (wrapped.span(), crate::written_monad(region)) else {
+    let (Some(span), Some(region)) = (wrapped.span(), written_monad(region)) else {
         return;
     };
     context.note_embedding_site(
         span,
-        crate::EmbeddingSite {
+        EmbeddingSite {
             action: action.clone(),
             region,
         },
@@ -1078,7 +1078,7 @@ pub(super) fn elaborate_func_check(
                     let e_plicity = e_plicities[e_idx];
                     if w_plicity == e_plicity {
                         // Consume both. Unify the *rebuilt* written annotation against the expected domain (`expect` reduces both sides; an omitted annotation is a hole `check` births and `expect` solves to the expected domain).
-                        let w_domain = crate::check_is_sort(context, &w_domain)?.0;
+                        let w_domain = check_is_sort(context, &w_domain)?.0;
                         expect(context, term, &w_domain, &e_domain)?;
                         let name = context.fresh_for(w_hint, written.written());
                         let x = Term::free_var(&name);
@@ -1130,7 +1130,7 @@ pub(super) fn elaborate_func_infer(
         let mut cursor = telescope.cursor();
 
         while let Some((hint, domain)) = cursor.entry() {
-            let domain = crate::check_is_sort(context, &domain)?.0;
+            let domain = check_is_sort(context, &domain)?.0;
 
             // A domain nothing pins is refused here rather than left to fail obscurely downstream — but only a silent hole is: a written `?` domain is the author asking what the domain is, and it rides on to zonk's report (`MetavarOrigin` states the rule). A settle tier instead admits the hole as a named domain metavariable, per the function's contract above.
             let reduced = reduce_with(context, &domain)?;

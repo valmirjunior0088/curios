@@ -1,6 +1,11 @@
 //! Imitation against an inductive, a struct and an intrinsic former, and the arities that block it.
 
-use {super::test_support::*, crate::*, curios_core::*, curios_utilities::Qualifier};
+use {
+    super::test_support::*,
+    crate::*,
+    curios_core::{InductDecl, Intrinsic, MetavarId, StructDecl, Telescope, Term, UniverseContext},
+    curios_utilities::Qualifier,
+};
 
 // === Flex-apply imitation (higher-kinded metavariables) =====================
 

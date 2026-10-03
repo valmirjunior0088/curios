@@ -1,8 +1,8 @@
 use {
     super::{FieldSource, check_dependent_fields, park_checking},
     crate::{
-        Context, Error, FrozenFrame, Mode, ParkedProjection, ParkedWork, check, elaborate, expect,
-        reduce_with, sort_term,
+        Context, Error, FrozenFrame, Mode, ParkedProjection, ParkedWork, check, check_is_sort,
+        elaborate, expect, fill_placeholder, reduce_with, sort_term, stuck_on_metavar,
     },
     curios_core::{
         Bound, Field, InductType, Proj, SelfReference, StructType, Subterm, Telescope, Term, Tuple,
@@ -28,7 +28,7 @@ pub(super) fn elaborate_tuple_type(
     let mut fields = Vec::new();
     context.with_frame(|context| {
         tt.telescope.walk_producing(|_, hint, ty| {
-            let field = crate::check_is_sort(context, &ty)?.0;
+            let field = check_is_sort(context, &ty)?.0;
             let name = context.fresh(hint);
             let x = Term::free_var(&name);
             // The *rebuilt* field type, as in `elaborate_func_type`.
@@ -83,7 +83,7 @@ pub(super) fn elaborate_tuple(
             return Ok((rebuilt, inferred));
         }
         // Not a tuple type *yet*. An expectation stuck on an unsolved metavariable has decided nothing — `Count(?L)`, a description-indexed payload waiting on its index — so refusing here would refuse one step before the turnaround that solves it.
-        _ if !context.parking_suppressed() && crate::stuck_on_metavar(context, &reduced) => {
+        _ if !context.parking_suppressed() && stuck_on_metavar(context, &reduced) => {
             return park_checking(context, term, &expected);
         }
         _ => {
@@ -130,7 +130,7 @@ pub(super) fn elaborate_proj(
     let head_type = reduce_with(context, &head_type)?;
 
     // Not a tuple or a struct *yet*: a head type stuck on an unsolved metavariable has decided nothing, and what decides it — tuple arms parked against an unannotated match's type, which the drain settles — may still be coming. The projection waits for it rather than refusing one step early.
-    if !context.parking_suppressed() && crate::stuck_on_metavar(context, &head_type) {
+    if !context.parking_suppressed() && stuck_on_metavar(context, &head_type) {
         return Ok(park_projection(
             context,
             head,
@@ -176,7 +176,7 @@ pub(crate) fn retry_projection(
 ) -> Result<(), Error> {
     let projected = context.with_retry_frame(&frame, |context| -> Result<Option<Term>, Error> {
         let head_type = reduce_with(context, &parked.head_type)?;
-        if crate::stuck_on_metavar(context, &head_type) {
+        if stuck_on_metavar(context, &head_type) {
             return Ok(None);
         }
         let (projection, field_type) =
@@ -187,7 +187,7 @@ pub(crate) fn retry_projection(
     })?;
 
     match projected {
-        Some(projection) => crate::fill_placeholder(
+        Some(projection) => fill_placeholder(
             context,
             parked.placeholder,
             &parked.result,

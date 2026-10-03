@@ -7,8 +7,8 @@
 use {
     super::{ReifyBudget, ReifyScope, Value, copy_weight, deep_copy_function, reify, reify_check},
     crate::{
-        Analysis, Atom, BlockId, Function, FunctionId, Module, Rhs, Statement, StatementId,
-        Terminator, ValueId, control_blocks,
+        Analysis, Atom, BlockId, ConstructorId, Function, FunctionId, Module, Rhs, Statement,
+        StatementId, Terminator, ValueId, control_blocks,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -525,7 +525,7 @@ fn resolve_construct(
     def_index: &BTreeMap<ValueId, StatementId>,
     atom: Atom,
     budget: &mut usize,
-) -> Option<(crate::ConstructorId, Vec<Atom>)> {
+) -> Option<(ConstructorId, Vec<Atom>)> {
     let mut current = atom;
     loop {
         if *budget == 0 {

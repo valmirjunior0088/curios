@@ -113,7 +113,7 @@ fn check_telescope_entries<B: Bound>(
     let mut entries = Vec::new();
     let mut cursor = telescope.cursor();
     while let Some((_, ty)) = cursor.entry() {
-        let rebuilt = crate::check_is_sort(context, &ty)?.0;
+        let rebuilt = check_is_sort(context, &ty)?.0;
         let label = cursor.advance_fresh(|hint| context.fresh(hint));
         assume_entry(context, &label, &rebuilt, plicity(entries.len()));
         entries.push((label, rebuilt));
@@ -298,8 +298,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
                 .take(induct_decl.param_count())
                 .map(|(binder, _)| Term::free_var(binder))
                 .collect::<Vec<_>>();
-            let constructed =
-                crate::check_is_sort(context, &Term::induct_type(*name, params, targets))?.0;
+            let constructed = check_is_sort(context, &Term::induct_type(*name, params, targets))?.0;
 
             match &*constructed {
                 Subterm::InductType(constructed) => {
@@ -716,7 +715,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     let name = Free::from(&def.name);
     let outer_site = context.set_checked_site(&format!("'{}'", def.name));
     check_written_type_totality(context, &def.type_, &format!("the type of '{}'", def.name))?;
-    let type_ = crate::check_is_sort(context, &def.type_)?.0;
+    let type_ = check_is_sort(context, &def.type_)?.0;
 
     // A witness declaration registers into the program-wide table as soon as its signature is known — *before* its body elaborates, so a recursive witness (a `Show(Tree)` whose fields show subtrees) can resolve through its own entry.
     if context.is_witness_declaration(&def.name) {
@@ -814,7 +813,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         check_written_type_totality(context, &def.type_, &format!("the type of '{}'", def.name))?;
         // A member's type is that member's own: a proof written in it credits the member's binders, not those of the member the item was entered at.
         context.enter_declaration(Some(def.name));
-        types.push(crate::check_is_sort(context, &def.type_)?.0);
+        types.push(check_is_sort(context, &def.type_)?.0);
     }
 
     // Upgrade the assumptions to the *rebuilt* signatures before any body is checked (see `elaborate_rec`): a lowered (under-applied) type must not leak into later reduction. The lowered forms were only needed above, while the signatures checked each other.

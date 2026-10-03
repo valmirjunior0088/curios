@@ -6,8 +6,8 @@
 
 use {
     super::{
-        Analysis, Atom, BlockId, FunctionId, Intrinsic, LocalBehavior, Module, ProductId, Rhs,
-        Semantics, Statement, ValueId,
+        Analysis, Atom, BlockId, FunctionId, Intrinsic, LocalBehavior, Module, ObservableBehavior,
+        ProductId, Rhs, Semantics, Statement, ValueId,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -42,7 +42,7 @@ impl Summary {
                 && !module.function(id).is_some_and(|function| function.total);
             let seed = if recursive {
                 LocalBehavior {
-                    observable: super::ObservableBehavior::none().with_divergence(),
+                    observable: ObservableBehavior::none().with_divergence(),
                     ..LocalBehavior::pure()
                 }
             } else {

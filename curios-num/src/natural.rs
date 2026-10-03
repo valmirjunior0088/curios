@@ -11,13 +11,16 @@ use {
     },
 };
 
+#[cfg(feature = "archive")]
+use crate::BigUintBytes;
+
 /// A type-level natural. Unbounded — the type level pretends ℕ, the way [`Integer`](crate::Integer) pretends ℤ; the running program is unbounded too, an i31 while a value is small and a boxed magnitude past it.
 ///
 /// The wrapped magnitude is private, which is the point: this crate is the only one that names `num-bigint`, so a consumer reaches ℕ through the operations below rather than through a bignum type it would have to depend on. The operations the *erased* stages fold with — [`Natural::mul_within`] and its siblings — impose no width either: a growing operation takes an allowance from its caller and declines past it, because how large a numeral is worth building is a fact about a stage's resources rather than about ℕ.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
 pub struct Natural {
-    #[archived_with(crate::BigUintBytes)]
+    #[archived_with(BigUintBytes)]
     value: BigUint,
 }
 

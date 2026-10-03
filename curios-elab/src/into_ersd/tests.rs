@@ -2,7 +2,12 @@ use {
     crate::{reduce::test_support::qed, *},
     curios_abi::{ForeignFunction, HostOp},
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Program, Zonked, *},
+    curios_core::{
+        Atom, Certification, Certified, Definition, DefinitionKind, Entrypoint, Free, Global,
+        InductDecl, InductParam, Intrinsic, Item, Level, Module, Nat, Program, RecItem, StructDecl,
+        StructType, Subterm, Telescope, Term, Totality, UniverseContext, UniverseMetaId,
+        UniverseParam, Zonkable, Zonked, project_erased_universes,
+    },
     curios_ersd::{FieldShape, test_support::shape},
     curios_utilities::{Plicity, Qualifier},
     std::{

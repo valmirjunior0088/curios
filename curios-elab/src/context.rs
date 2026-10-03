@@ -16,8 +16,9 @@ mod tests;
 use {
     super::{
         Error, HeadKey, Provenance, UniverseMark, UniverseSolver, UniverseStateToken, Witness,
-        WitnessKey,
+        WitnessKey, zonk_universe_levels_scoped,
     },
+    crate::{Refusal, levels_clash_on_a_decided_instance, zonk_solved_term_metas},
     curios_core::{
         Advance, Bound, ConceptDecl, Consumption, Cost, DefinitionKind, Free, Global, HeadTag,
         ImplicitOrigin, Imports, InductDecl, Level, Metavar, MetavarId, MetavarOrigin, Probe,
@@ -1062,7 +1063,7 @@ impl Context {
     pub(crate) fn proj_reduct(&self, base: &Term, index: usize) -> Option<&Term> {
         let entry = self.frames.projection_entry(base, index)?;
 
-        match crate::levels_clash_on_a_decided_instance(self, base, &entry.original) {
+        match levels_clash_on_a_decided_instance(self, base, &entry.original) {
             Ok(false) => Some(&entry.value),
             Ok(true) | Err(_) => None,
         }
@@ -1103,7 +1104,7 @@ impl Context {
     pub(crate) fn scrutinee_reduct(&self, canonical: &Term, probe: &Term) -> Option<&Term> {
         let entry = self.frames.scrutinee_entry(canonical)?;
 
-        match crate::levels_clash_on_a_decided_instance(self, probe, &entry.original) {
+        match levels_clash_on_a_decided_instance(self, probe, &entry.original) {
             Ok(false) => Some(&entry.value),
             Ok(true) | Err(_) => None,
         }
@@ -1520,7 +1521,7 @@ impl Context {
     }
 
     /// Record why the procedure that proves a bound from the facts in scope proved nothing, for the report the hole becomes.
-    pub(crate) fn note_refusal(&mut self, id: MetavarId, refusal: crate::Refusal) {
+    pub(crate) fn note_refusal(&mut self, id: MetavarId, refusal: Refusal) {
         self.solutions.note_refusal(id, refusal);
     }
 
@@ -1657,7 +1658,7 @@ impl Context {
         let entries = outer
             .spine
             .iter()
-            .map(|entry| crate::zonk_solved_term_metas(self, entry))
+            .map(|entry| zonk_solved_term_metas(self, entry))
             .collect::<Vec<_>>();
         if entries
             .iter()
@@ -1926,7 +1927,7 @@ impl Context {
         let solver = self.universe_solver.clone();
         let terms = terms
             .iter()
-            .map(|term| super::zonk_universe_levels_scoped(*term, &solver).map_err(Error::from))
+            .map(|term| zonk_universe_levels_scoped(*term, &solver).map_err(Error::from))
             .collect::<Result<Vec<_>, _>>()?;
         self.caches.invalidate_for_universe_rewrite();
         Ok(terms)
@@ -1978,7 +1979,7 @@ impl Context {
     }
 
     pub(crate) fn zonk_universe_levels<B: Bound>(&self, value: &B) -> Result<B, Error> {
-        super::zonk_universe_levels_scoped(value, &self.universe_solver).map_err(Error::from)
+        zonk_universe_levels_scoped(value, &self.universe_solver).map_err(Error::from)
     }
 
     // === Parked constraints ============================================

@@ -15,9 +15,10 @@ mod tests;
 
 use {
     super::{
-        Atom, BlockId, CellOperation, ChannelOperation, Constant, ConstructorId, FamilyId, Field,
-        FieldShape, ForeignId, FunctionId, Intrinsic, Module, Operation, ProductId, Rhs,
-        SequenceGrain, SequenceOp, Statement, StatementId, Terminator, ValueId,
+        Analysis, Atom, BlockId, CellOperation, ChannelOperation, Constant, ConstructorId,
+        FamilyId, Field, FieldShape, ForeignId, FunctionId, Intrinsic, Module, Operation,
+        ProductId, RecValue, Rhs, SequenceGrain, SequenceOp, Statement, StatementId, Terminator,
+        ValueId,
     },
     curios_num::{Grain, Rounding},
     std::{
@@ -29,7 +30,7 @@ use {
 impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let reach = Reach::of(self);
-        let uses = super::Analysis::analyze(self);
+        let uses = Analysis::analyze(self);
         Printer {
             module: self,
             reach: &reach,
@@ -267,7 +268,7 @@ enum Job {
 struct Printer<'m, 'a, 'f, 'o> {
     module: &'m Module,
     reach: &'a Reach,
-    uses: &'a super::Analysis,
+    uses: &'a Analysis,
     out: &'f mut fmt::Formatter<'o>,
 }
 
@@ -428,7 +429,7 @@ impl Printer<'_, '_, '_, '_> {
         sequence: &mut Vec<Job>,
         first: &'static str,
         functions: &[FunctionId],
-        values: &[super::RecValue],
+        values: &[RecValue],
     ) {
         let total = functions.len() + values.len();
         let mut emitted = 0;

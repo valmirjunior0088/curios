@@ -3,7 +3,10 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_core::*,
+    curios_core::{
+        Atom, Exhaustion, InductDecl, InductParam, Intrinsic, Many, MetavarId, Scope, StructDecl,
+        Telescope, Term, UniverseContext,
+    },
     curios_utilities::{Plicity, Qualifier},
 };
 

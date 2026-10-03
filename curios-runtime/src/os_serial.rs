@@ -6,10 +6,6 @@
 //!
 //! **Closing a port discards what it has not sent.** Left to itself, Linux holds the last close of a serial device until its output has drained — thirty seconds by default when the device takes none — whatever the descriptor's flags, and macOS discards the output of a non-blocking one instead; neither is a close that never waits and loses nothing. So the port drops its unsent output as it closes, which bounds the kernel's wait to what the hardware already holds, and the wait a program wants is `serial_drain`'s: `tcdrain` on a thread of its own, signalling a pipe the scheduler polls, as `os_child` reaps a child. One thread per drain under way is the native host's cost for a wait neither system offers without blocking.
 
-#[cfg(target_os = "linux")]
-use std::{collections::HashMap, io::ErrorKind, path::PathBuf};
-#[cfg(not(target_os = "linux"))]
-use std::{ffi::c_ulong, os::unix::ffi::OsStrExt};
 use {
     super::{Failure, SerialOp, failure_from_error},
     rustix::{
@@ -33,6 +29,11 @@ use {
         thread,
     },
 };
+
+#[cfg(target_os = "linux")]
+use std::{collections::HashMap, io::ErrorKind, path::PathBuf};
+#[cfg(not(target_os = "linux"))]
+use std::{ffi::c_ulong, os::unix::ffi::OsStrExt};
 
 // The modem-line ioctls rustix does not wrap. Linux numbers its generic tty ioctls by hand, and both release architectures use these two; macOS keeps the BSD family's encoded ones, spelled as its header defines them, `_IOW('t', 108, int)` and `_IOW('t', 107, int)`. The line bits agree across all of them.
 #[cfg(target_os = "linux")]
