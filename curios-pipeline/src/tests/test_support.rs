@@ -8,7 +8,7 @@ use {
     curios_elab::{Context, Resumed, erase_program},
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, LintKind, RootSource, UnitSource},
-    curios_unit::{Prefix, Unit},
+    curios_unit::{Predecessors, Unit},
     curios_utilities::{RootKind, test_support::Temporary},
     std::fs,
 };
@@ -65,7 +65,7 @@ pub(super) fn typecheck(source: &str) -> Result<(), String> {
     with_prelude(|prelude| {
         crate::elaborate_and_zonk(
             DEFAULT_STEP_BUDGET,
-            Prefix::over(prelude),
+            Predecessors::over(prelude),
             &SYNTAX,
             &entrypoint,
             &RootSource::none(),
@@ -85,7 +85,7 @@ pub(super) fn erase_to_ersd(source: &str) -> curios_ersd::Module {
     let (program, _foreigns, _records) = with_prelude(|prelude| {
         crate::elaborate_and_zonk(
             DEFAULT_STEP_BUDGET,
-            Prefix::over(prelude),
+            Predecessors::over(prelude),
             &SYNTAX,
             &entrypoint,
             &RootSource::none(),
@@ -96,10 +96,10 @@ pub(super) fn erase_to_ersd(source: &str) -> curios_ersd::Module {
     .unwrap();
     let program = curios_core::Zonked::project(&program).expect("the elaborated program is zonked");
     with_prelude(|prelude| {
-        let scope = Prefix::over(prelude);
+        let predecessors = Predecessors::over(prelude);
         erase_program(
             &mut Context::with_default_budget(SYNTAX),
-            Resumed::of(&scope.cores(), scope.arena()),
+            Resumed::of(&predecessors.cores(), predecessors.arena()),
             &program,
         )
     })
@@ -139,13 +139,13 @@ pub(crate) fn compile_with_units(
             .collect::<Vec<_>>();
         let produced = compile_units(
             DEFAULT_STEP_BUDGET,
-            Prefix::over(prelude),
+            Predecessors::over(prelude),
             &SYNTAX,
             &sources,
             None,
             |_| {},
         )?;
-        let scope = prelude
+        let predecessors = prelude
             .iter()
             .copied()
             .chain(produced.iter())
@@ -153,7 +153,7 @@ pub(crate) fn compile_with_units(
 
         compile_entrypoint(
             DEFAULT_STEP_BUDGET,
-            Prefix::over(&scope),
+            Predecessors::over(&predecessors),
             &SYNTAX,
             &entry,
             &RootSource::none(),
@@ -219,7 +219,7 @@ pub(super) fn compile_modules(modules: &RootSource) -> Result<Unit, String> {
     with_prelude(|prelude| {
         compile_units(
             DEFAULT_STEP_BUDGET,
-            Prefix::over(prelude),
+            Predecessors::over(prelude),
             &SYNTAX,
             &[(UnitSource::mounted(modules), None)],
             None,
@@ -235,7 +235,7 @@ pub(super) fn compile_in_order(sources: &[&RootSource]) -> Vec<Unit> {
     with_prelude(|prelude| {
         compile_units(
             DEFAULT_STEP_BUDGET,
-            Prefix::over(prelude),
+            Predecessors::over(prelude),
             &SYNTAX,
             &sources
                 .iter()
@@ -253,7 +253,7 @@ pub(super) fn recompile_modules(modules: &RootSource, baseline: &Unit) -> Result
     with_prelude(|prelude| {
         compile_unit_over(
             DEFAULT_STEP_BUDGET,
-            Prefix::over(prelude),
+            Predecessors::over(prelude),
             &SYNTAX,
             &UnitSource::mounted(modules),
             baseline,

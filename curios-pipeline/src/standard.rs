@@ -1,6 +1,6 @@
 //! The fold with the fixed prelude in front of it.
 //!
-//! **The scope-agnostic half is [`compile_entrypoint`], and it stays that way.** It takes a [`Prefix`] and cannot tell which unit is `/std`; nothing here changes that, and nothing there calls anything here. What this module adds is the *standard* prefix — the one every product puts in scope — so that the answer to "what does a Curios program get for free" is written once rather than by the native product, the browser product and this crate's own tests each. A product may still hand the fold any prefix it likes.
+//! **The half that knows no particular predecessors is [`compile_entrypoint`], and it stays that way.** It takes a [`Predecessors`] and cannot tell which unit is `/std`; nothing here changes that, and nothing there calls anything here. What this module adds is the *standard* predecessors — the ones every product puts in scope — so that the answer to "what does a Curios program get for free" is written once rather than by the native product, the browser product and this crate's own tests each. A product may still hand the fold any predecessors it likes.
 
 #[cfg(test)]
 mod tests;
@@ -12,7 +12,7 @@ use {
     },
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{RootSource, UnitSource},
-    curios_unit::{Prefix, Unit},
+    curios_unit::{Predecessors, Unit},
     curios_utilities::Qualifier,
 };
 
@@ -35,7 +35,7 @@ where
 ///
 /// **One value rather than three arguments, because the three are one decision.** Every entry point takes the budget, the units and the cache and means the same thing by them; what varies is the subject compiled on top. Spelled apart, that decision would be restated at every call and push the entry points past the argument count a signature carries.
 ///
-/// **The order *is* the dependency order.** Nothing here resolves or sorts one, because deciding a scope is the caller's job and only the shape of the standard prefix is settled here. A unit naming a prefix mounted after it fails as an unbound name, which is what a positional order costs and what a manifest's declared dependencies replace.
+/// **The order *is* the dependency order.** Nothing here resolves or sorts one, because deciding the predecessors is the caller's job and only the shape of the standard ones is settled here. A unit naming a prefix mounted after it fails as an unbound name, which is what a positional order costs and what a manifest's declared dependencies replace.
 #[derive(Clone, Copy)]
 pub struct Fold<'a> {
     budget: u64,
@@ -65,8 +65,15 @@ impl<'a> Fold<'a> {
         O: FnMut(Stage<'_>),
         P: FnMut(Progress<'_>),
     {
-        self.under_entry(progress, |scope| {
-            compile_entrypoint(self.budget, scope, &SYNTAX, entrypoint, loader, observe)
+        self.under_entry(progress, |predecessors| {
+            compile_entrypoint(
+                self.budget,
+                predecessors,
+                &SYNTAX,
+                entrypoint,
+                loader,
+                observe,
+            )
         })
     }
 
@@ -90,10 +97,10 @@ impl<'a> Fold<'a> {
         O: FnMut(Stage<'_>),
         P: FnMut(Progress<'_>),
     {
-        self.under_entry(progress, |scope| {
+        self.under_entry(progress, |predecessors| {
             compile_unit_as_tests(
                 self.budget,
-                scope,
+                predecessors,
                 &SYNTAX,
                 entrypoint,
                 loader,
@@ -114,12 +121,12 @@ impl<'a> Fold<'a> {
     where
         P: FnMut(Progress<'_>),
     {
-        self.under_entry(progress, |scope| {
-            check_entrypoint(self.budget, scope, &SYNTAX, entrypoint, loader, tail)
+        self.under_entry(progress, |predecessors| {
+            check_entrypoint(self.budget, predecessors, &SYNTAX, entrypoint, loader, tail)
         })
     }
 
-    /// The fold with nothing on top: each unit lowered, elaborated, judged and erased against everything before it and the prelude. What a build of a library runs, whose last unit's verdicts are the answer and whose units before it are its scope.
+    /// The fold with nothing on top: each unit lowered, elaborated, judged and erased against everything before it and the prelude. What a build of a library runs, whose last unit's verdicts are the answer and whose units before it are its predecessors.
     pub fn check_units<P>(self, progress: P) -> Result<(), CompileError>
     where
         P: FnMut(Progress<'_>),
@@ -152,14 +159,14 @@ impl<'a> Fold<'a> {
         self.scoped(progress, |prelude, produced, _| then(prelude, &produced))
     }
 
-    /// The fold with an entry on top: the prelude, the units, then `entry` over the whole scope, bracketed by the progress events the entry step cannot announce for itself.
+    /// The fold with an entry on top: the prelude, the units, then `entry` over all of them, bracketed by the progress events the entry step cannot announce for itself.
     fn under_entry<P, E, T>(self, progress: P, entry: E) -> Result<T, CompileError>
     where
         P: FnMut(Progress<'_>),
-        E: FnOnce(Prefix<'_>) -> Result<T, CompileError>,
+        E: FnOnce(Predecessors<'_>) -> Result<T, CompileError>,
     {
         self.scoped(progress, |prelude, produced, progress| {
-            let scope = prelude
+            let predecessors = prelude
                 .iter()
                 .copied()
                 .chain(produced.iter())
@@ -167,14 +174,14 @@ impl<'a> Fold<'a> {
 
             // The entry is announced here rather than inside `compile_entrypoint`, which stays free of the concern: it is the last step of this fold, and bracketing it costs one event where threading a second callback down would cost a signature.
             progress(Progress::Entry);
-            let compiled = entry(Prefix::over(&scope))?;
+            let compiled = entry(Predecessors::over(&predecessors))?;
             progress(Progress::Compiled);
 
             Ok(compiled)
         })
     }
 
-    /// The standard scope, assembled once: the fixed prelude's roots, then the units compiled in order against them — what every method here compiles against — handed to `then` as the prelude, the units produced, and the progress reporter for whatever follows. The one spelling of the scope this type exists to write once; the methods differ only in what they do with it.
+    /// The standard predecessors, assembled once: the fixed prelude's roots, then the units compiled in order against them — what every method here compiles against — handed to `then` as the prelude, the units produced, and the progress reporter for whatever follows. The one spelling of them this type exists to write once; the methods differ only in what they do with it.
     fn scoped<P, T>(
         self,
         mut progress: P,
@@ -213,7 +220,7 @@ impl<'a> Fold<'a> {
                 .collect::<Vec<_>>();
             let produced = compile_units(
                 budget,
-                Prefix::over(&roots),
+                Predecessors::over(&roots),
                 &SYNTAX,
                 &sources,
                 cache,
@@ -227,7 +234,7 @@ impl<'a> Fold<'a> {
 
 /// The last archived root, when the first of `units` claims a prefix it mounts: the root that unit takes the place of.
 ///
-/// The first unit alone, because its scope is then exactly the roots before the withheld one — the scope the archived unit was compiled in — and a later unit's would not be; a package named `std` placed later in a fold collides as any other claim does. And the last root alone, because the roots after a withheld one would have been compiled against it: a claim on an earlier root — a package named `sys`, which nothing could name anyway — is left to collide with it as any claim does.
+/// The first unit alone, because its predecessors are then exactly the roots before the withheld one — the ones the archived unit was compiled against — and a later unit's would not be; a package named `std` placed later in a fold collides as any other claim does. And the last root alone, because the roots after a withheld one would have been compiled against it: a claim on an earlier root — a package named `sys`, which nothing could name anyway — is left to collide with it as any claim does.
 fn withheld<'a>(prelude: &[&'a Unit], units: &[RootSource]) -> Option<(usize, &'a Unit)> {
     let claims = units.first()?.mounts();
     let (index, root) = prelude.iter().copied().enumerate().next_back()?;
@@ -259,7 +266,13 @@ pub fn typecheck_with_prelude(
     loader: &curios_text::RootSource,
 ) -> Result<crate::Typechecked, crate::Refused> {
     with_prelude(|prelude| {
-        crate::typecheck_entrypoint(budget, Prefix::over(prelude), &SYNTAX, entrypoint, loader)
+        crate::typecheck_entrypoint(
+            budget,
+            Predecessors::over(prelude),
+            &SYNTAX,
+            entrypoint,
+            loader,
+        )
     })
 }
 
@@ -270,7 +283,13 @@ pub fn examine_with_prelude(
     loader: &curios_text::RootSource,
 ) -> Result<crate::Examined, crate::Refused> {
     with_prelude(|prelude| {
-        crate::examine_entrypoint(budget, Prefix::over(prelude), &SYNTAX, entrypoint, loader)
+        crate::examine_entrypoint(
+            budget,
+            Predecessors::over(prelude),
+            &SYNTAX,
+            entrypoint,
+            loader,
+        )
     })
 }
 
@@ -279,7 +298,9 @@ pub fn recheck_with_prelude_measured(
     program: &curios_core::Zonked<curios_core::Program>,
     budget: u64,
 ) -> (Vec<curios_cert::Verdict>, curios_cert::Kernel) {
-    with_prelude(|prelude| crate::recheck_measured(program, budget, Prefix::over(prelude), &SYNTAX))
+    with_prelude(|prelude| {
+        crate::recheck_measured(program, budget, Predecessors::over(prelude), &SYNTAX)
+    })
 }
 
 /// Put `program` to the independent kernel with the fixed prelude in scope. See [`recheck`].
@@ -287,5 +308,5 @@ pub fn recheck_with_prelude(
     program: &curios_core::Zonked<curios_core::Program>,
     budget: u64,
 ) -> Vec<curios_cert::Verdict> {
-    with_prelude(|prelude| recheck(program, budget, Prefix::over(prelude), &SYNTAX))
+    with_prelude(|prelude| recheck(program, budget, Predecessors::over(prelude), &SYNTAX))
 }

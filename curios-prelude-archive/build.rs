@@ -53,7 +53,7 @@ fn build() {
         println!("cargo:rerun-if-changed={}", path.display());
     }
 
-    // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each image is framed as every store slot is, holding the unit before certification, so the prelude `curios-prelude` certifies and restores is a two-unit prefix and not a shape of its own.
+    // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each image is framed as every store slot is, holding the unit before certification, so the prelude `curios-prelude` certifies and restores is a fold of two units and not a shape of its own.
     let sys = archive(
         "sys",
         sys_text,
@@ -61,12 +61,12 @@ fn build() {
         &[],
         ErasedArena::default(),
     );
-    let std_scope = [sys.core()];
+    let std_predecessors = [sys.core()];
     let std = archive(
         "std",
         std_text,
-        Established::over(&std_scope),
-        &std_scope,
+        Established::over(&std_predecessors),
+        &std_predecessors,
         sys.arena(),
     );
 
@@ -80,8 +80,12 @@ fn build() {
 }
 
 /// Resolve and lower one prelude root against the roots already lowered, with every invariant the lowered form is trusted to satisfy asserted here.
-fn lower(root: &str, modules: &curios_text::RootSource, scope: &[&PreparedText]) -> PreparedText {
-    let prepared = prepare_prelude(modules, scope, &SYNTAX)
+fn lower(
+    root: &str,
+    modules: &curios_text::RootSource,
+    predecessors: &[&PreparedText],
+) -> PreparedText {
+    let prepared = prepare_prelude(modules, predecessors, &SYNTAX)
         .unwrap_or_else(|error| panic!("/{root} failed to lower: {}", error.format()));
     validate_lowered_universe_seeds(prepared.core(), &prepared.minted().universes).unwrap_or_else(
         |error| panic!("lowered Text universe seeds of /{root} are invalid: {error}"),
@@ -92,12 +96,12 @@ fn lower(root: &str, modules: &curios_text::RootSource, scope: &[&PreparedText])
 
 /// Elaborate, validate, erase and hash-cons one lowered root into the unit its image is, against what the roots before it established.
 ///
-/// `arena` is the previous root's, not a fresh one: each unit's erasure resumes over what the one before it produced, so the arena a unit carries is the whole prefix's and the split between images is a split of items rather than of operands.
+/// `arena` is the previous root's, not a fresh one: each unit's erasure resumes over what the one before it produced, so the arena a unit carries is the whole fold's and the split between images is a split of items rather than of operands.
 fn archive(
     root: &str,
     mut prepared: PreparedText,
     established: Established<'_>,
-    scope: &[&curios_core::Module],
+    predecessors: &[&curios_core::Module],
     arena: ErasedArena,
 ) -> Uncertified {
     let lowered = prepared.core().clone();
@@ -117,14 +121,14 @@ fn archive(
         );
         let elaboration = match &elaborated {
             Ok(_) => String::new(),
-            Err(error) => error.format_with(&lowered, scope, &SYNTAX),
+            Err(error) => error.format_with(&lowered, predecessors, &SYNTAX),
         };
         panic!("/{root} failed to parse: {parsed}{elaboration}");
     }
     let core = elaborated.unwrap_or_else(|error| {
         panic!(
             "/{root} failed to elaborate: {}",
-            error.format_with(&lowered, scope, &SYNTAX)
+            error.format_with(&lowered, predecessors, &SYNTAX)
         )
     });
     // The pipeline's crediting, for the one caller that elaborates a unit itself: a binder a proof the elaborator wrote reads is used, and the image's lints say so.
@@ -146,13 +150,13 @@ fn archive(
     // No entrypoint, so nothing to seal: this unit's arena stays open, which is what its successors resume over.
     let mut ersd = erase_unit(
         &mut Context::with_default_budget(SYNTAX),
-        Resumed::of(scope, arena),
+        Resumed::of(predecessors, arena),
         &zonked,
     )
     .unwrap_or_else(|error| {
         panic!(
             "/{root} failed to erase into the erased prefix: {}",
-            error.format_with(&core, scope, &SYNTAX)
+            error.format_with(&core, predecessors, &SYNTAX)
         )
     });
 

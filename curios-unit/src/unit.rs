@@ -19,9 +19,9 @@ pub struct Uncertified {
     text: PreparedText,
     /// Elaborated and zonked. This is what the kernel judges and what a successor's elaboration replays.
     core: Module,
-    /// **Not per-unit, despite sitting on a unit** — which is why it is named for what it is rather than for the stage that made it. Each unit's erasure resumes over the previous one's arena — see [`Prefix::arena`](crate::Prefix::arena) — so what this holds is the whole prefix's artifact, cumulative from the first unit forward, and never an independent arena numbered from zero.
+    /// **Not per-unit, despite sitting on a unit** — which is why it is named for what it is rather than for the stage that made it. Each unit's erasure resumes over the previous one's arena — see [`Predecessors::arena`](crate::Predecessors::arena) — so what this holds is the artifact of every unit so far, cumulative from the first unit forward, and never an independent arena numbered from zero.
     ///
-    /// Why is the crate `README.md`'s "The erased arena is the prefix's, not the unit's".
+    /// Why is the crate `README.md`'s "The erased arena is the fold's, not the unit's".
     arena: ErasedArena,
 }
 
@@ -44,7 +44,7 @@ impl Uncertified {
         &self.core.mounts
     }
 
-    /// This unit's resolution state, as the scope a later unit's names resolve against.
+    /// This unit's resolution state, as what a later unit's names resolve against.
     pub fn text(&self) -> &PreparedText {
         &self.text
     }
@@ -67,7 +67,7 @@ impl Uncertified {
 
 /// One compiled and certified unit: everything a later unit needs in order to be compiled against it.
 ///
-/// What a compilation produced, and the record the certifier's walk over it left — so a unit in scope always carries the kernel's own verdicts on its definitions, and a later walk never has to ask whether it does. Made only by [`Uncertified::certified`].
+/// What a compilation produced, and the record the certifier's walk over it left — so a predecessor always carries the kernel's own verdicts on its definitions, and a later walk never has to ask whether it does. Made only by [`Uncertified::certified`].
 ///
 /// The serialized form of this is what a store files under an address covering its mounts, its predecessors and the compiler that judged them, beside a [`Record`](crate::Record) of the files it was compiled from.
 #[derive(Clone)]

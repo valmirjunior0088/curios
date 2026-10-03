@@ -35,25 +35,25 @@ fn exposed_nominal(
     }
 }
 
-/// Every nominal declaration an alias chain can land on: the unit's own, over the ones its scope already made visible.
+/// Every nominal declaration an alias chain can land on: the unit's own, over the ones its predecessors already made visible.
 ///
 /// A *scope*, not a merged map. The audit walks alias edges until it reaches something nominal, and an alias may legitimately point at a type from an earlier unit — so the question crosses the boundary and is answered by asking every half. Merging them upstream would answer it too, with a map whose correctness here depended on somebody else having concatenated the prelude into it and nothing saying so. See `documentation/design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
 #[derive(Clone, Copy)]
 pub(super) struct NominalScope<'a> {
     /// The units already lowered, in dependency order. Empty when this lowering *is* the first and there is nothing beneath it.
-    bases: &'a [&'a curios_core::Module],
+    predecessors: &'a [&'a curios_core::Module],
     induct_decls: &'a BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: &'a BTreeMap<curios_core::Global, curios_core::StructDecl>,
 }
 
 impl<'a> NominalScope<'a> {
     pub(super) fn new(
-        bases: &'a [&'a curios_core::Module],
+        predecessors: &'a [&'a curios_core::Module],
         induct_decls: &'a BTreeMap<curios_core::Global, curios_core::InductDecl>,
         struct_decls: &'a BTreeMap<curios_core::Global, curios_core::StructDecl>,
     ) -> Self {
         Self {
-            bases,
+            predecessors,
             induct_decls,
             struct_decls,
         }
@@ -66,7 +66,7 @@ impl<'a> NominalScope<'a> {
 
     fn induct(&self, name: &curios_core::Global) -> Option<&'a curios_core::InductDecl> {
         self.induct_decls.get(name).or_else(|| {
-            self.bases
+            self.predecessors
                 .iter()
                 .rev()
                 .find_map(|base| base.induct_decls.get(name))
@@ -75,7 +75,7 @@ impl<'a> NominalScope<'a> {
 
     fn struct_(&self, name: &curios_core::Global) -> Option<&'a curios_core::StructDecl> {
         self.struct_decls.get(name).or_else(|| {
-            self.bases
+            self.predecessors
                 .iter()
                 .rev()
                 .find_map(|base| base.struct_decls.get(name))

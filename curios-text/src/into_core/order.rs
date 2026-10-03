@@ -2,7 +2,7 @@
 //!
 //! A stable Kahn pass keeps independent declarations in source order. A genuine value cycle leaves nodes unorderable, and they are emitted in source order for someone above to answer for: a declaration's own name is bound by the group it becomes, so a *self*-referencing witness is repaired by `curios_elab::elaborate_module_let` lowering it into a group of one, and a cycle between two witnesses is refused there by name — neither reaches the kernel as an unbound reference. Nothing else can form a cycle at all: definitions that name one another are one group, `let ... and` states it in the source, and a cycle the source did not declare is refused here by name.
 //!
-//! **One partition, over the unit's own items.** A unit holds its own items and nothing else, so every item here is under one mount and every name from outside it is satisfied by the scope rather than by a node in this graph. A cycle is a cycle whoever wrote it, and it is reported as one.
+//! **One partition, over the unit's own items.** A unit holds its own items and nothing else, so every item here is under one mount and every name from outside it is satisfied by a predecessor rather than by a node in this graph. A cycle is a cycle whoever wrote it, and it is reported as one.
 
 use {
     super::*,
@@ -93,10 +93,10 @@ fn witness_concept(let_: &FlatLet) -> Option<curios_core::Global> {
         .flatten()
 }
 
-/// Method-wrapper name → owning concept: this unit's own wrappers, and the scope's for each concept this unit registers a witness row into. A row registered here into a concept an earlier unit declared is dispatched through that unit's wrappers, which are no item of this one — and a reference to one is as much a use of the row as a reference to a wrapper declared beside it, which the operator half already allows for by reading the registry. Read off a definition's kind, never its path: a module nested beside a concept's members shares their qualifier without being one. The scope is walked only for a unit that has a row to order, so a unit that satisfies nothing pays nothing.
+/// Method-wrapper name → owning concept: this unit's own wrappers, and the predecessors' for each concept this unit registers a witness row into. A row registered here into a concept an earlier unit declared is dispatched through that unit's wrappers, which are no item of this one — and a reference to one is as much a use of the row as a reference to a wrapper declared beside it, which the operator half already allows for by reading the registry. Read off a definition's kind, never its path: a module nested beside a concept's members shares their qualifier without being one. The predecessors are walked only for a unit that has a row to order, so a unit that satisfies nothing pays nothing.
 fn wrapper_owners(
     items: &[FlatItem],
-    scope_modules: &[&curios_core::Module],
+    predecessor_modules: &[&curios_core::Module],
     rows: &HashMap<Qualifier, Vec<usize>>,
 ) -> HashMap<curios_core::Global, Qualifier> {
     let mut owners = items
@@ -122,7 +122,7 @@ fn wrapper_owners(
             owners.insert(name, *owner);
         }
     };
-    for item in scope_modules.iter().flat_map(|module| &module.items) {
+    for item in predecessor_modules.iter().flat_map(|module| &module.items) {
         match item {
             curios_core::Item::Let(definition) => record(definition.name, &definition.kind),
             curios_core::Item::Rec(rec) => rec
@@ -274,7 +274,7 @@ fn cycle_names(items: &[FlatItem], cycle: &[usize]) -> Vec<String> {
 
 pub(super) fn order_flat_items(
     items: Vec<FlatItem>,
-    scope_modules: &[&curios_core::Module],
+    predecessor_modules: &[&curios_core::Module],
     induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
     syntax: &SyntaxRegistry,
@@ -282,9 +282,9 @@ pub(super) fn order_flat_items(
     let nodes = (0..items.len()).collect::<Vec<usize>>();
     let owner = owner_of(&items, &nodes);
     let rows = witness_rows(&items, &nodes);
-    let wrapper_owner = wrapper_owners(&items, scope_modules, &rows);
+    let wrapper_owner = wrapper_owners(&items, predecessor_modules, &rows);
 
-    // Only this unit's own items, because only they are in this graph. A name from the scope is owned by no node here, so `dep_nodes` records no edge for it — which is right: the unit it belongs to was emitted whole before this one began.
+    // Only this unit's own items, because only they are in this graph. A name from a predecessor is owned by no node here, so `dep_nodes` records no edge for it — which is right: the unit it belongs to was emitted whole before this one began.
     let mut deps = HashMap::with_capacity(nodes.len());
     let mut soft_deps = HashMap::with_capacity(nodes.len());
     for &n in &nodes {

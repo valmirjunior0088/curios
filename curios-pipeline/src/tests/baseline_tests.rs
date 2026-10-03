@@ -5,7 +5,7 @@ use {
     crate::{Cache, DEFAULT_STEP_BUDGET, Progress, compile_units},
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::UnitSource,
-    curios_unit::{Prefix, Unit},
+    curios_unit::{Predecessors, Unit},
     std::cell::RefCell,
 };
 
@@ -67,7 +67,7 @@ fn folded_offered(
     with_prelude(|prelude| {
         compile_units(
             DEFAULT_STEP_BUDGET,
-            Prefix::over(prelude),
+            Predecessors::over(prelude),
             &SYNTAX,
             &sources,
             cache,

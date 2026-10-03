@@ -512,7 +512,7 @@ fn erase_within(
     module: &Zonked<Module>,
     entry: Option<(&Term, &Term)>,
 ) -> Result<ErasedArena, Error> {
-    let scope = resumed.projected_cores();
+    let predecessors = resumed.projected_cores();
     // The entry's universes are held to its module's schemes before projection erases them.
     let entry = entry
         .map(|(body, type_)| {
@@ -535,13 +535,13 @@ fn erase_within(
     // Erasure is re-derivation of elaborated terms, never surface elaboration, so the representation-privacy checks are suppressed for the whole walk.
     context.with_suppressed_privacy(|context| {
         // Every half: `module` declares only its own, so each scope unit's nominal entries reach the context from that unit itself. They are disjoint by mount — no unit can reuse another's name — which is why `register_*` rejecting a duplicate key is not a constraint here.
-        for unit in &scope {
+        for unit in &predecessors {
             seed_registries(context, unit)?;
         }
         seed_registries(context, &module)?;
 
         // Re-seed the Core context with the scope's definitions, in dependency order: later items and the entrypoint reduce through them.
-        for item in scope.iter().flat_map(|unit| &unit.items) {
+        for item in predecessors.iter().flat_map(|unit| &unit.items) {
             match item {
                 Item::Let(definition) => {
                     context.define_assuming_scheme(

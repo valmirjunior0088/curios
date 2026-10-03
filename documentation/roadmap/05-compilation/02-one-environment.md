@@ -13,9 +13,9 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 
 ## The gap
 
-**The fold is a line.** A `Prefix` is every unit before this one rather than what this one depends on, and `curios-package` has the dependency graph and flattens it into that line.
+**The fold is a line.** `Predecessors` are every unit before this one rather than what this one depends on, and `curios-package` has the dependency graph and flattens it into that line.
 
-**Every compile re-seeds its whole scope.** Erasure projects every predecessor's Core and elaboration re-seeds every definition, and `Globals::of` copies each registry and maps each definition, once per predecessor unit — the prelude alone is two — so a unit's prologue costs its scope rather than what it reads, multiplied by the dependencies. Read from the code and not yet measured.
+**Every compile re-seeds all its predecessors.** Erasure projects every predecessor's Core and elaboration re-seeds every definition, and `Globals::of` copies each registry and maps each definition, once per predecessor unit — the prelude alone is two — so a unit's prologue costs its predecessors rather than what it reads, multiplied by the dependencies. Read from the code and not yet measured.
 
 **The elaborator threads state from item to item.** A witness goal that finds no table entry is deferred, swept after every later item, and may then refuse an item already finished (`curios-elab/src/resolve.rs`); a refused item poisons the items after it that reach it; the witness table grows as items elaborate; and one metavariable and binder counter serves the whole unit.
 
@@ -49,7 +49,7 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 Each lands alone, on its own check.
 
 1. **Elaboration local to an item, against a complete witness index.** Items still elaborate one at a time in source order; what changes is that nothing one item leaves behind is read by the next except through what it published. Every verdict over `/std` and the corpus is compared with the compiler before it, and any program whose witness resolution changes is recorded as a finding, since coherence already claims resolution is independent of order.
-2. **One environment, reads recorded.** `Established`, `Globals`, `Resumed` and `Prefix` become views of it; the lowering's sort, `dependency_order` and `invalidated` are replaced by the recorded graph. Recompiling over a baseline then invalidates by recorded reads rather than the transitive closure of every name, and [cached verdicts](../../design/soundness/admission/cached-verdicts.md)' per-item argument is restated over them in the same change, extending its account of the certifier's record. The critical path is measured here: the recorded graph weighted by each item's `declaration` span, reported as the speedup the graph admits.
+2. **One environment, reads recorded.** `Established`, `Globals`, `Resumed` and `Predecessors` become views of it; the lowering's sort, `dependency_order` and `invalidated` are replaced by the recorded graph. Recompiling over a baseline then invalidates by recorded reads rather than the transitive closure of every name, and [cached verdicts](../../design/soundness/admission/cached-verdicts.md)' per-item argument is restated over them in the same change, extending its account of the certifier's record. The critical path is measured here: the recorded graph weighted by each item's `declaration` span, reported as the speedup the graph admits.
 
 ## Verification
 
@@ -59,7 +59,7 @@ Each lands alone, on its own check.
 
 ## Design decisions this overturns or corrects
 
-- [`curios-unit`'s README](../../../curios-unit/README.md): *A scope is borrowed, per stage*, with `Prefix`'s own documentation.
+- [`curios-unit`'s README](../../../curios-unit/README.md): *Predecessors are borrowed, per stage*, with `Predecessors`' own documentation.
 - [A module is a compilation unit, and the prelude is an environment](../../design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md): a compilation stops being units folded over one dependency order.
 - [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md): invalidation by recorded reads.
 - [Cached verdicts](../../design/soundness/admission/cached-verdicts.md): the per-item argument restated over recorded reads.

@@ -79,7 +79,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 ## Compilation
 
 - [ ] [A shared term costs its size](roadmap/05-compilation/01-shared-term-costs.md) — settlement is a sixth of `/std`'s elaboration, `capture` loses sharing, `shift`, `release` and the kernel's typing walk an open term per path, and a sum is flattened afresh on every read
-- [ ] [One environment, and every read recorded](roadmap/05-compilation/02-one-environment.md) — the item graph is computed three times, the elaborator threads state from item to item, and every compile re-seeds its whole scope
+- [ ] [One environment, and every read recorded](roadmap/05-compilation/02-one-environment.md) — the item graph is computed three times, the elaborator threads state from item to item, and every compile re-seeds all its predecessors
 - [ ] [A compilation is a graph of item tasks](roadmap/05-compilation/03-item-tasks.md) — nothing the compiler holds can cross a thread, so a compilation occupies one core
 - [ ] [Size cliffs](roadmap/05-compilation/04-size-cliffs.md) — not refined yet; elaboration is not linear in `let` depth, the parser buys its depth with stack, and every binding gets a fresh local
 - [ ] [What unbounded `Nat` and `Int` still cost at run time](roadmap/05-compilation/05-unbounded-nat-costs.md) — not refined yet; a field is a reference, a chain boxes between steps, and the fast path tests a tag per operand

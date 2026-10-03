@@ -513,10 +513,10 @@ pub fn build_shorten(symbols: &[Global]) -> HashMap<Global, String> {
 /// The tier exists because a segment-suffix is not by itself a spelling anyone can write. `/std/Bool/Holds` is reachable as `Bool/Holds` and in full, never as a bare `Holds` — reaching it needs a `use` naming `Holds` itself, which only a reader's spelling ([`ReaderNames`]) can see. Counting the suffix it cannot claim against a reader's own root-declared `Holds` would tie the two, so *neither* would shorten, and the name the reader had just written would report as `/Holds` while the one they could not reach reported as `Bool/Holds`.
 ///
 /// Only a single-segment name gets the claim, because only its bare label is writable: reaching a reader's own `/Vec/nil` needs `Vec/nil` or an import just as the environment's does, so a nested own name has no better title to `nil` than the shared contest below gives it. Handing it one would spell a goal candidate — `? ≈ nil()` — that the reader could not paste.
-pub fn build_shorten_layered(own: &[Global], scope: &[Global]) -> HashMap<Global, String> {
+pub fn build_shorten_layered(own: &[Global], predecessors: &[Global]) -> HashMap<Global, String> {
     // One global can be listed twice (an inductive is both an `induct_decls` registry key and an `items` type-constructor definition), and a unit listed in both tiers lists it in both; count distinct names, or such a name would look ambiguous with itself and never shorten.
     let own = own.iter().collect::<BTreeSet<_>>();
-    let scope = scope
+    let predecessors = predecessors
         .iter()
         .collect::<BTreeSet<_>>()
         .difference(&own)
@@ -535,7 +535,7 @@ pub fn build_shorten_layered(own: &[Global], scope: &[Global]) -> HashMap<Global
 
     // How many distinct globals carry each segment-suffix.
     let mut count: HashMap<String, usize> = HashMap::new();
-    for name in own.iter().chain(scope.iter()) {
+    for name in own.iter().chain(predecessors.iter()) {
         for suffix in suffixes(name) {
             *count.entry(suffix).or_insert(0) += 1;
         }
@@ -554,7 +554,7 @@ pub fn build_shorten_layered(own: &[Global], scope: &[Global]) -> HashMap<Global
         map.insert(*(*name), label.clone());
     }
 
-    for name in own.iter().chain(scope.iter()) {
+    for name in own.iter().chain(predecessors.iter()) {
         if map.contains_key(*name) {
             continue;
         }

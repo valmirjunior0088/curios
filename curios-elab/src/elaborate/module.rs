@@ -1735,9 +1735,9 @@ fn elaborate_and_zonk_unit_over_within(
     recompile: Recompile<'_>,
     minted: &Minted,
 ) -> Result<Module, Error> {
-    let mut scope = established.modules().to_vec();
-    scope.push(recompile.reused);
-    let extended = Established::over(&scope);
+    let mut modules = established.modules().to_vec();
+    modules.push(recompile.reused);
+    let extended = Established::over(&modules);
 
     let elaborated = elaborate_module_suffix(context, extended, recompile.closure, minted, None)?;
     let inherited = extended.recorded_totality();

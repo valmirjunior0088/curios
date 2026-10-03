@@ -18,7 +18,7 @@ use {
         BrokenItem, Entrypoint, Lint, LoweredEntry, PreparedText, RootSource, UnitSource,
         into_core_unit, into_core_with_prelude,
     },
-    curios_unit::{Prefix, Uncertified, Unit},
+    curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::{Qualifier, Report, SyntaxRegistry},
     std::{collections::BTreeSet, fmt},
 };
@@ -168,44 +168,45 @@ pub(crate) fn with_broken<T>(
     })
 }
 
-/// Put `program` to the independent kernel with `scope` already in scope, so only what its units do not already answer for is judged — their own items resting on the verdict recorded when each was built.
+/// Put `program` to the independent kernel with `predecessors` already in scope, so only what its units do not already answer for is judged — their own items resting on the verdict recorded when each was built.
 ///
 /// The [`Globals`] environment is assembled here rather than in `curios-unit`, because a unit is defined to stay below the kernel and cannot name it. Every caller that wants the compile path's rechecking gets this one rather than reconstructing it.
 pub fn recheck(
     program: &curios_core::Zonked<Program>,
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
 ) -> Vec<Verdict> {
-    certify_program(program, budget, &globals(scope), *syntax).verdicts
+    certify_program(program, budget, &globals(predecessors), *syntax).verdicts
 }
 
 /// The kernel's walk over one unit, with the record it leaves of what it concluded — what a unit files beside its definitions for a later walk to read. See `curios_cert::certify_module`.
 pub(crate) fn certify(
     module: &curios_core::Zonked<curios_core::Module>,
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
 ) -> Rechecked {
-    certify_module(module, budget, &globals(scope), *syntax)
+    certify_module(module, budget, &globals(predecessors), *syntax)
 }
 
 /// [`recheck`], handing back the walk's own kernel for a measurement to read rather than only its verdicts. See `curios_cert::recheck_program_measured`.
 pub fn recheck_measured(
     program: &curios_core::Zonked<Program>,
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
 ) -> (Vec<Verdict>, Kernel) {
-    let (rechecked, kernel) = recheck_program_measured(program, budget, &globals(scope), *syntax);
+    let (rechecked, kernel) =
+        recheck_program_measured(program, budget, &globals(predecessors), *syntax);
 
     (rechecked.verdicts, kernel)
 }
 
-/// The kernel's environment for `scope`: every unit mounted, with the record the certifier filed with it.
-pub(crate) fn globals(scope: Prefix<'_>) -> Globals {
+/// The kernel's environment for `predecessors`: every unit mounted, with the record the certifier filed with it.
+pub(crate) fn globals(predecessors: Predecessors<'_>) -> Globals {
     let mut globals = Globals::default();
-    for unit in scope.units() {
+    for unit in predecessors.units() {
         globals.mount(unit.core(), unit.certification());
     }
 
@@ -216,10 +217,10 @@ pub(crate) fn globals(scope: Prefix<'_>) -> Globals {
 pub(crate) fn kernel_refusal(
     verdict: &Verdict,
     module: &curios_core::Module,
-    scope: &[&curios_core::Module],
+    predecessors: &[&curios_core::Module],
     syntax: &SyntaxRegistry,
 ) -> CompileError {
-    let refusal = verdict.error.format_with(module, scope, syntax);
+    let refusal = verdict.error.format_with(module, predecessors, syntax);
 
     CompileError::failure(match &verdict.name {
         Some(name) => format!("the kernel refused {name}: {refusal}"),
@@ -265,13 +266,13 @@ pub struct Typechecked {
 /// Each refusal carries the elaborator's error as it raised it beside the diagnostic a compilation prints, since rendering is where a consumer that matches the error's variant would lose it. A caller that wants the kernel's opinion on the result puts it to [`recheck`], which supplies the same environment `compile_entrypoint` does rather than re-walking the standard library.
 pub fn typecheck_entrypoint(
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: &RootSource,
 ) -> Result<Typechecked, Refused> {
     let lowered =
-        lower_entry(scope, syntax, entrypoint, loader, &mut |_| {}).map_err(|reported| {
+        lower_entry(predecessors, syntax, entrypoint, loader, &mut |_| {}).map_err(|reported| {
             Refused {
                 error: None,
                 reported,
@@ -281,7 +282,7 @@ pub fn typecheck_entrypoint(
     let mut context = Context::new(budget, *syntax);
     let ((program, _, _), obligations) = elaborate_entry(
         &mut context,
-        scope,
+        predecessors,
         syntax,
         lowered,
         EntryTail::Authored,
@@ -308,7 +309,7 @@ pub enum EntryTail {
     Proof,
     /// The synthesized `Test/main([...])` over the entry unit's own registered tests, replacing an executable's authored tail. A unit with no tests gets `Test/main([])`, which runs nothing and exits 0.
     Tests,
-    /// The same synthesized tail over the last mounted unit's registered tests — the library-under-test case, where the entry is an empty program and the subject is the scope's final unit.
+    /// The same synthesized tail over the last mounted unit's registered tests — the library-under-test case, where the entry is an empty program and the subject is the last predecessor.
     LastUnitTests,
 }
 
@@ -378,7 +379,7 @@ fn test_records(scheduled: &[curios_elab::ScheduledTest]) -> Vec<TestRecord> {
 #[cfg(test)]
 pub(crate) fn elaborate_and_zonk<O>(
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: &RootSource,
@@ -388,10 +389,10 @@ pub(crate) fn elaborate_and_zonk<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    let lowered = lower_entry(scope, syntax, entrypoint, loader, observe)?;
+    let lowered = lower_entry(predecessors, syntax, entrypoint, loader, observe)?;
     elaborate_lowered(
         budget,
-        scope,
+        predecessors,
         syntax,
         lowered,
         tail,
@@ -405,7 +406,7 @@ where
 
 /// The lowering half of the prologue: the surface tree to a core module, observed as the `text` rung.
 fn lower_entry<O>(
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: &RootSource,
@@ -416,7 +417,7 @@ where
 {
     observe(Stage::Text(entrypoint));
 
-    let text = scope.text();
+    let text = predecessors.text();
     into_core_with_prelude(entrypoint, loader, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))
 }
@@ -427,7 +428,7 @@ type Elaborated = (Program, ForeignStore, Vec<TestRecord>);
 /// The elaborating half of the prologue, over an entry already lowered: the lowering's findings, credited with what elaboration's proofs read whatever its verdict, beside that verdict.
 fn elaborate_lowered<O>(
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     mut lowered: LoweredEntry,
     tail: EntryTail,
@@ -443,7 +444,7 @@ where
     let mut context = Context::new(budget, *syntax);
     let verdict = elaborate_entry(
         &mut context,
-        scope,
+        predecessors,
         syntax,
         lowered,
         tail,
@@ -464,7 +465,7 @@ enum Obligations {
 /// The one elaboration of an entry, in `context`, which the caller reads its credits and its consumption from however this ends: the compile path's and the type-checking path's alike, so the entry's contract is stated once. Beside the program come the obligations it reported, none where they are raised.
 fn elaborate_entry<O>(
     context: &mut Context,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     lowered: LoweredEntry,
     tail: EntryTail,
@@ -474,7 +475,7 @@ fn elaborate_entry<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    let cores = scope.cores();
+    let cores = predecessors.cores();
     let LoweredEntry {
         program: mut lowered,
         minted,
@@ -588,16 +589,16 @@ where
 /// The erased module is discarded. Producing it is the whole cost, and the caller wants the Core module.
 pub fn check_entrypoint(
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: &RootSource,
     tail: EntryTail,
 ) -> Result<Checked, CompileError> {
-    let lowered = lower_entry(scope, syntax, entrypoint, loader, &mut |_| {})?;
-    let (entry, judged) = check_lowered(budget, scope, syntax, lowered, tail, &mut |_| {});
+    let lowered = lower_entry(predecessors, syntax, entrypoint, loader, &mut |_| {})?;
+    let (entry, judged) = check_lowered(budget, predecessors, syntax, lowered, tail, &mut |_| {});
     let verdict = judged.and_then(|judged| {
-        erase_checked(budget, scope, syntax, &judged)?;
+        erase_checked(budget, predecessors, syntax, &judged)?;
         Ok(judged.program.as_program().clone())
     });
 
@@ -618,18 +619,18 @@ struct Judged {
 
 /// The erase step both the check and the compile path take, so neither can hold a verdict the other does not.
 ///
-/// The sealed program's termination flags are marked here, from the record of everything it was erased from — every unit in scope and the entry — and nowhere else: erasure marks nothing, and nothing reads a flag before the back half lowers what this returns. See `curios_ersd::Function::total`.
+/// The sealed program's termination flags are marked here, from the record of everything it was erased from — every predecessor and the entry — and nowhere else: erasure marks nothing, and nothing reads a flag before the back half lowers what this returns. See `curios_ersd::Function::total`.
 fn erase_checked(
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     judged: &Judged,
 ) -> Result<curios_ersd::Module, CompileError> {
-    let cores = scope.cores();
+    let cores = predecessors.cores();
 
     let mut arena = erase_program(
         &mut Context::new(budget, *syntax),
-        Resumed::of(&cores, scope.arena()),
+        Resumed::of(&cores, predecessors.arena()),
         &judged.program,
     )
     .map_err(|error| {
@@ -639,7 +640,7 @@ fn erase_checked(
             syntax,
         ))
     })?;
-    for unit in scope.units() {
+    for unit in predecessors.units() {
         arena.mark_total(unit.certification());
     }
     arena.mark_total(&judged.certification);
@@ -650,7 +651,7 @@ fn erase_checked(
 /// [`check_entrypoint`] with the stages it passes observed, and the entry's foreign rows kept for the lowering that follows it.
 fn check_observed<O>(
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: &RootSource,
@@ -660,15 +661,15 @@ fn check_observed<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    let lowered = lower_entry(scope, syntax, entrypoint, loader, observe)?;
+    let lowered = lower_entry(predecessors, syntax, entrypoint, loader, observe)?;
     // Compiling reports no lint, so the findings go unread.
-    check_lowered(budget, scope, syntax, lowered, tail, observe).1
+    check_lowered(budget, predecessors, syntax, lowered, tail, observe).1
 }
 
 /// The back half of [`check_observed`], from a lowered entry: elaborate, zonk, and put the result to the kernel — beside the lowering's findings, credited by elaboration.
 fn check_lowered<O>(
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     lowered: LoweredEntry,
     tail: EntryTail,
@@ -679,7 +680,7 @@ where
 {
     let (findings, put) = put_lowered(
         budget,
-        scope,
+        predecessors,
         syntax,
         lowered,
         tail,
@@ -689,7 +690,7 @@ where
     (
         findings,
         put.map_err(|refused| refused.reported)
-            .and_then(|put| put.accepted(scope, syntax)),
+            .and_then(|put| put.accepted(predecessors, syntax)),
     )
 }
 
@@ -707,11 +708,15 @@ struct Put {
 
 impl Put {
     /// The entry as the compile path takes it on: refused by the kernel's first verdict, or judged.
-    fn accepted(self, scope: Prefix<'_>, syntax: &SyntaxRegistry) -> Result<Judged, CompileError> {
+    fn accepted(
+        self,
+        predecessors: Predecessors<'_>,
+        syntax: &SyntaxRegistry,
+    ) -> Result<Judged, CompileError> {
         if let Some(verdict) = self.verdicts.first() {
             let refusal = verdict.error.format_with(
                 &self.program.as_program().module,
-                &scope.cores(),
+                &predecessors.cores(),
                 syntax,
             );
             return Err(CompileError::failure(match &verdict.name {
@@ -732,7 +737,7 @@ impl Put {
 /// The one sequence every path that decides about a program takes, from a lowered entry: elaborate, zonk, and put the result to the kernel — beside the lowering's findings, credited by elaboration. `obligations` is the only thing a caller chooses: whether the elaborator's erasure obligations stop it, as a compilation has them, or come back beside the kernel's verdicts.
 fn put_lowered<O>(
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     lowered: LoweredEntry,
     tail: EntryTail,
@@ -742,8 +747,15 @@ fn put_lowered<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    let (findings, elaborated) =
-        elaborate_lowered(budget, scope, syntax, lowered, tail, obligations, observe);
+    let (findings, elaborated) = elaborate_lowered(
+        budget,
+        predecessors,
+        syntax,
+        lowered,
+        tail,
+        obligations,
+        observe,
+    );
     (
         findings,
         elaborated.and_then(|((program, foreigns, records), obligations)| {
@@ -753,10 +765,10 @@ where
                 reported: CompileError::failure(refusal.to_string()),
             })?;
 
-            // The independent kernel's second opinion: each unit in scope was walked when it was built and arrives here as environment, so only what it does not already answer for is judged.
+            // The independent kernel's second opinion: each predecessor was walked when it was built and arrives here as environment, so only what it does not already answer for is judged.
             let rechecked = {
                 curios_profile::profile!("recheck");
-                certify_program(&program, budget, &globals(scope), *syntax)
+                certify_program(&program, budget, &globals(predecessors), *syntax)
             };
 
             Ok(Put {
@@ -785,13 +797,13 @@ pub struct Examined {
 /// The steps are the compile path's own, taken in its order through `put_lowered`, with one difference: the elaborator's erasure obligations are reported rather than raised, so a program only it refuses still reaches the kernel. That is what a consumer asking which checker refused a program needs, and what [`check_entrypoint`] cannot say, since it stops at the first refusal. It stops under the kernel: erasure decides whether a program can be built, which is no part of whether its entry has the type it states.
 pub fn examine_entrypoint(
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: &RootSource,
 ) -> Result<Examined, Refused> {
     let lowered =
-        lower_entry(scope, syntax, entrypoint, loader, &mut |_| {}).map_err(|reported| {
+        lower_entry(predecessors, syntax, entrypoint, loader, &mut |_| {}).map_err(|reported| {
             Refused {
                 error: None,
                 reported,
@@ -799,7 +811,7 @@ pub fn examine_entrypoint(
         })?;
     let (_, put) = put_lowered(
         budget,
-        scope,
+        predecessors,
         syntax,
         lowered,
         EntryTail::Proof,
@@ -843,18 +855,18 @@ where
     wasm_module
 }
 
-/// Compile one unit against `scope`: lower, elaborate, judge, erase.
+/// Compile one unit against `predecessors`: lower, elaborate, judge, erase.
 ///
 /// **The judgment sits between elaboration and erasure and that ordering is the point.** A module the kernel refuses never reaches erasure's budget, and a refusal reads as a refusal rather than as whatever erasure made of an ill-typed term. It is also why this is a fold step rather than one operation: the producer of a stored unit runs the same sequence *without* the judge, because the crate that writes an image deliberately cannot reach the kernel.
 pub fn compile_unit(
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     source: &UnitSource<'_>,
 ) -> Result<Unit, CompileError> {
     curios_profile::profile!("compile_unit");
-    let text = scope.text();
-    let cores = scope.cores();
+    let text = predecessors.text();
+    let cores = predecessors.cores();
 
     let mut lowered = into_core_unit(source, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
@@ -887,14 +899,14 @@ pub fn compile_unit(
     let core = curios_core::Zonked::project(&core)
         .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
-    let rechecked = certify(&core, budget, scope, syntax);
+    let rechecked = certify(&core, budget, predecessors, syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
         return Err(kernel_refusal(verdict, core.as_module(), &cores, syntax));
     }
 
     let ersd = erase_unit(
         &mut Context::new(budget, *syntax),
-        Resumed::of(&cores, scope.arena()),
+        Resumed::of(&cores, predecessors.arena()),
         &core,
     )
     .map_err(|error| CompileError::Failure(error.reports_with(core.as_module(), &cores, syntax)))?;
@@ -931,14 +943,14 @@ pub trait Cache {
 
 /// Compile `sources` in dependency order, each against `base` and everything before it — the fold this whole design is named for.
 ///
-/// Returns the units it produced, not the ones it was given: the caller owns `base` and this cannot take it. A scope is rebuilt per step from pointers to both, which is free.
+/// Returns the units it produced, not the ones it was given: the caller owns `base` and this cannot take it. The predecessors are rebuilt per step from pointers to both, which is free.
 ///
 /// A `cache` short-circuits the step entirely: a recorded unit was judged when it was recorded, so neither elaboration nor the kernel re-runs for it. `None` compiles everything, which is what every caller without a project does.
 ///
 /// Each source arrives beside the baseline its assembler offers for it — `None` for every unit but one taking a prelude root's place, which is decided where the sources are built rather than recognized here. The offer goes to `cache` on a miss, which decides what becomes of it, and with no cache nothing is taken.
 pub fn compile_units<'a, P>(
     budget: u64,
-    base: Prefix<'a>,
+    base: Predecessors<'a>,
     syntax: &SyntaxRegistry,
     sources: &[(UnitSource<'_>, Option<&Unit>)],
     cache: Option<&dyn Cache>,
@@ -965,7 +977,7 @@ where
             None => Progress::Compiling(&prefix),
         });
 
-        let scope = base
+        let predecessors = base
             .units()
             .iter()
             .copied()
@@ -973,10 +985,14 @@ where
             .collect::<Vec<_>>();
 
         let unit = match &baseline {
-            Some(baseline) => {
-                compile_unit_over(budget, Prefix::over(&scope), syntax, source, baseline)?
-            }
-            None => compile_unit(budget, Prefix::over(&scope), syntax, source)?,
+            Some(baseline) => compile_unit_over(
+                budget,
+                Predecessors::over(&predecessors),
+                syntax,
+                source,
+                baseline,
+            )?,
+            None => compile_unit(budget, Predecessors::over(&predecessors), syntax, source)?,
         };
         progress(Progress::Compiled);
 
@@ -1008,14 +1024,14 @@ pub enum Progress<'a> {
     Compiled,
 }
 
-/// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the `foreign` declarations of the program and of every unit in its scope — an embedder that will run the module builds its `ffi`-tier bindings (`curios-runtime`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
+/// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the `foreign` declarations of the program and of every predecessor — an embedder that will run the module builds its `ffi`-tier bindings (`curios-runtime`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
 ///
 /// Production erases onto the archived erased prelude: it is restored and replayed, only the entry's own items erase, the Ersd optimizer shrinks and rebases the module, and the lowering into Cont makes every encoding decision once (see `curios_ersd::lower_to_cont`).
 ///
 /// **`loader` is borrowed rather than taken, so the caller still owns it when this returns.** Resolution records what it read through `&self` — the log is interior-mutable precisely so that lowering never has to thread `&mut` — and a caller filing what this compilation produced needs that log *after* the fold, exactly as it needs the cache handle's refusal after the fold. Consuming the loader would put the read set out of reach at the only moment it is worth anything, and nothing here wants ownership of it.
 pub fn compile_entrypoint<O>(
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: &RootSource,
@@ -1026,7 +1042,7 @@ where
 {
     compile_with_tail(
         budget,
-        scope,
+        predecessors,
         syntax,
         entrypoint,
         loader,
@@ -1039,7 +1055,7 @@ where
 /// [`compile_entrypoint`] with the unit compiled as a test program: the authored tail — or a module's absence of one — is replaced by the synthesized `Test/main([...])` over the registered tests `tail` selects, and everything else is the ordinary pipeline, kernel judgment included. No file is written and nothing about the surface changes; which tail a unit compiles under is the caller's question alone. Beside the program, the caller gets one [`TestRecord`] per scheduled test, in schedule order — the report metadata execution alone cannot recover.
 pub fn compile_unit_as_tests<O>(
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: &RootSource,
@@ -1049,12 +1065,20 @@ pub fn compile_unit_as_tests<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    compile_with_tail(budget, scope, syntax, entrypoint, loader, tail, observe)
+    compile_with_tail(
+        budget,
+        predecessors,
+        syntax,
+        entrypoint,
+        loader,
+        tail,
+        observe,
+    )
 }
 
 fn compile_with_tail<O>(
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: &RootSource,
@@ -1067,17 +1091,17 @@ where
     curios_profile::profile!("compile_entrypoint");
     let judged = check_observed(
         budget,
-        scope,
+        predecessors,
         syntax,
         entrypoint,
         loader,
         tail,
         &mut observe,
     )?;
-    let ersd_module = erase_checked(budget, scope, syntax, &judged)?;
+    let ersd_module = erase_checked(budget, predecessors, syntax, &judged)?;
 
     // Every unit's rows, not the entry's alone: an embedder binds one registry, and a dependency that declares a `foreign` row has to reach it. Disjoint by mount, so the union cannot collide.
-    let mut all_foreigns = scope.foreigns();
+    let mut all_foreigns = predecessors.foreigns();
     all_foreigns.absorb(&judged.foreigns);
 
     Ok((

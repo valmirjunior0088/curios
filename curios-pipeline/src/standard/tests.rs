@@ -8,7 +8,7 @@ use {
     },
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Overlay, RootSource, UnitSource, into_core_unit},
-    curios_unit::{Prefix, Unit},
+    curios_unit::{Predecessors, Unit},
     curios_utilities::{Qualifier, RootKind, test_support::Temporary},
     std::{cell::RefCell, fs, path::PathBuf, time::Instant},
 };
@@ -68,7 +68,7 @@ fn std_recompile_closure_census() {
             panic!("the prelude has two roots")
         };
         let roots = [*sys];
-        let scope = Prefix::over(&roots);
+        let predecessors = Predecessors::over(&roots);
 
         println!("\n=== recompiling /std over the archive ===");
         for Edit { label, file, edit } in edits {
@@ -78,14 +78,14 @@ fn std_recompile_closure_census() {
             let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
             let start = Instant::now();
-            let lowered =
-                into_core_unit(&unit, &scope.text(), &SYNTAX).expect("the edited library lowers");
+            let lowered = into_core_unit(&unit, &predecessors.text(), &SYNTAX)
+                .expect("the edited library lowers");
             let lowered_in = start.elapsed();
             let start = Instant::now();
             let closure = invalidated(std, lowered.core());
             let diffed_in = start.elapsed();
             let start = Instant::now();
-            compile_unit_over(DEFAULT_STEP_BUDGET, scope, &SYNTAX, &unit, std)
+            compile_unit_over(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit, std)
                 .expect("the edited library recompiles");
             let recompiled_in = start.elapsed();
 
@@ -150,7 +150,7 @@ fn a_package_named_sys_collides_with_the_compilers_own_root() {
     assert!(error.contains("sys"), "unexpected error: {error}");
 }
 
-/// A unit after the first has a scope the archived unit was never compiled in, so it is not the one that takes the root's place — and it collides, as any later claim does.
+/// A unit after the first has predecessors the archived unit was never compiled against, so it is not the one that takes the root's place — and it collides, as any later claim does.
 #[test]
 fn only_the_first_unit_can_take_a_roots_place() {
     with_prelude(|prelude| {

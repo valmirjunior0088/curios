@@ -206,14 +206,14 @@ impl Error {
     pub fn format_with(
         &self,
         module: &Module,
-        scope: &[&Module],
+        predecessors: &[&Module],
         syntax: &SyntaxRegistry,
     ) -> String {
         // See `curios_elab::Error::format_with`: a module carries only its own declarations, so *both* halves of the spelling have to be told what its environment put in scope — the shortening table and the plicity marks alike. The shortening keeps the two apart as that one does, so `module`'s own declarations settle their spelling before the environment competes for it.
         let own = module.module_symbols();
         let mut symbols = Vec::new();
         let mut plicities = module.nominal_plicities();
-        for unit in scope {
+        for unit in predecessors {
             symbols.extend(unit.module_symbols());
             for (name, marks) in unit.nominal_plicities() {
                 plicities.entry(name).or_insert(marks);

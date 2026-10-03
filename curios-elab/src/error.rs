@@ -1381,25 +1381,25 @@ impl Error {
         Rc::new(build_rename(&names, spelling))
     }
 
-    /// Render this error with source-style names, shortening global names against `module`'s symbols together with `scope`'s (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here or [`Error::format_with_hints`], so every axis is set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
+    /// Render this error with source-style names, shortening global names against `module`'s symbols together with `predecessors`' (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here or [`Error::format_with_hints`], so every axis is set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
     pub fn format_with(
         &self,
         module: &Module,
-        scope: &[&Module],
+        predecessors: &[&Module],
         syntax: &SyntaxRegistry,
     ) -> String {
-        Report::render_all(&self.reports_with(module, scope, syntax))
+        Report::render_all(&self.reports_with(module, predecessors, syntax))
     }
 
     /// [`Error::format_with`] as data: one [`Report`] per thing said, located. See [`Error::reports_with_hints`].
     pub fn reports_with(
         &self,
         module: &Module,
-        scope: &[&Module],
+        predecessors: &[&Module],
         syntax: &SyntaxRegistry,
     ) -> Vec<Report> {
         self.reports(
-            &Rc::new(report_spelling(module, scope, syntax)),
+            &Rc::new(report_spelling(module, predecessors, syntax)),
             &BTreeMap::new(),
         )
     }
@@ -1408,19 +1408,25 @@ impl Error {
     pub fn format_with_hints(
         &self,
         module: &Module,
-        scope: &[&Module],
+        predecessors: &[&Module],
         syntax: &SyntaxRegistry,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
         spellings: &Spellings,
     ) -> String {
-        Report::render_all(&self.reports_with_hints(module, scope, syntax, unbound, spellings))
+        Report::render_all(&self.reports_with_hints(
+            module,
+            predecessors,
+            syntax,
+            unbound,
+            spellings,
+        ))
     }
 
     /// [`Error::format_with_hints`] as data, and the primitive it renders: every error is one report at its innermost span, except a goal batch, which is one report *per goal* at that goal's own occurrence — a goal's identity is its source location, and a consumer placing each where it was written needs them apart. Rendering the list is exactly the text the compile path prints, so the located form and the printed form cannot drift.
     pub fn reports_with_hints(
         &self,
         module: &Module,
-        scope: &[&Module],
+        predecessors: &[&Module],
         syntax: &SyntaxRegistry,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
         spellings: &Spellings,
@@ -1433,7 +1439,8 @@ impl Error {
             .map(|definition| (definition.name, definition.island))
             .collect();
         let names = ReaderNames::new(spellings.clone(), islands);
-        let spelling = report_spelling(module, scope, syntax).with_reader_names(Rc::new(names));
+        let spelling =
+            report_spelling(module, predecessors, syntax).with_reader_names(Rc::new(names));
         self.reports(&Rc::new(spelling), unbound)
     }
 
@@ -1734,15 +1741,15 @@ impl From<UniverseError> for Error {
 
 /// The spelling every report of `module`'s shares before a reader stands anywhere: everything a reader could see — `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so every table has to be told the prelude exists — the shortening table to know `Vec` is an unambiguous suffix, the plicity marks to know `Eq`'s first parameter is implicit, the witness table to know `Show`'s method.
 ///
-/// Taking the scope as a `Module` rather than as one of its projections is deliberate: a name slice would repair the shortening and leave the plicities reading a module that does not hold the prelude, and a second projection is a second thing to forget.
+/// Taking each predecessor as a `Module` rather than as one of its projections is deliberate: a name slice would repair the shortening and leave the plicities reading a module that does not hold the prelude, and a second projection is a second thing to forget.
 ///
 /// The two halves stay apart for the shortening, which is what `build_shorten_layered` wants: a declaration this reader wrote settles its own spelling before the environment competes for it, so a root `Holds` beside `/std/Bool/Holds` reports as the `Holds` that was written rather than as `/Holds`. The plicities and witnesses merge, having no such contest — a name resolves to one declaration and reads its marks off that one.
-fn report_spelling(module: &Module, scope: &[&Module], syntax: &SyntaxRegistry) -> Spelling {
+fn report_spelling(module: &Module, predecessors: &[&Module], syntax: &SyntaxRegistry) -> Spelling {
     let own = module.module_symbols();
     let mut symbols = Vec::new();
     let mut plicities = module.nominal_plicities();
     let mut witnesses = module.witness_spelling(syntax);
-    for unit in scope {
+    for unit in predecessors {
         symbols.extend(unit.module_symbols());
         for (name, marks) in unit.nominal_plicities() {
             plicities.entry(name).or_insert(marks);

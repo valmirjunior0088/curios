@@ -4,21 +4,21 @@ The Curios compile driver: `compile_entrypoint`, `compile_units`, `Stage`, and t
 
 ## Design
 
-### The driver is the compiler boundary, and scope is not its decision
+### The driver is the compiler boundary, and its predecessors are not its decision
 
-**Decision.** This crate depends on no runtime, no Binaryen, no CLI and no `curios-package`, and folds its stages over whatever scope it is handed. `curios-package` sits beside the boundary, and `curios-js` does not touch it.
+**Decision.** This crate depends on no runtime, no Binaryen, no CLI and no `curios-package`, and folds its stages over whatever predecessors it is handed. `curios-package` sits beside the boundary, and `curios-js` does not touch it.
 
 **Rationale.** Manifests, dependency resolution and the store answer what is in a compilation and where each part came from, which is a product's question: `curios` answers it over `curios-package`, and the browser, with no filesystem, answers it differently. A driver that knew manifests would need a plausible answer from every caller that has none. The boundary is the manifest's — no `curios-package` row here — and `curios-package/src/lib.rs` states it from the other side.
 
 **Rejected.** The driver resolving its own inputs, which puts a filesystem assumption below the browser product.
 
-### The standard prefix is a function here, not a policy
+### The standard predecessors are a function here, not a policy
 
-**Decision.** `compile_entrypoint` takes a `Prefix` and cannot tell which unit is `/std`. `standard.rs` sits above it and supplies the fixed prelude, `/sys` and `/std` first in scope, and nothing in the scope-agnostic half calls it. A package named `std` that is a fold's first unit takes the archived `/std`'s place, compiled over the archived unit as its baseline and granted what that root could see, and every later unit is compiled against it; only the first unit and the last root can qualify, and both are asserted ([A stored unit is a baseline for an item-level recompile](../documentation/design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md)).
+**Decision.** `compile_entrypoint` takes a `Predecessors` and cannot tell which unit is `/std`. `standard.rs` sits above it and supplies the fixed prelude, `/sys` and `/std` first in scope, and nothing in the half that knows no particular predecessors calls it. A package named `std` that is a fold's first unit takes the archived `/std`'s place, compiled over the archived unit as its baseline and granted what that root could see, and every later unit is compiled against it; only the first unit and the last root can qualify, and both are asserted ([A stored unit is a baseline for an item-level recompile](../documentation/design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md)).
 
 **Rationale.** The native product, the browser product and this crate's fixtures would each spell the prelude by hand, and three callers agreeing on one spelling is a missing function. The standard library is the largest Curios program and the one edited most, and a question about one of its modules would otherwise be a collision of two claims on `/std`. Reserving the name makes the answer independent of which binary answers, and a baseline is correct for any tree, since an item is reused only where its lowered form matches and nothing it reaches changed.
 
-**Rejected.** Superseding by prefix for any unit of the fold, when a later unit's scope is not the one the archived unit was compiled in; identifying the tree by the record's directory, which depends on the binary's checkout; a manifest key or root kind for the standard library; recognizing the prelude in `curios-wonder` or the package layer, neither of which can reach the archive.
+**Rejected.** Superseding by prefix for any unit of the fold, when a later unit's predecessors are not the ones the archived unit was compiled against; identifying the tree by the record's directory, which depends on the binary's checkout; a manifest key or root kind for the standard library; recognizing the prelude in `curios-wonder` or the package layer, neither of which can reach the archive.
 
 ### A baseline crosses the cache seam as a unit, and the cache decides
 

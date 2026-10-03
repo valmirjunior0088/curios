@@ -31,9 +31,9 @@ thread_local! {
     });
 }
 
-/// Borrow this thread's restored prelude, certified, as the ordered prefix every compilation starts from — `/sys` then `/std`, each unit carrying the certifier's record of its definitions.
+/// Borrow this thread's restored prelude, certified, as the ordered predecessors every compilation starts from — `/sys` then `/std`, each unit carrying the certifier's record of its definitions.
 ///
-/// A slice rather than one unit, and in dependency order rather than any: what `Prefix::over` takes is exactly this, so a product puts the whole prelude in scope by handing it along instead of deciding how its roots compose.
+/// A slice rather than one unit, and in dependency order rather than any: what `Predecessors::over` takes is exactly this, so a product puts the whole prelude in scope by handing it along instead of deciding how its roots compose.
 pub fn with_prelude<R>(use_prelude: impl FnOnce(&[&Unit]) -> R) -> R {
     PRELUDE.with(|prelude| {
         let [sys, std] = &**prelude;

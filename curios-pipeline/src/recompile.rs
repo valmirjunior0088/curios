@@ -15,24 +15,24 @@ use {
         Context, Established, Recompile, Resumed, elaborate_and_zonk_unit_over, erase_unit,
     },
     curios_text::{UnitSource, into_core_unit},
-    curios_unit::{Prefix, Uncertified, Unit},
+    curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::{SyntaxRegistry, grown},
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Compile one unit against `scope` over `baseline`: lower whole, diff, elaborate and judge the closure, erase whole.
+/// Compile one unit against `predecessors` over `baseline`: lower whole, diff, elaborate and judge the closure, erase whole.
 ///
-/// The result is a unit like [`compile_unit`](crate::compile_unit)'s — the same lowering, a core module holding every item in the lowering's order, the same erasure onto the scope's arena — differing in which items were elaborated and judged now and which were taken from the baseline. Erasure is whole because the arena is the prefix's and appends.
+/// The result is a unit like [`compile_unit`](crate::compile_unit)'s — the same lowering, a core module holding every item in the lowering's order, the same erasure onto the predecessors' arena — differing in which items were elaborated and judged now and which were taken from the baseline. Erasure is whole because the arena is the fold's and appends.
 pub fn compile_unit_over(
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     source: &UnitSource<'_>,
     baseline: &Unit,
 ) -> Result<Unit, CompileError> {
     curios_profile::profile!("compile_unit_over");
-    let text = scope.text();
-    let cores = scope.cores();
+    let text = predecessors.text();
+    let cores = predecessors.cores();
 
     let mut lowered = into_core_unit(source, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
@@ -76,7 +76,7 @@ pub fn compile_unit_over(
     let core =
         Zonked::project(&core).map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
-    let rechecked = recheck_over(&core, budget, scope, &reused, baseline, syntax);
+    let rechecked = recheck_over(&core, budget, predecessors, &reused, baseline, syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
         return Err(kernel_refusal(verdict, core.as_module(), &cores, syntax));
     }
@@ -85,7 +85,7 @@ pub fn compile_unit_over(
 
     let ersd = erase_unit(
         &mut Context::new(budget, *syntax),
-        Resumed::of(&cores, scope.arena()),
+        Resumed::of(&cores, predecessors.arena()),
         &core,
     )
     .map_err(|error| CompileError::Failure(error.reports_with(core.as_module(), &cores, syntax)))?;
@@ -99,12 +99,12 @@ pub fn compile_unit_over(
 pub(crate) fn recheck_over(
     module: &Zonked<Module>,
     budget: u64,
-    scope: Prefix<'_>,
+    predecessors: Predecessors<'_>,
     reused: &Module,
     baseline: &Unit,
     syntax: &SyntaxRegistry,
 ) -> Rechecked {
-    let mut globals = globals(scope);
+    let mut globals = globals(predecessors);
     globals.mount(reused, baseline.certification());
 
     certify_module(module, budget, &globals, *syntax)

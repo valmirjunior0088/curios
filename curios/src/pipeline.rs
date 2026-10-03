@@ -37,7 +37,7 @@ pub(crate) fn payload_of(
         .map(|home| (home.package.clone(), home.executable.clone()));
     let declares = program.declares();
     let manifest = program.home().map(|home| home.manifest.clone());
-    let scope = program.into_units();
+    let units = program.into_units();
 
     // Opened before the store is consulted, because the entry's own text is half of what a stored payload is verified against — and it has to be the text that was *parsed*, not a re-read taken afterwards.
     let (entrypoint, loader, source) = open(entry.as_deref())?;
@@ -66,7 +66,7 @@ pub(crate) fn payload_of(
         });
 
     // Built once and handed to both halves of the payload family, which is what keeps them agreeing about what the chain is: the probe refuses a unit the fold could not place, and the write must refuse the same one.
-    let sources = scope.iter().map(UnitSource::mounted).collect::<Vec<_>>();
+    let sources = units.iter().map(UnitSource::mounted).collect::<Vec<_>>();
 
     if let Some((cache, program)) = &filed
         && let Some((payload, foreigns)) = cache.payload_get(program, &sources, engine())
@@ -82,7 +82,7 @@ pub(crate) fn payload_of(
 
     let compiled = compile_entry(
         budget,
-        &scope,
+        &units,
         &entrypoint,
         &loader,
         &subject,

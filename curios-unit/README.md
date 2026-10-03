@@ -1,6 +1,6 @@
 # curios-unit
 
-The compilation unit: what one unit hands its successors — one opaque artifact per stage — and the `Prefix` of borrowed predecessors each stage is compiled against. A compilation is a set of units folded over a dependency order; the intrinsic root is a unit, the standard library above it is one, a package is one, and the program asked for is the unit with no successors, which is what lets it carry the entry point. What `Unit` and `Prefix` expose belongs to the crate rustdoc.
+The compilation unit: what one unit hands its successors — one opaque artifact per stage — and the borrowed `Predecessors` each stage is compiled against. A compilation is a set of units folded over a dependency order; the intrinsic root is a unit, the standard library above it is one, a package is one, and the program asked for is the unit with no successors, which is what lets it carry the entry point. What `Unit` and `Predecessors` expose belongs to the crate rustdoc.
 
 ## Design
 
@@ -10,9 +10,9 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 **Rationale.** `curios-prelude-archive`'s build script constructs an `Uncertified` unit, and a build script reaching the kernel re-runs on every certifier edit and re-elaborates the whole standard library, the regression `curios-analysis` stands apart to prevent.
 
-### A scope is borrowed, per stage, as that stage's own type
+### Predecessors are borrowed, per stage, as that stage's own type
 
-**Decision.** `Prefix` borrows the predecessor units and hands each stage its view as the opaque type that stage owns — one `curios-text` resolution state per unit (`Prefix::text`), one `curios-core` module per unit (`Prefix::cores`), and the one cumulative `curios-elab` erased arena the last unit carries, cloned because replay consumes it (`Prefix::arena`) — rather than one merged value or anything this crate unpacks. A unit is composed of those opaque artifacts rather than flattened into their fields.
+**Decision.** `Predecessors` borrows the predecessor units and hands each stage its view as the opaque type that stage owns — one `curios-text` resolution state per unit (`Predecessors::text`), one `curios-core` module per unit (`Predecessors::cores`), and the one cumulative `curios-elab` erased arena the last unit carries, cloned because replay consumes it (`Predecessors::arena`) — rather than one merged value or anything this crate unpacks. A unit is composed of those opaque artifacts rather than flattened into their fields.
 
 **Rationale.** Merging would copy the standard library into every compilation. Widening the stages' internals so a struct here could hold them would export a resolver's internals for no consumer.
 
@@ -30,7 +30,7 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 **Rationale.** A later walk reads a unit in scope for its definitions' totality, so a unit without a record would be a case every reader handles, for the one producer below the certifier by design. The state in the type removes the case from every consumer.
 
-**Rejected.** An optional record, a special case every reader carries; a unit generic over its record, which two named types say without the machinery; the record outside the unit, which turns every scope into a slice of pairs.
+**Rejected.** An optional record, a special case every reader carries; a unit generic over its record, which two named types say without the machinery; the record outside the unit, which turns the predecessors into a slice of pairs.
 
 ### A unit carries no identity another compilation could mint
 
@@ -40,8 +40,8 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 **Rejected.** Floors, each unit's counters resuming above every predecessor's: a floor widens safely, but it ties a unit's bytes to its place in the fold and asks every walk to trust a carried number nothing checks.
 
-### The erased arena is the prefix's, not the unit's
+### The erased arena is the fold's, not the unit's
 
 **Decision.** The arena a `Unit` carries is cumulative from the first unit forward — each unit's erasure resumes over the previous one's — never an independent arena numbered from zero.
 
-**Rationale.** Independently erased arenas both start at zero, so per-unit artifacts would need a relocation pass, the one rustc pays a `cnum_map` for. A stored unit's key names its exact ordered predecessors, so the arena a restored unit carries always matches the prefix it is restored into, which is what lets a unit be stored whole.
+**Rationale.** Independently erased arenas both start at zero, so per-unit artifacts would need a relocation pass, the one rustc pays a `cnum_map` for. A stored unit's key names its exact ordered predecessors, so the arena a restored unit carries always matches the predecessors it is restored after, which is what lets a unit be stored whole.

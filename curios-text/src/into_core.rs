@@ -2,7 +2,7 @@
 //!
 //! [`into_core_unit`] runs a unit through these passes, in order:
 //!
-//! 1. **Discovery** (`Resolved::of`): the prefixes the unit claims checked disjoint from the scope's, then every module they declare loaded through its source.
+//! 1. **Discovery** (`Resolved::of`): the prefixes the unit claims checked disjoint from the predecessors', then every module they declare loaded through its source.
 //! 2. **Interface resolution** (`interface::resolve_unit`): each module's declarations seeded into its interface, then every `pub use` resolved to a fixed point, before any body is lowered.
 //! 3. **Lowering** (`process_items`): each item's names resolved against those interfaces, its sugar undone and its matches compiled (`match_compile`), then the entry's final term.
 //! 4. **Audit** (`audit`, `lint`): what the public interface exposes, and the declarations nothing reaches.
@@ -246,7 +246,7 @@ pub struct PreparedText {
     unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
     /// How this unit's names can be written: every binding a `use` brought into scope, with the spelling a reader wrote it under and, per definition, the ones in scope where it was written — see `Context::imports` — and every absolute path the unit may write for each global. What a goal report's candidate pool reaches beyond the names the program already mentions, and what every report spells a name by.
     spellings: curios_core::Spellings,
-    /// Every lint the lowering found, in reading order, less each `unused-binder` lint elaboration credited — see [`Lint`]. Carried with the unit because a lint depends on exactly what the unit's identity in the store depends on: its own sources and its scope's interfaces.
+    /// Every lint the lowering found, in reading order, less each `unused-binder` lint elaboration credited — see [`Lint`]. Carried with the unit because a lint depends on exactly what the unit's identity in the store depends on: its own sources and its predecessors' interfaces.
     lints: Vec<Lint>,
     /// Every written binder a proof the elaborator wrote read — see [`LintedBinder`]. What a unit compiled over this one as its baseline credits in a declaration it does not elaborate again.
     credited: Vec<LintedBinder>,
@@ -363,28 +363,28 @@ impl PreparedText {
 }
 
 impl<'a> Resolved<'a> {
-    /// Discover every module `source` declares, over what `scope` already established.
+    /// Discover every module `source` declares, over what the predecessors already established.
     ///
     /// **One walk for the entry and a mounted unit.** They differ in where a root's items come from and in which prefixes the compilation root lists as children, both of which are answered below rather than duplicated: two copies of a tree walk agree only by being read, which is the shape every configuration-dependent defect in this stage has had.
     ///
     /// No synthesized `mod sys;`-style declarations here: the compilation root's own `ModuleInfo` is built from the entry's raw items, then every mounted prefix is registered as its child *explicitly* — a deliberate fact, not something recovered later by pattern-matching a qualifier's leading string segment. `insert_child` (which rejects any collision, not just pub/pub) is what catches a user's own `mod std` colliding with that registration, in either direction.
     fn of(
         source: &UnitSource<'_>,
-        scope: &'a [&'a BTreeMap<Qualifier, ModuleInfo>],
-        scope_mounts: &[Mount],
+        predecessor_tables: &'a [&'a BTreeMap<Qualifier, ModuleInfo>],
+        predecessor_mounts: &[Mount],
         own: &[Mount],
     ) -> Result<Self, Error> {
         let mut resolved = Resolved {
             modules: HashMap::new(),
             mod_spans: HashMap::new(),
-            table: Scoped::over(scope),
+            table: Scoped::over(predecessor_tables),
         };
 
         // The compilation root: the entry's own module when the entry is what is being lowered, and otherwise a synthetic one belonging to no unit — which is why its children are *every* mounted prefix rather than only this unit's.
         //
-        // Writing it lands in this unit's own layer, which shadows whatever the scope's layer said, so listing only `own` here would silently hide the scope's mounts — `/std` among them — from a unit being compiled against them, which the test that says a unit reaches a mounted name holds.
+        // Writing it lands in this unit's own layer, which shadows whatever the predecessors' layer said, so listing only `own` here would silently hide the predecessors' mounts — `/std` among them — from a unit being compiled against them, which the test that says a unit reaches a mounted name holds.
         let mut root_info = scan_module_info(source.root_items())?;
-        for child in mounted_children(scope_mounts.iter().chain(own)) {
+        for child in mounted_children(predecessor_mounts.iter().chain(own)) {
             root_info.insert_child(&Label::from(child), true)?;
         }
         resolved.table.insert(Qualifier::empty(), root_info);
@@ -1450,7 +1450,7 @@ pub struct UnitSource<'a> {
     source: &'a RootSource,
     /// The prefixes this unit declared a dependency on, and so the only ones its names may resolve into — or `None` for every unit in scope.
     ///
-    /// `None` is not "nothing declared" but "the caller did not decide", which is every caller that has no manifest to read one out of: a fold whose order is the whole of its dependency information cannot narrow, so the default has to be the complete scope. A unit that *does* declare them names them here, and a predecessor it did not name is then in the fold — contributing its identities, its universe seeds and its erased operands — while being unspellable.
+    /// `None` is not "nothing declared" but "the caller did not decide", which is every caller that has no manifest to read one out of: a fold whose order is the whole of its dependency information cannot narrow, so the default has to be every predecessor. A unit that *does* declare them names them here, and a predecessor it did not name is then in the fold — contributing its identities, its universe seeds and its erased operands — while being unspellable.
     visible: Option<Vec<Qualifier>>,
 }
 
@@ -1483,15 +1483,15 @@ impl<'a> UnitSource<'a> {
         }
     }
 
-    /// The mounts of `scope` this source may name, plus `own`.
+    /// The mounts of `predecessors` this source may name, plus `own`.
     ///
     /// Filtered per *mount* rather than per unit: what a manifest declares is a prefix, and a unit claiming two prefixes would otherwise hand over the one nobody asked for along with the one somebody did. `own` is always included, since a unit does not declare a dependency on itself.
     ///
     /// **Declaring nothing means every open prefix, not every prefix.** A closed root — `/sys`, the compiler's own, which no manifest can name because it has no path — is in the fold of every compilation and in the default set of none. So the honest reading of "the caller did not decide" is "everything a program may name", and the standard library reaches `/sys` by being the one unit that declares it.
     ///
-    /// Narrowing *resolution*, never auditing: the nominal audit reads the whole of `scope`, because a declaration in an unspellable predecessor still exists and a public exposure of it is still one.
-    fn visible_mounts(&self, scope: &[&PreparedText], own: &[Mount]) -> Vec<Mount> {
-        scope
+    /// Narrowing *resolution*, never auditing: the nominal audit reads the whole of `predecessors`, because a declaration in an unspellable predecessor still exists and a public exposure of it is still one.
+    fn visible_mounts(&self, predecessors: &[&PreparedText], own: &[Mount]) -> Vec<Mount> {
+        predecessors
             .iter()
             .flat_map(|unit| unit.mounts.iter())
             .filter(|mount| match &self.visible {
@@ -1530,7 +1530,7 @@ impl<'a> UnitSource<'a> {
 
     /// The prefixes this unit declared a dependency on, when it declared any — the other half of which unit this is.
     ///
-    /// Two units of one source and one scope differing only in what they declared are two lowerings, because a name resolves in one and is refused in the other. So a store addresses them apart, which is what this is read for.
+    /// Two units of one source and the same predecessors differing only in what they declared are two lowerings, because a name resolves in one and is refused in the other. So a store addresses them apart, which is what this is read for.
     pub fn declared(&self) -> Option<&[Qualifier]> {
         self.visible.as_deref()
     }
@@ -1571,37 +1571,46 @@ impl<'a> UnitSource<'a> {
 ///
 /// **One walk for every configuration.** Where a unit's items sit, whether anything is already in scope, and where four counters start are all arguments here; a copy of the walk per configuration would agree with the others only by being read, which is the shape every configuration-dependent defect in this stage has had.
 ///
-/// `scope` is in dependency order. Reads span it and the unit's own; writes only ever touch the unit's own, which is what makes a layer sufficient rather than a copy.
+/// `predecessors` are in dependency order. Reads span them and the unit's own; writes only ever touch the unit's own, which is what makes a layer sufficient rather than a copy.
 ///
 /// An entry source's final term is lowered too — a refusal in it is this lowering's — and handed back only by the entry's own spelling, [`into_core_with_prelude`]: a unit is a [`curios_core::Module`] alone.
 pub fn into_core_unit(
     source: &UnitSource<'_>,
-    scope: &[&PreparedText],
+    predecessors: &[&PreparedText],
     syntax: &SyntaxRegistry,
 ) -> Result<PreparedText, Error> {
-    lower_unit(source, scope, syntax).map(|(unit, _)| unit)
+    lower_unit(source, predecessors, syntax).map(|(unit, _)| unit)
 }
 
 /// [`into_core_unit`], with the final term an entry source closes with, lowered beside the unit.
 fn lower_unit(
     source: &UnitSource<'_>,
-    scope: &[&PreparedText],
+    predecessors: &[&PreparedText],
     syntax: &SyntaxRegistry,
 ) -> Result<(PreparedText, Option<curios_core::Entrypoint>), Error> {
     curios_profile::profile!("into_core_unit");
-    curios_utilities::grown(|| into_core_unit_within(source, scope, syntax))
+    curios_utilities::grown(|| into_core_unit_within(source, predecessors, syntax))
 }
 
 fn into_core_unit_within(
     source: &UnitSource<'_>,
-    scope: &[&PreparedText],
+    predecessors: &[&PreparedText],
     syntax: &SyntaxRegistry,
 ) -> Result<(PreparedText, Option<curios_core::Entrypoint>), Error> {
-    // The whole scope, in every reading but one. Per-dependency visibility narrows nothing here: a prefix this unit did not declare stays discoverable and its names stay resolvable, and what refuses is the reference itself — see `Reach::guard`. Hiding the tables instead would turn an undeclared dependency into an unbound name, which is the one diagnostic an undeclared dependency must not produce.
-    let scope_tables = scope.iter().map(|unit| &unit.table).collect::<Vec<_>>();
-    let scope_public = scope.iter().map(|unit| &unit.public).collect::<Vec<_>>();
-    let scope_modules = scope.iter().map(|unit| &unit.core).collect::<Vec<_>>();
-    let scope_mounts = scope
+    // Every predecessor, in every reading but one. Per-dependency visibility narrows nothing here: a prefix this unit did not declare stays discoverable and its names stay resolvable, and what refuses is the reference itself — see `Reach::guard`. Hiding the tables instead would turn an undeclared dependency into an unbound name, which is the one diagnostic an undeclared dependency must not produce.
+    let predecessor_tables = predecessors
+        .iter()
+        .map(|unit| &unit.table)
+        .collect::<Vec<_>>();
+    let predecessor_public = predecessors
+        .iter()
+        .map(|unit| &unit.public)
+        .collect::<Vec<_>>();
+    let predecessor_modules = predecessors
+        .iter()
+        .map(|unit| &unit.core)
+        .collect::<Vec<_>>();
+    let predecessor_mounts = predecessors
         .iter()
         .flat_map(|unit| unit.mounts.iter().cloned())
         .collect::<Vec<_>>();
@@ -1615,7 +1624,7 @@ fn into_core_unit_within(
     //
     // Mount-set disjointness is what `Scoped`'s shadowing rule, the registries' duplicate-key rejection and the `ffi` import namespace all rest on, so it is checked once here rather than assumed three times.
     for (claim, prefix) in claims(source, &own) {
-        if let Some(earlier) = scope_mounts
+        if let Some(earlier) = predecessor_mounts
             .iter()
             .find(|earlier| !earlier.prefix.is_root() && earlier.prefix == prefix)
         {
@@ -1631,16 +1640,16 @@ fn into_core_unit_within(
         mut table,
         modules,
         mod_spans,
-    } = Resolved::of(source, &scope_tables, &scope_mounts, &own)?;
+    } = Resolved::of(source, &predecessor_tables, &predecessor_mounts, &own)?;
 
-    // Every prefix this compilation mounts — the scope's, then this unit's. Resolution asks the whole set; the lowered module records only `own`, because a module states what its own unit provides.
-    let mounts = scope_mounts
+    // Every prefix this compilation mounts — the predecessors', then this unit's. Resolution asks the whole set; the lowered module records only `own`, because a module states what its own unit provides.
+    let mounts = predecessor_mounts
         .iter()
         .cloned()
         .chain(own.iter().cloned())
         .collect::<Vec<_>>();
     // The subset this unit declared, plus its own. The default is every predecessor, so this differs from `mounts` only for a caller that had a manifest to read one out of.
-    let visible_mounts = source.visible_mounts(scope, &own);
+    let visible_mounts = source.visible_mounts(predecessors, &own);
     let reach = Reach::over(&mounts, &visible_mounts);
 
     let public = interface::resolve_unit(
@@ -1649,7 +1658,7 @@ fn into_core_unit_within(
         &modules,
         &mut table,
         reach,
-        Scoped::over(&scope_public),
+        Scoped::over(&predecessor_public),
     )?;
 
     // Every counter starts at zero. No term in scope carries a local, a metavariable or a universe metavariable — a stored unit is refused one — so nothing minted here can alias an identity already there, and what this unit mints depends on nothing compiled before it.
@@ -1687,7 +1696,7 @@ fn into_core_unit_within(
         &lints,
         syntax,
     );
-    // Every named prefix in the compilation binds its own one-segment name. No two can repeat it: the disjointness check above refuses a unit claiming what the scope already holds, and the scope's own mounts were pairwise disjoint when each was compiled. The entry's prefix is the empty one, which has no name to bind.
+    // Every named prefix in the compilation binds its own one-segment name. No two can repeat it: the disjointness check above refuses a unit claiming what a predecessor already holds, and the predecessors' own mounts were pairwise disjoint when each was compiled. The entry's prefix is the empty one, which has no name to bind.
     for mount in &mounts {
         if !mount.prefix.is_root() {
             context.insert_scope(mount.prefix.head().to_string(), mount.prefix)?;
@@ -1695,7 +1704,7 @@ fn into_core_unit_within(
     }
 
     let mut flat_items = Vec::new();
-    // This unit's own, never the scope's extended in place. What the scope declares is *scope*, and the one pass here that asks a scope question — the public-exposure audit, whose alias walk may land on a predecessor's type — takes it as a base to query rather than as entries copied into these maps. The dependency sort below never needed it: it looks a declaration up only for names an item itself declares.
+    // This unit's own, never the predecessors' extended in place. What a predecessor declares stays its own, and the one pass here that asks about one — the public-exposure audit, whose alias walk may land on a predecessor's type — takes them to query rather than as entries copied into these maps. The dependency sort below never needed it: it looks a declaration up only for names an item itself declares.
     let mut induct_decls = BTreeMap::new();
     let mut struct_decls = BTreeMap::new();
     let mut concepts = BTreeMap::new();
@@ -1760,7 +1769,7 @@ fn into_core_unit_within(
         &public,
         &table,
         &flat_items,
-        NominalScope::new(&scope_modules, &induct_decls, &struct_decls),
+        NominalScope::new(&predecessor_modules, &induct_decls, &struct_decls),
     )?;
 
     let dead = unused_declarations(&Declarations {
@@ -1778,7 +1787,7 @@ fn into_core_unit_within(
     // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
     let items = order_flat_items(
         flat_items,
-        &scope_modules,
+        &predecessor_modules,
         &induct_decls,
         &struct_decls,
         syntax,
@@ -1789,8 +1798,8 @@ fn into_core_unit_within(
 
     // Read last, when the export view is final and every definition's import scope has been recorded, and before the tables below are taken out of their scoped views.
     let documentation = source.documented().map(|(prefix, description)| {
-        // The scope's own records, for the declarations this unit adopts out of a root a consumer cannot name. A unit keeps no surface tree, so the record it carried away is the only place its declarations survive — see `document`'s `records`.
-        let records = scope
+        // The predecessors' own records, for the declarations this unit adopts out of a root a consumer cannot name. A unit keeps no surface tree, so the record it carried away is the only place its declarations survive — see `document`'s `records`.
+        let records = predecessors
             .iter()
             .filter_map(|unit| unit.documentation())
             .collect::<Vec<_>>();
@@ -1868,13 +1877,13 @@ pub fn into_core(
 
 /// Resolve and lower one fixed root once for build-time archival, against the fixed roots already lowered.
 ///
-/// `scope` is empty for the first root and holds its predecessors for every later one: the fixed prelude is a fold like any other, so the root that references another is lowered after it rather than beside it.
+/// `predecessors` is empty for the first root and holds the roots before it for every later one: the fixed prelude is a fold like any other, so the root that references another is lowered after it rather than beside it.
 pub fn prepare_prelude(
     input: &RootSource,
-    scope: &[&PreparedText],
+    predecessors: &[&PreparedText],
     syntax: &SyntaxRegistry,
 ) -> Result<PreparedText, Error> {
-    into_core_unit(&UnitSource::mounted(input), scope, syntax)
+    into_core_unit(&UnitSource::mounted(input), predecessors, syntax)
 }
 
 /// The entry program lowered: its module and the term it closes with, what its lowering minted, which elaboration's counters start above, its `foreign` rows, the unresolved-name table its `unbound variable` reports read from, and its lints.
@@ -1910,10 +1919,10 @@ fn unused_imports(sites: Vec<UseSite>) -> Vec<Lint> {
 pub fn into_core_with_prelude(
     entrypoint: &Entrypoint,
     loader: &RootSource,
-    scope: &[&PreparedText],
+    predecessors: &[&PreparedText],
     syntax: &SyntaxRegistry,
 ) -> Result<LoweredEntry, Error> {
-    let (unit, entry) = lower_unit(&UnitSource::entry(entrypoint, loader), scope, syntax)?;
+    let (unit, entry) = lower_unit(&UnitSource::entry(entrypoint, loader), predecessors, syntax)?;
 
     Ok(LoweredEntry {
         program: curios_core::Program {

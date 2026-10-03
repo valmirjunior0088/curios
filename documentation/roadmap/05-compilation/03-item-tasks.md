@@ -53,7 +53,7 @@ Each lands alone, on its own check.
 
 ## Design decisions this overturns or corrects
 
-- [`curios-unit`'s README](../../../curios-unit/README.md): *The erased arena is the prefix's, not the unit's*.
+- [`curios-unit`'s README](../../../curios-unit/README.md): *The erased arena is the fold's, not the unit's*.
 - [`curios-prelude-archive`'s README](../../../curios-prelude-archive/README.md): `/std`'s arena stops resuming above `/sys`'s, and the images are restored once per process.
 - [Cached verdicts](../../design/soundness/admission/cached-verdicts.md): the address loses its ordered predecessors.
 - `curios-wonder/src/server.rs`: its module documentation's *single-threaded by construction*.
