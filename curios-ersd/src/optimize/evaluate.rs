@@ -6,11 +6,10 @@
 
 mod budget;
 mod closed;
+pub(crate) use closed::*;
 mod copy;
 mod interpret;
 mod reify;
 mod spine;
+pub(crate) use spine::*;
 mod value;
-
-pub(crate) use closed::evaluate_closed_terms;
-pub(crate) use spine::specialize_literal_spines;

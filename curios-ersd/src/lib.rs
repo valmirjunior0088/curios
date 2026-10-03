@@ -32,7 +32,7 @@ mod build;
 pub use build::*;
 
 mod print;
-pub(crate) use print::{spell_function, spell_value};
+pub(crate) use print::*;
 
 mod walk;
 
@@ -40,7 +40,7 @@ mod analysis;
 pub use analysis::*;
 
 mod into_cont;
-pub use into_cont::lower_to_cont;
+pub use into_cont::*;
 
 pub mod test_support;
 
@@ -53,4 +53,4 @@ pub use summary::*;
 mod remap;
 
 mod optimize;
-pub use optimize::{optimize, optimize_verified};
+pub use optimize::*;

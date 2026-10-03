@@ -35,7 +35,7 @@ use scoped::*;
 
 mod document;
 use curios_document::Documentation;
-use document::document;
+use document::*;
 
 #[cfg(test)]
 mod binding_tests;

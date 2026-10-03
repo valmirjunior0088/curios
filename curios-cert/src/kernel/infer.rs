@@ -13,10 +13,10 @@
 //! Beyond those, the kernel refuses whatever it cannot determine. A type whose sort is unclear, a nominal name with no declaration: each is a refusal, never a default. The reason is in the [`kernel`](super) module documentation — a guessed answer from a second opinion is worse than no second opinion.
 
 mod eliminate;
-use eliminate::check_induct_arms;
+use eliminate::*;
 
 mod intrinsic;
-use intrinsic::{check_operands, infer_intrinsic};
+use intrinsic::*;
 
 #[cfg(test)]
 mod declaration_tests;

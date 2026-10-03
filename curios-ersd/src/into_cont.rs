@@ -7,7 +7,7 @@
 //! Arena identities are globally unique and never shadowed, so flat maps to their Cont counterparts suffice; source hints are carried onto the Cont values and functions they lower to.
 
 mod census;
-pub(crate) use census::{SequenceFacts, sequence_census};
+pub(crate) use census::*;
 
 mod emitter;
 use emitter::*;

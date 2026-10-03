@@ -10,7 +10,7 @@ mod foreigns;
 use foreigns::*;
 
 mod harness;
-pub use harness::run;
+pub use harness::*;
 
 #[cfg(test)]
 mod tests;

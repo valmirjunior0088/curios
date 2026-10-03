@@ -23,30 +23,28 @@ mod infer;
 pub use infer::*;
 
 mod memos;
-use memos::Memos;
+use memos::*;
 
 mod module;
 pub(crate) use module::*;
 
 mod positions;
-pub(crate) use positions::Position;
-use positions::Positions;
+pub(crate) use positions::*;
 
 mod calls;
-use calls::Calls;
+use calls::*;
 
 mod reads;
-use reads::ReadRecorder;
+use reads::*;
 
 mod scope;
-use scope::Scope;
+use scope::*;
 
 mod sort;
 pub use sort::*;
 
 mod spend;
-pub(crate) use spend::Replay;
-use spend::Spend;
+pub(crate) use spend::*;
 
 mod whnf;
 pub(crate) use whnf::*;

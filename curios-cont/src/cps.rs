@@ -2181,17 +2181,30 @@ mod analysis;
 mod clone;
 mod contify;
 mod cse;
+
 mod dataflow;
+pub(crate) use dataflow::*;
+
 mod demand;
+pub(crate) use demand::*;
+
 mod evaluate;
 mod fields;
 mod inline;
+
 mod optimize;
+pub use optimize::*;
+
 mod origin;
+pub(crate) use origin::*;
+
 mod print;
 mod protocol;
 mod reachable;
+
 mod represent;
+pub use represent::*;
+
 mod simplify;
 mod specialize;
 mod uncurry;
@@ -2215,12 +2228,6 @@ mod simplify_tests;
 mod specialize_tests;
 #[cfg(test)]
 mod test_support;
-
-pub(crate) use dataflow::*;
-pub(crate) use demand::*;
-pub use optimize::optimize;
-pub(crate) use origin::*;
-pub use represent::*;
 
 #[cfg(test)]
 mod tests;

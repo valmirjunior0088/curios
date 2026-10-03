@@ -54,8 +54,7 @@ mod suggest;
 pub(crate) use suggest::*;
 
 mod entailment;
-pub use entailment::{Conclusion, Origin, Refusal};
-pub(crate) use entailment::{Entailed, entail};
+pub use entailment::*;
 
 mod established;
 pub use established::*;

@@ -5,10 +5,13 @@
 //! Split from `curios-parse` rather than sharing a module namespace with it, because both name their unit `pure`; `README.md` states the decision and what it rejected.
 
 mod combinator;
-mod document;
-mod run;
+pub use combinator::*;
 
-pub use {combinator::*, document::*, run::*};
+mod document;
+pub use document::*;
+
+mod run;
+pub use run::*;
 
 #[cfg(test)]
 mod tests;

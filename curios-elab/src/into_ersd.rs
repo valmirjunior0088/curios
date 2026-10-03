@@ -26,10 +26,9 @@ mod environment;
 use environment::*;
 
 mod lower;
-pub use lower::{ErasedArena, erase_program, erase_unit};
+pub use lower::*;
 
 mod resumed;
-use lower::{Lowering, Outcome};
 pub use resumed::*;
 
 mod binding;
@@ -43,7 +42,7 @@ mod eliminate;
 mod recursion;
 
 mod intrinsic;
-use intrinsic::narrow_case_key;
+use intrinsic::*;
 
 #[cfg(test)]
 mod tests;

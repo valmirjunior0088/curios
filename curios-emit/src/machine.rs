@@ -13,7 +13,7 @@ use {
 };
 
 mod structurize;
-pub(crate) use structurize::{structurize, value_name};
+pub(crate) use structurize::*;
 
 // Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm` — see `documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md`.
 id!(MachineBlockId, "~b", mint);

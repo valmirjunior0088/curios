@@ -1,7 +1,7 @@
 mod coordination;
 
 mod reply;
-use reply::Waiting;
+use reply::*;
 
 use {
     super::{
