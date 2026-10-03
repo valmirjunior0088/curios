@@ -16,7 +16,7 @@ fn a_program_whose_tail_proves_something_else_is_refused_at_false() {
     let witness = Witness {
         what: "a proof of `True`",
         proof: Proof::Program("/std/Bool/True/qed()"),
-        expect: refused![elaborator: Error::TypeMismatch { .. }],
+        expect: refused![elaborator: curios_elab::Error::TypeMismatch { .. }],
     };
 
     assert_eq!(witness.unmet(&witness.proof.answer()), None);
@@ -34,7 +34,7 @@ fn a_module_whose_term_proves_nothing_is_refused_at_false() {
     let witness = Witness {
         what: "a number",
         proof: Proof::Module(|| (Module::default(), zero())),
-        expect: refused![kernel: Error::Mismatch { .. }],
+        expect: refused![kernel: curios_cert::Error::Mismatch { .. }],
     };
 
     assert_eq!(witness.unmet(&witness.proof.answer()), None);

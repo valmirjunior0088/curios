@@ -30,14 +30,13 @@ impl Polarity {
 
     /// Least upper bound: how several occurrences of the same target combine.
     pub fn join(self, other: Polarity) -> Polarity {
-        use Polarity::*;
         match (self, other) {
-            (Unused, p) | (p, Unused) => p,
-            (Mixed, _) | (_, Mixed) => Mixed,
+            (Self::Unused, p) | (p, Self::Unused) => p,
+            (Self::Mixed, _) | (_, Self::Mixed) => Self::Mixed,
             (p, q) if p == q => p,
             // `Strict ⊑ Pos`, so a strict and a positive occurrence join to positive; every other distinct pair spans the two incomparable branches and lands at the top.
-            (Strict, Pos) | (Pos, Strict) => Pos,
-            _ => Mixed,
+            (Self::Strict, Self::Pos) | (Self::Pos, Self::Strict) => Self::Pos,
+            _ => Self::Mixed,
         }
     }
 
@@ -45,24 +44,22 @@ impl Polarity {
     ///
     /// `Unused` annihilates (the argument is never looked at, so nothing inside it occurs), `Strict` is the identity, and `Mixed` absorbs every non-`Unused` argument.
     pub fn compose(self, inner: Polarity) -> Polarity {
-        use Polarity::*;
         match (self, inner) {
-            (Unused, _) | (_, Unused) => Unused,
-            (Strict, p) | (p, Strict) => p,
-            (Mixed, _) | (_, Mixed) => Mixed,
-            (Pos, Pos) | (Neg, Neg) => Pos,
-            (Pos, Neg) | (Neg, Pos) => Neg,
+            (Self::Unused, _) | (_, Self::Unused) => Self::Unused,
+            (Self::Strict, p) | (p, Self::Strict) => p,
+            (Self::Mixed, _) | (_, Self::Mixed) => Self::Mixed,
+            (Self::Pos, Self::Pos) | (Self::Neg, Self::Neg) => Self::Pos,
+            (Self::Pos, Self::Neg) | (Self::Neg, Self::Pos) => Self::Neg,
         }
     }
 
     /// Descend into a function type's domain: what was positive is now negative and vice versa. `Strict` becomes `Neg` — a strict occurrence is a positive one that additionally never crossed an arrow, and it has now crossed one.
     pub fn flip(self) -> Polarity {
-        use Polarity::*;
         match self {
-            Unused => Unused,
-            Strict | Pos => Neg,
-            Neg => Pos,
-            Mixed => Mixed,
+            Self::Unused => Self::Unused,
+            Self::Strict | Self::Pos => Self::Neg,
+            Self::Neg => Self::Pos,
+            Self::Mixed => Self::Mixed,
         }
     }
 }

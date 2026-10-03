@@ -9,7 +9,7 @@ use {
 const FORGED: Witness = Witness {
     what: "the forged proof",
     proof: Proof::Program(""),
-    expect: refused![kernel: Error::UntypedEntry],
+    expect: refused![kernel: curios_cert::Error::UntypedEntry],
 };
 
 const TICKET: Ticket = Ticket {
@@ -68,7 +68,7 @@ fn a_refusal_holds_only_by_the_error_the_witness_names() {
         panic!("a witness refused by another error holds nothing shut");
     };
 
-    assert!(problems[0].contains("not by the kernel's `Error::UntypedEntry`"));
+    assert!(problems[0].contains("not by the kernel's `curios_cert::Error::UntypedEntry`"));
     assert!(problems[0].contains("kernel `UnclosedUniverses`"));
 }
 
@@ -88,7 +88,7 @@ fn a_refusal_expected_of_the_kernel_is_not_met_by_the_elaborators() {
 #[test]
 fn a_witness_naming_both_checkers_holds_only_where_both_refuse() {
     let both = Witness {
-        expect: refused![elaborator: Error::Poisoned, kernel: Error::UntypedEntry],
+        expect: refused![elaborator: curios_elab::Error::Poisoned, kernel: curios_cert::Error::UntypedEntry],
         ..FORGED
     };
     let kernel = by_kernel(curios_cert::Error::UntypedEntry);
@@ -118,7 +118,7 @@ fn a_witness_naming_both_checkers_holds_only_where_both_refuse() {
 #[test]
 fn an_elaborators_error_is_named_beneath_what_located_it() {
     let named = Witness {
-        expect: refused![elaborator: Error::Poisoned],
+        expect: refused![elaborator: curios_elab::Error::Poisoned],
         ..FORGED
     };
     let located = curios_elab::Error::InDeclaration {
@@ -205,7 +205,7 @@ static EXAMPLE: Part = Part {
         witnesses: &[Witness {
             what: "the proof of `True`",
             proof: Proof::Program("/std/Bool/True/qed()"),
-            expect: refused![elaborator: Error::TypeMismatch { .. }],
+            expect: refused![elaborator: curios_elab::Error::TypeMismatch { .. }],
         }],
     }],
 };
@@ -223,7 +223,7 @@ fn a_run_puts_every_witness_and_says_where_its_ticket_stands() {
     assert!(printed.contains("xboard: 1 ticket(s) — 1 holding"));
     assert!(printed.contains("HOLDS      2026-10-02  A proof of `True` passes for one of `False`"));
     assert!(printed.contains(
-        "program  the proof of `True` — refused by the elaborator's `Error::TypeMismatch { .. }` [elaborator `TypeMismatch`]"
+        "program  the proof of `True` — refused by the elaborator's `curios_elab::Error::TypeMismatch { .. }` [elaborator `TypeMismatch`]"
     ));
     assert!(printed.contains("conversion — 1 ticket(s), the last found 2026-10-02"));
     assert!(printed.contains("not put to the kernel: 1"));

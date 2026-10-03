@@ -135,47 +135,105 @@ impl Intrinsic {
     ///
     /// Indexed rather than returning a sequence because the concatenations are variadic and every operand of one shares a representation, so a list would allocate to say what a match arm already says.
     pub fn operand_repr(&self, index: usize) -> Repr {
-        use Intrinsic::*;
-
         match (self, index) {
             // The sequence operations are the only ones whose operands differ from one another: a rope first, then positions.
-            (BinGet(grain) | BinSlice(grain) | BinRest(grain) | BinAppend(grain), 0) => {
+            (
+                Self::BinGet(grain)
+                | Self::BinSlice(grain)
+                | Self::BinRest(grain)
+                | Self::BinAppend(grain),
+                0,
+            ) => Repr::Bin(*grain),
+            (Self::BinGet(_) | Self::BinSlice(_) | Self::BinRest(_) | Self::BinAppend(_), _) => {
+                Repr::Nat
+            }
+            // Both operands of a pointwise combination are ropes, which is what separates it from every other sequence row here — there is no position among them.
+            (Self::BinAnd(grain) | Self::BinOr(grain) | Self::BinXor(grain), _) => {
                 Repr::Bin(*grain)
             }
-            (BinGet(_) | BinSlice(_) | BinRest(_) | BinAppend(_), _) => Repr::Nat,
-            // Both operands of a pointwise combination are ropes, which is what separates it from every other sequence row here — there is no position among them.
-            (BinAnd(grain) | BinOr(grain) | BinXor(grain), _) => Repr::Bin(*grain),
             // A fill takes a count and a generator, and neither is a rope: the element rides the `Nat` grain as an append's does.
-            (BinReplicate(_), _) => Repr::Nat,
-            (BinReinterp(grain), _) => Repr::Bin(*grain),
-            (ListGet | ListSlice | ListRest | ListAppend, 0) => Repr::List,
-            (ListGet | ListSlice | ListRest, _) => Repr::Nat,
+            (Self::BinReplicate(_), _) => Repr::Nat,
+            (Self::BinReinterp(grain), _) => Repr::Bin(*grain),
+            (Self::ListGet | Self::ListSlice | Self::ListRest | Self::ListAppend, 0) => Repr::List,
+            (Self::ListGet | Self::ListSlice | Self::ListRest, _) => Repr::Nat,
             // A chunk element is one packed byte, carried at the `Nat` grain like an append's.
-            (BinChunk(_, _), _) => Repr::Nat,
+            (Self::BinChunk(_, _), _) => Repr::Nat,
             // A list element is carried, never interpreted — unlike a `Bytes` element, which is a `Nat` grain.
-            (ListAppend, _) => Repr::Ref,
-            (BinConcat(grain, _), _) | (BinEql(grain) | BinLen(grain), _) => Repr::Bin(*grain),
-            (FltOfLeBytes, _) => Repr::Bin(Grain::X),
-            (WindowExtent, _) => Repr::Nat,
+            (Self::ListAppend, _) => Repr::Ref,
+            (Self::BinConcat(grain, _), _) | (Self::BinEql(grain) | Self::BinLen(grain), _) => {
+                Repr::Bin(*grain)
+            }
+            (Self::FltOfLeBytes, _) => Repr::Bin(Grain::X),
+            (Self::WindowExtent, _) => Repr::Nat,
             // The whole point of the test is to look at the reference uncoerced, and the read that follows it hands that same reference on.
-            (IsImmediate | ImmediateGet, _) => Repr::Ref,
-            (ListConcat(_) | ListLen | ListSettle | ListFlat(_), _) => Repr::List,
-            (TupleGet(_) | RowGet(..), _) => Repr::Ref,
+            (Self::IsImmediate | Self::ImmediateGet, _) => Repr::Ref,
+            (Self::ListConcat(_) | Self::ListLen | Self::ListSettle | Self::ListFlat(_), _) => {
+                Repr::List
+            }
+            (Self::TupleGet(_) | Self::RowGet(..), _) => Repr::Ref,
 
             // A `Nat` or `Int` is a reference whatever its size — an i31 or a boxed magnitude — and each lowering takes it apart itself, the small case inline, or takes the word it already is; a shift count is such a `Nat` too.
             (
-                NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatDiv | NatRem | NatLe
-                | NatAnd | NatOr | NatXor | NatShl | NatShr | NatEqz | NatToInt | NatToFlt(_)
-                | IntEql | IntNeq | IntAdd | IntSub | IntMul | IntDiv | IntRem | IntLt | IntLe
-                | IntAnd | IntOr | IntXor | IntShl | IntShr | IntEqz | IntToNat | IntToFlt(_),
+                Self::NatEql
+                | Self::NatNeq
+                | Self::NatAdd
+                | Self::NatSub
+                | Self::NatMul
+                | Self::NatLt
+                | Self::NatDiv
+                | Self::NatRem
+                | Self::NatLe
+                | Self::NatAnd
+                | Self::NatOr
+                | Self::NatXor
+                | Self::NatShl
+                | Self::NatShr
+                | Self::NatEqz
+                | Self::NatToInt
+                | Self::NatToFlt(_)
+                | Self::IntEql
+                | Self::IntNeq
+                | Self::IntAdd
+                | Self::IntSub
+                | Self::IntMul
+                | Self::IntDiv
+                | Self::IntRem
+                | Self::IntLt
+                | Self::IntLe
+                | Self::IntAnd
+                | Self::IntOr
+                | Self::IntXor
+                | Self::IntShl
+                | Self::IntShr
+                | Self::IntEqz
+                | Self::IntToNat
+                | Self::IntToFlt(_),
                 _,
             ) => Repr::Number,
 
             (
-                FltAdd(_) | FltSub(_) | FltMul(_) | FltDiv(_) | FltFma(_) | FltRem | FltEql
-                | FltNeq | FltLt | FltLe | FltMin | FltMax | FltNeg | FltAbs | FltSqrt(_)
-                | FltRoundIntegral(_) | FltCopysign | FltToNat | FltToLeBytes | FltToInt
-                | FltMantissa | FltExponent,
+                Self::FltAdd(_)
+                | Self::FltSub(_)
+                | Self::FltMul(_)
+                | Self::FltDiv(_)
+                | Self::FltFma(_)
+                | Self::FltRem
+                | Self::FltEql
+                | Self::FltNeq
+                | Self::FltLt
+                | Self::FltLe
+                | Self::FltMin
+                | Self::FltMax
+                | Self::FltNeg
+                | Self::FltAbs
+                | Self::FltSqrt(_)
+                | Self::FltRoundIntegral(_)
+                | Self::FltCopysign
+                | Self::FltToNat
+                | Self::FltToLeBytes
+                | Self::FltToInt
+                | Self::FltMantissa
+                | Self::FltExponent,
                 _,
             ) => Repr::Flt,
         }
@@ -211,42 +269,94 @@ impl Intrinsic {
 
     /// The representation this operation produces.
     pub fn result_repr(&self) -> Repr {
-        use Intrinsic::*;
-
         match self {
             // Every comparison and predicate answers a `Bool`, whose carrier is a machine word.
-            NatEql | NatNeq | NatLt | NatLe | NatEqz | IntEql | IntNeq | IntLt | IntLe | IntEqz
-            | FltEql | FltNeq | FltLt | FltLe | BinEql(_) => Repr::Nat,
+            Self::NatEql
+            | Self::NatNeq
+            | Self::NatLt
+            | Self::NatLe
+            | Self::NatEqz
+            | Self::IntEql
+            | Self::IntNeq
+            | Self::IntLt
+            | Self::IntLe
+            | Self::IntEqz
+            | Self::FltEql
+            | Self::FltNeq
+            | Self::FltLt
+            | Self::FltLe
+            | Self::BinEql(_) => Repr::Nat,
 
             // Every `Nat` or `Int` an operation computes is a reference, since no operation bounds its result's size in general: a length and a window's checked extent included, which a sequence past the i31 would leave.
-            NatAdd | NatSub | NatMul | NatDiv | NatRem | NatAnd | NatOr | NatXor | NatShl
-            | NatShr | IntToNat | FltToNat | IntAdd | IntSub | IntMul | IntDiv | IntRem
-            | IntAnd | IntOr | IntXor | IntShl | IntShr | NatToInt | FltToInt | FltMantissa
-            | FltExponent | BinLen(_) | ListLen | WindowExtent => Repr::Ref,
+            Self::NatAdd
+            | Self::NatSub
+            | Self::NatMul
+            | Self::NatDiv
+            | Self::NatRem
+            | Self::NatAnd
+            | Self::NatOr
+            | Self::NatXor
+            | Self::NatShl
+            | Self::NatShr
+            | Self::IntToNat
+            | Self::FltToNat
+            | Self::IntAdd
+            | Self::IntSub
+            | Self::IntMul
+            | Self::IntDiv
+            | Self::IntRem
+            | Self::IntAnd
+            | Self::IntOr
+            | Self::IntXor
+            | Self::IntShl
+            | Self::IntShr
+            | Self::NatToInt
+            | Self::FltToInt
+            | Self::FltMantissa
+            | Self::FltExponent
+            | Self::BinLen(_)
+            | Self::ListLen
+            | Self::WindowExtent => Repr::Ref,
 
-            FltAdd(_) | FltSub(_) | FltMul(_) | FltDiv(_) | FltFma(_) | FltRem | FltMin
-            | FltMax | FltNeg | FltAbs | FltSqrt(_) | FltRoundIntegral(_) | FltCopysign
-            | NatToFlt(_) | IntToFlt(_) | FltOfLeBytes => Repr::Flt,
+            Self::FltAdd(_)
+            | Self::FltSub(_)
+            | Self::FltMul(_)
+            | Self::FltDiv(_)
+            | Self::FltFma(_)
+            | Self::FltRem
+            | Self::FltMin
+            | Self::FltMax
+            | Self::FltNeg
+            | Self::FltAbs
+            | Self::FltSqrt(_)
+            | Self::FltRoundIntegral(_)
+            | Self::FltCopysign
+            | Self::NatToFlt(_)
+            | Self::IntToFlt(_)
+            | Self::FltOfLeBytes => Repr::Flt,
 
             // `IsImmediate` joins the predicates: it answers a `Bool`, whose carrier is a `Nat`.
-            BinGet(_) | IsImmediate => Repr::Nat,
-            BinSlice(grain)
-            | BinRest(grain)
-            | BinAppend(grain)
-            | BinConcat(grain, _)
-            | BinChunk(grain, _)
-            | BinReplicate(grain)
-            | BinAnd(grain)
-            | BinOr(grain)
-            | BinXor(grain) => Repr::Bin(*grain),
+            Self::BinGet(_) | Self::IsImmediate => Repr::Nat,
+            Self::BinSlice(grain)
+            | Self::BinRest(grain)
+            | Self::BinAppend(grain)
+            | Self::BinConcat(grain, _)
+            | Self::BinChunk(grain, _)
+            | Self::BinReplicate(grain)
+            | Self::BinAnd(grain)
+            | Self::BinOr(grain)
+            | Self::BinXor(grain) => Repr::Bin(*grain),
             // The one row whose result grain is not the one it names: the grain is the operand's, and reading it at the other is the whole operation.
-            BinReinterp(grain) => Repr::Bin(grain.other()),
-            FltToLeBytes => Repr::Bin(Grain::X),
-            ListSlice | ListRest | ListAppend | ListConcat(_) | ListSettle | ListFlat(_) => {
-                Repr::List
-            }
+            Self::BinReinterp(grain) => Repr::Bin(grain.other()),
+            Self::FltToLeBytes => Repr::Bin(Grain::X),
+            Self::ListSlice
+            | Self::ListRest
+            | Self::ListAppend
+            | Self::ListConcat(_)
+            | Self::ListSettle
+            | Self::ListFlat(_) => Repr::List,
             // A list read, a tuple or variant projection and an immediate arm's payload all yield whatever was stored, uninterpreted.
-            ListGet | TupleGet(_) | RowGet(..) | ImmediateGet => Repr::Ref,
+            Self::ListGet | Self::TupleGet(_) | Self::RowGet(..) | Self::ImmediateGet => Repr::Ref,
         }
     }
 }

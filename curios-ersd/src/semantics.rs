@@ -233,17 +233,69 @@ impl Semantics {
     ///
     /// The divisions do not trap either: `/sys`'s division takes a proof that its divisor is nonzero, so a term reaching here has already been refused if it could not supply one, and `IntDiv`'s signed overflow — a *range* fact the precondition says nothing about — is a quotient past the i31, which grows into a boxed magnitude. What the classification decides is only whether an unused binding may be deleted, which is safe for a division whatever its divisor; a guard keeps its proof by position, and nothing here moves an operation above one.
     pub fn operation(operation: Operation) -> LocalBehavior {
-        use Operation::*;
         match operation {
-            FltToNat | FltToInt | FltMantissa | FltExponent | FltOfLeBytes => LocalBehavior::trap(),
-            NatDiv | NatRem | IntDiv | IntRem | BoolAnd | BoolOr | BoolXor | BoolEql | BoolNeq
-            | NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatLe | NatAnd | NatOr
-            | NatXor | NatShl | NatShr | ByteToNat | NatToByte | IntEql | IntNeq | IntAdd
-            | IntSub | IntMul | IntLt | IntLe | IntAnd | IntOr | IntXor | IntShl | IntShr
-            | FltAdd(_) | FltSub(_) | FltMul(_) | FltDiv(_) | FltFma(_) | FltRem | FltEql
-            | FltNeq | FltLt | FltLe | FltMin | FltMax | FltCopysign | FltNeg | FltAbs
-            | FltSqrt(_) | FltRoundIntegral(_) | NatToInt | NatToFlt(_) | IntToNat
-            | IntToFlt(_) | FltToLeBytes => LocalBehavior::pure(),
+            Operation::FltToNat
+            | Operation::FltToInt
+            | Operation::FltMantissa
+            | Operation::FltExponent
+            | Operation::FltOfLeBytes => LocalBehavior::trap(),
+            Operation::NatDiv
+            | Operation::NatRem
+            | Operation::IntDiv
+            | Operation::IntRem
+            | Operation::BoolAnd
+            | Operation::BoolOr
+            | Operation::BoolXor
+            | Operation::BoolEql
+            | Operation::BoolNeq
+            | Operation::NatEql
+            | Operation::NatNeq
+            | Operation::NatAdd
+            | Operation::NatSub
+            | Operation::NatMul
+            | Operation::NatLt
+            | Operation::NatLe
+            | Operation::NatAnd
+            | Operation::NatOr
+            | Operation::NatXor
+            | Operation::NatShl
+            | Operation::NatShr
+            | Operation::ByteToNat
+            | Operation::NatToByte
+            | Operation::IntEql
+            | Operation::IntNeq
+            | Operation::IntAdd
+            | Operation::IntSub
+            | Operation::IntMul
+            | Operation::IntLt
+            | Operation::IntLe
+            | Operation::IntAnd
+            | Operation::IntOr
+            | Operation::IntXor
+            | Operation::IntShl
+            | Operation::IntShr
+            | Operation::FltAdd(_)
+            | Operation::FltSub(_)
+            | Operation::FltMul(_)
+            | Operation::FltDiv(_)
+            | Operation::FltFma(_)
+            | Operation::FltRem
+            | Operation::FltEql
+            | Operation::FltNeq
+            | Operation::FltLt
+            | Operation::FltLe
+            | Operation::FltMin
+            | Operation::FltMax
+            | Operation::FltCopysign
+            | Operation::FltNeg
+            | Operation::FltAbs
+            | Operation::FltSqrt(_)
+            | Operation::FltRoundIntegral(_)
+            | Operation::NatToInt
+            | Operation::NatToFlt(_)
+            | Operation::IntToNat
+            | Operation::IntToFlt(_)
+            | Operation::FltToLeBytes => LocalBehavior::pure(),
         }
     }
 
@@ -251,15 +303,24 @@ impl Semantics {
     ///
     /// The pointwise rows do not trap. Their one bound is that the operands share a length, and that is stated in the type and discharged before erasure — nothing survives to this stage that could fail it, so treating them as fallible would keep a dead-result elimination from removing one whose result nothing reads.
     pub fn sequence(operation: SequenceOp) -> LocalBehavior {
-        use SequenceOp::*;
         match operation {
-            BinGet(_) | ListGet => LocalBehavior::trap(),
-            BinSlice(_) | ListSlice => LocalBehavior::trap().with_alloc(Allocation::Immutable),
-            BinAppend(_) | BinConcat(_) | BinReplicate(_) | BinReinterp(_) | BinAnd(_)
-            | BinOr(_) | BinXor(_) | ListAppend | ListConcat | ListBuild => {
-                LocalBehavior::alloc(Allocation::Immutable)
+            SequenceOp::BinGet(_) | SequenceOp::ListGet => LocalBehavior::trap(),
+            SequenceOp::BinSlice(_) | SequenceOp::ListSlice => {
+                LocalBehavior::trap().with_alloc(Allocation::Immutable)
             }
-            BinLen(_) | ListLen | BinEql(_) => LocalBehavior::pure(),
+            SequenceOp::BinAppend(_)
+            | SequenceOp::BinConcat(_)
+            | SequenceOp::BinReplicate(_)
+            | SequenceOp::BinReinterp(_)
+            | SequenceOp::BinAnd(_)
+            | SequenceOp::BinOr(_)
+            | SequenceOp::BinXor(_)
+            | SequenceOp::ListAppend
+            | SequenceOp::ListConcat
+            | SequenceOp::ListBuild => LocalBehavior::alloc(Allocation::Immutable),
+            SequenceOp::BinLen(_) | SequenceOp::ListLen | SequenceOp::BinEql(_) => {
+                LocalBehavior::pure()
+            }
         }
     }
 
@@ -343,8 +404,6 @@ impl Semantics {
         operands: &[Constant],
         allowance: u64,
     ) -> FoldOutcome {
-        use Operation::*;
-
         let nat = |index: usize| match operands.get(index) {
             Some(Constant::Nat(value)) => Some(value),
             _ => None,
@@ -372,81 +431,95 @@ impl Semantics {
 
         let compute = || -> Option<Result<Constant, TrapKind>> {
             Some(Ok(match operation {
-                BoolAnd => Constant::Bool(bool_(0)? & bool_(1)?),
-                BoolOr => Constant::Bool(bool_(0)? | bool_(1)?),
-                BoolXor => Constant::Bool(bool_(0)? ^ bool_(1)?),
-                BoolEql => Constant::Bool(bool_(0)? == bool_(1)?),
-                BoolNeq => Constant::Bool(bool_(0)? != bool_(1)?),
+                Operation::BoolAnd => Constant::Bool(bool_(0)? & bool_(1)?),
+                Operation::BoolOr => Constant::Bool(bool_(0)? | bool_(1)?),
+                Operation::BoolXor => Constant::Bool(bool_(0)? ^ bool_(1)?),
+                Operation::BoolEql => Constant::Bool(bool_(0)? == bool_(1)?),
+                Operation::BoolNeq => Constant::Bool(bool_(0)? != bool_(1)?),
 
-                NatAdd => Constant::Nat(nat(0)? + nat(1)?),
-                NatSub => Constant::Nat(nat(0)?.monus(nat(1)?)),
-                NatMul => Constant::Nat(nat(0)?.mul_within(nat(1)?, allowance)?),
-                NatDiv => {
+                Operation::NatAdd => Constant::Nat(nat(0)? + nat(1)?),
+                Operation::NatSub => Constant::Nat(nat(0)?.monus(nat(1)?)),
+                Operation::NatMul => Constant::Nat(nat(0)?.mul_within(nat(1)?, allowance)?),
+                Operation::NatDiv => {
                     return Some(scalar_result(nat(0)?.div(nat(1)?), Constant::Nat));
                 }
-                NatRem => {
+                Operation::NatRem => {
                     return Some(scalar_result(nat(0)?.rem(nat(1)?), Constant::Nat));
                 }
-                NatAnd => Constant::Nat(nat(0)? & nat(1)?),
-                NatOr => Constant::Nat(nat(0)? | nat(1)?),
-                NatXor => Constant::Nat(nat(0)? ^ nat(1)?),
-                NatShl => Constant::Nat(nat(0)?.shl_within(nat(1)?, allowance)?),
-                NatShr => Constant::Nat(nat(0)? >> nat(1)?),
-                NatEql => Constant::Bool(nat(0)? == nat(1)?),
-                NatNeq => Constant::Bool(nat(0)? != nat(1)?),
-                NatLt => Constant::Bool(nat(0)? < nat(1)?),
-                NatLe => Constant::Bool(nat(0)? <= nat(1)?),
+                Operation::NatAnd => Constant::Nat(nat(0)? & nat(1)?),
+                Operation::NatOr => Constant::Nat(nat(0)? | nat(1)?),
+                Operation::NatXor => Constant::Nat(nat(0)? ^ nat(1)?),
+                Operation::NatShl => Constant::Nat(nat(0)?.shl_within(nat(1)?, allowance)?),
+                Operation::NatShr => Constant::Nat(nat(0)? >> nat(1)?),
+                Operation::NatEql => Constant::Bool(nat(0)? == nat(1)?),
+                Operation::NatNeq => Constant::Bool(nat(0)? != nat(1)?),
+                Operation::NatLt => Constant::Bool(nat(0)? < nat(1)?),
+                Operation::NatLe => Constant::Bool(nat(0)? <= nat(1)?),
 
-                IntAdd => Constant::Int(int(0)?.clone() + int(1)?.clone()),
-                IntSub => Constant::Int(int(0)?.clone() - int(1)?.clone()),
-                IntMul => Constant::Int(int(0)?.mul_within(int(1)?, allowance)?),
-                IntDiv => {
+                Operation::IntAdd => Constant::Int(int(0)?.clone() + int(1)?.clone()),
+                Operation::IntSub => Constant::Int(int(0)?.clone() - int(1)?.clone()),
+                Operation::IntMul => Constant::Int(int(0)?.mul_within(int(1)?, allowance)?),
+                Operation::IntDiv => {
                     return Some(scalar_result(int(0)?.div(int(1)?), Constant::Int));
                 }
-                IntRem => {
+                Operation::IntRem => {
                     return Some(scalar_result(int(0)?.rem(int(1)?), Constant::Int));
                 }
-                IntAnd => Constant::Int(int(0)?.clone() & int(1)?.clone()),
-                IntOr => Constant::Int(int(0)?.clone() | int(1)?.clone()),
-                IntXor => Constant::Int(int(0)?.clone() ^ int(1)?.clone()),
-                IntShl => Constant::Int(int(0)?.shl_within(nat(1)?, allowance)?),
-                IntShr => Constant::Int(int(0)? >> nat(1)?),
-                IntEql => Constant::Bool(int(0)? == int(1)?),
-                IntNeq => Constant::Bool(int(0)? != int(1)?),
-                IntLt => Constant::Bool(int(0)? < int(1)?),
-                IntLe => Constant::Bool(int(0)? <= int(1)?),
+                Operation::IntAnd => Constant::Int(int(0)?.clone() & int(1)?.clone()),
+                Operation::IntOr => Constant::Int(int(0)?.clone() | int(1)?.clone()),
+                Operation::IntXor => Constant::Int(int(0)?.clone() ^ int(1)?.clone()),
+                Operation::IntShl => Constant::Int(int(0)?.shl_within(nat(1)?, allowance)?),
+                Operation::IntShr => Constant::Int(int(0)? >> nat(1)?),
+                Operation::IntEql => Constant::Bool(int(0)? == int(1)?),
+                Operation::IntNeq => Constant::Bool(int(0)? != int(1)?),
+                Operation::IntLt => Constant::Bool(int(0)? < int(1)?),
+                Operation::IntLe => Constant::Bool(int(0)? <= int(1)?),
 
-                FltAdd(rounding) => Constant::Flt(flt(0)?.sum(flt(1)?, rounding)),
-                FltSub(rounding) => Constant::Flt(flt(0)?.difference(flt(1)?, rounding)),
-                FltMul(rounding) => Constant::Flt(flt(0)?.product(flt(1)?, rounding)),
-                FltDiv(rounding) => Constant::Flt(flt(0)?.quotient(flt(1)?, rounding)),
-                FltFma(rounding) => Constant::Flt(flt(0)?.fma(flt(1)?, flt(2)?, rounding)),
-                FltRem => Constant::Flt(flt(0)? % flt(1)?),
-                FltMin => Constant::Flt(flt(0)?.min(flt(1)?)),
-                FltMax => Constant::Flt(flt(0)?.max(flt(1)?)),
-                FltCopysign => Constant::Flt(flt(0)?.copysign(flt(1)?)),
-                FltNeg => Constant::Flt(-flt(0)?),
-                FltAbs => Constant::Flt(flt(0)?.abs()),
-                FltSqrt(rounding) => Constant::Flt(flt(0)?.sqrt(rounding)),
-                FltRoundIntegral(rounding) => Constant::Flt(flt(0)?.round_integral(rounding)),
-                FltEql => Constant::Bool(flt(0)?.eql(flt(1)?)),
-                FltNeq => Constant::Bool(flt(0)?.neq(flt(1)?)),
-                FltLt => Constant::Bool(flt(0)?.lt(flt(1)?)),
-                FltLe => Constant::Bool(flt(0)?.le(flt(1)?)),
+                Operation::FltAdd(rounding) => Constant::Flt(flt(0)?.sum(flt(1)?, rounding)),
+                Operation::FltSub(rounding) => Constant::Flt(flt(0)?.difference(flt(1)?, rounding)),
+                Operation::FltMul(rounding) => Constant::Flt(flt(0)?.product(flt(1)?, rounding)),
+                Operation::FltDiv(rounding) => Constant::Flt(flt(0)?.quotient(flt(1)?, rounding)),
+                Operation::FltFma(rounding) => {
+                    Constant::Flt(flt(0)?.fma(flt(1)?, flt(2)?, rounding))
+                }
+                Operation::FltRem => Constant::Flt(flt(0)? % flt(1)?),
+                Operation::FltMin => Constant::Flt(flt(0)?.min(flt(1)?)),
+                Operation::FltMax => Constant::Flt(flt(0)?.max(flt(1)?)),
+                Operation::FltCopysign => Constant::Flt(flt(0)?.copysign(flt(1)?)),
+                Operation::FltNeg => Constant::Flt(-flt(0)?),
+                Operation::FltAbs => Constant::Flt(flt(0)?.abs()),
+                Operation::FltSqrt(rounding) => Constant::Flt(flt(0)?.sqrt(rounding)),
+                Operation::FltRoundIntegral(rounding) => {
+                    Constant::Flt(flt(0)?.round_integral(rounding))
+                }
+                Operation::FltEql => Constant::Bool(flt(0)?.eql(flt(1)?)),
+                Operation::FltNeq => Constant::Bool(flt(0)?.neq(flt(1)?)),
+                Operation::FltLt => Constant::Bool(flt(0)?.lt(flt(1)?)),
+                Operation::FltLe => Constant::Bool(flt(0)?.le(flt(1)?)),
 
-                NatToInt => Constant::Int(Integer::from(nat(0)?.clone())),
-                NatToFlt(rounding) => Constant::Flt(Floating::of_natural(nat(0)?, rounding)),
-                IntToNat => return Some(scalar_result(Natural::try_from(int(0)?), Constant::Nat)),
-                IntToFlt(rounding) => Constant::Flt(Floating::of_integer(int(0)?, rounding)),
-                FltToNat => return Some(scalar_result(flt(0)?.to_natural(), Constant::Nat)),
-                FltToInt => return Some(scalar_result(flt(0)?.to_integer(), Constant::Int)),
-                FltMantissa => {
+                Operation::NatToInt => Constant::Int(Integer::from(nat(0)?.clone())),
+                Operation::NatToFlt(rounding) => {
+                    Constant::Flt(Floating::of_natural(nat(0)?, rounding))
+                }
+                Operation::IntToNat => {
+                    return Some(scalar_result(Natural::try_from(int(0)?), Constant::Nat));
+                }
+                Operation::IntToFlt(rounding) => {
+                    Constant::Flt(Floating::of_integer(int(0)?, rounding))
+                }
+                Operation::FltToNat => {
+                    return Some(scalar_result(flt(0)?.to_natural(), Constant::Nat));
+                }
+                Operation::FltToInt => {
+                    return Some(scalar_result(flt(0)?.to_integer(), Constant::Int));
+                }
+                Operation::FltMantissa => {
                     return Some(scalar_result(
                         flt(0)?.to_dyadic().map(|(mantissa, _)| mantissa),
                         Constant::Int,
                     ));
                 }
-                FltExponent => {
+                Operation::FltExponent => {
                     return Some(scalar_result(
                         flt(0)?
                             .to_dyadic()
@@ -454,11 +527,13 @@ impl Semantics {
                         Constant::Int,
                     ));
                 }
-                ByteToNat => Constant::Nat(Natural::from(byte(0)?)),
+                Operation::ByteToNat => Constant::Nat(Natural::from(byte(0)?)),
                 // Declines past the carrier rather than masking, so this folder produces Core's value or none — never a third one. Core refuses the same operand, and the `below` field is what promises neither is reached; the two agree by construction rather than by both truncating.
-                NatToByte => Constant::Byte(u8::try_from(u32::try_from(nat(0)?).ok()?).ok()?),
-                FltToLeBytes => Constant::Bin(Grain::X, flt(0)?.to_le_bytes()),
-                FltOfLeBytes => {
+                Operation::NatToByte => {
+                    Constant::Byte(u8::try_from(u32::try_from(nat(0)?).ok()?).ok()?)
+                }
+                Operation::FltToLeBytes => Constant::Bin(Grain::X, flt(0)?.to_le_bytes()),
+                Operation::FltOfLeBytes => {
                     return Some(scalar_result(
                         Floating::of_le_bytes(bin_x(0)?),
                         Constant::Flt,
@@ -471,8 +546,6 @@ impl Semantics {
 
     /// Constant-fold a sequence operation. Only packed-binary operations can fold — the constant domain has no list carrier, so list operations are always [`FoldOutcome::Unknown`] here (the evaluator interprets them over its own value domain instead). Elements stay grain-shaped: a byte grain yields `Byte`, a bit grain `Bool`.
     pub fn fold_sequence(operation: SequenceOp, operands: &[Constant]) -> FoldOutcome {
-        use {Grain, SequenceOp::*};
-
         let bin = |index: usize, grain: Grain| match operands.get(index) {
             Some(Constant::Bin(found, value)) if *found == grain => Some(value),
             _ => None,
@@ -492,9 +565,11 @@ impl Semantics {
 
         let compute = || -> Option<Result<Constant, TrapKind>> {
             Some(Ok(match operation {
-                BinLen(grain) => Constant::Nat(Natural::from(bin(0, grain)?.len(grain))),
-                BinEql(grain) => Constant::Bool(bin(0, grain)? == bin(1, grain)?),
-                BinGet(Grain::X) => {
+                SequenceOp::BinLen(grain) => {
+                    Constant::Nat(Natural::from(bin(0, grain)?.len(grain)))
+                }
+                SequenceOp::BinEql(grain) => Constant::Bool(bin(0, grain)? == bin(1, grain)?),
+                SequenceOp::BinGet(Grain::X) => {
                     return Some(
                         match bin(0, Grain::X)?.byte(usize::try_from(nat(1)?).ok()?) {
                             Some(byte) => Ok(Constant::Byte(byte)),
@@ -502,7 +577,7 @@ impl Semantics {
                         },
                     );
                 }
-                BinGet(Grain::B) => {
+                SequenceOp::BinGet(Grain::B) => {
                     return Some(
                         match bin(0, Grain::B)?.bit(usize::try_from(nat(1)?).ok()?) {
                             Some(bit) => Ok(Constant::Bool(bit)),
@@ -511,7 +586,7 @@ impl Semantics {
                     );
                 }
                 // A window is `(start, length)`; the packed view takes a half-open range, so the end is computed here and an end past `usize` is the out-of-bounds it would have been anyway.
-                BinSlice(grain) => {
+                SequenceOp::BinSlice(grain) => {
                     let value = bin(0, grain)?;
                     let start = usize::try_from(nat(1)?).ok()?;
                     let count = usize::try_from(nat(2)?).ok()?;
@@ -525,13 +600,13 @@ impl Semantics {
                         },
                     );
                 }
-                BinAppend(Grain::X) => {
+                SequenceOp::BinAppend(Grain::X) => {
                     Constant::Bin(Grain::X, bin(0, Grain::X)?.append_byte(byte(1)?)?)
                 }
-                BinAppend(Grain::B) => {
+                SequenceOp::BinAppend(Grain::B) => {
                     Constant::Bin(Grain::B, bin(0, Grain::B)?.append_bit(bool_(1)?))
                 }
-                BinConcat(grain) => Constant::Bin(
+                SequenceOp::BinConcat(grain) => Constant::Bin(
                     grain,
                     Binary::concat(
                         (0..operands.len())
@@ -540,11 +615,11 @@ impl Semantics {
                     ),
                 ),
                 // Split by grain for [`SequenceOp::BinAppend`]'s reason: the generator is a `Byte` constant at one and a `Bool` at the other, and only the grain says which to read.
-                BinReplicate(Grain::X) => Constant::Bin(
+                SequenceOp::BinReplicate(Grain::X) => Constant::Bin(
                     Grain::X,
                     Binary::replicate(Grain::X, byte(1)?, usize::try_from(nat(0)?).ok()?),
                 ),
-                BinReplicate(Grain::B) => Constant::Bin(
+                SequenceOp::BinReplicate(Grain::B) => Constant::Bin(
                     Grain::B,
                     Binary::replicate(
                         Grain::B,
@@ -553,23 +628,23 @@ impl Semantics {
                     ),
                 ),
                 // Two literals of different lengths decline to fold rather than answering, exactly as the Core reducer declines them: the length is the type's to hold and the checker's to enforce, and a folder that decided it here would be answering for a run that is neither operand's.
-                BinAnd(grain) => {
+                SequenceOp::BinAnd(grain) => {
                     let (left, right) = (bin(0, grain)?, bin(1, grain)?);
                     (left.bit_length() == right.bit_length())
                         .then(|| Constant::Bin(grain, left.and(right)))?
                 }
-                BinOr(grain) => {
+                SequenceOp::BinOr(grain) => {
                     let (left, right) = (bin(0, grain)?, bin(1, grain)?);
                     (left.bit_length() == right.bit_length())
                         .then(|| Constant::Bin(grain, left.or(right)))?
                 }
-                BinXor(grain) => {
+                SequenceOp::BinXor(grain) => {
                     let (left, right) = (bin(0, grain)?, bin(1, grain)?);
                     (left.bit_length() == right.bit_length())
                         .then(|| Constant::Bin(grain, left.xor(right)))?
                 }
                 // One condition at both grains: a byte run's bit length is eight times its count and always passes, while a bit run's is exactly what the bound states. A window holding whole bytes at an offset that is not one is repacked rather than shared.
-                BinReinterp(grain) => {
+                SequenceOp::BinReinterp(grain) => {
                     let run = bin(0, grain)?;
                     run.bit_length().is_multiple_of(8).then(|| {
                         Constant::Bin(
@@ -581,7 +656,12 @@ impl Semantics {
                         )
                     })?
                 }
-                ListLen | ListGet | ListSlice | ListAppend | ListConcat | ListBuild => return None,
+                SequenceOp::ListLen
+                | SequenceOp::ListGet
+                | SequenceOp::ListSlice
+                | SequenceOp::ListAppend
+                | SequenceOp::ListConcat
+                | SequenceOp::ListBuild => return None,
             }))
         };
         fold_outcome(compute())

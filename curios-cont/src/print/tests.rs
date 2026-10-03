@@ -6,7 +6,7 @@ use {
         Node, NodeId, Row, Slot, ValueExpr,
         test_support::{halt, halt_zero},
     },
-    curios_num::Natural,
+    curios_num::{Grain, Natural, Rounding},
 };
 
 fn nat(value: u32) -> Atom {
@@ -666,23 +666,32 @@ fn no_node_identity_appears_in_a_well_formed_dump() {
 /// Reached by construction rather than by the lowering, so the table cannot answer a Rust variant name for an operation a program can run.
 #[test]
 fn an_intrinsic_spells_its_carrier_and_operation() {
-    use crate::Intrinsic::*;
-    use curios_num::{Grain, Rounding};
-
     for (op, expected) in [
-        (NatAdd, "Nat/add"),
-        (IntToFlt(Rounding::TiesToEven), "Int/to_flt"),
-        (IntToFlt(Rounding::TowardZero), "Flt/toward_zero/of_int"),
-        (FltAdd(Rounding::TowardPositive), "Flt/toward_positive/add"),
-        (FltFma(Rounding::TiesToEven), "Flt/fma"),
-        (FltRoundIntegral(Rounding::TowardNegative), "Flt/floor"),
-        (FltRoundIntegral(Rounding::TiesToAway), "Flt/round"),
-        (FltOfLeBytes, "Flt/of_le_bytes"),
-        (BinLen(Grain::X), "Bytes/len"),
-        (BinChunk(Grain::B, 3), "Bits/chunk"),
-        (ListConcat(2), "List/concat"),
-        (WindowExtent, "Window/extent"),
-        (IsImmediate, "Immediate/is"),
+        (Intrinsic::NatAdd, "Nat/add"),
+        (Intrinsic::IntToFlt(Rounding::TiesToEven), "Int/to_flt"),
+        (
+            Intrinsic::IntToFlt(Rounding::TowardZero),
+            "Flt/toward_zero/of_int",
+        ),
+        (
+            Intrinsic::FltAdd(Rounding::TowardPositive),
+            "Flt/toward_positive/add",
+        ),
+        (Intrinsic::FltFma(Rounding::TiesToEven), "Flt/fma"),
+        (
+            Intrinsic::FltRoundIntegral(Rounding::TowardNegative),
+            "Flt/floor",
+        ),
+        (
+            Intrinsic::FltRoundIntegral(Rounding::TiesToAway),
+            "Flt/round",
+        ),
+        (Intrinsic::FltOfLeBytes, "Flt/of_le_bytes"),
+        (Intrinsic::BinLen(Grain::X), "Bytes/len"),
+        (Intrinsic::BinChunk(Grain::B, 3), "Bits/chunk"),
+        (Intrinsic::ListConcat(2), "List/concat"),
+        (Intrinsic::WindowExtent, "Window/extent"),
+        (Intrinsic::IsImmediate, "Immediate/is"),
     ] {
         let module = module_with(|module, _| {
             let result = module.add_value(None);

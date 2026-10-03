@@ -6,6 +6,10 @@
 //!
 //! **Closing a port discards what it has not sent.** Left to itself, Linux holds the last close of a serial device until its output has drained — thirty seconds by default when the device takes none — whatever the descriptor's flags, and macOS discards the output of a non-blocking one instead; neither is a close that never waits and loses nothing. So the port drops its unsent output as it closes, which bounds the kernel's wait to what the hardware already holds, and the wait a program wants is `serial_drain`'s: `tcdrain` on a thread of its own, signalling a pipe the scheduler polls, as `os_child` reaps a child. One thread per drain under way is the native host's cost for a wait neither system offers without blocking.
 
+#[cfg(target_os = "linux")]
+use std::{collections::HashMap, io::ErrorKind, path::PathBuf};
+#[cfg(not(target_os = "linux"))]
+use std::{ffi::c_ulong, os::unix::ffi::OsStrExt};
 use {
     super::{Failure, SerialOp, failure_from_error},
     rustix::{
@@ -60,8 +64,6 @@ fn apply(fd: &OwnedFd, termios: &mut Termios, speed: u32) -> rustix::io::Result<
 /// Set `termios` on `fd` at `speed`. Apple's serial driver takes through the settings only the speeds in its own table and answers `EINVAL` for any other, so a refusal is retried at a speed the table holds and the speed then set by `IOSSIOSPEED`, `_IOW('T', 2, speed_t)`, which takes any. A refusal that was the frame's is refused again by the retry.
 #[cfg(not(target_os = "linux"))]
 fn apply(fd: &OwnedFd, termios: &mut Termios, speed: u32) -> rustix::io::Result<()> {
-    use std::ffi::c_ulong;
-
     const IOSSIOSPEED: Opcode = rustix::ioctl::opcode::write::<c_ulong>(b'T', 2);
 
     termios.set_speed(speed)?;
@@ -88,8 +90,6 @@ fn apply(fd: &OwnedFd, termios: &mut Termios, speed: u32) -> rustix::io::Result<
 /// A terminal class entry is a serial device when a device stands behind it, which a console, a virtual terminal and a pseudo-terminal have none of, and when its driver found the port: the 8250 driver registers its legacy ports whether or not a chip answers, and reports one that did not as type `0`. A device udev named under `/dev/serial/by-id` is listed by that name, the first in byte order where it has several, and any other by its node.
 #[cfg(target_os = "linux")]
 pub(crate) fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
-    use std::{collections::HashMap, io::ErrorKind, path::PathBuf};
-
     // Filed last to first, so the name left under a node is the first in byte order.
     let mut links = fs::read_dir("/dev/serial/by-id")
         .map(|links| links.flatten().map(|link| link.path()).collect::<Vec<_>>())
@@ -133,8 +133,6 @@ pub(crate) fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
 /// The serial devices the system has, each by a path an open takes, sorted: the callout devices, `/dev/cu.*`, which open without waiting for carrier as their dial-in twins `/dev/tty.*` do not promise.
 #[cfg(not(target_os = "linux"))]
 pub(crate) fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
-    use std::os::unix::ffi::OsStrExt;
-
     let mut devices = Vec::new();
 
     for entry in fs::read_dir("/dev")? {

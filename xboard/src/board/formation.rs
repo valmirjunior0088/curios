@@ -17,7 +17,7 @@ pub(super) const FORMATION: Part = Part {
         witnesses: &[Witness {
             what: "Curry's paradox through a record whose negative use of its parameter is an instance of it",
             proof: Proof::Module(a_parameter_named_through_an_instance),
-            expect: refused![kernel: Error::NotPositive { .. }],
+            expect: refused![kernel: curios_cert::Error::NotPositive { .. }],
         }],
     }],
 };

@@ -460,11 +460,13 @@ impl<'m> Evaluator<'m> {
             Ok(operands) => operands,
             Err(bail) => return Outcome::Bail(bail),
         };
-        use SequenceOp::*;
         match operation {
-            ListLen | ListGet | ListSlice | ListAppend | ListConcat | ListBuild => {
-                outcome(interpret_list(operation, &operands))
-            }
+            SequenceOp::ListLen
+            | SequenceOp::ListGet
+            | SequenceOp::ListSlice
+            | SequenceOp::ListAppend
+            | SequenceOp::ListConcat
+            | SequenceOp::ListBuild => outcome(interpret_list(operation, &operands)),
             _ => {
                 let Some(constants) = leaves(&operands) else {
                     return Outcome::Bail(Bail::Unsupported);
@@ -727,7 +729,6 @@ fn peel(grain: SequenceGrain, sequence: &Value, at: usize) -> Result<Option<(Val
 }
 
 fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Bail> {
-    use SequenceOp::*;
     let list = |index: usize| match operands.get(index) {
         Some(Value::List(elements)) => Ok(elements.clone()),
         _ => Err(Bail::Unsupported),
@@ -737,18 +738,18 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
         _ => Err(Bail::Unsupported),
     };
     match operation {
-        ListBuild => Ok(Value::List(ListWindow::new(operands.to_vec()))),
-        ListLen => Ok(Value::Nat(Natural::from(list(0)?.len()))),
-        ListGet => match list(0)?.get(index(1)?) {
+        SequenceOp::ListBuild => Ok(Value::List(ListWindow::new(operands.to_vec()))),
+        SequenceOp::ListLen => Ok(Value::Nat(Natural::from(list(0)?.len()))),
+        SequenceOp::ListGet => match list(0)?.get(index(1)?) {
             Some(element) => Ok(element.clone()),
             None => Err(Bail::Trap),
         },
         // A window is `(start, length)`, so there is no reversed range left to reject — only one that runs past the end.
-        ListSlice => match list(0)?.window(index(1)?, index(2)?) {
+        SequenceOp::ListSlice => match list(0)?.window(index(1)?, index(2)?) {
             Some(window) => Ok(Value::List(window)),
             None => Err(Bail::Trap),
         },
-        ListAppend => {
+        SequenceOp::ListAppend => {
             let mut elements = list(0)?.to_vec();
             match operands.get(1) {
                 Some(element) => elements.push(element.clone()),
@@ -756,15 +757,24 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
             }
             Ok(Value::List(ListWindow::new(elements)))
         }
-        ListConcat => {
+        SequenceOp::ListConcat => {
             let mut elements = Vec::new();
             for position in 0..operands.len() {
                 elements.extend(list(position)?.iter().cloned());
             }
             Ok(Value::List(ListWindow::new(elements)))
         }
-        BinLen(_) | BinGet(_) | BinSlice(_) | BinAppend(_) | BinConcat(_) | BinEql(_)
-        | BinReplicate(_) | BinReinterp(_) | BinAnd(_) | BinOr(_) | BinXor(_) => {
+        SequenceOp::BinLen(_)
+        | SequenceOp::BinGet(_)
+        | SequenceOp::BinSlice(_)
+        | SequenceOp::BinAppend(_)
+        | SequenceOp::BinConcat(_)
+        | SequenceOp::BinEql(_)
+        | SequenceOp::BinReplicate(_)
+        | SequenceOp::BinReinterp(_)
+        | SequenceOp::BinAnd(_)
+        | SequenceOp::BinOr(_)
+        | SequenceOp::BinXor(_) => {
             unreachable!("packed-binary operations fold through the semantic contract")
         }
     }

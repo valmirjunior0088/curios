@@ -13,7 +13,7 @@ pub(super) const TOTALITY: Part = Part {
         witnesses: &[Witness {
             what: "a nullary group at `False` whose body is an instance of its own member",
             proof: Proof::Module(a_member_reached_through_an_instance),
-            expect: refused![kernel: Error::NotDescending { .. }],
+            expect: refused![kernel: curios_cert::Error::NotDescending { .. }],
         }],
     }],
 };

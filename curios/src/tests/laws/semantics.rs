@@ -169,8 +169,6 @@ fn constant(value: Constant, carrier: Carrier) -> Value {
 
 /// `operation` at `carrier`, applied to `operands`; `None` outside the operation's domain.
 fn apply(carrier: Carrier, operation: Operation, operands: &[Value]) -> Option<Value> {
-    use Value::{Boolean, Byte, Float, List, Packed};
-
     Some(match (carrier, operation, operands) {
         (Carrier::Natural, _, [Value::Natural(a), Value::Natural(b)]) => match operation {
             Operation::Sum => Value::Natural(a.clone() + b),
@@ -183,32 +181,40 @@ fn apply(carrier: Carrier, operation: Operation, operands: &[Value]) -> Option<V
             Operation::Xor => Value::Natural(a.clone() ^ b),
             Operation::ShiftLeft => Value::Natural(a.shl_within(b, 1 << 20)?),
             Operation::ShiftRight => Value::Natural(a >> b),
-            Operation::Equal => Boolean(a == b),
-            Operation::Unequal => Boolean(a != b),
-            Operation::Less => Boolean(a < b),
-            Operation::AtMost => Boolean(a <= b),
+            Operation::Equal => Value::Boolean(a == b),
+            Operation::Unequal => Value::Boolean(a != b),
+            Operation::Less => Value::Boolean(a < b),
+            Operation::AtMost => Value::Boolean(a <= b),
             _ => return None,
         },
         (Carrier::Integer, _, [Value::Integer(a), Value::Integer(b)]) => match operation {
             Operation::Sum => Value::Integer(a.clone() + b.clone()),
             Operation::Difference => Value::Integer(a.clone() - b.clone()),
             Operation::Product => Value::Integer(a.clone() * b.clone()),
-            Operation::Equal => Boolean(a == b),
-            Operation::Unequal => Boolean(a != b),
-            Operation::Less => Boolean(a < b),
-            Operation::AtMost => Boolean(a <= b),
+            Operation::Equal => Value::Boolean(a == b),
+            Operation::Unequal => Value::Boolean(a != b),
+            Operation::Less => Value::Boolean(a < b),
+            Operation::AtMost => Value::Boolean(a <= b),
             _ => return None,
         },
-        (Carrier::Boolean, _, [Boolean(a), Boolean(b)]) => Boolean(match operation {
-            Operation::And => *a && *b,
-            Operation::Or => *a || *b,
-            Operation::Xor | Operation::Unequal => a != b,
-            Operation::Equal => a == b,
-            _ => return None,
-        }),
-        (Carrier::Float, Operation::Equal, [Float(a), Float(b)]) => Boolean(a.eql(*b)),
-        (Carrier::Float, Operation::Unequal, [Float(a), Float(b)]) => Boolean(a.neq(*b)),
-        (Carrier::Packed(_), Operation::Equal, [Packed(_, a), Packed(_, b)]) => Boolean(a == b),
+        (Carrier::Boolean, _, [Value::Boolean(a), Value::Boolean(b)]) => {
+            Value::Boolean(match operation {
+                Operation::And => *a && *b,
+                Operation::Or => *a || *b,
+                Operation::Xor | Operation::Unequal => a != b,
+                Operation::Equal => a == b,
+                _ => return None,
+            })
+        }
+        (Carrier::Float, Operation::Equal, [Value::Float(a), Value::Float(b)]) => {
+            Value::Boolean(a.eql(*b))
+        }
+        (Carrier::Float, Operation::Unequal, [Value::Float(a), Value::Float(b)]) => {
+            Value::Boolean(a.neq(*b))
+        }
+        (Carrier::Packed(_), Operation::Equal, [Value::Packed(_, a), Value::Packed(_, b)]) => {
+            Value::Boolean(a == b)
+        }
         (
             Carrier::Natural,
             Operation::Conversion {
@@ -221,7 +227,7 @@ fn apply(carrier: Carrier, operation: Operation, operands: &[Value]) -> Option<V
             Operation::Conversion {
                 from: Carrier::Byte,
             },
-            [Byte(value)],
+            [Value::Byte(value)],
         ) => Value::Natural(Natural::from(*value)),
         (
             Carrier::Integer,
@@ -236,60 +242,64 @@ fn apply(carrier: Carrier, operation: Operation, operands: &[Value]) -> Option<V
                 from: Carrier::Natural,
             },
             [Value::Natural(value)],
-        ) => Byte(u8::try_from(value).ok()?),
+        ) => Value::Byte(u8::try_from(value).ok()?),
         (
             Carrier::Float,
             Operation::Conversion {
                 from: Carrier::Packed(Grain::X),
             },
-            [Packed(Grain::X, bytes)],
-        ) => Float(Floating::of_le_bytes(bytes).ok()?),
+            [Value::Packed(Grain::X, bytes)],
+        ) => Value::Float(Floating::of_le_bytes(bytes).ok()?),
         (
             Carrier::Packed(Grain::X),
             Operation::Conversion {
                 from: Carrier::Float,
             },
-            [Float(value)],
-        ) => Packed(Grain::X, value.to_le_bytes()),
+            [Value::Float(value)],
+        ) => Value::Packed(Grain::X, value.to_le_bytes()),
         (
             Carrier::Packed(Grain::X),
             Operation::Conversion {
                 from: Carrier::Packed(Grain::B),
             },
-            [Packed(Grain::B, bits)],
+            [Value::Packed(Grain::B, bits)],
         ) => {
             if !bits.bit_length().is_multiple_of(8) {
                 return None;
             }
-            Packed(Grain::X, Binary::from_bytes(bits.to_packed_bytes()))
+            Value::Packed(Grain::X, Binary::from_bytes(bits.to_packed_bytes()))
         }
         (
             Carrier::Packed(Grain::B),
             Operation::Conversion {
                 from: Carrier::Packed(Grain::X),
             },
-            [Packed(Grain::X, bytes)],
-        ) => Packed(Grain::B, bytes.clone()),
-        (Carrier::Packed(grain), Operation::Concat, [Packed(_, a), Packed(_, b)]) => {
-            Packed(grain, Binary::concat([a, b]))
+            [Value::Packed(Grain::X, bytes)],
+        ) => Value::Packed(Grain::B, bytes.clone()),
+        (Carrier::Packed(grain), Operation::Concat, [Value::Packed(_, a), Value::Packed(_, b)]) => {
+            Value::Packed(grain, Binary::concat([a, b]))
         }
-        (Carrier::Packed(grain), Operation::Length, [Packed(_, word)]) => {
+        (Carrier::Packed(grain), Operation::Length, [Value::Packed(_, word)]) => {
             Value::Natural(Natural::from(word.len(grain)))
         }
-        (Carrier::Packed(Grain::B), Operation::Append, [Packed(_, word), Boolean(bit)]) => {
-            Packed(Grain::B, word.append_bit(*bit))
+        (
+            Carrier::Packed(Grain::B),
+            Operation::Append,
+            [Value::Packed(_, word), Value::Boolean(bit)],
+        ) => Value::Packed(Grain::B, word.append_bit(*bit)),
+        (
+            Carrier::Packed(Grain::X),
+            Operation::Append,
+            [Value::Packed(_, word), Value::Byte(byte)],
+        ) => Value::Packed(Grain::X, word.append_byte(*byte)?),
+        (Carrier::List, Operation::Concat, [Value::List(a), Value::List(b)]) => {
+            Value::List(a.iter().chain(b).cloned().collect())
         }
-        (Carrier::Packed(Grain::X), Operation::Append, [Packed(_, word), Byte(byte)]) => {
-            Packed(Grain::X, word.append_byte(*byte)?)
-        }
-        (Carrier::List, Operation::Concat, [List(a), List(b)]) => {
-            List(a.iter().chain(b).cloned().collect())
-        }
-        (Carrier::List, Operation::Length, [List(items)]) => {
+        (Carrier::List, Operation::Length, [Value::List(items)]) => {
             Value::Natural(Natural::from(items.len()))
         }
-        (Carrier::List, Operation::Append, [List(items), Value::Natural(item)]) => {
-            List(items.iter().chain([item]).cloned().collect())
+        (Carrier::List, Operation::Append, [Value::List(items), Value::Natural(item)]) => {
+            Value::List(items.iter().chain([item]).cloned().collect())
         }
         _ => panic!("no semantics for {operation:?} at {carrier:?} over {operands:?}"),
     })

@@ -64,7 +64,7 @@ impl fmt::Display for Expected {
 
 /// What refuses a witness once its flaw is closed, one entry per checker expected to refuse it.
 ///
-/// `refused![kernel: Error::NotASort(_)]` expects the kernel's refusal by that error, and `refused![elaborator: Error::TypeMismatch { .. }, kernel: Error::Mismatch { .. }]` expects both checkers'. `Error` is the checker's own under each label, `curios_elab::Error` and `curios_cert::Error`. After either, `if` and a condition over what the pattern binds narrows an error whose variant says too little. A label alone, `refused![kernel]`, expects a refusal by an error not named yet, which is how an open ticket states a refusal its fix has still to introduce.
+/// `refused![kernel: curios_cert::Error::NotASort(_)]` expects the kernel's refusal by that error, and `refused![elaborator: curios_elab::Error::TypeMismatch { .. }, kernel: curios_cert::Error::Mismatch { .. }]` expects both checkers'. Each pattern names its checker's own error with its crate, `curios_elab::Error` under `elaborator` and `curios_cert::Error` under `kernel`. After either, `if` and a condition over what the pattern binds narrows an error whose variant says too little. A label alone, `refused![kernel]`, expects a refusal by an error not named yet, which is how an open ticket states a refusal its fix has still to introduce.
 #[macro_export]
 macro_rules! refused {
     ($($checker:ident $(: $pattern:pat $(if $guard:expr)?)?),+ $(,)?) => {
@@ -87,11 +87,7 @@ macro_rules! expected {
     (elaborator: $pattern:pat $(if $guard:expr)?) => {
         $crate::Expected::Elaborator {
             pattern: Some(stringify!($pattern $(if $guard)?)),
-            is: |error| {
-                use ::curios_elab::Error;
-
-                matches!(error, $pattern $(if $guard)?)
-            },
+            is: |error| matches!(error, $pattern $(if $guard)?),
         }
     };
     (kernel) => {
@@ -103,11 +99,7 @@ macro_rules! expected {
     (kernel: $pattern:pat $(if $guard:expr)?) => {
         $crate::Expected::Kernel {
             pattern: Some(stringify!($pattern $(if $guard)?)),
-            is: |error| {
-                use ::curios_cert::Error;
-
-                matches!(error, $pattern $(if $guard)?)
-            },
+            is: |error| matches!(error, $pattern $(if $guard)?),
         }
     };
 }

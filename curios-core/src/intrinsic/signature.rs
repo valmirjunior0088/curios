@@ -120,49 +120,77 @@ impl Intrinsic {
             produced: Produced::Sort,
         };
 
-        use Intrinsic::*;
-
         match self {
             // Type formers. Every closed one is small; the parameterized ones defer their sort.
-            BoolType | NatType | ByteType | IntType | FltType | BinType(_) | HandleType => {
-                nullary(Term::type_ground())
+            Self::BoolType
+            | Self::NatType
+            | Self::ByteType
+            | Self::IntType
+            | Self::FltType
+            | Self::BinType(_)
+            | Self::HandleType => nullary(Term::type_ground()),
+            Self::ListType(_) | Self::CellType(_) | Self::ChannelType(_) | Self::IoType(_) => {
+                former()
             }
-            ListType(_) | CellType(_) | ChannelType(_) | IoType(_) => former(),
 
             // Literals. A `Nat` successor is the one literal carrying a term: `Succ(3, x)` is `x + 3`, and its base is a `Nat` like any other.
-            Bool(_) => nullary(bool_type()),
-            Nat(self::Nat::Zero) => nullary(nat_type()),
-            Nat(self::Nat::Succ(..)) => un(nat_type(), nat_type()),
-            Byte(_) => nullary(byte_type()),
-            Int(_) => nullary(int_type()),
-            Flt(_) => nullary(flt_type()),
-            Bin(grain, _) => nullary(bin_type(*grain)),
-            Handle(_) => nullary(handle_type()),
+            Self::Bool(_) => nullary(bool_type()),
+            Self::Nat(self::Nat::Zero) => nullary(nat_type()),
+            Self::Nat(self::Nat::Succ(..)) => un(nat_type(), nat_type()),
+            Self::Byte(_) => nullary(byte_type()),
+            Self::Int(_) => nullary(int_type()),
+            Self::Flt(_) => nullary(flt_type()),
+            Self::Bin(grain, _) => nullary(bin_type(*grain)),
+            Self::Handle(_) => nullary(handle_type()),
 
             // Comparisons: same-typed operands in, a boolean out.
-            BoolEql(..) | BoolNeq(..) => bin_op(bool_type(), bool_type()),
-            NatEql(..) | NatNeq(..) | NatLt(..) | NatLe(..) => bin_op(nat_type(), bool_type()),
-            IntEql(..) | IntNeq(..) | IntLt(..) | IntLe(..) => bin_op(int_type(), bool_type()),
-            FltEql(..) | FltNeq(..) | FltLt(..) | FltLe(..) => bin_op(flt_type(), bool_type()),
+            Self::BoolEql(..) | Self::BoolNeq(..) => bin_op(bool_type(), bool_type()),
+            Self::NatEql(..) | Self::NatNeq(..) | Self::NatLt(..) | Self::NatLe(..) => {
+                bin_op(nat_type(), bool_type())
+            }
+            Self::IntEql(..) | Self::IntNeq(..) | Self::IntLt(..) | Self::IntLe(..) => {
+                bin_op(int_type(), bool_type())
+            }
+            Self::FltEql(..) | Self::FltNeq(..) | Self::FltLt(..) | Self::FltLe(..) => {
+                bin_op(flt_type(), bool_type())
+            }
 
             // Arithmetic and bitwise: closed on their carrier.
-            BoolAnd(..) | BoolOr(..) | BoolXor(..) => bin_op(bool_type(), bool_type()),
-            NatAdd(..) | NatSub(..) | NatMul(..) | NatAnd(..) | NatOr(..) | NatXor(..)
-            | NatShl(..) | NatShr(..) => bin_op(nat_type(), nat_type()),
-            IntAdd(..) | IntSub(..) | IntMul(..) | IntAnd(..) | IntOr(..) | IntXor(..) => {
-                bin_op(int_type(), int_type())
+            Self::BoolAnd(..) | Self::BoolOr(..) | Self::BoolXor(..) => {
+                bin_op(bool_type(), bool_type())
             }
+            Self::NatAdd(..)
+            | Self::NatSub(..)
+            | Self::NatMul(..)
+            | Self::NatAnd(..)
+            | Self::NatOr(..)
+            | Self::NatXor(..)
+            | Self::NatShl(..)
+            | Self::NatShr(..) => bin_op(nat_type(), nat_type()),
+            Self::IntAdd(..)
+            | Self::IntSub(..)
+            | Self::IntMul(..)
+            | Self::IntAnd(..)
+            | Self::IntOr(..)
+            | Self::IntXor(..) => bin_op(int_type(), int_type()),
             // A shift count is a natural on both carriers: a signed count would leave `Int/shr(v, -1)` — `⌊v / 2^-1⌋` — for the theory to define, which it does not.
-            IntShl(..) | IntShr(..) => sig(
+            Self::IntShl(..) | Self::IntShr(..) => sig(
                 vec![Operand::At(int_type()), Operand::At(nat_type())],
                 int_type(),
             ),
-            FltAdd(..) | FltSub(..) | FltMul(..) | FltDiv(..) | FltRem(..) | FltMin(..)
-            | FltMax(..) | FltCopysign(..) => bin_op(flt_type(), flt_type()),
-            FltNeg(..) | FltAbs(..) | FltSqrt(..) | FltRoundIntegral(..) => {
-                un(flt_type(), flt_type())
-            }
-            FltFma(..) => sig(
+            Self::FltAdd(..)
+            | Self::FltSub(..)
+            | Self::FltMul(..)
+            | Self::FltDiv(..)
+            | Self::FltRem(..)
+            | Self::FltMin(..)
+            | Self::FltMax(..)
+            | Self::FltCopysign(..) => bin_op(flt_type(), flt_type()),
+            Self::FltNeg(..)
+            | Self::FltAbs(..)
+            | Self::FltSqrt(..)
+            | Self::FltRoundIntegral(..) => un(flt_type(), flt_type()),
+            Self::FltFma(..) => sig(
                 vec![
                     Operand::At(flt_type()),
                     Operand::At(flt_type()),
@@ -172,113 +200,118 @@ impl Intrinsic {
             ),
 
             // The guarded divisions. A natural is nonzero exactly when zero is below it, which is why `Nat` needs no `NonZero` of its own.
-            NatDiv { divisor, .. } | NatRem { divisor, .. } => sig(
+            Self::NatDiv { divisor, .. } | Self::NatRem { divisor, .. } => sig(
                 vec![
                     Operand::At(nat_type()),
                     Operand::At(nat_type()),
-                    Operand::At(holds(NatLt(
-                        Term::intrinsic(Nat(self::Nat::Zero)),
+                    Operand::At(holds(Self::NatLt(
+                        Term::intrinsic(Self::Nat(self::Nat::Zero)),
                         divisor.clone(),
                     ))),
                 ],
                 nat_type(),
             ),
-            IntDiv { divisor, .. } | IntRem { divisor, .. } => sig(
+            Self::IntDiv { divisor, .. } | Self::IntRem { divisor, .. } => sig(
                 vec![
                     Operand::At(int_type()),
                     Operand::At(int_type()),
-                    Operand::At(holds(IntNeq(
+                    Operand::At(holds(Self::IntNeq(
                         divisor.clone(),
-                        Term::intrinsic(Int(Integer::from(0))),
+                        Term::intrinsic(Self::Int(Integer::from(0))),
                     ))),
                 ],
                 int_type(),
             ),
 
             // Conversions preserve the number, never the bits — a bit view belongs to the explicit `Bin` casts below.
-            ByteToNat(..) => un(byte_type(), nat_type()),
-            NatToByte { nat, .. } => sig(
+            Self::ByteToNat(..) => un(byte_type(), nat_type()),
+            Self::NatToByte { nat, .. } => sig(
                 vec![
                     Operand::At(nat_type()),
-                    Operand::At(holds(NatLt(
+                    Operand::At(holds(Self::NatLt(
                         nat.clone(),
-                        Term::intrinsic(Nat(self::Nat::new(256u32))),
+                        Term::intrinsic(Self::Nat(self::Nat::new(256u32))),
                     ))),
                 ],
                 byte_type(),
             ),
-            NatToInt(..) => un(nat_type(), int_type()),
-            NatToFlt(..) => un(nat_type(), flt_type()),
-            IntToNat { int, .. } => sig(
+            Self::NatToInt(..) => un(nat_type(), int_type()),
+            Self::NatToFlt(..) => un(nat_type(), flt_type()),
+            Self::IntToNat { int, .. } => sig(
                 vec![
                     Operand::At(int_type()),
-                    Operand::At(holds(IntLe(
-                        Term::intrinsic(Int(Integer::from(0))),
+                    Operand::At(holds(Self::IntLe(
+                        Term::intrinsic(Self::Int(Integer::from(0))),
                         int.clone(),
                     ))),
                 ],
                 nat_type(),
             ),
-            IntToFlt(..) => un(int_type(), flt_type()),
-            FltToNat { flt, .. } => sig(
+            Self::IntToFlt(..) => un(int_type(), flt_type()),
+            Self::FltToNat { flt, .. } => sig(
                 vec![
                     Operand::At(flt_type()),
-                    Operand::At(holds(BoolAnd(
-                        Term::intrinsic(FltLe(
-                            Term::intrinsic(Flt(Floating::zero(false))),
+                    Operand::At(holds(Self::BoolAnd(
+                        Term::intrinsic(Self::FltLe(
+                            Term::intrinsic(Self::Flt(Floating::zero(false))),
                             flt.clone(),
                         )),
-                        Term::intrinsic(FltLt(
+                        Term::intrinsic(Self::FltLt(
                             flt.clone(),
-                            Term::intrinsic(Flt(Floating::infinite(false))),
+                            Term::intrinsic(Self::Flt(Floating::infinite(false))),
                         )),
                     ))),
                 ],
                 nat_type(),
             ),
-            FltToInt { flt, .. } | FltMantissa { flt, .. } | FltExponent { flt, .. } => sig(
+            Self::FltToInt { flt, .. }
+            | Self::FltMantissa { flt, .. }
+            | Self::FltExponent { flt, .. } => sig(
                 vec![
                     Operand::At(flt_type()),
-                    Operand::At(holds(BoolAnd(
-                        Term::intrinsic(FltLt(
-                            Term::intrinsic(Flt(Floating::infinite(true))),
+                    Operand::At(holds(Self::BoolAnd(
+                        Term::intrinsic(Self::FltLt(
+                            Term::intrinsic(Self::Flt(Floating::infinite(true))),
                             flt.clone(),
                         )),
-                        Term::intrinsic(FltLt(
+                        Term::intrinsic(Self::FltLt(
                             flt.clone(),
-                            Term::intrinsic(Flt(Floating::infinite(false))),
+                            Term::intrinsic(Self::Flt(Floating::infinite(false))),
                         )),
                     ))),
                 ],
                 int_type(),
             ),
-            FltToLeBytes(..) => un(flt_type(), bin_type(Grain::X)),
-            FltOfLeBytes { bin, .. } => sig(
+            Self::FltToLeBytes(..) => un(flt_type(), bin_type(Grain::X)),
+            Self::FltOfLeBytes { bin, .. } => sig(
                 vec![
                     Operand::At(bin_type(Grain::X)),
-                    Operand::At(holds(NatEql(
+                    Operand::At(holds(Self::NatEql(
                         bin_len(Grain::X, bin.clone()),
-                        Term::intrinsic(Nat(self::Nat::new(8u32))),
+                        Term::intrinsic(Self::Nat(self::Nat::new(8u32))),
                     ))),
                 ],
                 flt_type(),
             ),
 
             // `Bin`: a sequence of bytes or of bits, depending on the grain.
-            BinLen(grain, _) => un(bin_type(*grain), nat_type()),
-            BinEql(grain, ..) => bin_op(bin_type(*grain), bool_type()),
+            Self::BinLen(grain, _) => un(bin_type(*grain), nat_type()),
+            Self::BinEql(grain, ..) => bin_op(bin_type(*grain), bool_type()),
             // The two bounded `Bin` accessors. `Bin/len` is the *intrinsic* here rather than `/sys`'s wrapper, because a signature states what the operand must be and this table is below `/sys`.
-            BinGet {
+            Self::BinGet {
                 grain, bin, index, ..
             } => sig(
                 vec![
                     Operand::At(bin_type(*grain)),
                     Operand::At(nat_type()),
-                    Operand::At(holds(NatLt(index.clone(), bin_len(*grain, bin.clone())))),
+                    Operand::At(holds(Self::NatLt(
+                        index.clone(),
+                        bin_len(*grain, bin.clone()),
+                    ))),
                 ],
                 grain_element(*grain),
             ),
-            BinSlice {
+            Self::BinSlice {
                 grain,
                 bin,
                 start,
@@ -289,21 +322,21 @@ impl Intrinsic {
                     Operand::At(bin_type(*grain)),
                     Operand::At(nat_type()),
                     Operand::At(nat_type()),
-                    Operand::At(holds(NatLe(
-                        Term::intrinsic(NatAdd(start.clone(), length.clone())),
+                    Operand::At(holds(Self::NatLe(
+                        Term::intrinsic(Self::NatAdd(start.clone(), length.clone())),
                         bin_len(*grain, bin.clone()),
                     ))),
                 ],
                 bin_type(*grain),
             ),
-            BinAppend { grain, .. } => sig(
+            Self::BinAppend { grain, .. } => sig(
                 vec![
                     Operand::At(bin_type(*grain)),
                     Operand::At(grain_element(*grain)),
                 ],
                 bin_type(*grain),
             ),
-            BinConcat { grain, operands } => sig(
+            Self::BinConcat { grain, operands } => sig(
                 operands
                     .iter()
                     .map(|_| Operand::At(bin_type(*grain)))
@@ -311,24 +344,24 @@ impl Intrinsic {
                 bin_type(*grain),
             ),
             // Count first, then the generator, as `/std/List/replicate` reads. No bound: every count names a run, and the length of the one it names is what `BinLen` reduces over this node.
-            BinReplicate { grain, .. } => sig(
+            Self::BinReplicate { grain, .. } => sig(
                 vec![Operand::At(nat_type()), Operand::At(grain_element(*grain))],
                 bin_type(*grain),
             ),
             // The three pointwise rows are one rule at three operators. See [`Intrinsic::BinAnd`] for why the equal length is stated rather than extended away.
-            BinAnd {
+            Self::BinAnd {
                 grain, left, right, ..
             }
-            | BinOr {
+            | Self::BinOr {
                 grain, left, right, ..
             }
-            | BinXor {
+            | Self::BinXor {
                 grain, left, right, ..
             } => sig(
                 vec![
                     Operand::At(bin_type(*grain)),
                     Operand::At(bin_type(*grain)),
-                    Operand::At(holds(NatEql(
+                    Operand::At(holds(Self::NatEql(
                         bin_len(*grain, left.clone()),
                         bin_len(*grain, right.clone()),
                     ))),
@@ -336,21 +369,21 @@ impl Intrinsic {
                 bin_type(*grain),
             ),
             // One row for both directions, its bound uniform in position and decided per grain — `NatDiv`'s arrangement, which is what keeps this from being two rows that differ only in which way they read.
-            BinReinterp { grain, bin, .. } => sig(
+            Self::BinReinterp { grain, bin, .. } => sig(
                 vec![
                     Operand::At(bin_type(*grain)),
                     Operand::At(match grain {
                         // `n` bytes are `8n` bits, so no count of them leaves a remainder.
-                        Grain::X => holds(Bool(true)),
+                        Grain::X => holds(Self::Bool(true)),
                         // The run holds a whole number of bytes. Spelled with the remainder rather than a mask of the low three bits: the two decide the same thing, and this is the one a caller can read.
-                        Grain::B => holds(NatEql(
-                            Term::intrinsic(NatRem {
+                        Grain::B => holds(Self::NatEql(
+                            Term::intrinsic(Self::NatRem {
                                 dividend: bin_len(Grain::B, bin.clone()),
-                                divisor: Term::intrinsic(Nat(self::Nat::new(8u32))),
+                                divisor: Term::intrinsic(Self::Nat(self::Nat::new(8u32))),
                                 // `0 < 8` over the literal, which reduces to the proposition the registry names an inhabitant for.
                                 non_zero: decided(syntax.proof.true_qed, vec![]),
                             }),
-                            Term::intrinsic(Nat(self::Nat::new(0u32))),
+                            Term::intrinsic(Self::Nat(self::Nat::new(0u32))),
                         )),
                     }),
                 ],
@@ -358,17 +391,17 @@ impl Intrinsic {
             ),
 
             // `List`. Every operation carries its element type as an operand, which is what lets it be typed without inventing anything — `[]` included, which has no element to read a type from.
-            List { element, items } => sig(
+            Self::List { element, items } => sig(
                 std::iter::once(Operand::IsType)
                     .chain(items.iter().map(|_| Operand::At(element.clone())))
                     .collect(),
                 list_type(element.clone()),
             ),
-            ListLen { element, .. } => sig(
+            Self::ListLen { element, .. } => sig(
                 vec![Operand::IsType, Operand::At(list_type(element.clone()))],
                 nat_type(),
             ),
-            ListGet {
+            Self::ListGet {
                 element,
                 list,
                 index,
@@ -378,14 +411,14 @@ impl Intrinsic {
                     Operand::IsType,
                     Operand::At(list_type(element.clone())),
                     Operand::At(nat_type()),
-                    Operand::At(holds(NatLt(
+                    Operand::At(holds(Self::NatLt(
                         index.clone(),
                         list_len(element.clone(), list.clone()),
                     ))),
                 ],
                 element.clone(),
             ),
-            ListSlice {
+            Self::ListSlice {
                 element,
                 list,
                 start,
@@ -397,14 +430,14 @@ impl Intrinsic {
                     Operand::At(list_type(element.clone())),
                     Operand::At(nat_type()),
                     Operand::At(nat_type()),
-                    Operand::At(holds(NatLe(
-                        Term::intrinsic(NatAdd(start.clone(), length.clone())),
+                    Operand::At(holds(Self::NatLe(
+                        Term::intrinsic(Self::NatAdd(start.clone(), length.clone())),
                         list_len(element.clone(), list.clone()),
                     ))),
                 ],
                 list_type(element.clone()),
             ),
-            ListAppend { element, .. } => sig(
+            Self::ListAppend { element, .. } => sig(
                 vec![
                     Operand::IsType,
                     Operand::At(list_type(element.clone())),
@@ -412,7 +445,7 @@ impl Intrinsic {
                 ],
                 list_type(element.clone()),
             ),
-            ListConcat { element, operands } => sig(
+            Self::ListConcat { element, operands } => sig(
                 std::iter::once(Operand::IsType)
                     .chain(
                         operands
@@ -422,7 +455,7 @@ impl Intrinsic {
                     .collect(),
                 list_type(element.clone()),
             ),
-            ListMap { from, to, .. } => sig(
+            Self::ListMap { from, to, .. } => sig(
                 vec![
                     Operand::IsType,
                     Operand::IsType,
@@ -436,8 +469,10 @@ impl Intrinsic {
             ),
 
             // Guest coordination operations describe effects; their outcomes are ordinary declared inductives.
-            Cell { element } => sig(vec![Operand::IsType], io_type(cell_type(element.clone()))),
-            CellPoll {
+            Self::Cell { element } => {
+                sig(vec![Operand::IsType], io_type(cell_type(element.clone())))
+            }
+            Self::CellPoll {
                 element, universes, ..
             } => sig(
                 vec![Operand::IsType, Operand::At(cell_type(element.clone()))],
@@ -447,7 +482,7 @@ impl Intrinsic {
                     vec![element.clone()],
                 )),
             ),
-            CellFill { element, .. } => sig(
+            Self::CellFill { element, .. } => sig(
                 vec![
                     Operand::IsType,
                     Operand::At(cell_type(element.clone())),
@@ -455,20 +490,20 @@ impl Intrinsic {
                 ],
                 io_type(bool_type()),
             ),
-            Channel {
+            Self::Channel {
                 element, capacity, ..
             } => sig(
                 vec![
                     Operand::IsType,
                     Operand::At(nat_type()),
-                    Operand::At(holds(NatLt(
-                        Term::intrinsic(Nat(self::Nat::Zero)),
+                    Operand::At(holds(Self::NatLt(
+                        Term::intrinsic(Self::Nat(self::Nat::Zero)),
                         capacity.clone(),
                     ))),
                 ],
                 io_type(channel_type(element.clone())),
             ),
-            ChannelPush { element, .. } => sig(
+            Self::ChannelPush { element, .. } => sig(
                 vec![
                     Operand::IsType,
                     Operand::At(channel_type(element.clone())),
@@ -476,7 +511,7 @@ impl Intrinsic {
                 ],
                 io_type(nominal(syntax.channel.push, Vec::new(), Vec::new())),
             ),
-            ChannelTake {
+            Self::ChannelTake {
                 element, universes, ..
             } => sig(
                 vec![Operand::IsType, Operand::At(channel_type(element.clone()))],
@@ -486,25 +521,25 @@ impl Intrinsic {
                     vec![element.clone()],
                 )),
             ),
-            ChannelClose { element, .. } => sig(
+            Self::ChannelClose { element, .. } => sig(
                 vec![Operand::IsType, Operand::At(channel_type(element.clone()))],
                 io_type(unit()),
             ),
-            ChannelClosed { element, .. } => sig(
+            Self::ChannelClosed { element, .. } => sig(
                 vec![Operand::IsType, Operand::At(channel_type(element.clone()))],
                 io_type(bool_type()),
             ),
-            ChannelCount { element, .. } | ChannelCapacity { element, .. } => sig(
+            Self::ChannelCount { element, .. } | Self::ChannelCapacity { element, .. } => sig(
                 vec![Operand::IsType, Operand::At(channel_type(element.clone()))],
                 io_type(nat_type()),
             ),
 
             // The two constructors of the opaque effect carrier. There is no third: nothing anywhere lowers an `Io(T)` to its `T`, which is what makes every term of non-`Io` type pure by typing.
-            IoPure { result, .. } => sig(
+            Self::IoPure { result, .. } => sig(
                 vec![Operand::IsType, Operand::At(result.clone())],
                 io_type(result.clone()),
             ),
-            ListFold {
+            Self::ListFold {
                 element, result, ..
             } => sig(
                 vec![
@@ -519,7 +554,7 @@ impl Intrinsic {
                 ],
                 result.clone(),
             ),
-            IoBind { from, to, .. } => sig(
+            Self::IoBind { from, to, .. } => sig(
                 vec![
                     Operand::IsType,
                     Operand::IsType,
