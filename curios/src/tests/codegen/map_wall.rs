@@ -68,7 +68,7 @@ pub(super) fn timed(cwasm: &[u8], n: u64) -> f64 {
 ///
 /// # What it last printed
 ///
-/// Taken at `7694acba7`, release, x86-64 Linux, seven readings in one sitting: 1060, 1069, 1069, 1081, 1084, 1124, 1160 ns/insert, median 1081. This sitting read unimodally, inside ±4.6%; an earlier one on another box read bimodally, two clusters about 10% apart, so a figure is compared only within one sitting.
+/// Taken at `447fbb0a1`, release, x86-64 Linux, seven readings in one sitting: 1067, 1069, 1070, 1076, 1089, 1095, 1097 ns/insert, median 1076. This sitting read unimodally, inside ±1.4%; an earlier one on another box read bimodally, two clusters about 10% apart, so a figure is compared only within one sitting.
 ///
 /// # What the design rests on
 ///
@@ -160,14 +160,14 @@ end
 ///
 /// # What it last printed
 ///
-/// Taken at `7694acba7`, release, x86-64 Linux, seven readings in one sitting:
+/// Taken at `447fbb0a1`, release, x86-64 Linux, seven readings in one sitting:
 ///
 /// ```text
 /// outputs at N=1000: ofnat "923684", control "923689"
-///   key construction 151 154 154 156 156 159 162 ns/insert, median 156
+///   key construction 151 153 154 155 155 156 159 ns/insert, median 155
 /// ```
 ///
-/// **The key class is 14% of the insert `map_wall_spines_slope` reads — 156 ns against 1081** — so the workload confound `programs/README.md` flags is real but immaterial at these key magnitudes. Beside it, the collector's share measured nil (`spines_collection_decomposition`), and the optimized `spines` module's nine surviving `br_table`s all sit in string/UTF-8 decoding and `main`, none in `insert1`, `bit`, `crit`, `lookup`, `wedge`, or the fold, so the descent has no table left to replace. What remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
+/// **The key class is 14% of the insert `map_wall_spines_slope` reads — 155 ns against 1076** — so the workload confound `programs/README.md` flags is real but immaterial at these key magnitudes. Beside it, the collector's share measured nil (`spines_collection_decomposition`), and the optimized `spines` module's nine surviving `br_table`s all sit in string/UTF-8 decoding and `main`, none in `insert1`, `bit`, `crit`, `lookup`, `wedge`, or the fold, so the descent has no table left to replace. What remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
 #[test]
 #[ignore = "measurement, timed: reports timings rather than asserting"]
 fn map_wall_key_share() {

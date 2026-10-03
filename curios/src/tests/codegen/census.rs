@@ -947,7 +947,7 @@ fn survey(label: &str, source: &str) -> Survey {
 ///
 /// # What it last printed
 ///
-/// Taken at `7694acba7`, x86-64 Linux. Over the fourteen-program corpus: 585 regions — 522 blocked, 47 continuation-only, 16 needs-workers — and no variant regions at all. Most regions repeat across programs because they live in `/std`'s shared plumbing. The needs-workers owners are `/std/Str/fold`, `io/bind` and `main`. Three functions carry return edges of more than one shape — `/build` (`{Tuple(4), Bare}`), `/std/Nat/of_str` (`{Tuple(2), Bare}`) and `io/bind` (`{Tuple(2), Bare}`, escaping) — and none is evidence for a return-side mechanism: an escaping one is declined for escaping, and a `trees` node is stored in its parent, so splitting `/build`'s return relocates the allocation into the caller rather than removing it.
+/// Taken at `447fbb0a1`, x86-64 Linux. Over the fourteen-program corpus: 585 regions — 522 blocked, 47 continuation-only, 16 needs-workers — and no variant regions at all. Most regions repeat across programs because they live in `/std`'s shared plumbing. The needs-workers owners are `/std/Str/fold`, `io/bind` and `main`. Three functions carry return edges of more than one shape — `/build` (`{Tuple(4), Bare}`), `/std/Nat/of_str` (`{Tuple(2), Bare}`) and `io/bind` (`{Tuple(2), Bare}`, escaping) — and none is evidence for a return-side mechanism: an escaping one is declined for escaping, and a `trees` node is stored in its parent, so splitting `/build`'s return relocates the allocation into the caller rather than removing it.
 ///
 /// The boxed-tag annex reads 462 tag-led constructions, none of them read back at slot zero within its own flow. Read that as an upper bound rather than a count of dead tags: a construction that comes to rest and is discriminated after a reload is in no flow at all, and this instrument cannot see the read.
 ///
@@ -1062,7 +1062,7 @@ fn aggregate_flow_census() {
 ///
 /// # What it last printed
 ///
-/// Taken at `7694acba7`, x86-64 Linux. Against a limit of 24: `/std/Str/classify` extent 52, `/std/Str/fold` 41 — both over the budget, so specializing either per tag is declined by it rather than by any rule, and raising the limit to admit them would admit per-tag clones of everything else this size. `/std/Str/step` is not among them: the fold does not call it (see `ladder`'s `the_per_character_walk_carries_its_scan_without_allocating`), so the walkers are all a retake reports.
+/// Taken at `447fbb0a1`, x86-64 Linux. Against a limit of 24: `/std/Str/classify` extent 52, `/std/Str/fold` 41 — both over the budget, so specializing either per tag is declined by it rather than by any rule, and raising the limit to admit them would admit per-tag clones of everything else this size. `/std/Str/step` is not among them: the fold does not call it (see `ladder`'s `the_per_character_walk_carries_its_scan_without_allocating`), so the walkers are all a retake reports.
 #[test]
 #[ignore = "measurement, counted: reports the extents the specializer's budget compares"]
 fn step_specialization_extent() {
@@ -1312,7 +1312,7 @@ end
 ///
 /// # The reading
 ///
-/// Taken at `7694acba7`. The population is real and pervasive — 813 of 2219 constructions stand beside a dying matching-width value, well outside the workloads alone. It is also *entirely* the cross-frame shape: zero constructed-width pairs means no dying value pairs with a construction from its own function — every death arrives as a parameter taken apart where the matching birth happens, which is exactly a tail-recursive rebuild loop, and which any reuse mechanism keyed to intra-function allocation sites would miss completely. The map-spine substrate concentrates in `/std/Map`'s `insert`/`insert_node`/`replace` and the TOML decoder's build and scan functions, the decoder alone holding three fifths of all pairs. And 262 of 340 rope extends are linearly threaded — the base's only use is the extend that consumes it.
+/// Taken at `447fbb0a1`. The population is real and pervasive — 813 of 2219 constructions stand beside a dying matching-width value, well outside the workloads alone. It is also *entirely* the cross-frame shape: zero constructed-width pairs means no dying value pairs with a construction from its own function — every death arrives as a parameter taken apart where the matching birth happens, which is exactly a tail-recursive rebuild loop, and which any reuse mechanism keyed to intra-function allocation sites would miss completely. The map-spine substrate concentrates in `/std/Map`'s `insert`/`insert_node`/`replace` and the TOML decoder's build and scan functions, the decoder alone holding three fifths of all pairs. And 262 of 340 rope extends are linearly threaded — the base's only use is the extend that consumes it.
 #[test]
 #[ignore = "measurement, counted: surveys the corpus rather than asserting"]
 fn death_birth_census() {

@@ -16,7 +16,7 @@ use super::test_support::*;
 ///
 /// # What it last printed
 ///
-/// Taken at `7694acba7`, x86-64 Linux, debug.
+/// Taken at `447fbb0a1`, x86-64 Linux, debug.
 ///
 /// | Program | Table slots | Dispatch sites | Environment constructions | Interned as consts |
 /// | --- | ---: | ---: | ---: | ---: |
@@ -112,7 +112,7 @@ fn closure_index_dispatch_measurements() {
 ///
 /// # What it last printed
 ///
-/// Taken at `7694acba7`, x86-64 Linux, **debug**.
+/// Taken at `447fbb0a1`, x86-64 Linux, **debug**.
 ///
 /// | Fixture | Multi-result types | Allocation sites |
 /// | --- | --- | --- |
@@ -181,7 +181,7 @@ fn split_return_measurements() {
 /// | `parse_digits` | 1000000 | 0.92 s | 5 767 168 B | 3 786 408 B |
 /// | `trees` | 21 | 0.23 s | 271 679 488 B | 3 786 504 B |
 ///
-/// What this test itself prints is the third unit — the raw pre-Binaryen module size for each structural fixture, which is where code growth shows up first and without a runtime at all. Taken at `7694acba7`: `lcg` 23530, `trees` 24667, `higher-order` 23905, `direct/escaping` 23669, `function-only` 23088, `mutual-recursion` 23259, `split-return` 29800 bytes. The baseline above is `82cb8ef7`'s and has not been retaken, so the two are not read against each other.
+/// What this test itself prints is the third unit — the raw pre-Binaryen module size for each structural fixture, which is where code growth shows up first and without a runtime at all. Taken at `447fbb0a1`: `lcg` 23530, `trees` 24667, `higher-order` 23905, `direct/escaping` 23669, `function-only` 23088, `mutual-recursion` 23259, `split-return` 29800 bytes. The baseline above is `82cb8ef7`'s and has not been retaken, so the two are not read against each other.
 #[test]
 #[ignore = "measurement, counted: reports emitted size rather than asserting"]
 fn copy_growth_measurements() {

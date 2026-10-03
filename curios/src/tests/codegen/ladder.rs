@@ -318,15 +318,15 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
 ///
 /// # What it last measured
 ///
-/// Taken at `7694acba7`, x86-64 Linux, in process at N = 300 000: one warmup round, then seven rounds over the whole family, each round timing every member so no member is measured on a warmer machine than another. Median of the seven, with their span.
+/// Taken at `447fbb0a1`, x86-64 Linux, in process at N = 300 000: one warmup round, then seven rounds over the whole family, each round timing every member so no member is measured on a warmer machine than another. Median of the seven, with their span.
 ///
 /// | Rung | raw | binaryen | Isolates | Reading |
 /// | --- | --- | --- | --- | --- |
-/// | `baseline` | 2.129s [2.106–2.345] | 1.120s [1.045–1.188] | — | the reference the rest are read against |
-/// | `flat_acc` | 5.009s [4.971–5.522] | 4.049s [4.043–4.086] | the accumulator tuple | 2.35× the baseline, spans far apart on both paths: the `{Nat, Nat}` tuple is *cheaper* than the per-arm tail calls that replace it |
-/// | `held_scan` | 2.283s [2.136–2.394] | 1.123s [1.047–1.130] | the scan argument reconstruction | no difference proven — its spans overlap the baseline's on both paths here and at N = 2000, so this family cannot measure the obligation |
-/// | `inline_step` | 3.206s [3.192–3.575] | 2.145s [2.132–2.246] | the returned scan state and its call | 1.5× the baseline, and indistinguishable from `indexed` once Binaryen has run |
-/// | `indexed` | 3.088s [3.084–3.472] | 2.137s [1.965–2.263] | nothing — a negative result | `Bytes/get`'s checked `Option` path costs more than the suffix view it replaces, so this rung cannot attribute the suffix view; the window split's own transformation is that obligation's only honest instrument |
+/// | `baseline` | 2.105s [2.097–2.347] | 1.120s [1.063–1.192] | — | the reference the rest are read against |
+/// | `flat_acc` | 5.017s [4.990–5.559] | 4.084s [4.069–4.091] | the accumulator tuple | 2.35× the baseline, spans far apart on both paths: the `{Nat, Nat}` tuple is *cheaper* than the per-arm tail calls that replace it |
+/// | `held_scan` | 2.250s [2.115–2.387] | 1.124s [1.055–1.126] | the scan argument reconstruction | no difference proven — its spans overlap the baseline's on both paths here and at N = 2000, so this family cannot measure the obligation |
+/// | `inline_step` | 3.203s [3.190–3.614] | 2.141s [2.134–2.244] | the returned scan state and its call | 1.5× the baseline, and indistinguishable from `indexed` once Binaryen has run |
+/// | `indexed` | 3.102s [3.078–3.463] | 2.122s [1.989–2.260] | nothing — a negative result | `Bytes/get`'s checked `Option` path costs more than the suffix view it replaces, so this rung cannot attribute the suffix view; the window split's own transformation is that obligation's only honest instrument |
 ///
 /// **What this family can and cannot attribute.** One obligation is measurable here: the accumulator tuple, and its sign is the opposite of what removing an obligation suggests. One is not: the scan argument reconstruction is inside the noise at two input sizes two orders of magnitude apart. The remaining two are a single figure rather than two — `inline_step` and `indexed` agree once optimized — so the returned scan state and the suffix view cannot be told apart by this instrument.
 #[test]

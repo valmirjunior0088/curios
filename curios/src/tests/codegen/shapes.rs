@@ -152,7 +152,7 @@ fn optimized_wat(source: &str) -> String {
 ///
 /// # What it last printed
 ///
-/// Taken at `7694acba7`, release, x86-64 Linux:
+/// Taken at `447fbb0a1`, release, x86-64 Linux:
 ///
 /// ```text
 /// schema roster: 62 products, 63 families, 236 constructors
@@ -297,7 +297,7 @@ end
 ///
 /// ```text
 /// outputs at 300 rounds: bare "491113", payload "161671"
-/// Taken at `7694acba7`, seven readings in one sitting: bare 14.29–14.52 ns/element, payload 16.50–16.64 ns/element, boxed-field read 2.08–2.26 ns, median 2.17 (13–14%)
+/// Taken at `447fbb0a1`, seven readings in one sitting: bare 14.26–14.61 ns/element, payload 16.47–16.70 ns/element, boxed-field read 1.93–2.31 ns, median 2.18 (13–14%)
 /// ```
 ///
 /// What the figure decided: one always-boxed scalar field costs about a fifth of even this dispatch-heavy loop's per-element budget, and it is pure representation tax — the same fold over the same list, differing by one `ref.i31` at the store and one `ref.cast (ref i31)` + `i31.get_u` at the read. Across takes that cut the fold's per-dispatch cost out from under it, the absolute price fell while the *relative* share held or grew: the class scales with the loop around it, which is what makes it worth deleting at the representation rather than the site.
@@ -349,7 +349,7 @@ fn boxed_field_read_measurements() {
 ///
 /// # What it last printed
 ///
-/// Taken at `7694acba7`, release, x86-64 Linux:
+/// Taken at `447fbb0a1`, release, x86-64 Linux:
 ///
 /// ```text
 /// families holding a family-typed field: 18
