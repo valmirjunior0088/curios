@@ -114,7 +114,8 @@ fn a_recorded_reading_is_the_module_that_files_it() {
     );
 
     assert!(module.contains("READING_07: Reading"));
-    assert!(module.contains("Date::new(2026, 10, 07)"));
+    // `date -I` zero-pads the day, and `07` is a zero-prefixed decimal literal that does not compile.
+    assert!(module.contains("Date::new(2026, 10, 7)"));
     assert!(module.contains("subject: \"curios 0.15.6 (51232992ce88)\""));
     assert!(module.contains("machine: \"A Processor, x86_64, 16 cpus, 31.3 GiB\""));
     assert!(module.contains("(\"rustc\", \"1.95.0\")"));

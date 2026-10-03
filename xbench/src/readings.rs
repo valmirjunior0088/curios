@@ -5,6 +5,9 @@
 #[cfg(test)]
 mod tests;
 
-use xbench::Reading;
+mod reading_00;
+use reading_00::*;
 
-pub(super) const READINGS: &[&Reading] = &[];
+use xbench::{Date, Platform, Reading, took, weighed};
+
+pub(super) const READINGS: &[&Reading] = &[&READING_00];

@@ -424,7 +424,13 @@ fn recorded(number: usize, sitting: &Sitting) -> String {
         platform,
         ..
     } = sitting;
-    let (year, month, day) = (&taken[0..4], &taken[5..7], &taken[8..10]);
+    // `date -I` zero-pads, and `03` is a zero-prefixed decimal literal, which does not compile.
+    let unpadded = |field: &str| field.trim_start_matches('0').to_string();
+    let (year, month, day) = (
+        &taken[0..4],
+        unpadded(&taken[5..7]),
+        unpadded(&taken[8..10]),
+    );
     let mut module = format!(
         "//! Reading {number:02}, taken {taken}.\n\nuse super::*;\n\npub(super) const READING_{number:02}: Reading = Reading {{\n    taken: Date::new({year}, {month}, {day}),\n    subject: {subject:?},\n    platform: Platform {{\n        machine: {:?},\n        state: {:?},\n        software: {:?},\n    }},\n    pinned: &[\n",
         platform.machine, platform.state, platform.software
