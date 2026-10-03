@@ -8,6 +8,7 @@ induct Act: Type
 | act_value(Toml)
 end
 
+--- The empty document: nothing in the table, no origin recorded for any path, and no header in scope.
 pub let build_empty: Build =
     Build { root = Map/empty(), side = Map/empty(), scope = [] };
 
@@ -273,6 +274,7 @@ let walk(
 let plains(names: List(Str)) -> List(Seg) =
     List/map(names, (n) => Seg/plain(n));
 
+--- A key-value pair written under the header in scope, or the rule its path broke.
 pub let apply_assign(b: Build, path: List(Str), v: Toml) -> Result(Error, Build) =
     match walk(
         b.root,
@@ -286,6 +288,7 @@ pub let apply_assign(b: Build, path: List(Str), v: Toml) -> Result(Error, Build)
     | failure(r) => Result/failure(Error/rule(path, r))
     end;
 
+--- A `[table]` header: its path becomes the scope later pairs are written under, or the rule it broke.
 pub let apply_header(b: Build, path: List(Str)) -> Result(Error, Build) =
     match walk(b.root, b.side, x[], plains(path), 0, Act/act_table())
     | success((root2, side2, resolved)) =>
@@ -293,6 +296,7 @@ pub let apply_header(b: Build, path: List(Str)) -> Result(Error, Build) =
     | failure(r) => Result/failure(Error/rule(path, r))
     end;
 
+--- A `[[table]]` header: one element is appended to the array at its path, which becomes the scope, or the rule it broke.
 pub let apply_aot(b: Build, path: List(Str)) -> Result(Error, Build) =
     match walk(b.root, b.side, x[], plains(path), 0, Act/act_many())
     | success((root2, side2, resolved)) =>
@@ -300,6 +304,7 @@ pub let apply_aot(b: Build, path: List(Str)) -> Result(Error, Build) =
     | failure(r) => Result/failure(Error/rule(path, r))
     end;
 
+--- An inline table's pairs as a map, each applied in turn, or the first rule one of them broke.
 pub let inline_fold(pairs: List({List(Str), Toml})) -> Result(Error, Map(Toml)) =
     let start: Result(Error, Build) = Result/success(build_empty);
     let built =

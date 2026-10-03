@@ -3,17 +3,11 @@ use /std/ops/{Eql};
 
 --- The request's method.
 pub induct Method: pub Type
---- `GET`.
 | get()
---- `HEAD`.
 | head()
---- `POST`.
 | post()
---- `PUT`.
 | put()
---- `DELETE`.
 | delete()
---- `PATCH`.
 | patch()
 end
 

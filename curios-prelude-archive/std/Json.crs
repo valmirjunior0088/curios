@@ -2,7 +2,6 @@ use /std/{Bool, Flt, Str, List};
 
 --- A JSON value.
 pub induct Json: pub Type
---- `null`.
 | null()
 --- `true` or `false`.
 | bool(Bool)

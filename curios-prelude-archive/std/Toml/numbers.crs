@@ -107,6 +107,7 @@ let int_magnitude(signed: Bool) -> Parse(Bytes, Nat) =
         match marked | some(_) => prefixed | none() => decimal end
     end;
 
+--- An integer in any of the bases TOML writes, refused past the range an `Int` holds.
 pub let int_value: Parse(Bytes, Toml) =
     let (negative, signed) = sign!;
     let mag = int_magnitude(signed)!;
@@ -195,6 +196,7 @@ let exp_digits: Parse(Bytes, Nat) =
         end;
     go(0, false, false);
 
+--- A float's named values, `inf` and `nan`, under either sign.
 pub let flt_special: Parse(Bytes, Toml) =
     let (negative, _) = sign!;
     Parse/or(
@@ -228,6 +230,7 @@ let exp_part: Parse(Bytes, {Nat, Bool, Bool}) =
     | some(_) => Parse/commit(exp_fields)
     end;
 
+--- A float written out: digits, an optional fraction and an optional exponent, with a leading zero refused.
 pub let flt_number: Parse(Bytes, Toml) =
     let (negative, _) = sign!;
     let leading = leading_zero!;

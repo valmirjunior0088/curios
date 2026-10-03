@@ -4,6 +4,7 @@ let is_ws_byte(b: Byte) -> Bool =
     let n = Byte/to_nat(b);
     n == 0x20 || n == 0x9;
 
+--- Whether `b` may appear in a bare key: an ASCII letter or digit, `-`, or `_`.
 pub let is_bare_byte(b: Byte) -> Bool =
     let n = Byte/to_nat(b);
     Nat/in_range(n, 0x41, 0x5A) || Nat/in_range(n, 0x61, 0x7A) || Nat/in_range(n, 0x30, 0x39)
@@ -14,6 +15,7 @@ let is_comment_byte(b: Byte) -> Bool =
     let n = Byte/to_nat(b);
     n == 0x9 || Nat/in_range(n, 0x20, 0x7E) || n >= 0x80;
 
+--- The value of the hexadecimal digit at code point `n`, or `none` where `n` is not one.
 pub let hex_val(n: Nat) -> Option(Nat) =
     choose
     | Nat/in_range(n, 0x30, 0x39) => Option/some(n - 0x30)
@@ -22,6 +24,7 @@ pub let hex_val(n: Nat) -> Option(Nat) =
     | _ => Option/none()
     end;
 
+--- Spaces and tabs, as many as there are.
 pub let ws: Parse(Bytes, {}) =
     Parse/map(Parse/bytes/take_while(is_ws_byte), (_) => ());
 
@@ -29,11 +32,13 @@ let comment: Parse(Bytes, {}) =
     let _ = Parse/bytes/expect(0x23)!;
     Parse/map(Parse/bytes/take_while(is_comment_byte), (_) => ());
 
+--- One line break, either `\r\n` or a bare `\n`.
 pub let newline: Parse(Bytes, {}) =
     Parse/or(
         Parse/map(Parse/and(Parse/bytes/expect(0xD), Parse/bytes/expect(0xA)), (_) => ()),
         Parse/map(Parse/bytes/expect(0xA), (_) => ()));
 
+--- Whitespace, line breaks and comments, as much as there is: what may sit between two items.
 pub let trivia: Parse(Bytes, {}) =
     Parse/map(
         Parse/many0(
@@ -44,6 +49,7 @@ pub let trivia: Parse(Bytes, {}) =
                     Parse/or(newline, comment)))),
         (_) => ());
 
+--- The end of a line: trailing whitespace, an optional comment, then a line break or the end of the input.
 pub let line_end: Parse(Bytes, {}) =
     let _ = ws!;
     let _ = Parse/or(comment, Parse/pure(()))!;

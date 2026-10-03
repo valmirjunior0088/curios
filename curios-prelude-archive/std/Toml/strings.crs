@@ -240,20 +240,24 @@ let str_of(b: Bytes) -> Parse(Bytes, Str) =
     | none() => Parse/fail("invalid UTF-8 in string")
     end;
 
+--- A basic string, delimited by `"`, with its escapes resolved.
 pub let str_basic: Parse(Bytes, Str) =
     let b = basic_str_scan!;
     str_of(b);
 
+--- A literal string, delimited by `'`, taken as written.
 pub let str_literal: Parse(Bytes, Str) =
     let b = literal_str_scan!;
     str_of(b);
 
+--- A multi-line basic string, delimited by `"""`, with its escapes resolved and the opening line break dropped.
 pub let str_ml_basic: Parse(Bytes, Str) =
     let _ = Parse/bytes/literal("\"\"\"")!;
     let _ = skip_opening_newline!;
     let b = ml_basic_body(x[])!;
     str_of(b);
 
+--- A multi-line literal string, delimited by `'''`, taken as written with the opening line break dropped.
 pub let str_ml_literal: Parse(Bytes, Str) =
     let _ = Parse/bytes/literal("'''")!;
     let _ = skip_opening_newline!;
