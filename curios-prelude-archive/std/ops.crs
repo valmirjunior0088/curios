@@ -1,39 +1,73 @@
---- Decidable equality: the concept `==` and `!=` dispatch to.
+use /std/{Bool};
+
+--- Equality as a decision, which `==` and `!=` dispatch through.
 ---
 --- A witness supplies both methods, since `!=` is not the negation of `eql`. A declared type derives its witness with `satisfy Eql(T);`.
-pub mod Eql;
-pub use Eql/{let Eql};
+---
+--- Distinct from `Eq`, which is the proposition that two values are the same: a witness here answers, and owes no proof that its answer agrees.
+pub concept Eql(A: Type): pub Type {
+    --- Whether the two are equal.
+    eql(A, A) -> Bool,
+    --- Whether the two differ, supplied in its own right rather than read off `eql`.
+    neq(A, A) -> Bool,
+}
 
---- The four ordered comparisons: the concept `<`, `<=`, `>` and `>=` dispatch to, each answering a `Bool`.
-pub mod Cmp;
-pub use Cmp/{let Cmp};
+--- The four ordered comparisons, which `<`, `<=`, `>` and `>=` dispatch through, each answering a `Bool`.
+pub concept Cmp(A: Type): pub Type {
+    --- Whether the first is below the second.
+    lt(A, A) -> Bool,
+    --- Whether the first is below the second or equal to it.
+    le(A, A) -> Bool,
+    --- Whether the first is above the second.
+    gt(A, A) -> Bool,
+    --- Whether the first is above the second or equal to it.
+    ge(A, A) -> Bool,
+}
 
---- Addition: the concept `+` dispatches to.
-pub mod Add;
-pub use Add/{let Add};
+--- Addition, which `+` dispatches through.
+pub concept Add(A: Type): pub Type {
+    --- The sum of the two.
+    add(A, A) -> A,
+}
 
---- Subtraction: the concept `-` dispatches to. Below zero is the carrier's own law: `Nat` truncates, `Int` and `Flt` go negative.
-pub mod Sub;
-pub use Sub/{let Sub};
+--- Subtraction, which `-` dispatches through. Below zero is the carrier's own law: `Nat` truncates, `Int` and `Flt` go negative.
+pub concept Sub(A: Type): pub Type {
+    --- The second taken from the first.
+    sub(A, A) -> A,
+}
 
---- Multiplication: the concept `*` dispatches to.
-pub mod Mul;
-pub use Mul/{let Mul};
+--- Multiplication, which `*` dispatches through.
+pub concept Mul(A: Type): pub Type {
+    --- The product of the two.
+    mul(A, A) -> A,
+}
 
---- Division: the concept `/` dispatches to, under the precondition `Ok` each carrier states on its divisor.
+--- Division, which `/` dispatches through, under the precondition `Ok` each carrier states on its divisor.
 ---
 --- A literal divisor discharges the precondition by reduction, and a computed one from the facts in scope — a guard or a hypothesis. A carrier whose division is total states `True`.
-pub mod Div;
-pub use Div/{let Div};
+pub concept Div(A: Type): pub Type {
+    --- The precondition this carrier states for a divisor: `True` where division is total, and a proposition the caller must discharge where it is not.
+    Ok(A) -> Prop,
+    --- The quotient, under the evidence that `b` may be divided by.
+    div(a: A, b: A, @ok: Ok(b)) -> A,
+}
 
---- Remainder: the concept `%` dispatches to, under the same precondition as division.
-pub mod Rem;
-pub use Rem/{let Rem};
+--- Remainder, which `%` dispatches through, under the same precondition as division.
+pub concept Rem(A: Type): pub Type {
+    --- The precondition this carrier states for a divisor, as `Div`'s is.
+    Ok(A) -> Prop,
+    --- What is left of `a` once `b` has been taken from it as often as it goes.
+    rem(a: A, b: A, @ok: Ok(b)) -> A,
+}
 
---- Conjunction: the concept `&&` dispatches to.
-pub mod And;
-pub use And/{let And};
+--- Conjunction, which `&&` dispatches through.
+pub concept And(A: Type): pub Type {
+    --- Both.
+    and(A, A) -> A,
+}
 
---- Disjunction: the concept `||` dispatches to.
-pub mod Or;
-pub use Or/{let Or};
+--- Disjunction, which `||` dispatches through.
+pub concept Or(A: Type): pub Type {
+    --- Either.
+    or(A, A) -> A,
+}
