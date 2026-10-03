@@ -517,3 +517,25 @@ fn a_bound_pinned_later_holds_under_the_guard_its_slot_was_born_under() {
         "expected the undischarged bound, got: {error}"
     );
 }
+
+// **A bound stated by a concept's member discharges where the module declares the row.** `Rem`'s `Ok` is a member, so the slot `Rem/rem` leaves for it is `Ok` projected out of the `Rem(Num)` row, and the bound reduces only through that row — one this module declares, which nothing `probe` writes names. The order is therefore the lowering's to find, from the wrapper `probe` references: `Rem/rem` belongs to a concept `/std` declared, so the edge is read off `/std`'s module rather than off an item here. The `Cmp(Num)` row is what makes the order matter, since its methods are this module's definitions and no row can simply lead the unit.
+#[test]
+fn a_member_bound_discharges_through_a_row_the_module_declares() {
+    assert_eq!(
+        run(r#"
+        use /std/{Str, Nat, Bool};
+        use /std/Bool/{Holds};
+        use /std/ops/{Cmp, Rem};
+        struct Num: Type { n : Nat }
+        let lt(a : Num, b : Num) -> Bool = a.n < b.n;
+        let le(a : Num, b : Num) -> Bool = a.n <= b.n;
+        let gt(a : Num, b : Num) -> Bool = b.n < a.n;
+        let ge(a : Num, b : Num) -> Bool = b.n <= a.n;
+        satisfy Cmp(Num) { lt = lt, le = le, gt = gt, ge = ge }
+        satisfy Rem(Num) { Ok(b) = Holds(0 < b.n), rem(a, b, @ok) = a }
+        let probe() -> Num = Rem/rem(Num { n = 10 }, Num { n = 3 });
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+}

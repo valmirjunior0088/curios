@@ -252,6 +252,36 @@ fn a_derived_equality_witness_orders_its_method_first() {
     assert!(at("/std/Equal/Equal/eql") < at("witness"), "{names:?}");
 }
 
+// A witness row registered into a concept an earlier unit declared is dispatched through that unit's wrappers, which are no item of this one — so no name here can order a use after the row, and the edge is read off the earlier unit's module. `user` waits on nothing but `Colour` by name, and without the edge is emitted ahead of the row its reference dispatches through.
+#[test]
+fn a_reference_to_an_earlier_units_wrapper_follows_the_row_it_dispatches_through() {
+    let module = lowered_module_over_prelude(
+        r#"
+        pub induct Colour : pub Type | red() end
+        pub let user : Type = /std/Shape/Shape/area(Colour/red(), Colour/red());
+        pub let method : Type = Type;
+        satisfy /std/Shape/Shape(Colour) {
+            area = method,
+        }
+        Type
+        "#,
+    );
+
+    let names = module
+        .items
+        .iter()
+        .map(curios_core::Item::describe)
+        .collect::<Vec<_>>();
+    let at = |needle: &str| {
+        names
+            .iter()
+            .position(|name| name.contains(needle))
+            .unwrap_or_else(|| panic!("{needle} is not among {names:?}"))
+    };
+
+    assert!(at("witness") < at("/user"), "{names:?}");
+}
+
 /// The procedure that proves a bound from the facts in scope writes its vocabulary into proofs no item spells, so where that vocabulary is declared beside its users — `/std` — every item it does not itself need is ordered after it, whatever the source order, and what it needs stays ahead of it.
 #[test]
 fn every_item_the_proof_vocabulary_does_not_need_follows_it() {

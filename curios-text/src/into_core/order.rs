@@ -93,9 +93,13 @@ fn witness_concept(let_: &FlatLet) -> Option<curios_core::Global> {
         .flatten()
 }
 
-/// Method-wrapper name → owning concept, over every item in the compilation: a wrapper referenced from either partition identifies its concept, wherever that concept's witness rows live.
-fn wrapper_owners(items: &[FlatItem]) -> HashMap<curios_core::Global, Qualifier> {
-    items
+/// Method-wrapper name → owning concept: this unit's own wrappers, and the scope's for each concept this unit registers a witness row into. A row registered here into a concept an earlier unit declared is dispatched through that unit's wrappers, which are no item of this one — and a reference to one is as much a use of the row as a reference to a wrapper declared beside it, which the operator half already allows for by reading the registry. Read off a definition's kind, never its path: a module nested beside a concept's members shares their qualifier without being one. The scope is walked only for a unit that has a row to order, so a unit that satisfies nothing pays nothing.
+fn wrapper_owners(
+    items: &[FlatItem],
+    scope_modules: &[&curios_core::Module],
+    rows: &HashMap<Qualifier, Vec<usize>>,
+) -> HashMap<curios_core::Global, Qualifier> {
+    let mut owners = items
         .iter()
         .flat_map(|item| match item {
             FlatItem::Let(let_) => std::slice::from_ref(let_),
@@ -105,7 +109,30 @@ fn wrapper_owners(items: &[FlatItem]) -> HashMap<curios_core::Global, Qualifier>
             curios_core::DefinitionKind::ConceptMethod { owner } => Some((let_.name, *owner)),
             _ => None,
         })
-        .collect()
+        .collect::<HashMap<_, _>>();
+
+    if rows.is_empty() {
+        return owners;
+    }
+
+    let mut record = |name: curios_core::Global, kind: &curios_core::DefinitionKind| {
+        if let curios_core::DefinitionKind::ConceptMethod { owner } = kind
+            && rows.contains_key(owner)
+        {
+            owners.insert(name, *owner);
+        }
+    };
+    for item in scope_modules.iter().flat_map(|module| &module.items) {
+        match item {
+            curios_core::Item::Let(definition) => record(definition.name, &definition.kind),
+            curios_core::Item::Rec(rec) => rec
+                .definitions
+                .iter()
+                .for_each(|definition| record(definition.name, &definition.kind)),
+        }
+    }
+
+    owners
 }
 
 /// The witness rows among `nodes`, grouped by the concept they register into.
@@ -247,14 +274,15 @@ fn cycle_names(items: &[FlatItem], cycle: &[usize]) -> Vec<String> {
 
 pub(super) fn order_flat_items(
     items: Vec<FlatItem>,
+    scope_modules: &[&curios_core::Module],
     induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
     syntax: &SyntaxRegistry,
 ) -> Result<Vec<FlatItem>, Error> {
     let nodes = (0..items.len()).collect::<Vec<usize>>();
     let owner = owner_of(&items, &nodes);
-    let wrapper_owner = wrapper_owners(&items);
     let rows = witness_rows(&items, &nodes);
+    let wrapper_owner = wrapper_owners(&items, scope_modules, &rows);
 
     // Only this unit's own items, because only they are in this graph. A name from the scope is owned by no node here, so `dep_nodes` records no edge for it — which is right: the unit it belongs to was emitted whole before this one began.
     let mut deps = HashMap::with_capacity(nodes.len());

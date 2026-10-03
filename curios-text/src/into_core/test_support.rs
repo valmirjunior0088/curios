@@ -177,6 +177,22 @@ pub(super) fn lowered_module(src: &str) -> curios_core::Module {
     program.module
 }
 
+/// [`lowered_module`] over the fixture prelude, for what a unit's lowering reads off the units before it.
+pub(super) fn lowered_module_over_prelude(src: &str) -> curios_core::Module {
+    let modules = prelude_fixture();
+    let prepared = super::prepare_prelude(&modules, &[], syntax()).unwrap();
+
+    super::into_core_with_prelude(
+        &src.parse::<Entrypoint>().unwrap(),
+        &RootSource::none(),
+        std::slice::from_ref(&&prepared),
+        syntax(),
+    )
+    .unwrap()
+    .program
+    .module
+}
+
 pub(super) fn written_type(id: usize) -> curios_core::Term {
     curios_core::Term::type_at(curios_core::Level::meta(curios_core::UniverseMetaId(id)))
 }
@@ -297,7 +313,7 @@ pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
     .map_err(|error| error.to_string())
 }
 
-/// The prelude these tests lower against: the real `/sys` roster, and a `/std` of stubs deep enough for every name `/sys` reaches through the registry.
+/// The prelude these tests lower against: the real `/sys` roster, and a `/std` of stubs deep enough for every name `/sys` reaches through the registry — with one concept beside them, for the order a unit takes around a row it registers into a concept declared before it.
 fn prelude_fixture() -> RootSource {
     let mut modules = RootSource::supplied();
     modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops(), &SYNTAX));
@@ -311,28 +327,21 @@ fn prelude_fixture() -> RootSource {
             pub mod Nat
                 pub let Nat : Type = Type;
                 pub let add : Type = Type;
-                pub let Lt : Type = Type;
-                pub let Le : Type = Type;
-                pub induct Proof: pub Type
-                | qed()
-                end
-            end
-            pub mod Int
-                pub let NonZero : Type = Type;
-                pub let NonNeg : Type = Type;
-            end
-            pub mod Flt
-                pub let EightBytes : Type = Type;
             end
             pub mod Bool
                 pub let Holds : Type = Type;
                 pub use /sys/Bool/{True};
             end
+            pub mod Shape
+                pub concept Shape(A : Type) : pub Type {
+                    area(A, A) -> Type,
+                }
+            end
         "#
         .parse()
         .unwrap(),
     );
-    // `/sys` states each decided precondition as `Holds` over one of its own comparisons, and names `Holds` and the two `Flt` bounds through the registry — so the scope has to hold whatever this fixture's registry points those at. Stubs, not definitions: these tests lower and never elaborate, so a name that resolves is the whole requirement.
+    // `/sys` states each decided precondition as `Holds` over one of its own comparisons, and names `Holds` through the registry — so the scope has to hold whatever this fixture's registry points it at. Stubs, not definitions: these tests lower and never elaborate, so a name that resolves is the whole requirement.
     modules
 }
 

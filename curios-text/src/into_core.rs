@@ -1600,7 +1600,7 @@ fn into_core_unit_within(
     // The whole scope, in every reading but one. Per-dependency visibility narrows nothing here: a prefix this unit did not declare stays discoverable and its names stay resolvable, and what refuses is the reference itself — see `Reach::guard`. Hiding the tables instead would turn an undeclared dependency into an unbound name, which is the one diagnostic an undeclared dependency must not produce.
     let scope_tables = scope.iter().map(|unit| &unit.table).collect::<Vec<_>>();
     let scope_public = scope.iter().map(|unit| &unit.public).collect::<Vec<_>>();
-    let scope_cores = scope.iter().map(|unit| &unit.core).collect::<Vec<_>>();
+    let scope_modules = scope.iter().map(|unit| &unit.core).collect::<Vec<_>>();
     let scope_mounts = scope
         .iter()
         .flat_map(|unit| unit.mounts.iter().cloned())
@@ -1760,7 +1760,7 @@ fn into_core_unit_within(
         &public,
         &table,
         &flat_items,
-        NominalScope::new(&scope_cores, &induct_decls, &struct_decls),
+        NominalScope::new(&scope_modules, &induct_decls, &struct_decls),
     )?;
 
     let dead = unused_declarations(&Declarations {
@@ -1776,10 +1776,16 @@ fn into_core_unit_within(
     });
 
     // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
-    let items = order_flat_items(flat_items, &induct_decls, &struct_decls, syntax)?
-        .into_iter()
-        .map(FlatItem::into_core)
-        .collect();
+    let items = order_flat_items(
+        flat_items,
+        &scope_modules,
+        &induct_decls,
+        &struct_decls,
+        syntax,
+    )?
+    .into_iter()
+    .map(FlatItem::into_core)
+    .collect();
 
     // Read last, when the export view is final and every definition's import scope has been recorded, and before the tables below are taken out of their scoped views.
     let documentation = source.documented().map(|(prefix, description)| {
