@@ -47,6 +47,12 @@ use print::*;
 mod sys_module;
 pub use sys_module::*;
 
+mod prelude;
+pub use prelude::*;
+
+mod registry;
+pub use registry::*;
+
 mod parse;
 
 mod module;

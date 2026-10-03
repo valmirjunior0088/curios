@@ -3,6 +3,7 @@
 //! The engine's own behaviour — which records a program yields — is covered beside it in `wonder/tests.rs`; these decide what the transports do with them: that an answer is stdout and exit 0 whatever it says, that a file is placed in its unit, and that the server publishes the same records where the editor is looking and clears them when they go.
 
 use {
+    curios_text::std_directory,
     curios_utilities::test_support::Temporary,
     curios_wonder::SETTLE,
     std::{
@@ -727,8 +728,8 @@ fn formatting_is_answered_while_a_check_is_running() {
 /// The costliest test in this file: it lowers the whole standard library once and erases it whole.
 #[test]
 fn a_module_of_the_standard_library_is_answered_against_the_prelude_it_is_part_of() {
-    let module = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../curios-prelude-archive/std/List.crs")
+    let module = std_directory()
+        .join("List.crs")
         .canonicalize()
         .expect("the standard library's tree");
 

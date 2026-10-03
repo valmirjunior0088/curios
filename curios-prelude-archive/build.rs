@@ -1,12 +1,3 @@
-#[path = "src/syntax.rs"]
-#[allow(unreachable_pub)]
-mod syntax;
-use syntax::SYNTAX;
-
-#[path = "src/sources.rs"]
-mod sources;
-use sources::*;
-
 use {
     curios_core::Item,
     curios_core::{Global, Sharing, Zonked, validate_stored_identities},
@@ -14,7 +5,7 @@ use {
         Context, ErasedArena, Established, Resumed, elaborate_and_zonk_unit, erase_unit,
         validate_lowered_universe_seeds, validate_universes,
     },
-    curios_text::{PreparedText, prepare_prelude},
+    curios_text::{PreparedText, SYNTAX, prepare_prelude, std_source, sys_source},
     curios_unit::{Record, Uncertified, framed},
     curios_utilities::{Report, Source, digest},
     std::{
@@ -35,13 +26,9 @@ fn main() {
 
 fn build() {
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=src/sources.rs");
-    println!("cargo:rerun-if-changed=src/syntax.rs");
-
-    let manifest = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
 
     let sys_modules = sys_source();
-    let std_modules = std_source(&manifest);
+    let std_modules = std_source();
 
     // Both roots lowered before either is elaborated, because the registry spans them: a target check over `/sys` alone would miss every `/std` slot and one over `/std` alone every `/sys` slot, so the check runs once over the union and there is no half to pass by being asked the wrong question.
     let sys_text = lower("sys", &sys_modules, &[]);

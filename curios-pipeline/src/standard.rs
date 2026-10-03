@@ -10,8 +10,8 @@ use {
         Cache, Checked, CompileError, EntryTail, Progress, Stage, TestRecord, check_entrypoint,
         compile_entrypoint, compile_unit_as_tests, compile_units, declared_test_paths, recheck,
     },
-    curios_prelude::{SYNTAX, with_prelude},
-    curios_text::{RootSource, UnitSource},
+    curios_prelude::with_prelude,
+    curios_text::{RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
     curios_utilities::Qualifier,
 };

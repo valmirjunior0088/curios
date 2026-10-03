@@ -787,8 +787,10 @@ dependencies = [
  "curios-archive",
  "curios-cert",
  "curios-core",
+ "curios-elab",
  "curios-prelude-archive",
  "curios-profile",
+ "curios-text",
  "curios-unit",
 ]
 
@@ -2625,7 +2627,6 @@ dependencies = [
  "curios-core",
  "curios-elab",
  "curios-pipeline",
- "curios-prelude",
  "curios-text",
  "curios-utilities",
 ]

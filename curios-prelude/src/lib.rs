@@ -1,12 +1,10 @@
 //! Curios's fixed prelude, certified by the independent kernel as a condition of this crate building.
 //!
-//! Everything here comes from [`curios_prelude_archive`], which owns the authored `/std` sources, their elaboration, and one serialized image per root — plus `/sys`, which it mounts rather than authors: `curios-text`'s `sys_module` projects that root whole from `curios-abi`'s host store and the intrinsic table. What this crate adds is a build script that restores those images and walks every item with `curios-cert`, each root against the roots before it, failing the build on any refusal — and the record that walk leaves of what it concluded, with which each image's uncertified unit becomes the [`Unit`] that [`with_prelude`] lends, so a later walk reads the certifier's verdicts on the prelude's definitions and never the stamps elaboration wrote.
+//! Everything here comes from [`curios_prelude_archive`], which elaborates the two roots `curios-text` holds — `/std` authored there, `/sys` projected whole by its `sys_module` from `curios-abi`'s host store and the intrinsic table — into one serialized image per root. What this crate adds is a build script that restores those images and walks every item with `curios-cert`, each root against the roots before it, failing the build on any refusal — and the record that walk leaves of what it concluded, with which each image's uncertified unit becomes the [`Unit`] that [`with_prelude`] lends, so a later walk reads the certifier's verdicts on the prelude's definitions and never the stamps elaboration wrote.
 //!
 //! Why certification is a crate rather than a check, and why it is split from the archive's own build script, are `README.md`'s decisions.
 //!
-//! Depend on *this* crate, never on `curios-prelude-archive` directly: that one hands out an image no kernel has seen. Which is why what it exports is named here one by one rather than by glob — its uncertified restoration and its own `with_prelude` are for the build script, not for anything this crate lends.
-
-pub use curios_prelude_archive::SYNTAX;
+//! Depend on *this* crate, never on `curios-prelude-archive` directly: that one hands out an image no kernel has seen, and its uncertified restoration and its own `with_prelude` are for the build script, not for anything this crate lends.
 
 use {
     curios_core::Certification, curios_prelude_archive::restore_archives, curios_unit::Unit,

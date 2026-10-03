@@ -39,4 +39,4 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 - When work lands, rewrite the item it extends; don't stack new ones beside it. Open an unchecked item only for a limitation named from the code — what is refused, and where.
 - A measurement a spec depends on is written into the spec as a protocol precise enough to rebuild its scripts; the scripts are not checked in.
 
-An absolute Curios path leads with its slash — `/std/Tui/Layout` — while a file path such as `curios-prelude-archive/std/Tui.crs` keeps its form.
+An absolute Curios path leads with its slash — `/std/Tui/Layout` — while a file path such as `curios-text/std/Tui.crs` keeps its form.

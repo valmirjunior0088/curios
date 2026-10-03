@@ -21,5 +21,4 @@ curios-elab = { workspace = true }
 # A program put to both checkers as a compilation puts it, and a module built by hand to the kernel with the prelude in scope.
 curios-pipeline = { workspace = true }
 # The registry's name for `False`, which a module built by hand is put at.
-curios-prelude = { workspace = true }
 curios-text = { workspace = true }

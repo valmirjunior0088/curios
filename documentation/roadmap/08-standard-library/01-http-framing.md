@@ -1,6 +1,6 @@
 # HTTP messages as RFC 9110 and RFC 9112 frame them
 
-Working specification for the HTTP messages `/std` reads and writes other than as RFC 9110 and RFC 9112 frame them, and for the head's opaque octets it refuses where they are data. The rule is [`curios-prelude-archive`'s README](../../../curios-prelude-archive/README.md#std-invents-no-value-where-a-proof-belongs-and-text-is-addressed-by-position)'s: where a branch cannot be reached its unreachability is proved, where it can the caller sees an `Option`, a `Result` or a refusal, and a default stays only where it is the specified answer, documented as such.
+Working specification for the HTTP messages `/std` reads and writes other than as RFC 9110 and RFC 9112 frame them, and for the head's opaque octets it refuses where they are data. The rule is [`curios-prelude-archive`'s README](../../../curios-text/README.md#std-invents-no-value-where-a-proof-belongs-and-text-is-addressed-by-position)'s: where a branch cannot be reached its unreachability is proved, where it can the caller sees an `Option`, a `Result` or a refusal, and a default stays only where it is the specified answer, documented as such.
 
 It is independent of every other spec. [Text read as text](02-text-read-as-text.md) leaves `http/Request` and `http/Response` reading `Parse(Bytes, A)`: an HTTP head is octets, not text.
 

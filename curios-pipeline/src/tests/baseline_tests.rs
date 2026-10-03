@@ -3,8 +3,8 @@
 use {
     super::test_support::{mounted, unit_of},
     crate::{Cache, DEFAULT_STEP_BUDGET, Progress, compile_units},
-    curios_prelude::{SYNTAX, with_prelude},
-    curios_text::UnitSource,
+    curios_prelude::with_prelude,
+    curios_text::{SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
     std::cell::RefCell,
 };

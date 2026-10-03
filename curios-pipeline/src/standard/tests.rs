@@ -6,16 +6,16 @@ use {
         Cache, DEFAULT_STEP_BUDGET, Fold, compile_unit_over, invalidated,
         tests::test_support::compile_with_units,
     },
-    curios_prelude::{SYNTAX, with_prelude},
-    curios_text::{Overlay, RootSource, UnitSource, into_core_unit},
+    curios_prelude::with_prelude,
+    curios_text::{Overlay, RootSource, SYNTAX, UnitSource, into_core_unit, std_directory},
     curios_unit::{Predecessors, Unit},
     curios_utilities::{Qualifier, RootKind, test_support::Temporary},
-    std::{cell::RefCell, fs, path::PathBuf, time::Instant},
+    std::{cell::RefCell, fs, time::Instant},
 };
 
 /// The standard library's own tree, as the package claiming `/std` from it.
 fn std_from_its_tree() -> RootSource {
-    let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../curios-prelude-archive/std");
+    let directory = std_directory();
 
     RootSource::mounted(
         "std",
@@ -49,7 +49,7 @@ struct Edit {
 #[test]
 #[ignore = "measurement: lowers the standard library and recompiles it over the archive, reporting closure sizes and per-phase timings"]
 fn std_recompile_closure_census() {
-    let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../curios-prelude-archive/std");
+    let directory = std_directory();
     let edits = [
         Edit {
             label: "a leaf: a declaration added to /std/Nat",

@@ -8,8 +8,7 @@ use {
     curios_cert::Verdict,
     curios_core::{Free, Global, Module, Program, Term, Zonked, ZonkedRefusal},
     curios_pipeline::{DEFAULT_STEP_BUDGET, Examined, examine_with_prelude, recheck_with_prelude},
-    curios_prelude::SYNTAX,
-    curios_text::RootSource,
+    curios_text::{RootSource, SYNTAX},
     std::fmt,
 };
 

@@ -19,9 +19,9 @@ A claim about what a Curios program means is a hypothesis until this tree's comp
 - `wonder diagnostics -` reports every error and goal as `run` would. It stops at the first failure, so iterate.
 - `?` is the type oracle: `let y: ? = e` reports `e`'s type; a bare `?` reports the scope, the expected type, what blocks it and candidate fits.
 - `wonder stage <rung> -` reprints the program at one pipeline rung, `text` through `wasm-optm`.
-- A file is analysed in the unit whose `mod` lines reach it. A file under `curios-prelude-archive/std/` compiles as the package `std` over the archived prelude, so a question costs the closure of the edit.
+- A file is analysed in the unit whose `mod` lines reach it. A file under `curios-text/std/` compiles as the package `std` over the archived prelude, so a question costs the closure of the edit.
 
-Every other fact is on disk: `documentation/syntax.md` for the surface language, `curios-prelude-archive/std/` for idiom and signatures, `.curios/sources/` for dependencies.
+Every other fact is on disk: `documentation/syntax.md` for the surface language, `curios-text/std/` for idiom and signatures, `.curios/sources/` for dependencies.
 
 ## Build and check
 

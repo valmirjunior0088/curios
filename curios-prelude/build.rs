@@ -7,6 +7,8 @@
 use {
     curios_cert::{Globals, Rechecked, certify_module},
     curios_core::{Certification, Zonked},
+    curios_elab::DEFAULT_STEP_BUDGET,
+    curios_text::SYNTAX,
     std::{fs, path::PathBuf},
 };
 
@@ -37,12 +39,7 @@ fn certify() {
             let Rechecked {
                 verdicts: refusals,
                 certification,
-            } = certify_module(
-                &zonked,
-                curios_prelude_archive::DEFAULT_STEP_BUDGET,
-                &globals,
-                curios_prelude_archive::SYNTAX,
-            );
+            } = certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
 
             if let Some(verdict) = refusals.first() {
                 // The name, not only the error: a `curios_cert::Error` renders terms and sorts and never the top-level item it came from, so without this the one diagnostic this crate exists to produce points nowhere in a prelude of a thousand items.

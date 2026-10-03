@@ -2,12 +2,12 @@
 
 use {
     super::*,
-    crate::SYNTAX,
     curios_cert::{
         Error, Globals, certify_module, recheck_module_measured, recheck_module_verdicts_uncached,
     },
     curios_core::{Bound, Cases, Global, Item, Match, Subterm, Term, Visit, Zonked},
     curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedArena, Resumed, erase_unit},
+    curios_text::SYNTAX,
     curios_unit::{Record, Uncertified, segments},
     curios_utilities::digest,
     std::{
@@ -45,7 +45,7 @@ fn the_stored_prelude_declares_no_tests() {
 /// A literal's type is `Str` at a single level, and its proof is `True/qed()` against a decided `Valid` — once, whatever the length, and `True` has no level to mint. What stays pinned is what checking that proof reduces: each carrier's `Valid`, the `Valid/from` a string's unfolds to, and the `scan_from` fold under it, on which a level would be minted once per literal or once per byte, and a declaration's level count would grow with literal *length* — which is what makes `long_str_literal_compiles_on_the_default_test_stack` a test.
 #[test]
 fn string_literal_machinery_is_monomorphic() {
-    // `Str` and `Char` are the carriers a literal builds; the rest is what its proof is discharged by running. None of the reduced names is in `curios-prelude-archive/src/syntax.rs`: nothing in Rust emits them, they are reached through the carriers' field types.
+    // `Str` and `Char` are the carriers a literal builds; the rest is what its proof is discharged by running. None of the reduced names is in `curios-text/src/registry.rs`: nothing in Rust emits them, they are reached through the carriers' field types.
     let pinned = [
         "/std/Str/Str",
         "/std/Str/Valid/Valid",
