@@ -1,9 +1,10 @@
 use /std/{Bytes, Str, Nat, Bool, Result, Try, Async, Io, Handle};
 use /std/tcp/{resolve, let Socket};
 use /std/Handle/{Interest};
+use /std/Bool/{Holds};
 
 --- Up to `n` bytes, parking until some arrive.
-pub let read(c: Socket, n: Nat, @positive: Nat/Lt(0, n)) -> Async(Io/Chunk) =
+pub let read(c: Socket, n: Nat, @positive: Holds(0 < n)) -> Async(Io/Chunk) =
     Async/Read/read(@Async, @Handle, c.0, n, @positive);
 
 --- The whole of `b`, parking while the peer cannot take more.

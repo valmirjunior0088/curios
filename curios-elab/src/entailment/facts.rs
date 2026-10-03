@@ -5,7 +5,7 @@
 //! - A hypothesis in scope whose type reduces to a decided comparison, a conjunction of comparisons — `&&`, and any `Bool` function unfolding to one as `in_range` and `Char/is_upper` do — or an equation at `Nat` or `Int`.
 //! - A proof field of a tuple- or struct-typed hypothesis, one level down, where the item may open the representation: `v.counted`, `hi.ok`.
 //! - A hypothesis or a field whose statement the arm's refinements reduce to an empty proposition — `in_range(n, 128, 191)` where a guard holds `n <= 127` — which refutes the scope by itself: read as `1 <= 0`, proved by its own zero-arm match.
-//! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `Le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
+//! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
 //! - What an operation a fact or the goal is read over defines: a quotient's bounds, and a truncated subtraction's cases ([`Reader::definitions`]).
 //! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs.
 //! - That every monomial over naturals is at least zero, which conversion decides.
@@ -161,9 +161,9 @@ impl Facts {
 pub(super) struct Split {
     /// `b <= a`, which the proof splits on.
     pub(super) guard: Term,
-    /// Where it holds: `b <= a`, and `b + (a - b) = a` by `Le/add_sub_cancel`.
+    /// Where it holds: `b <= a`, and `b + (a - b) = a` by `le/add_sub_cancel`.
     pub(super) holds: Vec<Fact>,
-    /// Where it fails: `a < b`, and `a - b <= 0` by `Le/sub_zero`, which conversion does not decide there.
+    /// Where it fails: `a < b`, and `a - b <= 0` by `le/sub_zero`, which conversion does not decide there.
     pub(super) fails: Vec<Fact>,
 }
 
@@ -580,7 +580,7 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// A range check `proof` shows holds: `lo <= c` and `c <= hi`, through `Le/of_in_range` over the arguments the check is passed as stated — so a guard's `qed` checks against the check the arm recorded, and a hypothesis is handed to the lemma as it is. The lemma's body was elaborated where no guard stood between the check and its unfolding.
+    /// A range check `proof` shows holds: `lo <= c` and `c <= hi`, through `le/of_in_range` over the arguments the check is passed as stated — so a guard's `qed` checks against the check the arm recorded, and a hypothesis is handed to the lemma as it is. The lemma's body was elaborated where no guard stood between the check and its unfolding.
     fn range(
         &mut self,
         context: &mut Context,
@@ -623,7 +623,7 @@ impl<'a> Reader<'a> {
 
     /// The bounds of each quotient and remainder among the atoms read so far — `d * (x / d) <= x` and `x < d * (x / d) + d` — with the remainder lifted out of every fact ([`Lift`]). Whether it read one.
     ///
-    /// The bounds are `Le/add_r(d * (x / d), x % d)` and `Lt/add_mul_lt(x / d, x % d, x / d + 1, d, qed, qed)`, whose types hold the remainder beside its quotient's multiple, which conversion reads as the dividend; their stated sides hold neither. The second asks for `x % d < d`, which conversion decides at any divisor, where it decides the aligned `x % d + 1 <= d` only at a literal. A division is read only once no other still to be read divides its remainder, so the bounds of `(x % 4096) / 64`, which hold `x % 4096`, are read before that remainder is lifted out of them. Where the divisor is no literal its multiple is a product, which linear arithmetic reads as an unknown of its own and [`products`] relate to its factors.
+    /// The bounds are `le/add_r(d * (x / d), x % d)` and `lt/add_mul_lt(x / d, x % d, x / d + 1, d, qed, qed)`, whose types hold the remainder beside its quotient's multiple, which conversion reads as the dividend; their stated sides hold neither. The second asks for `x % d < d`, which conversion decides at any divisor, where it decides the aligned `x % d + 1 <= d` only at a literal. A division is read only once no other still to be read divides its remainder, so the bounds of `(x % 4096) / 64`, which hold `x % 4096`, are read before that remainder is lifted out of them. Where the divisor is no literal its multiple is a product, which linear arithmetic reads as an unknown of its own and [`products`] relate to its factors.
     ///
     /// `Nat` alone: at `Int`, conversion decides Euclid's identity and neither of a remainder's bounds.
     fn quotients(&mut self, context: &mut Context, target: Option<&Target>) -> Result<bool, Error> {
@@ -766,7 +766,7 @@ impl<'a> Reader<'a> {
         Ok(read)
     }
 
-    /// The case of `a - b` that does not truncate: `b <= a`, and `b + (a - b) = a` by `Le/add_sub_cancel`, each proved from `b <= a` by `qed` where the scope decides it.
+    /// The case of `a - b` that does not truncate: `b <= a`, and `b + (a - b) = a` by `le/add_sub_cancel`, each proved from `b <= a` by `qed` where the scope decides it.
     fn exact(&mut self, context: &mut Context, a: &Term, b: &Term) -> Result<(), Error> {
         let difference = context.syntax().entailment.natural.difference;
         let qed = qed(context);
@@ -779,7 +779,7 @@ impl<'a> Reader<'a> {
         self.equation(context, Carrier::Natural, &summed, a, cancelled, origin)
     }
 
-    /// The case that truncates: `a < b`, by `Lt/of_not_le` where the scope decides `b <= a` fails, and `a - b <= 0` by `Le/sub_zero`.
+    /// The case that truncates: `a < b`, by `lt/of_not_le` where the scope decides `b <= a` fails, and `a - b <= 0` by `le/sub_zero`.
     fn truncated(&mut self, context: &mut Context, a: &Term, b: &Term) -> Result<(), Error> {
         let natural = context.syntax().entailment.natural;
         let of_not_le = order(context, Carrier::Natural).of_not_le;
@@ -1012,9 +1012,9 @@ pub(super) fn negated(
     Ok(negation)
 }
 
-/// The product of each pair of `facts` and the negated goal, through `Le/mul`: `a <= b` and `c <= d` give `a * d + b * c <= a * c + b * d`, read as every fact is — the products Mathlib's `nlinarith` adds before its linear search, each a fact whose monomials that search reads as unknowns.
+/// The product of each pair of `facts` and the negated goal, through `le/mul`: `a <= b` and `c <= d` give `a * d + b * c <= a * c + b * d`, read as every fact is — the products Mathlib's `nlinarith` adds before its linear search, each a fact whose monomials that search reads as unknowns.
 ///
-/// A natural's sign is a factor only over one atom, and never beside another natural's, whose product conversion decides; a pair at two carriers is taken at `Int`, the `Nat` factor's sides widened as a sum's are. A pair whose `Le/mul` is not in scope is left out.
+/// A natural's sign is a factor only over one atom, and never beside another natural's, whose product conversion decides; a pair at two carriers is taken at `Int`, the `Nat` factor's sides widened as a sum's are. A pair whose `le/mul` is not in scope is left out.
 pub(super) fn products(
     context: &mut Context,
     views: &mut LinearViews,
@@ -1141,7 +1141,7 @@ pub(super) struct Lift {
     denotes: LinearForm,
     /// `d * (x / d)`.
     multiple: Term,
-    /// `Le/add_mono_l`.
+    /// `le/add_mono_l`.
     shift: SyntaxName,
 }
 
@@ -1154,7 +1154,7 @@ impl Lift {
             .map(|(coefficient, _)| coefficient.clone())
     }
 
-    /// `fact` raised by `c * d * (x / d)` on both sides, `c` the remainder's coefficient in it, through `Le/add_mono_l`: the remainder's `c` copies then stand beside as many multiples, which conversion reads as `c * x`. An `Int` fact reads a remainder only through its widening, which is left as it is: a certificate that needs it does not check, and is reported as the procedure's refusal.
+    /// `fact` raised by `c * d * (x / d)` on both sides, `c` the remainder's coefficient in it, through `le/add_mono_l`: the remainder's `c` copies then stand beside as many multiples, which conversion reads as `c * x`. An `Int` fact reads a remainder only through its widening, which is left as it is: a certificate that needs it does not check, and is reported as the procedure's refusal.
     fn apply(&self, fact: &mut Fact) {
         let Some(coefficient) = self.coefficient(&fact.form) else {
             return;
@@ -1223,7 +1223,7 @@ struct Range {
 
 /// What a statement names once its heads are opened.
 enum Opened {
-    /// A call of the range check `Le/of_in_range` reads, its arguments as stated.
+    /// A call of the range check `le/of_in_range` reads, its arguments as stated.
     Range(Range),
     /// A comparison the fragment reads, over its operands as stated.
     Comparison(Intrinsic),
@@ -1254,7 +1254,7 @@ fn opened(context: &mut Context, stated: &Term) -> Result<Option<Opened>, Error>
     .map(Option::flatten)
 }
 
-/// The decision `stated` holds, opened by its heads to `Holds(decision)` — `Nat/Lt(i, n)` to `i < n` as written — or `None` where opening reaches no `Holds`.
+/// The decision `stated` holds, opened by its heads to `Holds(decision)` — a named proposition standing for one, to the `i < n` it was written as — or `None` where opening reaches no `Holds`.
 pub(super) fn held(context: &mut Context, stated: &Term) -> Result<Option<Term>, Error> {
     let holds = global(context.syntax().proof.holds);
     open_until(context, stated, |term| match &**term {

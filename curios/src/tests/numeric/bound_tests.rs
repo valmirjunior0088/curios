@@ -13,14 +13,14 @@ fn a_bound_over_a_recursion_returning_a_literal_discharges() {
         use /std/{Str, Nat};
         let f(k : Nat, n : Nat) -> Nat =
             match k | 0 => 5 | j + 1; ih => f(j, n) end;
-        let bound(n : Nat) -> Nat/Le(5, f(0, n)) = Nat/Le/refl(5);
+        let bound(n : Nat) -> Holds(5 <= f(0, n)) = Nat/le/refl(5);
         /std/print("ok")
         "#),
         b"ok"
     );
 }
 
-// The other half: the same shape with a base arm returning a *parameter*. `f(0, n)` reduces correctly to `n`, and `force_rec` keeps that `Var`-headed reduct because it is free of the group: a head-shape test alone cannot tell a stuck form from an answer that happens to be a variable, and would leave the bound standing as `Nat/Le(n, f(0, n))`. Returning one's own parameter is the ordinary shape of an accumulator, which is why this is easy to hit.
+// The other half: the same shape with a base arm returning a *parameter*. `f(0, n)` reduces correctly to `n`, and `force_rec` keeps that `Var`-headed reduct because it is free of the group: a head-shape test alone cannot tell a stuck form from an answer that happens to be a variable, and would leave the bound standing as `Holds(n <= f(0, n))`. Returning one's own parameter is the ordinary shape of an accumulator, which is why this is easy to hit.
 #[test]
 fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
     assert_eq!(
@@ -28,7 +28,7 @@ fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
         use /std/{Str, Nat};
         let f(k : Nat, n : Nat) -> Nat =
             match k | 0 => n | j + 1; ih => f(j, n) end;
-        let bound(n : Nat) -> Nat/Le(n, f(0, n)) = Nat/Le/refl(n);
+        let bound(n : Nat) -> Holds(n <= f(0, n)) = Nat/le/refl(n);
         /std/print("ok")
         "#),
         b"ok"
@@ -292,8 +292,8 @@ fn well_founded_recursion_serves_a_proposition_and_a_computation() {
         run(r#"
         use /std/{Nat, Str, Char, List, WellFounded};
         use /std/Bool/{True};
-        let below(n: Nat) -> Nat/Lt(n, n + 3) =
-            WellFounded/recurse((k) => Nat/Lt(k, k + 3), (k, ih) => True/qed(), n, WellFounded/lt(n));
+        let below(n: Nat) -> Holds(n < n + 3) =
+            WellFounded/recurse((k) => Holds(k < k + 3), (k, ih) => True/qed(), n, WellFounded/lt(n));
         let fib(n: Nat) -> Nat =
             WellFounded/recurse(
                 (k) => Nat,
@@ -443,7 +443,7 @@ fn a_bound_over_one_length_reached_by_two_routes_discharges() {
         use /std/{Nat, Bytes, Char, Str};
         use /std/Bool/{True};
         let _within(c: Char, k: Nat)
-            -> Nat/Le(k + Bytes/len(Char/to_utf8(c)), k + Bytes/len(Str/of_char(c).bytes) + 1) =
+            -> Holds(k + Bytes/len(Char/to_utf8(c)) <= k + Bytes/len(Str/of_char(c).bytes) + 1) =
             True/qed();
         /std/print("ok")
         "#),
@@ -451,14 +451,14 @@ fn a_bound_over_one_length_reached_by_two_routes_discharges() {
     );
 }
 
-// **A bound whose proposition is pinned after its insertion is filled on retry.** `proved`'s `p` has type `P`, an unsolved metavariable when the call inserts it, so it is a bound only because `P`'s own type is `Prop`: the sort is read off the metavariable's type rather than defaulted to `Type`, the bound is parked, and the expectation's `Nat/Le(n, n + 1)` brings it to truth once `P` is solved. The control is a proposition that reduces to `False`, which the retry refuses as it would a bound known at insertion.
+// **A bound whose proposition is pinned after its insertion is filled on retry.** `proved`'s `p` has type `P`, an unsolved metavariable when the call inserts it, so it is a bound only because `P`'s own type is `Prop`: the sort is read off the metavariable's type rather than defaulted to `Type`, the bound is parked, and the expectation's `Holds(n <= n + 1)` brings it to truth once `P` is solved. The control is a proposition that reduces to `False`, which the retry refuses as it would a bound known at insertion.
 #[test]
 fn a_bound_whose_proposition_is_pinned_later_is_filled_on_retry() {
     assert_eq!(
         run(r#"
         use /std/{Nat};
         let proved(@P: Prop, @p: P) -> P = p;
-        let filled(n : Nat) -> Nat/Le(n, n + 1) = proved();
+        let filled(n : Nat) -> Holds(n <= n + 1) = proved();
         /std/print("ok")
         "#),
         b"ok"
@@ -468,14 +468,14 @@ fn a_bound_whose_proposition_is_pinned_later_is_filled_on_retry() {
         r#"
         use /std/{Nat, Bool};
         let proved(@P: Prop, @p: P) -> P = p;
-        let refused(n : Nat) -> Nat/Le(n + 1, n) = proved();
+        let refused(n : Nat) -> Holds(n + 1 <= n) = proved();
         /std/print("unreachable")
         "#,
     )
     .expect_err("a proposition that reduces to False is not filled");
 
     assert!(
-        error.contains("nothing discharged Nat/Le(n + 1, n), which reduces to Bool/False"),
+        error.contains("nothing discharged Holds(n + 1 <= n), which reduces to Bool/False"),
         "expected the undischarged bound, got: {error}"
     );
 }
@@ -488,7 +488,7 @@ fn a_bound_pinned_later_holds_under_the_guard_its_slot_was_born_under() {
         use /std/{Nat};
         let proved(@P: Prop, @p: P) -> P = p;
         let guarded(a : Nat, b : Nat) -> Nat =
-            match a < b | true => let q: Nat/Lt(a, b) = proved(); a | false => b end;
+            match a < b | true => let q: Holds(a < b) = proved(); a | false => b end;
         /std/print("ok")
         "#),
         b"ok"
@@ -500,7 +500,7 @@ fn a_bound_pinned_later_holds_under_the_guard_its_slot_was_born_under() {
         let proved(@P: Prop, @p: P) -> P = p;
         let guarded(a : Nat, b : Nat) -> Nat =
             let early = proved();
-            match a < b | true => let q: Nat/Lt(a, b) = early; a | false => b end;
+            match a < b | true => let q: Holds(a < b) = early; a | false => b end;
         /std/print("unreachable")
         "#,
     )

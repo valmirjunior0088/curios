@@ -1,7 +1,7 @@
 pub use /sys/{List};
 pub use /sys/List/{get, len, slice, map, fold};
 use /std/{Nat, Bool, Option, Str, Show, Spell, Monad, Ordering, Ord};
-use /std/Bool/{True};
+use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp};
 
 --- The element at `i`, or `none` past the end.
@@ -9,7 +9,7 @@ pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
     match i < len(a) | true => Option/some(get(a, i)) | false => Option/none() end;
 
 --- Everything from `k` on, under the evidence that `k` is within the length.
-pub let drop(@T: Type, a: List(T), k: Nat, @ok: Nat/Le(k, len(a))) -> List(T) =
+pub let drop(@T: Type, a: List(T), k: Nat, @ok: Holds(k <= len(a))) -> List(T) =
     slice(@T, a, k, len(a) - k);
 
 --- The concatenation, in order.
@@ -176,10 +176,10 @@ pub let balanced(
     @A: Type,
     n: Nat,
     empty: A,
-    single: (i: Nat, Nat/Lt(i, n)) -> A,
+    single: (i: Nat, Holds(i < n)) -> A,
     combine: (A, A) -> A,
 ) -> A =
-    let go(fuel: Nat, lo: Nat, hi: Nat, bounded: Nat/Le(hi, n)) -> A =
+    let go(fuel: Nat, lo: Nat, hi: Nat, bounded: Holds(hi <= n)) -> A =
         match fuel
         | 0 => empty
         | pred + 1 =>
@@ -191,7 +191,7 @@ pub let balanced(
             | _ => empty
             end
         end;
-    go(n, 0, n, Nat/Le/refl(n));
+    go(n, 0, n, Nat/le/refl(n));
 
 satisfy (@A: Type, use Eql(A)) => Eql(List(A)) {
     eql(a, b) =

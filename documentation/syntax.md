@@ -73,7 +73,7 @@ A path without that leading `/` is relative to the module it is written in: its 
 Nat                 -- a declaration or import of this module
 Option/some         -- member of Option
 /std/List           -- absolute name
-/std/Nat/Lt         -- absolute name through a nested module
+/std/Nat/lt         -- absolute name through a nested module
 ```
 
 The root `/sys` is the compiler's own and a program may not name it: it holds the intrinsic types, the host's operations, and the propositions a decided bound is stated in. Naming it is refused, pointing at the `/std` module that stands in front of it — `Nat` is reached as `/std/Nat`. It is named in this document only where the mechanism behind a form is the point.
@@ -434,7 +434,7 @@ Both operands of an operator have the same type. `==` and `!=` are two separate 
 
 An operator's result type is whatever its concept's method declares: `+`, `-`, `*`, `/`, `%`, `&&` and `||` return the operand type, while `==`, `!=`, `<`, `>`, `<=` and `>=` return `Bool`.
 
-`/` and `%` additionally carry the precondition their concept declares. `Div` and `Rem` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Nat/Lt(0, b)`: by reduction where `b` is a literal, and from the facts in scope — a hypothesis or a guard that `0 < b` — otherwise ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). A carrier whose division is total states `True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail ([A bound is stated in a decided proposition and discharged by reduction](design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md)).
+`/` and `%` additionally carry the precondition their concept declares. `Div` and `Rem` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Holds(0 < b)`: by reduction where `b` is a literal, and from the facts in scope — a hypothesis or a guard that `0 < b` — otherwise ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). A carrier whose division is total states `True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail ([A bound is stated in a decided proposition and discharged by reduction](design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md)).
 
 Operator notation always uses witness resolution, including intrinsic operands. Standard witnesses cover the intrinsic types, while a `satisfy` declaration enables the same notation for a user-defined type.
 
@@ -970,7 +970,7 @@ A field's result may itself be a sort, which makes the field an associated type 
 
 ```crs
 satisfy Rem(Nat) {
-    Ok(b) = Nat/Lt(0, b),
+    Ok(b) = Holds(0 < b),
     rem = rem,
 }
 ```
@@ -1160,7 +1160,7 @@ A bound is stated and proved in `/std/Bool`'s vocabulary, which a program import
 A bound reduction does not decide is proved by the elaborator where it follows by linear arithmetic from the facts in scope: the hypotheses and their proof fields one level down, and the guards of the arms around it, each read through the local definitions and refinements in scope. The fragment is `Nat` and `Int` comparisons with literal coefficients; at `Nat`, also a truncated subtraction, through its two cases, and a quotient or remainder at any nonzero divisor, through the quotient's bounds; and, where linear arithmetic alone finds none, the products of pairs of facts and the negated goal. The proof is an ordinary term both checkers recheck, so nothing it adds is trusted ([A bound that follows from the facts in scope is proved by the elaborator](design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)).
 
 ```crs
-let get(xs: List(Nat), i: Nat, m: Nat, p: Nat/Lt(i, m), q: Nat/Le(m, List/len(xs))) -> Nat =
+let get(xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/len(xs))) -> Nat =
     List/get(xs, i);
 ```
 
@@ -1169,7 +1169,7 @@ Two `/std` functions reach the same proof where no bound asks for it. `True/prov
 ```crs
 use /std/Bool/{False};
 
-let clamp(n: Nat, q: Nat/Le(n, 10)) -> Nat =
+let clamp(n: Nat, q: Holds(n <= 10)) -> Nat =
     match n > 20 | true => match False/refuted() end | false => n end;
 ```
 

@@ -30,7 +30,7 @@ struct Split(n: Nat): Type {
 
 -- Every number has one, by successor induction.
 --
--- The step decides whether the digit has filled. The bump branch discharges its own bound by the arm's refinement, `Lt(d + 1, 256)` being `Lt(d, 255)` after cancellation; the carry branch is where the digit is known to be `255`, which takes both directions of the order — the half the guard refuted, proved from the guard, and the carrier's own bound for the other.
+-- The step decides whether the digit has filled. The bump branch discharges its own bound by the arm's refinement, `Holds(d + 1 < 256)` being `Holds(d < 255)` after cancellation; the carry branch is where the digit is known to be `255`, which takes both directions of the order — the half the guard refuted, proved from the guard, and the carrier's own bound for the other.
 let split(n: Nat) -> Split(n) =
     match n
     | 0 => Split { high = 0, low = 0, joined = Eq/refl() }
@@ -44,7 +44,7 @@ let split(n: Nat) -> Split(n) =
             }
         | false =>
             let filled: Eq()(Byte/to_nat(prev.low), 255) =
-                Nat/Le/antisym(Byte/to_nat(prev.low), 255, True/qed(), True/proved());
+                Nat/le/antisym(Byte/to_nat(prev.low), 255, True/qed(), True/proved());
             Split {
                 high = prev.high + 1,
                 low = 0,
@@ -61,7 +61,7 @@ let euclid(n: Nat) -> Eq()(256 * (n / 256) + n % 256, n) =
     Eq/subst((m) => Eq()(256 * (m / 256) + m % 256, m), Eq/sym(split(n).joined), Eq/refl());
 
 -- The recursion `of_nat` performs terminates, which is what lets injectivity recurse the same way.
-let high_below(n: Nat, positive: Nat/Lt(0, n)) -> Nat/Lt(n / 256, n) =
+let high_below(n: Nat, positive: Holds(0 < n)) -> Holds(n / 256 < n) =
     True/proved();
 
 -- The two halves of a cons, as total functions so congruence can take one apart.
@@ -154,7 +154,7 @@ pub let of_nat_injective(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq
         WellFounded/lt(a))(b, same);
 
 --- Everything from `k` on, under the evidence that `k` is within the length.
-pub let drop(b: Bytes, k: Nat, @ok: Nat/Le(k, len(b))) -> Bytes =
+pub let drop(b: Bytes, k: Nat, @ok: Holds(Nat/le(k, len(b)))) -> Bytes =
     slice(b, k, len(b) - k);
 
 --- Every bit of every byte flipped.

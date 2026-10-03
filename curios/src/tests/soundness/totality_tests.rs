@@ -485,9 +485,9 @@ fn a_call_through_a_constructor_payload_descends() {
 
         let strong(
             P : (Nat) -> Prop,
-            step : (n : Nat, ih : (m : Nat, lt : Nat/Lt(m, n)) -> P(m)) -> P(n),
+            step : (n : Nat, ih : (m : Nat, lt : Holds(m < n)) -> P(m)) -> P(n),
             n : Nat,
-            acc : Accessible((a : Nat, b : Nat) => Nat/Lt(a, b))(n),
+            acc : Accessible((a : Nat, b : Nat) => Holds(a < b))(n),
         ) -> P(n) =
             match acc : (w, _) => P(w)
             | intro(@w, below) => step(w, (m, lt) => strong(P, step, m, below(m, lt)))
@@ -519,9 +519,9 @@ fn the_library_well_founded_recursion_serves_a_proof() {
     let source = r#"
         use /std/{Nat, Str, WellFounded, Char, List};
         use /std/Bool/{True};
-        let two_more(n: Nat) -> Nat/Lt(n, n + 2) =
-            WellFounded/recurse((k) => Nat/Lt(k, k + 2), (k, ih) => True/qed(), n, WellFounded/lt(n));
-        let lt_is_well_founded: WellFounded((a: Nat, b: Nat) => Nat/Lt(a, b)) = WellFounded/lt;
+        let two_more(n: Nat) -> Holds(n < n + 2) =
+            WellFounded/recurse((k) => Holds(k < k + 2), (k, ih) => True/qed(), n, WellFounded/lt(n));
+        let lt_is_well_founded: WellFounded((a: Nat, b: Nat) => Holds(a < b)) = WellFounded/lt;
         /std/print(Str/of_char(List/get(@Char, ['a', 'b', 'c'], 1, @two_more(1))))
         "#;
     assert_eq!(run(source), b"b");

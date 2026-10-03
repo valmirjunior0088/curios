@@ -12,9 +12,9 @@ The library carries what reduction does not state:
 
 - `/std/Nat/div_mod` hands back the quotient and remainder `/` and `%` compute, with Euclid's identity (`joined`) and the bound (`bounded`) as its proofs;
 - `/std/Nat/Divides(d, n)` is a multiple witness, with `refl`, `trans`, `zero`, `one`, `add`, `mul`, and `of_rem`, which turns a zero remainder into divisibility with the quotient as the witness;
-- `/std/Nat/Lt` and `/std/Nat/Le` carry the order laws, and `/std/WellFounded/recurse` over `WellFounded/lt` is strong induction along `<` — the measure a Euclidean recursion recurses on;
+- `/std/Nat/lt` and `/std/Nat/le` carry the order laws, and `/std/WellFounded/recurse` over `WellFounded/lt` is strong induction along `<` — the measure a Euclidean recursion recurses on;
 - `/std/Int`'s indexed `Sign` view — every `Int` is `nonneg(n)`, the embedding of `n`, or `neg(n)`, which is `-1 - Nat/to_int(n)` — with `view`, `trichotomy` and `eq_of_eql`;
-- `/std/Int/Lt` and `/std/Int/Le`, each law proved by carrying the `Nat` law along the embedding through the sign view, which the `Int` lemmas below follow too: a statement about `Int` is split by the view of its operands, and each case is a `Nat` law read through `Nat/to_int`.
+- `/std/Int/lt` and `/std/Int/le`, each law proved by carrying the `Nat` law along the embedding through the sign view, which the `Int` lemmas below follow too: a statement about `Int` is split by the view of its operands, and each case is a `Nat` law read through `Nat/to_int`.
 
 **Declared or proved.** Every law below is a lemma. A law conversion decides is [declared](02-declared-operations.md), and a fact inside the fragment conversion decides, or [the elaborator proves from the facts in scope](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md), that neither reaches is a gap there, recorded there — in the law grid or in `curios`'s `tests::bounds`. A fact outside it is proved here, and a refused row in the law grid records why conversion does not take it.
 
@@ -60,7 +60,7 @@ Two laws a proof might expect to state are already conversion's and are not lemm
 - **Totality**, as a disjunction: `Le(a, b)` or `Le(b, a)`, from `trichotomy`. Its `Bool` form holding by conversion would take [the relational layer](08-relational-layer.md), reserved until a consumer needs it.
 - **The executable relations agree with the propositions**: `ord`, `==`, `<`, `<=`, `>` and `>=` each decide the proposition their spelling names, and `ord(a, b)` is `eq` exactly when `Eq()(a, b)`.
 - **Flip symmetry**: `ord(b, a)` is `ord(a, b)` reversed.
-- **Multiplication monotonicity under a non-positive factor**: `Le(a, b)` and `Le(k, +0)` give `Le(b · k, a · k)`, the twin of `Le/mul_mono_r`.
+- **Multiplication monotonicity under a non-positive factor**: `Le(a, b)` and `Le(k, +0)` give `Le(b · k, a · k)`, the twin of `le/mul_mono_r`.
 
 ## `Int`: cancellation
 

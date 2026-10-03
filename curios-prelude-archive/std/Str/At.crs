@@ -13,7 +13,7 @@ pub struct At(s: Str): pub Type {
     --- The byte offset.
     offset: Nat,
     --- Why it lies within `s`.
-    within: Nat/Le(offset, Bytes/len(s.bytes)),
+    within: Holds(offset <= Bytes/len(s.bytes)),
     --- Why a character may begin there.
     boundary: Holds(starts(Bytes/drop(s.bytes, offset, @within))),
 }
@@ -26,7 +26,7 @@ pub let start(s: Str) -> At(s) =
 pub let finish(s: Str) -> At(s) =
     At {
         offset = Bytes/len(s.bytes),
-        within = Nat/Le/refl(Bytes/len(s.bytes)),
+        within = Nat/le/refl(Bytes/len(s.bytes)),
         boundary = True/qed(),
     };
 
@@ -34,14 +34,14 @@ pub let finish(s: Str) -> At(s) =
 pub let of_offset(
     s: Str,
     k: Nat,
-    @within: Nat/Le(k, Bytes/len(s.bytes)),
+    @within: Holds(k <= Bytes/len(s.bytes)),
     @boundary: Holds(starts(Bytes/drop(s.bytes, k, @within))),
 ) -> At(s) =
     At { offset = k, within = within, boundary = boundary };
 
 --- The position `k` bytes into `s`, or `none` when `k` is past the end or inside a character. Decided by the one byte at `k`.
 pub let try_of_offset(s: Str, k: Nat) -> Option(At(s)) =
-    match Nat/Le/try(k, Bytes/len(s.bytes))
+    match Nat/le/try(k, Bytes/len(s.bytes))
     | none() => Option/none()
     | some(within) =>
         match starts(Bytes/drop(s.bytes, k, @within))
@@ -65,16 +65,16 @@ pub let to_after(
     s: Str,
     at: At(s),
     p: At(s),
-    @ordered: Nat/Le(at.offset, p.offset),
+    @ordered: Holds(at.offset <= p.offset),
 ) -> At(Str/after(s, at)) =
-    let back = Eq/sym(Nat/Le/add_sub_cancel(at.offset, p.offset, ordered));
+    let back = Eq/sym(Nat/le/add_sub_cancel(at.offset, p.offset, ordered));
     At {
         offset = p.offset - at.offset,
         within = True/proved(),
         boundary =
             Eq/subst(
                 (n: Nat) =>
-                    (within: Nat/Le(n, Bytes/len(s.bytes))) -> Holds(
+                    (within: Holds(n <= Bytes/len(s.bytes))) -> Holds(
                         starts(Bytes/drop(s.bytes, n, @within))),
                 back,
                 (_) => p.boundary)(True/proved()),
@@ -94,7 +94,7 @@ let run_starts(rest: Bytes) -> Holds(starts(Bytes/drop(rest, run(rest), @run_wit
     | x[h, ..t] => match Str/continues(h) | true => run_starts(t) | false => True/qed() end
     end
 --- The continuing bytes that open `rest` lie within it.
-and run_within(rest: Bytes) -> Nat/Le(run(rest), Bytes/len(rest)) =
+and run_within(rest: Bytes) -> Holds(Nat/le(run(rest), Bytes/len(rest))) =
     match rest
     | x[] => True/qed()
     | x[h, ..t] => match Str/continues(h) | true => run_within(t) | false => True/qed() end
@@ -103,11 +103,11 @@ and run_within(rest: Bytes) -> Nat/Le(run(rest), Bytes/len(rest)) =
 --- How many bytes the first character of `b` takes — its lead and the bytes continuing it — with the bound and the boundary past them. The character is not decoded: the one-byte rule is all a step needs.
 let hop(
     @b: Bytes,
-    some: Nat/Lt(0, Bytes/len(b)),
+    some: Holds(0 < Bytes/len(b)),
 ) -> {
     width: Nat,
-    positive: Nat/Lt(0, width),
-    within: Nat/Le(width, Bytes/len(b)),
+    positive: Holds(0 < width),
+    within: Holds(width <= Bytes/len(b)),
     boundary: Holds(starts(Bytes/drop(b, width, @within)))} =
     match b
     | x[] => match some end
@@ -120,7 +120,7 @@ let hop(
     end;
 
 --- The first character of valid bytes that hold one.
-let lead(@b: Bytes, v: Str/Valid(b), some: Nat/Lt(0, Bytes/len(b))) -> Char =
+let lead(@b: Bytes, v: Str/Valid(b), some: Holds(0 < Bytes/len(b))) -> Char =
     match b
     | x[] => match some end
     | x[c, ..t] => Str/Valid/decode_head(c, @t, v)
@@ -130,8 +130,8 @@ let lead(@b: Bytes, v: Str/Valid(b), some: Nat/Lt(0, Bytes/len(b))) -> Char =
 pub let skip(
     s: Str,
     at: At(s),
-    @here: Nat/Lt(at.offset, Bytes/len(s.bytes)),
-) -> {past: At(s), progress: Nat/Lt(at.offset, past.offset)} =
+    @here: Holds(at.offset < Bytes/len(s.bytes)),
+) -> {past: At(s), progress: Holds(at.offset < past.offset)} =
     let rest = Str/after(s, at);
     let hopped = hop(@rest.bytes, True/proved());
     (
@@ -146,8 +146,8 @@ pub let skip(
 pub let next(
     s: Str,
     at: At(s),
-    @here: Nat/Lt(at.offset, Bytes/len(s.bytes)),
-) -> {char: Char, past: At(s), progress: Nat/Lt(at.offset, past.offset)} =
+    @here: Holds(at.offset < Bytes/len(s.bytes)),
+) -> {char: Char, past: At(s), progress: Holds(at.offset < past.offset)} =
     let rest = Str/after(s, at);
     let stepped = skip(s, at, @here);
     (char = lead(rest.valid, True/proved()), past = stepped.past, progress = stepped.progress);
@@ -156,7 +156,7 @@ pub let next(
 pub let try_next(
     s: Str,
     at: At(s),
-) -> Option({char: Char, past: At(s), progress: Nat/Lt(at.offset, past.offset)}) =
+) -> Option({char: Char, past: At(s), progress: Holds(at.offset < past.offset)}) =
     match at.offset < Bytes/len(s.bytes)
     | true => Option/some(next(s, at))
     | false => Option/none()
@@ -166,8 +166,8 @@ pub let try_next(
 let floor(
     s: Str,
     k: Nat,
-    within: Nat/Le(k, Bytes/len(s.bytes)),
-) -> {at: At(s), below: Nat/Le(at.offset, k)} =
+    within: Holds(k <= Bytes/len(s.bytes)),
+) -> {at: At(s), below: Holds(at.offset <= k)} =
     match k
     | 0 => (at = start(s), below = True/qed())
     | j + 1 =>
@@ -175,7 +175,7 @@ let floor(
         | true =>
             (
                 at = At { offset = j + 1, within = within, boundary = True/qed() },
-                below = Nat/Le/refl(j + 1))
+                below = Nat/le/refl(j + 1))
         | false =>
             let back = floor(s, j, True/proved());
             (at = back.at, below = True/proved())
@@ -186,8 +186,8 @@ let floor(
 pub let prev(
     s: Str,
     at: At(s),
-    @here: Nat/Lt(0, at.offset),
-) -> {char: Char, past: At(s), progress: Nat/Lt(past.offset, at.offset)} =
+    @here: Holds(0 < at.offset),
+) -> {char: Char, past: At(s), progress: Holds(past.offset < at.offset)} =
     match at.offset
     | 0 => match here end
     | j + 1 =>
@@ -199,13 +199,13 @@ pub let prev(
 pub let try_prev(
     s: Str,
     at: At(s),
-) -> Option({char: Char, past: At(s), progress: Nat/Lt(past.offset, at.offset)}) =
+) -> Option({char: Char, past: At(s), progress: Holds(past.offset < at.offset)}) =
     match 0 < at.offset | true => Option/some(prev(s, at)) | false => Option/none() end;
 
 --- A position past another is well-founded: what is left of `s` past a position shrinks as the position moves on.
-let onward(s: Str) -> WellFounded((p: At(s), q: At(s)) => Nat/Lt(q.offset, p.offset)) =
+let onward(s: Str) -> WellFounded((p: At(s), q: At(s)) => Holds(q.offset < p.offset)) =
     let left: WellFounded((p: At(s), q: At(s)) =>
-        Nat/Lt(Bytes/len(s.bytes) - p.offset, Bytes/len(s.bytes) - q.offset)) =
+        Holds(Bytes/len(s.bytes) - p.offset < Bytes/len(s.bytes) - q.offset)) =
         WellFounded/on((p: At(s)) => Bytes/len(s.bytes) - p.offset, WellFounded/lt);
     WellFounded/narrow(left, (p, q, ahead) => True/proved());
 
@@ -213,7 +213,7 @@ let onward(s: Str) -> WellFounded((p: At(s), q: At(s)) => Nat/Lt(q.offset, p.off
 pub let forward(
     @s: Str,
     P: (At(s)) -> Type,
-    step: (at: At(s), again: (p: At(s), progress: Nat/Lt(at.offset, p.offset)) -> P(p)) -> P(at),
+    step: (at: At(s), again: (p: At(s), progress: Holds(at.offset < p.offset)) -> P(p)) -> P(at),
     at: At(s),
 ) -> P(at) =
     WellFounded/recurse(P, step, at, onward(s)(at));
@@ -222,7 +222,7 @@ pub let forward(
 pub let backward(
     @s: Str,
     P: (At(s)) -> Type,
-    step: (at: At(s), again: (p: At(s), progress: Nat/Lt(p.offset, at.offset)) -> P(p)) -> P(at),
+    step: (at: At(s), again: (p: At(s), progress: Holds(p.offset < at.offset)) -> P(p)) -> P(at),
     at: At(s),
 ) -> P(at) =
     WellFounded/recurse(P, step, at, WellFounded/on((p: At(s)) => p.offset, WellFounded/lt)(at));
@@ -232,7 +232,7 @@ let starts_before(
     @a: Bytes,
     rest: Bytes,
     k: Nat,
-    within: Nat/Le(k, Bytes/len(a)),
+    within: Holds(k <= Bytes/len(a)),
     at: Holds(starts(Bytes/drop(a, k, @within))),
     begins: Holds(starts(rest)),
 ) -> Holds(starts(Bytes/drop(x[..a, ..rest], k))) =

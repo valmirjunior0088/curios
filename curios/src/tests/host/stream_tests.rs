@@ -79,9 +79,9 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
                 | failure(_) => "error"
                 end
             end;
-        let error_first(n : Nat, @positive : Nat/Lt(0, n)) -> Async(Io/Chunk) =
+        let error_first(n : Nat, @positive : Holds(0 < n)) -> Async(Io/Chunk) =
             Async/pure(Io/Chunk/error(Io/Error/other(247)));
-        let chunk_then_error : Io((n : Nat, @positive : Nat/Lt(0, n)) -> Async(Io/Chunk)) =
+        let chunk_then_error : Io((n : Nat, @positive : Holds(0 < n)) -> Async(Io/Chunk)) =
             let calls = Cell/new(@{})!;
             Io/pure((n) =>
                 let first = Async/lift(Cell/fill(calls, ()))!;
@@ -89,7 +89,7 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
                 | true => Async/pure(Io/Chunk/chunk(x[0x41, 0x42]))
                 | _ => Async/pure(Io/Chunk/error(Io/Error/other(247)))
                 end);
-        let chunk_then_eof : Io((n : Nat, @positive : Nat/Lt(0, n)) -> Async(Io/Chunk)) =
+        let chunk_then_eof : Io((n : Nat, @positive : Holds(0 < n)) -> Async(Io/Chunk)) =
             let calls = Cell/new(@{})!;
             Io/pure((n) =>
                 let first = Async/lift(Cell/fill(calls, ()))!;
@@ -107,7 +107,7 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
     assert_eq!(run(source), b"error / error / ok:3");
 }
 
-/// A program's own stream proves every chunk it hands a reader holds a byte. One that builds a chunk from bytes it cannot see is refused where it builds it; one that decides the length with `Nat/Lt/try` passes over an empty piece, so `read_until` reads on to the delimiter rather than taking an empty chunk for it and ending the read early.
+/// A program's own stream proves every chunk it hands a reader holds a byte. One that builds a chunk from bytes it cannot see is refused where it builds it; one that decides the length with `Nat/lt/try` passes over an empty piece, so `read_until` reads on to the delimiter rather than taking an empty chunk for it and ending the read early.
 #[test]
 fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
     let stream = |answer: &str| {
@@ -149,7 +149,7 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
     assert!(refused.contains("nothing discharged"), "{refused}");
 
     let decided = stream(
-        "match Nat/Lt/try(0, Bytes/len(p.1)) | some(q) => Io/pure(Io/Chunk/chunk(p.1, @q)) | none() => next(more) end",
+        "match Nat/lt/try(0, Bytes/len(p.1)) | some(q) => Io/pure(Io/Chunk/chunk(p.1, @q)) | none() => next(more) end",
     );
     assert_eq!(run(&decided), b"a");
 }

@@ -9,7 +9,7 @@ pub let Valid(code: Nat) -> Prop =
     Holds(is_valid(code));
 
 --- A code below the surrogates is a scalar value.
-pub let below_surrogates(code: Nat, p: Nat/Lt(code, 0xD800)) -> Valid(code) =
+pub let below_surrogates(code: Nat, p: Holds(code < 0xD800)) -> Valid(code) =
     match code < 0xD800
     | true => True/qed()
     | false => match p end
@@ -18,8 +18,8 @@ pub let below_surrogates(code: Nat, p: Nat/Lt(code, 0xD800)) -> Valid(code) =
 --- A code past the surrogates and at most `U+10FFFF` is a scalar value.
 pub let above_surrogates(
     code: Nat,
-    low: Nat/Le(0xE000, code),
-    high: Nat/Le(code, 0x10FFFF),
+    low: Holds(0xE000 <= code),
+    high: Holds(code <= 0x10FFFF),
 ) -> Valid(code) =
     match code < 0xD800
     | true => True/qed()
@@ -31,7 +31,7 @@ pub let above_surrogates(
     end;
 
 --- A scalar value is at most `U+10FFFF`.
-pub let at_most(code: Nat, valid: Valid(code)) -> Nat/Le(code, 0x10FFFF) =
+pub let at_most(code: Nat, valid: Valid(code)) -> Holds(code <= 0x10FFFF) =
     match code < 0xD800
     | true => True/proved()
     | false =>
@@ -45,8 +45,8 @@ pub let at_most(code: Nat, valid: Valid(code)) -> Nat/Le(code, 0x10FFFF) =
 pub let below_surrogates_of(
     code: Nat,
     valid: Valid(code),
-    below_end: Nat/Lt(code, 0xE000),
-) -> Nat/Lt(code, 0xD800) =
+    below_end: Holds(code < 0xE000),
+) -> Holds(code < 0xD800) =
     match code < 0xD800
     | true => True/qed()
     | false =>

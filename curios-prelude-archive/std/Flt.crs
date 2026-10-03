@@ -458,7 +458,7 @@ let layout(ds: List(Nat), k: Int) -> Str =
         match kn == 0
         | true => leading(0)
         | false =>
-            match Nat/Lt/try(kn, len)
+            match Nat/lt/try(kn, len)
             | some(inside) =>
                 Str/flatten([
                     digits_to_str(List/take(ds, kn)),
@@ -497,7 +497,7 @@ let total_key(f: Flt) -> Nat =
 pub let to_str(f: Flt) -> Str =
     let b = to_le_bytes(f);
     -- `to_le_bytes`'s length reduces to eight, so every index below discharges its bound by reduction.
-    let at(i: Nat, @ok: Nat/Lt(i, 8)) -> Nat = Byte/to_nat(Bytes/get(b, i, @ok));
+    let at(i: Nat, @ok: Holds(i < 8)) -> Nat = Byte/to_nat(Bytes/get(b, i, @ok));
     let b6 = at(6);
     let b7 = at(7);
     let exp_field = b7 % 0x80 * 16 + b6 / 0x10;
@@ -759,7 +759,7 @@ let of_hex_body(r: Rounding, negative: Bool, body: Str) -> Option(Flt) =
         end);
 
 --- `f` written with exactly `n` significant digits, rounded to nearest with ties to even, and laid out as `to_str` lays out digits (§5.12.2). `rounded/to_str_significant` takes the direction.
-pub let to_str_significant(f: Flt, n: Nat, @ok: Nat/Lt(0, n)) -> Str =
+pub let to_str_significant(f: Flt, n: Nat, @ok: Holds(0 < n)) -> Str =
     match n
     | 0 => match ok end
     | k + 1 => to_str_significant_in(Rounding/ties_to_even(), f, k + 1)

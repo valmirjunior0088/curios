@@ -1,4 +1,5 @@
 use /std/{Bytes, Nat, Path, Try, Async, Io, Handle};
+use /std/Bool/{Holds};
 
 --- An open file.
 pub struct File: Type {
@@ -33,7 +34,7 @@ pub let close(f: File) -> Io({}) =
     Handle/close(f.0);
 
 --- Up to `n` bytes, and at least one until the file ends.
-pub let read(f: File, n: Nat, @positive: Nat/Lt(0, n)) -> Io(Io/Chunk) =
+pub let read(f: File, n: Nat, @positive: Holds(0 < n)) -> Io(Io/Chunk) =
     Async/Read/read(@Io, @Handle, f.0, n, @positive);
 
 --- The whole of `b`, a short write resent.

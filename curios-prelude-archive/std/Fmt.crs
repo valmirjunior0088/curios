@@ -22,7 +22,7 @@ pub let format_type_with(T: Type, f: Fmt) -> Type =
     end;
 
 let flush(bytes: Bytes, start: Nat, count: Nat, rest: Fmt) -> Fmt =
-    match Nat/Le/try(start + count, Bytes/len(bytes))
+    match Nat/le/try(start + count, Bytes/len(bytes))
     | none() => Fmt/nil()
     | some(within) =>
         match Str/of_bytes(Bytes/slice(bytes, start, count, @within))
@@ -35,7 +35,7 @@ let parse_at(bytes: Bytes, pos: Nat, fuel: Nat) -> Fmt =
     match fuel
     | 0 => Fmt/nil()
     | rest + 1 =>
-        match Nat/Lt/try(pos, Bytes/len(bytes))
+        match Nat/lt/try(pos, Bytes/len(bytes))
         | none() => Fmt/nil()
         | some(ok) =>
             match Byte/to_nat(Bytes/get(bytes, pos, @ok))
@@ -49,7 +49,7 @@ and parse_lit_at(bytes: Bytes, start: Nat, taken: Nat, fuel: Nat) -> Fmt =
     match fuel
     | 0 => flush(bytes, start, taken, Fmt/nil())
     | rest + 1 =>
-        match Nat/Lt/try(start + taken, Bytes/len(bytes))
+        match Nat/lt/try(start + taken, Bytes/len(bytes))
         | none() => flush(bytes, start, taken, Fmt/nil())
         | some(ok) =>
             match Byte/to_nat(Bytes/get(bytes, start + taken, @ok))
@@ -64,7 +64,7 @@ and parse_esc_at(bytes: Bytes, start: Nat, taken: Nat, fuel: Nat) -> Fmt =
     match fuel
     | 0 => flush(bytes, start, taken, Fmt/nil())
     | rest + 1 =>
-        match Nat/Lt/try(start + taken + 1, Bytes/len(bytes))
+        match Nat/lt/try(start + taken + 1, Bytes/len(bytes))
         | none() => parse_lit_at(bytes, start, taken + 1, rest)
         | some(ok) =>
             match Byte/to_nat(Bytes/get(bytes, start + taken + 1, @ok))

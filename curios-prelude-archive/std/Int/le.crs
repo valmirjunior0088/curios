@@ -2,43 +2,39 @@ use /std/{Nat, Int, Bool, Option, Eq};
 use /std/Bool/{True, Holds};
 use /std/Int/{floor, floor_mul, positive};
 
---- That `a` is below `b` or equal to it, decided.
-pub let Le(a: Int, b: Int) -> Prop =
-    Holds(Int/le(a, b));
-
 --- `n <= n`.
-pub let refl(n: Int) -> Le(n, n) =
+pub let refl(n: Int) -> Holds(n <= n) =
     True/qed();
 
 --- The procedure that decides `a <= b`: the evidence when it holds, `none` otherwise.
-pub let try(a: Int, b: Int) -> Option(Le(a, b)) =
+pub let try(a: Int, b: Int) -> Option(Holds(a <= b)) =
     match a <= b: (r) => Option(Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
 --- A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.
-pub let of_not_lt(a: Int, b: Int, p: Holds(Bool/not(a < b))) -> Le(b, a) =
+pub let of_not_lt(a: Int, b: Int, p: Holds(Bool/not(a < b))) -> Holds(b <= a) =
     p;
 
 --- Transitivity.
-pub let trans(@a: Int, @b: Int, @c: Int, p: Le(a, b), q: Le(b, c)) -> Le(a, c) =
+pub let trans(@a: Int, @b: Int, @c: Int, p: Holds(a <= b), q: Holds(b <= c)) -> Holds(a <= c) =
     floor(Int/to_nat(b - a, @p), Int/to_nat(c - b, @q));
 
 --- `a <= b` and `c <= d` give `a + c <= b + d`: two bounds added side by side.
 ---
 --- The step a proof the elaborator writes from the facts in scope is summed with, one fact at a time. It is [`trans`] alone, because `a + c <= b + c` cancels to `a <= b` and `b + c <= b + d` to `c <= d`.
-pub let add(@a: Int, @b: Int, @c: Int, @d: Int, p: Le(a, b), q: Le(c, d)) -> Le(a + c, b + d) =
+pub let add(@a: Int, @b: Int, @c: Int, @d: Int, p: Holds(a <= b), q: Holds(c <= d)) -> Holds(a + c <= b + d) =
     trans(@a + c, @b + c, @b + d, p, q);
 
 --- An equation's bound: `a = b` gives `a <= b`.
 ---
 --- How a proof the elaborator writes from the facts in scope reads an equation: as this bound and the one [`Eq/sym`] turns it into.
-pub let of_eq(@a: Int, @b: Int, e: Eq()(a, b)) -> Le(a, b) =
-    Eq/subst((x: Int) => Le(a, x), e, refl(a));
+pub let of_eq(@a: Int, @b: Int, e: Eq()(a, b)) -> Holds(a <= b) =
+    Eq/subst((x: Int) => Holds(a <= x), e, refl(a));
 
 --- `a <= b` gives `a * k <= b * k` for a `k` no smaller than zero.
-pub let mul_mono_r(@a: Int, @b: Int, k: Int, p: Le(a, b), q: Le(+0, k)) -> Le(a * k, b * k) =
+pub let mul_mono_r(@a: Int, @b: Int, k: Int, p: Holds(a <= b), q: Holds(+0 <= k)) -> Holds(a * k <= b * k) =
     floor_mul(Int/to_nat(b - a, @p), Int/to_nat(k, @q));
 
 --- `a <= b` and `c <= d` give `a * d + b * c <= a * c + b * d`: the product of two bounds' differences is not negative.
@@ -49,15 +45,15 @@ pub let mul(
     @b: Int,
     @c: Int,
     @d: Int,
-    p: Le(a, b),
-    q: Le(c, d),
-) -> Le(a * d + b * c, a * c + b * d) =
+    p: Holds(a <= b),
+    q: Holds(c <= d),
+) -> Holds(a * d + b * c <= a * c + b * d) =
     mul_mono_r(@a, @b, d - c, p, q);
 
 --- Two bounds facing each other pin one value.
 ---
 --- The two differences are naturals summing to zero; a successor for the first is a positive sum, which the second hypothesis already refutes.
-pub let antisym(a: Int, b: Int, p: Le(a, b), q: Le(b, a)) -> Eq()(a, b) =
+pub let antisym(a: Int, b: Int, p: Holds(a <= b), q: Holds(b <= a)) -> Eq()(a, b) =
     let other = Int/to_nat(a - b, @q);
     match Int/to_nat(b - a, @p): (m) => (Eq()(Nat/to_int(m), b - a)) -> Eq()(a, b)
     | 0 => (e) => Eq/cong((x: Int) => a + x, e)

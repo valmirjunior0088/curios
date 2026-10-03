@@ -6,6 +6,7 @@ use /std/Monad/{Lift};
 --- The failure every host operation reports.
 pub mod Error;
 pub use Error/{let Error};
+use /std/Bool/{Holds};
 
 satisfy Monad(Io) {
     pure = pure,
@@ -44,7 +45,7 @@ pub let stderr: Output =
     Output { Handle/stderr };
 
 --- Up to `n` bytes, and at least one until the input ends, waited for on this program's own behalf. Inside a fiber, `Async/Read`'s `read` parks instead.
-pub let read(i: Input, n: Nat, @positive: Nat/Lt(0, n)) -> Io(Chunk) =
+pub let read(i: Input, n: Nat, @positive: Holds(0 < n)) -> Io(Chunk) =
     Async/Read/read(@Io, @Handle, i.0, n, @positive);
 
 --- One line without its newline, `none` at the end of the input. An error ends the input as the end does, and what was read before it is still the line. It reads a byte at a time, so it consumes nothing past the newline.

@@ -181,9 +181,9 @@ fn a_broken_item_withholds_its_dependents_and_reports_as_the_whole_compile_does(
 const CREDITED: &str = "use /std/{Nat};
 use /std/Bool/{True};
 
-pub let below(i: Nat, n: Nat, p: Nat/Lt(i, n)) -> Nat/Le(i, n) = True/proved();
+pub let below(i: Nat, n: Nat, p: Holds(i < n)) -> Holds(i <= n) = True/proved();
 
-pub let idle(i: Nat, q: Nat/Lt(i, 3)) -> Nat = i;
+pub let idle(i: Nat, q: Holds(i < 3)) -> Nat = i;
 
 pub let unrelated: Nat = 7;
 ";

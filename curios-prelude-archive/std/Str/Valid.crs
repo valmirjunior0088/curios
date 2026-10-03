@@ -98,7 +98,7 @@ let interrupted(
         match 0x80 <= lo
         | false => match h end
         | true =>
-            let continuing = Nat/Le/to_in_range(n, 0x80, 0xBF, True/proved(), True/proved());
+            let continuing = Nat/le/to_in_range(n, 0x80, 0xBF, True/proved(), True/proved());
             match Nat/in_range(n, 0x80, 0xBF)
             | true => match q end
             | false => match continuing end
@@ -112,7 +112,7 @@ let seam_before(
     h: Holds(scan_continues(s)),
     @b: Bytes,
     k: Nat,
-    within: Nat/Le(k, Bytes/len(b)),
+    within: Holds(k <= Bytes/len(b)),
     at: Holds(Str/At/starts(Bytes/drop(b, k, @within))),
     d: from(s, b),
 ) -> from(s, Bytes/slice(b, 0, k, @within)) =
@@ -144,7 +144,7 @@ let seam_after(
     h: Holds(scan_continues(s)),
     @b: Bytes,
     k: Nat,
-    within: Nat/Le(k, Bytes/len(b)),
+    within: Holds(k <= Bytes/len(b)),
     at: Holds(Str/At/starts(Bytes/drop(b, k, @within))),
     d: from(s, b),
 ) -> Valid(Bytes/drop(b, k, @within)) =
@@ -175,7 +175,7 @@ pub let before(
     @b: Bytes,
     v: Valid(b),
     k: Nat,
-    within: Nat/Le(k, Bytes/len(b)),
+    within: Holds(k <= Bytes/len(b)),
     at: Holds(Str/At/starts(Bytes/drop(b, k, @within))),
 ) -> Valid(Bytes/slice(b, 0, k, @within)) =
     seam_before(Scan/lead(), True/qed(), k, within, at, v);
@@ -185,7 +185,7 @@ pub let after(
     @b: Bytes,
     v: Valid(b),
     k: Nat,
-    within: Nat/Le(k, Bytes/len(b)),
+    within: Holds(k <= Bytes/len(b)),
     at: Holds(Str/At/starts(Bytes/drop(b, k, @within))),
 ) -> Valid(Bytes/drop(b, k, @within)) =
     seam_after(Scan/lead(), True/qed(), k, within, at, v);

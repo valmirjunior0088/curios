@@ -254,8 +254,8 @@ fn a_prop_instantiation_of_a_type_valued_parameter_is_erased_on_both_sides() {
         use /std/{Nat, Str};
         use /std/Bool/{True};
         let app(P: (Nat) -> Type, f: (k: Nat) -> P(k), n: Nat) -> P(n) = f(n);
-        let pf(n: Nat) -> Nat/Le(n, n) = app((k) => Nat/Le(k, k), (k) => True/qed(), n);
-        let _: Nat/Le(3, 3) = pf(3);
+        let pf(n: Nat) -> Holds(n <= n) = app((k) => Holds(k <= k), (k) => True/qed(), n);
+        let _: Holds(3 <= 3) = pf(3);
         /std/print("ok")
         "#),
         b"ok"

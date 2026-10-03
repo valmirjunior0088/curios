@@ -40,10 +40,10 @@ test overlay_clips_a_patch_at_the_edge =
 test a_cell_is_read_under_the_frames_own_bounds =
     let f = Frame/of_lines(Style/plain, ["ab", "cd"], 2, 2);
     let at(x: Nat, y: Nat) -> Str =
-        match Nat/Lt/try(x, 2): (_) => Str
+        match Nat/lt/try(x, 2): (_) => Str
         | none() => "?"
         | some(px) =>
-            match Nat/Lt/try(y, 2): (_) => Str
+            match Nat/lt/try(y, 2): (_) => Str
             | none() => "?"
             | some(py) => Frame/get(f, x, y, px, py).symbol
             end

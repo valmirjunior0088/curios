@@ -1,13 +1,14 @@
 pub use /sys/Bits/{let Bits, get, len, eql, slice, replicate, and, or, xor, to_bytes};
 use /std/{List, Nat, Bool, Option, Eq, Str, Show, Spell, Ordering, Ord};
 use /std/ops/{Eql, Cmp};
+use /std/Bool/{Holds};
 
 --- The bit at `i`, or `none` past the end.
 pub let try_get(b: Bits, i: Nat) -> Option(Bool) =
     match i < len(b) | true => Option/some(get(b, i)) | false => Option/none() end;
 
 --- Everything from `k` on, under the evidence that `k` is within the length.
-pub let drop(b: Bits, k: Nat, @ok: Nat/Le(k, len(b))) -> Bits =
+pub let drop(b: Bits, k: Nat, @ok: Holds(k <= len(b))) -> Bits =
     slice(b, k, len(b) - k);
 
 --- Every bit flipped.

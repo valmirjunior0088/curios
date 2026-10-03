@@ -41,7 +41,7 @@ let combine_is_trimmed(
 let combine_cons(
     head: Bool,
     t: Bits,
-    p: Nat/Lt(0, Bits/len(t)),
+    p: Holds(0 < Bits/len(t)),
 ) -> Eq()(combine(head, t), b[head, ..t]) =
     match t
     | b[] => match p end

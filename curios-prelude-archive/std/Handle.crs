@@ -9,6 +9,7 @@ pub use Interest/{let Interest};
 --- What a poll reports for one handle.
 pub mod Readiness;
 pub use Readiness/{let Readiness};
+use /std/Bool/{Holds};
 
 let to_mask(i: Interest) -> Byte =
     Byte/or(
@@ -50,7 +51,7 @@ let answered(b: Bytes) -> Io/Chunk =
     match b | x[] => Io/Chunk/eof() | x[_, .._] => Io/Chunk/chunk(b) end;
 
 --- Up to `n` bytes, waited for on this program's own behalf: a host that would block is polled until it would not.
-let read_waiting(h: Handle, n: Nat, @positive: Nat/Lt(0, n)) -> Io(Io/Chunk) =
+let read_waiting(h: Handle, n: Nat, @positive: Holds(0 < n)) -> Io(Io/Chunk) =
     let r = /sys/Handle/read(h, n)!;
     match r
     | success(some(b)) => Io/pure(answered(b))
@@ -100,7 +101,7 @@ let park_on(h: Handle, interest: Interest) -> Async({}) =
     Async/park([Async/Wait/ready(h, interest)]);
 
 --- Up to `n` bytes, parking the fiber while the host would block.
-let read_parking(h: Handle, n: Nat, @positive: Nat/Lt(0, n)) -> Async(Io/Chunk) =
+let read_parking(h: Handle, n: Nat, @positive: Holds(0 < n)) -> Async(Io/Chunk) =
     let r = /sys/Handle/read(h, n)!;
     match r
     | success(some(b)) => Async/pure(answered(b))

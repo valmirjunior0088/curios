@@ -156,7 +156,7 @@ fn lints_are_reported_after_a_goal_and_after_an_error() {
 /// A binder only a proof the elaborator wrote reads is used: `p` is read by the proof `proved` stands for and `q` by nothing, and that holds beside an error elsewhere as beside none.
 #[test]
 fn a_binder_only_a_proof_the_elaborator_wrote_reads_is_not_reported() {
-    let credited = "use /std/{Nat}; use /std/Bool/{True};\nlet _f(i: Nat, n: Nat, p: Nat/Lt(i, n), q: Nat/Lt(i, 3)) -> Nat/Le(i, n) = True/proved();\n";
+    let credited = "use /std/{Nat}; use /std/Bool/{True};\nlet _f(i: Nat, n: Nat, p: Holds(i < n), q: Holds(i < 3)) -> Holds(i <= n) = True/proved();\n";
     let lints = |source: &str| {
         of(source)
             .into_iter()

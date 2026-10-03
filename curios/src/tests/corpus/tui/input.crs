@@ -118,7 +118,7 @@ test flush_reads_a_lone_escape_as_the_key =
 let rest_is_a_suffix(b: Bytes) -> Test =
     let d = input/decode(@Nat, b);
     let cut = Bytes/len(b) - Bytes/len(d.rest);
-    match Nat/Le/try(cut, Bytes/len(b))
+    match Nat/le/try(cut, Bytes/len(b))
     | none() => Test/assert(false)
     | some(ok) =>
         Test/assert(Bytes/len(d.rest) <= Bytes/len(b) && Bytes/eql(Bytes/drop(b, cut, @ok), d.rest))

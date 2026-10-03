@@ -10,6 +10,7 @@ pub use Future/{let Future};
 --- A flag one fiber raises and another parks on: the one park a program takes that waits on no handle and no timer.
 pub mod Signal;
 pub use Signal/{let Signal};
+use /std/Bool/{Holds};
 
 --- What a selection is written against: a non-committing attempt at a value and what to wait on while it declines.
 pub mod Offer;
@@ -148,7 +149,7 @@ pub let go(body: Fiber) -> Async({}) =
 pub let drain(
     @M: (Type) -> Type,
     use Monad(M),
-    read: (n: Nat, @positive: Nat/Lt(0, n)) -> M(Io/Chunk),
+    read: (n: Nat, @positive: Holds(0 < n)) -> M(Io/Chunk),
 ) -> M(Result(Io/Error, Bytes)) =
     let go(acc: Bytes) -> M(Result(Io/Error, Bytes)) =
         let r = read(4096)!;
@@ -161,11 +162,11 @@ pub let drain(
 
 --- What a stream is read through, in the monad the region is written in: `Async` parks the fiber until bytes arrive, `Io` waits on this program's own behalf.
 ---
---- A read asks for a positive count and answers a chunk of between one byte and that count, the end of the stream, or a failure. The lower bound is the chunk's own, stated in its type, so a witness for a stream of its own proves every chunk it hands out holds a byte — `Nat/Lt/try` decides it of a length the witness cannot see. The upper bound is the witness's promise, which the host's rows hold `Handle` to.
+--- A read asks for a positive count and answers a chunk of between one byte and that count, the end of the stream, or a failure. The lower bound is the chunk's own, stated in its type, so a witness for a stream of its own proves every chunk it hands out holds a byte — `Nat/lt/try` decides it of a length the witness cannot see. The upper bound is the witness's promise, which the host's rows hold `Handle` to.
 ---
 --- A carrier whose progress a peer decides declares only the `Async` witness, so reading it in an `Io` region is refused where it is written.
 pub concept Read(M: (Type) -> Type, S: Type): pub Type {
-    read(s: S, n: Nat, @positive: Nat/Lt(0, n)) -> M(Io/Chunk),
+    read(s: S, n: Nat, @positive: Holds(0 < n)) -> M(Io/Chunk),
 }
 
 --- What a stream is written through: the whole of the bytes, a short write resent, and what the stream holds of the writes it accepted handed on.
@@ -730,7 +731,7 @@ let cancel_all(ts: List(Token)) -> Io({}) =
 --- Every task's answer, in order: all of them are spawned before the first is waited for, so they run together.
 pub let join_all(@A: Type, tasks: List(Async(A))) -> Async(List(A)) =
     let go(i: Nat) -> Async(List(A)) =
-        match Nat/Lt/try(i, List/len(tasks))
+        match Nat/lt/try(i, List/len(tasks))
         | none() => pure([])
         | some(ok) =>
             let h = spawn(List/get(@Async(A), tasks, i, @ok))!;

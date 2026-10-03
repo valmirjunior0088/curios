@@ -282,9 +282,9 @@ fn every_item_the_proof_vocabulary_does_not_need_follows_it() {
             .unwrap_or_else(|| panic!("{needle} is not among {names:?}"))
     };
 
-    assert!(at("/std/Nat/Le/add") < at("/user"), "{names:?}");
+    assert!(at("/std/Nat/le/add") < at("/user"), "{names:?}");
     assert!(
-        at("/std/Nat/Le/helper") < at("/std/Nat/Le/add"),
+        at("/std/Nat/le/helper") < at("/std/Nat/le/add"),
         "{names:?}"
     );
 }

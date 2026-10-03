@@ -128,7 +128,7 @@ fn a_spine_mismatch_falls_through_to_unfolding() {
     assert_eq!(run(source), b"ok");
 }
 
-// An implicit solved from a projection of a local binding whose value discharges a bound inside a match arm. The candidate `t.0` reduces to the whole of `codes`'s fold, whose `x[h, ..t]` arm carries `Bytes/get(b, 0, @True/qed())` — a proof the arm's own refinement discharged where it was written. `Convert::solve` re-validates a candidate as an oracle, with suppression scoped to the depth it began at, so the ambient arm stays withheld and the validated term's own arms do not. Withholding *every* refinement would check the proof against the unreduced `Nat/Lt(0, Bytes/len(b))`, reject a correct solution, and surface the implicit as a mismatch with the entire unfolded fold on its inferred side.
+// An implicit solved from a projection of a local binding whose value discharges a bound inside a match arm. The candidate `t.0` reduces to the whole of `codes`'s fold, whose `x[h, ..t]` arm carries `Bytes/get(b, 0, @True/qed())` — a proof the arm's own refinement discharged where it was written. `Convert::solve` re-validates a candidate as an oracle, with suppression scoped to the depth it began at, so the ambient arm stays withheld and the validated term's own arms do not. Withholding *every* refinement would check the proof against the unreduced `Holds(0 < Bytes/len(b))`, reject a correct solution, and surface the implicit as a mismatch with the entire unfolded fold on its inferred side.
 #[test]
 fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm() {
     assert_eq!(
@@ -420,23 +420,23 @@ fn an_implicit_born_outside_an_arm_is_solved_without_its_guard() {
     assert_eq!(output, b"tft");
 }
 
-/// A solution is committed as written where its reduct does not re-check. `reach` reduces to `k` plus `hop` inlined, and `hop`'s absurd arm types only because its own arm refines the variable `b`: inlined, its scrutinee's type is `Nat/Lt(0, Bytes/len(b) - k)`, which the arm's equation on `Bytes/slice(…)` never reaches, so the reduct is refused at re-validation and `Eq/refl`'s `@x` is solved to `reach(b, k, @within, @here)` as written. Mutation-checked: committing the reduct alone refuses the program at `Eq/refl()`.
+/// A solution is committed as written where its reduct does not re-check. `reach` reduces to `k` plus `hop` inlined, and `hop`'s absurd arm types only because its own arm refines the variable `b`: inlined, its scrutinee's type is `Holds(0 < Bytes/len(b) - k)`, which the arm's equation on `Bytes/slice(…)` never reaches, so the reduct is refused at re-validation and `Eq/refl`'s `@x` is solved to `reach(b, k, @within, @here)` as written. Mutation-checked: committing the reduct alone refuses the program at `Eq/refl()`.
 #[test]
 fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
     let output = run(r#"
         use /std/{Bytes, Nat, Eq, print};
         use /std/Bool/{True};
 
-        let hop(@b: Bytes, some: Nat/Lt(0, Bytes/len(b))) -> Nat =
+        let hop(@b: Bytes, some: Holds(0 < Bytes/len(b))) -> Nat =
             match b
             | x[] => match some end
             | x[_, .._] => 1
             end;
 
-        let reach(b: Bytes, k: Nat, @within: Nat/Le(k, Bytes/len(b)), @here: Nat/Lt(k, Bytes/len(b))) -> Nat =
+        let reach(b: Bytes, k: Nat, @within: Holds(k <= Bytes/len(b)), @here: Holds(k < Bytes/len(b))) -> Nat =
             k + hop(@Bytes/drop(b, k, @within), True/proved());
 
-        pub let same(b: Bytes, k: Nat, @within: Nat/Le(k, Bytes/len(b)), @here: Nat/Lt(k, Bytes/len(b)))
+        pub let same(b: Bytes, k: Nat, @within: Holds(k <= Bytes/len(b)), @here: Holds(k < Bytes/len(b)))
             -> Eq()(reach(b, k, @within, @here), reach(b, k, @within, @here)) =
             Eq/refl();
 

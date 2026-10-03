@@ -65,13 +65,13 @@ fn a_conversion_parked_under_refinements_notes_the_dependence() {
 
 #[test]
 fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
-    // The proof argument is checked before anything pins `@b`, against `Nat/Lt(0, Bytes/len(?b))` — a match stuck on the metavariable. The goal must park and discharge once the witness argument solves `?b`, in either argument order.
+    // The proof argument is checked before anything pins `@b`, against `Holds(0 < Bytes/len(?b))` — a match stuck on the metavariable. The goal must park and discharge once the witness argument solves `?b`, in either argument order.
     let source = r#"
         use /std/Str/{Valid};
         use /std/{Nat, Byte, Bytes, Io};
         use /std/Bool/{True};
 
-        let proof_first(@b: Bytes, nz: Nat/Lt(0, Bytes/len(b)), w: Valid(b)) -> {} = ();
+        let proof_first(@b: Bytes, nz: Holds(0 < Bytes/len(b)), w: Valid(b)) -> {} = ();
 
         let call(h: Byte, t: Bytes, valid: Valid(x[h, ..t])) -> {} =
             proof_first(True/qed(), valid);

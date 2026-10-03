@@ -649,9 +649,9 @@ pub(super) const A_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS_BEFORE_UNFOLDING: &
 pub(super) const AN_INTRINSIC_APPLIED_TO_TWO_PROOFS_CONVERTS_AT_THEIR_PROPOSITION: &str = r#"
         use /std/{Eq, Nat};
 
-        let halve(a : Nat, b : Nat, @p : Nat/Lt(0, b)) -> Nat = Nat/div(a, b, @p);
+        let halve(a : Nat, b : Nat, @p : Holds(0 < b)) -> Nat = Nat/div(a, b, @p);
 
-        let same(a : Nat, b : Nat, p : Nat/Lt(0, b), q : Nat/Lt(0, b)) -> Eq()(halve(a, b, @p), Nat/div(a, b, @q)) = Eq/refl();
+        let same(a : Nat, b : Nat, p : Holds(0 < b), q : Holds(0 < b)) -> Eq()(halve(a, b, @p), Nat/div(a, b, @q)) = Eq/refl();
 
         /std/print(Nat/to_str(1))
         "#;
@@ -698,15 +698,15 @@ pub(super) const TWO_ACCESSIBILITY_PROOFS_AT_ONE_RECURSIVE_CALL_CONVERT: &str = 
         use /std/{Eq, Nat};
         use /std/WellFounded/{Accessible};
 
-        let R(y : Nat, x : Nat) -> Prop = Nat/Lt(x, y);
+        let R(y : Nat, x : Nat) -> Prop = Holds(x < y);
 
-        let f(n : Nat, lt : (k : Nat) -> Nat/Lt(k, k + 1), a : Accessible(R)(n)) -> Nat =
+        let f(n : Nat, lt : (k : Nat) -> Holds(k < k + 1), a : Accessible(R)(n)) -> Nat =
             match a | intro(@_, below) => f(n + 1, lt, below(n + 1, lt(n))) end;
 
         let inv(n : Nat, a : Accessible(R)(n)) -> (y : Nat, r : R(y, n)) -> Accessible(R)(y) =
             (y, r) => match a | intro(@_, below) => below(y, r) end;
 
-        let same(lt : (k : Nat) -> Nat/Lt(k, k + 1), a : Accessible(R)(0), x : Eq()(f(0, lt, a), 0))
+        let same(lt : (k : Nat) -> Holds(k < k + 1), a : Accessible(R)(0), x : Eq()(f(0, lt, a), 0))
             -> Eq()(f(0, lt, Accessible/intro(inv(0, a))), 0) = x;
 
         /std/print(Nat/to_str(1))

@@ -1,6 +1,7 @@
 use /std/{Nat, Bool, Bytes, Str, List, Map, Result};
 use /std/Toml/{Toml, Seg, Origin, Error, let Build};
 use /std/Toml/Error/{Rule};
+use /std/Bool/{Holds};
 
 induct Act: Type
 | act_table()
@@ -36,7 +37,7 @@ let seg_name(seg: Seg) -> Str =
 let replace_at(
     items: List(Toml),
     index: Nat,
-    ok: Nat/Lt(index, List/len(items)),
+    ok: Holds(index < List/len(items)),
     value: Toml,
 ) -> List(Toml) =
     [..List/slice(items, 0, index), value, ..List/drop(@Toml, items, index + 1, @ok)];
@@ -163,7 +164,7 @@ let walk(
                     | some(existing) =>
                         match existing
                         | arr(items) =>
-                            match Nat/Lt/try(index, List/len(items))
+                            match Nat/lt/try(index, List/len(items))
                             | some(in_range) =>
                                 match List/get(@Toml, items, index, @in_range)
                                 | table(inner) =>
@@ -236,7 +237,7 @@ let walk(
                             | _ =>
                                 let index = List/len(items) - 1;
                                 let seg2 = Seg/at(name, index);
-                                match Nat/Lt/try(index, List/len(items))
+                                match Nat/lt/try(index, List/len(items))
                                 | some(in_range) =>
                                     match List/get(@Toml, items, index, @in_range)
                                     | table(inner) =>

@@ -162,7 +162,7 @@ fn the_false_arm_of_a_comparison_proves_its_dual() {
         use /std/{Nat, Option};
         use /std/Bool/{True};
 
-        let at_least(n : Nat, m : Nat) -> Option(Nat/Le(m, n)) =
+        let at_least(n : Nat, m : Nat) -> Option(Holds(m <= n)) =
             match n < m
             | true => Option/none()
             | false => Option/some(True/qed())
@@ -183,7 +183,7 @@ fn the_false_arm_of_a_comparison_proves_its_dual_across_the_successor_seam() {
         use /std/{Nat, Int, Option};
         use /std/Bool/{True, Holds};
 
-        let above(n : Nat) -> Option(Nat/Le(5, n)) =
+        let above(n : Nat) -> Option(Holds(5 <= n)) =
             match n <= 4
             | true => Option/none()
             | false => Option/some(True/qed())
@@ -213,7 +213,7 @@ fn the_false_arm_of_a_comparison_proves_nothing_one_step_past_its_dual() {
         use /std/{Nat, Option};
         use /std/Bool/{True};
 
-        let past(n : Nat) -> Option(Nat/Le(6, n)) =
+        let past(n : Nat) -> Option(Holds(6 <= n)) =
             match n <= 4
             | true => Option/none()
             | false => Option/some(True/qed())
@@ -225,7 +225,7 @@ fn the_false_arm_of_a_comparison_proves_nothing_one_step_past_its_dual() {
         "#;
     let message = error(source);
     assert!(
-        message.contains("type mismatch") && message.contains("Nat/Le(6, n)"),
+        message.contains("type mismatch") && message.contains("Holds(6 <= n)"),
         "the probe decided a fact one step past the guard's dual:\n{message}"
     );
 }
@@ -240,7 +240,7 @@ fn the_dead_arm_of_a_dispatched_guard_proves_its_dual() {
         let nested(cp : Nat) -> Nat =
             match cp % 4096 / 64 <= 63
             | false =>
-                let _e : Nat/Lt(63, cp % 4096 / 64) = True/qed();
+                let _e : Holds(63 < cp % 4096 / 64) = True/qed();
                 0
             | true => 1
             end;

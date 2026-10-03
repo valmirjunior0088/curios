@@ -184,7 +184,7 @@ fn an_elided_motive_over_an_expression_reaches_an_occurrence_behind_a_definition
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
         let below(n : Nat) -> Bool = match n < 5 | true => true | false => n < 10 end;
-        let bounded(n : Nat, h : Nat/Lt(n, 10)) -> Holds(below(n)) =
+        let bounded(n : Nat, h : Holds(n < 10)) -> Holds(below(n)) =
             match n < 5
             | true => True/qed()
             | false => h
@@ -237,13 +237,13 @@ fn an_elided_motive_over_an_expression_refuses_an_arm_whose_goal_fails() {
 fn a_case_split_whose_goal_holds_a_proof_about_its_scrutinee_needs_no_convoy() {
     let source = r#"
         use /std/{Nat, Bytes, List, Eq};
-        let at_bytes(a : Bytes, i : Nat, q : Nat/Lt(i, Bytes/len(a)))
+        let at_bytes(a : Bytes, i : Nat, q : Holds(i < Bytes/len(a)))
             -> Eq()(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =
             match a | x[] => Eq/refl() | x[_, .._] => Eq/refl() end;
-        let at_list(@T : Type, xs : List(T), i : Nat, q : Nat/Lt(i, List/len(xs)))
+        let at_list(@T : Type, xs : List(T), i : Nat, q : Holds(i < List/len(xs)))
             -> Eq()(List/get(@T, xs, i, @q), List/get(@T, xs, i, @q)) =
             match xs | [] => Eq/refl() | [_, .._] => Eq/refl() end;
-        let byte_of(n : Nat, q : Nat/Lt(n, 256)) -> Eq()(Nat/to_byte(n, @q), Nat/to_byte(n, @q)) =
+        let byte_of(n : Nat, q : Holds(n < 256)) -> Eq()(Nat/to_byte(n, @q), Nat/to_byte(n, @q)) =
             match n | 0 => Eq/refl() | p + 1 => Eq/refl() end;
         /std/print("ok")
         "#;
@@ -256,7 +256,7 @@ fn a_case_split_whose_goal_holds_a_proof_about_its_scrutinee_needs_no_convoy() {
 fn a_fold_that_reads_its_hypothesis_still_closes_a_family() {
     let source = r#"
         use /std/{Nat, Bytes, Eq};
-        let at_bytes(a : Bytes, i : Nat, q : Nat/Lt(i, Bytes/len(a)))
+        let at_bytes(a : Bytes, i : Nat, q : Holds(i < Bytes/len(a)))
             -> Eq()(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =
             match a | x[] => Eq/refl() | x[_, .._]; ih => ih end;
         /std/print("ok")

@@ -1,6 +1,6 @@
 # A partial primitive is totalized by a canonical extension, or it states its domain
 
-**Decision.** An intrinsic whose reduction can fail is made total by its *canonical total extension* — the one total function agreeing with it on its domain that the structure determines rather than a designer chooses — where one exists, and otherwise states its precondition in its type. `Nat/sub` clamps, monus being what subtraction is on a monoid with no inverses; `Nat/div` demands `Nat/Lt(0, b)`, and `get` its index's bound. A window is a start and a length, so a reversed range cannot be spelled at all, and only its end's bound is stated. A carrier's width is a third case and neither route: `Nat` and `Int` are unbounded, and the one width left, the host wire's, is refused where it is crossed.
+**Decision.** An intrinsic whose reduction can fail is made total by its *canonical total extension* — the one total function agreeing with it on its domain that the structure determines rather than a designer chooses — where one exists, and otherwise states its precondition in its type. `Nat/sub` clamps, monus being what subtraction is on a monoid with no inverses; `Nat/div` demands `Holds(0 < b)`, and `get` its index's bound. A window is a start and a length, so a reversed range cannot be spelled at all, and only its end's bound is stated. A carrier's width is a third case and neither route: `Nat` and `Int` are unbounded, and the one width left, the host wire's, is refused where it is crossed.
 
 **Rationale.**
 

@@ -196,7 +196,7 @@ fn a_typeless_local_let_still_infers_its_body() {
     assert_eq!(run(source), b"ok\n");
 }
 
-// A postponement whose blocker is itself blocked. `List/slice` carries a `Nat/Le(start + length, len)` bound; undischarged inside `bad`, its proof metavariable rides into the candidate for `resize`'s implicit length when the reducer unfolds `bad`'s body, and `Convert::solve`'s embedded-metavariable guard postpones that candidate rather than committing a solution of a wider context. The drain follows the recorded blocking edges to the end of the chain and reports what nothing was ever going to solve, rather than the goal that merely waited — which would name an implicit the author never wrote (`the implicit argument 'n' of '/resize'`), at the `resize` call rather than at the bound, without mentioning `List/slice` at all.
+// A postponement whose blocker is itself blocked. `List/slice` carries a `Holds(start + length <= len)` bound; undischarged inside `bad`, its proof metavariable rides into the candidate for `resize`'s implicit length when the reducer unfolds `bad`'s body, and `Convert::solve`'s embedded-metavariable guard postpones that candidate rather than committing a solution of a wider context. The drain follows the recorded blocking edges to the end of the chain and reports what nothing was ever going to solve, rather than the goal that merely waited — which would name an implicit the author never wrote (`the implicit argument 'n' of '/resize'`), at the `resize` call rather than at the bound, without mentioning `List/slice` at all.
 #[test]
 fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
     let source = r#"

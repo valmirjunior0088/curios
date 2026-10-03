@@ -5,16 +5,6 @@ use /std/{Str, Option, Char, Bool, Ordering, Show, Spell, Ord, Eq};
 use /std/Bool/{Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
---- That `a` is below `b`.
----
---- Decided rather than proved: over literals it reduces to the proposition that holds, which is how `/` and `%` on `Nat` discharge what they ask of a divisor. Declared beside the carrier rather than in `Lt` beside its lemmas, so a proof that recurses over the relation finds it already established.
-pub let Lt(a: Nat, b: Nat) -> Prop =
-    Holds(lt(a, b));
-
---- That `a` is below `b` or equal to it, decided as `Lt` is.
-pub let Le(a: Nat, b: Nat) -> Prop =
-    Holds(le(a, b));
-
 --- The decimal digit of `d` modulo ten.
 let single_digit(d: Nat) -> Str =
     Str/of_char(Char/hex_digit(d % 10));
@@ -142,15 +132,15 @@ satisfy Mul(Nat) {
     mul = mul,
 }
 
---- The divisor must be positive: `Lt(0, b)`.
+--- The divisor must be positive: `Holds(0 < b)`.
 satisfy Div(Nat) {
-    Ok(b) = Lt(0, b),
+    Ok(b) = Holds(lt(0, b)),
     div = div,
 }
 
---- The divisor must be positive: `Lt(0, b)`.
+--- The divisor must be positive: `Holds(0 < b)`.
 satisfy Rem(Nat) {
-    Ok(b) = Lt(0, b),
+    Ok(b) = Holds(lt(0, b)),
     rem = rem,
 }
 
@@ -169,12 +159,12 @@ satisfy Ord(Nat) {
 --- `a < b`'s laws, and its crossings with `a <= b`.
 ---
 --- Proved by recursion on the numbers rather than on evidence: one more on each side of a decided comparison cancels, so the hypothesis about `a + 1` and `b + 1` already is the one about `a` and `b`.
-pub mod Lt;
+pub mod lt;
 
 --- `a <= b`'s laws.
 ---
---- Decided, so a guard already taken discharges it for free; a proof that has to recurse walks the numbers, as `Lt`'s do.
-pub mod Le;
+--- Decided, so a guard already taken discharges it for free; a proof that has to recurse walks the numbers, as `lt`'s do.
+pub mod le;
 
 --- Division with remainder, certified: `div_mod` hands back the quotient and remainder `/` and `%` compute, with Euclid's identity and the remainder's bound.
 pub mod div_mod;

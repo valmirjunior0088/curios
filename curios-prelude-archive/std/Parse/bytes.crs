@@ -1,10 +1,10 @@
 use /std/{Result, Nat, Byte, Bytes, Str, Bool, Option, Parse};
-use /std/Bool/{True};
+use /std/Bool/{True, Holds};
 use /std/Parse/{Of, At, Pos, Input, Error};
 
 --- A bytes parser walks its input as it is, and its positions lie within it.
 satisfy Input(Bytes) {
-    Admits(input, offset) = Nat/Le(offset, Bytes/len(input)),
+    Admits(input, offset) = Holds(offset <= Bytes/len(input)),
     bytes(input) = input,
     start(_) = True/qed(),
 }
@@ -13,7 +13,7 @@ satisfy Input(Bytes) {
 let step(
     @input: Bytes,
     at: Pos(Bytes, input),
-    ok: Nat/Lt(at.offset, Bytes/len(input)),
+    ok: Holds(at.offset < Bytes/len(input)),
 ) -> Pos(Bytes, input) =
     At { offset = at.offset + 1, holds = ok };
 
@@ -21,7 +21,7 @@ let step(
 pub let byte: Parse(Bytes, Byte) =
     Of {
         run(input, at) =
-            match Nat/Lt/try(at.offset, Bytes/len(input))
+            match Nat/lt/try(at.offset, Bytes/len(input))
             | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
             | some(ok) => Result/success((step(at, ok), Bytes/get(input, at.offset, @ok)))
             end,
@@ -36,7 +36,7 @@ pub let byte_if(pred: (Byte) -> Bool) -> Parse(Bytes, Byte) =
 pub let peek_byte: Parse(Bytes, Byte) =
     Of {
         run(input, at) =
-            match Nat/Lt/try(at.offset, Bytes/len(input))
+            match Nat/lt/try(at.offset, Bytes/len(input))
             | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
             | some(ok) => Result/success((at, Bytes/get(input, at.offset, @ok)))
             end,
@@ -61,7 +61,7 @@ pub let expect(expected: Byte) -> Parse(Bytes, Byte) =
     let message = Str/concat("expected ", byte_spelling(expected));
     Of {
         run(input, at) =
-            match Nat/Lt/try(at.offset, Bytes/len(input))
+            match Nat/lt/try(at.offset, Bytes/len(input))
             | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
             | some(ok) =>
                 let got = Bytes/get(input, at.offset, @ok);
@@ -77,7 +77,7 @@ let literal_past(@input: Bytes, lit: Bytes, at: Pos(Bytes, input)) -> Option(Pos
     match lit
     | x[] => Option/some(at)
     | x[h, ..t] =>
-        match Nat/Lt/try(at.offset, Bytes/len(input))
+        match Nat/lt/try(at.offset, Bytes/len(input))
         | none() => Option/none()
         | some(ok) =>
             match Bytes/get(input, at.offset, @ok) == h
@@ -104,14 +104,14 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes, Bytes) =
         run(input, at) =
             let (taken, at_stop, _) =
                 match Bytes/len(input) - at.offset: (_) =>
-                    {taken: Nat, within: Nat/Le(at.offset + taken, Bytes/len(input)), stopped: Bool}
+                    {taken: Nat, within: Holds(at.offset + taken <= Bytes/len(input)), stopped: Bool}
                 | 0 => (0, at.holds, false)
                 | _ + 1; ih =>
                     let (taken, at_cur, stopped) = ih;
                     match stopped
                     | true => ih
                     | false =>
-                        match Nat/Lt/try(at.offset + taken, Bytes/len(input))
+                        match Nat/lt/try(at.offset + taken, Bytes/len(input))
                         | none() => (taken, at_cur, true)
                         | some(ok) =>
                             match pred(Bytes/get(input, at.offset + taken, @ok))
@@ -131,7 +131,7 @@ pub let rest: Parse(Bytes, Bytes) =
     Of {
         run(input, at) =
             Result/success((
-                At { offset = Bytes/len(input), holds = Nat/Le/refl(Bytes/len(input)) },
+                At { offset = Bytes/len(input), holds = Nat/le/refl(Bytes/len(input)) },
                 Bytes/drop(input, at.offset, @at.holds))),
     };
 
@@ -139,7 +139,7 @@ pub let rest: Parse(Bytes, Bytes) =
 pub let take(n: Nat) -> Parse(Bytes, Bytes) =
     Of {
         run(input, at) =
-            match Nat/Le/try(at.offset + n, Bytes/len(input))
+            match Nat/le/try(at.offset + n, Bytes/len(input))
             | some(within) =>
                 Result/success((
                     At { offset = at.offset + n, holds = within },

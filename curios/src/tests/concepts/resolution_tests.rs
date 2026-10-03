@@ -247,14 +247,14 @@ fn a_use_parameter_at_a_proposition_is_refused_where_it_is_declared() {
     let report = error(
         r#"
         use /std/{Nat};
-        let f(n: Nat, use Nat/Lt(n, 10)) -> Nat = n;
+        let f(n: Nat, use Holds(n < 10)) -> Nat = n;
         let g: Nat = f(3);
         /std/print("unreachable")
         "#,
     );
     assert!(
         report.contains("a 'use' parameter's type must be a concept application")
-            && report.contains("found: Nat/Lt(n, 10)")
+            && report.contains("found: Holds(n < 10)")
             && report.contains("write '@' in place of 'use'")
             && !report.contains("no witness"),
         "unexpected report:\n{report}"
@@ -268,7 +268,7 @@ fn a_witness_premise_at_a_proposition_is_refused() {
         r#"
         use /std/{Nat, Show};
         struct Foo: Type { Nat }
-        satisfy (@A: Type, use Nat/Lt(0, 1)) => Show(Foo) {
+        satisfy (@A: Type, use Holds(0 < 1)) => Show(Foo) {
             show(_x) = "foo"
         }
         /std/print("unreachable")
@@ -276,7 +276,7 @@ fn a_witness_premise_at_a_proposition_is_refused() {
     );
     assert!(
         report.contains("a 'use' parameter's type must be a concept application")
-            && report.contains("found: Nat/Lt(0, 1)"),
+            && report.contains("found: Holds(0 < 1)"),
         "unexpected report:\n{report}"
     );
 }

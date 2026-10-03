@@ -94,7 +94,7 @@ pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =
     let weights = List/fold(List/map(cs, weight), 0, (n, total) => n + total);
     let spare = avail - claimed;
     let shares =
-        match Nat/Lt/try(0, weights)
+        match Nat/lt/try(0, weights)
         | none() => List/map(cs, fixed)
         | some(ok) => List/map(cs, (c) => fixed(c) + Nat/div(spare * weight(c), weights, @ok))
         end;

@@ -8,7 +8,7 @@ fn a_hypothesis_only_a_proof_in_the_result_type_reads_is_used() {
     let unit = unit_of(
         "use /std/{Nat, Eq};
 
-pub let halves(n: Nat, ok: Nat/Lt(0, n)) -> Eq()(10 / n, 10 / n) = Eq/refl();
+pub let halves(n: Nat, ok: Holds(0 < n)) -> Eq()(10 / n, 10 / n) = Eq/refl();
 ",
     );
 
@@ -22,7 +22,7 @@ fn a_proof_in_a_group_members_type_credits_that_member() {
         "use /std/{Nat, Eq};
 
 pub let first(n: Nat, idle: Nat) -> Nat = n
-pub and second(n: Nat, ok: Nat/Lt(0, n)) -> Eq()(10 / n, 10 / n) = Eq/refl();
+pub and second(n: Nat, ok: Holds(0 < n)) -> Eq()(10 / n, 10 / n) = Eq/refl();
 ",
     );
 
@@ -38,7 +38,7 @@ fn a_declaration_holding_anothers_type_is_credited_nothing_by_it() {
     let unit = unit_of(
         "use /std/{Nat, Eq};
 
-pub let lemma(n: Nat, ok: Nat/Lt(0, n)) -> Eq()(10 / n, 10 / n) = Eq/refl();
+pub let lemma(n: Nat, ok: Holds(0 < n)) -> Eq()(10 / n, 10 / n) = Eq/refl();
 
 pub let holder(m: Nat, idle: Nat) -> Nat =
     let _ = lemma;

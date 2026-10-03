@@ -176,8 +176,8 @@ let scalars_within(
     min2: Nat,
     max2: Nat,
     s: Holds(scalars(min, max)),
-    low: Nat/Le(min, min2),
-    high: Nat/Le(max2, max),
+    low: Holds(min <= min2),
+    high: Holds(max2 <= max),
 ) -> Holds(scalars(min2, max2)) =
     match max < 0xD800
     | true =>
@@ -287,7 +287,7 @@ let begins_below(
     m: Nat,
     n: Nat,
     all: Holds(each_below(m)),
-    inside: Nat/Lt(n, m),
+    inside: Holds(n < m),
 ) -> Holds(begins_scalars(Nat/to_byte(n % 256))) =
     match m
     | 0 => match inside end
@@ -300,7 +300,7 @@ let begins_below(
             | false =>
                 Eq/subst(
                     (k: Nat) => Holds(begins_scalars(Nat/to_byte(k % 256))),
-                    Nat/Le/antisym(mp, n, True/proved(), inside),
+                    Nat/le/antisym(mp, n, True/proved(), inside),
                     True/qed())
             end
         end
@@ -359,7 +359,7 @@ pub let after(s: Str, at: At(s)) -> Str =
     };
 
 --- The text from `from` to `to`, cut in O(1): what lies before `to` in the text after `from`.
-pub let between(s: Str, from: At(s), to: At(s), @ordered: Nat/Le(from.offset, to.offset)) -> Str =
+pub let between(s: Str, from: At(s), to: At(s), @ordered: Holds(from.offset <= to.offset)) -> Str =
     before(after(s, from), At/to_after(s, from, to, @ordered));
 
 --- The concatenation, in order.
@@ -546,13 +546,13 @@ let meets(
     from: At(s),
     piece: Str,
     p: At(piece),
-) -> Option({past: At(s), reach: Nat/Le(from.offset, past.offset)}) =
+) -> Option({past: At(s), reach: Holds(from.offset <= past.offset)}) =
     At/forward(
-        (at) => (p: At(piece)) -> Option({past: At(s), reach: Nat/Le(at.offset, past.offset)}),
+        (at) => (p: At(piece)) -> Option({past: At(s), reach: Holds(at.offset <= past.offset)}),
         (at, again) =>
             (p) =>
                 match At/try_next(piece, p)
-                | none() => Option/some((past = at, reach = Nat/Le/refl(at.offset)))
+                | none() => Option/some((past = at, reach = Nat/le/refl(at.offset)))
                 | some(want) =>
                     match At/try_next(s, at)
                     | some(have) =>
@@ -574,7 +574,7 @@ pub let follows(
     s: Str,
     from: At(s),
     piece: Str,
-) -> Option({past: At(s), reach: Nat/Le(from.offset, past.offset)}) =
+) -> Option({past: At(s), reach: Holds(from.offset <= past.offset)}) =
     meets(s, from, piece, At/start(piece));
 
 --- The position past the longest run of characters from `from` that `pred` accepts, which is not before `from`: one walk forward, which stops at the first character refused or at the end.
@@ -582,9 +582,9 @@ pub let span(
     s: Str,
     from: At(s),
     pred: (Char) -> Bool,
-) -> {past: At(s), reach: Nat/Le(from.offset, past.offset)} =
+) -> {past: At(s), reach: Holds(from.offset <= past.offset)} =
     At/forward(
-        (at) => {past: At(s), reach: Nat/Le(at.offset, past.offset)},
+        (at) => {past: At(s), reach: Holds(at.offset <= past.offset)},
         (at, again) =>
             match At/try_next(s, at)
             | some(n) =>
@@ -592,9 +592,9 @@ pub let span(
                 | true =>
                     let rest = again(n.past, n.progress);
                     (past = rest.past, reach = True/proved())
-                | false => (past = at, reach = Nat/Le/refl(at.offset))
+                | false => (past = at, reach = Nat/le/refl(at.offset))
                 end
-            | none() => (past = at, reach = Nat/Le/refl(at.offset))
+            | none() => (past = at, reach = Nat/le/refl(at.offset))
             end,
         from);
 
@@ -623,8 +623,8 @@ let Found(s: Str, from: At(s)) -> Type =
     {
         start: At(s),
         past: At(s),
-        ordered: Nat/Le(from.offset, start.offset),
-        progress: Nat/Lt(start.offset, past.offset)};
+        ordered: Holds(from.offset <= start.offset),
+        progress: Holds(start.offset < past.offset)};
 
 --- The first occurrence at or after `from` of the needle whose first character `first` reads, or `none`.
 ---
@@ -633,13 +633,13 @@ let occurrence(
     s: Str,
     from: At(s),
     needle: Str,
-    first: {char: Char, past: At(needle), progress: Nat/Lt(0, past.offset)},
+    first: {char: Char, past: At(needle), progress: Holds(0 < past.offset)},
 ) -> Option(Found(s, from)) =
     let lead_byte =
         Bytes/get(
             needle.bytes,
             0,
-            @Nat/Lt/of_lt_le(
+            @Nat/lt/of_lt_le(
                 0,
                 first.past.offset,
                 Bytes/len(needle.bytes),
@@ -674,7 +674,7 @@ let occurrence(
                             Option/some((
                                 start = at,
                                 past = met.past,
-                                ordered = Nat/Le/refl(at.offset),
+                                ordered = Nat/le/refl(at.offset),
                                 progress = True/proved()))
                         | none() => later()
                         end
@@ -790,7 +790,7 @@ pub let replace(s: Str, from: Str, to: Str) -> Str =
 --- `s` with each character `with` answers for replaced by the answer, and the runs between copied as the pieces of `s` they are, so what comes back is text without being checked again: one walk forward, which is what an encoder escapes through.
 pub let escape(s: Str, with: (Char) -> Option(Str)) -> Str =
     At/forward(
-        (at) => (run: At(s), ordered: Nat/Le(run.offset, at.offset)) -> Str,
+        (at) => (run: At(s), ordered: Holds(run.offset <= at.offset)) -> Str,
         (at, again) =>
             (run, ordered) =>
                 match At/try_next(s, at)
@@ -802,10 +802,10 @@ pub let escape(s: Str, with: (Char) -> Option(Str)) -> Str =
                         flatten([
                             between(s, run, at, @ordered),
                             replacement,
-                            again(n.past, n.progress)(n.past, Nat/Le/refl(n.past.offset))])
+                            again(n.past, n.progress)(n.past, Nat/le/refl(n.past.offset))])
                     end
                 end,
-        At/start(s))(At/start(s), Nat/Le/refl(0));
+        At/start(s))(At/start(s), Nat/le/refl(0));
 
 --- The lines: split on newlines, one trailing carriage return dropped from each, and a final newline closing the last line rather than opening an empty one.
 pub let lines(s: Str) -> List(Str) =

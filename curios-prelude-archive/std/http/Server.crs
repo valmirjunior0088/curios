@@ -43,7 +43,7 @@ let blank_line(b: Bytes) -> Option(Nat) =
 --- How many bytes the request needs in all once its headers are in hand: the head, then `Content-Length` bytes. A request without the header has no body, as HTTP specifies; one whose value is not a number is read the same way, where HTTP asks for a refusal.
 let needed(acc: Bytes, head_end: Nat) -> Option(Nat) =
     let head_len = head_end + 4;
-    match Nat/Le/try(head_len, Bytes/len(acc))
+    match Nat/le/try(head_len, Bytes/len(acc))
     | none() => Option/none()
     | some(within) =>
         let head = Bytes/slice(acc, 0, head_len, @within);

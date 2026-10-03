@@ -1,6 +1,7 @@
 use /std/{Nat, Str, Char, Byte, Bytes, List, Option};
 use /std/Tui/{Key, Event};
 use /std/Tui/Key/{Code};
+use /std/Bool/{Holds};
 
 let at(b: Bytes, i: Nat) -> Option(Nat) =
     Option/map(Bytes/try_get(b, i), Byte/to_nat);
@@ -131,7 +132,7 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
         match len
         | 0 => Step/emit(Option/none(), i + 1)
         | _ =>
-            match Nat/Le/try(i + len, Bytes/len(input))
+            match Nat/le/try(i + len, Bytes/len(input))
             | none() => Step/cut()
             | some(within) =>
                 match Str/of_bytes(Bytes/slice(input, i, len, @within))
@@ -148,9 +149,9 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
         -- Where the end marker begins, at or after `start`, with room for all six of its bytes: past the last place that has room, the chunk ends inside the paste.
         let find(
             j: Nat,
-            @onward: Nat/Le(start, j),
-        ) -> Option({at: Nat, onward: Nat/Le(start, at), room: Nat/Le(at + 6, Bytes/len(input))}) =
-            match Nat/Le/try(j + 6, Bytes/len(input))
+            @onward: Holds(start <= j),
+        ) -> Option({at: Nat, onward: Holds(start <= at), room: Holds(at + 6 <= Bytes/len(input))}) =
+            match Nat/le/try(j + 6, Bytes/len(input))
             | none() => Option/none()
             | some(room) =>
                 match Bytes/eql(Bytes/slice(input, j, 6, @room), paste_end)
@@ -158,7 +159,7 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
                 | false => find(j + 1)
                 end
             end;
-        match find(start, @Nat/Le/refl(start))
+        match find(start, @Nat/le/refl(start))
         | none() => Step/cut()
         | some(marker) =>
             let before = Bytes/slice(input, 0, marker.at);
@@ -218,7 +219,7 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
             end
         end;
     let go(i: Nat, acc: List(Event(E))) -> {events: List(Event(E)), rest: Bytes} =
-        match Nat/Lt/try(i, Bytes/len(input))
+        match Nat/lt/try(i, Bytes/len(input))
         | none() => (events = List/reverse(acc), rest = x[])
         | some(inside) =>
             let n = Byte/to_nat(Bytes/get(input, i, @inside));

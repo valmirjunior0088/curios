@@ -1,0 +1,43 @@
+use /std/{Nat, Bool, Option};
+use /std/Bool/{True, Holds};
+
+--- The procedure that decides `a < b`: the evidence when it holds, `none` otherwise.
+pub let try(a: Nat, b: Nat) -> Option(Holds(a < b)) =
+    match a < b: (r) => Option(Holds(r))
+    | true => Option/some(True/qed())
+    | false => Option/none()
+    end;
+
+--- A comparison that came back `false` is the other one: `a <= b` failing gives `b < a`.
+---
+--- The dual of `Nat/le/of_not_lt`: the bridge from a refuted `<=` held as a hypothesis.
+pub let of_not_le(a: Nat, b: Nat, p: Holds(Bool/not(a <= b))) -> Holds(b < a) =
+    match b
+    | 0 =>
+        match a
+        | 0 => match p end
+        | _ + 1 => True/qed()
+        end
+    | bp + 1 =>
+        match a
+        | 0 => match p end
+        | ap + 1 => of_not_le(ap, bp, p)
+        end
+    end;
+
+--- A strict bound composed with a loose one stays strict.
+pub let of_lt_le(a: Nat, b: Nat, c: Nat, p: Holds(a < b), q: Holds(b <= c)) -> Holds(a < c) =
+    Nat/le/trans(p, q);
+
+--- Two bounded digits in adjacent places stay under the product of their radices: `a < m` and `b < n` give `a * n + b < m * n`.
+---
+--- The bound every positional encoding wants, and the step a proof the elaborator writes from the facts in scope states a quotient's upper bound with: `x < (x / d + 1) * d`, read as the remainder beside its quotient's multiple. `a * n + b < a * n + n` *is* `b < n` after cancellation, so the hypothesis inhabits the first step unchanged; what the second step needs is that `a + 1 <= m` scales, which is [`Nat/le/mul_mono_r`].
+pub let add_mul_lt(
+    a: Nat,
+    b: Nat,
+    m: Nat,
+    n: Nat,
+    pa: Holds(a < m),
+    pb: Holds(b < n),
+) -> Holds(a * n + b < m * n) =
+    of_lt_le(a * n + b, a * n + n, m * n, pb, Nat/le/mul_mono_r(n, pa));

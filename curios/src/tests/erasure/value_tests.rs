@@ -16,7 +16,7 @@ fn every_printed_value_is_the_one_its_proof_states() {
         let z_of(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Nat = match e | refl(@z) => z + 1 end;
 
         -- A pinned payload beside a proof payload: `below` erases, `w` is the index.
-        let point(@x: Nat, acc: Accessible((a: Nat, b: Nat) => Nat/Lt(a, b))(x)) -> Nat =
+        let point(@x: Nat, acc: Accessible((a: Nat, b: Nat) => Holds(a < b))(x)) -> Nat =
             match acc | intro(@w, _below) => w + 1 end;
 
         -- Targets that swap their binders: each payload is read from its own position.
@@ -29,11 +29,11 @@ fn every_printed_value_is_the_one_its_proof_states() {
         let pick(T: Type, p: Eq()(1, 1), n: Nat) -> Nat = n + 1;
 
         -- An erased field beside a kept one.
-        struct Bounded: pub Type { n: Nat, ok: Nat/Lt(n, 100) }
+        struct Bounded: pub Type { n: Nat, ok: Holds(n < 100) }
 
         -- A proof-valued callee, applied and dropped.
-        let lemma(n: Nat) -> Nat/Le(n, n) = Le/refl(n);
-        let keep(n: Nat, _p: Nat/Le(n, n)) -> Nat = n + 1;
+        let lemma(n: Nat) -> Holds(n <= n) = le/refl(n);
+        let keep(n: Nat, _p: Holds(n <= n)) -> Nat = n + 1;
 
         let _refl_payload: Eq()(z_of(Eq/refl(@Nat, @41)), 42) = Eq/refl();
         let _accessible_payload: Eq()(point(WellFounded/lt(41)), 42) = Eq/refl();

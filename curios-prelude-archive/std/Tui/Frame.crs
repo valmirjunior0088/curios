@@ -1,6 +1,6 @@
 use /std/{Nat, Str, List, Vec, Eq, Tui};
-use /std/Nat/{Lt};
 use /std/Tui/{Style, Tile};
+use /std/Bool/{Holds};
 
 --- `h` rows of `w` tiles.
 pub let Frame(w: Nat, h: Nat) -> Type =
@@ -96,7 +96,7 @@ pub let to_lines(@w: Nat, @h: Nat, frame: Frame(w, h)) -> List(Str) =
     List/map(Vec/to_list(frame), (r) => Str/flatten(List/map(Vec/to_list(r), (c) => c.symbol)));
 
 --- Row `y`, under the evidence that it is within the height.
-pub let row(@w: Nat, @h: Nat, frame: Frame(w, h), y: Nat, ok: Lt(y, h)) -> Vec(Tile, w) =
+pub let row(@w: Nat, @h: Nat, frame: Frame(w, h), y: Nat, ok: Holds(y < h)) -> Vec(Tile, w) =
     Vec/get(@Vec(Tile, w), @h, frame, y, @ok);
 
 --- The tile at `x`, `y`, under the evidence that both are within the frame.
@@ -106,8 +106,8 @@ pub let get(
     frame: Frame(w, h),
     x: Nat,
     y: Nat,
-    ok_x: Lt(x, w),
-    ok_y: Lt(y, h),
+    ok_x: Holds(x < w),
+    ok_y: Holds(y < h),
 ) -> Tile =
     Vec/get(@Tile, @w, Vec/get(@Vec(Tile, w), @h, frame, y, @ok_y), x, @ok_x);
 

@@ -199,17 +199,17 @@ fn bin_slice_is_a_monoid_citizen() {
     let source = r#"
         use /std/{Str, Eq, Bytes, Nat, Io};
         let split(b : Bytes, s : Nat, l1 : Nat, l2 : Nat,
-                  total : Nat/Le((s + l1) + l2, Bytes/len(b)))
+                  total : Holds((s + l1) + l2 <= Bytes/len(b)))
             -> Eq()(x[
                     ..Bytes/slice(
                         b, s, l1,
-                        @Nat/Le/trans(Nat/Le/add_r(s + l1, l2), total)),
+                        @Nat/le/trans(Nat/le/add_r(s + l1, l2), total)),
                     ..Bytes/slice(b, s + l1, l2, @total)], Bytes/slice(b, s, l1 + l2, @total)) =
             Eq/refl();
-        let empty(b : Bytes, i : Nat, il : Nat/Le(i, Bytes/len(b)))
+        let empty(b : Bytes, i : Nat, il : Holds(i <= Bytes/len(b)))
             -> Eq()(Bytes/slice(b, i, 0, @il), x[]) = Eq/refl();
         let full(b : Bytes)
-            -> Eq()(Bytes/slice(b, 0, Bytes/len(b), @Nat/Le/refl(Bytes/len(b))), b) =
+            -> Eq()(Bytes/slice(b, 0, Bytes/len(b), @Nat/le/refl(Bytes/len(b))), b) =
             Eq/refl();
         let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
@@ -223,8 +223,8 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
     let source = r#"
         use /std/{Str, Eq, Bytes, Nat, Io};
         let bad(b : Bytes, s : Nat, l1 : Nat, o : Nat, l2 : Nat,
-                w1 : Nat/Le(s + l1, Bytes/len(b)), w2 : Nat/Le(o + l2, Bytes/len(b)),
-                w3 : Nat/Le(s + (l1 + l2), Bytes/len(b)))
+                w1 : Holds(s + l1 <= Bytes/len(b)), w2 : Holds(o + l2 <= Bytes/len(b)),
+                w3 : Holds(s + (l1 + l2) <= Bytes/len(b)))
             -> Eq()(x[..Bytes/slice(b, s, l1, @w1), ..Bytes/slice(b, o, l2, @w2)], Bytes/slice(b, s, l1 + l2, @w3)) =
             Eq/refl();
         let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
@@ -239,17 +239,17 @@ fn list_slice_is_a_monoid_citizen() {
     let source = r#"
         use /std/{Str, Eq, List, Nat, Io};
         let split(@T : Type, a : List(T), s : Nat, l1 : Nat, l2 : Nat,
-                  total : Nat/Le((s + l1) + l2, List/len(a)))
+                  total : Holds((s + l1) + l2 <= List/len(a)))
             -> Eq()([
                     ..List/slice(
                         @T, a, s, l1,
-                        @Nat/Le/trans(Nat/Le/add_r(s + l1, l2), total)),
+                        @Nat/le/trans(Nat/le/add_r(s + l1, l2), total)),
                     ..List/slice(@T, a, s + l1, l2, @total)], List/slice(@T, a, s, l1 + l2, @total)) =
             Eq/refl();
-        let empty(@T : Type, a : List(T), i : Nat, il : Nat/Le(i, List/len(a)))
+        let empty(@T : Type, a : List(T), i : Nat, il : Holds(i <= List/len(a)))
             -> Eq()(List/slice(@T, a, i, 0, @il), []) = Eq/refl();
         let full(@T : Type, a : List(T))
-            -> Eq()(List/slice(@T, a, 0, List/len(a), @Nat/Le/refl(List/len(a))), a) =
+            -> Eq()(List/slice(@T, a, 0, List/len(a), @Nat/le/refl(List/len(a))), a) =
             Eq/refl();
         let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
@@ -291,8 +291,8 @@ fn list_slice_window_seam_mismatch_is_rejected() {
     let source = r#"
         use /std/{Str, Eq, List, Nat, Io};
         let bad(@T : Type, a : List(T), s : Nat, m : Nat, n : Nat, e : Nat,
-                sm : Nat/Le(s, m), ml : Nat/Le(m, List/len(a)),
-                ne : Nat/Le(n, e), el : Nat/Le(e, List/len(a)), se : Nat/Le(s, e))
+                sm : Holds(s <= m), ml : Holds(m <= List/len(a)),
+                ne : Holds(n <= e), el : Holds(e <= List/len(a)), se : Holds(s <= e))
             -> Eq()([
                     ..List/slice(@T, a, s, m, @sm, @ml),
                     ..List/slice(@T, a, n, e, @ne, @el)], List/slice(@T, a, s, e, @se, @el)) =

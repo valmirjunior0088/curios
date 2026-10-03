@@ -2,6 +2,7 @@ pub use /sys/{let Channel};
 pub use /sys/Channel/{Push, Take};
 use /std/{Nat, Bool, Option, Io, Async};
 use /std/Async/{Offer};
+use /std/Bool/{Holds};
 
 --- The end values are put in.
 pub struct Sender(A: Type): Type {
@@ -17,7 +18,7 @@ pub struct Receiver(A: Type): Type {
 pub let new(
     @A: Type,
     capacity: Nat,
-    @positive: Nat/Lt(0, capacity),
+    @positive: Holds(0 < capacity),
 ) -> Io({Sender(A), Receiver(A)}) =
     let c = /sys/Channel/new(@A, capacity, @positive)!;
     Io/pure((Sender { c }, Receiver { c }));

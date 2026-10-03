@@ -101,7 +101,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Nat under / and %",
-        binders: "x: Nat, y: Nat, d: Nat, p: Nat/Lt(0, d)",
+        binders: "x: Nat, y: Nat, d: Nat, p: Holds(0 < d)",
         held: &[
             "Eq()((x * 2) / 2, x)",
             "Eq()((x * 2) % 2, 0)",
@@ -375,7 +375,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "List, the free monoid",
-        binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat, s: Nat, l: Nat, ok: Nat/Le(s + l, List/len(xs)), at: Nat/Lt(s, List/len(xs)), head: Nat/Lt(0, List/len(ys)), into: Nat/Lt(s, List/len(ys)), fits: Nat/Le(l, List/len(ys)), z: Nat, g: (Nat, Nat) -> Nat, h: (Nat) -> Nat",
+        binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat, s: Nat, l: Nat, ok: Holds(s + l <= List/len(xs)), at: Holds(s < List/len(xs)), head: Holds(0 < List/len(ys)), into: Holds(s < List/len(ys)), fits: Holds(l <= List/len(ys)), z: Nat, g: (Nat, Nat) -> Nat, h: (Nat) -> Nat",
         held: &[
             "Eq()([..[..xs, ..ys], ..zs], [..xs, ..ys, ..zs])",
             "Eq()([..xs, ..[..ys, ..zs]], [..xs, ..ys, ..zs])",
@@ -430,7 +430,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bytes, the free monoid",
-        binders: "bs: Bytes, cs: Bytes, ds: Bytes, k: Byte, s: Nat, l: Nat, ok: Nat/Le(s + l, Bytes/len(bs)), head: Nat/Lt(0, Bytes/len(cs)), into: Nat/Lt(s, Bytes/len(cs)), fits: Nat/Le(l, Bytes/len(cs))",
+        binders: "bs: Bytes, cs: Bytes, ds: Bytes, k: Byte, s: Nat, l: Nat, ok: Holds(s + l <= Bytes/len(bs)), head: Holds(0 < Bytes/len(cs)), into: Holds(s < Bytes/len(cs)), fits: Holds(l <= Bytes/len(cs))",
         held: &[
             "Eq()(x[..x[..bs, ..cs], ..ds], x[..bs, ..cs, ..ds])",
             "Eq()(Bytes/len(x[k, ..bs]), Bytes/len(bs) + 1)",
@@ -474,7 +474,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bits, the free monoid",
-        binders: "ts: Bits, us: Bits, ws: Bits, v: Bool, s: Nat, l: Nat, ok: Nat/Le(s + l, Bits/len(ts)), head: Nat/Lt(0, Bits/len(us)), into: Nat/Lt(s, Bits/len(us)), fits: Nat/Le(l, Bits/len(us))",
+        binders: "ts: Bits, us: Bits, ws: Bits, v: Bool, s: Nat, l: Nat, ok: Holds(s + l <= Bits/len(ts)), head: Holds(0 < Bits/len(us)), into: Holds(s < Bits/len(us)), fits: Holds(l <= Bits/len(us))",
         held: &[
             // The byte grain's laws, stated again here: one grain's fold arm is not evidence for the other's, and a law held at one grain and unstated at the other is a copy with nothing checking it. The explanations are the byte group's, above.
             "Eq()(b[..b[..ts, ..us], ..ws], b[..ts, ..us, ..ws])",
@@ -511,7 +511,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "List, through a window",
-        binders: "xs: List(Nat), ys: List(Nat), s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Nat/Le(s + l, List/len(xs)), first: Nat/Lt(0, l), at: Nat/Lt(s, List/len(xs)), inside: Nat/Lt(i, l), deep: Nat/Lt(s + i, List/len(xs)), next: Nat/Lt(s + 1, List/len(xs)), other: Nat/Lt(s, List/len(ys)), inner: Nat/Le(t + m, l), whole: Nat/Le(s + t + m, List/len(xs))",
+        binders: "xs: List(Nat), ys: List(Nat), s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Holds(s + l <= List/len(xs)), first: Holds(0 < l), at: Holds(s < List/len(xs)), inside: Holds(i < l), deep: Holds(s + i < List/len(xs)), next: Holds(s + 1 < List/len(xs)), other: Holds(s < List/len(ys)), inner: Holds(t + m <= l), whole: Holds(s + t + m <= List/len(xs))",
         held: &[
             // A position inside a window is the position it names in the base, and a window of a window is the window it names there. Decided where two are compared, never by rewriting one: the rewritten node would owe a bound no term in hand proves, and a comparison builds nothing, so the two bounds are never read. A carrier of its own because these rows take more binders than the monoid's do, and every goal's candidate search pays for the whole scope.
             "Eq()(List/get(@Nat, List/slice(@Nat, xs, s, l, @ok), 0, @first), List/get(@Nat, xs, s, @at))",
@@ -526,7 +526,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bytes, through a window",
-        binders: "bs: Bytes, cs: Bytes, s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Nat/Le(s + l, Bytes/len(bs)), first: Nat/Lt(0, l), at: Nat/Lt(s, Bytes/len(bs)), inside: Nat/Lt(i, l), deep: Nat/Lt(s + i, Bytes/len(bs)), next: Nat/Lt(s + 1, Bytes/len(bs)), other: Nat/Lt(s, Bytes/len(cs)), inner: Nat/Le(t + m, l), whole: Nat/Le(s + t + m, Bytes/len(bs))",
+        binders: "bs: Bytes, cs: Bytes, s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Holds(s + l <= Bytes/len(bs)), first: Holds(0 < l), at: Holds(s < Bytes/len(bs)), inside: Holds(i < l), deep: Holds(s + i < Bytes/len(bs)), next: Holds(s + 1 < Bytes/len(bs)), other: Holds(s < Bytes/len(cs)), inner: Holds(t + m <= l), whole: Holds(s + t + m <= Bytes/len(bs))",
         held: &[
             // The `List` rows, at the byte grain.
             "Eq()(Bytes/get(Bytes/slice(bs, s, l, @ok), 0, @first), Bytes/get(bs, s, @at))",
@@ -541,7 +541,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bits, through a window",
-        binders: "ts: Bits, us: Bits, s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Nat/Le(s + l, Bits/len(ts)), first: Nat/Lt(0, l), at: Nat/Lt(s, Bits/len(ts)), inside: Nat/Lt(i, l), deep: Nat/Lt(s + i, Bits/len(ts)), next: Nat/Lt(s + 1, Bits/len(ts)), other: Nat/Lt(s, Bits/len(us)), inner: Nat/Le(t + m, l), whole: Nat/Le(s + t + m, Bits/len(ts))",
+        binders: "ts: Bits, us: Bits, s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Holds(s + l <= Bits/len(ts)), first: Holds(0 < l), at: Holds(s < Bits/len(ts)), inside: Holds(i < l), deep: Holds(s + i < Bits/len(ts)), next: Holds(s + 1 < Bits/len(ts)), other: Holds(s < Bits/len(us)), inner: Holds(t + m <= l), whole: Holds(s + t + m <= Bits/len(ts))",
         held: &[
             // The `List` rows, at the bit grain: one grain's arm is not evidence for the other's.
             "Eq()(Bits/get(Bits/slice(ts, s, l, @ok), 0, @first), Bits/get(ts, s, @at))",
@@ -556,7 +556,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "List, through a concatenation",
-        binders: "xs: List(Nat), ys: List(Nat), i: Nat, s: Nat, l: Nat, joined: Nat/Lt(i, List/len([..xs, ..ys])), left: Nat/Lt(i, List/len(xs)), right: Nat/Lt(i, List/len(ys)), spans: Nat/Le(s + l, List/len([..xs, ..ys])), inside: Nat/Le(s + l, List/len(xs))",
+        binders: "xs: List(Nat), ys: List(Nat), i: Nat, s: Nat, l: Nat, joined: Holds(i < List/len([..xs, ..ys])), left: Holds(i < List/len(xs)), right: Holds(i < List/len(ys)), spans: Holds(s + l <= List/len([..xs, ..ys])), inside: Holds(s + l <= List/len(xs))",
         held: &[
             // A position inside an operand of a concatenation is that operand's position, and so is a window inside one. Decided where two are compared, as a position through a window is: the concatenation's bound reaches past the operand, so rewriting the read would owe a bound no term in hand proves, while the operand's own read is typed by the bound that places the position inside it.
             "Eq()(List/get(@Nat, [..xs, ..ys], i, @joined), List/get(@Nat, xs, i, @left))",
@@ -569,7 +569,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bytes, through a concatenation",
-        binders: "bs: Bytes, cs: Bytes, i: Nat, s: Nat, l: Nat, joined: Nat/Lt(i, Bytes/len(x[..bs, ..cs])), left: Nat/Lt(i, Bytes/len(bs)), right: Nat/Lt(i, Bytes/len(cs)), spans: Nat/Le(s + l, Bytes/len(x[..bs, ..cs])), inside: Nat/Le(s + l, Bytes/len(bs))",
+        binders: "bs: Bytes, cs: Bytes, i: Nat, s: Nat, l: Nat, joined: Holds(i < Bytes/len(x[..bs, ..cs])), left: Holds(i < Bytes/len(bs)), right: Holds(i < Bytes/len(cs)), spans: Holds(s + l <= Bytes/len(x[..bs, ..cs])), inside: Holds(s + l <= Bytes/len(bs))",
         held: &[
             // The `List` rows, at the byte grain.
             "Eq()(Bytes/get(x[..bs, ..cs], i, @joined), Bytes/get(bs, i, @left))",
@@ -582,7 +582,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bits, through a concatenation",
-        binders: "ts: Bits, us: Bits, i: Nat, s: Nat, l: Nat, joined: Nat/Lt(i, Bits/len(b[..ts, ..us])), left: Nat/Lt(i, Bits/len(ts)), right: Nat/Lt(i, Bits/len(us)), spans: Nat/Le(s + l, Bits/len(b[..ts, ..us])), inside: Nat/Le(s + l, Bits/len(ts))",
+        binders: "ts: Bits, us: Bits, i: Nat, s: Nat, l: Nat, joined: Holds(i < Bits/len(b[..ts, ..us])), left: Holds(i < Bits/len(ts)), right: Holds(i < Bits/len(us)), spans: Holds(s + l <= Bits/len(b[..ts, ..us])), inside: Holds(s + l <= Bits/len(ts))",
         held: &[
             // The `List` rows, at the bit grain: one grain's arm is not evidence for the other's.
             "Eq()(Bits/get(b[..ts, ..us], i, @joined), Bits/get(ts, i, @left))",

@@ -1,16 +1,16 @@
 use /std/{Nat, Str, List, Vec, Option};
-use /std/Nat/{Lt};
 use /std/Tui/{Style, Tile, Frame};
 use /std/Tui/Key/{Code};
+use /std/Bool/{Holds};
 
 --- Items with one selected, or none when there are no items.
 pub struct Listing: pub Type {
     items: List(Str),
-    cursor: Option({i: Nat, ok: Lt(i, List/len(items))}),
+    cursor: Option({i: Nat, ok: Holds(i < List/len(items))}),
 }
 
-let at(items: List(Str), i: Nat) -> Option({i: Nat, ok: Lt(i, List/len(items))}) =
-    match Lt/try(i, List/len(items))
+let at(items: List(Str), i: Nat) -> Option({i: Nat, ok: Holds(i < List/len(items))}) =
+    match Nat/lt/try(i, List/len(items))
     | none() => Option/none()
     | some(ok) => Option/some((i = i, ok = ok))
     end;

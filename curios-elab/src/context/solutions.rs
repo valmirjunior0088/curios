@@ -28,7 +28,7 @@ pub(crate) struct MetaEntry {
     pub solution: Option<Term>,
     /// Ordinary inference holes may be solved by conversion. Recursive elaboration slots are filled only by the owning `rec` elaborator; conversion treats an unfilled slot as a blocking dependency.
     pub kind: MetaKind,
-    /// Whether `result` is a proposition, decided once where an omitted implicit is minted. It is what tells a *bound* nothing discharged — `Nat/Lt(i, n)`, the whole of why a call was refused — from a type argument nothing determined, `@T: Type`, which never was an obligation; the report reads differently for the two, and zonk, which raises it, holds the context immutably and cannot ask the sort itself.
+    /// Whether `result` is a proposition, decided once where an omitted implicit is minted. It is what tells a *bound* nothing discharged — `Holds(i < n)`, the whole of why a call was refused — from a type argument nothing determined, `@T: Type`, which never was an obligation; the report reads differently for the two, and zonk, which raises it, holds the context immutably and cannot ask the sort itself.
     pub proposition: bool,
     /// What `result` reduced to when the mint — or a later attempt at a parked discharge — asked whether it was decided, kept when that is an inductive type: the reduct — `False` — is what the unsolved report says beside the bound's spelling, and the report cannot reduce for itself.
     pub reduct: Option<Term>,

@@ -10,7 +10,7 @@ fn proof_bound_as_a_statement_does_not_run_its_certificate() {
         use /std/Nat/{Le};
         let a : Nat = 6;
         let b : Nat = 7;
-        let p : Eq()(a + (b - a), b) = Le/add_sub_cancel(a, b, Le/add_r(a, 1));
+        let p : Eq()(a + (b - a), b) = le/add_sub_cancel(a, b, le/add_r(a, 1));
         /std/print("ok")
         "#;
     assert_eq!(run(source), b"ok");
@@ -23,10 +23,10 @@ fn a_let_bound_proof_leaves_no_computation_behind() {
         use /std/{Nat, List, Io, proc};
         use /std/Bool/{True};
         use /std/Nat/{Le};
-        let use_it(a: Nat, b: Nat, _p: Nat/Le(a, b)) -> Nat = a + b;
+        let use_it(a: Nat, b: Nat, _p: Holds(a <= b)) -> Nat = a + b;
         Io/bind(proc/args, (args) =>
             let n = List/len(args);
-            let p = Le/trans(@n, @n, @n + 1, Le/refl(n), True/qed());
+            let p = le/trans(@n, @n, @n + 1, le/refl(n), True/qed());
             proc/exit(Nat/to_byte(use_it(n, n + 1, p) % 256)))
         "#;
     let optimized = cont_optm(source);
@@ -43,7 +43,7 @@ fn a_top_level_proof_does_not_run_before_the_program() {
         use /std/{Nat, print};
         use /std/Bool/{True};
         use /std/Nat/{Le};
-        let p: Nat/Le(300, 301) = Le/trans(@300, @300, @301, Le/refl(300), True/qed());
+        let p: Holds(300 <= 301) = le/trans(@300, @300, @301, le/refl(300), True/qed());
         print("ok")
         "#;
     let optimized = cont_optm(source);
@@ -54,7 +54,7 @@ fn a_top_level_proof_does_not_run_before_the_program() {
     assert_eq!(run(source), b"ok");
 }
 
-// The control: a binding that is a value is still computed where it is written, used or not. The same shape of recursion as `Le/trans`, bound as a `Nat` and never read, survives to the optimized program, since nothing below Core knows the call is total.
+// The control: a binding that is a value is still computed where it is written, used or not. The same shape of recursion as `le/trans`, bound as a `Nat` and never read, survives to the optimized program, since nothing below Core knows the call is total.
 #[test]
 fn a_let_bound_value_is_still_computed() {
     let source = r#"
@@ -82,7 +82,7 @@ fn proof_in_an_erased_position_is_not_evaluated() {
         let a : Nat = 6;
         let b : Nat = 7;
         let consume(x : Nat, y : Nat, p : Eq()(x + (y - x), y)) -> Nat = 42;
-        /std/print(Nat/to_str(consume(a, b, Le/add_sub_cancel(a, b, Le/add_r(a, 1)))))
+        /std/print(Nat/to_str(consume(a, b, le/add_sub_cancel(a, b, le/add_r(a, 1)))))
         "#;
     assert_eq!(run(source), b"42");
 }
