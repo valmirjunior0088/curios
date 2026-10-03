@@ -36,13 +36,13 @@ pub struct Rat: Type {
 }
 ```
 
-**Construction.** `of_scaled_ratio(n: Int, e: Int, d: Nat, @ok: Nat/Lt(0, d))` is the normalizing constructor: it collapses a zero numerator, strips the powers of two from the numerator into the exponent and from the denominator out of it through `Nat`'s `odd_part` and `trailing_zeros`, divides both by their certified `gcd` through `exact_div`, and builds the certificate. The rest are its cases:
+**Construction.** `of_scaled_ratio(n: Int, e: Int, d: Nat, @ok: Holds(0 < d))` is the normalizing constructor: it collapses a zero numerator, strips the powers of two from the numerator into the exponent and from the denominator out of it through `Nat`'s `odd_part` and `trailing_zeros`, divides both by their certified `gcd` through `exact_div`, and builds the certificate. The rest are its cases:
 
 ```text
 of_int : Int -> Rat
 of_nat : Nat -> Rat
 of_dyadic : Dyadic -> Rat
-of_ratio : (n : Int, d : Nat, @ok : Nat/Lt(0, d)) -> Rat
+of_ratio : (n : Int, d : Nat, @ok : Holds(0 < d)) -> Rat
 of_flt : (f : Flt, @ok : Flt/Finite(f)) -> Rat
 try_of_flt : Flt -> Option(Rat)
 ```

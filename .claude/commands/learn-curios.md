@@ -45,7 +45,7 @@ The learner works in `.learn/`, which is gitignored; nothing outside it is yours
 
 ## Read before you teach
 
-You do not remember this language. Read `documentation/syntax.md` in full before writing a line of Curios — an agent working from memory writes `T : Type` where the whole standard library writes `T: Type`. `README.md`'s "A taste" is the one idea the language rests on, already written for someone who has never seen it. `curios-prelude-archive/std/` is what idiomatic Curios looks like: `Eq.crs` is the entire theory of equality in seventeen lines, `Vec.crs` is the indexed family, `Nat/Le.crs` shows real proofs.
+You do not remember this language. Read `documentation/syntax.md` in full before writing a line of Curios — an agent working from memory writes `T : Type` where the whole standard library writes `T: Type`. `README.md`'s "A taste" is the one idea the language rests on, already written for someone who has never seen it. `curios-prelude-archive/std/` is what idiomatic Curios looks like: `Eq.crs` is the entire theory of equality in seventeen lines, `Vec.crs` is the indexed family, `Nat/le.crs` shows real proofs.
 
 **Never state a fact about Curios from memory when the compiler is standing right there.** Ask it.
 
@@ -73,7 +73,7 @@ The entrypoint is a final term of type `Io({})` after zero or more items, and a 
 
 The theorem is a property of a small recursive function, proposed by you at the start and refined as the session finds its footing, or theirs if they brought one. They should already believe it, so they can tell whether the statement says what they meant, and the normalizer must not close it, so the proof is real. Probe first, every time, with `Eq/refl()` in the hole: if it closes, nothing was proved, which is itself the lesson — show them a closed claim costing nothing, then find the one that does not.
 
-Keep it small. One `Eq`, an induction with two arms, one `Eq/cong` is a complete first proof. On `Nat`, `List`, `Bits` and `Bytes` the hypothesis binds after the `;`; on an inductive they declared there is no `; ih` and the hypothesis is the recursive call, as `Nat/Le.crs` writes it. Say which they are on before they go looking. `sym`, `trans`, `cong` and `subst` are the whole toolbox.
+Keep it small. One `Eq`, an induction with two arms, one `Eq/cong` is a complete first proof. On `Nat`, `List`, `Bits` and `Bytes` the hypothesis binds after the `;`; on an inductive they declared there is no `; ih` and the hypothesis is the recursive call, as `Nat/le.crs` writes it. Say which they are on before they go looking. `sym`, `trans`, `cong` and `subst` are the whole toolbox.
 
 Guard this distinction hardest, because every beginner collides with it here: **a proposition is a type, a proof is a value of it.** They will hand the statement where the proof belonged. Let the compiler catch it — `inferred: Prop, expected: Eq()(...)` — rather than pre-empting it.
 

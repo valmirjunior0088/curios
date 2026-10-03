@@ -5,7 +5,7 @@ use {
     curios_pipeline::DEFAULT_STEP_BUDGET,
 };
 
-// The control half of a minimal pair over the unfolding rule. `f`'s base arm returns a literal, so `f(0, n)` reduces to an `Intrinsic`-headed term, `force_rec` keeps that reduct, and the decided `Nat/Le` discharges by reduction. Identical in every other respect to the half below, which differs only in what the base arm returns.
+// The control half of a minimal pair over the unfolding rule. `f`'s base arm returns a literal, so `f(0, n)` reduces to an `Intrinsic`-headed term, `force_rec` keeps that reduct, and the decided bound discharges by reduction. Identical in every other respect to the half below, which differs only in what the base arm returns.
 #[test]
 fn a_bound_over_a_recursion_returning_a_literal_discharges() {
     assert_eq!(

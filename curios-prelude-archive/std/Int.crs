@@ -5,7 +5,7 @@ use /std/{Nat, Bool, Str, Option, Ordering, Show, Spell, Ord, Eq};
 use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
---- That `a` is not zero, decided as `Nat/Lt` is — what `/` and `%` on `Int` ask of a divisor.
+--- That `a` is not zero, decided — what `/` and `%` on `Int` ask of a divisor.
 pub let NonZero(a: Int) -> Prop =
     Holds(neq(a, 0));
 
@@ -23,7 +23,7 @@ pub mod le;
 
 --- An integer is a natural widened, or one below the negation of one: the two canonical forms, as the family's indices.
 ---
---- Matching on [`view`] refines `i` to its form in each arm, which is how a proof takes an integer apart — `Int` has no constructors of its own, and this is the case split it would have. Nothing here is primitive: the view is built from `Int/to_nat`, and the order laws in `Lt` and `Le` go through it and through `Nat`.
+--- Matching on [`view`] refines `i` to its form in each arm, which is how a proof takes an integer apart — `Int` has no constructors of its own, and this is the case split it would have. Nothing here is primitive: the view is built from `Int/to_nat`, and the order laws in `lt` and `le` go through it and through `Nat`.
 pub induct Sign: (Int) -> pub Type
 --- `i` is the natural `n`, widened.
 | nonneg(n: Nat): (Nat/to_int(n))

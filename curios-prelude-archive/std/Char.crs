@@ -62,11 +62,11 @@ pub let gt(a: Char, b: Char) -> Bool =
 pub let ge(a: Char, b: Char) -> Bool =
     a.code >= b.code;
 
---- That `a` is below `b` in code-point order, decided as `Nat/Lt` is.
+--- That `a` is below `b` in code-point order, decided.
 pub let Lt(a: Char, b: Char) -> Prop =
     Holds(lt(a, b));
 
---- That `a` is at most `b` in code-point order, decided as `Nat/Le` is.
+--- That `a` is at most `b` in code-point order, decided.
 pub let Le(a: Char, b: Char) -> Prop =
     Holds(le(a, b));
 

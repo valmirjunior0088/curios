@@ -41,7 +41,7 @@ pub use Hash/{let Hash};
 
 --- Natural numbers, unbounded: a machine word while a value is small, and a run of limbs once it outgrows one.
 ---
---- Subtraction truncates at zero. Division and remainder carry the precondition `Holds(0 < b)`. `Lt` and `Le` beneath are the decided propositions every bound in the library is stated in.
+--- Subtraction truncates at zero. Division and remainder carry the precondition `Holds(0 < b)`. `lt` and `le` beneath hold the order lemmas a bound's proof is built from.
 pub mod Nat;
 pub use Nat/{let Nat};
 
