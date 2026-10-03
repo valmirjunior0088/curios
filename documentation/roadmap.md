@@ -128,6 +128,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 - [ ] [HTTP messages as RFC 9110 and RFC 9112 frame them](roadmap/08-standard-library/01-http-framing.md) — HTTP neither reads nor writes a message as RFC 9110 and RFC 9112 frame it, and refuses a head's opaque octets where they are data
 - [ ] [Text read as text, and numbers by each format's grammar](roadmap/08-standard-library/02-text-read-as-text.md) — `Json` accepts `01` and writes infinity as `null`, the text formats walk the bytes of input that began as text, and `Flt`'s readers cut text where a grammar belongs
+- [ ] [A map keyed by its key type](roadmap/08-standard-library/04-a-map-keyed-by-its-key-type.md) — `Map` indexes encodings, so keys of two types with one encoding are one key and enumeration hands back `Bytes`
 - [ ] [A certified sort and an `Ord`-keyed tree](roadmap/08-standard-library/03-certified-sort-and-ord-tree.md) — not refined yet; `sort` is pinned by properties rather than proved, and `Map` is keyed only through `Bytes` encodings
 - [x] Foundations: `/std/Bool`'s `True`, `False` and `Holds`, `Eq` and `Ordering`, `Option` and `Result`, `State`, `Try`, `Io/Error` and `Path`
 - [x] Collections: `List` and its helpers, `Vec` counting its list in its type, and `Map`, a canonical crit-bit trie over `Bytes` keys

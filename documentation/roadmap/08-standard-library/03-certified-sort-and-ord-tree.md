@@ -8,7 +8,7 @@
 
 ## The `Ord`-keyed tree
 
-`/std/Map` is a crit-bit trie over `Bytes` keys, reached through the `Key` encodings `/std/Hash` gives, and `Set(K)` stores the key as its value so its elements come back typed. A tree keyed by `Ord` opens with a consumer whose keys no `Key` encoding serves.
+`/std/Map` is a crit-bit trie over `Bytes` keys, reached through the `Key` encodings `/std/Hash` gives, and `Set(K)` stores the key as its value so its elements come back typed. A tree keyed by `Ord` opens with a consumer whose keys no `Key` encoding serves, and follows whatever typed-key shape [a map keyed by its key type](04-a-map-keyed-by-its-key-type.md) settles first.
 
 ## Refinement
 
