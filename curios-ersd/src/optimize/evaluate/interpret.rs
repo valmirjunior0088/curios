@@ -5,10 +5,7 @@
 //! Closedness and scope: a candidate call is evaluated from an empty frame; every atom it transitively reads must resolve to a constant, a module function, or a top-level item value (a CAF forced on demand and memoized), never a runtime binder. A function reference closes on demand against the current frame. Scalar and packed-binary operations fold through [`Semantics`] — the single source of truth under the numeric law — while list operations, closures, and `ListMap` are interpreted directly.
 
 use {
-    super::{
-        budget::{Budget, MAX_FOLD_BITS},
-        value::{Bail, Closure, ListWindow, Value},
-    },
+    super::{Bail, Budget, Closure, ListWindow, MAX_FOLD_BITS, Value},
     crate::{
         Atom, BlockId, Constant, FoldNatStep, FoldOutcome, FoldSequenceStep, ForeignId, FreeValues,
         FunctionId, Intrinsic, Module, Operation, Rhs, Semantics, SequenceGrain, SequenceOp,

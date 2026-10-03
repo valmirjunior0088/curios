@@ -5,10 +5,10 @@
 //! This pass mints one specialized function per `(target, position, spine)`: a verbatim deep copy with the baked parameter dropped and instead bound locally to the reified spine — *binding, not substitution* — then folded: a match on the now-known spine takes its arm, a known projection reads its field, and a self-recursive call whose spine argument folds to a strictly smaller literal is rewritten to the next specialization. The chain is finite because every mint keys on a strict subterm of its requester's spine; the budgets are belt and braces. A recursive call whose spine does not fold falls back to the generic target — always correct, never required to fire.
 
 use {
-    super::{budget::ReifyBudget, copy::deep_copy_function, reify::reify, value::Value},
+    super::{ReifyBudget, ReifyScope, Value, copy_weight, deep_copy_function, reify, reify_check},
     crate::{
         Analysis, Atom, BlockId, Function, FunctionId, Module, Rhs, Statement, StatementId,
-        Terminator, ValueId, walk::control_blocks,
+        Terminator, ValueId, control_blocks,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -309,17 +309,17 @@ impl Minter {
 
         // Materialize the spine locally, deep-copy the target, drop the baked parameter and bind it to the spine ahead of the copied body. Dry-run first so a declined mint strands nothing.
         // One scope for this mint's probe and its real run: the module does not change between them, and sharing it across *mints* would be unsound because a deep copy rewrites bodies the scope has already answered for.
-        let mut scope = super::reify::ReifyScope::new();
+        let mut scope = ReifyScope::new();
         {
             let mut probe = ReifyBudget::new();
-            super::reify::reify_check(module, spine, &mut probe, &mut scope).ok()?;
+            reify_check(module, spine, &mut probe, &mut scope).ok()?;
         }
         let mut prelude = Vec::new();
         let mut reify_budget = ReifyBudget::new();
         let spine_atom = reify(module, spine, &mut reify_budget, &mut prelude, &mut scope).ok()?;
 
         // Charge what the copy will materialize before making it: a mint is bounded by size as well as by count.
-        let weight = super::copy::copy_weight(module, target)?;
+        let weight = copy_weight(module, target)?;
         if weight > self.nodes {
             return None;
         }

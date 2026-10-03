@@ -3,10 +3,13 @@
 //! Pruning, compile-time partial evaluation with literal-spine specialization beside it, and the monoid worker/wrapper rebase. All structural and local optimization — folding, dead code, inlining, contification, specialization — belongs to Cont, which runs after the lowering; Ersd's leverage is what it still knows: don't hand Cont work it can delete (pruning), run what compile time has already decided (partial evaluation), and re-base what would exhaust the runtime stack (worker/wrapper).
 
 mod prune;
+use prune::*;
 
 mod evaluate;
+use evaluate::*;
 
 mod rebase;
+use rebase::*;
 
 use super::{Analysis, Module};
 
@@ -27,11 +30,11 @@ pub fn optimize(module: &mut Module) {
 /// Not a debug assertion either. Restating the check under `cfg(debug_assertions)` would put the whole cost back exactly where the suite runs, in exchange for a verdict the line above it already gave.
 pub fn optimize_verified(module: &mut Module) {
     let analysis = Analysis::analyze(module);
-    prune::prune_unreachable(module, &analysis);
+    prune_unreachable(module, &analysis);
     compact(module);
     // A curried chain folds one application per round. Eight is a cap the loop reaches, not a bound it stays under: every program in `programs/` installs replacements in all eight rounds, because each reified closure copy carries closed applications of its own into the next round. What keeps that from multiplying the module is each round's reification drawing on one shared node pool, and the prune after the loop drops the copies nothing kept.
     for _ in 0..8 {
-        if !evaluate::evaluate_closed_terms(module) {
+        if !evaluate_closed_terms(module) {
             break;
         }
     }
@@ -39,10 +42,10 @@ pub fn optimize_verified(module: &mut Module) {
     module
         .verify()
         .expect("closed-term evaluation preserves a verifiable module");
-    evaluate::specialize_literal_spines(module);
-    rebase::rebase_monoid_recursion(module);
+    specialize_literal_spines(module);
+    rebase_monoid_recursion(module);
     let analysis = Analysis::analyze(module);
-    prune::prune_unreachable(module, &analysis);
+    prune_unreachable(module, &analysis);
     compact(module);
 }
 

@@ -2,7 +2,7 @@
 //!
 //! Every limit is a fixed constant, so a compile is reproducible regardless of machine or timing. A format-string parse over a short literal runs hundreds of steps and its UTF-8 revalidation a few thousand, so the per-candidate step budget is generous while the shared pass pool caps the whole-module cost. The call-depth cap bounds native recursion (each interpreted call recurses into a host Rust frame); the reify caps bound one replacement. Exhaustion bails to leave the candidate untouched — never a panic.
 
-use super::value::Bail;
+use super::Bail;
 
 /// Per-candidate step budget.
 pub(super) const STEP_BUDGET: usize = 50_000;

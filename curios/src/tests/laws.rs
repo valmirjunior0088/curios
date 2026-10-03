@@ -11,8 +11,13 @@
 use super::typecheck;
 
 mod audit;
+
 mod generated;
+use generated::*;
+
 mod semantics;
+use semantics::*;
+
 mod written;
 
 /// The last goal of every program the goal test states: trivially closed by `refl`, so its candidate line is evidence that the search still had budget when the refused rows before it were answered.

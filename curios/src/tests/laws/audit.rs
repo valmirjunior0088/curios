@@ -3,10 +3,7 @@
 //! Conversion stays symmetric (each law reversed), transitive (two laws chained through a side they share), and closed under substitution (each law at compound terms that change its atoms, and through a solved metavariable); and constructors stay free modulo the theory, which is what inversion reads when it concludes a clash (a case split on an equation between distinct constructors needs no arm). A finite grid is evidence about the implemented fragment, not a metatheorem, and it grows with the law table it is generated from.
 
 use {
-    super::{
-        IMPORTS, closes,
-        generated::{Row, declared, name, rows, spell, type_name},
-    },
+    super::{IMPORTS, Row, closes, declared, name, rows, spell, type_name},
     crate::tests::typecheck,
     curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation},
 };

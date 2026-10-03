@@ -9,6 +9,7 @@
 //! The walk recurses over the module's block structure inside [`recurse`], so a deep module diagnoses on the default test-thread stack instead of overflowing it.
 
 mod eager;
+use eager::*;
 
 #[cfg(test)]
 mod tests;
@@ -178,7 +179,7 @@ impl Module {
     /// Every recursive group's computed members, against the two rules forcing by need rests on. It runs once the structure holds, so every live group it reads off the arena is one the module owns; it is not inside the walk because the walk is the half that panics.
     fn check_recursion(&self) -> Result<(), VerifyError> {
         for group in self.rec_groups().iter().flatten() {
-            eager::check_group(self, &group.values)?;
+            check_group(self, &group.values)?;
         }
         Ok(())
     }

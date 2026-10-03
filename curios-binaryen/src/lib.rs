@@ -5,6 +5,7 @@
 //! [`optimize`] hands its observer the optimized module while it is alive, as an [`Optimized`] that renders through Binaryen's own text writer when it is formatted — the `wonder stage wasm-optm` payload. The text is eyes-only: nothing in the workspace parses it, and the folded s-expression dialect is Binaryen's to change.
 
 mod sys;
+use sys::*;
 
 use std::{ffi::CStr, fmt, marker::PhantomData, ptr, slice, sync::Mutex};
 
@@ -19,34 +20,34 @@ pub fn optimize(mut bytes: Vec<u8>, names: bool, observe: impl FnOnce(&Optimized
         // Exactly the features the pipeline targets and Wasmtime's engine enables — not `BinaryenFeatureAll`, which lets the optimizer emit post-GC proposals (e.g. exact reference types) that the runtime does not accept.
         //
         // `BulkMemoryOpt` is not a choice (see its binding): a set holding bulk memory without it aborts the process the first time a pass asks.
-        let features = sys::BinaryenFeatureMutableGlobals()
-            | sys::BinaryenFeatureNontrappingFPToInt()
-            | sys::BinaryenFeatureBulkMemory()
-            | sys::BinaryenFeatureBulkMemoryOpt()
-            | sys::BinaryenFeatureSignExt()
-            | sys::BinaryenFeatureTailCall()
-            | sys::BinaryenFeatureReferenceTypes()
-            | sys::BinaryenFeatureMultivalue()
-            | sys::BinaryenFeatureMultiMemory()
-            | sys::BinaryenFeatureMemory64()
-            | sys::BinaryenFeatureGC();
+        let features = BinaryenFeatureMutableGlobals()
+            | BinaryenFeatureNontrappingFPToInt()
+            | BinaryenFeatureBulkMemory()
+            | BinaryenFeatureBulkMemoryOpt()
+            | BinaryenFeatureSignExt()
+            | BinaryenFeatureTailCall()
+            | BinaryenFeatureReferenceTypes()
+            | BinaryenFeatureMultivalue()
+            | BinaryenFeatureMultiMemory()
+            | BinaryenFeatureMemory64()
+            | BinaryenFeatureGC();
 
         let module =
-            sys::BinaryenModuleReadWithFeatures(bytes.as_mut_ptr().cast(), bytes.len(), features);
+            BinaryenModuleReadWithFeatures(bytes.as_mut_ptr().cast(), bytes.len(), features);
 
         // The module neither escapes references nor is dynamically linked, which closed-world GC optimizations require to be effective.
-        sys::BinaryenSetClosedWorld(true);
-        sys::BinaryenSetOptimizeLevel(2);
-        sys::BinaryenSetShrinkLevel(1);
+        BinaryenSetClosedWorld(true);
+        BinaryenSetOptimizeLevel(2);
+        BinaryenSetShrinkLevel(1);
         // Off by default, and deliberately: the name section is 22 KB on a program the size of `trees`, which a shipped binary should not carry. A runtime profile without it shows bare addresses, so the caller that is profiling asks for it.
-        sys::BinaryenSetDebugInfo(names);
+        BinaryenSetDebugInfo(names);
         // The buffered text writer never reaches a terminal, but colour is a process-global setting like every other one above, so it is pinned rather than left to a tty probe.
-        sys::BinaryenSetColorsEnabled(false);
+        BinaryenSetColorsEnabled(false);
 
-        sys::BinaryenModuleOptimize(module);
+        BinaryenModuleOptimize(module);
 
         assert!(
-            sys::BinaryenModuleValidate(module),
+            BinaryenModuleValidate(module),
             "Binaryen produced an invalid module"
         );
 
@@ -55,16 +56,16 @@ pub fn optimize(mut bytes: Vec<u8>, names: bool, observe: impl FnOnce(&Optimized
             session: PhantomData,
         });
 
-        let result = sys::BinaryenModuleAllocateAndWrite(module, ptr::null());
+        let result = BinaryenModuleAllocateAndWrite(module, ptr::null());
         let optimized = slice::from_raw_parts(result.binary.cast(), result.binary_bytes).to_vec();
 
-        sys::free(result.binary);
+        free(result.binary);
 
         if !result.source_map.is_null() {
-            sys::free(result.source_map.cast());
+            free(result.source_map.cast());
         }
 
-        sys::BinaryenModuleDispose(module);
+        BinaryenModuleDispose(module);
 
         optimized
     }
@@ -72,7 +73,7 @@ pub fn optimize(mut bytes: Vec<u8>, names: bool, observe: impl FnOnce(&Optimized
 
 /// The optimized module while its optimizer session is still open: what [`optimize`] hands its observer. Formatting it renders the module through Binaryen's own text writer, from the in-memory module the optimizer just rewrote, so an observer that does not look pays nothing.
 pub struct Optimized<'a> {
-    module: sys::BinaryenModuleRef,
+    module: BinaryenModuleRef,
     session: PhantomData<&'a ()>,
 }
 
@@ -80,10 +81,10 @@ impl fmt::Display for Optimized<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         // The module is alive for as long as this view is, and the session's lock is held around it.
         unsafe {
-            let pointer = sys::BinaryenModuleAllocateAndWriteText(self.module);
+            let pointer = BinaryenModuleAllocateAndWriteText(self.module);
             let written = formatter.write_str(&CStr::from_ptr(pointer).to_string_lossy());
 
-            sys::free(pointer.cast());
+            free(pointer.cast());
 
             written
         }

@@ -7,14 +7,13 @@ mod tests;
 
 use {
     super::{
-        budget::{DESCRIPTION_COPY_NODE_LIMIT, PASS_REIFY_BUDGET, ReifyBudget},
-        interpret::{Evaluator, Outcome, Residual},
-        reify::{ReifyScope, free_references, reify, reify_all, reify_check, reify_check_all},
-        value::{Bail, Value},
+        Bail, DESCRIPTION_COPY_NODE_LIMIT, Evaluator, Outcome, PASS_REIFY_BUDGET, ReifyBudget,
+        ReifyScope, Residual, Value, free_references, reify, reify_all, reify_check,
+        reify_check_all,
     },
     crate::{
         Atom, BlockId, ForeignId, FunctionId, Module, Rhs, Statement, StatementId, ValueId,
-        walk::control_blocks,
+        control_blocks,
     },
     std::collections::{BTreeMap, BTreeSet},
 };

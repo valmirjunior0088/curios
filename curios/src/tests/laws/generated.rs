@@ -3,7 +3,7 @@
 //! A law declared at two carriers is stated at both by construction, and a family a carrier's procedure does not decide fails at that carrier rather than going unstated.
 
 use {
-    super::{closes, misplaced, semantics::holds},
+    super::{closes, holds, misplaced},
     curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation, TABLE},
     curios_num::Grain,
 };

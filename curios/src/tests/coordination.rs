@@ -1,7 +1,7 @@
 //! Repeatable measurements of guest coordination, with compilation and execution captured separately. The measurement below owns its workload settings and individual results.
 
 use {
-    super::{compile, tui::LISTING_PROGRAM},
+    super::{LISTING_PROGRAM, compile},
     curios_profile::{Destination, fold, trace},
     curios_runtime::{MockHost, MockIo},
     std::{

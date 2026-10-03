@@ -4,10 +4,8 @@
 
 use {
     crate::{
-        Atom, Block, BlockId, Function, FunctionId, Module, RecGroup, RecGroupId, RecValue,
-        Statement, StatementId, ValueId,
-        remap::{Remap, lookup},
-        walk::control_blocks,
+        Atom, Block, BlockId, Function, FunctionId, Module, RecGroup, RecGroupId, RecValue, Remap,
+        Statement, StatementId, ValueId, control_blocks, lookup,
     },
     std::collections::{BTreeMap, BTreeSet},
 };

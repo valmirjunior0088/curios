@@ -18,7 +18,7 @@ mod tests;
 use {
     crate::{
         Atom, Block, BlockId, Constant, Function, FunctionId, Module, Operation, Rhs, Statement,
-        StatementId, Terminator, walk::control_blocks,
+        StatementId, Terminator, control_blocks,
     },
     curios_num::{Integer, Natural},
     std::collections::BTreeSet,

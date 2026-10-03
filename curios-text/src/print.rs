@@ -11,7 +11,7 @@ use {
         TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse,
         TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField,
     },
-    crate::parse::op_precedence,
+    crate::op_precedence,
     curios_abi::{ResultShape, WireResults, WireSignature, WireType, stdio},
     curios_num::{Floating, Grain, Natural, Rounding},
     curios_print::{

@@ -35,6 +35,7 @@ mod print;
 pub(crate) use print::*;
 
 mod walk;
+pub(crate) use walk::*;
 
 mod analysis;
 pub use analysis::*;
@@ -51,6 +52,7 @@ mod summary;
 pub use summary::*;
 
 mod remap;
+pub(crate) use remap::*;
 
 mod optimize;
 pub use optimize::*;

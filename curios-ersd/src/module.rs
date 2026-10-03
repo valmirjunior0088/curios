@@ -10,8 +10,8 @@ mod tests;
 use {
     super::{
         Atom, Block, BlockId, Constant, ConstantId, Constructor, ConstructorId, FamilyId, Field,
-        ForeignId, Function, FunctionId, ProductId, ProductSchema, RecGroup, RecGroupId, Statement,
-        StatementId, Terminator, ValueId, VariantFamily,
+        ForeignId, Function, FunctionId, ProductId, ProductSchema, RecGroup, RecGroupId, Remap,
+        Statement, StatementId, Terminator, ValueId, VariantFamily,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Arena,
@@ -354,7 +354,7 @@ impl Module {
         let statements = self.statements.compact();
         let rec_groups = self.rec_groups.compact();
 
-        let remap = crate::remap::Remap {
+        let remap = Remap {
             values: &values,
             blocks: &blocks,
             functions: &functions,

@@ -7,8 +7,12 @@ mod characters;
 mod cli;
 mod codegen;
 mod concepts;
+
 #[cfg(feature = "profile")]
 mod coordination;
+#[cfg(feature = "profile")]
+use coordination::*;
+
 mod corpus;
 mod derive;
 mod document;
@@ -41,8 +45,15 @@ mod soundness;
 mod strings;
 mod structs;
 mod toml;
+
 mod tui;
+// Only the two profile suites replay the listing.
+#[cfg(feature = "profile")]
+use tui::*;
+
 mod unfolding;
+use unfolding::*;
+
 mod universes;
 mod wasm_conformance;
 

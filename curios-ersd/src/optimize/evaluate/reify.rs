@@ -3,14 +3,10 @@
 //! A leaf value interns as a [`Constant`] and needs no statement; a list, product, or constructor materializes its already-reified fields into a `Let` binding the corresponding construction right-hand side, appended to `out` in dependency order for the caller to splice ahead of the candidate. A closure result materializes as a deep copy of its function with its reified captures wired in, bound by a `Functions` statement — what makes the runtime-args `Fmt` collapse reachable.
 
 use {
-    super::{
-        budget::ReifyBudget,
-        copy::{copy_weight, deep_copy_function},
-        value::{Bail, Closure, Value},
-    },
+    super::{Bail, Closure, ReifyBudget, Value, copy_weight, deep_copy_function},
     crate::{
         Atom, BlockId, Constant, FunctionId, Module, Rhs, SequenceOp, Statement, StatementId,
-        ValueId, walk::control_blocks,
+        ValueId, control_blocks,
     },
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},

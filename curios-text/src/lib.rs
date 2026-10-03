@@ -54,6 +54,7 @@ mod registry;
 pub use registry::*;
 
 mod parse;
+use parse::*;
 
 mod module;
 pub use module::*;

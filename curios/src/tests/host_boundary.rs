@@ -1,11 +1,7 @@
 //! Repeatable measurements of the host and guest boundary, with compilation and execution captured separately. The measurement below owns its workload settings and individual results.
 
 use {
-    super::{
-        compile,
-        coordination::{assert_listing, listing_host},
-        tui::LISTING_PROGRAM,
-    },
+    super::{LISTING_PROGRAM, assert_listing, compile, listing_host},
     curios_profile::{Destination, fold, trace},
     curios_runtime::{MockHost, MockIo},
     std::{
