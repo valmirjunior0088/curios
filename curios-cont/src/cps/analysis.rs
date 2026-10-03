@@ -100,7 +100,7 @@ pub(super) fn analyze_sccs(call_graph: &BTreeMap<FunctionId, BTreeSet<FunctionId
 }
 pub(super) fn analyze_calls(module: &Module) -> CallAnalysis {
     let mut analysis = CallAnalysis::default();
-    for (function, _) in module.functions.iter_live() {
+    for (function, _) in module.live_functions() {
         analysis.call_sites.entry(function).or_default();
         analysis.call_graph.entry(function).or_default();
     }
@@ -108,7 +108,7 @@ pub(super) fn analyze_calls(module: &Module) -> CallAnalysis {
     // The function references each body names, collected beside `escaping` off the same atoms, and which bodies hold a closure callee at all. The recursion verdict below needs both; the body-only `call_graph` must carry neither, since a reference is not a call site.
     let mut named_in: BTreeMap<FunctionId, BTreeSet<FunctionId>> = BTreeMap::new();
     let mut applies_a_closure: BTreeSet<FunctionId> = BTreeSet::new();
-    for owner in module.functions.live_ids().collect::<Vec<_>>() {
+    for owner in module.function_ids().collect::<Vec<_>>() {
         for node_id in function_nodes(module, owner) {
             analysis.node_owners.insert(node_id, owner);
             let node = module.node(node_id).unwrap();
@@ -212,7 +212,7 @@ pub(super) fn analyze_calls(module: &Module) -> CallAnalysis {
             }
         }
     }
-    for function in module.functions.live_ids() {
+    for function in module.function_ids() {
         if analysis.lexical_scope.contains_key(&function) {
             continue;
         }
@@ -242,7 +242,7 @@ pub(super) fn continuation_entries(
     module: &Module,
 ) -> BTreeMap<ContinuationId, Vec<Option<FunctionId>>> {
     let mut output = BTreeMap::<ContinuationId, Vec<Option<FunctionId>>>::new();
-    for (_, node) in module.nodes.iter_live() {
+    for (_, node) in module.live_nodes() {
         match node {
             Node::ApplyFun {
                 callee, return_to, ..
@@ -368,7 +368,7 @@ pub(super) fn free_values(module: &Module, function: FunctionId) -> BTreeSet<Val
 pub(super) fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
     let mut known = BTreeMap::new();
 
-    for (_, node) in module.nodes.iter_live() {
+    for (_, node) in module.live_nodes() {
         if let Node::LetValue {
             result,
             value: ValueExpr::Literal(literal),
@@ -383,11 +383,11 @@ pub(super) fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
     let recursive_functions = &analysis.recursive;
 
     let mut function_inputs = BTreeMap::<FunctionId, Vec<Knowledge>>::new();
-    for (function, definition) in module.functions.iter_live() {
+    for (function, definition) in module.live_functions() {
         function_inputs.insert(function, vec![Knowledge::Unknown; definition.params.len()]);
     }
 
-    for (_, node) in module.nodes.iter_live() {
+    for (_, node) in module.live_nodes() {
         if let Node::ApplyFun {
             callee: Callee::Known(function),
             args,
@@ -417,13 +417,13 @@ pub(super) fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
 
     // A continuation parameter is known the same way a function's is: every transfer hands it the same literal. Edges carry their arguments; an operation delivering into its `return_to` hands a runtime value, which is the `None` that forces `Conflict`. A join point whose every jump passes one tag — the clone `specialize_jump_patterns` or `split_parameters` leaves once the other tag's jumps are gone — keeps a switch on that parameter and the arm it can never take, and a read in that dead arm of a value minted in the live arm's vocabulary is exactly what `verify_rows` refuses once a later pass substitutes the construction into it.
     let mut continuation_inputs = BTreeMap::<ContinuationId, Vec<Knowledge>>::new();
-    for (continuation, definition) in module.continuations.iter_live() {
+    for (continuation, definition) in module.live_continuations() {
         continuation_inputs.insert(
             continuation,
             vec![Knowledge::Unknown; definition.params.len()],
         );
     }
-    for (_, node) in module.nodes.iter_live() {
+    for (_, node) in module.live_nodes() {
         let mut edge = |edge: &Edge| {
             if let Some(inputs) = continuation_inputs.get_mut(&edge.target) {
                 merge_inputs(inputs, Some(&edge.args));

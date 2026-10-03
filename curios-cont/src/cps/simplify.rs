@@ -7,7 +7,7 @@ use {
 
 pub(super) fn rewrite_atoms(module: &mut Module, known: &BTreeMap<ValueId, Atom>) -> bool {
     let mut changed = false;
-    for (_, node) in module.nodes.iter_live_mut() {
+    for (_, node) in module.live_nodes_mut() {
         visit_atoms_mut(node, &mut |atom| {
             if let Atom::Value(value) = atom
                 && let Some(replacement) = known.get(value)
@@ -39,8 +39,7 @@ pub(super) fn rewrite_atoms(module: &mut Module, known: &BTreeMap<ValueId, Atom>
 }
 pub(super) fn forward_continuations(module: &mut Module) -> bool {
     let forwarding = module
-        .continuations
-        .iter_live()
+        .live_continuations()
         .filter_map(|(id, continuation)| {
             let Node::ApplyCont(edge) = module.node(continuation.body)? else {
                 return None;
@@ -80,7 +79,7 @@ pub(super) fn forward_continuations(module: &mut Module) -> bool {
     };
 
     let mut changed = false;
-    for (_, node) in module.nodes.iter_live_mut() {
+    for (_, node) in module.live_nodes_mut() {
         match node {
             Node::ApplyCont(edge) => {
                 thread_edge(edge, &forwarding, &mut changed);
@@ -152,8 +151,7 @@ pub(super) fn thread_edge(
 /// Sound because the continuation's body is one node and everything it reads is in scope at each jump into it: its parameters are the jump's arguments, and anything else was in scope where it was defined, which every jump into it lies within, since a continuation is local to its function. The call keeps the body's arguments, with the jump's substituted for the parameters, and the body's return continuation, so its arity and protocol are unchanged. Only a jump handing over a known function is forwarded: a callee that is still a value gains nothing from moving and would only copy the node.
 pub(super) fn forward_calls(module: &mut Module) -> bool {
     let calling = module
-        .continuations
-        .iter_live()
+        .live_continuations()
         .filter_map(|(id, continuation)| {
             let Node::ApplyFun {
                 callee: Callee::Closure(callee),
@@ -184,7 +182,7 @@ pub(super) fn forward_calls(module: &mut Module) -> bool {
     }
 
     let mut changed = false;
-    for (_, node) in module.nodes.iter_live_mut() {
+    for (_, node) in module.live_nodes_mut() {
         let Node::ApplyCont(edge) = node else {
             continue;
         };
@@ -230,7 +228,7 @@ pub(super) fn retarget(
 }
 pub(super) fn simplify_nodes(module: &mut Module) -> bool {
     let mut changed = false;
-    for (_, node) in module.nodes.iter_live_mut() {
+    for (_, node) in module.live_nodes_mut() {
         match node {
             Node::LetIntrinsic {
                 result,
@@ -351,7 +349,7 @@ fn identity_fold(op: Intrinsic, args: &[Atom]) -> Option<IdentityFold> {
 pub(super) fn fold_intrinsic_identities(module: &mut Module) -> bool {
     let mut changed = false;
     loop {
-        let selected = module.nodes.iter_live().find_map(|(id, node)| {
+        let selected = module.live_nodes().find_map(|(id, node)| {
             let Node::LetIntrinsic {
                 result,
                 op,
@@ -372,11 +370,11 @@ pub(super) fn fold_intrinsic_identities(module: &mut Module) -> bool {
             IdentityFold::Operand(replacement) => {
                 rewrite_atoms(module, &BTreeMap::from([(result, replacement)]));
                 rewire_node(module, node, next);
-                module.nodes.remove(node);
-                module.values.remove(result);
+                module.remove_node(node);
+                module.remove_value(result);
             }
             IdentityFold::Literal(literal) => {
-                module.nodes.set(
+                module.set_node(
                     node,
                     Node::LetValue {
                         result,
@@ -398,7 +396,7 @@ pub(super) fn fuse_append_chains(module: &mut Module) -> bool {
     // Every packed append by its result — node, grain, base, element, successor — and every packed literal binding, so a chain rooted at an interned empty is recognized.
     let mut appends = BTreeMap::new();
     let mut literals = BTreeMap::new();
-    for (id, node) in module.nodes.iter_live() {
+    for (id, node) in module.live_nodes() {
         match node {
             Node::LetIntrinsic {
                 result,
@@ -464,7 +462,7 @@ pub(super) fn fuse_append_chains(module: &mut Module) -> bool {
 
         let chunk = Intrinsic::BinChunk(grain, elems.len());
         if rooted_empty {
-            module.nodes.set(
+            module.set_node(
                 tip_node,
                 Node::LetIntrinsic {
                     result: tip,
@@ -481,7 +479,7 @@ pub(super) fn fuse_append_chains(module: &mut Module) -> bool {
                 args: vec![root, Atom::Value(chunk_result)],
                 next: tip_next,
             });
-            module.nodes.set(
+            module.set_node(
                 tip_node,
                 Node::LetIntrinsic {
                     result: chunk_result,
@@ -502,8 +500,8 @@ pub(super) fn fuse_append_chains(module: &mut Module) -> bool {
             .collect();
         splice_dead_nodes(module, &redirect);
         for (node, value) in chain {
-            module.nodes.remove(node);
-            module.values.remove(value);
+            module.remove_node(node);
+            module.remove_value(value);
         }
         changed = true;
     }
@@ -602,7 +600,7 @@ fn install_flat(
         });
     }
     match head {
-        Some((value, elems)) => module.nodes.set(
+        Some((value, elems)) => module.set_node(
             site,
             Node::LetValue {
                 result: value,
@@ -616,8 +614,8 @@ fn install_flat(
                 .node(tail)
                 .cloned()
                 .expect("the flat node was just added");
-            module.nodes.set(site, node);
-            module.nodes.remove(tail);
+            module.set_node(site, node);
+            module.remove_node(tail);
         }
     }
 
@@ -627,8 +625,8 @@ fn install_flat(
         .collect();
     splice_dead_nodes(module, &redirect);
     for (node, value, _) in consumed {
-        module.nodes.remove(node);
-        module.values.remove(value);
+        module.remove_node(node);
+        module.remove_value(value);
     }
 }
 
@@ -640,7 +638,7 @@ pub(super) fn flatten_indexed_lists(module: &mut Module) -> bool {
         let mut concats = BTreeMap::new();
         let mut appends = BTreeMap::new();
         let mut flat = BTreeSet::new();
-        for (id, node) in module.nodes.iter_live() {
+        for (id, node) in module.live_nodes() {
             match node {
                 Node::LetIntrinsic {
                     result,
@@ -678,8 +676,7 @@ pub(super) fn flatten_indexed_lists(module: &mut Module) -> bool {
 
     // Settle sites first. Each is re-read at its turn, so a settle-of-settle chain resolves in any order.
     let settle_sites: Vec<NodeId> = module
-        .nodes
-        .iter_live()
+        .live_nodes()
         .filter_map(|(id, node)| {
             matches!(
                 node,
@@ -708,8 +705,8 @@ pub(super) fn flatten_indexed_lists(module: &mut Module) -> bool {
             Atom::Value(value) if flat.contains(value) => {
                 rewrite_atoms(module, &BTreeMap::from([(result, operand.clone())]));
                 rewire_node(module, site, next);
-                module.nodes.remove(site);
-                module.values.remove(result);
+                module.remove_node(site);
+                module.remove_value(result);
                 changed = true;
             }
             Atom::Value(value)
@@ -736,8 +733,7 @@ pub(super) fn flatten_indexed_lists(module: &mut Module) -> bool {
     // Then the demand rule, over what remains.
     let demands = super::demand::demands(module);
     let roots: Vec<NodeId> = module
-        .nodes
-        .iter_live()
+        .live_nodes()
         .filter_map(|(id, node)| match node {
             Node::LetIntrinsic {
                 result,
@@ -793,7 +789,7 @@ pub(super) fn flatten_indexed_lists(module: &mut Module) -> bool {
 pub(super) fn forward_aggregate_projections(module: &mut Module) -> bool {
     // Keyed by the vocabulary the construction was built in, so a read only ever forwards through a matching construction — a `RowGet` never folds through a structural tuple, nor a `TupleGet` through a row's.
     let mut aggregates = BTreeMap::<(ValueId, Option<RowId>), &[Atom]>::new();
-    for (_, node) in module.nodes.iter_live() {
+    for (_, node) in module.live_nodes() {
         match node {
             Node::LetValue {
                 result,
@@ -815,7 +811,7 @@ pub(super) fn forward_aggregate_projections(module: &mut Module) -> bool {
 
     let mut forwarded = BTreeMap::<ValueId, Atom>::new();
     let mut redirect = BTreeMap::<NodeId, NodeId>::new();
-    for (id, node) in module.nodes.iter_live() {
+    for (id, node) in module.live_nodes() {
         let Node::LetIntrinsic {
             result,
             op,
@@ -866,10 +862,10 @@ pub(super) fn forward_aggregate_projections(module: &mut Module) -> bool {
     rewrite_atoms(module, &forwarded);
     splice_dead_nodes(module, &redirect);
     for &node in redirect.keys() {
-        module.nodes.remove(node);
+        module.remove_node(node);
     }
     for &result in forwarded.keys() {
-        module.values.remove(result);
+        module.remove_value(result);
     }
     true
 }
@@ -880,7 +876,7 @@ pub(super) fn eliminate_dead_bindings(module: &mut Module) -> bool {
         let counts = module.value_use_counts();
         let mut redirect = BTreeMap::<NodeId, NodeId>::new();
         let mut dead_values = Vec::<ValueId>::new();
-        for (id, node) in module.nodes.iter_live() {
+        for (id, node) in module.live_nodes() {
             let removal = match node {
                 Node::LetValue { result, next, .. }
                     if counts.get(result).copied().unwrap_or(0) == 0 =>
@@ -911,10 +907,10 @@ pub(super) fn eliminate_dead_bindings(module: &mut Module) -> bool {
         }
         splice_dead_nodes(module, &redirect);
         for &node in redirect.keys() {
-            module.nodes.remove(node);
+            module.remove_node(node);
         }
         for value in dead_values {
-            module.values.remove(value);
+            module.remove_value(value);
         }
         changed = true;
     }
@@ -923,13 +919,13 @@ pub(super) fn eliminate_dead_bindings(module: &mut Module) -> bool {
 
 /// Redirect every control edge that targets a spliced-out node to the first surviving node in its chain. `redirect` maps each removed node to its immediate successor; following the chain skips runs of consecutive removed nodes, so the result is the same as rewiring one node at a time.
 fn splice_dead_nodes(module: &mut Module, redirect: &BTreeMap<NodeId, NodeId>) {
-    for (_, function) in module.functions.iter_live_mut() {
+    for (_, function) in module.live_functions_mut() {
         function.body = resolve_redirect(redirect, function.body);
     }
-    for (_, continuation) in module.continuations.iter_live_mut() {
+    for (_, continuation) in module.live_continuations_mut() {
         continuation.body = resolve_redirect(redirect, continuation.body);
     }
-    for (_, node) in module.nodes.iter_live_mut() {
+    for (_, node) in module.live_nodes_mut() {
         match node {
             Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => {
                 *next = resolve_redirect(redirect, *next);
@@ -958,17 +954,17 @@ fn resolve_redirect(redirect: &BTreeMap<NodeId, NodeId>, mut id: NodeId) -> Node
     id
 }
 pub(super) fn rewire_node(module: &mut Module, from: NodeId, to: NodeId) {
-    for (_, function) in module.functions.iter_live_mut() {
+    for (_, function) in module.live_functions_mut() {
         if function.body == from {
             function.body = to;
         }
     }
-    for (_, continuation) in module.continuations.iter_live_mut() {
+    for (_, continuation) in module.live_continuations_mut() {
         if continuation.body == from {
             continuation.body = to;
         }
     }
-    for (_, node) in module.nodes.iter_live_mut() {
+    for (_, node) in module.live_nodes_mut() {
         match node {
             Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => {
                 if *next == from {
@@ -1012,8 +1008,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut Module) -> bool {
 
     // Precompute the continuations used as a return target in one pass, rather than rescanning every node for each continuation.
     let return_targets = module
-        .nodes
-        .slots()
+        .nodes()
         .iter()
         .flatten()
         .filter_map(|node| match node {
@@ -1026,8 +1021,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut Module) -> bool {
         })
         .collect::<BTreeSet<_>>();
     let continuations = module
-        .continuations
-        .iter_live()
+        .live_continuations()
         .filter(|(id, _)| !return_targets.contains(id))
         .filter_map(|(id, definition)| {
             let dead = dead_indices(&definition.params);
@@ -1036,11 +1030,11 @@ pub(super) fn eliminate_dead_parameters(module: &mut Module) -> bool {
         .collect::<Vec<_>>();
     for (continuation, dead) in continuations {
         let removed = remove_parameter_indices(
-            &mut module.continuations.get_mut(continuation).unwrap().params,
+            &mut module.continuation_mut(continuation).unwrap().params,
             &dead,
         );
         module.remove_params_from_record(continuation, &dead);
-        for (_, node) in module.nodes.iter_live_mut() {
+        for (_, node) in module.live_nodes_mut() {
             match node {
                 Node::ApplyCont(edge) if edge.target == continuation => {
                     remove_parameter_indices(&mut edge.args, &dead);
@@ -1060,14 +1054,13 @@ pub(super) fn eliminate_dead_parameters(module: &mut Module) -> bool {
             module.replace_atom(UseTarget::Value(value), Atom::Filler);
         }
         for value in removed {
-            module.values.remove(value);
+            module.remove_value(value);
         }
         changed = true;
     }
 
     let escaping = module
-        .nodes
-        .slots()
+        .nodes()
         .iter()
         .flatten()
         .flat_map(atoms)
@@ -1077,8 +1070,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut Module) -> bool {
         })
         .collect::<BTreeSet<_>>();
     let functions = module
-        .functions
-        .iter_live()
+        .live_functions()
         .filter(|(id, _)| !escaping.contains(id))
         .filter_map(|(id, definition)| {
             let dead = dead_indices(&definition.params);
@@ -1086,11 +1078,9 @@ pub(super) fn eliminate_dead_parameters(module: &mut Module) -> bool {
         })
         .collect::<Vec<_>>();
     for (function, dead) in functions {
-        let removed = remove_parameter_indices(
-            &mut module.functions.get_mut(function).unwrap().params,
-            &dead,
-        );
-        for (_, node) in module.nodes.iter_live_mut() {
+        let removed =
+            remove_parameter_indices(&mut module.function_mut(function).unwrap().params, &dead);
+        for (_, node) in module.live_nodes_mut() {
             if let Node::ApplyFun {
                 callee: Callee::Known(callee),
                 args,
@@ -1106,7 +1096,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut Module) -> bool {
             module.replace_atom(UseTarget::Value(value), Atom::Filler);
         }
         for value in removed {
-            module.values.remove(value);
+            module.remove_value(value);
         }
         changed = true;
     }

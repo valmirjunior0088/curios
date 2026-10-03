@@ -15,7 +15,7 @@ pub(super) fn inline_known_calls(module: &mut Module) -> bool {
     for _ in 0..10_000 {
         let analysis = analyze_calls(module);
         let mut inlined_any = false;
-        for index in 0..module.nodes.len() {
+        for index in 0..module.nodes().len() {
             let node_id = NodeId(index as u32);
             // Re-read: an earlier inline in this sweep may have removed or rewritten this node.
             let Some(Node::ApplyFun {
@@ -27,7 +27,7 @@ pub(super) fn inline_known_calls(module: &mut Module) -> bool {
                 continue;
             };
             let (callee, args, return_to) = (*callee, args.clone(), *return_to);
-            if Some(callee) == module.entry || analysis.recursive.contains(&callee) {
+            if Some(callee) == module.entry() || analysis.recursive.contains(&callee) {
                 continue;
             }
             if !analysis.node_owners.contains_key(&node_id) {
@@ -64,7 +64,7 @@ pub(super) fn inline_single_use_continuations(module: &mut Module) -> bool {
     for _ in 0..10_000 {
         let transfers_by_target = continuation_transfers(module);
         let mut inlined_any = false;
-        for index in 0..module.continuations.len() {
+        for index in 0..module.continuations().len() {
             let target = ContinuationId(index as u32);
             // Re-read: an earlier inline (and its prune) in this sweep may have removed or rewritten this continuation.
             let Some(continuation) = module.continuation(target) else {
@@ -102,7 +102,7 @@ pub(super) fn inline_single_use_continuations(module: &mut Module) -> bool {
 pub(super) fn continuation_transfers(module: &Module) -> BTreeMap<ContinuationId, Vec<NodeId>> {
     let mut transfers: BTreeMap<ContinuationId, Vec<NodeId>> = BTreeMap::new();
     let mut targets = BTreeSet::new();
-    for (id, node) in module.nodes.iter_live() {
+    for (id, node) in module.live_nodes() {
         targets.clear();
         collect_control_targets(node, &mut targets);
         for &target in &targets {
@@ -188,7 +188,7 @@ pub(super) fn inline_continuation(
     }
 
     for &node in &substitution_nodes {
-        let node = module.nodes.get_mut(node).unwrap();
+        let node = module.node_mut(node).unwrap();
         visit_atoms_mut(node, &mut |atom| {
             if let Atom::Value(value) = atom
                 && let Some(replacement) = substitutions.get(value)
@@ -208,12 +208,11 @@ pub(super) fn inline_continuation(
         }
     }
 
-    let body = module.nodes.remove(definition.body).unwrap();
-    module.nodes.set(call, body);
-    module.continuations.remove(continuation);
-    module.field_groups.remove(&continuation);
+    let body = module.remove_node(definition.body).unwrap();
+    module.set_node(call, body);
+    module.remove_continuation(continuation);
     for param in definition.params {
-        module.values.remove(param);
+        module.remove_value(param);
     }
     true
 }
@@ -274,7 +273,7 @@ pub(super) fn inline_call(
         owned.extend(definition.params.iter().copied());
     }
     for old in owned {
-        let definition = module.values.get(old).unwrap().clone();
+        let definition = module.value(old).unwrap().clone();
         let fresh = module.add_value(definition.debug_name);
         values.insert(old, Atom::Value(fresh));
     }
@@ -294,7 +293,7 @@ pub(super) fn inline_call(
         let fresh = module.reserve_continuation();
         continuations.insert(id, fresh);
         for &param in &continuation.params {
-            let definition = module.values.get(param).unwrap().clone();
+            let definition = module.value(param).unwrap().clone();
             let fresh = module.add_value(definition.debug_name);
             values.insert(param, Atom::Value(fresh));
         }
@@ -354,7 +353,7 @@ pub(super) fn inline_call(
     }
 
     for (&old, continuation) in &continuation_defs {
-        module.continuations.define(
+        module.define_continuation(
             continuations[&old],
             Continuation {
                 debug_name: continuation.debug_name.clone(),
@@ -383,9 +382,9 @@ pub(super) fn inline_call(
     // The callee's body clone lands on the live call node (`node_map` seeds `function.body -> call`); every other clone fills a slot reserved above.
     for (id, node) in cloned_nodes {
         if id == call {
-            module.nodes.set(id, node);
+            module.set_node(id, node);
         } else {
-            module.nodes.define(id, node);
+            module.define_node(id, node);
         }
     }
     true

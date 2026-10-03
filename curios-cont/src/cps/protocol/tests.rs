@@ -418,7 +418,7 @@ fn a_forwarder_rebuilds_in_its_class_vocabulary() {
         functions: vec![callee, forwarder],
         body: inner,
     });
-    module.functions.get_mut(entry).unwrap().body = bound;
+    module.function_mut(entry).unwrap().body = bound;
     module.set_entry(entry);
     module.verify().unwrap();
 

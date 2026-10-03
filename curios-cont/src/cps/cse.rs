@@ -57,7 +57,7 @@ pub(super) fn dedupe_intrinsics(module: &mut Module) -> bool {
 
     let mut substitutions = BTreeMap::new();
     let mut duplicates = Vec::new();
-    let functions = module.functions.live_ids().collect::<Vec<_>>();
+    let functions = module.function_ids().collect::<Vec<_>>();
     for function in functions {
         let mut table = BTreeMap::<(Intrinsic, Vec<AtomKey>), ValueId>::new();
         let mut work = vec![Task::Visit(module.function(function).unwrap().body)];
@@ -132,8 +132,8 @@ pub(super) fn dedupe_intrinsics(module: &mut Module) -> bool {
     rewrite_atoms(module, &substitutions);
     for (node, result, next) in duplicates {
         rewire_node(module, node, next);
-        module.nodes.remove(node);
-        module.values.remove(result);
+        module.remove_node(node);
+        module.remove_value(result);
     }
     true
 }
@@ -142,13 +142,13 @@ pub(super) fn dedupe_intrinsics(module: &mut Module) -> bool {
 fn debug_assert_single_owner(module: &Module) {
     if cfg!(debug_assertions) {
         let mut counts = BTreeMap::<NodeId, usize>::new();
-        for (_, function) in module.functions.iter_live() {
+        for (_, function) in module.live_functions() {
             *counts.entry(function.body).or_insert(0) += 1;
         }
-        for (_, continuation) in module.continuations.iter_live() {
+        for (_, continuation) in module.live_continuations() {
             *counts.entry(continuation.body).or_insert(0) += 1;
         }
-        for (_, node) in module.nodes.iter_live() {
+        for (_, node) in module.live_nodes() {
             match node {
                 Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => {
                     *counts.entry(*next).or_insert(0) += 1;
@@ -159,7 +159,7 @@ fn debug_assert_single_owner(module: &Module) {
                 _ => {}
             }
         }
-        for (id, _) in module.nodes.iter_live() {
+        for (id, _) in module.live_nodes() {
             assert_eq!(
                 counts.get(&id).copied().unwrap_or(0),
                 1,

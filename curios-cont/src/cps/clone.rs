@@ -241,7 +241,7 @@ pub(super) fn copy_bodies(
     }
     let mut values: BTreeMap<ValueId, ValueId> = BTreeMap::new();
     for old in owned {
-        let definition = module.values.get(old).unwrap().clone();
+        let definition = module.value(old).unwrap().clone();
         let fresh = module.add_value(definition.debug_name);
         values.insert(old, fresh);
     }
@@ -324,10 +324,10 @@ pub(super) fn copy_bodies(
         .collect();
 
     for (id, node) in cloned_nodes {
-        module.nodes.define(id, node);
+        module.define_node(id, node);
     }
     for (id, cont) in cloned_conts {
-        module.continuations.define(id, cont);
+        module.define_continuation(id, cont);
     }
     for (id, function) in cloned_functions {
         module.define_function(id, function);

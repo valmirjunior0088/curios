@@ -119,14 +119,14 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
     let mut offers = BTreeMap::new();
     let mut withdrawn = BTreeSet::new();
 
-    for (_, continuation) in module.continuations.iter_live() {
+    for (_, continuation) in module.live_continuations() {
         // A continuation parameter has no producer of its own, so it takes whatever its uses agree on.
         for &param in &continuation.params {
             offers.insert(param, Offer::Open { words: true });
         }
     }
 
-    for (_, node) in module.nodes.iter_live() {
+    for (_, node) in module.live_nodes() {
         match node {
             // A row read is the one operation whose result carrier is a fact of the module rather than of the operation: the slot it names says whether a register can hold it.
             // A result its literal operands bound below the i31 is offered the word its value fits.
@@ -190,7 +190,7 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
         }
     }
 
-    for (function, definition) in module.functions.iter_live() {
+    for (function, definition) in module.live_functions() {
         // Every function is entered through a `func/N` signature whose parameters are uniformly `anyref`.
         withdrawn.extend(&definition.params);
         withdraw_params(module, definition.return_cont, &mut withdrawn);
@@ -238,7 +238,7 @@ fn word_params(module: &Module, offers: &BTreeMap<ValueId, Offer>) -> BTreeSet<V
         }
     };
 
-    for (_, node) in module.nodes.iter_live() {
+    for (_, node) in module.live_nodes() {
         match node {
             Node::ApplyCont(edge) => read_edge(edge),
             Node::Switch { cases, default, .. } => {
@@ -297,10 +297,10 @@ fn wire_carrier(wire: &WireType) -> Option<Repr> {
 /// Decide the storage of every value in the module: which values `curios-emit` may hold in a machine register, and at which carrier.
 pub fn storage(module: &Module) -> BTreeMap<ValueId, Storage> {
     let offers = offers(module);
-    let seeds = module.values.live_ids().collect::<Vec<_>>();
+    let seeds = module.value_ids().collect::<Vec<_>>();
 
     Solver::solve(seeds, |solver| {
-        for (_, node) in module.nodes.iter_live() {
+        for (_, node) in module.live_nodes() {
             match node {
                 // The roster states what each operand position reads.
                 Node::LetIntrinsic { op, args, .. } => {

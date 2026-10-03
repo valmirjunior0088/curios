@@ -66,12 +66,7 @@ fn registers_and_rewires_uses() {
         .unwrap();
     let replacement = module.add_value(Some("replacement".into()));
     let entry = module.entry().unwrap();
-    module
-        .functions
-        .get_mut(entry)
-        .unwrap()
-        .params
-        .push(replacement);
+    module.function_mut(entry).unwrap().params.push(replacement);
     let count = |module: &Module, value| module.value_use_counts().get(&value).copied();
     assert_eq!(count(&module, old), Some(1));
     module.replace_atom(UseTarget::Value(old), Atom::Value(replacement));
@@ -119,8 +114,8 @@ fn verifier_rejects_intrinsic_arity_mismatch() {
         args: vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))],
         next,
     });
-    let bad = NodeId((module.nodes.len() - 1) as u32);
-    module.functions.get_mut(FunctionId(0)).unwrap().body = bad;
+    let bad = NodeId((module.nodes().len() - 1) as u32);
+    module.function_mut(FunctionId(0)).unwrap().body = bad;
     assert!(
         module
             .verify()
@@ -164,7 +159,7 @@ fn verifier_rejects_a_read_in_the_other_vocabulary() {
             },
             next: read,
         });
-        module.functions.get_mut(FunctionId(0)).unwrap().body = construction;
+        module.function_mut(FunctionId(0)).unwrap().body = construction;
 
         let error = module.verify().unwrap_err().0;
         assert!(
@@ -249,7 +244,7 @@ fn the_round_boundary_accepts_the_dead_arm_only_convergence_removes() {
         ]),
         next: let_cont,
     });
-    module.functions.get_mut(FunctionId(0)).unwrap().body = construction;
+    module.function_mut(FunctionId(0)).unwrap().body = construction;
 
     // The full set refuses the mismatch; the boundary set accepts everything else about the module and leaves the mismatch to the exit gate.
     assert!(module.verify().unwrap_err().0.contains("was built as"));
@@ -355,7 +350,7 @@ fn verifier_rejects_another_functions_return_target() {
     );
     let entry = module.entry().unwrap();
     let entry_body = module.function(entry).unwrap().body;
-    module.nodes.set(
+    module.set_node(
         entry_body,
         Node::ApplyCont(Edge {
             target: second_return,
@@ -377,7 +372,7 @@ fn verifier_rejects_undefined_non_return_continuation() {
     let undefined = module.reserve_continuation();
     let entry = module.entry().unwrap();
     let entry_body = module.function(entry).unwrap().body;
-    module.nodes.set(
+    module.set_node(
         entry_body,
         Node::ApplyCont(Edge {
             target: undefined,
@@ -443,7 +438,7 @@ fn a_node_reached_from_two_places_is_refused() {
         continuations: vec![first, second],
         body: jump,
     });
-    module.nodes.set(
+    module.set_node(
         body,
         Node::LetCont {
             continuations: Vec::new(),

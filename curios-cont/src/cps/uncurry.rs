@@ -21,7 +21,7 @@ pub(super) fn uncurryable(module: &Module) -> BTreeMap<FunctionId, Option<usize>
     let entries = continuation_entries(module);
     let mut verdicts = BTreeMap::<FunctionId, Option<usize>>::new();
 
-    for owner in module.functions.live_ids().collect::<Vec<_>>() {
+    for owner in module.function_ids().collect::<Vec<_>>() {
         let sentinel = module.function(owner).unwrap().return_cont;
         for node_id in function_nodes(module, owner) {
             let Some(Node::ApplyFun {
@@ -287,12 +287,7 @@ pub(super) fn uncurry_returns(module: &mut Module) -> bool {
         let params = (0..width)
             .map(|index| module.add_value(Some(format!("applied/{}/{index}", member.index()))))
             .collect::<Vec<_>>();
-        module
-            .functions
-            .get_mut(member)
-            .unwrap()
-            .params
-            .extend(&params);
+        module.function_mut(member).unwrap().params.extend(&params);
         extra.insert(member, params);
     }
 
@@ -315,7 +310,7 @@ pub(super) fn uncurry_returns(module: &mut Module) -> bool {
             {
                 let (onward, mut args) = (*onward, args.clone());
                 args.extend(carried.iter().cloned());
-                module.nodes.set(
+                module.set_node(
                     node_id,
                     Node::ApplyFun {
                         callee: Callee::Known(onward),
@@ -331,7 +326,7 @@ pub(super) fn uncurry_returns(module: &mut Module) -> bool {
                 && let [Atom::Fun(returned)] = edge.args.as_slice()
             {
                 let returned = *returned;
-                module.nodes.set(
+                module.set_node(
                     node_id,
                     Node::ApplyFun {
                         callee: Callee::Known(returned),
@@ -361,7 +356,7 @@ pub(super) fn uncurry_returns(module: &mut Module) -> bool {
                 result,
                 after,
             } => {
-                module.nodes.set(
+                module.set_node(
                     site,
                     Node::ApplyCont(Edge {
                         target: after,
@@ -371,7 +366,7 @@ pub(super) fn uncurry_returns(module: &mut Module) -> bool {
                 return_to
             }
         };
-        module.nodes.set(
+        module.set_node(
             node_id,
             Node::ApplyFun {
                 callee,
@@ -392,7 +387,7 @@ fn plan_class(
     members: &[FunctionId],
 ) -> Option<Vec<(NodeId, Site)>> {
     let mut plan = Vec::new();
-    for node_id in module.nodes.live_ids().collect::<Vec<_>>() {
+    for node_id in module.node_ids().collect::<Vec<_>>() {
         let Some(Node::ApplyFun {
             callee: Callee::Known(callee),
             return_to,
@@ -437,7 +432,7 @@ fn reached_directly(module: &Module, body: NodeId, site: NodeId) -> bool {
 /// The undirected connected components of the tail-call graph, which a shared return obliges to decide together.
 fn tail_classes(module: &Module) -> Vec<Vec<FunctionId>> {
     let mut edges = BTreeMap::<FunctionId, BTreeSet<FunctionId>>::new();
-    for owner in module.functions.live_ids().collect::<Vec<_>>() {
+    for owner in module.function_ids().collect::<Vec<_>>() {
         let sentinel = module.function(owner).unwrap().return_cont;
         edges.entry(owner).or_default();
         for node_id in function_nodes(module, owner) {

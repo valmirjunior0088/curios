@@ -15,8 +15,8 @@ pub(super) fn contify_calls(module: &mut Module) -> bool {
     let analysis = analyze_calls(module);
     let mut admitted = Vec::new();
 
-    for (callee, function) in module.functions.iter_live() {
-        if Some(callee) == module.entry || analysis.escaping.contains(&callee) {
+    for (callee, function) in module.live_functions() {
+        if Some(callee) == module.entry() || analysis.escaping.contains(&callee) {
             continue;
         }
 
@@ -97,7 +97,7 @@ pub(super) fn contify_call(module: &mut Module, callee: FunctionId, call: NodeId
     let return_body = module.reserve_node();
     let loop_scope = module.reserve_node();
     for node_id in function_nodes(module, callee) {
-        let node = module.nodes.get_mut(node_id).unwrap();
+        let node = module.node_mut(node_id).unwrap();
         match node {
             Node::ApplyFun {
                 callee: Callee::Known(target),
@@ -140,21 +140,21 @@ pub(super) fn contify_call(module: &mut Module, callee: FunctionId, call: NodeId
     }
 
     let initial = module.reserve_node();
-    module.nodes.define(
+    module.define_node(
         initial,
         Node::ApplyCont(Edge {
             target: loop_cont,
             args,
         }),
     );
-    module.nodes.define(
+    module.define_node(
         return_body,
         Node::ApplyCont(Edge {
             target: return_to,
             args: vec![Atom::Value(return_value)],
         }),
     );
-    module.continuations.define(
+    module.define_continuation(
         return_bridge,
         Continuation {
             debug_name: Some("contified return".into()),
@@ -162,14 +162,14 @@ pub(super) fn contify_call(module: &mut Module, callee: FunctionId, call: NodeId
             body: return_body,
         },
     );
-    module.nodes.define(
+    module.define_node(
         loop_scope,
         Node::LetCont {
             continuations: vec![return_bridge],
             body: function.body,
         },
     );
-    module.continuations.define(
+    module.define_continuation(
         loop_cont,
         Continuation {
             debug_name: function.debug_name,
@@ -177,15 +177,15 @@ pub(super) fn contify_call(module: &mut Module, callee: FunctionId, call: NodeId
             body: loop_scope,
         },
     );
-    module.nodes.set(
+    module.set_node(
         call,
         Node::LetCont {
             continuations: vec![loop_cont],
             body: initial,
         },
     );
-    module.functions.remove(callee);
-    for (_, node) in module.nodes.iter_live_mut() {
+    module.remove_function(callee);
+    for (_, node) in module.live_nodes_mut() {
         if let Node::LetFun { functions, .. } = node {
             functions.retain(|function| *function != callee);
         }

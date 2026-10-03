@@ -118,11 +118,11 @@ fn flow_edge(module: &Module, solver: &mut Solver<Origin>, edge: &Edge) {
 /// What flows into every value, to its least fixpoint.
 pub(crate) fn origins(module: &Module) -> BTreeMap<ValueId, Origin> {
     let escaping = analyze_calls(module).escaping;
-    let seeds = module.values.live_ids().collect::<Vec<_>>();
+    let seeds = module.value_ids().collect::<Vec<_>>();
 
     Solver::solve(seeds, |solver| {
         // The injected boundaries, restated every round so a later join cannot narrow them.
-        for (function, definition) in module.functions.iter_live() {
+        for (function, definition) in module.live_functions() {
             if escaping.contains(&function) || module.entry() == Some(function) {
                 for param in &definition.params {
                     solver.join(*param, Origin::Opaque);
@@ -130,7 +130,7 @@ pub(crate) fn origins(module: &Module) -> BTreeMap<ValueId, Origin> {
             }
         }
 
-        for (_, node) in module.nodes.iter_live() {
+        for (_, node) in module.live_nodes() {
             match node {
                 Node::LetValue { result, value, .. } => {
                     let origin = match value {

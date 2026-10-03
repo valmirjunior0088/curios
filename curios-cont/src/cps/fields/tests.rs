@@ -1024,7 +1024,7 @@ fn a_window_region_with_a_hostile_use_declines() {
     };
     let mut default = default;
     default.args = vec![Atom::Value(escape)];
-    module.nodes.set(
+    module.set_node(
         hostile,
         Node::Switch {
             scrutinee,

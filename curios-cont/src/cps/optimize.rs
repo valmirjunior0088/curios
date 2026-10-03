@@ -62,14 +62,14 @@ pub fn optimize(module: &mut Module) {
             // The growth ledger beside the fired ledger: what each pass left standing, so a size regression names its pass the way a time regression names its span.
             curios_profile::sample!(
                 concat!($name, "::nodes"),
-                module.nodes.iter_live().count()
+                module.live_nodes().count()
             );
             curios_profile::sample!(
                 concat!($name, "::conts"),
-                module.continuations.iter_live().count()
+                module.live_continuations().count()
             );
-            curios_profile::sample!(concat!($name, "::cap"), module.nodes.slots().len());
-            curios_profile::sample!(concat!($name, "::values"), module.values.live_count());
+            curios_profile::sample!(concat!($name, "::cap"), module.nodes().len());
+            curios_profile::sample!(concat!($name, "::values"), module.value_ids().count());
             changed
         }};
     }

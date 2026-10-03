@@ -53,7 +53,7 @@ pub(super) fn return_protocols(module: &Module) -> BTreeMap<FunctionId, ReturnPr
     let mut resumes = BTreeMap::<FunctionId, BTreeSet<ContinuationId>>::new();
     let entries = continuation_entries(module);
 
-    for owner in module.functions.live_ids().collect::<Vec<_>>() {
+    for owner in module.function_ids().collect::<Vec<_>>() {
         let sentinel = module.function(owner).unwrap().return_cont;
         tail_calls.entry(owner).or_default();
         if module.entry() == Some(owner) {
@@ -205,11 +205,11 @@ pub(super) fn split_returns(module: &mut Module) -> bool {
         for edge in return_edges_mut(&mut node, sentinel) {
             edge.args = split_fields(module, &constructions, &edge.args, width);
         }
-        module.nodes.set(node_id, node);
+        module.set_node(node_id, node);
     }
 
     let mut resuming = BTreeMap::new();
-    for (_, node) in module.nodes.iter_live() {
+    for (_, node) in module.live_nodes() {
         if let Node::ApplyFun {
             callee: Callee::Known(callee),
             return_to,
@@ -245,7 +245,7 @@ pub(super) fn split_returns(module: &mut Module) -> bool {
             },
             next: body,
         });
-        let definition = module.continuations.get_mut(resume).unwrap();
+        let definition = module.continuation_mut(resume).unwrap();
         definition.params = params;
         definition.body = rebuilt;
     }
@@ -304,7 +304,7 @@ fn return_edges(node: &Node, sentinel: ContinuationId) -> Vec<&Edge> {
 /// The fields of every aggregate built in the module, by the value the construction binds, with the row a variant construction belongs to. A variant is visible here for the same reason a tuple is — a return edge naming one is a class this rewrite can split — and the row rides along so the resume rebuilds in the vocabulary the reads below it use.
 fn constructions(module: &Module) -> BTreeMap<ValueId, (Vec<Atom>, Option<RowId>)> {
     let mut output = BTreeMap::new();
-    for (_, node) in module.nodes.iter_live() {
+    for (_, node) in module.live_nodes() {
         match node {
             Node::LetValue {
                 result,

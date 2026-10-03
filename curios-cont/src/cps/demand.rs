@@ -77,10 +77,10 @@ fn defer_edge(module: &Module, solver: &mut Solver<Demand>, edge: &Edge) {
 
 /// What every value's uses ask of it.
 pub(crate) fn demands(module: &Module) -> BTreeMap<ValueId, Demand> {
-    let seeds = module.values.live_ids().collect::<Vec<_>>();
+    let seeds = module.value_ids().collect::<Vec<_>>();
 
     Solver::solve(seeds, |solver| {
-        for (_, node) in module.nodes.iter_live() {
+        for (_, node) in module.live_nodes() {
             match node {
                 // A projection reads one field and nothing else — the only use that does not consume the whole value. It is taken before the general fallback below, which would otherwise report `Opaque` for the same operand and erase the refinement.
                 Node::LetIntrinsic {

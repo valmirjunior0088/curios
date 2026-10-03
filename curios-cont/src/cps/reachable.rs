@@ -4,7 +4,7 @@ use {
 };
 
 pub(super) fn prune_unreachable(module: &mut Module) -> bool {
-    let Some(entry) = module.entry else {
+    let Some(entry) = module.entry() else {
         return false;
     };
     let mut functions = BTreeSet::new();
@@ -67,18 +67,15 @@ pub(super) fn prune_unreachable(module: &mut Module) -> bool {
     }
 
     let old = (
-        module.functions.live_count(),
-        module.continuations.live_count(),
-        module.nodes.live_count(),
-        module.values.live_count(),
+        module.function_ids().count(),
+        module.continuation_ids().count(),
+        module.node_ids().count(),
+        module.value_ids().count(),
     );
-    module.functions.retain(&functions);
-    module.continuations.retain(&continuations);
-    module
-        .field_groups
-        .retain(|continuation, _| continuations.contains(continuation));
-    module.nodes.retain(&nodes);
-    for (_, node) in module.nodes.iter_live_mut() {
+    module.retain_functions(&functions);
+    module.retain_continuations(&continuations);
+    module.retain_nodes(&nodes);
+    for (_, node) in module.live_nodes_mut() {
         match node {
             Node::LetFun {
                 functions: members, ..
@@ -91,13 +88,13 @@ pub(super) fn prune_unreachable(module: &mut Module) -> bool {
         }
     }
     let mut values = BTreeSet::new();
-    for (_, function) in module.functions.iter_live() {
+    for (_, function) in module.live_functions() {
         values.extend(function.params.iter().copied());
     }
-    for (_, continuation) in module.continuations.iter_live() {
+    for (_, continuation) in module.live_continuations() {
         values.extend(continuation.params.iter().copied());
     }
-    for (_, node) in module.nodes.iter_live() {
+    for (_, node) in module.live_nodes() {
         match node {
             Node::LetValue { result, .. } | Node::LetIntrinsic { result, .. } => {
                 values.insert(*result);
@@ -105,11 +102,11 @@ pub(super) fn prune_unreachable(module: &mut Module) -> bool {
             _ => {}
         }
     }
-    module.values.retain(&values);
+    module.retain_values(&values);
     old != (
-        module.functions.live_count(),
-        module.continuations.live_count(),
-        module.nodes.live_count(),
-        module.values.live_count(),
+        module.function_ids().count(),
+        module.continuation_ids().count(),
+        module.node_ids().count(),
+        module.value_ids().count(),
     )
 }

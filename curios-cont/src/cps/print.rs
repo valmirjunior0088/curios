@@ -19,7 +19,6 @@ use {
         IntrinsicCall, Literal, Module, Node, NodeId, RowId, Slot, ValueExpr, ValueId,
     },
     curios_num::{Grain, Rounding},
-    curios_utilities::ArenaId,
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
@@ -58,7 +57,7 @@ impl Reach {
         let mut work = Vec::new();
 
         // Exhaustive rather than a wildcard, so a node variant that learns to name a row cannot reach the printer while silently missing this walk.
-        for (_, node) in module.nodes.iter_live() {
+        for (_, node) in module.live_nodes() {
             match node {
                 Node::LetValue { value, .. } => match value {
                     ValueExpr::Row(row, _) => work.push(*row),
@@ -88,7 +87,7 @@ impl Reach {
             if !rows.insert(row) {
                 continue;
             }
-            let Some(Some(definition)) = module.rows.get(row.index()) else {
+            let Some(definition) = module.defined_row(row) else {
                 continue;
             };
             for slot in &definition.slots {
@@ -151,12 +150,10 @@ impl Printer<'_, '_, '_, '_> {
     /// The reached rows, in identity order. Answers whether anything was declared, so the entry knows whether a separating blank line is owed.
     fn header(&mut self) -> Result<bool, fmt::Error> {
         let mut declared = false;
-        for (index, row) in self.module.rows.iter().enumerate() {
-            let id = RowId::from_index(index);
-            let Some(row) = row else { continue };
-            if !self.reach.rows.contains(&id) {
+        for id in &self.reach.rows {
+            let Some(row) = self.module.defined_row(*id) else {
                 continue;
-            }
+            };
             let slots = row
                 .slots
                 .iter()
@@ -176,14 +173,12 @@ impl Printer<'_, '_, '_, '_> {
         loop {
             let function = self
                 .module
-                .functions
-                .iter_live()
+                .live_functions()
                 .map(|(id, _)| id)
                 .find(|id| !seen.functions.contains(id));
             let continuation = self
                 .module
-                .continuations
-                .iter_live()
+                .live_continuations()
                 .map(|(id, _)| id)
                 .find(|id| !seen.continuations.contains(id));
 
@@ -489,7 +484,7 @@ impl Printer<'_, '_, '_, '_> {
 
     /// A binder. A hintless value nothing reads is spelled `_`, which is what it is; a hinted one keeps its hint however dead it is.
     fn binder(&self, id: ValueId) -> String {
-        match self.module.values.get(id) {
+        match self.module.value(id) {
             Some(definition) => match &definition.debug_name {
                 Some(name) => format!("{id}${name}"),
                 None if self.uses.get(&id).copied().unwrap_or(0) == 0 => "_".into(),
@@ -500,7 +495,7 @@ impl Printer<'_, '_, '_, '_> {
     }
 
     fn value(&self, id: ValueId) -> String {
-        match self.module.values.get(id) {
+        match self.module.value(id) {
             Some(definition) => format!("{id}{}", hint(&definition.debug_name)),
             None => format!("{id}"),
         }
@@ -523,7 +518,7 @@ impl Printer<'_, '_, '_, '_> {
     /// A parameter list, bracketing each run of parameters the fields record says was one aggregate. The record is a fact of the program that [`Module::verify`] holds the list to, so it is stated where the list is. Only a continuation can carry one, so a function's list passes no owner rather than passing an identity the map could answer for by coincidence.
     fn params(&self, owner: Option<ContinuationId>, params: &[ValueId]) -> String {
         let groups: &[FieldGroup] = owner
-            .and_then(|owner| self.module.field_groups.get(&owner))
+            .and_then(|owner| self.module.field_groups().get(&owner))
             .map_or(&[], Vec::as_slice);
         let mut rendered = String::from("(");
         let mut index = 0;
@@ -599,7 +594,7 @@ impl Printer<'_, '_, '_, '_> {
     }
 
     fn row(&self, id: RowId) -> String {
-        match self.module.rows.get(id.index()).and_then(Option::as_ref) {
+        match self.module.defined_row(id) {
             Some(row) => format!("{id}{}", hint(&row.debug_name)),
             None => format!("{id}"),
         }

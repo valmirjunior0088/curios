@@ -70,14 +70,14 @@ fn admit(module: &Module, origins: &BTreeMap<ValueId, Origin>) -> Vec<Split> {
 
     // Every edge into each continuation, so the per-position source check below is one pass rather than one per candidate parameter.
     let mut incoming = BTreeMap::<ContinuationId, Vec<&Edge>>::new();
-    for (_, node) in module.nodes.iter_live() {
+    for (_, node) in module.live_nodes() {
         for edge in edges_of(node) {
             incoming.entry(edge.target).or_default().push(edge);
         }
     }
 
     let mut admitted = Vec::new();
-    for (continuation, definition) in module.continuations.iter_live() {
+    for (continuation, definition) in module.live_continuations() {
         if resumes.contains(&continuation) {
             continue;
         }
@@ -165,7 +165,7 @@ pub(super) fn split_parameters(module: &mut Module) -> bool {
 
     // The nodes carrying an edge into each continuation, indexed once for the sweep. A split repoints a carrier's predecessors at its projection chain and sets the carrier in place, so the index holds across the sweep — and it is what keeps a sweep of a hundred splits from walking the module a hundred times to find the few nodes each one rewrites.
     let mut carriers = BTreeMap::<ContinuationId, Vec<NodeId>>::new();
-    for (id, node) in module.nodes.iter_live() {
+    for (id, node) in module.live_nodes() {
         for edge in edges_of(node) {
             let entry = carriers.entry(edge.target).or_default();
             if entry.last() != Some(&id) {
@@ -205,8 +205,7 @@ fn apply_split(
         })
         .collect::<Vec<_>>();
     let definition = module
-        .continuations
-        .get_mut(split.continuation)
+        .continuation_mut(split.continuation)
         .expect("admitted continuation is live");
     definition
         .params
@@ -222,12 +221,11 @@ fn apply_split(
         next: body,
     });
     module
-        .continuations
-        .get_mut(split.continuation)
+        .continuation_mut(split.continuation)
         .expect("admitted continuation is live")
         .body = head;
     module.replace_atom(UseTarget::Value(split.param), Atom::Value(rebuilt));
-    module.values.remove(split.param);
+    module.remove_value(split.param);
 
     // Every incoming edge projects its argument into fields above the jump; forwarding collapses the reads through visible constructions on the next rounds.
     for &carrier in carriers {
@@ -276,7 +274,7 @@ fn apply_split(
                 },
             );
         }
-        module.nodes.set(carrier, node);
+        module.set_node(carrier, node);
     }
 }
 
@@ -303,7 +301,7 @@ fn admit_worker(module: &Module, origins: &BTreeMap<ValueId, Origin>) -> Option<
     let demands = demands(module);
     let calls = analyze_calls(module);
 
-    for (function, definition) in module.functions.iter_live() {
+    for (function, definition) in module.live_functions() {
         // An escaping function is reached by callers this rewrite cannot see, and the module entry by the host, which is not rewritten with the module.
         if calls.escaping.contains(&function) || module.entry() == Some(function) {
             continue;
@@ -358,8 +356,7 @@ pub(super) fn split_workers(module: &mut Module) -> bool {
         .map(|index| module.add_value(Some(format!("worker/{}/{index}", worker.function.index()))))
         .collect::<Vec<_>>();
     let definition = module
-        .functions
-        .get_mut(worker.function)
+        .function_mut(worker.function)
         .expect("admitted function is live");
     definition
         .params
@@ -374,17 +371,15 @@ pub(super) fn split_workers(module: &mut Module) -> bool {
         next: body,
     });
     module
-        .functions
-        .get_mut(worker.function)
+        .function_mut(worker.function)
         .expect("admitted function is live")
         .body = head;
     module.replace_atom(UseTarget::Value(worker.param), Atom::Value(rebuilt));
-    module.values.remove(worker.param);
+    module.remove_value(worker.param);
 
     // Every call site projects its argument into fields above the call, filling what its own construction does not carry.
     let callers = module
-        .nodes
-        .iter_live()
+        .live_nodes()
         .filter(|(_, node)| {
             matches!(
                 node,
@@ -424,7 +419,7 @@ pub(super) fn split_workers(module: &mut Module) -> bool {
         };
         args.splice(worker.position..=worker.position, replacement);
         insert_above(module, caller, inserted);
-        module.nodes.set(caller, node);
+        module.set_node(caller, node);
     }
 
     true
@@ -494,7 +489,7 @@ enum WindowUse {
 fn window_uses(module: &Module) -> BTreeMap<ValueId, Vec<WindowUse>> {
     let mut uses = BTreeMap::<ValueId, Vec<WindowUse>>::new();
     let mut record = |value: ValueId, this: WindowUse| uses.entry(value).or_default().push(this);
-    for (id, node) in module.nodes.iter_live() {
+    for (id, node) in module.live_nodes() {
         match node {
             Node::LetIntrinsic { op, args, .. } => {
                 for (position, atom) in args.iter().enumerate() {
@@ -679,7 +674,7 @@ pub(super) fn split_windows(module: &mut Module) -> bool {
 
     // The widest admissible region, not the first. A region grows forward along transfers from its seed, so a seed downstream of another's grows a *strict sub-region* of it — and splitting that one records a group over positions the larger region also spans, which `grow_window_region` then declines outright, stranding the larger region's slices for the rest of the compilation. `programs/walk_mirror_held_scan.crs` is that shape: its walk's region and the one-continuation sub-region below it are both candidates, and taking the sub-region first would slice a fresh rope per character where `walk_mirror_baseline.crs` virtualizes the same walk. Slices consumed is the key because consuming them is what the rewrite is for; seed order breaks ties, so the choice stays deterministic.
     let mut admitted: Option<WindowRegion> = None;
-    for (continuation, definition) in module.continuations.iter_live() {
+    for (continuation, definition) in module.live_continuations() {
         if resumes.contains(&continuation) {
             continue;
         }
@@ -716,8 +711,7 @@ pub(super) fn split_windows(module: &mut Module) -> bool {
         let offset = module.add_value(Some(format!("window/{}/offset", continuation.index())));
         let length = module.add_value(Some(format!("window/{}/length", continuation.index())));
         let definition = module
-            .continuations
-            .get_mut(continuation)
+            .continuation_mut(continuation)
             .expect("admitted continuation is live");
         definition
             .params
@@ -755,7 +749,7 @@ pub(super) fn split_windows(module: &mut Module) -> bool {
 
             // A *suffix* names no count, so one is computed here from the member's own `length` — the same fact the emitted rope would have read off itself, derived in this pass because the physical rope is what it is removing. The guard is the same either way: `WindowExtent` refuses a start past the end, which is exactly what the underflowing difference would ask it for.
             match matches!(WindowFamily::of(op), Some((_, WindowRead::Rest))) {
-                false => module.nodes.set(
+                false => module.set_node(
                     slice,
                     Node::LetIntrinsic {
                         result: extent,
@@ -769,7 +763,7 @@ pub(super) fn split_windows(module: &mut Module) -> bool {
                         module.add_value(Some(format!("window/{}/rest", slice.index())));
                     let guard = module.reserve_node();
 
-                    module.nodes.set(
+                    module.set_node(
                         slice,
                         Node::LetIntrinsic {
                             result: remaining,
@@ -820,7 +814,7 @@ pub(super) fn split_windows(module: &mut Module) -> bool {
                     rewire_node(module, *node, next);
                     module.remove_node(*node);
                     module.replace_atom(UseTarget::Value(result), fields[&member][2].clone());
-                    module.values.remove(result);
+                    module.remove_value(result);
                 }
                 WindowUse::Get(node) => {
                     let Node::LetIntrinsic {
@@ -840,7 +834,7 @@ pub(super) fn split_windows(module: &mut Module) -> bool {
                             next: *node,
                         }],
                     );
-                    module.nodes.set(
+                    module.set_node(
                         *node,
                         Node::LetIntrinsic {
                             result,
@@ -858,8 +852,7 @@ pub(super) fn split_windows(module: &mut Module) -> bool {
 
     // 4. Rewrite every edge into a split continuation, highest position first: a member argument travels as its fields, and any other rope opens as its own whole window with one length read above the jump.
     let carriers: Vec<NodeId> = module
-        .nodes
-        .iter_live()
+        .live_nodes()
         .filter(|(_, node)| {
             edges_of(node).iter().any(|edge| {
                 splits
@@ -900,12 +893,12 @@ pub(super) fn split_windows(module: &mut Module) -> bool {
             }
         }
         insert_above(module, carrier, openings);
-        module.nodes.set(carrier, node);
+        module.set_node(carrier, node);
     }
 
     // 5. The parameters and slice results have no remaining uses; the verifier would name any this pass missed.
     for member in &region.members {
-        module.values.remove(*member);
+        module.remove_value(*member);
     }
 
     true
@@ -914,8 +907,7 @@ pub(super) fn split_windows(module: &mut Module) -> bool {
 /// The continuations that receive call results — the interface the return protocol owns.
 fn resume_targets(module: &Module) -> BTreeSet<ContinuationId> {
     module
-        .nodes
-        .slots()
+        .nodes()
         .iter()
         .flatten()
         .filter_map(|node| match node {

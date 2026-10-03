@@ -1008,6 +1008,11 @@ impl Module {
             .unwrap_or_else(|| panic!("{id} was reserved and never defined"))
     }
 
+    /// The row at `id`, where one was defined. [`Module::row`] is the reading of everything that trusts the module; this is the verifier's and the printer's, which meet a module that may name a row nothing defined.
+    pub(crate) fn defined_row(&self, id: RowId) -> Option<&Row> {
+        self.rows.get(id.index()).and_then(Option::as_ref)
+    }
+
     /// What a transfer hands a slot its construction never wrote: what the constructed row's field holds there — zero for a register slot, since a register has no null, and null, as [`Atom::Filler`], for a reference. `None` is a tuple, whose every field is a reference.
     pub fn pad(&self, row: Option<RowId>, index: usize) -> Atom {
         match row.map(|row| self.row(row).slots[index]) {
@@ -1106,6 +1111,41 @@ impl Module {
 
     pub fn continuation(&self, id: ContinuationId) -> Option<&Continuation> {
         self.continuations.get(id)
+    }
+
+    pub fn value(&self, id: ValueId) -> Option<&ValueDef> {
+        self.values.get(id)
+    }
+
+    /// The live nodes, in identity order.
+    pub fn live_nodes(&self) -> impl Iterator<Item = (NodeId, &Node)> {
+        self.nodes.iter_live()
+    }
+
+    /// The live functions, in identity order.
+    pub fn live_functions(&self) -> impl Iterator<Item = (FunctionId, &Function)> {
+        self.functions.iter_live()
+    }
+
+    /// The live continuations, in identity order.
+    pub fn live_continuations(&self) -> impl Iterator<Item = (ContinuationId, &Continuation)> {
+        self.continuations.iter_live()
+    }
+
+    pub fn node_ids(&self) -> impl Iterator<Item = NodeId> {
+        self.nodes.live_ids()
+    }
+
+    pub fn value_ids(&self) -> impl Iterator<Item = ValueId> {
+        self.values.live_ids()
+    }
+
+    pub fn function_ids(&self) -> impl Iterator<Item = FunctionId> {
+        self.functions.live_ids()
+    }
+
+    pub fn continuation_ids(&self) -> impl Iterator<Item = ContinuationId> {
+        self.continuations.live_ids()
     }
 
     /// Count, per value, how many times it is referenced across the module. A value's use sites are its operand occurrences plus its use as an indirect callee; definitions (`LetValue`/`LetIntrinsic` results, parameters) are not uses, so an unreferenced value is absent from the map. Derived on demand rather than maintained incrementally.
@@ -1257,6 +1297,72 @@ impl Module {
 
     pub fn remove_node(&mut self, id: NodeId) -> Option<Node> {
         self.nodes.remove(id)
+    }
+
+    /// Replace a live node in place, where [`Module::define_node`] fills a reserved one.
+    pub(crate) fn set_node(&mut self, id: NodeId, node: Node) {
+        self.nodes.set(id, node);
+    }
+
+    pub(crate) fn node_mut(&mut self, id: NodeId) -> Option<&mut Node> {
+        self.nodes.get_mut(id)
+    }
+
+    pub(crate) fn function_mut(&mut self, id: FunctionId) -> Option<&mut Function> {
+        self.functions.get_mut(id)
+    }
+
+    pub(crate) fn continuation_mut(&mut self, id: ContinuationId) -> Option<&mut Continuation> {
+        self.continuations.get_mut(id)
+    }
+
+    pub(crate) fn live_nodes_mut(&mut self) -> impl Iterator<Item = (NodeId, &mut Node)> {
+        self.nodes.iter_live_mut()
+    }
+
+    pub(crate) fn live_functions_mut(
+        &mut self,
+    ) -> impl Iterator<Item = (FunctionId, &mut Function)> {
+        self.functions.iter_live_mut()
+    }
+
+    pub(crate) fn live_continuations_mut(
+        &mut self,
+    ) -> impl Iterator<Item = (ContinuationId, &mut Continuation)> {
+        self.continuations.iter_live_mut()
+    }
+
+    pub(crate) fn remove_value(&mut self, id: ValueId) {
+        self.values.remove(id);
+    }
+
+    pub(crate) fn remove_function(&mut self, id: FunctionId) {
+        self.functions.remove(id);
+    }
+
+    /// Tombstone a continuation, and with it the fields record of its parameters, which describes nothing once they are gone.
+    pub(crate) fn remove_continuation(&mut self, id: ContinuationId) {
+        self.continuations.remove(id);
+        self.field_groups.remove(&id);
+    }
+
+    pub(crate) fn retain_nodes(&mut self, keep: &BTreeSet<NodeId>) {
+        self.nodes.retain(keep);
+    }
+
+    pub(crate) fn retain_values(&mut self, keep: &BTreeSet<ValueId>) {
+        self.values.retain(keep);
+    }
+
+    pub(crate) fn retain_functions(&mut self, keep: &BTreeSet<FunctionId>) {
+        self.functions.retain(keep);
+    }
+
+    /// Tombstone every continuation outside `keep`, and drop the fields record of each one that goes.
+    pub(crate) fn retain_continuations(&mut self, keep: &BTreeSet<ContinuationId>) {
+        self.continuations.retain(keep);
+        self.field_groups
+            .retain(|continuation, _| keep.contains(continuation));
     }
 
     pub fn replace_atom(&mut self, from: UseTarget, replacement: Atom) {

@@ -71,7 +71,7 @@ pub(super) fn scc_invariant_knowns(
     }
 
     let mut constraints: Vec<(FunctionId, Vec<Atom>)> = Vec::new();
-    for (_, node) in module.nodes.iter_live() {
+    for (_, node) in module.live_nodes() {
         if let Node::ApplyFun {
             callee: Callee::Known(callee),
             args,
@@ -116,7 +116,7 @@ pub(super) fn eligible_sccs(module: &Module, analysis: &CallAnalysis) -> Vec<Vec
                         .is_some_and(|edges| edges.contains(function))
                 });
             let observable = members.iter().all(|function| {
-                !analysis.escaping.contains(function) && Some(*function) != module.entry
+                !analysis.escaping.contains(function) && Some(*function) != module.entry()
             });
             recursive && observable
         })
@@ -224,13 +224,13 @@ pub(super) fn specialize_scc_calls(module: &mut Module, budget: &mut usize) -> b
         let clones = clone_scc(module, &member_set);
         let clone_entry = clones[&entry];
         // Only the requested members are bound here. A copy of a *nested* definition is introduced by the copied `LetFun` inside its own member's body, so binding it out here as well would bind it twice.
-        if let Some(Node::LetFun { functions, .. }) = module.nodes.get_mut(intro) {
+        if let Some(Node::LetFun { functions, .. }) = module.node_mut(intro) {
             functions.extend(member_set.iter().filter_map(|m| clones.get(m).copied()));
         }
         for (node_id, callee, args) in &external {
             if *callee == entry
                 && *args == context_args
-                && let Some(Node::ApplyFun { callee, .. }) = module.nodes.get_mut(*node_id)
+                && let Some(Node::ApplyFun { callee, .. }) = module.node_mut(*node_id)
             {
                 *callee = Callee::Known(clone_entry);
             }
@@ -252,7 +252,7 @@ pub(super) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) 
 
     // The first specializable pattern in deterministic (node, then argument) order: a known-callee call whose argument is a known tagged tuple that the callee deconstructs, whose callee has a lexical `LetFun` owner and a clonable body within the growth budget.
     let mut chosen: Option<(FunctionId, usize, u32, usize, Option<RowId>)> = None;
-    'search: for (_, node) in module.nodes.iter_live() {
+    'search: for (_, node) in module.live_nodes() {
         let Node::ApplyFun {
             callee: Callee::Known(callee),
             args,
@@ -261,7 +261,7 @@ pub(super) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) 
         else {
             continue;
         };
-        if Some(*callee) == module.entry {
+        if Some(*callee) == module.entry() {
             continue;
         }
         let params = &module.function(*callee).unwrap().params;
@@ -306,7 +306,7 @@ pub(super) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) 
         .flat_map(|&id| function_nodes(module, id))
         .collect::<Vec<_>>();
     for node_id in peeled {
-        let node = module.nodes.get_mut(node_id).unwrap();
+        let node = module.node_mut(node_id).unwrap();
         if let Node::ApplyFun {
             callee: Callee::Known(target),
             ..
@@ -344,17 +344,17 @@ pub(super) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) 
         next: clone_body,
     });
     params.splice(index..=index, field_params);
-    let clone_function = module.functions.get_mut(clone).unwrap();
+    let clone_function = module.function_mut(clone).unwrap();
     clone_function.params = params;
     clone_function.body = entry;
 
     // Introduce the clone in the callee's lexical scope.
-    if let Some(Node::LetFun { functions, .. }) = module.nodes.get_mut(intro) {
+    if let Some(Node::LetFun { functions, .. }) = module.node_mut(intro) {
         functions.push(clone);
     }
 
     // Repoint every call sharing the pattern to the single clone, splicing each site's own constructor fields in place of the tuple argument.
-    for node_id in 0..module.nodes.len() {
+    for node_id in 0..module.nodes().len() {
         let Some(Node::ApplyFun {
             callee: Callee::Known(target),
             args,
@@ -380,7 +380,7 @@ pub(super) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) 
             callee: target,
             args,
             ..
-        }) = module.nodes.get_mut(NodeId(node_id as u32))
+        }) = module.node_mut(NodeId(node_id as u32))
         else {
             unreachable!()
         };
@@ -396,7 +396,7 @@ pub(super) fn tagged_tuple_values(
     module: &Module,
 ) -> BTreeMap<ValueId, (u32, Vec<Atom>, Option<RowId>)> {
     let mut result = BTreeMap::new();
-    for (_, node) in module.nodes.iter_live() {
+    for (_, node) in module.live_nodes() {
         let (value, fields, row) = match node {
             Node::LetValue {
                 result: value,
@@ -434,7 +434,7 @@ pub(super) fn deconstructs_param(module: &Module, function: FunctionId, param: V
 /// The literal results of `LetValue` bindings, used to resolve caller values already known to be constant.
 pub(super) fn literal_value_map(module: &Module) -> BTreeMap<ValueId, Atom> {
     let mut literals = BTreeMap::new();
-    for (_, node) in module.nodes.iter_live() {
+    for (_, node) in module.live_nodes() {
         if let Node::LetValue {
             result,
             value: ValueExpr::Literal(literal),
@@ -451,7 +451,7 @@ pub(super) fn introducing_letfun(
     module: &Module,
     members: &BTreeSet<FunctionId>,
 ) -> Option<NodeId> {
-    for (id, node) in module.nodes.iter_live() {
+    for (id, node) in module.live_nodes() {
         if let Node::LetFun { functions, .. } = node {
             let introduced: BTreeSet<FunctionId> = functions.iter().copied().collect();
             if members.is_subset(&introduced) {
@@ -481,7 +481,7 @@ pub(super) fn specialize_jump_patterns(module: &mut Module, budget: &mut usize) 
 
     // The first specializable pattern in deterministic (node, then edge, then argument) order.
     let mut chosen: Option<(ContinuationId, usize, u32, usize, Option<RowId>)> = None;
-    'search: for (_, node) in module.nodes.iter_live() {
+    'search: for (_, node) in module.live_nodes() {
         let edges: Vec<&Edge> = match node {
             Node::ApplyCont(edge) => vec![edge],
             Node::Switch { cases, default, .. } => cases.values().chain(default.iter()).collect(),
@@ -548,12 +548,12 @@ pub(super) fn specialize_jump_patterns(module: &mut Module, budget: &mut usize) 
         next: clone_body,
     });
     params.splice(index..=index, field_params);
-    let clone_definition = module.continuations.get_mut(clone).unwrap();
+    let clone_definition = module.continuation_mut(clone).unwrap();
     clone_definition.params = params;
     clone_definition.body = entry;
 
     // Introduce the clone beside the original, so it shares the original's lexical scope.
-    if let Some(Node::LetCont { continuations, .. }) = module.nodes.get_mut(intro) {
+    if let Some(Node::LetCont { continuations, .. }) = module.node_mut(intro) {
         continuations.push(clone);
     }
 
@@ -578,9 +578,9 @@ pub(super) fn specialize_jump_patterns(module: &mut Module, budget: &mut usize) 
         edge.args.splice(index..=index, spliced);
         true
     };
-    for node_index in 0..module.nodes.len() {
+    for node_index in 0..module.nodes().len() {
         let node_id = NodeId(node_index as u32);
-        let Some(node) = module.nodes.get_mut(node_id) else {
+        let Some(node) = module.node_mut(node_id) else {
             continue;
         };
         match node {
@@ -620,7 +620,7 @@ pub(super) fn continuation_projects(
 }
 /// The `LetCont` node introducing `continuation`. Every live local continuation has exactly one (the verifier's lexical-binding check), so `None` only means the module is mid-rewrite.
 pub(super) fn introducing_letcont(module: &Module, continuation: ContinuationId) -> Option<NodeId> {
-    module.nodes.iter_live().find_map(|(id, node)| {
+    module.live_nodes().find_map(|(id, node)| {
         matches!(
             node,
             Node::LetCont { continuations, .. } if continuations.contains(&continuation)
