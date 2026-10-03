@@ -73,7 +73,7 @@ fn lcg_loop_is_scalar_no_closure_no_indirect() {
     );
 }
 
-/// The loop carries its scalars in registers, so a back edge moves a register to a register. `ref.as_non_null` is the tell: a boxed edge argument is loaded with it, and a parameter the representation analysis holds raw is loaded at its carrier instead — a bare `local.get`. Zero of them in the kernel is the loop-carried decision the `cps::represent` fixpoint exists to produce.
+/// The loop carries its scalars in registers, so a back edge moves a register to a register. `ref.as_non_null` is the tell: a boxed edge argument is loaded with it, and a parameter the representation analysis holds raw is loaded at its carrier instead — a bare `local.get`. Zero of them in the kernel is the loop-carried decision `curios-cont`'s `represent` fixpoint exists to produce.
 ///
 /// The casts do *not* go to zero and asserting that they do would be wrong: 4 `ref.cast`/`i31.get_u` pairs survive on values the loop reads from outside itself, where the coercion is correct and is the cheaper side of the trade. Nor does the `i64` widening go away — see `i64.mul` in [`lcg_loop_is_scalar_no_closure_no_indirect`] — because a `Nat` product leaving the i31 has to be detected and grown into a boxed magnitude, and `i32.mul` wraps silently, which no storage decision changes.
 #[test]

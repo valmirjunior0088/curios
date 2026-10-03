@@ -1054,7 +1054,7 @@ fn aggregate_flow_census() {
     }
 }
 
-/// The clone extent the specializer's budget compares, measured on the functions the value-lifetime decision names. `specialize_call_patterns` refuses a clone when the callee's copied extent plus one exceeds `BRANCH_SPECIALIZATION_GROWTH_LIMIT` (`curios-cont/src/cps/optimize.rs`), and the claim that the scan-state candidate is declined *on a budget rather than on a rule* is a claim about these numbers. Run explicitly:
+/// The clone extent the specializer's budget compares, measured on the functions the value-lifetime decision names. `specialize_call_patterns` refuses a clone when the callee's copied extent plus one exceeds `BRANCH_SPECIALIZATION_GROWTH_LIMIT` (`curios-cont/src/optimize.rs`), and the claim that the scan-state candidate is declined *on a budget rather than on a rule* is a claim about these numbers. Run explicitly:
 ///
 /// ```sh
 /// cargo test --package curios --lib --all-features -- --ignored --nocapture step_specialization_extent

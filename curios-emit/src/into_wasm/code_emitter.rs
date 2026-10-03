@@ -1576,7 +1576,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     ) {
         let (value_name, result_local) = (dest.value_name, dest.local.clone());
 
-        // Every store below may assume this: a local held in a register is held at exactly the carrier this op produces, so no path has to coerce on the way in. What makes it true is that the representation analysis only offers a register to a value whose own definition produces that carrier — see `Offer` in `cps::represent`.
+        // Every store below may assume this: a local held in a register is held at exactly the carrier this op produces, so no path has to coerce on the way in. What makes it true is that the representation analysis only offers a register to a value whose own definition produces that carrier — see `Offer` in `curios-cont`'s `represent`.
         let result_repr = match op {
             // A row read produces its slot's carrier, which is a fact of the row rather than of the operation.
             curios_cont::Intrinsic::RowGet(row, index) => {
