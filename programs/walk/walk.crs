@@ -8,8 +8,7 @@ use /std/{Str, Char, Nat, Io};
 let loop(k: Nat, text: Str, acc: Nat) -> Nat =
     match k: (_) => Nat
     | 0 => acc
-    | m + 1 =>
-        loop(m, text, Str/fold(text, acc, (c, a) => (a * 31 + Char/to_nat(c)) % 1000003))
+    | m + 1 => loop(m, text, Str/fold(text, acc, (c, a) => (a * 31 + Char/to_nat(c)) % 1000003))
     end;
 
 let total(n: Nat) -> Nat =
