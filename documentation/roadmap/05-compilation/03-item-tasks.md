@@ -38,7 +38,7 @@ It needs [one environment](02-one-environment.md) and what that builds on, and n
 
 ## Stages
 
-Each lands alone and passes the gate.
+Each lands alone, on its own check.
 
 1. **Erasure per item, linked by name.** The cumulative arena is deleted, and stored units are addressed over their dependency closure. Each item is erased under a budget of its own: erasure walks a whole unit under one today, so whether an item erases depends on what was erased before it.
 2. **A term representation that crosses threads.** Needs the interned names a unit carries, so that the measurement includes what interning removes. Measured: the prelude build's wall time and the compile time of the corpus in `programs/`, on a release build without `profile`, before and after. Kontroli's 28.2% is the figure to expect and not the figure to report.
@@ -46,7 +46,7 @@ Each lands alone and passes the gate.
 
 ## Verification
 
-- The gate passes at every stage, and every verdict over `/std` and the corpus in `programs/` is compared with the compiler before the stage; a difference is a finding, never a fixture update.
+- At every stage, every verdict over `/std` and the corpus in `programs/` is compared with the compiler before the stage; a difference is a finding, never a fixture update.
 - The differential compiles `/std` and the corpus with one worker and with many and requires identical stored units, diagnostics and emitted bytes.
 - A genuine cycle between two items is reported with the same text under one worker and many.
 - Each stage reports the time it moved, named by the stage.

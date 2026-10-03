@@ -29,7 +29,6 @@ Every other fact is on disk: `documentation/syntax.md` for the surface language,
 - Between the steps of a larger effort, and as the whole check for a focused change: `cargo xtask clippy` and `cargo xtask fmt`, plus the change's own tests by name. Clippy already elaborates, erases and certifies all of `/std`, so a Text, Core, Ersd or certifier change needs nothing more; a change to `curios-cont`, `curios-emit` or `curios-wasm` adds the `curios` corpus tests that reach it. No `cargo check`, and no retaking of measurements — name any figure the change may have moved. While a check runs, draft the next step in a scratchpad mirror, not in the tree.
 - Run a long command as a tracked background task writing `cmd > log 2>&1; echo "EXIT=$?" >> log`, and read the exit code from the log. Never detach one with `&` or add a shell that waits on it.
 - Keep the feature set constant within a session: `--all-features` builds a second prelude archive, and the two evict each other.
-- Before handing off code: `/full-gate`, once, after the last step, on the user's go-ahead.
 
 ## Where the rest is
 

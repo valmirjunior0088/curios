@@ -46,7 +46,7 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 
 ## Stages
 
-Each lands alone and passes the gate.
+Each lands alone, on its own check.
 
 1. **Elaboration local to an item, against a complete witness index.** Items still elaborate one at a time in source order; what changes is that nothing one item leaves behind is read by the next except through what it published. Every verdict over `/std` and the corpus is compared with the compiler before it, and any program whose witness resolution changes is recorded as a finding, since coherence already claims resolution is independent of order.
 2. **One environment, reads recorded.** `Established`, `Globals`, `Resumed` and `Prefix` become views of it; the lowering's sort, `dependency_order` and `invalidated` are replaced by the recorded graph. Recompiling over a baseline then invalidates by recorded reads rather than the transitive closure of every name, and [cached verdicts](../../design/soundness/admission/cached-verdicts.md)' per-item argument is restated over them in the same change, extending its account of the certifier's record. The critical path is measured here: the recorded graph weighted by each item's `declaration` span, reported as the speedup the graph admits.

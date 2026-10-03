@@ -1,6 +1,6 @@
 # Every gate step catches what no other step does
 
-**Decision.** The hand-off gate, `/full-gate` (`.claude/commands/full-gate.md`), is a minimal set: a step earns its place by being the only thing that fails when something specific is wrong, and a step whose findings another reports is removed rather than kept for reassurance. Each step's sole catch is stated here, and a step added later states its own first. That each step is one `cargo xtask` recipe is [`xtask`'s own decision](../../xtask/README.md).
+**Decision.** The hand-off gate, `/run-full-gate` (`.claude/commands/run-full-gate.md`), is a minimal set: a step earns its place by being the only thing that fails when something specific is wrong, and a step whose findings another reports is removed rather than kept for reassurance. Each step's sole catch is stated here, and a step added later states its own first. That each step is one `cargo xtask` recipe is [`xtask`'s own decision](../../xtask/README.md).
 
 - **`runtime`** is a prerequisite rather than a check: it builds the slim launcher in its own Cargo invocation, which `curios` embeds.
 - **`fmt-check`** alone fails on formatting drift.
@@ -9,8 +9,8 @@
 - **`doctest`** alone compiles and runs what a `///` block asserts, since cargo's every target excludes doctests. It passes over an empty set, so the first example written is run the day it is written.
 - **`docs`** alone runs rustdoc, under `[workspace.lints.rustdoc] all = "deny"` inherited through `[lints] workspace = true`, over private items because the crates state their invariants on `pub(crate)` ones; a broken intra-doc link is checked nowhere else.
 - **`js-test`** alone runs a compiled program under a JavaScript engine against the browser harness's own host, building the bundle for `wasm32-unknown-unknown` first.
-- **The grammar and VS Code steps** install their npm trees from the lock file and test them; `vscode-package` alone runs `vsce` over the extension's manifest and bundles it as it ships, which the grammar snapshots never load.
-- **The Zed steps** format, lint, build for `wasm32-wasip2` and test the extension, and `zed-test` checks that `editors/zed/extension.toml`'s grammar rev is the grammar the checkout holds, since Zed installs the grammar from a pushed commit. It fails exactly on a regenerated grammar not yet pushed, which is the two-commit sequence those moves follow.
+- **The grammar and VS Code steps** install their npm trees from the lock file and test them; `vscode-build` alone runs `vsce` over the extension's manifest and bundles it as it ships, which the grammar snapshots never load.
+- **The Zed steps** format, lint, build for `wasm32-wasip2` and test the extension, and `zed-test` checks that `editors/zed/extension.toml`'s grammar rev is the grammar the checkout holds, since Zed installs the grammar from a pushed commit. It fails exactly on a regenerated grammar not yet pushed, which is the two-commit sequence those moves follow. `zed-build` is the only step that links the extension into the `wasm32-wasip2` component Zed loads, which `zed-clippy`'s check build and `zed-test`'s host build never do.
 
 **Rationale.** A gate is read under time pressure, and a reader who cannot tell which step would have caught a mistake starts skipping the slow ones. Naming each unique catch makes that judgement unnecessary: nothing in the list is redundant, so nothing is optional.
 

@@ -2,7 +2,7 @@
 //!
 //! **A recipe is cargo with flags, and whatever step cargo does not do.** Every recipe here spawns `cargo` — or npm, in an editor tree — as a separate process, and then copies a file, generates the browser bindings or runs a container, where there is such a step to take. Nothing is a build script: a build script runs before its crate compiles and so cannot post-process that crate's output, and a nested `cargo` inside one contends for the target-directory lock. A process that `cargo run` has already launched holds no lock, so its nested builds are ordinary.
 //!
-//! **A recipe takes no arguments it passes on.** A recipe may take a parameter it places itself — a release's version, a program to profile, a package to narrow a check to, a name to narrow a test run by, a shard of one to run — but never a tail it hands to the tool unread. Every recipe's command line is written here, so `/full-gate`, the check workflow and a contributor run one spelling of each step and no two of them can drift. A recipe names a tool and a tree: `cargo` at the workspace root, `grammar` and `vscode` for their npm packages, `zed` for the extension's own workspace. Anything else in a tree is run from inside it, where that tree's README sends the reader.
+//! **A recipe takes no arguments it passes on.** A recipe may take a parameter it places itself — a release's version, a program to profile, a package to narrow a check to, a name to narrow a test run by, a shard of one to run — but never a tail it hands to the tool unread. Every recipe's command line is written here, so `/run-full-gate`, the check workflow and a contributor run one spelling of each step and no two of them can drift. A recipe names a tool and a tree: `cargo` at the workspace root, `grammar` and `vscode` for their npm packages, `zed` for the extension's own workspace. Anything else in a tree is run from inside it, where that tree's README sends the reader.
 //!
 //! **The launcher's isolation is the spawn.** `runtime` builds `curios-runtime` in its own `cargo` invocation, so workspace feature unification cannot reach it — `curios` enables `curios-runtime/cranelift`, and a launcher built beside it would carry a compiler. `curios/build.rs` embeds what this recipe copies to `curios/.artifacts/<triple>` and refuses to build without it.
 //!
@@ -20,7 +20,7 @@
 //!
 //! The command line is clap's, in `curios`'s own convention — a `Parser` root over a `Subcommand` of recipes — so the help is derived from the definitions and cannot fall out of step with them.
 //!
-//! **This file is the rule table and nothing else.** It declares the recipes and dispatches each to one call, so what a recipe *is* can be read top to bottom without reading what it *does* — and a recipe's steps live in [`recipes`], beside the vocabulary they are written in: [`places`], [`commands`], [`filing`] and [`constants`]. Every step `/full-gate` and the check workflow name is a recipe here, with nothing between a name and its meaning.
+//! **This file is the rule table and nothing else.** It declares the recipes and dispatches each to one call, so what a recipe *is* can be read top to bottom without reading what it *does* — and a recipe's steps live in [`recipes`], beside the vocabulary they are written in: [`places`], [`commands`], [`filing`] and [`constants`]. Every step `/run-full-gate` and the check workflow name is a recipe here, with nothing between a name and its meaning.
 
 mod places;
 use places::*;
@@ -207,7 +207,7 @@ enum Recipe {
     #[command(
         about = "Bundle the VS Code extension and write its .vsix under editors/vscode/.artifacts"
     )]
-    VscodePackage,
+    VscodeBuild,
 
     #[command(about = "Format the Zed extension")]
     ZedFmt,
@@ -263,7 +263,7 @@ fn main() -> ExitCode {
         Recipe::GrammarTest => grammar(&["test"]),
         Recipe::VscodeInstall => vscode(&["clean-install"]),
         Recipe::VscodeTest => vscode(&["test"]),
-        Recipe::VscodePackage => vscode(&["run", "package"]),
+        Recipe::VscodeBuild => vscode(&["run", "package"]),
         Recipe::ZedFmt => zed(&["fmt", "--all"]),
         Recipe::ZedFmtCheck => zed(&["fmt", "--all", "--", "--check"]),
         Recipe::ZedClippy => zed(&["clippy", "--target", "wasm32-wasip2", "--", "-Dwarnings"]),

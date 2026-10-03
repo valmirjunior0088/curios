@@ -181,8 +181,8 @@ jobs:
         run: cargo xtask vscode-install
       - name: Run grammar snapshot tests
         run: cargo xtask vscode-test
-      - name: Package the extension
-        run: cargo xtask vscode-package
+      - name: Build the extension
+        run: cargo xtask vscode-build
 
   zed:
     name: Zed extension
