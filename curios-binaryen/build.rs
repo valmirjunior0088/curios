@@ -1,6 +1,6 @@
 //! Downloads, verifies, and builds the pinned Binaryen source release.
 //!
-//! Cargo gives distinct build-script fingerprints their own `OUT_DIR`, so that directory cannot cache an expensive C++ build shared by ordinary builds, tests, and Clippy. This script instead keeps one locked cache per compilation target in `.artifacts/` beside this crate — outside Cargo's target tree, so `cargo clean` does not take a build measured in minutes with it. A cache entry is complete only after CMake installs the static library and the script writes its versioned completion marker.
+//! Cargo gives distinct build-script fingerprints their own `OUT_DIR`, so that directory cannot cache an expensive C++ build shared by ordinary builds, tests, and Clippy. This script builds in `OUT_DIR`, then keeps only the static library in one locked cache per compilation target in `.artifacts/` beside this crate — outside Cargo's target tree, so `cargo clean` does not take a build measured in minutes with it — and empties `OUT_DIR` again. A cache entry is complete only once its library is in place and the script writes its versioned `done` marker.
 
 use {
     flate2::read::GzDecoder,
@@ -72,11 +72,11 @@ fn build_marker() -> String {
     )
 }
 
-/// Where a cache entry records its completion: written last by [`build`], so its presence is what says the entry is usable.
+/// Where a cache entry records that it is done: written last by [`build`], so its presence is what says the entry is usable.
 ///
 /// Spelled here rather than at each use because [`main`] declares it to Cargo as a rerun input and [`build`] reads and writes it, and the two must be the same file.
-fn completion_marker(entry: &Path) -> PathBuf {
-    entry.join("complete")
+fn done_marker(entry: &Path) -> PathBuf {
+    entry.join("done")
 }
 
 fn lock(path: &Path) -> File {
@@ -92,12 +92,25 @@ fn lock(path: &Path) -> File {
     file
 }
 
-fn static_library_exists(destination: &Path) -> bool {
-    ["lib", "lib64"].iter().any(|directory| {
-        ["libbinaryen.a", "binaryen.lib"]
-            .iter()
-            .any(|library| destination.join(directory).join(library).is_file())
-    })
+/// The names the static library takes: `libbinaryen.a`, or `binaryen.lib` on MSVC.
+const LIBRARY_NAMES: [&str; 2] = ["libbinaryen.a", "binaryen.lib"];
+
+/// The static library in `directory`, under whichever name the platform gives it.
+fn library_in(directory: &Path) -> Option<PathBuf> {
+    LIBRARY_NAMES
+        .iter()
+        .map(|name| directory.join(name))
+        .find(|path| path.is_file())
+}
+
+/// Remove `directory` and make it again, empty. This script is the only writer in its `OUT_DIR`.
+fn fresh(directory: &Path) {
+    if directory.exists() {
+        fs::remove_dir_all(directory)
+            .unwrap_or_else(|error| panic!("empty {}: {error}", directory.display()));
+    }
+    fs::create_dir_all(directory)
+        .unwrap_or_else(|error| panic!("create {}: {error}", directory.display()));
 }
 
 fn download(url: &str) -> Result<Vec<u8>, String> {
@@ -125,65 +138,52 @@ fn instructions_on_failure(archive_path: &Path, cause: &str) -> ! {
     );
 }
 
-fn archive(archive_path: &Path) -> Vec<u8> {
-    match fs::read(archive_path) {
-        Ok(bytes) => {
-            if sha256_hex(&bytes) == BINARYEN_SOURCE_SHA256 {
-                return bytes;
-            }
-            // A corrupted cache entry (e.g. a truncated download persisted by an earlier failure) must not wedge every subsequent build: drop it and fall through to a fresh download.
-            fs::remove_file(archive_path).unwrap_or_else(|error| {
-                panic!(
-                    "remove corrupted Binaryen archive {}: {error}",
-                    archive_path.display()
-                )
-            });
+/// The source archive, checked against its pinned hash in memory and never stored: one placed in the cache entry by hand, for an offline build, or else a download.
+fn source(entry: &Path) -> Vec<u8> {
+    let placed = entry.join(format!("{BINARYEN_VERSION}.tar.gz"));
+    let bytes = match fs::read(&placed) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            download(&source_url()).unwrap_or_else(|error| instructions_on_failure(&placed, &error))
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => panic!("read Binaryen archive {}: {error}", archive_path.display()),
-    }
+        Err(error) => panic!("read Binaryen archive {}: {error}", placed.display()),
+    };
 
-    let bytes = download(&source_url())
-        .unwrap_or_else(|error| instructions_on_failure(archive_path, &error));
     let actual = sha256_hex(&bytes);
     if actual != BINARYEN_SOURCE_SHA256 {
         instructions_on_failure(
-            archive_path,
+            &placed,
             &format!("sha256 mismatch: expected {BINARYEN_SOURCE_SHA256}, got {actual}"),
         );
     }
-    fs::write(archive_path, &bytes).expect("write downloaded Binaryen archive");
 
     bytes
 }
 
-fn build(entry: &Path) {
-    let work = entry.join("work");
-    let complete = completion_marker(entry);
-    let archive_path = entry.join(format!("{BINARYEN_VERSION}.tar.gz"));
+/// Fill the cache `entry` unless its marker already names this build: unpack the source into `out`, build and install it there, keep the static library alone in the entry's `lib/`, and empty `out` again.
+fn build(entry: &Path, out: &Path) {
+    let done = done_marker(entry);
+    let cached = entry.join("lib");
     let marker = build_marker();
 
-    if fs::read_to_string(&complete).is_ok_and(|contents| contents == marker)
-        && static_library_exists(&work)
+    if fs::read_to_string(&done).is_ok_and(|contents| contents == marker)
+        && library_in(&cached).is_some()
     {
         return;
     }
 
-    if work.exists() {
-        fs::remove_dir_all(&work).expect("remove incomplete Binaryen build");
+    let _ = fs::remove_file(&done);
+    if cached.exists() {
+        fs::remove_dir_all(&cached).expect("remove the cached Binaryen library");
     }
-    fs::create_dir_all(&work).expect("create Binaryen work directory");
-    let _ = fs::remove_file(&complete);
+    fresh(out);
 
-    let archive_bytes = archive(&archive_path);
-    let tar = GzDecoder::new(archive_bytes.as_slice());
-    Archive::new(tar)
-        .unpack(&work)
+    let archive = source(entry);
+    Archive::new(GzDecoder::new(archive.as_slice()))
+        .unpack(out)
         .expect("extract Binaryen source archive");
 
-    let source = work.join(format!("binaryen-{BINARYEN_VERSION}"));
-    cmake::Config::new(source)
-        .out_dir(&work)
+    let prefix = cmake::Config::new(out.join(format!("binaryen-{BINARYEN_VERSION}")))
         .profile("Release")
         .define("BUILD_SHARED_LIBS", "OFF")
         .define("BUILD_TOOLS", "OFF")
@@ -191,12 +191,22 @@ fn build(entry: &Path) {
         .define("ENABLE_WERROR", "OFF")
         .build();
 
-    assert!(
-        static_library_exists(&work),
-        "Binaryen did not install its static library under {}",
-        work.display()
-    );
-    fs::write(complete, marker).expect("mark Binaryen cache complete");
+    // CMake installs into `lib` or `lib64` as the platform prefers; the entry keeps one `lib/` either way.
+    let installed = ["lib", "lib64"]
+        .iter()
+        .find_map(|directory| library_in(&prefix.join(directory)))
+        .unwrap_or_else(|| {
+            panic!(
+                "Binaryen did not install its static library under {}",
+                prefix.display()
+            )
+        });
+    fs::create_dir_all(&cached).expect("create the cached Binaryen library's directory");
+    fs::copy(&installed, cached.join(installed.file_name().unwrap()))
+        .expect("keep the Binaryen library in the cache");
+    fs::write(done, marker).expect("mark Binaryen cache done");
+
+    fresh(out);
 }
 
 fn main() {
@@ -211,22 +221,17 @@ fn main() {
     // Every directive this script emits is an absolute path into the entry below, and the entry sits outside Cargo's target tree — so nothing else tells Cargo when it goes away. Without this, deleting `.artifacts` by hand replays stale `-L` paths into a directory that no longer exists instead of rebuilding it. `curios/build.rs` declares its launcher for the same reason, and states it.
     println!(
         "cargo:rerun-if-changed={}",
-        completion_marker(&binaryen_dir).display()
+        done_marker(&binaryen_dir).display()
     );
 
     fs::create_dir_all(&binaryen_dir).expect("create Binaryen cache entry");
     let _lock = lock(&binaryen_dir.join("lock"));
 
-    build(&binaryen_dir);
+    build(&binaryen_dir, &PathBuf::from(env::var("OUT_DIR").unwrap()));
 
-    let binaryen_install_dir = binaryen_dir.join("work");
     println!(
-        "cargo:rustc-link-search=native={}/lib",
-        binaryen_install_dir.display()
-    );
-    println!(
-        "cargo:rustc-link-search=native={}/lib64",
-        binaryen_install_dir.display()
+        "cargo:rustc-link-search=native={}",
+        binaryen_dir.join("lib").display()
     );
     println!("cargo:rustc-link-lib=static=binaryen");
 
