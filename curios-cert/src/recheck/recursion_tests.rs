@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::Globals,
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_core::{Free, Global, Intrinsic, Many, Module, RecGroup, RecMemberScopes, Scope, Term},
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},

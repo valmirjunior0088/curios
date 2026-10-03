@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_core::*,
     curios_utilities::{Qualifier, Source, Span},
     std::sync::Arc,

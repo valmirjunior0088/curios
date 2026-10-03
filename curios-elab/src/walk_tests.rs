@@ -1,6 +1,6 @@
 //! Every walk this crate runs over whole terms, over one doubling term: sixty levels that each sum the one below with itself around a local's application to a metavariable, a tree no walk per path finishes and a graph of sixty-one nodes. A walk the crate adds joins the table here, so one a change makes per-path again stalls its row rather than waiting for a profile; a walk private to its module keeps its fixture beside it — `denoise`'s, `typing`'s and `convert::occurrence`'s — since reaching it from here would widen it for a test.
 
-use {crate::*, curios_analysis::fixture::SYNTAX, curios_core::*};
+use {crate::*, curios_analysis::test_support::SYNTAX, curios_core::*};
 
 fn doubled(base: Term) -> Term {
     let mut term = base;

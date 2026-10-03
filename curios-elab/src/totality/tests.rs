@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_core::{DefinitionKind, Free, Intrinsic, UniverseContext},
     curios_utilities::Qualifier,
 };

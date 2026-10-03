@@ -9,8 +9,8 @@
 use {
     curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
     curios_analysis::{
-        Coverage, Declarations, Invert, Judge, PositivityRefusal, fixture::SYNTAX, group_totality,
-        invert_indices, positivity_vectors, solve_indices,
+        Coverage, Declarations, Invert, Judge, PositivityRefusal, group_totality, invert_indices,
+        positivity_vectors, solve_indices, test_support::SYNTAX,
     },
     curios_cert::Kernel,
     curios_core::{

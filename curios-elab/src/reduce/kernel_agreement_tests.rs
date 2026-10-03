@@ -9,7 +9,7 @@
 use {
     super::test_support::{context, nat, nominal},
     crate::refine_head,
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_cert::Kernel,
     curios_core::*,
 };

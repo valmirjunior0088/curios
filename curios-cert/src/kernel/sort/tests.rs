@@ -1,6 +1,6 @@
 use {
     crate::{Error, Kernel, Sort},
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_core::{
         Free, Global, InductDecl, Intrinsic, Level, Many, RecGroup, RecMemberScopes, Scope,
         Telescope, Term, UniverseContext, UniverseParam,

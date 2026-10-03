@@ -3,7 +3,7 @@
 use {
     super::test_support::{context, nat, nominal, qed},
     crate::*,
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_core::*,
     curios_num::{Binary, Floating, Grain, Integer, Rounding},
 };

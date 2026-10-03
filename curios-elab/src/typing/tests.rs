@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_cert::{Kernel, carries_information},
     curios_core::*,
     curios_utilities::Qualifier,

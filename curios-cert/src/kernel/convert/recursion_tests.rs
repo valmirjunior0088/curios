@@ -3,7 +3,7 @@
 use {
     super::{History, convert_intrinsic, test_support::*},
     crate::{Kernel, convert},
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_core::{
         Free, Intrinsic, Level, Term, UniverseConstraint, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseParam,

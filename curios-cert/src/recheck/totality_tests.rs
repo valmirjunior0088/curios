@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::{Error, Globals, Verdict},
-    curios_analysis::{Erased, fixture::SYNTAX},
+    curios_analysis::{Erased, test_support::SYNTAX},
     curios_core::{Certification, Certified, Global, Totality},
     curios_utilities::Qualifier,
 };

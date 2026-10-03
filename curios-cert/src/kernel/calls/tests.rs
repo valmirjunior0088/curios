@@ -4,7 +4,7 @@
 
 use {
     crate::{Error, Kernel, infer},
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_core::{
         Carrier, Cases, Free, Global, Intrinsic, Nat, Scope, StructDecl, Telescope, Term, Two,
         UniverseContext,

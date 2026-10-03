@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::{Error, Globals},
     curios_abi::{ForeignFunction, HostOp},
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_core::{Global, Intrinsic, Term},
     curios_num::Grain,
     curios_utilities::Qualifier,

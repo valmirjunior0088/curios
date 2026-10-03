@@ -24,9 +24,6 @@ pub use specialize::*;
 mod unfolding;
 pub use unfolding::*;
 
-#[cfg(test)]
-mod test_support;
-
 mod positivity;
 pub use positivity::*;
 
@@ -36,6 +33,6 @@ pub use totality::*;
 mod erased;
 pub use erased::*;
 
-// A namespace rather than a root export, for `curios-runtime`'s `test_support` reason: `curios_analysis::fixture::SYNTAX` says at its use site that the caller reached for scaffolding rather than product API. The path is the warning label.
+// A namespace rather than a root export, for `curios-runtime`'s `test_support` reason: `curios_analysis::test_support::SYNTAX` says at its use site that the caller reached for scaffolding rather than product API. The path is the warning label.
 #[cfg(feature = "test-support")]
-pub mod fixture;
+pub mod test_support;

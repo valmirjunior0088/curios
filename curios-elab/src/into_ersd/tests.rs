@@ -1,7 +1,7 @@
 use {
     crate::{reduce::test_support::qed, *},
     curios_abi::{ForeignFunction, HostOp},
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_core::{Program, Zonked, *},
     curios_ersd::{FieldShape, test_support::shape},
     curios_utilities::{Plicity, Qualifier},

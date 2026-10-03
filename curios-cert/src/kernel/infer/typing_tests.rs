@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::{Counted, Error, Kernel, infer},
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_core::{Intrinsic, Nat, Subterm, Term},
 };
 

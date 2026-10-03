@@ -4,7 +4,7 @@
 
 use {
     crate::Kernel,
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_core::{
         Free, Global, InductDecl, Intrinsic, Level, Nat, Telescope, Term, UniverseContext,
     },

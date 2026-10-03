@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::{Kernel, whnf},
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_core::{Cost, Exhaustion, Free, Intrinsic, Reducer, Term},
     curios_utilities::Qualifier,
 };

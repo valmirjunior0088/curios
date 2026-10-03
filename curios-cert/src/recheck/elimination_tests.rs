@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::{Error, Globals},
-    curios_analysis::fixture::SYNTAX,
+    curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Scope, Subterm,
         Telescope, Term, UniverseContext,
