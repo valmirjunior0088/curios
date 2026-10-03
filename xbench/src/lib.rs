@@ -5,7 +5,7 @@
 //! - [`held`] holds every tool to the pin the file that owns it states, before anything is built.
 //! - [`capture`] asks the host where the reading is being taken.
 //! - [`collect`] builds the contestants, holds them to the answers their workloads are known to have, times them interleaved, and prints a [`Reading`] as the module that records it.
-//! - [`report`] computes every median, span, ratio and refusal from the readings, since none of them is stored.
+//! - [`report()`] computes every median, span, ratio and refusal from the readings, since none of them is stored.
 
 mod date;
 pub use date::*;
