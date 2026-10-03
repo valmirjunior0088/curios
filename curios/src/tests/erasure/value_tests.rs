@@ -9,8 +9,9 @@ use crate::tests::run;
 fn every_printed_value_is_the_one_its_proof_states() {
     let source = r#"
         use /std/{Eq, Nat, Str, Io, print, WellFounded};
-        use /std/Nat/{Le};
+        use /std/Nat/{le};
         use /std/WellFounded/{Accessible};
+        use /std/Bool/{Holds};
 
         -- `refl(@z) : (z, z)` pins its payload twice; the payload is the index.
         let z_of(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Nat = match e | refl(@z) => z + 1 end;

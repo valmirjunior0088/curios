@@ -408,6 +408,7 @@ fn every_fact_of_a_filled_row_is_needed() {
 
 /// The byte row: two hex digits make a byte, a fact scaled by a literal summed with another.
 const BYTE: &str = "use /std/{Nat, Io};
+use /std/Bool/{Holds};
 let byte(a: Nat, b: Nat, p: Holds(a < 16), q: Holds(b < 16)) -> Holds(a * 16 + b < 256) = PROOF;
 Io/pure(())";
 
@@ -415,7 +416,7 @@ Io/pure(())";
 fn a_filled_row_files_the_same_proof_every_time() {
     // One program, one certificate, one proof: the search is deterministic, so the elaborated item is the same on every run. CI runs this on each platform it builds for.
     let omitted = "use /std/{Nat, Io};
-use /std/Bool/{True};
+use /std/Bool/{True, Holds};
 let byte(a: Nat, b: Nat, p: Holds(a < 16), q: Holds(b < 16)) -> Holds(a * 16 + b < 256) = True/proved(@Holds(a * 16 + b < 256));
 Io/pure(())";
     let first = core_elab(omitted);

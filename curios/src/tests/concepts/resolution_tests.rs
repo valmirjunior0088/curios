@@ -247,6 +247,7 @@ fn a_use_parameter_at_a_proposition_is_refused_where_it_is_declared() {
     let report = error(
         r#"
         use /std/{Nat};
+        use /std/Bool/{Holds};
         let f(n: Nat, use Holds(n < 10)) -> Nat = n;
         let g: Nat = f(3);
         /std/print("unreachable")
@@ -267,6 +268,7 @@ fn a_witness_premise_at_a_proposition_is_refused() {
     let report = error(
         r#"
         use /std/{Nat, Show};
+        use /std/Bool/{Holds};
         struct Foo: Type { Nat }
         satisfy (@A: Type, use Holds(0 < 1)) => Show(Foo) {
             show(_x) = "foo"

@@ -22,6 +22,7 @@ fn a_dispatch_that_resolves_to_a_closed_comparison_records_nothing() {
         use /std/{Nat, print};
         use /std/Bool/{True, Holds};
         use /std/ops/{Eql};
+        use /std/Bool/{Holds};
 
         struct U: pub Type { Nat }
 

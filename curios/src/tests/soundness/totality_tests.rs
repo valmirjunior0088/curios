@@ -478,6 +478,7 @@ fn an_aliased_sort_that_descends_is_still_accepted() {
 fn a_call_through_a_constructor_payload_descends() {
     let source = r#"
         use /std/{Nat};
+        use /std/Bool/{Holds};
 
         induct Accessible(@A : Type, R : (A, A) -> Prop) : (A) -> Prop
         | intro(@x : A, below : (y : A, r : R(y, x)) -> Accessible(R)(y)) : (x)
@@ -518,7 +519,7 @@ fn a_call_through_a_parameter_bound_function_does_not_descend() {
 fn the_library_well_founded_recursion_serves_a_proof() {
     let source = r#"
         use /std/{Nat, Str, WellFounded, Char, List};
-        use /std/Bool/{True};
+        use /std/Bool/{True, Holds};
         let two_more(n: Nat) -> Holds(n < n + 2) =
             WellFounded/recurse((k) => Holds(k < k + 2), (k, ih) => True/qed(), n, WellFounded/lt(n));
         let lt_is_well_founded: WellFounded((a: Nat, b: Nat) => Holds(a < b)) = WellFounded/lt;

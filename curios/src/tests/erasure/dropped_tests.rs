@@ -252,7 +252,7 @@ fn a_prop_instantiation_of_a_type_valued_parameter_is_erased_on_both_sides() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str};
-        use /std/Bool/{True};
+        use /std/Bool/{True, Holds};
         let app(P: (Nat) -> Type, f: (k: Nat) -> P(k), n: Nat) -> P(n) = f(n);
         let pf(n: Nat) -> Holds(n <= n) = app((k) => Holds(k <= k), (k) => True/qed(), n);
         let _: Holds(3 <= 3) = pf(3);

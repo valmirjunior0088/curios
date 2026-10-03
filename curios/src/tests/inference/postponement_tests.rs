@@ -183,6 +183,7 @@ fn a_typeless_local_let_still_infers_its_body() {
     // The positive control for `goal_tests`' `let y : ? = e`: an absent annotation is the origin-less hole, and keeps the inference path — a lambda body needs it, since checking a lambda against an unsolved hole would park and never resolve.
     let source = r#"
         use /std/{Nat};
+        use /std/Bool/{Holds};
 
         let g(x : Nat) -> Nat =
             let f = (n : Nat) => n + 1;

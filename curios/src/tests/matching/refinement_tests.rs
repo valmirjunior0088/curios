@@ -160,7 +160,7 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
 fn the_false_arm_of_a_comparison_proves_its_dual() {
     let source = r#"
         use /std/{Nat, Option};
-        use /std/Bool/{True};
+        use /std/Bool/{True, Holds};
 
         let at_least(n : Nat, m : Nat) -> Option(Holds(m <= n)) =
             match n < m
@@ -211,7 +211,7 @@ fn the_false_arm_of_a_comparison_proves_its_dual_across_the_successor_seam() {
 fn the_false_arm_of_a_comparison_proves_nothing_one_step_past_its_dual() {
     let source = r#"
         use /std/{Nat, Option};
-        use /std/Bool/{True};
+        use /std/Bool/{True, Holds};
 
         let past(n : Nat) -> Option(Holds(6 <= n)) =
             match n <= 4
@@ -235,7 +235,7 @@ fn the_false_arm_of_a_comparison_proves_nothing_one_step_past_its_dual() {
 fn the_dead_arm_of_a_dispatched_guard_proves_its_dual() {
     let source = r#"
         use /std/{Nat};
-        use /std/Bool/{True};
+        use /std/Bool/{True, Holds};
 
         let nested(cp : Nat) -> Nat =
             match cp % 4096 / 64 <= 63

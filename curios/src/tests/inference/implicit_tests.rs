@@ -119,6 +119,7 @@ fn an_implicit_solves_by_spine_agreement_before_the_head_unfolds() {
 fn a_spine_mismatch_falls_through_to_unfolding() {
     let source = r#"
         use /std/{Nat, Eq, Str, Io};
+        use /std/Bool/{Holds};
         let constant(n : Nat) -> Nat = 0;
         let same : Eq()(constant(2), constant(1)) = Eq/refl();
         let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
@@ -399,6 +400,7 @@ fn an_implicit_born_in_an_arm_is_solved_under_the_arms_guard() {
 fn an_implicit_born_outside_an_arm_is_solved_without_its_guard() {
     let output = run(r#"
         use /std/{Bool, Nat, Str, print};
+        use /std/Bool/{Holds};
 
         induct W: (Bool) -> pub Type
         | mk(b: Bool): (b)
@@ -425,7 +427,7 @@ fn an_implicit_born_outside_an_arm_is_solved_without_its_guard() {
 fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
     let output = run(r#"
         use /std/{Bytes, Nat, Eq, print};
-        use /std/Bool/{True};
+        use /std/Bool/{True, Holds};
 
         let hop(@b: Bytes, some: Holds(0 < Bytes/len(b))) -> Nat =
             match b

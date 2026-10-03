@@ -237,6 +237,7 @@ fn an_elided_motive_over_an_expression_refuses_an_arm_whose_goal_fails() {
 fn a_case_split_whose_goal_holds_a_proof_about_its_scrutinee_needs_no_convoy() {
     let source = r#"
         use /std/{Nat, Bytes, List, Eq};
+        use /std/Bool/{Holds};
         let at_bytes(a : Bytes, i : Nat, q : Holds(i < Bytes/len(a)))
             -> Eq()(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =
             match a | x[] => Eq/refl() | x[_, .._] => Eq/refl() end;
@@ -256,6 +257,7 @@ fn a_case_split_whose_goal_holds_a_proof_about_its_scrutinee_needs_no_convoy() {
 fn a_fold_that_reads_its_hypothesis_still_closes_a_family() {
     let source = r#"
         use /std/{Nat, Bytes, Eq};
+        use /std/Bool/{Holds};
         let at_bytes(a : Bytes, i : Nat, q : Holds(i < Bytes/len(a)))
             -> Eq()(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =
             match a | x[] => Eq/refl() | x[_, .._]; ih => ih end;

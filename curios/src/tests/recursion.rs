@@ -86,6 +86,7 @@ fn a_recursive_call_applied_past_its_parameters_computes_in_a_type() {
 fn an_accessibility_family_at_its_relation_is_a_predicate() {
     let source = r#"
         use /std/{Nat, WellFounded};
+        use /std/Bool/{Holds};
         let everywhere(P: (Nat) -> Prop) -> Prop = (n: Nat) -> P(n);
         let _accessible: everywhere(WellFounded/Accessible((a: Nat, b: Nat) => Holds(a < b))) =
             WellFounded/lt;

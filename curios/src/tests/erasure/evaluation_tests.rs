@@ -7,7 +7,7 @@ use crate::tests::{cont_optm, run};
 fn proof_bound_as_a_statement_does_not_run_its_certificate() {
     let source = r#"
         use /std/{Nat, Eq};
-        use /std/Nat/{Le};
+        use /std/Nat/{le};
         let a : Nat = 6;
         let b : Nat = 7;
         let p : Eq()(a + (b - a), b) = le/add_sub_cancel(a, b, le/add_r(a, 1));
@@ -22,7 +22,8 @@ fn a_let_bound_proof_leaves_no_computation_behind() {
     let source = r#"
         use /std/{Nat, List, Io, proc};
         use /std/Bool/{True};
-        use /std/Nat/{Le};
+        use /std/Nat/{le};
+        use /std/Bool/{Holds};
         let use_it(a: Nat, b: Nat, _p: Holds(a <= b)) -> Nat = a + b;
         Io/bind(proc/args, (args) =>
             let n = List/len(args);
@@ -42,7 +43,8 @@ fn a_top_level_proof_does_not_run_before_the_program() {
     let source = r#"
         use /std/{Nat, print};
         use /std/Bool/{True};
-        use /std/Nat/{Le};
+        use /std/Nat/{le};
+        use /std/Bool/{Holds};
         let p: Holds(300 <= 301) = le/trans(@300, @300, @301, le/refl(300), True/qed());
         print("ok")
         "#;
@@ -78,7 +80,7 @@ fn a_let_bound_value_is_still_computed() {
 fn proof_in_an_erased_position_is_not_evaluated() {
     let source = r#"
         use /std/{Nat, Eq};
-        use /std/Nat/{Le};
+        use /std/Nat/{le};
         let a : Nat = 6;
         let b : Nat = 7;
         let consume(x : Nat, y : Nat, p : Eq()(x + (y - x), y)) -> Nat = 42;

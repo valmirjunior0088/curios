@@ -15,6 +15,7 @@ fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
     // `f`'s implicit domain meets `(Nat) -> Option(?X)` with `?X` never pinned — and minted under the lambda's own binder, so the embedded-metavariable guard's containment exemption cannot commit the candidate and it postpones. The goal parks and survives the drain. The report must say the conversion was postponed — not that the types rigidly mismatched — and name the blockers it watched. (A bare `f(Option/none())` does not serve: `?X` is then contained in the implicit's own scope, the forced solution commits, and the honest residue is the uninferred implicit itself.)
     let source = r#"
         use /std/{Nat, Option, Io};
+        use /std/Bool/{Holds};
 
         let f(@A: Type, a: A) -> {} = ();
 
@@ -69,7 +70,7 @@ fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
     let source = r#"
         use /std/Str/{Valid};
         use /std/{Nat, Byte, Bytes, Io};
-        use /std/Bool/{True};
+        use /std/Bool/{True, Holds};
 
         let proof_first(@b: Bytes, nz: Holds(0 < Bytes/len(b)), w: Valid(b)) -> {} = ();
 

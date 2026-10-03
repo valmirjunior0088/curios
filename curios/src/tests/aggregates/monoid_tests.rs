@@ -198,6 +198,7 @@ fn bin_slice_is_a_monoid_citizen() {
     // `split` is where the window's whole bound discipline is visible at once. It takes **one** hypothesis, where a `(start, end)` window would need three, because a count cannot spell a reversed range; and the fused window is passed `@total` — *the second window's own proof, unchanged*. That only type-checks because `(s + l1) + l2` and `s + (l1 + l2)` are convertible, which is the equation `peel_nat_terms` decides. The first window's bound is the one thing actually derived, and only to weaken the total.
     let source = r#"
         use /std/{Str, Eq, Bytes, Nat, Io};
+        use /std/Bool/{Holds};
         let split(b : Bytes, s : Nat, l1 : Nat, l2 : Nat,
                   total : Holds((s + l1) + l2 <= Bytes/len(b)))
             -> Eq()(x[
@@ -222,6 +223,7 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
     // The dual: two windows whose seam does not meet — `slice(b, s, l1)` then `slice(b, o, l2)` with `o` unrelated to `s + l1` — must NOT fuse, so the concat is not convertible to `slice(b, s, l1 + l2)` and the `refl` is rejected. Guards the fusion's seam check, which under `(start, length)` is an *arithmetic* test (`o = s + l1`) decided by the `Nat` peel rather than a shared term compared syntactically, against gluing non-adjacent slices of one base.
     let source = r#"
         use /std/{Str, Eq, Bytes, Nat, Io};
+        use /std/Bool/{Holds};
         let bad(b : Bytes, s : Nat, l1 : Nat, o : Nat, l2 : Nat,
                 w1 : Holds(s + l1 <= Bytes/len(b)), w2 : Holds(o + l2 <= Bytes/len(b)),
                 w3 : Holds(s + (l1 + l2) <= Bytes/len(b)))
@@ -238,6 +240,7 @@ fn list_slice_is_a_monoid_citizen() {
     // The `List` mirror of `bin_slice_is_a_monoid_citizen`, count-based like it: `split` takes one hypothesis and hands the fused window the second window's own proof, `empty` drops a zero-length window, and `full` collapses the whole one.
     let source = r#"
         use /std/{Str, Eq, List, Nat, Io};
+        use /std/Bool/{Holds};
         let split(@T : Type, a : List(T), s : Nat, l1 : Nat, l2 : Nat,
                   total : Holds((s + l1) + l2 <= List/len(a)))
             -> Eq()([
@@ -290,6 +293,7 @@ fn list_slice_window_seam_mismatch_is_rejected() {
     // The dual of `bin_slice_window_seam_mismatch_is_rejected`: two `List` windows whose seam does not meet must NOT fuse, so the concat is not convertible to the single slice and the `refl` is rejected.
     let source = r#"
         use /std/{Str, Eq, List, Nat, Io};
+        use /std/Bool/{Holds};
         let bad(@T : Type, a : List(T), s : Nat, m : Nat, n : Nat, e : Nat,
                 sm : Holds(s <= m), ml : Holds(m <= List/len(a)),
                 ne : Holds(n <= e), el : Holds(e <= List/len(a)), se : Holds(s <= e))

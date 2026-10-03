@@ -648,6 +648,7 @@ pub(super) const A_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS_BEFORE_UNFOLDING: &
 
 pub(super) const AN_INTRINSIC_APPLIED_TO_TWO_PROOFS_CONVERTS_AT_THEIR_PROPOSITION: &str = r#"
         use /std/{Eq, Nat};
+        use /std/Bool/{Holds};
 
         let halve(a : Nat, b : Nat, @p : Holds(0 < b)) -> Nat = Nat/div(a, b, @p);
 
@@ -697,6 +698,7 @@ pub(super) const A_RECURSIVE_FUNCTION_MATCHING_ITS_PROOF_CONVERTS: &str = r#"
 pub(super) const TWO_ACCESSIBILITY_PROOFS_AT_ONE_RECURSIVE_CALL_CONVERT: &str = r#"
         use /std/{Eq, Nat};
         use /std/WellFounded/{Accessible};
+        use /std/Bool/{Holds};
 
         let R(y : Nat, x : Nat) -> Prop = Holds(x < y);
 

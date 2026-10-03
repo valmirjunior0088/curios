@@ -11,6 +11,7 @@ fn a_bound_over_a_recursion_returning_a_literal_discharges() {
     assert_eq!(
         run(r#"
         use /std/{Str, Nat};
+        use /std/Bool/{Holds};
         let f(k : Nat, n : Nat) -> Nat =
             match k | 0 => 5 | j + 1; ih => f(j, n) end;
         let bound(n : Nat) -> Holds(5 <= f(0, n)) = Nat/le/refl(5);
@@ -26,6 +27,7 @@ fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
     assert_eq!(
         run(r#"
         use /std/{Str, Nat};
+        use /std/Bool/{Holds};
         let f(k : Nat, n : Nat) -> Nat =
             match k | 0 => n | j + 1; ih => f(j, n) end;
         let bound(n : Nat) -> Holds(n <= f(0, n)) = Nat/le/refl(n);
@@ -291,7 +293,7 @@ fn well_founded_recursion_serves_a_proposition_and_a_computation() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Char, List, WellFounded};
-        use /std/Bool/{True};
+        use /std/Bool/{True, Holds};
         let below(n: Nat) -> Holds(n < n + 3) =
             WellFounded/recurse((k) => Holds(k < k + 3), (k, ih) => True/qed(), n, WellFounded/lt(n));
         let fib(n: Nat) -> Nat =
@@ -324,6 +326,7 @@ fn an_undischarged_bound_is_named_in_the_refusal() {
     let error = typecheck(
         r#"
         use /std/{Str, Bytes, Nat, Bool};
+        use /std/Bool/{Holds};
         let unguarded(b : Bytes, k : Nat) -> Bytes =
             Bytes/slice(b, 2, k);
         /std/print("unreachable")
@@ -441,7 +444,7 @@ fn a_bound_over_one_length_reached_by_two_routes_discharges() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Bytes, Char, Str};
-        use /std/Bool/{True};
+        use /std/Bool/{True, Holds};
         let _within(c: Char, k: Nat)
             -> Holds(k + Bytes/len(Char/to_utf8(c)) <= k + Bytes/len(Str/of_char(c).bytes) + 1) =
             True/qed();
@@ -457,6 +460,7 @@ fn a_bound_whose_proposition_is_pinned_later_is_filled_on_retry() {
     assert_eq!(
         run(r#"
         use /std/{Nat};
+        use /std/Bool/{Holds};
         let proved(@P: Prop, @p: P) -> P = p;
         let filled(n : Nat) -> Holds(n <= n + 1) = proved();
         /std/print("ok")
@@ -467,6 +471,7 @@ fn a_bound_whose_proposition_is_pinned_later_is_filled_on_retry() {
     let error = typecheck(
         r#"
         use /std/{Nat, Bool};
+        use /std/Bool/{Holds};
         let proved(@P: Prop, @p: P) -> P = p;
         let refused(n : Nat) -> Holds(n + 1 <= n) = proved();
         /std/print("unreachable")
@@ -486,6 +491,7 @@ fn a_bound_pinned_later_holds_under_the_guard_its_slot_was_born_under() {
     assert_eq!(
         run(r#"
         use /std/{Nat};
+        use /std/Bool/{Holds};
         let proved(@P: Prop, @p: P) -> P = p;
         let guarded(a : Nat, b : Nat) -> Nat =
             match a < b | true => let q: Holds(a < b) = proved(); a | false => b end;
@@ -497,6 +503,7 @@ fn a_bound_pinned_later_holds_under_the_guard_its_slot_was_born_under() {
     let error = typecheck(
         r#"
         use /std/{Nat};
+        use /std/Bool/{Holds};
         let proved(@P: Prop, @p: P) -> P = p;
         let guarded(a : Nat, b : Nat) -> Nat =
             let early = proved();
