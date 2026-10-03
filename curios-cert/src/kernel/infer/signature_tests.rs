@@ -1,6 +1,7 @@
 //! Each roster row held to what it types: a literal at the carrier its payload is a value of, a fold's value at the carrier its row states and nowhere past the domain it states, an operation the algebra declares at the carrier it is declared at, a row no fold answers at a description, and a parameterized former at its element's level.
 
 use {
+    super::test_support::*,
     crate::{Error, Kernel, infer},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
@@ -10,8 +11,6 @@ use {
     curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding},
     curios_utilities::{Qualifier, SyntaxName},
 };
-
-use super::test_support::*;
 
 /// A family over `parameters` types with no index, at `result_sort`.
 fn family(

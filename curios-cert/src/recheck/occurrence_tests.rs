@@ -1,6 +1,7 @@
 //! Nominal occurrences: the arity a term may be applied at, the binders a set opens, and how a refusal spells them.
 
 use {
+    super::test_support::*,
     crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
@@ -13,8 +14,6 @@ use {
         panic::{AssertUnwindSafe, catch_unwind},
     },
 };
-
-use super::test_support::*;
 
 /// A nominal occurrence's parameter and index counts must be the declaration's.
 ///

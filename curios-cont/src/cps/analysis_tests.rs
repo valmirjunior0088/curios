@@ -1,7 +1,5 @@
 //! What the SCC and known-value analyses derive before any pass rewrites a node.
 
-use curios_num::Natural;
-
 use {
     super::test_support::call_graph,
     crate::cps::{
@@ -13,6 +11,7 @@ use {
         Atom, Callee, Continuation, Edge, Function, FunctionId, Literal, Module, Node, ValueId,
         atoms,
     },
+    curios_num::Natural,
     std::collections::BTreeMap,
 };
 

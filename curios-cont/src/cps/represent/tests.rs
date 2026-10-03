@@ -1,5 +1,3 @@
-use curios_num::{Floating, Natural, Rounding};
-
 use {
     super::{Storage, storage},
     crate::Repr,
@@ -7,6 +5,7 @@ use {
         Atom, Callee, Continuation, Edge, Function, Intrinsic, Literal, Module, Node, NodeId,
         ValueId,
     },
+    curios_num::{Floating, Natural, Rounding},
 };
 
 /// Make `body` the entry function's body, with `params` as its parameters. The return continuation is reserved and never defined, which is exactly what a function's return sentinel is.

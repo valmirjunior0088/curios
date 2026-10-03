@@ -1,14 +1,13 @@
 //! A recursive member is certified only with its group.
 
 use {
+    super::test_support::*,
     crate::Globals,
     curios_analysis::fixture::SYNTAX,
     curios_core::{Free, Global, Intrinsic, Many, Module, RecGroup, RecMemberScopes, Scope, Term},
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
 };
-
-use super::test_support::*;
 
 /// `rec f : Absurd = f` reached as a member selection, which must be refused by the same rule the block spelling is refused by.
 ///

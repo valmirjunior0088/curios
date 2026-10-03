@@ -1,6 +1,7 @@
 //! Universe contexts, levels, and the instance an occurrence must state.
 
 use {
+    super::test_support::*,
     crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
@@ -11,8 +12,6 @@ use {
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
 };
-
-use super::test_support::*;
 
 /// A declaration's universe context is *assumed* while checking it, so an unsatisfiable one is a hypothesis set that proves anything.
 ///

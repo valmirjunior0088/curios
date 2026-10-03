@@ -1,10 +1,9 @@
 //! Compile-time evaluation of an intrinsic, and the traps it must not fold away.
 
-use curios_num::Natural;
-
 use {
     crate::cps::evaluate::evaluate,
     crate::{Atom, Intrinsic, Literal},
+    curios_num::Natural,
 };
 
 #[test]

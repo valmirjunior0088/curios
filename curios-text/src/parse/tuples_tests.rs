@@ -1,8 +1,6 @@
 //! Projections, named and empty tuples, and the struct literal that disambiguates from a tuple type.
 
-use crate::*;
-
-use super::test_support::*;
+use {super::test_support::*, crate::*};
 
 #[test]
 fn proj_numeric_suffix() {

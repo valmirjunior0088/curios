@@ -1,8 +1,6 @@
 //! Trailing commas across every comma list, and the comments a parse captures as a product.
 
-use crate::*;
-
-use super::test_support::*;
+use {super::test_support::*, crate::*};
 
 #[test]
 fn a_comment_banner_parses_without_native_recursion() {

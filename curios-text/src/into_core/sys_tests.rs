@@ -1,9 +1,10 @@
 //! The internal root `/sys` is reachable only through the standard library, a unit reaches only the prefixes it declared, and a user module may not collide with the prelude's.
 
-use crate::{Intrinsic, LetSignature, Subterm, Term, TopItem, sys_module};
-use curios_abi::host_ops;
-
-use super::test_support::*;
+use {
+    super::test_support::*,
+    crate::{Intrinsic, LetSignature, Subterm, Term, TopItem, sys_module},
+    curios_abi::host_ops,
+};
 
 // `sys` is the trusted intrinsic substrate, reachable only from the standard library. A user entrypoint that names it — through a `use` or a bare term reference — is rejected at resolution; the `/std` wrappers are the door.
 #[test]

@@ -3,12 +3,11 @@
 //! The differential half runs each scalar expression twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and demands identical output, pinning the folders and the backend to one semantics on both sides of the i31, where the running program's form changes from an i31 to a boxed magnitude and its value must not.
 
 use {
+    super::test_support::*,
     crate::tests::{compile, run, run_text, typecheck, typecheck_within},
     curios_pipeline::DEFAULT_STEP_BUDGET,
     curios_runtime::MockHost,
 };
-
-use super::test_support::*;
 
 #[test]
 fn folded_and_executed_scalar_ops_agree() {

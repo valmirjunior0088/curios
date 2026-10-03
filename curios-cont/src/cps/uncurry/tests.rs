@@ -1,5 +1,3 @@
-use curios_num::Natural;
-
 use {
     super::{uncurry_returns, uncurryable},
     crate::cps::test_support::halt_zero,
@@ -7,6 +5,7 @@ use {
         Atom, Callee, Continuation, Edge, Function, FunctionId, Literal, Module, Node, NodeId,
         ValueExpr,
     },
+    curios_num::Natural,
 };
 
 /// How the caller of a class member uses what it hands back.

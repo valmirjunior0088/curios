@@ -1,6 +1,7 @@
 //! Every peel verdict and open fold law, checked at every closed instantiation.
 
 use {
+    super::test_support::*,
     crate::{
         Free, Intrinsic, Nat, Subterm, Term, decide_bool, peel_bin, peel_int_pair, peel_list,
         peel_nat_terms, peel_position,
@@ -9,8 +10,6 @@ use {
     curios_num::Grain,
     curios_num::Integer,
 };
-
-use super::test_support::*;
 
 // Soundness gate for the peel's own verdicts over values: `Nat::cancel_common` decides all three, and the law behind them is otherwise argued only in code comments.
 //

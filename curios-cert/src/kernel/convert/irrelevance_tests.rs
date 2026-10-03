@@ -1,7 +1,7 @@
 //! Definitional proof irrelevance: where it fires, where it must not leak, and what a binder's stand-in type decides.
 
-use super::test_support::*;
 use {
+    super::test_support::*,
     crate::{Error, convert},
     curios_core::{
         Atom, Cases, Free, InductDecl, InductParam, Intrinsic, Level, Match, MatchResult,

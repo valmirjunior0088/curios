@@ -1,12 +1,11 @@
 //! The evaluation memos: what a hit costs, what clears them, and what a budget restore forgets.
 
 use {
+    super::test_support::*,
     crate::Kernel,
     curios_analysis::fixture::SYNTAX,
     curios_core::{Intrinsic, Reducer, Term, UniverseContext},
 };
-
-use super::test_support::*;
 
 /// A remembered reduct is the same answer the term would compute — including across a scope boundary, which a local-free key cannot observe.
 #[test]

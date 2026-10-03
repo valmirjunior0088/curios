@@ -1,7 +1,5 @@
 //! Dead code, jump and call forwarding, atom rewriting, and the intrinsic identities the simplifier folds.
 
-use curios_num::{Integer, Natural, Rounding};
-
 use {
     super::test_support::unary_intrinsic_module,
     crate::cps::simplify::{
@@ -13,6 +11,7 @@ use {
         Module, Node, NodeId, ValueExpr, ValueId,
     },
     curios_num::Floating,
+    curios_num::{Integer, Natural, Rounding},
     std::collections::BTreeMap,
 };
 

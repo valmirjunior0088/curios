@@ -1,12 +1,11 @@
 //! One typing rule each: universes, literals, variables, lambdas, applications, tuples, lets and recursive groups.
 
 use {
+    super::test_support::*,
     crate::{Counted, Error, Kernel, infer},
     curios_analysis::fixture::SYNTAX,
     curios_core::{Intrinsic, Nat, Subterm, Term},
 };
-
-use super::test_support::*;
 
 #[test]
 fn a_universe_is_one_level_above_itself() {

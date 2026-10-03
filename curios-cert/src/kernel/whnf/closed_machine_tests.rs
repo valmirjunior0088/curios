@@ -1,14 +1,13 @@
 //! The closed machine, checked against the strategy it accelerates.
 
 use {
+    super::test_support::*,
     super::unfold_rec,
     crate::Kernel,
     curios_core::{Free, Global, Intrinsic, Many, Reducer, Scope, Subterm, Term},
     curios_num::{Binary, Grain},
     curios_utilities::Qualifier,
 };
-
-use super::test_support::*;
 
 /// A global name handed to a closed function stays a name in what the machine hands back, exactly as it does under the strategy: `twice(g)` at a plain demand is `(x) => g(g(x))` with `g` *named*, not `g`'s body substituted twice. A machine that evaluates every beta argument and substitutes its value would inline a function-valued global's definition once per occurrence — and a web of definitions each naming the one before it twice would come back as a graph whose tree is `2^n`. The strategy substitutes the argument as written, so the two reducts would differ here, and this fixture is the one that sees it.
 #[test]

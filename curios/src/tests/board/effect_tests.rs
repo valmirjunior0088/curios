@@ -1,8 +1,6 @@
 //! An effect is not a value: what may be a scrutinee, an argument, or inhabit a pure arrow.
 
-use crate::tests::run;
-
-use super::test_support::*;
+use {super::test_support::*, crate::tests::run};
 
 // The arm rule at its one arm with no case value of its own. A `| _ =>` catch-all binds nothing and refines no index, so the only instance it can be checked at is the scrutinee's — which is the instance the elimination then hands its caller.
 //

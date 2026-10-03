@@ -4,8 +4,6 @@
 //!
 //! `pub(super)` rather than private: these are consumed by sibling modules across `cps`, and nothing outside it.
 
-use curios_num::Natural;
-
 use {
     crate::cps::analysis::function_nodes,
     crate::{
@@ -13,6 +11,7 @@ use {
         Module, Node, NodeId, ValueExpr, ValueId,
     },
     curios_abi::{ForeignFunction, HostOp},
+    curios_num::Natural,
     std::{
         collections::{BTreeMap, BTreeSet},
         sync::Arc,

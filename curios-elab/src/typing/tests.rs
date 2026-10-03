@@ -1,8 +1,8 @@
-use curios_core::*;
 use {
     crate::*,
     curios_analysis::fixture::SYNTAX,
     curios_cert::{Kernel, carries_information},
+    curios_core::*,
     curios_utilities::Qualifier,
 };
 

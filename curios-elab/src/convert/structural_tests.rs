@@ -1,9 +1,9 @@
 //! Tuples, projections, eta at a known type, and the irrelevance that fires at a computed proposition.
 
-use super::test_support::*;
-use curios_core::*;
 use {
+    super::test_support::*,
     crate::*,
+    curios_core::*,
     curios_utilities::{Plicity, Qualifier},
 };
 

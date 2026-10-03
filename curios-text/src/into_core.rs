@@ -34,8 +34,21 @@ mod scoped;
 use scoped::*;
 
 mod document;
-use curios_document::Documentation;
 use document::*;
+use {
+    super::*,
+    curios_abi::ForeignStore,
+    curios_core::Bound,
+    curios_document::Documentation,
+    curios_utilities::{
+        Entropy, Mount, Plicity, Qualifier, Report, RootKind, Span, SyntaxRegistry,
+    },
+    std::{
+        cell::{Cell, RefCell},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+        rc::Rc,
+    },
+};
 
 #[cfg(test)]
 mod binding_tests;
@@ -61,20 +74,6 @@ mod universe_tests;
 mod use_tests;
 #[cfg(test)]
 mod visibility_tests;
-
-use {
-    super::*,
-    curios_abi::ForeignStore,
-    curios_core::Bound,
-    curios_utilities::{
-        Entropy, Mount, Plicity, Qualifier, Report, RootKind, Span, SyntaxRegistry,
-    },
-    std::{
-        cell::{Cell, RefCell},
-        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-        rc::Rc,
-    },
-};
 
 /// Every prefix the compilation mounts, and which of them the unit being compiled may name.
 ///

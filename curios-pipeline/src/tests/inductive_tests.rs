@@ -1,8 +1,6 @@
 //! Declaring, constructing and matching an inductive family, indexed or not, and the arms inversion prunes.
 
-use curios_text::Entrypoint;
-
-use super::test_support::*;
+use {super::test_support::*, curios_text::Entrypoint};
 
 #[test]
 fn omitted_motive_mentioning_a_type_param_lowers() {

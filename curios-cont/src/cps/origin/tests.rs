@@ -1,11 +1,10 @@
-use curios_num::Natural;
-
 use {
     super::{Origin, origins},
     crate::cps::test_support::{halt, halt_zero, module_with},
     crate::{
         Atom, Callee, Continuation, Edge, Function, Literal, Module, Node, Slot, ValueExpr, ValueId,
     },
+    curios_num::Natural,
     std::collections::BTreeSet,
 };
 

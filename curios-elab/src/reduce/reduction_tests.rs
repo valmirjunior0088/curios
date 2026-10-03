@@ -1,10 +1,10 @@
 //! Beta, zeta, iota, projection and eta, the metavariable arms, and what invalidates a cached reduct.
 
-use super::test_support::{context, nat, nominal, qed};
-use curios_core::*;
 use {
+    super::test_support::{context, nat, nominal, qed},
     crate::*,
     curios_analysis::fixture::SYNTAX,
+    curios_core::*,
     curios_num::{Binary, Floating, Grain, Integer, Rounding},
 };
 

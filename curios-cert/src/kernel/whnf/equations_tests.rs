@@ -1,13 +1,12 @@
 //! Case equations inside an arm: what they answer, and how far out of their scope a remembered reduct may travel.
 
 use {
+    super::test_support::*,
     crate::{Kernel, whnf},
     curios_analysis::fixture::SYNTAX,
     curios_core::{Cost, Exhaustion, Free, Intrinsic, Reducer, Term},
     curios_utilities::Qualifier,
 };
-
-use super::test_support::*;
 
 /// A case equation lives exactly as long as its arm.
 ///

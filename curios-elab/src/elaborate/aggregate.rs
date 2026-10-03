@@ -1,6 +1,8 @@
-use super::*;
-use crate::{FrozenFrame, ParkedProjection};
-use curios_core::{SelfReference, stamp_declaration_instance};
+use {
+    super::*,
+    crate::{FrozenFrame, ParkedProjection},
+    curios_core::{SelfReference, stamp_declaration_instance},
+};
 
 pub(super) fn elaborate_tuple_type(
     context: &mut Context,

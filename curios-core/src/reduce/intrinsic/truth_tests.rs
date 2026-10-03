@@ -2,11 +2,10 @@
 
 use {
     super::decide_bool,
+    super::test_support::*,
     crate::{Intrinsic, Term},
     curios_algebra::BOOL_ATOM_CAP,
 };
-
-use super::test_support::*;
 
 fn and(left: Term, right: Term) -> Term {
     Term::intrinsic(Intrinsic::BoolAnd(left, right))

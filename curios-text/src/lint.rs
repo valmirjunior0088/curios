@@ -3,11 +3,10 @@
 //! Every lint is a zero — a `use` selector no reference resolved through, a binder nothing read, a declaration nothing reaches — decided by the lowering, which is the one stage that resolves every written name. The one reference no written name makes is a proof the elaborator writes from the facts in scope, which reads the binders it sums: a binder one reads is *credited* once elaboration has run ([`PreparedText::credit`](crate::PreparedText::credit)), and `unused-binder` does not report it. There are no levels and no suppression: what keeps a name is spelled in the program, and each message says how. The decision is `documentation/design/tools/a-lint-is-an-exact-finding-read-off-the-compilation.md`.
 
 use {
+    super::Label,
     curios_utilities::{Report, Span},
     std::collections::BTreeSet,
 };
-
-use super::Label;
 
 /// The kinds, each named as `curios lint` documents it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

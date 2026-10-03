@@ -1,12 +1,11 @@
 //! A name already in scope: replaced rather than judged, and live but unchecked.
 
 use {
+    super::test_support::*,
     crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{Free, Level, Term},
 };
-
-use super::test_support::*;
 
 /// The walk judges by name, and a name the handed environment already answers for is judged by nothing.
 ///

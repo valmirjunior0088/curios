@@ -1,8 +1,6 @@
 //! A fold's motive reaches its scrutinee only through the binder it declares.
 
-use crate::tests::run;
-
-use super::test_support::*;
+use {super::test_support::*, crate::tests::run};
 
 // The induction hypothesis of a fold is typed at the motive opened at the tail, inside an arm where the scrutinee is refined to the cons value. A motive that names the scrutinee instead of binding it has that occurrence refined too, so the hypothesis is assumed at the arm's own goal, and `ih` alone proves `Eq()(k + 1, 0)` from `Eq()(k, 0)`. Without the refusal, every program below compiles, runs, and prints, certifying a closed inhabitant of `Eq()(1, 0)`.
 #[test]

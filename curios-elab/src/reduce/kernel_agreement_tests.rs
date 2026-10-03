@@ -6,12 +6,12 @@
 //!
 //! One case puts an arm's equation in, where the two sides meet it through different doors: the kernel through its arm rule, which is all its public surface offers, and the elaborator through the reducer under the equation registered as an arm registers it.
 
-use curios_core::*;
 use {
     super::test_support::{context, nat, nominal},
     crate::refine_head,
     curios_analysis::fixture::SYNTAX,
     curios_cert::Kernel,
+    curios_core::*,
 };
 
 /// The kernel these fixtures are put to.

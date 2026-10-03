@@ -1,5 +1,3 @@
-use curios_num::Natural;
-
 use {
     super::{split_parameters, split_workers},
     crate::cps::test_support::{halt, halt_zero},
@@ -7,6 +5,7 @@ use {
         Atom, Callee, Continuation, ContinuationId, Edge, FieldGroup, Function, FunctionId,
         Intrinsic, Literal, Module, Node, Row, Slot, ValueExpr, ValueId, optimize,
     },
+    curios_num::Natural,
 };
 
 /// The canonical loop-carried product: a seed pair enters a header, one arm projects field 0 and jumps back with a fresh pair, the other hands the parameter to an exit that projects field 0 and nothing else. The accumulator of `/std/Str/fold`, in miniature.

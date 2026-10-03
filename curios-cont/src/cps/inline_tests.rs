@@ -1,11 +1,10 @@
 //! Inlining a known call and a single-use continuation, and what each must clone rather than share.
 
-use curios_num::Natural;
-
 use {
     super::test_support::capture_unmentioned_by_owner,
     crate::cps::inline::{inline_known_calls, inline_single_use_continuations},
     crate::{Atom, Callee, Continuation, Edge, Function, Literal, Module, Node},
+    curios_num::Natural,
 };
 
 #[test]

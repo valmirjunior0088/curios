@@ -2,10 +2,10 @@
 //!
 //! Range, by contrast, never errors here: `Nat`/`Int` are unbounded at the type level and in the running program alike, folds compute exactly, and only materialization in `curios-emit` refuses a value its envelope cannot box.
 
-use super::test_support::{context, qed};
-use curios_core::*;
 use {
+    super::test_support::{context, qed},
     crate::*,
+    curios_core::*,
     curios_num::{Floating, Integer},
 };
 

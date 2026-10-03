@@ -1,9 +1,10 @@
 //! Declaration order the lowering derives, and the modules it reads from a loader.
 
-use crate::{Entrypoint, Error, RootSource};
-use curios_utilities::{Qualifier, RootKind};
-
-use super::test_support::*;
+use {
+    super::test_support::*,
+    crate::{Entrypoint, Error, RootSource},
+    curios_utilities::{Qualifier, RootKind},
+};
 
 // A.f references B.g and B.h references A.e, with e and g independent — no cycle, but no contiguous source order binds both references. The reorder must produce a valid binding order, leaving the lowered term with no free name.
 #[test]

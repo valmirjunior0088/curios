@@ -1,9 +1,10 @@
 //! Foreign declarations: the store they populate and the import names they take across modules.
 
-use crate::{Entrypoint, RootSource};
-use curios_abi::{WireResults, WireType};
-
-use super::test_support::*;
+use {
+    super::test_support::*,
+    crate::{Entrypoint, RootSource},
+    curios_abi::{WireResults, WireType},
+};
 
 #[test]
 fn declaration_populates_the_store() {

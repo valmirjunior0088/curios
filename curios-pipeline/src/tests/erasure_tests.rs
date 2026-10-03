@@ -1,13 +1,12 @@
 //! What erasure carries into the arena, and what a repeated compilation restores unmutated.
 
 use {
+    super::test_support::*,
     crate::*,
     curios_ersd::{Analysis, Rhs, Statement, test_support::shape},
     curios_text::RootSource,
     curios_wasm::to_bytes,
 };
-
-use super::test_support::*;
 
 #[test]
 fn repeated_compilation_restores_an_unmutated_ersd_prefix() {

@@ -2,11 +2,10 @@
 
 use {
     super::Reducer,
+    super::test_support::*,
     crate::{Category, Cost, Intrinsic, Nat, ReduceError, Term},
     curios_num::{Binary, Grain, Integer, Natural},
 };
-
-use super::test_support::*;
 
 /// A shift's result is `bits(value) + amount` wide and the amount is a *value*, so no operand size bounds it. The charge is computed from the amount and refused before `num-bigint` is asked for anything — which is the difference between a diagnostic and an allocation the process may not survive.
 ///

@@ -1,6 +1,7 @@
 //! Motives and result sorts, and the large-elimination guard a vacuous elimination must not skip.
 
 use {
+    super::test_support::*,
     crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
@@ -10,8 +11,6 @@ use {
     curios_utilities::{Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
 };
-
-use super::test_support::*;
 
 /// A declared result sort that merely *reduces* to `Prop` silences the index guard that reads it syntactically.
 ///

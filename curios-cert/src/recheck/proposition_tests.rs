@@ -1,6 +1,7 @@
 //! What a proposition may carry, and what a proof may reach.
 
 use {
+    super::test_support::*,
     crate::{Error, Globals},
     curios_analysis::Erased,
     curios_analysis::fixture::SYNTAX,
@@ -8,8 +9,6 @@ use {
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
 };
-
-use super::test_support::*;
 
 /// The derivation a `Prop` carrying a type made possible, as a whole module.
 ///

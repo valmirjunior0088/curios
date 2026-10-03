@@ -2,10 +2,9 @@
 
 use {
     super::force_atoms,
+    super::test_support::*,
     crate::{Free, Intrinsic, Nat, Term, int_same},
 };
-
-use super::test_support::*;
 
 /// The pair as the forcing hands it back, or as it was where nothing moved. Through the reducer that reduces nothing, so what is left to bring two spellings together is the ordering alone.
 fn forced(this: &Term, that: &Term) -> (Term, Term) {

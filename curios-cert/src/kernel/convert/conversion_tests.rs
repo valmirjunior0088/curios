@@ -1,7 +1,7 @@
 //! Structural conversion: reflexivity, beta and delta, eta at a function and a pair, intrinsic congruence, plicity and universe levels.
 
-use super::test_support::*;
 use {
+    super::test_support::*,
     crate::{Error, convert},
     curios_core::{
         Free, FuncType, Global, InstanceHead, Intrinsic, Level, MetavarId, StructDecl, StructType,

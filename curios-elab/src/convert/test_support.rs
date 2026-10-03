@@ -2,8 +2,7 @@
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across `convert`, and nothing outside it.
 
-use curios_core::*;
-use {crate::*, curios_analysis::fixture::SYNTAX, curios_utilities::Qualifier};
+use {crate::*, curios_analysis::fixture::SYNTAX, curios_core::*, curios_utilities::Qualifier};
 
 /// A declaration's name, from the path a test writes. Fixture-only.
 pub(super) fn nominal(path: &str) -> Global {

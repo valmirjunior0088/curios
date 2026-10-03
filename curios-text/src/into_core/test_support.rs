@@ -2,15 +2,18 @@
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
-use crate::{Entrypoint, RootSource, sys_module};
-use curios_abi::host_ops;
-use curios_utilities::{
-    ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
-    EqlDerivation, HashDerivation, LiftSyntax, MonadSyntax, NaturalSyntax, OperatorSyntax,
-    OptionSyntax, OrdDerivation, OrderSyntax, ProofSyntax, Qualifier, ResultSyntax, RootKind,
-    SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax, test_support::Temporary,
+use {
+    crate::{Entrypoint, RootSource, sys_module},
+    curios_abi::host_ops,
+    curios_utilities::{
+        ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
+        EqlDerivation, HashDerivation, LiftSyntax, MonadSyntax, NaturalSyntax, OperatorSyntax,
+        OptionSyntax, OrdDerivation, OrderSyntax, ProofSyntax, Qualifier, ResultSyntax, RootKind,
+        SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+        test_support::Temporary,
+    },
+    std::{fs, path::Path},
 };
-use std::{fs, path::Path};
 
 pub(super) const fn registry_name(segments: &'static [&'static str]) -> SyntaxName {
     SyntaxName::new(segments)

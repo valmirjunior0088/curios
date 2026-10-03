@@ -1,6 +1,7 @@
 //! Constructors, eliminations, definitions and instances, and the descent a recursive declaration owes.
 
 use {
+    super::test_support::*,
     crate::{Error, check, check_definition, infer},
     curios_core::{
         Atom, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
@@ -9,8 +10,6 @@ use {
     },
     curios_utilities::{Plicity, Qualifier},
 };
-
-use super::test_support::*;
 
 /// A constructor's type is its signature's terminal — the family at the parameters and index targets this case aims at.
 #[test]

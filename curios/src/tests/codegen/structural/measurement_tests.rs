@@ -1,8 +1,6 @@
 //! Recorded figures for the structural shapes, each with the command that retakes it. None asserts.
 
-use curios_wasm::to_bytes;
-
-use super::test_support::*;
+use {super::test_support::*, curios_wasm::to_bytes};
 
 /// What the closure table index is worth at product level.
 ///

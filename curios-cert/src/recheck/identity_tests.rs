@@ -1,14 +1,13 @@
 //! Identities a walk is handed: a free local is refused before the kernel mints a binder that could alias it.
 
 use {
+    super::test_support::*,
     crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{Entrypoint, Free, Global, Intrinsic, Module, Nat, Program, Term},
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
 };
-
-use super::test_support::*;
 
 /// The indices a stray local is tried at: every one the kernel mints first, so a walk that let the local through would open a binder carrying the same identity at one of them.
 const COLLIDING: std::ops::Range<u32> = 0..4;

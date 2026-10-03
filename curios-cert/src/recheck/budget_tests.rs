@@ -1,6 +1,7 @@
 //! Each judgment of the walk spends a budget of its own.
 
 use {
+    super::test_support::*,
     crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
@@ -10,8 +11,6 @@ use {
     curios_utilities::{Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
 };
-
-use super::test_support::*;
 
 fn good() -> Global {
     Global::Authored(Qualifier::from(["Good"]))

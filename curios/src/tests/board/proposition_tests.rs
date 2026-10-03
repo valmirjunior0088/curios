@@ -1,8 +1,6 @@
 //! What a proposition may carry and what it may be eliminated into.
 
-use crate::tests::run;
-
-use super::test_support::*;
+use {super::test_support::*, crate::tests::run};
 
 // The large-elimination guard, in the direction that matters for soundness. Every `Box` is definitionally equal to every other by proof irrelevance, so reading a `Nat` back out of one would make 0 and 7 convertible.
 #[test]

@@ -1,13 +1,12 @@
 //! Beta, delta, zeta, iota, projection, eta and the switch arms — one reduction rule each.
 
 use {
+    super::test_support::*,
     super::{unfold_rec, unfold_rec_apply},
     crate::whnf,
     curios_core::{Apply, Free, Global, Intrinsic, Level, Reducer, Subterm, Term},
     curios_utilities::Qualifier,
 };
-
-use super::test_support::*;
 
 #[test]
 fn beta_opens_a_function_over_its_arguments() {

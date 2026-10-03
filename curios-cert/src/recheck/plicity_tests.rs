@@ -1,9 +1,6 @@
 //! The registry's plicity vector, which no kernel rule reads.
 
-use crate::Globals;
-
-use super::test_support::*;
-use curios_analysis::fixture::SYNTAX;
+use {super::test_support::*, crate::Globals, curios_analysis::fixture::SYNTAX};
 
 /// `plicities` is the one field on a registry entry that no clause of `check_induct_decl` establishes, and the reason it needs none is that this kernel never reads it — its consumer is `InductDecl::payload_plicities`, which the elaborator reads. Its *length* is no one's to check: `InductParam::new` pairs the vector with its telescope at the one door that builds one, so a short vector is unrepresentable.
 ///

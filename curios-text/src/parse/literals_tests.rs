@@ -1,12 +1,11 @@
 //! Numeric, character, string, list and binary literals, and the spread segments inside them.
 
 use {
+    super::test_support::*,
     crate::*,
     curios_num::{Floating, Grain},
     curios_utilities::Sign,
 };
-
-use super::test_support::*;
 
 #[test]
 fn integer_literals_are_polymorphic_num_lits() {

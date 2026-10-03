@@ -1,11 +1,11 @@
-use crate::reduce::test_support::qed;
-use curios_core::*;
-use curios_core::{Program, Zonked};
-use curios_ersd::{FieldShape, test_support::shape};
 use {
+    crate::reduce::test_support::qed,
     crate::*,
     curios_abi::{ForeignFunction, HostOp},
     curios_analysis::fixture::SYNTAX,
+    curios_core::*,
+    curios_core::{Program, Zonked},
+    curios_ersd::{FieldShape, test_support::shape},
     curios_utilities::{Plicity, Qualifier},
     std::{
         collections::{BTreeMap, BTreeSet},

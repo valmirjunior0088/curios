@@ -1,12 +1,11 @@
 //! Collecting and reaching over a term: free variables, metavariables, and the sharing a walk must visit once.
 
 use {
+    super::test_support::*,
     crate::*,
     curios_utilities::{Plicity, Qualifier},
     std::{collections::BTreeSet, rc::Rc},
 };
-
-use super::test_support::*;
 
 #[test]
 fn collect_ignores_index_names() {

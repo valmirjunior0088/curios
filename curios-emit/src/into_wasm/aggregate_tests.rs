@@ -1,8 +1,9 @@
 //! Tuples, list and packed literals, cells and variants — built and read at their own carriers.
 
-use curios_num::{Binary, Grain, Rounding};
-
-use super::test_support::*;
+use {
+    super::test_support::*,
+    curios_num::{Binary, Grain, Rounding},
+};
 
 #[test]
 fn tuple_construction_and_projection() {

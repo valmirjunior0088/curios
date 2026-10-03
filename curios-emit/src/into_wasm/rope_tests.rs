@@ -1,8 +1,6 @@
 //! The shared rope helpers a `Bin` or `List` operation calls, and the chain depth they lower on.
 
-use curios_num::Grain;
-
-use super::test_support::*;
+use {super::test_support::*, curios_num::Grain};
 
 #[test]
 fn bin_slice_calls_the_shared_slice_helper() {

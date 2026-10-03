@@ -1,12 +1,11 @@
 //! Symbolic `Nat` comparison: shared addends, commuted sums, and the bound an indexed loop walks under.
 
 use {
+    super::test_support::*,
     super::{Comparison, align_comparisons, compare_int, compare_nat, reduce_intrinsic},
     crate::{Aligned, Intrinsic, Nat, ReduceError, Subterm, Term},
     curios_num::Integer,
 };
-
-use super::test_support::*;
 
 // What the cancellation buys the comparison family: a shared addend decides nothing, so removing it lets a stuck comparison stall on the operands that actually differ. `Le(x + a, x + b)` becoming `Le(a, b)` is what makes a decided proposition usable under a binder rather than only at literals.
 #[test]

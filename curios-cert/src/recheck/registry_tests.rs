@@ -1,6 +1,7 @@
 //! Index targets the walk checks rather than believes, and the scheme a registry may declare apart from its type former.
 
 use {
+    super::test_support::*,
     crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{
@@ -10,8 +11,6 @@ use {
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
 };
-
-use super::test_support::*;
 
 /// A constructor's *index target* is registry data, which the walk checks rather than believes.
 ///

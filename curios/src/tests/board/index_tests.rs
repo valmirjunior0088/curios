@@ -1,8 +1,6 @@
 //! Index inversion and K: what forces a binder, and what may not excuse an omitted arm.
 
-use crate::tests::run;
-
-use super::test_support::*;
+use {super::test_support::*, crate::tests::run};
 
 // The large-elimination guard again, at its *singleton* rung. A one-constructor proposition may eliminate into data only when every payload binder is non-informative — a proposition itself, or *pinned* by the constructor's index targets, as `Eq`'s `refl(@z) : (z, z)` recovers `z`.
 //

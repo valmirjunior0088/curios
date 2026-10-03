@@ -2,11 +2,10 @@
 
 use {
     super::reduce_intrinsic,
+    super::test_support::*,
     crate::{FUSION_CAP, Free, Intrinsic, Nat, Subterm, Term},
     curios_num::{Binary, Grain},
 };
-
-use super::test_support::*;
 
 // Regression: `get(append(b[], x), 0)` must reduce to `x` through its own base-case arm — the cons peel's symbolic head chunk IS `append(b[], x)`, so without that arm the rewrite would rebuild the redex it came from until the step budget exhausted.
 #[test]

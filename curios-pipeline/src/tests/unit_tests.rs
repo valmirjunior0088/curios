@@ -1,8 +1,6 @@
 //! Mounts and prefixes across compilation units, the orphan rule that fires between them, and the bytes a unit stores whatever came before it.
 
-use {curios_core::Module, curios_text::RootSource};
-
-use super::test_support::*;
+use {super::test_support::*, curios_core::Module, curios_text::RootSource};
 
 /// Two ordinary units mounting one prefix is refused where the registry knows both, naming the prefix.
 #[test]

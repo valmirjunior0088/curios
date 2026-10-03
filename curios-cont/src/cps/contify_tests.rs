@@ -1,11 +1,10 @@
 //! Turning a function into a continuation, and the call shapes that forbid it.
 
-use curios_num::Natural;
-
 use {
     super::test_support::{capture_unmentioned_by_owner, helper_called},
     crate::cps::{contify::contify_calls, optimize::optimize},
     crate::{Atom, Callee, Continuation, Edge, Function, Literal, Module, Node},
+    curios_num::Natural,
     std::collections::BTreeMap,
 };
 

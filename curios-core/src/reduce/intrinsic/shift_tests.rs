@@ -1,11 +1,10 @@
 //! The right shifts folded at a count past the host word: the arithmetic answer, never a neutral term whose threshold is the host's.
 
 use {
+    super::test_support::*,
     crate::{Intrinsic, Nat, Term},
     curios_num::{Integer, Natural},
 };
-
-use super::test_support::*;
 
 fn count(value: u128) -> Term {
     Term::intrinsic(Intrinsic::Nat(Nat::new(Natural::from(value))))

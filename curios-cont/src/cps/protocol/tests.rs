@@ -1,5 +1,3 @@
-use curios_num::Natural;
-
 use {
     super::{ReturnProtocol, ReturnShape, return_protocols, split_returns},
     crate::cps::test_support::halt_zero,
@@ -7,6 +5,7 @@ use {
         Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
         Module, Node, Row, RowId, Slot, ValueExpr,
     },
+    curios_num::Natural,
 };
 
 /// A function returning a one-field tuple through its own return continuation — the shape a caller takes apart.

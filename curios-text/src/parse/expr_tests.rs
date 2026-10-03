@@ -1,13 +1,12 @@
 //! Expressions: application, infix, implicit marks, goals, local bindings, function sugar and the postfix `!`.
 
 use {
+    super::test_support::*,
     crate::*,
     curios_num::Floating,
+    curios_utilities::Sign,
     curios_utilities::{InfixOp, Plicity},
 };
-
-use super::test_support::*;
-use curios_utilities::Sign;
 
 #[test]
 fn let_func_and_apply() {

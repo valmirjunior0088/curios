@@ -1,11 +1,10 @@
-use curios_num::Natural;
-
 use {
     super::{
         Atom, Continuation, ContinuationId, Edge, FieldGroup, Function, FunctionId, Intrinsic,
         Literal, Module, Node, NodeId, Row, Slot, UseTarget, ValueExpr, ValueId,
     },
     crate::cps::test_support::halt_zero,
+    curios_num::Natural,
     std::collections::BTreeMap,
 };
 

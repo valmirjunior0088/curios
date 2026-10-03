@@ -1,5 +1,3 @@
-use curios_num::Natural;
-
 use {
     super::{
         MachineFunction, MachineInstruction, MachineOperand, MachineTerminator, MachineValueId,
@@ -7,6 +5,7 @@ use {
     },
     crate::into_wasm::{EmissionHostTarget, EmissionTail},
     curios_abi::{ForeignFunction, HostOp},
+    curios_num::Natural,
     std::sync::Arc,
 };
 

@@ -1,13 +1,12 @@
 //! The entrypoint: judged at the type it states, and refused when it states none.
 
 use {
+    super::test_support::*,
     crate::{Error, Globals},
     curios_analysis::fixture::SYNTAX,
     curios_core::{Entrypoint, Intrinsic, Module, Nat, Program, Term},
     std::collections::{BTreeMap, BTreeSet},
 };
-
-use super::test_support::*;
 
 /// A program of nothing but `entry`.
 fn entry_module(entry: Entrypoint) -> Program {

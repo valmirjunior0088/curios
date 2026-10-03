@@ -1,7 +1,7 @@
-use curios_core::*;
 use {
     crate::*,
     curios_analysis::fixture::SYNTAX,
+    curios_core::*,
     curios_num::Floating,
     curios_num::Natural,
     curios_utilities::{Plicity, Qualifier},

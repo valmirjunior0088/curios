@@ -1,7 +1,7 @@
 //! Recursive heads: alpha-variant groups, a folded call compared against its unfolding, and the recurrence that is assumed rather than unfolded forever.
 
-use super::test_support::*;
 use {
+    super::test_support::*,
     super::{History, convert_intrinsic},
     crate::{Kernel, convert},
     curios_analysis::fixture::SYNTAX,

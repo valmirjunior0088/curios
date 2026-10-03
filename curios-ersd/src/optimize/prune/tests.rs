@@ -1,8 +1,7 @@
-use curios_num::Natural;
-
 use {
     crate::*,
     curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
+    curios_num::Natural,
     std::sync::Arc,
 };
 

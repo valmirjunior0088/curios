@@ -1,8 +1,10 @@
 //! Congruence through every intrinsic operand, and the carriers that compare element-wise.
 
-use super::test_support::*;
-use curios_core::*;
-use curios_num::{Binary, Grain};
+use {
+    super::test_support::*,
+    curios_core::*,
+    curios_num::{Binary, Grain},
+};
 
 #[test]
 fn intrinsic_nat_add_recurses_into_operands() {

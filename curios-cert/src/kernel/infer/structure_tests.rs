@@ -1,6 +1,7 @@
 //! Structure occurrences at their declared parameter count, and the syntax elaboration may leave behind.
 
 use {
+    super::test_support::*,
     crate::{Error, check, infer},
     curios_core::{
         Global, InductDecl, Intrinsic, MetavarId, StructType, Subterm, Telescope, Term, Transient,
@@ -8,8 +9,6 @@ use {
     },
     curios_utilities::Qualifier,
 };
-
-use super::test_support::*;
 
 /// A list or a cell *of* proofs is not a proposition, and the typing rule has to say so — `Sort::of` already does.
 ///

@@ -1,12 +1,11 @@
 //! What a reduction is charged, and what happens when the budget runs out.
 
 use {
+    super::test_support::*,
     crate::{Kernel, whnf},
     curios_analysis::fixture::SYNTAX,
     curios_core::{Category, Cost, Exhaustion, ReduceError, Reducer, Term},
 };
-
-use super::test_support::*;
 
 /// The kernel is not strongly normalizing, and the budget is what makes every judgment terminate anyway. A group that consumes nothing spins until it runs out, which is an answer rather than a hang.
 #[test]

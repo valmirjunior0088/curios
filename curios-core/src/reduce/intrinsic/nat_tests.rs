@@ -1,13 +1,12 @@
 //! `Nat` bounds and Euclidean split, and the cancellation a symbolic operand admits.
 
 use {
+    super::test_support::*,
     super::{Comparison, compare_nat, nat_bound, nat_dominators, nat_euclid_split},
     crate::{Free, Intrinsic, Subterm, Term, peel_nat_terms},
     curios_algebra::Deduction,
     curios_num::Natural,
 };
-
-use super::test_support::*;
 
 // Soundness gate: `nat_bound` must never under-report, because the division split and the comparison body both turn a bound into a definitional equation — an under-report there is a false equation, not merely a wrong value. Every closed instantiation of each bounded shape must land at or below the bound the oracle states for the shape itself.
 #[test]

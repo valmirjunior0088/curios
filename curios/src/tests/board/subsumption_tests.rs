@@ -4,9 +4,10 @@
 //!
 //! Both checkers decide the same relation, and `curios_cert`'s `kernel::infer::sort_tests` puts the same two propositions to the kernel under these names. Rename both or neither.
 
-use crate::tests::{error, run, typecheck};
-
-use super::test_support::*;
+use {
+    super::test_support::*,
+    crate::tests::{error, run, typecheck},
+};
 
 // The direction the language needs. `Bool/Holds` is `(b : Bool) -> Prop`, handed to a slot wanting `(Bool) -> Type`; the corpus fixture `/big_nat`'s `canonical_of_is_trimmed` passes it to `Eq/subst` exactly so.
 #[test]

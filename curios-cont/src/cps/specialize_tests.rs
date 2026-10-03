@@ -1,7 +1,5 @@
 //! Specializing an SCC, a call pattern, and a jump pattern, each against its clone and growth budget.
 
-use curios_num::Natural;
-
 use {
     super::test_support::{
         PolymorphicLoop, has_switch, known_callee, polymorphic_loop, tagged_consumer, tagged_join,
@@ -18,6 +16,7 @@ use {
     crate::{
         Atom, Callee, Continuation, Edge, Function, Intrinsic, Literal, Module, Node, ValueExpr,
     },
+    curios_num::Natural,
     std::collections::BTreeMap,
 };
 

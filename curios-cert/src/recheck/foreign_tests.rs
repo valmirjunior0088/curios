@@ -1,6 +1,7 @@
 //! A foreign row inhabits its wire type and nothing more: a declared one whatever it claims, and a builtin exactly the roster's type for its row.
 
 use {
+    super::test_support::*,
     crate::{Error, Globals},
     curios_abi::{ForeignFunction, HostOp},
     curios_analysis::fixture::SYNTAX,
@@ -8,8 +9,6 @@ use {
     curios_num::Grain,
     curios_utilities::Qualifier,
 };
-
-use super::test_support::*;
 
 /// A forged ABI row cannot hand the guest an inhabitant of a proposition, because a wire signature cannot name one.
 ///

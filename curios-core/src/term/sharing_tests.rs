@@ -1,12 +1,11 @@
 //! Memoized rewrites keep sharing, and a deep term compares, releases and captures without native recursion.
 
 use {
+    super::test_support::*,
     crate::*,
     curios_utilities::{Source, Span},
     std::{rc::Rc, sync::Arc},
 };
-
-use super::test_support::*;
 
 #[test]
 fn a_memoized_rewrite_keeps_a_shared_subterm_shared() {

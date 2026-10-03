@@ -1,11 +1,9 @@
 //! A type a goal reports reads back: written where the goal stood, it compiles. That is the promise every reader-facing rendering makes — a report spells what its reader could have written at that position — and these are the programs that hold it to that, each written the first time a rendering broke it.
 
 use {
-    crate::*, curios_core::Global, curios_text::RootSource, curios_utilities::Qualifier,
-    std::fmt::Write,
+    super::test_support::*, crate::*, curios_core::Global, curios_text::RootSource,
+    curios_utilities::Qualifier, std::fmt::Write,
 };
-
-use super::test_support::*;
 
 /// Compile `source`, whose every `?` a goal report determines, write each goal's reported solution over the goal's own span, and compile the result. An error names the program as rewritten, so a failure shows the spelling that did not read back.
 fn reads_back(source: &str) -> Result<(), String> {

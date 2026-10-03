@@ -1,11 +1,10 @@
 //! The intrinsic fold laws over symbolic operands, and the free-monoid peel behind them.
 
-use super::test_support::qed;
-
-use curios_core::*;
 use {
+    super::test_support::qed,
     crate::{Context, reduce},
     curios_analysis::fixture::SYNTAX,
+    curios_core::*,
     curios_num::{Binary, Grain, Natural},
 };
 

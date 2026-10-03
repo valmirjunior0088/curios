@@ -1,8 +1,9 @@
 //! What a value is stored and read at: boxed payloads, immediates, destination carriers, and the type a slot carries.
 
-use crate::tests::{cont_optm_module, emits, run};
-
-use super::test_support::*;
+use {
+    super::test_support::*,
+    crate::tests::{cont_optm_module, emits, run},
+};
 
 /// A structural tuple's fields stay `(ref null any)`, which is what makes the representation analysis's locals-only scope *observable* rather than merely intended: it reaches locals and block parameters, never a heap layout, because a field is a contract between an allocation site and every reader of it rather than one function's private decision. A row's typed slots are the door's decision, made from the recorded shape; a scalar tuple field appearing here means the analysis's scope leaked.
 #[test]

@@ -4,12 +4,11 @@
 //!
 //! Backend lowering coverage: build a [`curios_cont::Module`](curios_cont::Module) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split whose semantic half runs end to end, in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
 
-use curios_num::{Integer, Natural};
-
 use {
     crate::into_wasm,
     curios_abi::{ForeignFunction, HostOp, host_ops},
     curios_num::{Binary, Floating, Grain},
+    curios_num::{Integer, Natural},
     std::{collections::BTreeMap, sync::Arc},
 };
 

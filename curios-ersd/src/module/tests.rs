@@ -1,8 +1,7 @@
-use curios_num::{Integer, Natural, Rounding};
-
 use {
     crate::*,
     curios_num::{Binary, Floating, Grain},
+    curios_num::{Integer, Natural, Rounding},
 };
 
 #[test]

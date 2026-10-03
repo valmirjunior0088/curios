@@ -1,13 +1,12 @@
 //! Intrinsic operands and results, the narrowing that needs its bound, and the free-monoid arms.
 
 use {
+    super::test_support::*,
     crate::{Error, infer},
     curios_analysis::fixture::SYNTAX,
     curios_core::{Free, Intrinsic, Term, UniverseContext},
     curios_num::Integer,
 };
-
-use super::test_support::*;
 
 #[test]
 fn a_channel_allocation_checks_its_positive_capacity_evidence() {

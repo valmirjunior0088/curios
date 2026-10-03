@@ -1,9 +1,9 @@
 //! Inductive and matrix matches, motives, patterns, and `choose`.
 
-use {crate::*, curios_num::Natural, curios_utilities::Plicity};
-
-use super::test_support::*;
-use curios_utilities::Sign;
+use {
+    super::test_support::*, crate::*, curios_num::Natural, curios_utilities::Plicity,
+    curios_utilities::Sign,
+};
 
 #[test]
 fn inductive_match_nullary_and_unary() {

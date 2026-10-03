@@ -1,19 +1,21 @@
 #[cfg(test)]
 mod tests;
 
-use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
-use curios_analysis::{RESOLVED_SPELLING_LAYERS, Unfolding, records_case_equation};
-use curios_core::{
-    Advance, Apply, Bound, Field, Free, Func, FuncType, Global, ImplicitOrigin, Intrinsic,
-    IntrinsicHead, Level, Lockstep, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError,
-    Scope, Spelling, Step, Subterm, Telescope, Term, Transient, UniverseConstraintKind,
-    UniverseConstraintOrigin, UniverseRole, Visit,
-};
-use curios_utilities::Span;
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, BTreeSet},
-    rc::Rc,
+use {
+    super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate},
+    curios_analysis::{RESOLVED_SPELLING_LAYERS, Unfolding, records_case_equation},
+    curios_core::{
+        Advance, Apply, Bound, Field, Free, Func, FuncType, Global, ImplicitOrigin, Intrinsic,
+        IntrinsicHead, Level, Lockstep, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError,
+        Scope, Spelling, Step, Subterm, Telescope, Term, Transient, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseRole, Visit,
+    },
+    curios_utilities::Span,
+    std::{
+        cell::RefCell,
+        collections::{BTreeMap, BTreeSet},
+        rc::Rc,
+    },
 };
 
 /// Synthesis is just `elaborate` in `Infer` mode, projecting out the type.

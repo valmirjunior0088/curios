@@ -1,14 +1,13 @@
 //! Totality verdicts across walks: the certifier's record read where a unit is carried, and elaboration's stamp compared, never read, where an item is judged.
 
 use {
+    super::test_support::*,
     crate::{Error, Globals, Verdict},
     curios_analysis::Erased,
     curios_analysis::fixture::SYNTAX,
     curios_core::{Certification, Certified, Global, Totality},
     curios_utilities::Qualifier,
 };
-
-use super::test_support::*;
 
 /// A totality stamp asserts the *closure* — elaboration's classification closes over mentions as the kernel's does — so the cross-check compares it against the closed verdict, not the local half.
 ///

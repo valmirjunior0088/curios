@@ -1,10 +1,10 @@
 //! Structural conversion: alpha equivalence, plicity, matches, and the recursive heads that converge coinductively or spend the budget.
 
-use super::test_support::*;
-use curios_core::*;
 use {
+    super::test_support::*,
     crate::*,
     curios_analysis::fixture::SYNTAX,
+    curios_core::*,
     curios_num::{Binary, Grain, Integer},
     curios_utilities::{Plicity, Qualifier},
 };

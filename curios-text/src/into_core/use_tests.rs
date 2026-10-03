@@ -1,8 +1,9 @@
 //! Every `use` form: paths, globs, brace groups, and the dual existence of a module and a binding under one name.
 
-use crate::{Entrypoint, RootSource};
-
-use super::test_support::*;
+use {
+    super::test_support::*,
+    crate::{Entrypoint, RootSource},
+};
 
 #[test]
 fn private_use_does_not_expose_qualifier() {
