@@ -9,7 +9,7 @@ pub(super) const TOTALITY: Part = Part {
     tickets: &[Ticket {
         title: "A member reached through an instance is a call the kernel does not record",
         found_on: Date::new(2026, 10, 2),
-        status: Status::Open,
+        status: Status::Fixed,
         witnesses: &[Witness {
             what: "a nullary group at `False` whose body is an instance of its own member",
             proof: Proof::Module(a_member_reached_through_an_instance),

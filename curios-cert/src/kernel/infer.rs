@@ -404,7 +404,13 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
         }),
 
         // A polymorphic name at a stated instance: its scheme, substituted.
+        //
+        // The occurrence is the head's, so a member named here is the call the `Var` rule above records, on the same reading: the levels spell the occurrence rather than stand between it and the member. A member reached only through this spelling would leave its group closing with no call at all, which is the one direction the recorder must not take. A projection head names its own group, which is certified below rather than recorded, since the group being checked holds its members as locals.
         Subterm::Instance(Instance { head, .. }) => {
+            if !spine_head && let Some(free) = head.head_name() {
+                kernel.record_call(free, &[])?;
+            }
+
             // `synth_neutral` reads a projection's type off the group it carries, which is a lookup and must stay one — so the group is certified *here*, before the read, at the generic spelling the instance was taken from. Skipping this would leave the instance spelling as a way to type a member of a group nothing checked.
             if let InstanceHead::RecProj(group, _) = head {
                 let group = group.clone();
