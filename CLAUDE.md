@@ -7,7 +7,7 @@ Curios is a dependently typed functional language implemented in Rust 2024, comp
 - Investigate, explain and propose freely; change the repository only as the user authorized, narrowly. Keeping formatters and linters passing on touched code is in scope.
 - A problem you were not asked to solve is a finding: state it once, with its evidence, and the user decides whether it becomes work. Don't reopen settled decisions.
 - Where more than one design is reasonable, present the alternatives with their trade-offs, recommend one, and wait.
-- Uncommitted changes are the user's, and other sessions commit to `main` while you work: never revert, reformat or stage what you did not write, and stage explicit paths. Never discard work with a reset or a checkout, and never rewrite history.
+- Uncommitted changes are the user's, and other sessions commit to `main` while you work: never revert, reformat or stage what you did not write, and stage explicit paths. Never discard work with a reset or a checkout.
 - Commit only when asked: one imperative, capitalized line — no body, trailer or co-author — on `main`.
 - Don't delegate to subagents unless asked. Stop only your own processes, by exact PID.
 
