@@ -55,13 +55,10 @@ struct FunctionConsts {
 
 pub(crate) fn hoist_consts(module: &mut EmissionModule) {
     let mut interner = ConstInterner::default();
-    for (_, clsr) in &mut module.clsrs {
-        hoist_region(&mut clsr.region, &mut interner);
+    for region in module.regions_mut() {
+        hoist_region(region, &mut interner);
     }
-    for (_, func) in &mut module.funcs {
-        hoist_region(&mut func.region, &mut interner);
-    }
-    module.consts = interner.consts;
+    module.set_consts(interner.consts);
 }
 
 /// Hoist one function's region tree: collect and intern its constants, then drop the hoisted bindings and rename every surviving occurrence. Two phases because a scalar may be demanded by an aggregate bound after uses of the scalar were already walked.

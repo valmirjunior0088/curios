@@ -6,7 +6,7 @@ use {
         MachineInstruction, MachineModule, MachineOperand, MachineTerminator, MachineValueId,
         MachineWrapper,
     },
-    crate::into_wasm::{
+    crate::{
         EmissionArg, EmissionBinder, EmissionBlock, EmissionBlockName, EmissionBody,
         EmissionCallTarget, EmissionCellTarget, EmissionChannelTarget, EmissionClosure,
         EmissionClosureName, EmissionCode, EmissionData, EmissionFunction, EmissionFunctionName,

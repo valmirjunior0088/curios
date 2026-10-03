@@ -4,7 +4,7 @@
 
 use {
     super::Context,
-    crate::into_wasm::{call, either, get, i32_const, i64_const, when},
+    crate::{call, either, get, i32_const, i64_const, when},
     curios_abi::{Check, ForeignFunction, HostOp, Outcome, WireLeaf, WireType, status, stdio_mode},
 };
 

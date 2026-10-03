@@ -7,6 +7,73 @@
 //! The crate owns neither representation it works between, so every name from `curios_cont` and `curios_wasm` is written with its crate.
 
 mod machine;
+use machine::*;
+
+mod emission;
+pub(crate) use emission::*;
 
 mod into_wasm;
 pub use into_wasm::*;
+
+mod symbols;
+pub(crate) use symbols::*;
+
+mod table;
+use table::*;
+
+mod frame;
+use frame::*;
+
+mod context;
+use context::*;
+
+mod code_emitter;
+use code_emitter::*;
+
+mod structure;
+use structure::*;
+
+mod expr_emitter;
+use expr_emitter::*;
+
+mod hoist;
+use hoist::*;
+
+mod immediate;
+use immediate::*;
+
+mod refusal;
+use refusal::*;
+
+mod module_emitter;
+use module_emitter::*;
+
+mod rope_emitter;
+use rope_emitter::*;
+
+mod big_emitter;
+use big_emitter::*;
+
+mod flt_emitter;
+use flt_emitter::*;
+
+mod shorthand;
+use shorthand::*;
+
+mod types;
+pub use types::*;
+
+#[cfg(test)]
+mod aggregate_tests;
+#[cfg(test)]
+mod foreign_tests;
+#[cfg(test)]
+mod hoist_tests;
+#[cfg(test)]
+mod intrinsic_tests;
+#[cfg(test)]
+mod module_tests;
+#[cfg(test)]
+mod rope_tests;
+#[cfg(test)]
+mod test_support;

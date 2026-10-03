@@ -1,8 +1,8 @@
 //! Emitting a fixture and reading the text back: the harness the Wasm emission suites assert through, and the programs they emit.
 //!
-//! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
+//! `pub(super)` rather than private: consumed by the suites across the crate, and by nothing outside it.
 //!
-//! Backend lowering coverage: build a [`curios_cont::Module`](curios_cont::Module) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split whose semantic half runs end to end, in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
+//! Backend lowering coverage: build a [`curios_cont::Module`](curios_cont::Module) directly, lower it with [`into_wasm`](crate::into_wasm()), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split whose semantic half runs end to end, in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
 
 use {
     crate::into_wasm,

@@ -2,7 +2,7 @@
 
 use {
     super::{Context, LoadAs},
-    crate::into_wasm::{
+    crate::{
         BigHelper, EmissionBlockName, EmissionCellTarget, EmissionChannelTarget, Table, branch,
         call, concrete_val, either, field_get, field_set, get, i32_const, set,
     },

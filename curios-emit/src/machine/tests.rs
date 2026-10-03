@@ -3,7 +3,7 @@ use {
         MachineFunction, MachineInstruction, MachineOperand, MachineTerminator, MachineValueId,
         lower,
     },
-    crate::into_wasm::{EmissionHostTarget, EmissionTail},
+    crate::{EmissionHostTarget, EmissionTail},
     curios_abi::{ForeignFunction, HostOp},
     curios_num::Natural,
     std::sync::Arc,
