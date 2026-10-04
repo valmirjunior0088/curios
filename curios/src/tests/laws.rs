@@ -10,12 +10,11 @@
 //!
 //! **Each checker is asked by itself.** The candidate line is the elaborator's answer, and a compilation asks the kernel only once the elaborator accepts, so neither says what the kernel makes of a row the elaborator refuses: a kernel that held a control would pass both. [`kernel_alone`] puts every row to the kernel with the elaborator's verdict left out, and a refused row must be refused there too, as a mismatch — a budget that ran out compared nothing.
 //!
-//! **The rules no law table states have seeds.** Beta, delta, zeta, iota, eta and irrelevance are conversion's as the carriers' laws are, and `structural` states one equation for each and the near miss beside it. A seed states no side: [`asked_alone`] reads which side each checker puts it on, and `parted` lists every row a checker puts on the other side than its seed derives, held equal to what the audits find.
+//! **The rules no law table states have seeds.** Beta, delta, zeta, iota, eta and irrelevance are conversion's as the carriers' laws are, and `structural` states one equation for each and the near miss beside it, which `contexts` places under every child a term former holds. A seed states no side: [`asked_alone`] reads which side each checker puts it on — the elaborator by the proof it is handed, since a candidate search costs a seed's row more than elaborating it does — and `parted` lists every row a checker puts on the other side than its seed derives, held equal to what the audits find.
 
 use {
     super::typecheck,
-    curios_cert::Error,
-    curios_core::{Definition, FuncType, Global, Item, Subterm, Term, Zonked},
+    curios_core::{Definition, Free, Global, Item, Subterm, Term, Zonked},
     curios_pipeline::{DEFAULT_STEP_BUDGET, recheck_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::Qualifier,
@@ -23,6 +22,9 @@ use {
 };
 
 mod audit;
+
+mod contexts;
+use contexts::*;
 
 mod generated;
 use generated::*;
@@ -34,6 +36,7 @@ mod semantics;
 use semantics::*;
 
 mod structural;
+use structural::*;
 
 mod written;
 
@@ -70,105 +73,165 @@ fn closes(header: &str, rows: &[(String, String)]) -> Result<(), Vec<String>> {
         .collect())
 }
 
-/// Whether `Eq/refl()` fits each row, as the elaborator answers when it alone is asked — every row as a written goal, read back through the candidate line — and then whether it fits the sentinel stated after them. A sentinel it does not fit means the candidate search ran dry, so the rows above it were answered by an empty budget and not by the normalizer.
-fn elaborator_alone(header: &str, name: &str, rows: &[(String, String)]) -> (Vec<bool>, bool) {
-    let mut stated = rows.to_vec();
-    stated.push((String::new(), SENTINEL.to_owned()));
-    let error = typecheck(&program(header, &stated, "?"))
+/// The rows of one program the compiler puts on the other side than stated: every row as a written goal, then the sentinel, read back through the candidate line. The first `held` rows are stated as held and the rest as refused.
+fn misplaced(header: &str, name: &str, rows: &[(String, String)], held: usize) -> Vec<String> {
+    let mut rows = rows.to_vec();
+    rows.push((String::new(), SENTINEL.to_owned()));
+    let error = typecheck(&program(header, &rows, "?"))
         .expect_err("a program of written goals never compiles");
     let reports = error.split("goal `?`").skip(1).collect::<Vec<_>>();
     assert_eq!(
         reports.len(),
-        stated.len(),
+        rows.len(),
         "{name}: one report per row, got:\n{error}"
     );
 
-    let mut fits = reports
-        .iter()
-        .map(|report| report.contains("? \u{2248} Eq/refl()"))
-        .collect::<Vec<_>>();
-    let sentinel = fits.pop().expect("the sentinel's report");
-
-    (fits, sentinel)
-}
-
-/// What [`elaborator_alone`]'s sentinel says of a search that ran dry.
-fn ran_dry(name: &str) -> String {
-    format!(
-        "{name}: the candidate search ran dry before the sentinel, so the refused rows above it were answered by an empty budget and not by the normalizer — split the carrier"
-    )
-}
-
-/// The rows of one program the compiler puts on the other side than stated, as [`elaborator_alone`] reads them. The first `held` rows are stated as held and the rest as refused.
-fn misplaced(header: &str, name: &str, rows: &[(String, String)], held: usize) -> Vec<String> {
-    let (fits, sentinel) = elaborator_alone(header, name, rows);
-
-    rows.iter()
-        .zip(fits)
-        .enumerate()
-        .filter(|(index, (_, fits))| *fits != (*index < held))
-        .map(|(index, ((_, row), fits))| {
-            format!(
+    let mut misplaced = Vec::new();
+    for (index, ((_, row), report)) in rows.iter().zip(reports).enumerate() {
+        let fits = report.contains("? \u{2248} Eq/refl()");
+        if index + 1 == rows.len() {
+            if !fits {
+                misplaced.push(format!(
+                    "{name}: the candidate search ran dry before the sentinel, so the refused rows above it were answered by an empty budget and not by the normalizer — split the carrier"
+                ));
+            }
+            continue;
+        }
+        let is_held = index < held;
+        if fits != is_held {
+            misplaced.push(format!(
                 "{name}: `{row}` is {} but the compiler {} close it by refl",
-                if index < held { "held" } else { "refused" },
+                if is_held { "held" } else { "refused" },
                 if fits { "does" } else { "does not" }
-            )
-        })
-        .chain((!sentinel).then(|| ran_dry(name)))
-        .collect()
+            ));
+        }
+    }
+    misplaced
 }
+
+/// A top-level name of a row's program.
+fn named(name: String) -> Global {
+    Global::Authored(Qualifier::from([name]))
+}
+
+/// Whether the elaborator holds each row when it alone is asked, in the rows' order: every row as an `Eq/refl()` proof, elaborated by [`typecheck_with_prelude`], which stops short of the kernel and reports every item it refuses rather than the first. A refusal that is no mismatch — a spent budget, a goal left undecided — is no answer, and fails the audit that asked.
+fn elaborator_alone(header: &str, name: &str, rows: &[(String, String)]) -> Vec<bool> {
+    let entrypoint = program(header, rows, "Eq/refl()")
+        .parse::<Entrypoint>()
+        .expect("the rows parse");
+    let refused =
+        match typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none()) {
+            Ok(_) => return vec![true; rows.len()],
+            Err(refused) => refused,
+        };
+    let Some(error) = refused.error.as_deref() else {
+        panic!("{name}: the rows do not lower:\n{refused}");
+    };
+
+    let mut holds = vec![true; rows.len()];
+    for member in error.each() {
+        // The declaration a refusal was raised in, and the refusal under the places it is wrapped in.
+        let (mut owner, mut raised) = (None, member);
+        loop {
+            raised = match raised {
+                curios_elab::Error::InDeclaration {
+                    owner: declared,
+                    error,
+                    ..
+                } => {
+                    owner = *declared;
+                    error
+                }
+                curios_elab::Error::Located { error, .. }
+                | curios_elab::Error::InUnreachableArm { error, .. }
+                | curios_elab::Error::InScope { error, .. } => error,
+                _ => break,
+            };
+        }
+        let index = (0..rows.len())
+            .find(|index| owner == Some(named(format!("law{index}"))))
+            .unwrap_or_else(|| {
+                panic!("{name}: the elaborator refuses more than a row:\n{refused}")
+            });
+        assert!(
+            matches!(raised, curios_elab::Error::TypeMismatch { .. }),
+            "{name}: the elaborator, asked alone, refuses `{}` otherwise than as a mismatch:\n{refused}",
+            rows[index].1
+        );
+        holds[index] = false;
+    }
+
+    holds
+}
+
+/// What a row's statement is a call of: the claim that two terms of one type are equal, beside the proof that the first equals itself. One call hands both halves the same type and the same left side, so they differ in nothing but the right side — two statements written apart would each settle levels of their own, and the kernel would refuse the claim for those.
+const CLAIMED: &str =
+    "let claimed(@A: Type, a: A, b: A) -> {Prop, Eq(@A)(a, a)} = (Eq(@A)(a, b), Eq/refl());";
 
 /// What the kernel says of each row when it alone is asked, in the rows' order: `None` where it holds the row, and its refusal where it does not.
 ///
-/// One program states each row twice: `stated`, a function into `Prop` whose body is the claim, and `proved`, `Eq/refl()` at the claim's left side against itself. Both elaborate whatever the row's side, and [`typecheck_with_prelude`] stops short of the kernel. The claim the kernel then judges takes `stated`'s lambda as its type, a function type over the same telescope, and `proved`'s as its body: every term in it is one the elaborator built, and the one comparison it leaves the kernel is the row's left side against its right, at their type.
-fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<Error>> {
+/// Each row is stated as one call of [`CLAIMED`], which elaborates whatever the row's side, since it asks only that the two sides have one type; [`typecheck_with_prelude`] stops short of the kernel. The claim the kernel then judges is that call's two halves under the statement's own binders: its first projection is the claim's type and its second the claim's body. Every term in it is one the elaborator built, and the one comparison it leaves the kernel is the row's left side against its right, at their type.
+fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_cert::Error>> {
     let items = rows
         .iter()
         .enumerate()
         .map(|(index, (binders, claim))| {
-            let (head, left, _) = sides(claim);
+            let (head, left, right) = sides(claim);
+            // The type the claim states for its sides, where it states one: `Eq`'s own hidden argument, handed on.
+            let stated = head
+                .strip_prefix("Eq(")
+                .and_then(|head| head.strip_suffix(')'))
+                .expect("a claim's head");
+            let arguments = match stated {
+                "" => format!("{left}, {right}"),
+                type_ => format!("{type_}, {left}, {right}"),
+            };
+            // A top-level definition states its type, which here restates the call's; the claim is taken from the call.
             format!(
-                "let stated{index}({binders}) -> Prop = {claim};\nlet proved{index}({binders}) -> {head}({left}, {left}) = Eq/refl();"
+                "let stated{index}({binders}) -> {{Prop, {head}({left}, {left})}} = claimed({arguments});"
             )
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let entrypoint = format!("{header}\n{items}\nIo/pure(())")
+    let entrypoint = format!("{header}\n{CLAIMED}\n{items}\nIo/pure(())")
         .parse::<Entrypoint>()
         .expect("the rows parse");
     let mut program = typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
         .unwrap_or_else(|refused| panic!("a row's statement does not elaborate:\n{refused}"))
         .program;
 
-    let named = |name: String| Global::Authored(Qualifier::from([name]));
     let claims = (0..rows.len())
         .map(|index| {
-            let definition = |name: Global| {
-                program
-                    .module
-                    .items
-                    .iter()
-                    .find_map(|item| match item {
-                        Item::Let(definition) if definition.name == name => Some(definition),
-                        _ => None,
-                    })
-                    .unwrap_or_else(|| panic!("the program defines {name}"))
-            };
-            let stated = definition(named(format!("stated{index}")));
-            let proved = definition(named(format!("proved{index}")));
-            // Both are stated under one binder list, so the elaborator generalizes them alike; a claim typed under one context and proved under another would be refused for its levels and say nothing of the row.
-            assert_eq!(stated.universe_context, proved.universe_context);
+            let name = named(format!("stated{index}"));
+            let stated = program
+                .module
+                .items
+                .iter()
+                .find_map(|item| match item {
+                    Item::Let(definition) if definition.name == name => Some(definition),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("the program defines {name}"));
             let Subterm::Func(function) = &*stated.body else {
                 panic!("a row's statement is a function of its binders");
             };
 
+            // Open the statement's binders at locals carrying their own hints, and close each half of the call back over them.
+            let mut cursor = function.telescope.cursor();
+            let mut binders = Vec::new();
+            while let Some((hint, domain)) = cursor.entry() {
+                let at = binders.len();
+                let binder = Free::local(u32::try_from(at).expect("a row's binders"), hint);
+                binders.push((function.plicities()[at], binder, domain));
+                cursor.advance(Term::free_var(&binder));
+            }
+            let call = cursor.body().expect("a cursor past every entry");
+
             Definition {
                 name: named(format!("claim{index}")),
-                type_: Term::from(Subterm::FuncType(FuncType::new(
-                    function.telescope.clone(),
-                    function.plicities().to_vec(),
-                ))),
-                ..proved.clone()
+                type_: Term::func_type_marked(binders.clone(), Term::proj(call.clone(), 0)),
+                body: Term::func_marked(binders, Term::proj(call, 1)),
+                ..stated.clone()
             }
         })
         .collect::<Vec<_>>();
@@ -180,7 +243,7 @@ fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<Error>> {
 
     let program = Zonked::project(&program).expect("an elaborated program is zonked");
     let verdicts = recheck_with_prelude(&program, DEFAULT_STEP_BUDGET);
-    // The statements and the reflexivity proofs are the elaborator's own, so a refusal of anything but a claim is the reader's fault and not a row's verdict.
+    // The statements are the elaborator's own, so a refusal of anything but a claim is the reader's fault and not a row's verdict.
     for verdict in &verdicts {
         assert!(
             verdict.name.is_some_and(|name| names.contains(&name)),
@@ -211,7 +274,7 @@ fn misplaced_by_the_kernel(
         .zip(rows)
         .enumerate()
         .filter_map(|(index, (refusal, (_, row)))| match (index < held, refusal) {
-            (true, None) | (false, Some(Error::Mismatch { .. })) => None,
+            (true, None) | (false, Some(curios_cert::Error::Mismatch { .. })) => None,
             (true, Some(error)) => Some(format!(
                 "{name}: `{row}` is held but the kernel, asked alone, refuses it: {error}"
             )),
@@ -257,20 +320,19 @@ impl fmt::Display for Answers {
     }
 }
 
-/// What each checker says of each row when it alone is asked: the elaborator through [`elaborator_alone`], the kernel through [`kernel_alone`]. A search that ran dry is no answer, and neither is a kernel refusal that is no mismatch, so either fails the audit that asked.
+/// What each checker says of each row when it alone is asked: the elaborator through [`elaborator_alone`], the kernel through [`kernel_alone`]. A refusal that is no mismatch is no answer from either, and fails the audit that asked.
 fn asked_alone(header: &str, name: &str, rows: &[(String, String)]) -> Vec<Answers> {
-    let (fits, sentinel) = elaborator_alone(header, name, rows);
-    assert!(sentinel, "{}", ran_dry(name));
+    let holds = elaborator_alone(header, name, rows);
 
     kernel_alone(header, rows)
         .into_iter()
-        .zip(fits)
+        .zip(holds)
         .zip(rows)
         .map(|((refusal, elaborator), (_, row))| Answers {
             elaborator,
             kernel: match refusal {
                 None => true,
-                Some(Error::Mismatch { .. }) => false,
+                Some(curios_cert::Error::Mismatch { .. }) => false,
                 Some(error) => panic!(
                     "{name}: the kernel, asked alone, refuses `{row}` otherwise than as a mismatch: {error}"
                 ),

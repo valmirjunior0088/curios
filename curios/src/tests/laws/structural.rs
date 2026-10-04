@@ -2,18 +2,21 @@
 //!
 //! A seed is two sides at one type, under one list of binders. A held seed's right side is a neutral of that type, a binder or a call of one, so two held seeds at one type meet at it and chain, and a seed placed under a context keeps a side the context cannot reduce. A near miss differs from the held seed beside it in the one thing its rule must not let pass: a binder dropped, two components swapped, the other arm taken.
 //!
-//! No seed states a verdict. Which side a checker puts it on is read from each checker asked by itself, and a seed a checker puts on the other side is listed in [`PARTED`] with the finding that holds why.
+//! No seed states a verdict. Which side a checker puts it on is read from each checker asked by itself, and a seed a checker puts on the other side is listed in the table of parted rows with the finding that holds why.
 
 use super::{Answers, Audit, asked_alone, closes, hold_to_the_table, parted};
 
-/// What a seed's program states ahead of its rows: its imports, and the declarations the seeds are stated over.
+/// What a seed's program states ahead of its rows: its imports, the declarations the seeds are stated over, and the ones a context places a seed under — a struct over any type, and a definition and a recursive function that each hand an argument back from a match stuck on a count.
 pub(super) const STRUCTURAL: &str =
     "use /std/{Eq, Nat, Bool, List, Option, Io}; use /std/Bool/{Holds};
 struct Record: pub Type { a: Nat, b: Nat }
 struct Empty: pub Type {}
 struct Bounded: pub Type { n: Nat, ok: Holds(n < 10) }
+struct Box(A: Type): pub Type { held: A }
 let forward(h: (Nat) -> Nat) -> (Nat) -> Nat = h;
-let shifted(h: (Nat) -> Nat) -> (Nat) -> Nat = (x: Nat) => h(x + 1);";
+let shifted(h: (Nat) -> Nat) -> (Nat) -> Nat = (x: Nat) => h(x + 1);
+let hold(@A: Type, a: A, count: Nat) -> A = match count: (_) => A | 0 => a | pred + 1 => a end;
+let carry(@A: Type, count: Nat, a: A) -> A = match count: (_) => A | 0 => a | pred + 1 => carry(pred, a) end;";
 
 /// The seeds at one type, under the binders they share.
 pub(super) struct Seeds {
