@@ -140,8 +140,12 @@ module.exports = grammar({
 
     type_parameters: ($) => seq("(", commaList($.type_parameter), ")"),
 
+    // A named parameter, plain or `@`, or a `use` premise, which has no name.
     type_parameter: ($) =>
-      seq(optional("@"), field("name", $.identifier), ":", field("type", $._term)),
+      choice(
+        seq(optional("@"), field("name", $.identifier), ":", field("type", $._term)),
+        seq("use", field("type", $._term)),
+      ),
 
     // `(indices) -> Sort` or a bare `Sort`, each with its own representation `pub`.
     _arity: ($) =>
@@ -234,11 +238,9 @@ module.exports = grammar({
       seq(
         optional(seq(field("parameters", $.parameters), "=>")),
         field("concept", $.path),
-        optional(field("arguments", $.type_arguments)),
+        optional(field("arguments", $.arguments)),
         choice(seq("{", commaList($.field_definition), "}"), ";"),
       ),
-
-    type_arguments: ($) => seq("(", commaList($._term), ")"),
 
     // `label = value` or the definition sugar `label(params) = value`.
     field_definition: ($) =>
@@ -448,7 +450,7 @@ module.exports = grammar({
     struct_literal: ($) =>
       seq(
         field("type", $.path),
-        optional(field("arguments", $.type_arguments)),
+        optional(field("arguments", $.arguments)),
         "{",
         commaList($.struct_entry),
         "}",

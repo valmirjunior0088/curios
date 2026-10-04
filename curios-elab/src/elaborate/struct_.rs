@@ -1,5 +1,5 @@
 use {
-    super::{binder_name, check_args_against},
+    super::{binder_name, check_args_against, premise_label},
     crate::{
         Context, Error, Mode, attempt_witness_goal, check, elaborate, expect, is_prop, reduce_with,
     },
@@ -8,6 +8,7 @@ use {
         StructType, Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
         instantiate_universe_levels_scoped,
     },
+    curios_utilities::Plicity,
 };
 
 fn instantiate_struct_decl(
@@ -39,6 +40,7 @@ fn instantiate_struct_decl(
             module: struct_decl.module,
             rep_public: struct_decl.rep_public,
             polarities: struct_decl.polarities,
+            plicities: struct_decl.plicities,
         },
         universes,
     ))
@@ -350,6 +352,8 @@ pub(super) fn elaborate_struct(
 }
 
 /// Resolve a struct literal's head parameters, threading the (dependent) parameter telescope so each minted metavariable is born at its binder's instantiated type: written arguments are checked, omitted ones minted fresh.
+///
+/// An omitted `use` parameter is a witness slot, as it is where the type former is applied without it: resolution finds the dictionary once the parameters it is keyed on are known, and an expected type that already names one settles the slot by unification first.
 pub(super) fn resolve_struct_params(
     context: &mut Context,
     name: &Global,
@@ -358,10 +362,22 @@ pub(super) fn resolve_struct_params(
     term: &Term,
 ) -> Result<Vec<Term>, Error> {
     let mut written = params.iter();
+    let mut premises = 0;
     let mut cursor = struct_decl.arity.cursor();
     while let Some((hint, ty)) = cursor.entry() {
+        let premise = struct_decl.plicity(cursor.args().len()) == Plicity::Witness;
         let arg = match written.next() {
             Some(arg) => check(context, arg, ty.clone())?,
+            None if premise => {
+                let provenance = WitnessOrigin {
+                    func: CalleeId::Function(Free::Global(*name)),
+                    binder: premise_label(premises),
+                };
+                let (id, metavar) =
+                    context.fresh_witness_metavar(ty.clone(), term.span(), provenance.clone());
+                attempt_witness_goal(context, id, &ty, provenance, term)?;
+                metavar
+            }
             None => {
                 let binder = binder_name(hint);
                 let proposition = is_prop(context, &ty).probed()?.unwrap_or(false);
@@ -379,6 +395,7 @@ pub(super) fn resolve_struct_params(
                     .1
             }
         };
+        premises += usize::from(premise);
         cursor.advance(arg);
     }
     Ok(cursor.into_args())

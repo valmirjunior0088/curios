@@ -32,9 +32,9 @@ mod intrinsic_tests;
 mod tests;
 
 use {
-    super::{Context, Error, check, elaborate_derive, expect},
+    super::{Context, Error, check, check_is_sort, elaborate_derive, expect},
     curios_core::{
-        Func, InstanceHead, Subterm, Term, Transient, foreign_operands, foreign_produced,
+        Ascribed, Func, InstanceHead, Subterm, Term, Transient, foreign_operands, foreign_produced,
         instantiate_universe_levels_scoped,
     },
     curios_utilities::recurse,
@@ -85,6 +85,22 @@ pub(crate) fn elaborate(
 
         Ok((rebuilt, type_))
     })
+}
+
+/// A term stated at a type: the type is elaborated as one, the term is checked against it, and the term is what is left — the node itself never reaches a later stage. Where a type is expected of the whole, the stated one is measured against it first, so the term is checked at a type that already carries what the position knows.
+fn elaborate_ascribed(
+    context: &mut Context,
+    ascribed: &Ascribed,
+    term: &Term,
+    mode: Mode,
+) -> Result<(Term, Term), Error> {
+    let (type_, _) = check_is_sort(context, &ascribed.type_)?;
+    if let Mode::Check(expected) = &mode {
+        expect(context, term, &type_, expected)?;
+    }
+    let checked = check(context, &ascribed.term, type_.clone())?;
+
+    Ok((checked, type_))
 }
 
 /// Synthesize a lambda for the settle tiers ([`settle_against`](super::settle_against)): the infer walk with each unannotated domain admitted as a metavariable named after its binder, pinned by the body or by whatever the settled type later unifies with, rather than refused. Only a settle tier may call this — while the expectation could still gain structure, committing the lambda's written shape would guess. Deliberately outside the elaboration cache: admitting the holes is a side effect, and a cached settle result under an `Infer` key would let a plain inference of the same lambda succeed where it must refuse. The span restamp and checked-record mirror [`elaborate`]'s tail, so the settled node reaches the module exactly as an ordinarily elaborated one does.
@@ -199,6 +215,9 @@ fn elaborate_subterm(
             return elaborate_bang(context, bang, term, mode);
         }
         Subterm::Transient(Transient::Derive) => return elaborate_derive(context, term, mode),
+        Subterm::Transient(Transient::Ascribed(ascribed)) => {
+            return elaborate_ascribed(context, ascribed, term, mode);
+        }
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
         Subterm::InductType(ut) => elaborate_induct_type(context, ut)?,
         Subterm::Variant(uc) => elaborate_variant(context, uc)?,

@@ -167,6 +167,7 @@ fn a_call_in_a_nominal_values_parameter_is_recorded() {
             module: Qualifier::default(),
             rep_public: true,
             polarities: Vec::new(),
+            plicities: Vec::new(),
         },
     );
 

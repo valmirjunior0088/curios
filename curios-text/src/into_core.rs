@@ -37,9 +37,10 @@ mod document;
 use document::*;
 use {
     crate::{
-        Apply, Argument, Entrypoint, Error, GroupItem, Label, LetSignature, Lint, LintedBinder,
-        Module, Name, RootSource, StructLit, StructLitEntry, Subterm, Term, TopItem, TupleField,
-        UseGroup, foreign_signature, func_sugar_lambda, func_sugar_type_params, ordered,
+        Apply, Argument, Entrypoint, Error, FuncTypeParam, GroupItem, Label, LetSignature, Lint,
+        LintedBinder, Module, Name, RootSource, StructLit, StructLitEntry, Subterm, Term, TopItem,
+        TupleField, UseGroup, foreign_signature, func_sugar_lambda, func_sugar_type_params,
+        ordered,
     },
     curios_abi::ForeignStore,
     curios_document::Documentation,
@@ -498,10 +499,10 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
     Ok(info)
 }
 
-// The surface concept application `C(args)` for a witness's declared type: the witnessed concept applied to the annotation's arguments (as written, so explicit).
+// The surface concept application `C(args)` for a witness's declared type: the witnessed concept applied to the annotation's arguments under the marks they were written with, as any application is.
 //
 // **Spanned over the written `C(args)`, because this is the only thing a `satisfy` refusal can point at.** A witness is anonymous, so nothing else in its declaration names it: `elaborate_module_let` locates a registration failure with `error.at_opt(def.type_.span())`, and this synthesized node is that type. Left spanless, every duplicate, orphan, unkeyable and irregular-premise refusal would arrive with no line at all — and a duplicate between two witnesses of one module would name that module twice and nothing else, which a reader cannot act on. The head name and each argument carry the spans this joins; `Term::with_span` keeps an innermost span already present, so the arguments are untouched.
-fn witness_concept_application(concept: &Name, args: &[Term]) -> Term {
+fn witness_concept_application(concept: &Name, args: &[Argument]) -> Term {
     let head: Term = Subterm::Name(concept.clone()).into();
     let written = |head: Term, last: Option<&Span>| match (concept.span(), last) {
         (Some(open), Some(close)) => {
@@ -517,18 +518,25 @@ fn witness_concept_application(concept: &Name, args: &[Term]) -> Term {
 
     let applied: Term = Subterm::Apply(Apply {
         head,
-        arguments: args
-            .iter()
-            .map(|arg| Argument {
-                term: arg.clone(),
-                plicity: Plicity::Explicit,
-            })
-            .collect(),
+        arguments: args.to_vec(),
     })
     .into();
 
     // The last argument's own span closes the range. An argument the parser gave none — a desugar's product — leaves the head's span alone, which still names the declaration.
-    written(applied, args.last().and_then(Term::span))
+    written(applied, args.last().and_then(|arg| arg.term.span()))
+}
+
+/// The name a declaration's parameter is minted under: its own, or `_` for a `use` parameter, which occupies a binder and names nothing.
+fn param_name(param: &FuncTypeParam) -> String {
+    param.label.clone().unwrap_or_else(|| "_".to_string())
+}
+
+/// What a declaration's parameter binds as at a value constructor: a `use` parameter stays the witness slot it is at the type constructor, and every other is implicit, inferred from the payload or the expected type.
+fn constructor_plicity(declared: Plicity) -> Plicity {
+    match declared {
+        Plicity::Witness => Plicity::Witness,
+        Plicity::Explicit | Plicity::Implicit => Plicity::Implicit,
+    }
 }
 
 impl Term {
@@ -781,7 +789,7 @@ fn process_items(
 
                         // Parameters and indices are minted before any of their types is lowered, and each type sees the binders before it — a later index type naming an earlier parameter must mean *that* binder.
                         let head_binders =
-                            lower.mint(u.params.iter().map(|(_, n, _)| n.clone()).chain(
+                            lower.mint(u.params.iter().map(param_name).chain(
                                 u.indices.iter().enumerate().map(|(i, (n, _))| {
                                     n.clone().unwrap_or_else(|| format!("_{i}"))
                                 }),
@@ -792,12 +800,13 @@ fn process_items(
                             .params
                             .iter()
                             .enumerate()
-                            .map(|(i, (p, _, t))| {
-                                let ty = lower.bound(&head_binders[..i], || lower.input_type(t))?;
-                                Ok((*p, param_binders[i].1, ty))
+                            .map(|(i, param)| {
+                                let ty = lower
+                                    .bound(&head_binders[..i], || lower.input_type(&param.type_))?;
+                                Ok((param.plicity, param_binders[i].1, ty))
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
-                        // The registry and the `InductType` normal form are positional; plicity matters only on the generated type-constructor function.
+                        // The registry's telescope and the `InductType` normal form are positional; the marks ride beside the telescope and on the generated type-constructor function.
                         let param_tys_unmarked = param_tys
                             .iter()
                             .map(|(_, n, t)| (*n, t.clone()))
@@ -862,11 +871,11 @@ fn process_items(
                                     target,
                                 );
 
-                                // The value constructor's calling convention: every leading declaration parameter is implicit, each payload keeps its declared mark — the same source `ctor_type` uses.
+                                // The value constructor's calling convention: every leading declaration parameter is hidden, each payload keeps its declared mark — the same source `ctor_type` uses.
                                 let plicities = u
                                     .params
                                     .iter()
-                                    .map(|_| Plicity::Implicit)
+                                    .map(|param| constructor_plicity(param.plicity))
                                     .chain(c.payload.iter().map(|param| param.plicity))
                                     .collect::<Vec<_>>();
 
@@ -895,6 +904,7 @@ fn process_items(
                                 rep_public: u.rep_pub,
                                 // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
                                 polarities: Vec::new(),
+                                plicities: u.params.iter().map(|param| param.plicity).collect(),
                             },
                         );
 
@@ -949,14 +959,17 @@ fn process_items(
                             n.clone().unwrap_or_else(|| format!("_{i}"))
                         };
 
-                        // Output type term `T`, `T(A, ...)`, `T(target...)`, or — indexed with parameters — the case's full terminal `T(A, ...)(target...)`: a name ref applied the way a use site writes it, one call for the parameters and one for the target's index expressions.
+                        // Output type term `T`, `T(A, ...)`, `T(target...)`, or — indexed with parameters — the case's full terminal `T(A, ...)(target...)`: a name ref applied the way a use site writes it, one call for the parameters and one for the target's index expressions. A `use` parameter has no name to write and is left out as a use site leaves it: the slot resolves to the constructor's own premise, the nearest witness in scope.
                         let parameters: Vec<Argument> = u
                             .params
                             .iter()
-                            .map(|(p, n, _)| Argument {
-                                term: Subterm::Name(Name::from(vec![n.clone()])).into(),
-                                // Each argument's mark must match its binder on the type constructor (the two-queue rule): an `@`-marked parameter is filled from the implicit queue.
-                                plicity: *p,
+                            .filter_map(|param| {
+                                Some(Argument {
+                                    term: Subterm::Name(Name::from(vec![param.label.clone()?]))
+                                        .into(),
+                                    // Each argument's mark must match its binder on the type constructor (the two-queue rule): an `@`-marked parameter is filled from the implicit queue.
+                                    plicity: param.plicity,
+                                })
                             })
                             .collect();
                         let targets: Vec<Argument> = c
@@ -976,9 +989,9 @@ fn process_items(
                                 |head, arguments| Subterm::Apply(Apply { head, arguments }).into(),
                             );
 
-                        // Constructor type: (params..., _0 : T_0, ...) -> T. Every inductive parameter is implicit at the value constructor — `Result/success(42)` infers them, the call-site `@` supplies one positionally — while the payload binders keep their declared marks (`@m` makes one implicit; the default is explicit).
+                        // Constructor type: (params..., _0 : T_0, ...) -> T. Every plain or `@` inductive parameter is implicit at the value constructor — `Result/success(42)` infers them, the call-site `@` supplies one positionally — and a `use` parameter stays a witness slot, while the payload binders keep their declared marks (`@m` makes one implicit; the default is explicit).
                         let binders = lower.mint(
-                            u.params.iter().map(|(_, n, _)| n.clone()).chain(
+                            u.params.iter().map(param_name).chain(
                                 c.payload
                                     .iter()
                                     .enumerate()
@@ -988,13 +1001,13 @@ fn process_items(
                         let plicities = u
                             .params
                             .iter()
-                            .map(|_| Plicity::Implicit)
+                            .map(|param| constructor_plicity(param.plicity))
                             .chain(c.payload.iter().map(|param| param.plicity))
                             .collect::<Vec<_>>();
                         let written = u
                             .params
                             .iter()
-                            .map(|(_, _, t)| t)
+                            .map(|param| &param.type_)
                             .chain(c.payload.iter().map(|param| &param.type_))
                             .collect::<Vec<_>>();
                         let param_tys = written
@@ -1025,7 +1038,7 @@ fn process_items(
                             curios_core::Atom::from(c.label.as_str()),
                             args,
                         );
-                        // The value constructor carries the same calling convention as `ctor_type`: every inductive parameter is implicit, each payload keeps its declared mark.
+                        // The value constructor carries the same calling convention as `ctor_type`: every inductive parameter is hidden, each payload keeps its declared mark.
                         let ctor_body = curios_core::Term::func_marked(param_tys, inject);
 
                         flat_items.push(FlatItem::Let(FlatLet {
@@ -1056,14 +1069,15 @@ fn process_items(
                     // Declaring module: the type-former's qualifier prefix — identical to core's per-item `island` — for the representation-privacy checks.
                     let module = context.prefixed(&s.label).without_last();
 
-                    let param_binders = lower.mint(s.params.iter().map(|(_, n, _)| n.clone()));
+                    let param_binders = lower.mint(s.params.iter().map(param_name));
                     let param_tys = s
                         .params
                         .iter()
                         .enumerate()
-                        .map(|(i, (p, _, t))| {
-                            let ty = lower.bound(&param_binders[..i], || lower.input_type(t))?;
-                            Ok((*p, param_binders[i].1, ty))
+                        .map(|(i, param)| {
+                            let ty = lower
+                                .bound(&param_binders[..i], || lower.input_type(&param.type_))?;
+                            Ok((param.plicity, param_binders[i].1, ty))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
                     let param_tys_unmarked = param_tys
@@ -1125,6 +1139,7 @@ fn process_items(
                             rep_public: s.rep_pub,
                             // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
                             polarities: Vec::new(),
+                            plicities: s.params.iter().map(|param| param.plicity).collect(),
                         },
                     );
 
@@ -1161,17 +1176,32 @@ fn process_items(
                     let name = curios_core::Global::Authored(context.prefixed(&concept.label));
                     let module = context.prefixed(&concept.label).without_last();
 
+                    // A concept's premise is a superclass field, which every dictionary carries and resolution reaches through; a `use` parameter would instead make the premise's dictionary part of the concept's own identity, so two witnesses of one concept at one type could differ in nothing a key reads.
+                    if let Some(param) = concept
+                        .params
+                        .iter()
+                        .find(|param| param.plicity == Plicity::Witness)
+                    {
+                        let error = Error::ConceptUseParameter {
+                            concept: concept.label.to_string(),
+                        };
+                        return Err(match param.type_.span() {
+                            Some(span) => error.at(span.clone()),
+                            None => error,
+                        });
+                    }
+
                     context.record_import_scope(Some(&name));
                     let lower = Lowerer::new(context, Some(name));
-                    let param_binders =
-                        lower.mint(concept.params.iter().map(|(_, n, _)| n.clone()));
+                    let param_binders = lower.mint(concept.params.iter().map(param_name));
                     let param_tys = concept
                         .params
                         .iter()
                         .enumerate()
-                        .map(|(i, (p, _, t))| {
-                            let ty = lower.bound(&param_binders[..i], || lower.input_type(t))?;
-                            Ok((*p, param_binders[i].1, ty))
+                        .map(|(i, param)| {
+                            let ty = lower
+                                .bound(&param_binders[..i], || lower.input_type(&param.type_))?;
+                            Ok((param.plicity, param_binders[i].1, ty))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
                     let param_tys_unmarked = param_tys
@@ -1230,6 +1260,7 @@ fn process_items(
                             rep_public: concept.rep_pub,
                             // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
                             polarities: Vec::new(),
+                            plicities: concept.params.iter().map(|param| param.plicity).collect(),
                         },
                     );
 
@@ -1365,7 +1396,7 @@ fn process_items(
                     _ => FlatItem::Rec(formers),
                 });
             }
-            // A witness desugars to an anonymous top-level definition satisfy (tele) -> C(args) = C(args) { f = e, … }; and marks it for registration in the program-wide witness table. It gets an *identity*, not a manufactured name: a `satisfy` block has no name a programmer wrote, and the module a diagnostic reports for it comes from `Definition::island`.
+            // A witness desugars to an anonymous top-level definition satisfy (tele) -> C(args) = C { f = e, … }; and marks it for registration in the program-wide witness table. It gets an *identity*, not a manufactured name: a `satisfy` block has no name a programmer wrote, and the module a diagnostic reports for it comes from `Definition::island`.
             // A group `satisfy … and …` lowers to one `rec` item, so its members' anonymous names are bound in one another; a lone witness stays a `let` item, and may still resolve through its own entry — that repair is elaboration's, since a witness references itself by resolution rather than by name.
             TopItem::Witness(group) => {
                 let mut items = group
@@ -1376,11 +1407,11 @@ fn process_items(
 
                         let concept_app =
                             witness_concept_application(&witness.concept, &witness.args);
-                        // A written body is the concept literal over its fields alone, so every `use`-marked position is left to resolution; a body-less one is the `Derive` transient, spanned at the concept application so a refusal lands on the declaration. Either way the telescope below wraps it identically.
+                        // A written body is the concept literal over its fields alone, so every `use`-marked position is left to resolution, under a bare head: the declared type states the arguments once, and the literal is checked against it. A body-less one is the `Derive` transient, spanned at the concept application so a refusal lands on the declaration. Either way the telescope below wraps it identically.
                         let body: Term = match &witness.body {
                             Some(fields) => Subterm::StructLit(StructLit {
                                 head: witness.concept.clone(),
-                                params: witness.args.clone(),
+                                params: Vec::new(),
                                 entries: fields
                                     .iter()
                                     .map(|field| {
@@ -1395,7 +1426,7 @@ fn process_items(
                             .into(),
                             None => {
                                 let derive: Term = Subterm::Derive.into();
-                                match witness.args.first().and_then(|arg| arg.span()) {
+                                match witness.args.first().and_then(|arg| arg.term.span()) {
                                     Some(span) => derive.with_span(span.clone()),
                                     None => derive,
                                 }

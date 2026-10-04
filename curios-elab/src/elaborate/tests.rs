@@ -76,6 +76,7 @@ fn register_opt(context: &mut Context) {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -388,6 +389,7 @@ fn register_flag(context: &mut Context) {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                plicities: Vec::new(),
             },
         )
         .unwrap();

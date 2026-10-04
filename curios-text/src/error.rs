@@ -91,6 +91,10 @@ pub enum Error {
     MalformedSuperField {
         concept: String,
     },
+    /// A concept declares a `use` parameter. A concept's premise is a superclass field; a parameter would put the premise's dictionary in the concept's identity.
+    ConceptUseParameter {
+        concept: String,
+    },
     /// A `pub` item's declared signature references an item that is not itself publicly reachable. Cross-module references are vetted during resolution; this closes the two privately-resolvable paths (the item's own module and its own private child modules).
     PrivateItemInPublicInterface {
         item: String,
@@ -291,6 +295,12 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "concept `{concept}` has a `use` field whose type is not a concept application"
+                )
+            }
+            Error::ConceptUseParameter { concept } => {
+                write!(
+                    f,
+                    "concept `{concept}` takes a `use` parameter: a concept states a premise as a superclass field, `use C(args)` among its fields"
                 )
             }
             Error::BangInTypePosition => {

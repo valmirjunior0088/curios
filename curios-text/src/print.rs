@@ -180,7 +180,7 @@ fn riding_call(head: Term, arguments: Vec<Argument>) -> Printer {
     });
     let items = arguments
         .into_iter()
-        .map(|argument| flat([print_plicity(argument.plicity), print_term(argument.term)]))
+        .map(print_argument)
         .collect::<Vec<_>>();
     if hugs {
         return flat([
@@ -337,6 +337,11 @@ fn print_flt(value: Floating) -> Printer {
     }
 
     pure(string)
+}
+
+/// One argument of an application, under the mark it was written with.
+fn print_argument(argument: Argument) -> Printer {
+    flat([print_plicity(argument.plicity), print_term(argument.term)])
 }
 
 /// One Π-binder, as in a function type: `@?label : type` (the label optional).
@@ -1330,7 +1335,7 @@ fn print_term_inner(term: Term) -> Printer {
             if params.is_empty() {
                 pure("")
             } else {
-                listed("(", params.into_iter().map(print_term).collect(), ")")
+                listed("(", params.into_iter().map(print_argument).collect(), ")")
             },
             pure(" "),
             listed_block(
@@ -1778,23 +1783,13 @@ fn print_top_induct_case(case: TopCase) -> Printer {
     ])
 }
 
-fn print_top_induct_params(params: Vec<(Plicity, String, Term)>) -> Printer {
+fn print_top_induct_params(params: Vec<FuncTypeParam>) -> Printer {
     if params.is_empty() {
         return pure("");
     }
 
     group(telescope(
-        params
-            .into_iter()
-            .map(|(plicity, name, ty)| {
-                flat([
-                    print_plicity(plicity),
-                    pure(name),
-                    pure(": "),
-                    print_term(ty),
-                ])
-            })
-            .collect(),
+        params.into_iter().map(print_func_type_param).collect(),
     ))
 }
 
@@ -1822,7 +1817,7 @@ fn print_top_induct_arity(
 /// The label is spanless like a `let`'s binder, so a clause with no position of its own would leave its leading comment to the first spanned descendant. The cases are the fallback because a *sort* is spanless too — `parse_type` and `parse_prop` build their term from a bare `Subterm` — so `and Odd : Type` has no located component in its head at all. Any offset within the clause bounds it equally well: only the clause's own text lies between its head and its first case, and a comment written in there is one this hoists above `and` rather than one it misplaces.
 fn induct_start(item: &TopInduct) -> Option<usize> {
     let head = match (item.params.first(), item.indices.first()) {
-        (Some((_, _, type_)), _) => Some(type_),
+        (Some(param), _) => Some(&param.type_),
         (None, Some((_, index))) => Some(index),
         (None, None) => None,
     };
@@ -1917,7 +1912,7 @@ fn struct_member_start(item: &TopStruct) -> Option<usize> {
     [
         item.params
             .first()
-            .and_then(|(_, _, type_)| type_.span().map(|span| span.start)),
+            .and_then(|param| param.type_.span().map(|span| span.start)),
         item.result_sort.span().map(|span| span.start),
         item.fields
             .first()
@@ -2017,7 +2012,7 @@ fn concept_member_start(item: &TopConcept) -> Option<usize> {
     [
         item.params
             .first()
-            .and_then(|(_, _, type_)| type_.span().map(|span| span.start)),
+            .and_then(|param| param.type_.span().map(|span| span.start)),
         item.result_sort.span().map(|span| span.start),
         item.fields
             .first()
@@ -2090,7 +2085,11 @@ fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
     } else {
         flat([
             pure(item.concept.join()),
-            listed("(", item.args.into_iter().map(print_term).collect(), ")"),
+            listed(
+                "(",
+                item.args.into_iter().map(print_argument).collect(),
+                ")",
+            ),
         ])
     };
 
@@ -2121,7 +2120,7 @@ fn witness_member_start(item: &TopWitness) -> Option<usize> {
             .and_then(|param| param.type_.span().map(|span| span.start)),
         item.args
             .first()
-            .and_then(|arg| arg.span().map(|span| span.start)),
+            .and_then(|arg| arg.term.span().map(|span| span.start)),
         item.body
             .as_ref()
             .and_then(|entries| entries.first())
@@ -2266,7 +2265,8 @@ pub(crate) fn print_case_result_head(item: &TopInduct, case: &TopCase) -> Printe
     let mut args = item
         .params
         .iter()
-        .map(|(_, label, _)| pure(label.clone()))
+        // A `use` parameter has no name, and the constructor's own result type leaves it to resolution as this does.
+        .filter_map(|param| param.label.clone().map(pure))
         .collect::<Vec<_>>();
     if let Some(target) = &case.target {
         args.extend(target.iter().cloned().map(print_term));
@@ -2362,7 +2362,7 @@ pub(crate) fn print_witness_head(item: &TopWitness) -> Printer {
             pure(item.concept.join()),
             listed(
                 "(",
-                item.args.iter().cloned().map(print_term).collect(),
+                item.args.iter().cloned().map(print_argument).collect(),
                 ")",
             ),
         ]),

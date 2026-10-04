@@ -1,7 +1,7 @@
 use {
     super::{Polarity, Telescope, Term, UniverseContext},
     crate::Sharing,
-    curios_utilities::Qualifier,
+    curios_utilities::{Plicity, Qualifier},
 };
 
 /// One struct declaration's registry entry: the metadata a `struct` declaration produces alongside its type-former binding.
@@ -23,6 +23,8 @@ pub struct StructDecl {
     pub rep_public: bool,
     /// How this struct uses each of its `params`, one entry per parameter in declaration order. See [`InductDecl::polarities`](super::InductDecl).
     pub polarities: Vec<Polarity>,
+    /// What each of its `params` binds as, one mark per parameter in declaration order — the marks the type former's own function type carries, kept here for the elaborator, which opens the parameters over the fields and has no function type to read them from. A `use` parameter joins the witness scope the field types resolve in. Read through [`Self::plicity`], never indexed directly; the kernel reads none of it.
+    pub plicities: Vec<Plicity>,
 }
 
 impl StructDecl {
@@ -52,6 +54,11 @@ impl StructDecl {
         self.polarities.get(i).copied().unwrap_or(Polarity::Mixed)
     }
 
+    /// What this declaration's `i`th parameter binds as. A declaration that states no marks has plain parameters only.
+    pub fn plicity(&self, i: usize) -> Plicity {
+        self.plicities.get(i).copied().unwrap_or(Plicity::Explicit)
+    }
+
     /// This declaration with every term hash-consed against `sharing`. See [`Module::shared`](crate::Module::shared).
     pub fn shared(&self, sharing: &Sharing) -> Self {
         Self {
@@ -61,6 +68,7 @@ impl StructDecl {
             module: self.module,
             rep_public: self.rep_public,
             polarities: self.polarities.clone(),
+            plicities: self.plicities.clone(),
         }
     }
 

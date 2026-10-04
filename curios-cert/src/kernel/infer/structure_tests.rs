@@ -35,6 +35,7 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
             module: Qualifier::from(["P"]),
             rep_public: true,
             polarities: Vec::new(),
+            plicities: Vec::new(),
         },
     );
     let proposition = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());

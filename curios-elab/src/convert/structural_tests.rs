@@ -169,6 +169,7 @@ fn struct_unit_field_is_irrelevant() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -205,6 +206,7 @@ fn a_struct_field_at_a_proposition_is_not_read() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -225,6 +227,7 @@ fn a_struct_field_at_a_proposition_is_not_read() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -269,6 +272,7 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -296,6 +300,7 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -358,6 +363,7 @@ fn variant_unit_payload_is_irrelevant() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                plicities: Vec::new(),
             },
         )
         .unwrap();

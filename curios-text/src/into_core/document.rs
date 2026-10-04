@@ -7,8 +7,8 @@
 use {
     super::{ModuleInfo, PublicInterface, Scoped, visible_binding, visible_child},
     crate::{
-        ConceptField, Doc, FuncSugarParam, LetSignature, Module, Pattern, StructField, Term,
-        TopCase, TopItem, UseGroup, print_case_head, print_case_result_head,
+        ConceptField, Doc, FuncSugarParam, FuncTypeParam, LetSignature, Module, Pattern,
+        StructField, TopCase, TopItem, UseGroup, print_case_head, print_case_result_head,
         print_concept_field_head, print_concept_head, print_foreign_head, print_induct_head,
         print_let_head, print_struct_field_head, print_struct_head, print_witness_head,
     },
@@ -16,7 +16,7 @@ use {
         Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Signature,
     },
     curios_print::{Printer, render_annotated},
-    curios_utilities::{Mount, Plicity, Qualifier, RootKind},
+    curios_utilities::{Mount, Qualifier, RootKind},
     std::{
         collections::{HashMap, HashSet},
         rc::Rc,
@@ -920,6 +920,9 @@ fn sugar_binders(params: &[FuncSugarParam]) -> HashSet<String> {
 }
 
 /// The labels a declaration's parameter telescope binds.
-fn param_binders(params: &[(Plicity, String, Term)]) -> HashSet<String> {
-    params.iter().map(|(_, label, _)| label.clone()).collect()
+fn param_binders(params: &[FuncTypeParam]) -> HashSet<String> {
+    params
+        .iter()
+        .filter_map(|param| param.label.clone())
+        .collect()
 }

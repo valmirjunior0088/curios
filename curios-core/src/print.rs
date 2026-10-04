@@ -1,9 +1,10 @@
 use {
     super::{
-        Apply, Argument, Atom, Bang, Bound, CalleeId, Carrier, Cases, Cursor, Field, Free, Func,
-        FuncType, Global, InductType, Infix, Intrinsic, Label, Let, Level, Match, MatchResult,
-        Metavar, MetavarOrigin, Nat, NumLit, Proj, Rec, Scope, Spellings, Struct, StructType,
-        Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var, Variant,
+        Apply, Argument, Ascribed, Atom, Bang, Bound, CalleeId, Carrier, Cases, Cursor, Field,
+        Free, Func, FuncType, Global, InductType, Infix, Intrinsic, Label, Let, Level, Match,
+        MatchResult, Metavar, MetavarOrigin, Nat, NumLit, Proj, Rec, Scope, Spellings, Struct,
+        StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var,
+        Variant,
     },
     curios_abi::stdio,
     curios_num::{Binary, Floating, Grain, Rounding},
@@ -2375,6 +2376,14 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             action,
             continuation,
         })) => flat([sub(action, frame), pure("!; "), sub(continuation, frame)]),
+        // No surface form states a type beside a bare term, so the dump brackets the pair.
+        Subterm::Transient(Transient::Ascribed(Ascribed { term, type_ })) => flat([
+            pure("("),
+            sub(term, frame),
+            pure(": "),
+            sub(type_, frame),
+            pure(")"),
+        ]),
         // The body a derived witness asks for, before elaboration has written it: no surface form spells it, so the dump names the transient.
         Subterm::Transient(Transient::Derive) => pure("derive"),
         // Identity and renaming spines (every entry a variable) are the uninteresting common case and print as the bare id; a spine carrying anything else is exactly the one worth seeing. Under axis (e) neither is: the spine is elaboration state like the id, and the reader gets `?`.

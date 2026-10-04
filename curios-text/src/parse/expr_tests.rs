@@ -248,8 +248,8 @@ fn implicit_marks_on_let_shorthand_and_inductive_params() {
         .unwrap();
     match &m.items[0] {
         TopItem::Induct(group) => {
-            assert_eq!(group[0].params[0].0, Plicity::Implicit);
-            assert_eq!(group[0].params[1].0, Plicity::Explicit);
+            assert_eq!(group[0].params[0].plicity, Plicity::Implicit);
+            assert_eq!(group[0].params[1].plicity, Plicity::Explicit);
         }
         other => panic!("expected an inductive, got {other:?}"),
     }

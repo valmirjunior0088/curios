@@ -682,6 +682,7 @@ fn opt_induct() -> InductDecl {
         module: Qualifier::empty(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     }
 }
 
@@ -1213,6 +1214,7 @@ fn newtype_struct(field: &str, type_: Term) -> StructDecl {
         module: Qualifier::empty(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     }
 }
 
@@ -1242,6 +1244,7 @@ fn unary_induct(payload: Term) -> InductDecl {
         module: Qualifier::empty(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     }
 }
 

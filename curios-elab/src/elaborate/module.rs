@@ -242,8 +242,11 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
 
     // Walk the parameters, then the index telescope they terminate in, checking each entry type against `Type` under the binders before it.
     let (param_entries, index_entries) = context.with_frame(|context| {
+        // A `use` parameter is in the witness scope of the index types below it, as it is in the type constructor's own function type.
         let (params, inner) =
-            check_telescope_entries(context, induct_decl.arity.clone(), |_| Plicity::Explicit)?;
+            check_telescope_entries(context, induct_decl.arity.clone(), |position| {
+                induct_decl.plicity(position)
+            })?;
         let (indices, ()) = check_telescope_entries(context, inner, |_| Plicity::Explicit)?;
 
         Ok::<_, Error>((params, indices))
@@ -267,6 +270,7 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
             module: induct_decl.module,
             rep_public: induct_decl.rep_public,
             polarities: induct_decl.polarities,
+            plicities: induct_decl.plicities,
         },
     );
 
@@ -289,8 +293,11 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
             .collect::<Vec<_>>();
 
         let (entries, targets) = context.with_frame(|context| {
+            // The signature's own marks: a `use` parameter of the family is a witness slot of every constructor, in scope for the payload types after it.
             let (entries, targets) =
-                check_telescope_entries(context, signature.clone(), |_| Plicity::Explicit)?;
+                check_telescope_entries(context, signature.clone(), |position| {
+                    param.plicities()[position]
+                })?;
 
             // The targets are still checked by `elaborate_induct_type`, which is what compares them against the rebuilt index telescope — so the constructed type is rebuilt here from what the declaration fixes (this family, at the constructor's own parameter binders) and the targets the signature states, elaborated, and its indices taken back.
             let params = entries
@@ -331,6 +338,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
             module: induct_decl.module,
             rep_public: induct_decl.rep_public,
             polarities: induct_decl.polarities,
+            plicities: induct_decl.plicities,
         },
     );
 
@@ -386,8 +394,11 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
     //
     // The parameters are opened rather than checked: `share_struct_params` elaborated them before the former's body was, and they are the terms that body was checked against. Elaborating them again would file a second set of universe instances beside the ones already in play.
     let (param_entries, field_entries) = context.with_frame(|context| -> Result<_, Error> {
+        // Under their declared marks, so a `use` parameter is in the witness scope of the fields, as it is in the former's own function type.
         let (params, inner) =
-            assume_telescope_entries(context, struct_decl.arity.clone(), |_| Plicity::Explicit);
+            assume_telescope_entries(context, struct_decl.arity.clone(), |position| {
+                struct_decl.plicity(position)
+            });
         let (fields, ()) = check_telescope_entries(context, inner, |position| {
             field_plicities
                 .get(position)
@@ -436,6 +447,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
             module: struct_decl.module,
             rep_public: struct_decl.rep_public,
             polarities: struct_decl.polarities,
+            plicities: struct_decl.plicities,
         },
     );
 
@@ -567,6 +579,7 @@ fn finalize_definition(
                 module: struct_decl.module,
                 rep_public: struct_decl.rep_public,
                 polarities: struct_decl.polarities,
+                plicities: struct_decl.plicities,
             },
         );
     }
@@ -630,6 +643,7 @@ fn finalize_definition(
                 module: struct_decl.module,
                 rep_public: struct_decl.rep_public,
                 polarities: struct_decl.polarities,
+                plicities: struct_decl.plicities,
             },
         );
     }
@@ -705,6 +719,7 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
             module: struct_decl.module,
             rep_public: struct_decl.rep_public,
             polarities: struct_decl.polarities,
+            plicities: struct_decl.plicities,
         },
     );
 }
@@ -925,6 +940,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 module: induct_decl.module,
                 rep_public: induct_decl.rep_public,
                 polarities: induct_decl.polarities,
+                plicities: induct_decl.plicities,
             },
         );
     }
@@ -941,6 +957,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                     module: struct_decl.module,
                     rep_public: struct_decl.rep_public,
                     polarities: struct_decl.polarities,
+                    plicities: struct_decl.plicities,
                 },
             );
         }
@@ -1063,6 +1080,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 module: induct_decl.module,
                 rep_public: induct_decl.rep_public,
                 polarities: induct_decl.polarities,
+                plicities: induct_decl.plicities,
             },
         );
     }
@@ -1079,6 +1097,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                     module: struct_decl.module,
                     rep_public: struct_decl.rep_public,
                     polarities: struct_decl.polarities,
+                    plicities: struct_decl.plicities,
                 },
             );
         }

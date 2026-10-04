@@ -56,6 +56,7 @@ pub(super) fn proposition(constructors: Vec<(Atom, InductParam)>) -> InductDecl 
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     }
 }
 
@@ -361,6 +362,7 @@ pub(super) fn indexed_module(target: Term) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     Module {
@@ -408,6 +410,7 @@ pub(super) fn level_registry(level: &Level) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     Module {
@@ -450,6 +453,7 @@ pub(super) fn indexed_by_proof(diverging: bool) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let qed = (
@@ -491,6 +495,7 @@ pub(super) fn clashing_index_decls(
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let held_decl = InductDecl {
@@ -512,6 +517,7 @@ pub(super) fn clashing_index_decls(
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     (
@@ -663,6 +669,7 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let held_decl = InductDecl {
@@ -676,6 +683,7 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let at_b = Term::induct_type(held_name, Vec::<Term>::new(), [at("b")]);
@@ -754,6 +762,7 @@ pub(super) fn scheme_registry(level: &Level, parameter_count: usize) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     Module {
@@ -783,6 +792,7 @@ pub(super) fn instance_of_width(width: usize) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let levels = vec![Level::param(UniverseParam(0)); width];
@@ -862,6 +872,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     // The type-former binding, whose body is the family's own normal form at the registry's width.
@@ -919,6 +930,7 @@ pub(super) fn lying_motive(sort: Term) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let at_zero = Term::induct_type(family, Vec::<Term>::new(), [zero.clone()]);
@@ -1096,6 +1108,7 @@ pub(super) fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let held = authored(
@@ -1146,6 +1159,7 @@ pub(super) fn struct_value_module(params: Vec<Term>) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let declared: Term = Subterm::StructType(StructType {
@@ -1200,6 +1214,7 @@ pub(super) fn variant_value_module(params: Vec<Term>) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let held = authored(
@@ -1311,6 +1326,7 @@ pub(super) fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let declared = Term::induct_match_scoped_marked(
@@ -1449,6 +1465,7 @@ pub(super) fn vouched_declaration() -> (Global, InductDecl) {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     (name, declaration)
@@ -1556,6 +1573,7 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let payload = match carried {
@@ -1598,7 +1616,7 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
     }
 }
 
-/// `induct Held : Type | mk(n : Nat)` with one item building `Held/mk` at `payload_count` arguments, the constructor's plicity vector either honest or lying.
+/// `induct Held : Type | mk(n : Nat)` with one item building `Held/mk` at `payload_count` arguments, the constructor's plicity vector and the declaration's own either honest or lying.
 pub(super) fn plicity_module(honest: bool, payload_count: usize) -> Module {
     let held_name = Global::Authored(Qualifier::from(["Held"]));
     let held = Term::induct_type(held_name, Vec::<Term>::new(), Vec::<Term>::new());
@@ -1627,6 +1645,11 @@ pub(super) fn plicity_module(honest: bool, payload_count: usize) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        // The declaration's own marks are sealed by nothing, so this lie is a mark for a parameter the family does not have.
+        plicities: match honest {
+            true => Vec::new(),
+            false => vec![Plicity::Witness],
+        },
     };
 
     let payload = (0..payload_count)
@@ -1669,6 +1692,7 @@ pub(super) fn indexed_family(
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     }
 }
 
@@ -1916,6 +1940,7 @@ pub(super) fn computed_field_wrapper(false_case: Term, true_case: Term) -> Struc
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     }
 }
 
@@ -2175,6 +2200,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let q_decl = InductDecl {
@@ -2188,6 +2214,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let bounded = UniverseConstraint {
@@ -2333,6 +2360,7 @@ pub(super) fn judged_environment() -> Module {
                 module: Qualifier::default(),
                 rep_public: true,
                 polarities: Vec::new(),
+                plicities: Vec::new(),
             },
         )]),
     )
@@ -2377,6 +2405,7 @@ pub(super) fn shadowing_registry(payload: Term) -> Module {
                 module: Qualifier::default(),
                 rep_public: true,
                 polarities: Vec::new(),
+                plicities: Vec::new(),
             },
         )]),
     )

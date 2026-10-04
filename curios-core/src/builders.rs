@@ -4,8 +4,8 @@
 
 use {
     super::{
-        Apply, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, NumLit, Scope,
-        Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Var,
+        Apply, Ascribed, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, NumLit,
+        Scope, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Var,
     },
     curios_num::{Binary, Grain, Natural, Rounding},
     curios_utilities::{InfixOp, Sign, StringSyntax, SyntaxName},
@@ -483,6 +483,14 @@ impl Term {
         Self::from(Subterm::Transient(Transient::Bang(Bang {
             action,
             continuation,
+        })))
+    }
+
+    /// A term stated at a type ([`Ascribed`]) — elaboration-transient, consumed by `elaborate_ascribed`, which leaves the term.
+    pub fn ascribed(term: Term, type_: Term) -> Self {
+        Self::from(Subterm::Transient(Transient::Ascribed(Ascribed {
+            term,
+            type_,
         })))
     }
 

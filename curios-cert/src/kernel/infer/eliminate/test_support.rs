@@ -130,6 +130,7 @@ pub(super) fn declare_at(
             module: Qualifier::from([path]),
             rep_public: true,
             polarities: Vec::new(),
+            plicities: Vec::new(),
         },
     );
 

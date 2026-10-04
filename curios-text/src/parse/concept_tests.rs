@@ -61,7 +61,7 @@ fn out_stays_a_valid_parameter_name() {
     let concept = &concepts[0];
 
     assert_eq!(concept.params.len(), 1);
-    assert_eq!(concept.params[0].1, "out");
+    assert_eq!(concept.params[0].label.as_deref(), Some("out"));
 }
 
 #[test]
@@ -187,6 +187,11 @@ fn witness_use_round_trip() {
         "satisfy Show(Nat) { show = f } and (@A : Type, use Show(A)) => Show(List(A)); u",
         "f(use dict, x)",
         "(@A : Type, use Show(A), x : A) -> A",
+        "struct Slot(K : Type, use Key(K), V : Type) : Type { key : K } u",
+        "induct Chain(K : Type, use Key(K)) : Type | done() end u",
+        "satisfy Named(@Nat) { name = n } u",
+        "Box(@Nat) { value = 1 }",
+        "Slot(Nat, use other, Str) { key = 2 }",
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(
@@ -195,6 +200,57 @@ fn witness_use_round_trip() {
             "round-trip failed for {source:?}"
         );
     }
+}
+
+/// A declaration's parameter list takes a `use` premise beside its named parameters: a mark and a type, with no name.
+#[test]
+fn a_declaration_parameter_may_be_a_use_premise() {
+    let source = "struct Slot(K : Type, use Key(K), @V : Type) : Type { key : K } u";
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
+    let TopItem::Struct(structs) = &entrypoint.module.items[0] else {
+        panic!("expected a struct declaration");
+    };
+    let params = &structs[0].params;
+
+    assert_eq!(params.len(), 3);
+    assert_eq!(params[0].plicity, Plicity::Explicit);
+    assert_eq!(params[0].label.as_deref(), Some("K"));
+    assert_eq!(params[1].plicity, Plicity::Witness);
+    assert_eq!(params[1].label, None);
+    assert_eq!(params[2].plicity, Plicity::Implicit);
+    assert_eq!(params[2].label.as_deref(), Some("V"));
+    assert_eq!(
+        entrypoint.to_string(),
+        "struct Slot(K: Type, use Key(K), @V: Type): Type {\n    key: K,\n}\nu"
+    );
+}
+
+/// A literal's applied head and a witness's concept application are argument lists, so each argument keeps the mark it was written with.
+#[test]
+fn a_literal_head_and_a_witness_head_keep_their_marks() {
+    let term = "Slot(Nat, use other, @Str) { key = 2 }"
+        .parse::<Term>()
+        .unwrap();
+    let Subterm::StructLit(literal) = term.as_subterm() else {
+        panic!("expected a struct literal");
+    };
+    assert_eq!(
+        literal
+            .params
+            .iter()
+            .map(|argument| argument.plicity)
+            .collect::<Vec<_>>(),
+        [Plicity::Explicit, Plicity::Witness, Plicity::Implicit],
+    );
+
+    let entrypoint = "satisfy Named(@Nat) { name = n } u"
+        .parse::<Entrypoint>()
+        .unwrap();
+    let TopItem::Witness(witnesses) = &entrypoint.module.items[0] else {
+        panic!("expected a witness declaration");
+    };
+    assert_eq!(witnesses[0].args.len(), 1);
+    assert_eq!(witnesses[0].args[0].plicity, Plicity::Implicit);
 }
 
 #[test]

@@ -2,7 +2,7 @@
 
 Working specification for `/std/Map` as `Map(K, V)`: one map whose key type is part of its type, whose leaves store the key rather than its encoding, and whose type names the dictionary it was built under. It replaces today's `Map(V)` and absorbs `Set(K)` rather than sitting beside either.
 
-Downstream of [plicity on a telescope's members](../03-surface/02-plicity-on-a-telescopes-members.md)'s stage 1, which admits a `use` type parameter, and of the elaborator leaving alone a witness slot that unification has already solved. Nothing here can land before both, for the reason under *Why the type names the dictionary*.
+Downstream of the elaborator leaving alone a witness slot that unification has already solved: a `struct` takes the `use` type parameter this is declared with, and a type naming a dictionary other than the registered one is not yet read back under it. Nothing here can land before that, for the reason under *Why the type names the dictionary*.
 
 ## Today's contract, and why it is honest
 

@@ -13,7 +13,7 @@ use {
 #[curios_archive::archived]
 pub struct InductParam {
     pub telescope: Telescope<Vec<Term>>,
-    /// One plicity mark per telescope binder — the value constructor's calling convention: every leading declaration parameter is `Implicit` (a value constructor infers them), each payload keeps its declared mark. Parallels `telescope`, and is sealed behind [`InductParam::new`] so the correspondence is asserted at the one door rather than at every use.
+    /// One plicity mark per telescope binder — the value constructor's calling convention: every leading declaration parameter is hidden, `Implicit` where it is plain or `@` at the type constructor (a value constructor infers them) and `Witness` where it is a `use` premise, and each payload keeps its declared mark. Parallels `telescope`, and is sealed behind [`InductParam::new`] so the correspondence is asserted at the one door rather than at every use.
     plicities: Vec<Plicity>,
 }
 
@@ -56,6 +56,8 @@ pub struct InductDecl {
     pub rep_public: bool,
     /// How this inductive uses each of its `params`, one entry per parameter in declaration order — the fact positivity composes through when a recursive occurrence travels via this type. Computed by `check_positivity` after elaboration and carried into the prelude archive so the standard library's are derived once per compiler build. Empty until then; read through [`Self::polarity`], never indexed directly.
     pub polarities: Vec<Polarity>,
+    /// What each of its `params` binds as at the type constructor, one mark per parameter in declaration order. See [`StructDecl::plicities`](super::StructDecl). The value constructors' marks are each signature's own ([`InductParam::plicities`]).
+    pub plicities: Vec<Plicity>,
 }
 
 impl InductDecl {
@@ -87,6 +89,11 @@ impl InductDecl {
         self.polarities.get(i).copied().unwrap_or(Polarity::Mixed)
     }
 
+    /// What this declaration's `i`th parameter binds as at the type constructor. A declaration that states no marks has plain parameters only.
+    pub fn plicity(&self, i: usize) -> Plicity {
+        self.plicities.get(i).copied().unwrap_or(Plicity::Explicit)
+    }
+
     /// This declaration with every term hash-consed against `sharing`. See [`Module::shared`](crate::Module::shared).
     pub fn shared(&self, sharing: &Sharing) -> Self {
         Self {
@@ -109,6 +116,7 @@ impl InductDecl {
             module: self.module,
             rep_public: self.rep_public,
             polarities: self.polarities.clone(),
+            plicities: self.plicities.clone(),
         }
     }
 

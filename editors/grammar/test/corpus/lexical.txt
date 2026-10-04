@@ -141,11 +141,13 @@ Pair(Nat, Bool) { ..base, snd = false }
     (struct_literal
       (path
         (identifier))
-      (type_arguments
-        (path
-          (identifier))
-        (path
-          (identifier)))
+      (arguments
+        (argument
+          (path
+            (identifier)))
+        (argument
+          (path
+            (identifier))))
       (struct_entry
         (spread
           (path

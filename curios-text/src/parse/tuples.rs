@@ -1,8 +1,8 @@
 use {
     super::{
-        parse_bin_literal, parse_block_string_literal, parse_bool_intrinsic, parse_char_lit,
-        parse_flt_value, parse_func_param, parse_func_type_param, parse_identifier, parse_keyword,
-        parse_label, parse_list_literal, parse_literal, parse_name, parse_num_lit,
+        parse_apply_argument, parse_bin_literal, parse_block_string_literal, parse_bool_intrinsic,
+        parse_char_lit, parse_flt_value, parse_func_param, parse_func_type_param, parse_identifier,
+        parse_keyword, parse_label, parse_list_literal, parse_literal, parse_name, parse_num_lit,
         parse_string_literal, refuse_dangling_dot,
     },
     crate::{
@@ -175,12 +175,14 @@ pub(super) fn parse_struct_entry<'a>() -> Parser<'a, StructLitEntry> {
         .or(parse_tuple_field().map(StructLitEntry::Field))
 }
 
-// A struct literal: `Name { … }` or `Name(args) { … }`. The trailing `{` is the commit point — it distinguishes the literal from a bare name / name-application (no brace) and from a Σ-type `{ x : A }` (no head name), so there is no grammar conflict. Plain entries reuse the tuple-value grammar (`= value` or positional) and `use <term>` fills a concept's `use`-marked field; the head's arguments are plain terms (`@`-pinning is not the struct idiom — the head type pins instead).
+// A struct literal: `Name { … }` or `Name(args) { … }`. The trailing `{` is the commit point — it distinguishes the literal from a bare name / name-application (no brace) and from a Σ-type `{ x : A }` (no head name), so there is no grammar conflict. Plain entries reuse the tuple-value grammar (`= value` or positional) and `use <term>` fills a concept's `use`-marked field; the head's arguments are a call's, marks included, since an applied head is an application of the type former.
 pub(super) fn parse_struct_lit<'a>() -> Parser<'a, Term> {
     parse_name()
         .and(
             parse_literal("(")
-                .and_keep(sep_by0_trailing(|| lazy(parse_term), || parse_literal(",")))
+                .and_keep(sep_by0_trailing(parse_apply_argument, || {
+                    parse_literal(",")
+                }))
                 .and_drop(parse_literal(")"))
                 .or(pure(vec![])),
         )

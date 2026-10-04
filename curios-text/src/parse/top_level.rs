@@ -1,8 +1,8 @@
 use {
     super::{
-        parse_binding, parse_func_sugar_param, parse_func_type_param, parse_identifier,
-        parse_keyword, parse_literal, parse_name, parse_plicity, parse_prop,
-        parse_tuple_field_prefix, parse_tuple_type_field, parse_type,
+        parse_apply_argument, parse_binding, parse_func_sugar_param, parse_func_type_param,
+        parse_identifier, parse_keyword, parse_literal, parse_name, parse_plicity, parse_prop,
+        parse_tuple_field_prefix, parse_tuple_type_field, parse_type, parse_use_func_type_param,
     },
     crate::{
         CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem, Label,
@@ -408,13 +408,19 @@ pub(super) fn parse_top_induct_case<'a>() -> Parser<'a, TopCase> {
     })
 }
 
-// An inductive parameter: `name : type`, or `@name : type` to make it implicit at the type-constructor function (it is implicit at the value constructors either way — the mark's only job is the type constructor, where unmarked parameters are written out).
-pub(super) fn parse_induct_param<'a>() -> Parser<'a, (Plicity, String, Term)> {
-    parse_plicity()
+// A declaration's parameter: `name : type`, `@name : type` to make it implicit at the type-constructor function (it is implicit at the value constructors either way — the mark's only job is the type constructor, where unmarked parameters are written out), or `use Concept(args)`, a premise the type names the dictionary of. A plain or `@` parameter is always named: the declaration's own types are what mention it.
+pub(super) fn parse_induct_param<'a>() -> Parser<'a, FuncTypeParam> {
+    parse_use_func_type_param().or(parse_plicity()
         .and(parse_identifier())
         .and_drop(parse_literal(":"))
         .and(lazy(parse_term))
-        .map(|((plicity, name), ty): ((Plicity, &str), Term)| (plicity, name.to_string(), ty))
+        .map(
+            |((plicity, name), type_): ((Plicity, &str), Term)| FuncTypeParam {
+                plicity,
+                label: Some(name.to_string()),
+                type_,
+            },
+        ))
 }
 
 // A head index-telescope entry: `n : Nat` or a bare `Nat`. The name is documentary (and a dependency hook for later entries) — never in scope in the cases — so it is optional and never takes `@`.
@@ -696,7 +702,9 @@ fn parse_witness_member<'a>(doc: Option<Doc>) -> Parser<'a, TopWitness> {
         // Past the concept's name this is a witness and nothing else, so the fall-through ends here as `test`'s ends at its label. `satisfy Name` is two names in a row and so no term, and the call `satisfy(…)` the dispatch keeps this arm recoverable for never reaches this point: its argument list is no telescope, and a `(` is no name.
         .and(commit(
             parse_literal("(")
-                .and_keep(sep_by0_trailing(|| lazy(parse_term), || parse_literal(",")))
+                .and_keep(sep_by0_trailing(parse_apply_argument, || {
+                    parse_literal(",")
+                }))
                 .and_drop(parse_literal(")"))
                 .or(pure(vec![]))
                 .and(

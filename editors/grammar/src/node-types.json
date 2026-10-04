@@ -4445,7 +4445,7 @@
         "required": false,
         "types": [
           {
-            "type": "type_arguments",
+            "type": "arguments",
             "named": true
           }
         ]
@@ -4892,7 +4892,7 @@
         "required": false,
         "types": [
           {
-            "type": "type_arguments",
+            "type": "arguments",
             "named": true
           }
         ]
@@ -5550,119 +5550,12 @@
     }
   },
   {
-    "type": "type_arguments",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": true,
-      "required": false,
-      "types": [
-        {
-          "type": "bang",
-          "named": true
-        },
-        {
-          "type": "binary",
-          "named": true
-        },
-        {
-          "type": "block_string",
-          "named": true
-        },
-        {
-          "type": "boolean",
-          "named": true
-        },
-        {
-          "type": "call",
-          "named": true
-        },
-        {
-          "type": "character",
-          "named": true
-        },
-        {
-          "type": "choose_term",
-          "named": true
-        },
-        {
-          "type": "function_type",
-          "named": true
-        },
-        {
-          "type": "goal",
-          "named": true
-        },
-        {
-          "type": "lambda",
-          "named": true
-        },
-        {
-          "type": "let_term",
-          "named": true
-        },
-        {
-          "type": "list_literal",
-          "named": true
-        },
-        {
-          "type": "match_term",
-          "named": true
-        },
-        {
-          "type": "number",
-          "named": true
-        },
-        {
-          "type": "packed_literal",
-          "named": true
-        },
-        {
-          "type": "parenthesized",
-          "named": true
-        },
-        {
-          "type": "path",
-          "named": true
-        },
-        {
-          "type": "projection",
-          "named": true
-        },
-        {
-          "type": "sort",
-          "named": true
-        },
-        {
-          "type": "string",
-          "named": true
-        },
-        {
-          "type": "struct_literal",
-          "named": true
-        },
-        {
-          "type": "tuple",
-          "named": true
-        },
-        {
-          "type": "tuple_type",
-          "named": true
-        },
-        {
-          "type": "unit",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
     "type": "type_parameter",
     "named": true,
     "fields": {
       "name": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "identifier",

@@ -63,6 +63,7 @@ fn a_parameter_named_through_an_instance() -> (Module, Term) {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let bad_decl = StructDecl {
@@ -75,6 +76,7 @@ fn a_parameter_named_through_an_instance() -> (Module, Term) {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
 
     let module = Module {

@@ -8,8 +8,8 @@
 
 use {
     super::{
-        Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Many,
-        RecGroup, RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm, Telescope, Term,
+        Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, Global, InductDecl, Many, RecGroup,
+        RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm, Telescope, Term,
         UniverseContext, UniverseError, WitnessSpelling, build_shorten,
     },
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
@@ -462,45 +462,26 @@ impl Module {
 
     /// Each nominal declaration's argument plicities, keyed by the family's name — parameters then indices, in the order a use site supplies them.
     ///
-    /// Read off the type constructor's own definition, whose declared type is the one or two `FuncType`s lowering nests — the parameters', then an indexed family's indices' — ending in the sort: the parameters keep their declared marks and the indices are always explicit. That is the only place the marks survive — `InductType` carries none (for a fixed name they are a function of the name, so storing them per-occurrence would be derived data that conversion must then either compare pointlessly or exclude from `Hash`, and excluding them lets hash-consing collapse differently-marked equal nodes), and neither `InductDecl::arity` nor `Telescope` has a slot for them.
+    /// Read off the registry entry, which records what each parameter binds as ([`InductDecl::plicities`], [`StructDecl::plicities`]); an index is always explicit. `InductType` carries none: for a fixed name the marks are a function of the name, so storing them per occurrence would be derived data that conversion must then either compare pointlessly or exclude from `Hash`, and excluding them lets hash-consing collapse differently-marked equal nodes.
     ///
-    /// Both item arms are walked: an inductive's type constructor is a `rec` item, since it refers to itself, while structs and concepts are plain `let`s. A nullary declaration has no `FuncType` wrapper at all and contributes nothing.
+    /// A concept is here through its record's entry. A nullary declaration has no argument and contributes nothing.
     pub fn nominal_plicities(&self) -> BTreeMap<Global, Vec<Plicity>> {
-        let mut marks = BTreeMap::new();
+        let inductives = self.induct_decls.iter().map(|(name, declaration)| {
+            let parameters = (0..declaration.param_count()).map(|index| declaration.plicity(index));
+            let indices = (0..declaration.index_count()).map(|_| Plicity::Explicit);
 
-        let mut record = |def: &Definition| {
-            if !matches!(
-                def.kind,
-                DefinitionKind::InductiveType
-                    | DefinitionKind::StructType
-                    | DefinitionKind::ConceptType
-            ) {
-                return;
-            }
-            // A type former's result is a sort, so the walk ends at the first node that is not a function type.
-            let mut collected = Vec::new();
-            let mut type_ = &def.type_;
-            while let Subterm::FuncType(FuncType {
-                telescope,
-                plicities,
-            }) = &**type_
-            {
-                collected.extend_from_slice(plicities);
-                type_ = telescope.terminal();
-            }
-            if !collected.is_empty() {
-                marks.insert(def.name, collected);
-            }
-        };
+            (*name, parameters.chain(indices).collect::<Vec<_>>())
+        });
+        let structures = self.struct_decls.iter().map(|(name, declaration)| {
+            let parameters = (0..declaration.param_count()).map(|index| declaration.plicity(index));
 
-        for item in &self.items {
-            match item {
-                Item::Let(def) => record(def),
-                Item::Rec(rec) => rec.definitions().iter().for_each(&mut record),
-            }
-        }
+            (*name, parameters.collect::<Vec<_>>())
+        });
 
-        marks
+        inductives
+            .chain(structures)
+            .filter(|(_, marks)| !marks.is_empty())
+            .collect()
     }
 
     /// What a report spells this unit's witnesses against (axis (h)): each concept's fields — a superclass edge's concept, or a method's wrapper, whether that wrapper takes the method's own parameters in its group, and the operator `syntax` names for it — and each witness's declared type. `syntax` is the registry's because this crate may not spell a prelude declaration.

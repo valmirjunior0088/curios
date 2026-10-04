@@ -439,9 +439,10 @@ and (@B: Type) => Show(B) {
     (satisfy_member
       (path
         (identifier))
-      (type_arguments
-        (path
-          (identifier)))
+      (arguments
+        (argument
+          (path
+            (identifier))))
       (field_definition
         (identifier)
         (sugar_parameters
@@ -462,9 +463,10 @@ and (@B: Type) => Show(B) {
           (sort)))
       (path
         (identifier))
-      (type_arguments
-        (path
-          (identifier)))
+      (arguments
+        (argument
+          (path
+            (identifier))))
       (field_definition
         (identifier)
         (sugar_parameters
@@ -498,9 +500,10 @@ satisfy (@A: Type, use Show(A)) => Show(List(A)) {
     (satisfy_member
       (path
         (identifier))
-      (type_arguments
-        (path
-          (identifier)))
+      (arguments
+        (argument
+          (path
+            (identifier))))
       (field_definition
         (identifier)
         (sugar_parameters
@@ -530,14 +533,15 @@ satisfy (@A: Type, use Show(A)) => Show(List(A)) {
                   (identifier)))))))
       (path
         (identifier))
-      (type_arguments
-        (call
-          (path
-            (identifier))
-          (arguments
-            (argument
-              (path
-                (identifier))))))
+      (arguments
+        (argument
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier)))))))
       (field_definition
         (identifier)
         (path
@@ -650,9 +654,10 @@ and Equal(Point) {
     (satisfy_member
       (path
         (identifier))
-      (type_arguments
-        (path
-          (identifier)))))
+      (arguments
+        (argument
+          (path
+            (identifier))))))
   (satisfy_item
     (satisfy_member
       (parameters
@@ -669,20 +674,22 @@ and Equal(Point) {
                   (identifier)))))))
       (path
         (identifier))
-      (type_arguments
-        (call
-          (path
-            (identifier))
-          (arguments
-            (argument
-              (path
-                (identifier)))))))
+      (arguments
+        (argument
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier))))))))
     (satisfy_member
       (path
         (identifier))
-      (type_arguments
-        (path
-          (identifier)))
+      (arguments
+        (argument
+          (path
+            (identifier))))
       (field_definition
         (identifier)
         (sugar_parameters
@@ -700,3 +707,127 @@ and Equal(Point) {
             (argument
               (path
                 (identifier)))))))))
+
+================================================================================
+A type declared under a premise, and heads that take a call's marks
+================================================================================
+
+struct Slot(K: Type, use Key(K), V: Type): Type { key: K }
+induct Chain(K: Type, use Key(K)): Type
+| done()
+end
+satisfy Named(@Nat) {
+    name = "nat",
+}
+let box: Box(@Nat) = Box(@Nat) { value = 1 };
+let two: Slot(Nat, use other, Str) = Slot(Nat, use other, Str) { key = 2 };
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (struct_member
+      (identifier)
+      (type_parameters
+        (type_parameter
+          (identifier)
+          (sort))
+        (type_parameter
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier))))))
+        (type_parameter
+          (identifier)
+          (sort)))
+      (sort)
+      (field_declaration
+        (identifier)
+        (path
+          (identifier)))))
+  (induct_item
+    (induct_body
+      (identifier)
+      (type_parameters
+        (type_parameter
+          (identifier)
+          (sort))
+        (type_parameter
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier)))))))
+      (sort)
+      (constructor
+        (identifier))))
+  (satisfy_item
+    (satisfy_member
+      (path
+        (identifier))
+      (arguments
+        (argument
+          (path
+            (identifier))))
+      (field_definition
+        (identifier)
+        (string))))
+  (let_item
+    (let_member
+      (identifier)
+      (call
+        (path
+          (identifier))
+        (arguments
+          (argument
+            (path
+              (identifier)))))
+      (struct_literal
+        (path
+          (identifier))
+        (arguments
+          (argument
+            (path
+              (identifier))))
+        (struct_entry
+          (field_definition
+            (identifier)
+            (number))))))
+  (let_item
+    (let_member
+      (identifier)
+      (call
+        (path
+          (identifier))
+        (arguments
+          (argument
+            (path
+              (identifier)))
+          (argument
+            (path
+              (identifier)))
+          (argument
+            (path
+              (identifier)))))
+      (struct_literal
+        (path
+          (identifier))
+        (arguments
+          (argument
+            (path
+              (identifier)))
+          (argument
+            (path
+              (identifier)))
+          (argument
+            (path
+              (identifier))))
+        (struct_entry
+          (field_definition
+            (identifier)
+            (number)))))))

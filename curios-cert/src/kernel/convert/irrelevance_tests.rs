@@ -110,6 +110,7 @@ fn a_struct_field_at_a_proposition_is_not_read() {
             module: Qualifier::empty(),
             rep_public: true,
             polarities: Vec::new(),
+            plicities: Vec::new(),
         },
     );
     let (p, q) = (binder(62, "p"), binder(63, "q"));
@@ -161,6 +162,7 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
             module: Qualifier::empty(),
             rep_public: true,
             polarities: Vec::new(),
+            plicities: Vec::new(),
         },
     );
     let (p, q) = (binder(62, "p"), binder(63, "q"));
@@ -451,6 +453,7 @@ fn a_struct_parameter_at_a_proposition_is_not_read() {
             module: Qualifier::empty(),
             rep_public: true,
             polarities: vec![curios_core::Polarity::Unused],
+            plicities: Vec::new(),
         },
     );
     let (p, q) = (binder(72, "p"), binder(73, "q"));

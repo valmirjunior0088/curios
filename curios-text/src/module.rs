@@ -1,9 +1,9 @@
 use {
     super::{
-        FuncSugarParam, FuncType, FuncTypeParam, Intrinsic, Label, LetSignature, LoadError, Name,
-        RootSource, Subterm, Term, Tuple, TupleType, TupleTypeParam, clear_comments,
-        parse_optional_term, parse_program_end, parse_term, parse_top_item, parse_whitespace,
-        print_module_items, print_term, take_comments,
+        Argument, FuncSugarParam, FuncType, FuncTypeParam, Intrinsic, Label, LetSignature,
+        LoadError, Name, RootSource, Subterm, Term, Tuple, TupleType, TupleTypeParam,
+        clear_comments, parse_optional_term, parse_program_end, parse_term, parse_top_item,
+        parse_whitespace, print_module_items, print_term, take_comments,
     },
     curios_abi::WireSignature,
     curios_parse::{
@@ -133,8 +133,8 @@ pub struct TopInduct {
     /// Whether construction and elimination are available outside the exact declaring module. Written as `pub` immediately before the result sort.
     pub rep_pub: bool,
     pub label: Label,
-    /// Inductive parameters are *implicit* on every value constructor regardless of any mark (the desugar applies those marks), with the call-site `@` available to supply one positionally when wanted. On the type-constructor function a parameter is *explicit* by default (types are written out); a declaration-site `@` makes it implicit there too (`induct Eq(@A : Type) : (x : A, y : A)` — `A` is recoverable from the indices, so types are written `Eq()(x, y)`).
-    pub params: Vec<(Plicity, String, Term)>,
+    /// The parameters of the type constructor's function type, and written as one's are: a named plain or `@` parameter, or a `use` premise, which has no name. A plain or `@` parameter is *implicit* on every value constructor regardless of its mark (the desugar applies those marks), with the call-site `@` available to supply one positionally when wanted. On the type-constructor function a parameter is *explicit* by default (types are written out); a declaration-site `@` makes it implicit there too (`induct Eq(@A : Type) : (x : A, y : A)` — `A` is recoverable from the indices, so types are written `Eq()(x, y)`). A `use` parameter is a witness slot at both: the type names the dictionary resolution found for it, and a value constructor finds the same one.
+    pub params: Vec<FuncTypeParam>,
     /// The head's index telescope, `induct Vec(T : Type) : (n : Nat)`. Names are optional and documentary — needed only when a later index's type depends on an earlier one; they are *not* in scope in the cases.
     pub indices: Vec<(Option<String>, Term)>,
     /// The arity's result sort — `Type` or `Prop`. Written after the index telescope (`: (n : Nat) -> Prop`) or in its place when there are no indices (`: Prop`); defaults to `Type` when omitted.
@@ -156,7 +156,7 @@ pub struct TopStruct {
     pub vis_pub: bool,
     pub rep_pub: bool,
     pub label: Label,
-    pub params: Vec<(Plicity, String, Term)>,
+    pub params: Vec<FuncTypeParam>,
     /// The result sort — `Type` or `Prop`, written `: Sort` after the parameters; defaults to `Type` when omitted.
     pub result_sort: Term,
     pub fields: Vec<StructField>,
@@ -196,7 +196,8 @@ pub struct TopConcept {
     /// Representation visibility, independent from `vis_pub` (the name's): `: pub Type` is transparent, `: Type` is sealed — witnesses and dictionary literals only in the declaring module, exactly like a private-representation struct.
     pub rep_pub: bool,
     pub label: Label,
-    pub params: Vec<(Plicity, String, Term)>,
+    /// Written as a `struct`'s are. A `use` parameter parses and is refused at lowering: a concept's premise is a superclass field.
+    pub params: Vec<FuncTypeParam>,
     pub result_sort: Term,
     pub fields: Vec<ConceptField>,
 }
@@ -209,13 +210,13 @@ pub struct WitnessField {
     pub value: Term,
 }
 
-/// A `witness` declaration: a registered inhabitant of a concept. Witnesses are anonymous — they are only ever reached through resolution (or an explicit `use <term>` carrying an ordinary value), so there is no name and no `pub`. The declaration desugars to a compiler-named top-level definition `let witness@N(tele) -> C(args) = C(args) { … }` registered in the program-wide witness table; diagnostics identify it by concept, key, and declaring module. Surface syntax writes a nonempty telescope as `satisfy (tele) => C(args) { … }`; the telescope admits only `@` and `use` parameters (explicit binders are rejected at lowering). `concept`/`args` are the witnessed concept application, reused verbatim as the struct-literal head. The body is written, or omitted as `satisfy C(args);` — the derived form, whose body the compiler writes.
+/// A `witness` declaration: a registered inhabitant of a concept. Witnesses are anonymous — they are only ever reached through resolution (or an explicit `use <term>` carrying an ordinary value), so there is no name and no `pub`. The declaration desugars to a compiler-named top-level definition `let witness@N(tele) -> C(args) = C { … }` registered in the program-wide witness table; diagnostics identify it by concept, key, and declaring module. Surface syntax writes a nonempty telescope as `satisfy (tele) => C(args) { … }`; the telescope admits only `@` and `use` parameters (explicit binders are rejected at lowering). `concept`/`args` are the witnessed concept application — an application like any other, so its arguments take the marks a call's do — which is the witness's declared type and what its body is checked against. The body is written, or omitted as `satisfy C(args);` — the derived form, whose body the compiler writes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopWitness {
     pub doc: Option<Doc>,
     pub params: Vec<FuncSugarParam>,
     pub concept: Name,
-    pub args: Vec<Term>,
+    pub args: Vec<Argument>,
     /// The written fields, or `None` for the derived form. A body holds implementation fields and nothing else: the concept's `use`-marked (superclass) positions are never written in a witness, so resolution fills each one and every path to a superclass finds the one registered witness.
     pub body: Option<Vec<WitnessField>>,
 }

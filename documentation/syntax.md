@@ -844,7 +844,7 @@ pub induct Option(A: Type): pub Type
 end
 ```
 
-Parameters follow the name. A parameter marked `@` is implicit at the type constructor; all inductive parameters are implicit at value constructors.
+Parameters follow the name. A parameter marked `@` is implicit at the type constructor, and a plain or `@` parameter is implicit at every value constructor. A parameter written `use Concept(args)` is a premise the family is declared under, a witness slot of the type constructor and of every value constructor alike — see [A type declared under a premise](#a-type-declared-under-a-premise).
 
 The required result annotation is either a sort or an index telescope followed by a sort:
 
@@ -898,6 +898,8 @@ pub struct Meters: pub Type { Nat }
 
 The outer `pub` exports the type name; the inner exports construction and projection, and without it those are restricted to the declaring module's subtree. A `Prop` structure may contain only non-informative fields.
 
+Parameters are written as an inductive's are: plain, `@`, or a `use Concept(args)` premise ([A type declared under a premise](#a-type-declared-under-a-premise)).
+
 Structures whose fields name one another are declared as one group with `and`; a lone structure may name itself in its fields with nothing said. See [Recursive groups](#recursive-groups).
 
 ```crs
@@ -907,11 +909,12 @@ and Edge: pub Type { weight: Nat, to: Node }
 
 ### Structure literals
 
-A structure value names its type and supplies its fields. Parameterized heads may supply type parameters before the field block.
+A structure value names its type and supplies its fields. A head may be applied before the field block, and an applied head is the type written as it is anywhere else — a call of the type former, taking the marks, the `?` holes and the omitted hidden arguments a call takes.
 
 ```crs
 Pair { fst = 1, snd = true }
 Pair(Nat, Bool) { fst = 1, snd = true }
+Box(@Nat) { value = 1 }
 Api { base = 3, bump(x) = x + 1 }
 ```
 
@@ -992,7 +995,7 @@ A concept returning `Prop` (or `pub Prop`) has proof-irrelevant witnesses that e
 
 ### Witness declarations
 
-`satisfy` registers an anonymous witness. Its terminal type is a concept application and its body supplies the concept fields — or is omitted, asking the compiler to write it; see [Derived witnesses](#derived-witnesses).
+`satisfy` registers an anonymous witness. Its terminal type is a concept application, written as any call is — `satisfy Named(@Nat) { … }` over `concept Named(@A: Type)` — and its body supplies the concept fields — or is omitted, asking the compiler to write it; see [Derived witnesses](#derived-witnesses).
 
 ```crs
 satisfy Show(Nat) {
@@ -1105,6 +1108,26 @@ join([1, 2, 3])
 join(use custom_show, [1, 2, 3])
 ```
 
+### A type declared under a premise
+
+A `struct` or an `induct` takes `use Concept(args)` among its parameters, and the dictionary it is applied at is then an argument of the type.
+
+```crs
+pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
+    key: K,
+    value: V,
+}
+
+pub let holds(@K: Type, use Key(K), @V: Type, slot: Slot(K, V), key: K) -> Bool =
+    Key/same(slot.key, key);
+```
+
+The parameter has no name and is in the witness scope of the declaration, so a field's type, an index's type and a constructor's payload resolve through it. Where the type is written the slot is a call's: `Slot(Nat, Str)` leaves it to resolution and `Slot(Nat, use reversed, Str)` fills it. Under a `use Key(K)` premise, as in `holds`, the nearest witness is the premise itself, so the signature's `Slot(K, V)` names the dictionary the function was given. Two types that differ in the dictionary are different types, since conversion compares it as it compares any argument, and a value holds no dictionary: the parameter belongs to the type, as `K` does.
+
+A structure literal with a bare head takes the dictionary from its expected type, or from resolution where there is none. At an inductive's value constructors the parameter stays a witness slot — resolved, or supplied with `use value` — where a plain or `@` parameter is implicit.
+
+A concept takes no `use` parameter: its premise is a superclass field, and a witness is keyed by the type heads of its concept's parameters, which a dictionary does not have.
+
 ### Witness resolution
 
 An omitted witness argument is resolved in this order:
@@ -1190,6 +1213,7 @@ A bound the facts do not imply is refused. The report names the facts considered
 | `b[...]` / `x[...]` | `Bits` / `Bytes` literal — grain letter glued to the bracket |
 | `Name { ... }` | Structure or concept literal |
 | `Name { ..base, ... }` | Structure update |
+| `struct Slot(K: Type, use Key(K)): …` | A type declared under a premise — the dictionary is an argument of the type |
 | `match term ... end` | Typed elimination or dispatch |
 | `choose ... end` | Ordered guarded ladder |
 | `test name = body;` | Declared test — a `/std/Test` description, collected per unit and run by `curios test` |

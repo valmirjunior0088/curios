@@ -58,6 +58,7 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Global {
             module: Qualifier::from([path]),
             rep_public: true,
             polarities: Vec::new(),
+            plicities: Vec::new(),
         },
     );
 
@@ -269,6 +270,7 @@ fn single_payload(payload_type: Term, result_sort: Term) -> InductDecl {
         module: Qualifier::from(["T"]),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     }
 }
 
@@ -555,7 +557,7 @@ fn forms(term: &Term) -> Vec<&'static str> {
             InstanceHead::RecProj(..) => "a universe instance of a projected group",
         }],
         Subterm::Transient(transient) => vec![match transient {
-            Transient::Infix(_) | Transient::Bang(_) => "a transient",
+            Transient::Infix(_) | Transient::Bang(_) | Transient::Ascribed(_) => "a transient",
             Transient::NumLit(_) | Transient::Derive => "a leaf",
         }],
         Subterm::Intrinsic(_) => vec!["an intrinsic"],
@@ -671,6 +673,9 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
                 continuation: markers.visited(),
             }))
             .into()
+        }),
+        Specimen::of(&mut markers, |markers| {
+            Term::ascribed(markers.visited(), markers.visited())
         }),
         Specimen::of(&mut markers, |markers| {
             Term::intrinsic(Intrinsic::ListType(markers.visited()))
@@ -953,6 +958,7 @@ fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
         InductDecl {
             // The lie: every parameter claimed strictly positive, while the payload below is a function *out of* the family.
             polarities: vec![Polarity::Strict],
+            plicities: Vec::new(),
             ..single_payload(
                 Term::func_type([(Free::local(0, Some("f")), bad_type)], false_type),
                 Term::type_ground(),
@@ -998,6 +1004,7 @@ fn an_out_of_set_vector_is_believed_only_under_partial_coverage() {
             ),
             constructors: Vec::new(),
             polarities: vec![Polarity::Strict],
+            plicities: Vec::new(),
             ..single_payload(Term::type_ground(), Term::type_ground())
         },
     );

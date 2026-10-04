@@ -23,6 +23,7 @@ fn register_list(context: &mut Context) {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -46,6 +47,7 @@ fn register_vec(context: &mut Context) {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -166,6 +168,7 @@ fn solves_against_struct_type() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                plicities: Vec::new(),
             },
         )
         .unwrap();

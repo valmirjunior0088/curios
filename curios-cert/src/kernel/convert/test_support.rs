@@ -41,6 +41,7 @@ pub(super) fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Ter
             module: Qualifier::from([path]),
             rep_public: true,
             polarities: Vec::new(),
+            plicities: Vec::new(),
         },
     );
 
@@ -116,6 +117,7 @@ pub(super) fn declare_indexed(kernel: &mut Kernel, path: &str, param_sort: Term)
             module: Qualifier::from([path]),
             rep_public: true,
             polarities: Vec::new(),
+            plicities: Vec::new(),
         },
     );
 

@@ -46,6 +46,14 @@ pub struct Bang {
     pub continuation: Term,
 }
 
+/// A term stated at a type: `term` is to inhabit `type_`. Lowering writes one where the source states a type beside a term with no binder between them — a struct literal's applied head, `Box(@Nat) { value = 1 }`, whose head is an application of the type former like any other and takes the marks one does. Consumed by `elaborate_ascribed`, which elaborates the type, checks the term against it and leaves the term.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub struct Ascribed {
+    pub term: Term,
+    pub type_: Term,
+}
+
 /// A lowering-born constructor consumed by elaboration: born in `into_core`, eliminated by `elaborate`, never legitimate in reduced, converted, zonked, or erased terms, and refused at the kernel boundary. Grouping the members under one `Subterm` variant lets every post-elaboration consumer dismiss the class wholesale — one refusal arm at the kernel, one `unreachable!` in each downstream stage — so a future transient extends lowering, elaboration, and display without touching them. `Metavar` is deliberately not a member: conversion parks on metavariables and zonk consumes them, so its lifecycle is elaboration-internal rather than pre-elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
@@ -56,6 +64,8 @@ pub enum Transient {
     NumLit(NumLit),
     /// A postfix `!` sequencing site; consumed by `elaborate_bang`.
     Bang(Bang),
+    /// A term stated at a type; consumed by `elaborate_ascribed`.
+    Ascribed(Ascribed),
     /// A witness body the compiler writes — the body position of a body-less `satisfy C(T);`; consumed by `elaborate_derive`, which reads the concept application it is checked against and expands it or refuses. Carries nothing: the expected type is the whole of its input.
     Derive,
 }
@@ -70,6 +80,7 @@ impl Transient {
                 action,
                 continuation,
             }) => [Some(action), Some(continuation)],
+            Transient::Ascribed(Ascribed { term, type_ }) => [Some(term), Some(type_)],
         };
         children.into_iter().flatten()
     }
@@ -90,6 +101,10 @@ impl Transient {
             }) => Transient::Bang(Bang {
                 action: f(action),
                 continuation: f(continuation),
+            }),
+            Transient::Ascribed(Ascribed { term, type_ }) => Transient::Ascribed(Ascribed {
+                term: f(term),
+                type_: f(type_),
             }),
         }
     }

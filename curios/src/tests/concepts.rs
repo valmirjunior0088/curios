@@ -7,6 +7,7 @@ mod field_tests;
 mod higher_kinded_tests;
 mod monad_tests;
 mod ordering_tests;
+mod premise_tests;
 mod recursion_tests;
 mod resolution_tests;
 mod sealed_tests;

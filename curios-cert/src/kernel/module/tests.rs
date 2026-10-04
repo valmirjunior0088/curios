@@ -35,6 +35,7 @@ fn family(kernel: &mut Kernel, result_sort: Term, payload_type: Term) -> InductD
         module: Qualifier::from(["Fam"]),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
     kernel.declare_induct(&fam(), &declaration);
 
@@ -97,6 +98,7 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
         module: Qualifier::from(["Vec"]),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
     kernel.declare_induct(&name, &declaration);
 
@@ -140,6 +142,7 @@ fn a_constructor_telescope_shorter_than_the_parameter_prefix_is_refused() {
         module: Qualifier::from(["Fam"]),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
     kernel.declare_induct(&fam(), &declaration);
 
@@ -180,6 +183,7 @@ fn prefixed(kernel: &mut Kernel, prefix: Term) -> InductDecl {
         module: Qualifier::from(["Fam"]),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
     kernel.declare_induct(&fam(), &declaration);
 
@@ -243,6 +247,7 @@ fn proposition(kernel: &mut Kernel, path: &str) -> Term {
             module: Qualifier::from([path]),
             rep_public: true,
             polarities: Vec::new(),
+            plicities: Vec::new(),
         },
     );
 
@@ -262,6 +267,7 @@ fn proposition_with_field(kernel: &mut Kernel, field_type: Term) -> StructDecl {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        plicities: Vec::new(),
     };
     kernel.declare_struct(&name, &declaration);
 

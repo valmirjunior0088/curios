@@ -1,10 +1,10 @@
 use {
     super::{Context, MatchCompiler},
     crate::{
-        BinSegment, Choose, ChooseTest, Error, Field, FuncParam, FuncTypeParam, Intrinsic, Label,
-        Let, LetBinding, LetGroup, LetSignature, Lint, LintedBinder, ListEntry, Name, Nat,
-        NatLiteral, NumLit, Pattern, PatternField, ProofLiteral, StructLitEntry, Subterm, Term,
-        func_sugar_params, func_sugar_type_params,
+        Apply, BinSegment, Choose, ChooseTest, Error, Field, FuncParam, FuncTypeParam, Intrinsic,
+        Label, Let, LetBinding, LetGroup, LetSignature, Lint, LintedBinder, ListEntry, Name, Nat,
+        NatLiteral, NumLit, Pattern, PatternField, ProofLiteral, StructLit, StructLitEntry,
+        Subterm, Term, func_sugar_params, func_sugar_type_params,
     },
     curios_num::{Binary, Grain},
     curios_utilities::{Plicity, Span, recurse},
@@ -418,29 +418,29 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     Field::Label(label) => curios_core::Term::proj_label(head, label.clone()),
                 }
             }
-            // A struct literal lowers to a `curios_core::Struct` carrying the resolved (qualified) struct name, the head parameters (empty → core elaboration mints metavariables), and the written entries — plain field values with their names (validated positionally and dropped by elaborate), `use <term>` fills for a concept's `use`-marked positions, and a `..base` spread carrying its base. Construction privacy and spread shape are enforced in core (`elaborate_struct`), alongside projection privacy.
-            Subterm::StructLit(lit) => curios_core::Term::struct_entries(
-                self.resolve_nominal(&lit.head)?,
-                lit.params
-                    .iter()
-                    .map(|p| self.term(p))
-                    .collect::<Result<Vec<_>, Error>>()?,
-                lit.entries
-                    .iter()
-                    .map(|entry| match entry {
-                        StructLitEntry::Field(field) => Ok((
-                            curios_core::StructEntry::Field(field.label.clone()),
-                            self.term(&field.desugared_value())?,
-                        )),
-                        StructLitEntry::Use(term) => {
-                            Ok((curios_core::StructEntry::Use, self.term(term)?))
-                        }
-                        StructLitEntry::Spread(term) => {
-                            Ok((curios_core::StructEntry::Spread, self.term(term)?))
-                        }
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?,
-            ),
+            // A struct literal lowers to a `curios_core::Struct` carrying the resolved (qualified) struct name, no parameters (core elaboration mints metavariables for them), and the written entries — plain field values with their names (validated positionally and dropped by elaborate), `use <term>` fills for a concept's `use`-marked positions, and a `..base` spread carrying its base — stated at its head's type where the head is applied ([`Self::headed`]). Construction privacy and spread shape are enforced in core (`elaborate_struct`), alongside projection privacy.
+            Subterm::StructLit(lit) => self.headed(
+                lit,
+                curios_core::Term::struct_entries(
+                    self.resolve_nominal(&lit.head)?,
+                    Vec::<curios_core::Term>::new(),
+                    lit.entries
+                        .iter()
+                        .map(|entry| match entry {
+                            StructLitEntry::Field(field) => Ok((
+                                curios_core::StructEntry::Field(field.label.clone()),
+                                self.term(&field.desugared_value())?,
+                            )),
+                            StructLitEntry::Use(term) => {
+                                Ok((curios_core::StructEntry::Use, self.term(term)?))
+                            }
+                            StructLitEntry::Spread(term) => {
+                                Ok((curios_core::StructEntry::Spread, self.term(term)?))
+                            }
+                        })
+                        .collect::<Result<Vec<_>, Error>>()?,
+                ),
+            )?,
             // A `choose` right-folds into nested `Bool` matches: each `cond => body` becomes `match cond | false => <rest> | true => body end`, the `_` default sitting at the innermost false branch. No motive at any level (a fresh hole each), matching the surface form's absence of one. Arms inherit the definitional refinement of their conditions for free — that is exactly what nesting `Bool` matches buys.
             Subterm::Choose(Choose { arms, default }) => {
                 let mut acc = self.term(default)?;
@@ -716,32 +716,32 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     Field::Label(label) => curios_core::Term::proj_label(head, label.clone()),
                 }
             }
-            // A struct literal's entry values hoist their bangs into this region, exactly like a tuple's fields.
-            Subterm::StructLit(lit) => curios_core::Term::struct_entries(
-                self.resolve_nominal(&lit.head)?,
-                lit.params
-                    .iter()
-                    .map(|p| self.collect(p, binds))
-                    .collect::<Result<Vec<_>, Error>>()?,
-                lit.entries
-                    .iter()
-                    .map(|entry| match entry {
-                        StructLitEntry::Field(field) => {
-                            let value = field.desugared_value();
-                            Ok((
-                                curios_core::StructEntry::Field(field.label.clone()),
-                                self.collect(&value, binds)?,
-                            ))
-                        }
-                        StructLitEntry::Use(term) => {
-                            Ok((curios_core::StructEntry::Use, self.collect(term, binds)?))
-                        }
-                        StructLitEntry::Spread(term) => {
-                            Ok((curios_core::StructEntry::Spread, self.collect(term, binds)?))
-                        }
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?,
-            ),
+            // A struct literal's entry values hoist their bangs into this region, exactly like a tuple's fields. Its head is a type, which has no region to hoist into.
+            Subterm::StructLit(lit) => self.headed(
+                lit,
+                curios_core::Term::struct_entries(
+                    self.resolve_nominal(&lit.head)?,
+                    Vec::<curios_core::Term>::new(),
+                    lit.entries
+                        .iter()
+                        .map(|entry| match entry {
+                            StructLitEntry::Field(field) => {
+                                let value = field.desugared_value();
+                                Ok((
+                                    curios_core::StructEntry::Field(field.label.clone()),
+                                    self.collect(&value, binds)?,
+                                ))
+                            }
+                            StructLitEntry::Use(term) => {
+                                Ok((curios_core::StructEntry::Use, self.collect(term, binds)?))
+                            }
+                            StructLitEntry::Spread(term) => {
+                                Ok((curios_core::StructEntry::Spread, self.collect(term, binds)?))
+                            }
+                        })
+                        .collect::<Result<Vec<_>, Error>>()?,
+                ),
+            )?,
             // An infix operator's operands hoist their bangs into this region, exactly like an application's arguments.
             Subterm::Infix(infix) => curios_core::Term::infix(
                 infix.op,
@@ -868,6 +868,26 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn pattern_binder(&self, name: &Label) -> Binder {
         self.mint_written([(name.to_string(), name.span().cloned())])
             .remove(0)
+    }
+
+    /// A lowered struct literal under the head it was written with. A bare head leaves the parameters to elaboration. An applied one is the type former applied as any call applies it — marks, omitted hidden arguments and `?` holes included — so it lowers as that application and the literal is stated at it, rather than the literal carrying a second argument list with rules of its own.
+    fn headed(
+        &self,
+        lit: &StructLit,
+        literal: curios_core::Term,
+    ) -> Result<curios_core::Term, Error> {
+        if lit.params.is_empty() {
+            return Ok(literal);
+        }
+
+        let former: Term = Subterm::Name(lit.head.clone()).into();
+        let applied: Term = Subterm::Apply(Apply {
+            head: former,
+            arguments: lit.params.clone(),
+        })
+        .into();
+
+        Ok(curios_core::Term::ascribed(literal, self.term(&applied)?))
     }
 
     /// A nominal head's resolved name. Only a global declares a structure, so a head resolving to a local or to nothing is refused here, where the bindings it could have meant are known — lowering it to the root-level global its spelling names would let it capture an entry module's binding of that name, as [`Self::resolve_name`] records for a bare reference.
