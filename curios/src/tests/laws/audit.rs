@@ -3,7 +3,9 @@
 //! Conversion stays symmetric (each law reversed), transitive (two laws chained through a side they share), and closed under substitution (each law at compound terms that change its atoms, and through a solved metavariable); and constructors stay free modulo the theory, which is what inversion reads when it concludes a clash (a case split on an equation between distinct constructors needs no arm). A finite grid is evidence about the implemented fragment, not a metatheorem, and it grows with the law table it is generated from.
 
 use {
-    super::{IMPORTS, Row, closes, declared, name, rows, spell, type_name},
+    super::{
+        Binder, IMPORTS, Row, applied, closes, declared, name, orders, rows, spell, type_name,
+    },
     crate::tests::typecheck,
     curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation},
 };
@@ -66,6 +68,68 @@ fn every_law_holds_at_compound_terms() {
     if let Err(failures) = closes(&instances) {
         panic!("{}", failures.join("\n"));
     }
+}
+
+/// Every operation the table declares commutative, over two atoms a side that convert without being identical — one call under two proofs of its bound — and swapped: `f(a, p1) ⋆ f(b, q1)` against `f(b, q2) ⋆ f(a, p2)`. No reader pairs such atoms by their spelling, so the row holds only where each checker classes them, and it is stated at several orders of its binders because the order an operation holds its operands in is, for some, a hash.
+#[test]
+fn every_commutative_law_holds_over_atoms_that_differ_in_a_proof() {
+    const ORDERS: usize = 8;
+    let commutative = declared()
+        .into_iter()
+        .filter(|(_, _, family)| *family == Family::Commutativity)
+        .collect::<Vec<_>>();
+    assert!(!commutative.is_empty());
+
+    let mut carriers: Vec<Carrier> = Vec::new();
+    for (carrier, _, _) in &commutative {
+        if !carriers.contains(carrier) {
+            carriers.push(*carrier);
+        }
+    }
+    let mut failures = Vec::new();
+    for carrier in carriers {
+        let call = format!("(n: Nat, at: Holds(n < 10)) -> {}", type_name(carrier));
+        let binders = [
+            ("a", "Nat".to_owned(), &[][..]),
+            ("b", "Nat".to_owned(), &[][..]),
+            ("f", call, &[][..]),
+            ("p1", "Holds(a < 10)".to_owned(), &["a"][..]),
+            ("p2", "Holds(a < 10)".to_owned(), &["a"][..]),
+            ("q1", "Holds(b < 10)".to_owned(), &["b"][..]),
+            ("q2", "Holds(b < 10)".to_owned(), &["b"][..]),
+        ];
+        let binders = binders
+            .iter()
+            .map(|(name, type_, needs)| Binder { name, type_, needs })
+            .collect::<Vec<_>>();
+        let claims = commutative
+            .iter()
+            .filter(|(at, _, _)| *at == carrier)
+            .map(|(_, operation, _)| {
+                let side = |left: &str, right: &str| {
+                    applied(carrier, *operation, &[left.to_owned(), right.to_owned()])
+                };
+                format!(
+                    "Eq()({}, {})",
+                    side("f(a, p1)", "f(b, q1)"),
+                    side("f(b, q2)", "f(a, p2)")
+                )
+            })
+            .collect::<Vec<_>>();
+        for binders in orders(&binders, ORDERS) {
+            let rows = claims
+                .iter()
+                .map(|claim| (binders.clone(), claim.clone()))
+                .collect::<Vec<_>>();
+            if let Err(found) = closes(&rows) {
+                failures.push(format!(
+                    "{carrier:?} under `{binders}`:\n{}",
+                    found.join("\n")
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
 
 /// The compound term a law's first variable is replaced by, where its carrier has one.

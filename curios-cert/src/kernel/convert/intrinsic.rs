@@ -7,21 +7,31 @@
 use {
     super::{History, compare, ground},
     crate::{Error, Kernel},
-    curios_analysis::{Congruence, Driver, Obligation, Outcome, convert_intrinsics},
-    curios_core::Intrinsic,
+    curios_analysis::{
+        Agreement, Congruence, Driver, Obligation, Outcome, Pass, connectives_agree,
+        connectives_agree_classed, convert_classed, convert_intrinsics,
+    },
+    curios_core::{Classes, Intrinsic, Term},
     curios_utilities::SyntaxRegistry,
 };
 
 /// Whether `this` and `that` are the same intrinsic operation on convertible operands.
 ///
-/// The chain that decides the pair or leaves what is left to compare is `curios-analysis`'s `convert_intrinsics`, the elaborator's too. What is the kernel's is the discharge: a residual is compared at `Type`, the levels by entailment, and each operand in order at its declared type, all under the active `History`, stopping at the first that fails.
+/// The chain that decides the pair or leaves what is left to compare is `curios-analysis`'s `convert_intrinsics`, the elaborator's too. What is the kernel's is the discharge: the atoms the chain hands back are classed by the kernel's own comparison, a residual is compared at `Type`, the levels by entailment, and each operand in order at its declared type, all under the active `History`, stopping at the first that fails.
 pub(super) fn convert_intrinsic(
     kernel: &mut Kernel,
     history: &mut History,
     this: &Intrinsic,
     that: &Intrinsic,
 ) -> Result<bool, Error> {
-    match convert_intrinsics(kernel, this.clone(), that.clone())? {
+    let outcome = match convert_intrinsics(kernel, this.clone(), that.clone())? {
+        Pass::Settled(outcome) => outcome,
+        Pass::Atoms(atoms) => {
+            let classes = classes(kernel, history, &atoms)?;
+            convert_classed(kernel, this.clone(), that.clone(), &classes)?
+        }
+    };
+    match outcome {
         Outcome::Equal => Ok(true),
         Outcome::Unequal => Ok(false),
         Outcome::Residual(this, that) => ground(kernel, history, &this, &that),
@@ -46,6 +56,47 @@ pub(super) fn convert_intrinsic(
                 }
             }
             Ok(true)
+        }
+    }
+}
+
+/// Whether a `Bool` connective on either side of a pair that is not two intrinsics agrees with the other side: `curios-analysis`'s `connectives_agree`, its atoms classed here where it hands them back.
+pub(super) fn connectives_convert(
+    kernel: &mut Kernel,
+    history: &mut History,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, Error> {
+    match connectives_agree(kernel, this, that)? {
+        Agreement::Agree => Ok(true),
+        Agreement::Silent => Ok(false),
+        Agreement::Atoms(atoms) => {
+            let classes = classes(kernel, history, &atoms)?;
+            Ok(connectives_agree_classed(kernel, this, that, &classes)?)
+        }
+    }
+}
+
+/// Which of `atoms` are one: each compared at `Type` with the representative of every class opened before it, under the history of the goal the pair belongs to. A comparison that fails leaves nothing behind, since a goal leaves the history whatever its outcome.
+///
+/// **Two atoms whose comparison is already in progress are left apart.** The recurrence rule assumes a goal met again, which is sound for a goal whose children are all still compared; a classing that took the assumption would spell one atom as the other and decide the pair it belongs to without comparing anything. So an atom pair the history holds is two atoms here, which is the refusing direction.
+fn classes(kernel: &mut Kernel, history: &mut History, atoms: &[Term]) -> Result<Classes, Error> {
+    curios_profile::profile!("convert::classes");
+    Classes::of(atoms, |this, that| {
+        if in_progress(kernel, history, this, that) || in_progress(kernel, history, that, this) {
+            return Ok(false);
+        }
+        ground(kernel, history, this, that)
+    })
+}
+
+/// Whether comparing `this` with `that` at `Type` is a goal the history already holds.
+fn in_progress(kernel: &Kernel, history: &mut History, this: &Term, that: &Term) -> bool {
+    match history.enter(kernel, &Term::type_ground(), this, that) {
+        None => true,
+        Some(goal) => {
+            history.leave(&goal);
+            false
         }
     }
 }

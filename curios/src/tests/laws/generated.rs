@@ -138,6 +138,11 @@ pub(super) fn type_name(carrier: Carrier) -> &'static str {
     }
 }
 
+/// `operation` at `carrier` over operands already spelled, for a row whose operands are no variables of the law.
+pub(super) fn applied(carrier: Carrier, operation: Operation, operands: &[String]) -> String {
+    Spelling::default().apply(carrier, operation, operands)
+}
+
 /// The spelling of one law's terms, and the proof binders its narrowings asked for.
 #[derive(Default)]
 struct Spelling {

@@ -627,6 +627,15 @@ impl Family {
     }
 }
 
+/// Whether [`TABLE`] declares `family` of `operation` at `carrier`.
+pub fn declares(carrier: Carrier, operation: Operation, family: Family) -> bool {
+    TABLE.iter().any(|declared| {
+        declared.carrier == carrier
+            && declared.operation == operation
+            && declared.families.contains(&family)
+    })
+}
+
 /// Every law [`TABLE`] states, in its order.
 pub fn laws() -> Vec<(Declared, Law)> {
     TABLE

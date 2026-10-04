@@ -454,29 +454,6 @@ impl Nat {
         Self::rebuild(floor, inner)
     }
 
-    /// A sum or a product rebuilt with its summands or factors in structural-hash order, each put through `order` first — the spelling `force_atoms` reads an atom's arguments in, and never written back. `None` for any other node.
-    ///
-    /// A sum is merged as it is rebuilt, like terms into one coefficient, and a product's literal factors are multiplied into its coefficient, so the rebuilt node is in the normal form the fold keeps; only its order is new.
-    pub(crate) fn in_order(node: &Term, order: &impl Fn(&Term) -> Term) -> Option<Term> {
-        match &**node {
-            Subterm::Intrinsic(Intrinsic::NatAdd(..)) => {
-                let mut combination = Self::linear(Self::summands(node).iter().map(order));
-                combination.sort_by_key(|(_, factor)| factor.structural_hash());
-                Some(Self::from_linear(combination, Natural::zero()))
-            }
-            Subterm::Intrinsic(Intrinsic::NatMul(..)) => {
-                let (coefficient, factors) = Self::monomial(node);
-                let mut factors = factors.iter().map(order).collect::<Vec<_>>();
-                factors.sort_by_key(Term::structural_hash);
-                Some(match Self::spine(&factors) {
-                    Some(spine) => Self::scaled(coefficient, spine),
-                    None => Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
-                })
-            }
-            _ => None,
-        }
-    }
-
     /// A weak-head `Nat` with every product of two symbolic sums distributed, and the result re-merged — the one normalization the fold does not perform on its own, asked for by name where a comparison needs the value: `compare_nat`, the converters' rule for two symbolic `Nat`s. See `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`.
     ///
     /// The fold keeps every sum merged and every difference cancelled, so this walks only into products and the sums that hold them; a term with no stuck product comes back untouched. A memo keyed on node identity keeps a shared operand distributed once and holds each input alive beside its answer, since an identity is an address; the descent re-enters [`recurse`] per level. A product is priced here by what it builds — the concat fold's idiom, one collection and one node per product — because `operand_bound` at the fold prices by literal width, and a symbolic cross product read as zero bits.

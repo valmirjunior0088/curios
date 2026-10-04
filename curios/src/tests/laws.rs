@@ -87,3 +87,56 @@ fn misplaced(name: &str, rows: &[(String, String)], held: usize) -> Vec<String> 
     }
     misplaced
 }
+
+/// One binder of a telescope the sweep reorders: its name, its type, and the binders its type names.
+struct Binder<'a> {
+    name: &'a str,
+    type_: &'a str,
+    needs: &'a [&'a str],
+}
+
+/// `count` orders of `binders`, each a telescope as source: the order they are declared in, that order reversed, and shuffles drawn from a fixed sequence, so every run states the same orders. A binder is kept after the binders its type names, by taking from each candidate order the first binder whose needs are already placed.
+///
+/// **An order is a verdict's adversary.** A binder's identity is minted where it is declared, so a structural hash — the order a product holds its factors in, the side a linear view puts an atom on — moves with the declaration order, and a verdict that rests on a hash holds at one order and fails at another. Two fixed orders cannot tell such a verdict from a law; a sweep can.
+fn orders(binders: &[Binder<'_>], count: usize) -> Vec<String> {
+    let declared = (0..binders.len()).collect::<Vec<_>>();
+    let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut draw = move |below: usize| {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        (state >> 33) as usize % below
+    };
+    (0..count)
+        .map(|order| {
+            let mut candidate = declared.clone();
+            match order {
+                0 => {}
+                1 => candidate.reverse(),
+                _ => {
+                    for at in (1..candidate.len()).rev() {
+                        candidate.swap(at, draw(at + 1));
+                    }
+                }
+            }
+            let mut placed: Vec<usize> = Vec::new();
+            while !candidate.is_empty() {
+                let next = candidate
+                    .iter()
+                    .position(|index| {
+                        binders[*index]
+                            .needs
+                            .iter()
+                            .all(|need| placed.iter().any(|done| binders[*done].name == *need))
+                    })
+                    .expect("a binder's needs are binders of the telescope, with no cycle");
+                placed.push(candidate.remove(next));
+            }
+            placed
+                .iter()
+                .map(|index| format!("{}: {}", binders[*index].name, binders[*index].type_))
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .collect()
+}

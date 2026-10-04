@@ -22,8 +22,8 @@ use scalar::*;
 mod truth;
 pub use truth::*;
 
-mod forced;
-pub use forced::*;
+mod classed;
+pub use classed::*;
 
 use {
     super::{ReduceError, Reducer},
@@ -2126,11 +2126,11 @@ pub fn reduce_intrinsic(
 }
 
 #[cfg(test)]
+mod classed_tests;
+#[cfg(test)]
 mod compare_tests;
 #[cfg(test)]
 mod cost_tests;
-#[cfg(test)]
-mod forced_tests;
 #[cfg(test)]
 mod free_monoid_tests;
 #[cfg(test)]

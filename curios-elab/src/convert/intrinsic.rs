@@ -5,11 +5,14 @@
 //! The rule is stated *generically* rather than as one arm per operation, and once for both checkers: `curios-analysis`'s `convert_intrinsics` runs the carriers' algebra and reads the congruence off the traversal that defines an intrinsic's operands. A hand-written pair match over a roster of upwards of a hundred entries is a list whose omissions are silent — `convert` short-circuits on syntactic identity before reaching here, so a missing arm only surfaces on two spellings that are convertible without being identical, as a *hard mismatch* rather than a postponement. What this module keeps is the elaborator's own part: its preparation, its packed-literal view, and its discharge.
 
 use {
-    super::Convert,
+    super::{Convert, convert},
     crate::{Context, zonk_solved_term_metas},
     curios_algebra::{Cut, split},
-    curios_analysis::{Congruence, Driver, Obligation, Outcome, convert_intrinsics},
-    curios_core::{Cost, Free, Intrinsic, ReduceError, Reducer, Subterm, Term},
+    curios_analysis::{
+        Agreement, Congruence, Driver, Obligation, Outcome, Pass, connectives_agree,
+        connectives_agree_classed, convert_classed, convert_intrinsics,
+    },
+    curios_core::{Classes, Cost, Free, Intrinsic, ReduceError, Reducer, Subterm, Term},
     curios_num::{Binary, Grain},
     curios_utilities::SyntaxRegistry,
 };
@@ -21,7 +24,18 @@ pub(crate) fn convert_intrinsic(
     this: Intrinsic,
     that: Intrinsic,
 ) -> Result<bool, ReduceError> {
-    let outcome = convert_intrinsics(&mut Elaborating { cmp, context }, this, that)?;
+    let pass = convert_intrinsics(
+        &mut Elaborating { cmp, context },
+        this.clone(),
+        that.clone(),
+    )?;
+    let outcome = match pass {
+        Pass::Settled(outcome) => outcome,
+        Pass::Atoms(atoms) => {
+            let classes = classes(context, &atoms)?;
+            convert_classed(&mut Elaborating { cmp, context }, this, that, &classes)?
+        }
+    };
     match outcome {
         Outcome::Equal => Ok(true),
         Outcome::Unequal => Ok(false),
@@ -46,6 +60,39 @@ pub(crate) fn convert_intrinsic(
             Ok(true)
         }
     }
+}
+
+/// Whether a `Bool` connective on either side of a pair that is not two intrinsics agrees with the other side: `curios-analysis`'s `connectives_agree`, its atoms classed here where it hands them back.
+pub(super) fn connectives_convert(
+    context: &mut Context,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, ReduceError> {
+    match connectives_agree(context, this, that)? {
+        Agreement::Agree => Ok(true),
+        Agreement::Silent => Ok(false),
+        Agreement::Atoms(atoms) => {
+            let classes = classes(context, &atoms)?;
+            connectives_agree_classed(context, this, that, &classes)
+        }
+    }
+}
+
+/// Which of `atoms` are one, as far as the elaborator can say without deciding anything else: two atoms are one where they convert with no solution and no universe constraint committed. Each comparison runs in the bracket a witness probe uses and is rolled back whatever it found, so a pair that would need a metavariable solved stays two atoms, and classing commits nothing.
+fn classes(context: &mut Context, atoms: &[Term]) -> Result<Classes, ReduceError> {
+    curios_profile::profile!("convert::classes");
+    Classes::of(atoms, |this, that| {
+        // Hand-paired rather than bracketed by a closure, as the witness probe's is: this sits on conversion's recursion.
+        let mark = context.solution_mark();
+        let solutions = context.solutions_committed();
+        let universes = context.universes().state_token();
+        let converts = convert(context, &Term::type_ground(), this, that);
+        let committed = context.solutions_committed() != solutions
+            || context.universes().state_token() != universes;
+        context.rollback_solutions(mark);
+        context.end_solutions(mark);
+        Ok(converts? && !committed)
+    })
 }
 
 /// The elaborator as the shared chain's driver: its context reduces, and its queue takes the packed-literal view's goals.

@@ -1,6 +1,9 @@
 //! The rows stated by hand: every carrier's laws no family states, the controls beside the laws a rule must stop short of, and the refused candidates with the reason conversion does not take each.
 
-use super::{closes, misplaced};
+use {
+    super::{Binder, closes, misplaced, orders},
+    crate::tests::typecheck,
+};
 
 /// One carrier's rows: the binders every claim is stated under, the laws `Eq/refl()` closes, and the laws it refuses.
 struct Carrier {
@@ -10,11 +13,122 @@ struct Carrier {
     refused: &'static [&'static str],
 }
 
-/// Every reader of the carriers' algebra keys an atom on its spelling, so two atoms equal only once their arguments are forced — `f(a + b)` and `f(b + a)` — would meet only where the positional congruence's hash order happened to pair them, and a verdict would turn on the order the binders were declared in. Conversion reads a pair it decided nothing about once more with every atom's arguments forced (`force_atoms`), so each row below is stated under both orders.
-const ATOM_BINDERS: &str = "a: Nat, b: Nat, c: Nat, d: Nat, n: Nat, m: Nat, f: (Nat) -> Nat, g: (Nat) -> Nat, i: Int, j: Int, k: Int, l: Int, h: (Int) -> Int, e: (Int) -> Int, p: (Nat) -> Bool, q: (Nat) -> Bool";
+/// The binders every atom row is stated under. Every reader of the carriers' algebra keys an atom on its spelling, and two atoms that convert without being identical — `f(a + b)` and `f(b + a)`, one call under two proofs of its bound, two functions whose bodies commute a sum — are one only because each checker classes them by its own conversion before any reader sees them. Without that a pair of them falls to the congruence, which compares operands in the order the term holds them, and a verdict turns on the order the binders were declared in; so the rows are stated at every order of the sweep.
+const ATOM_BINDERS: &[Binder] = &[
+    Binder {
+        name: "a",
+        type_: "Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "b",
+        type_: "Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "c",
+        type_: "Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "d",
+        type_: "Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "n",
+        type_: "Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "m",
+        type_: "Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "f",
+        type_: "(Nat) -> Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "g",
+        type_: "(Nat) -> Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "i",
+        type_: "Int",
+        needs: &[],
+    },
+    Binder {
+        name: "j",
+        type_: "Int",
+        needs: &[],
+    },
+    Binder {
+        name: "k",
+        type_: "Int",
+        needs: &[],
+    },
+    Binder {
+        name: "l",
+        type_: "Int",
+        needs: &[],
+    },
+    Binder {
+        name: "h",
+        type_: "(Int) -> Int",
+        needs: &[],
+    },
+    Binder {
+        name: "e",
+        type_: "(Int) -> Int",
+        needs: &[],
+    },
+    Binder {
+        name: "p",
+        type_: "(Nat) -> Bool",
+        needs: &[],
+    },
+    Binder {
+        name: "q",
+        type_: "(Nat) -> Bool",
+        needs: &[],
+    },
+    Binder {
+        name: "w",
+        type_: "(n: Nat, at: Holds(n < 10)) -> Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "p1",
+        type_: "Holds(a < 10)",
+        needs: &["a"],
+    },
+    Binder {
+        name: "p2",
+        type_: "Holds(a < 10)",
+        needs: &["a"],
+    },
+    Binder {
+        name: "q1",
+        type_: "Holds(b < 10)",
+        needs: &["b"],
+    },
+    Binder {
+        name: "q2",
+        type_: "Holds(b < 10)",
+        needs: &["b"],
+    },
+    Binder {
+        name: "u",
+        type_: "((Nat) -> Nat) -> Nat",
+        needs: &[],
+    },
+];
 
-/// [`ATOM_BINDERS`] declared the other way round, which mints every binder's identity in the opposite order.
-const ATOM_BINDERS_REVERSED: &str = "q: (Nat) -> Bool, p: (Nat) -> Bool, e: (Int) -> Int, h: (Int) -> Int, l: Int, k: Int, j: Int, i: Int, g: (Nat) -> Nat, f: (Nat) -> Nat, m: Nat, n: Nat, d: Nat, c: Nat, b: Nat, a: Nat";
+/// How many orders of [`ATOM_BINDERS`] the atom rows are stated at.
+const ATOM_ORDERS: usize = 16;
 
 const ATOMS_HELD: &[&str] = &[
     // A product's factors, commuted or not: the factor pairing reads them by identity.
@@ -38,11 +152,20 @@ const ATOMS_HELD: &[&str] = &[
     "Eq()(Bool/xor(p(a + b), q(c)), Bool/xor(q(c), p(b + a)))",
     "Eq()(Bool/not(p(a + b) && q(c)), Bool/not(q(c)) || Bool/not(p(b + a)))",
     "Eq()(p(a + b) || (p(b + a) && q(c)), p(a + b))",
-];
-
-// A candidate, and the gap forcing leaves: an atom that is no application keeps its insides as written, so two stuck `match`es whose branches commute a sum are two atoms, and the congruence pairs them by position. `documentation/roadmap/04-arithmetic/01-decided-by-spelling-or-cap.md` holds what would take it.
-const ATOMS_REFUSED: &[&str] = &[
+    // Two stuck `match`es whose arms commute a sum: neither is an application, so nothing but a checker's conversion says they are one, and two on a side leave no pair to hand on as a residual.
     "Eq()((match n | 0 => a + b | _ => c end) + (match m | 0 => c + d | _ => a end), (match m | 0 => d + c | _ => a end) + (match n | 0 => b + a | _ => c end))",
+    "Eq()((match n | 0 => a + b | _ => c end) * (match m | 0 => c + d | _ => a end), (match m | 0 => d + c | _ => a end) * (match n | 0 => b + a | _ => c end))",
+    // One call under two proofs of its bound. The first two rows leave one unpaired factor on a side and the third leaves two: conversion is transitive only where the third holds.
+    "Eq()(w(a, p1) * w(b, q1), w(a, p2) * w(b, q1))",
+    "Eq()(w(a, p2) * w(b, q1), w(b, q2) * w(a, p2))",
+    "Eq()(w(a, p1) * w(b, q1), w(b, q2) * w(a, p2))",
+    "Eq()(w(a, p1) + w(b, q1), w(b, q2) + w(a, p2))",
+    "Eq()(w(a, p1) == w(b, q1), w(b, q2) == w(a, p2))",
+    // Two functions whose bodies commute a sum, which differ under a binder.
+    "Eq()(u((x) => x + a) * u((x) => x + b), u((x) => b + x) * u((x) => a + x))",
+    "Eq()(u((x) => x + a) + u((x) => x + b), u((x) => b + x) + u((x) => a + x))",
+    // Three spellings of one atom are one monomial, so their coefficients merge.
+    "Eq()((match n | 0 => a + b + d | _ => c end) + (match n | 0 => b + a + d | _ => c end) + (match n | 0 => d + b + a | _ => c end), 3 * (match n | 0 => a + b + d | _ => c end))",
 ];
 
 const CARRIERS: &[Carrier] = &[
@@ -54,22 +177,10 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(f(x + y), f(y + x))",
             // A summand meets its own spelling. Summands pair by identity, and two occurrences of one operator are two terms while the signature holding them is checked — each carries its own witness metavariable, solved and not yet spliced — so the solved ones are substituted before the peel, without which the elaborator alone would refuse this as `x` against `y` under the positional congruence.
             "Eq()(f(x + 1) + f(y + 1), f(y + 1) + f(x + 1))",
-            // The composition of the two rows above. Cancellation pairs summands by identity and the fold leaves a stuck application's arguments as written, so `f(x + y)` would never meet `f(y + x)` inside a sum though conversion decides that pair on its own. `Nat::cancel_common` takes no reducer: what forces the summands' arguments is `force_atoms`, the conversion chain's one retry for every reader of atoms, asked only once the pair has decided nothing as it stood.
+            // The composition of the two rows above. Cancellation pairs summands by identity and the fold leaves a stuck application's arguments as written, so `f(x + y)` would never meet `f(y + x)` inside a sum though conversion decides that pair on its own. `Nat::cancel_common` takes no reducer and asks no judgment: what makes the two summands one is the checker classing the pair's atoms by its own conversion, the conversion chain's one retry for every reader of atoms, asked only once the pair has decided nothing as it stood.
             "Eq()(f(x + y) + g(y + z), g(z + y) + f(y + x))",
         ],
         refused: &[],
-    },
-    Carrier {
-        name: "Atoms up to their arguments",
-        binders: ATOM_BINDERS,
-        held: ATOMS_HELD,
-        refused: ATOMS_REFUSED,
-    },
-    Carrier {
-        name: "Atoms up to their arguments, their binders declared the other way round",
-        binders: ATOM_BINDERS_REVERSED,
-        held: ATOMS_HELD,
-        refused: ATOMS_REFUSED,
     },
     Carrier {
         name: "Nat under *",
@@ -758,4 +869,80 @@ fn every_row_is_on_the_side_the_compiler_puts_it() {
         .flat_map(|carrier| misplaced(carrier.name, &carrier.rows(), carrier.held.len()))
         .collect::<Vec<_>>();
     assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+#[test]
+fn every_atom_law_closes_at_every_order_of_its_binders() {
+    // The atom rows, apart from the carriers above because their binders are not one telescope but a sweep of them: one program per order, every row an `Eq/refl()` proof both checkers must accept, and at the first order every row read back as a goal as well.
+    for (order, binders) in orders(ATOM_BINDERS, ATOM_ORDERS).into_iter().enumerate() {
+        let rows = ATOMS_HELD
+            .iter()
+            .map(|claim| (binders.clone(), (*claim).to_owned()))
+            .collect::<Vec<_>>();
+        if let Err(failures) = closes(&rows) {
+            panic!(
+                "an atom law no longer closes under `{binders}`:\n{}",
+                failures.join("\n")
+            );
+        }
+        if order == 0 {
+            let found = misplaced("Atoms up to conversion", &rows, rows.len());
+            assert!(found.is_empty(), "{}", found.join("\n"));
+        }
+    }
+}
+
+#[test]
+fn a_step_taken_through_an_annotation_is_one_the_kernel_takes_in_one() {
+    // The elaborator compares a value's type with a `let`'s annotation and the annotation with the result type, each pair leaving one unpaired factor; the kernel compares the first type with the last, which leaves two. Both accept at every order only where conversion is transitive over them.
+    let binders = [
+        Binder {
+            name: "a",
+            type_: "Nat",
+            needs: &[],
+        },
+        Binder {
+            name: "b",
+            type_: "Nat",
+            needs: &[],
+        },
+        Binder {
+            name: "w",
+            type_: "(n: Nat, at: Holds(n < 10)) -> Nat",
+            needs: &[],
+        },
+        Binder {
+            name: "p1",
+            type_: "Holds(a < 10)",
+            needs: &["a"],
+        },
+        Binder {
+            name: "p2",
+            type_: "Holds(a < 10)",
+            needs: &["a"],
+        },
+        Binder {
+            name: "q1",
+            type_: "Holds(b < 10)",
+            needs: &["b"],
+        },
+        Binder {
+            name: "q2",
+            type_: "Holds(b < 10)",
+            needs: &["b"],
+        },
+        Binder {
+            name: "v",
+            type_: "Vec(Nat, w(a, p1) * w(b, q1))",
+            needs: &["a", "b", "w", "p1", "q1"],
+        },
+    ];
+    for binders in orders(&binders, ATOM_ORDERS) {
+        let source = format!(
+            "use /std/{{Nat, Vec, Io}}; use /std/Bool/{{Holds}};\npub let stepped({binders}) -> Vec(Nat, w(b, q2) * w(a, p2)) =\n    let through: Vec(Nat, w(a, p2) * w(b, q1)) = v;\n    through;\nIo/pure(())"
+        );
+        if let Err(error) = typecheck(&source) {
+            panic!("under `{binders}`: {error}");
+        }
+    }
 }

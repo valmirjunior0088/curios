@@ -34,7 +34,6 @@ mod test_support;
 
 use {
     super::{Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
-    curios_analysis::connectives_agree,
     curios_core::{
         Apply, Bound, Carrier, Cases, Cost, Cursor, Field, FuncType, Global, InductType, Instance,
         InstanceHead, Level, Lockstep, Many, MatchResult, Proj, Reducer, Scope, Step, Struct,
@@ -495,7 +494,7 @@ fn structural(
         // A `Bool` connective against a term that is no intrinsic at all — absorption's shape, `b || (b && c)` against the bare `b` — which the intrinsic congruence never sees: `curios-analysis`'s `connectives_agree` decides it equal or says nothing, and saying nothing leaves the pair where it was.
         //
         // Then two spellings of one recursive call: `force` keeps the folded application as a recursive call's normal form, while an arm's induction hypothesis is the raw stuck fold-match on the same argument. When the heads disagree, grant each side the one definitional unfolding `force` withheld and compare what results.
-        _ => match connectives_agree(kernel, this, that)? {
+        _ => match connectives_convert(kernel, history, this, that)? {
             true => Ok(true),
             false => unfolded_retry(kernel, history, this, that),
         },

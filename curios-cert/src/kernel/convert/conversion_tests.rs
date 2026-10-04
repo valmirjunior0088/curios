@@ -180,6 +180,20 @@ fn different_operations_do_not_convert() {
     assert_eq!(convert(&mut kernel, &nat_type(), &add, &mul), Ok(false));
 }
 
+/// Two stuck operations of one kind are each the whole of their side, so the pair has no atoms to class and is compared operand by operand. Were the pair handed back as its own two atoms, classing them would ask the comparison already in progress, which the recurrence rule assumes: mutation-checked against the guard in `curios-core`'s `atoms_of`.
+#[test]
+fn two_stuck_operations_on_different_operands_do_not_convert() {
+    let mut kernel = kernel();
+    let n = binder(0, "n");
+    let m = binder(1, "m");
+    let k = binder(2, "k");
+
+    let left = Term::intrinsic(Intrinsic::NatSub(Term::free_var(&n), Term::free_var(&k)));
+    let right = Term::intrinsic(Intrinsic::NatSub(Term::free_var(&m), Term::free_var(&k)));
+
+    assert_eq!(convert(&mut kernel, &nat_type(), &left, &right), Ok(false));
+}
+
 /// The free-monoid peel is what decides `n + 2 ≡ m + 2` by comparing `n` with `m` rather than comparing two opaque symbolic sums.
 #[test]
 fn a_shared_successor_floor_is_peeled_before_comparing() {

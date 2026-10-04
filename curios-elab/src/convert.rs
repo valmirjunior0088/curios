@@ -29,7 +29,6 @@ use {
         unfold_rec_apply,
     },
     crate::{metavar_origins, metavar_spines, zonk_solved_term_metas},
-    curios_analysis::connectives_agree,
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Free, Func, FuncType,
         InductType, Instance, InstanceHead, Intrinsic, Level, Lockstep, Many, Match, MatchResult,
@@ -1730,7 +1729,7 @@ impl Convert {
             if !matches!(
                 (&*this, &*that),
                 (Subterm::Intrinsic(_), Subterm::Intrinsic(_))
-            ) && connectives_agree(context, &this, &that)?
+            ) && connectives_convert(context, &this, &that)?
             {
                 continue;
             }

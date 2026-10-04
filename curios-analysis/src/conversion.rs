@@ -8,12 +8,12 @@
 //! 4. two connective trees flattened, their leaves forced;
 //! 5. two comparisons read through their linear views — one proposition where the views agree, and otherwise both respelled alike;
 //! 6. the peels, the product-factor and comparison-side pairings first;
-//! 7. steps 3 to 6 read once more with every atom's arguments forced, where they decided nothing ([`force_atoms`]);
+//! 7. where steps 3 to 6 decided nothing, the pair's atoms handed back to be classed ([`Pass::Atoms`]), and steps 3 to 6 read once more with each atom spelled as its class's representative ([`convert_classed`]);
 //! 8. the elaborator's packed-literal view ([`Driver::packed_view`]);
 //! 9. two numbers of one operation compared as numbers;
 //! 10. the congruence, each operand at the type its operation declares.
 //!
-//! **The chain decides; each checker discharges.** What it cannot settle comes back as an [`Outcome`] — a residual pair, or the congruence's levels and operands — rather than being compared here, because the two checkers compare differently and must: the elaborator enqueues and may solve, while the kernel compares in order under its active recursion history, whose keys include the goal and so must stay on the path that entered it. Nothing here calls a judgment.
+//! **The chain decides; each checker discharges.** What it cannot settle comes back — a residual pair, the congruence's levels and operands, or the atoms it needs classed before it can read on — rather than being compared here, because the two checkers compare differently and must: the elaborator enqueues and may solve, while the kernel compares in order under its active recursion history, whose keys include the goal and so must stay on the path that entered it. Nothing here calls a judgment.
 //!
 //! **Shared on the terms `curios-analysis` already states for itself.** The chain is algebra over the representation — the peels, the laws and the views are `curios-core`'s and `curios-algebra`'s, trusted by both checkers alike — and a second copy of it would be a second transcription of one function rather than a second opinion. What stays each checker's own is what does differ between them: the terms they are handed, how a residual is compared, and how levels are.
 //!
@@ -22,11 +22,11 @@
 use {
     curios_algebra::Conclusion,
     curios_core::{
-        Aligned, Intrinsic, Level, Nat, Operand, Probe, Produced, ReduceError, Reducer, Subterm,
-        Term, Var, Visit, align_comparisons, decide_bool, force_atoms, int_has_stuck_product,
-        int_normalize, int_same, is_bool_connective, normalize_bool, peel_bin, peel_bool,
-        peel_comparison, peel_int_pair, peel_list, peel_monomial, peel_nat_pair, peel_position,
-        peel_symmetric,
+        Aligned, Classes, Intrinsic, Level, Nat, Operand, Probe, Produced, ReduceError, Reducer,
+        Subterm, Term, Var, Visit, align_comparisons, atoms_of, classable, classed, decide_bool,
+        int_has_stuck_product, int_normalize, int_same, is_bool_connective, normalize_bool,
+        peel_bin, peel_bool, peel_comparison, peel_int_pair, peel_list, peel_monomial,
+        peel_nat_pair, peel_position, peel_symmetric,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -43,7 +43,15 @@ pub trait Driver: Reducer {
     fn syntax(&self) -> SyntaxRegistry;
 }
 
-/// What [`convert_intrinsics`] concluded, for the checker to act on.
+/// What the chain's first pass over a pair came to.
+pub enum Pass {
+    /// Settled as far as the chain settles anything: the outcome to discharge.
+    Settled(Outcome),
+    /// Nothing decided, and some two of the pair's atoms may be one: the checker classes them by its own conversion ([`Classes::of`]) and enters [`convert_classed`].
+    Atoms(Vec<Term>),
+}
+
+/// What the chain concluded, for the checker to act on.
 pub enum Outcome {
     Equal,
     Unequal,
@@ -70,12 +78,36 @@ pub struct Obligation {
     pub that: Term,
 }
 
-/// Whether `this` and `that`, two intrinsics both checkers reached conversion with, are the same value — the chain the module documentation lays out, up to what only the driver can discharge.
+/// Whether `this` and `that`, two intrinsics both checkers reached conversion with, are the same value — the chain the module documentation lays out, up to what only the driver can discharge, and stopping at step 7 where the pair has atoms to class.
 pub fn convert_intrinsics(
     driver: &mut impl Driver,
     this: Intrinsic,
     that: Intrinsic,
+) -> Result<Pass, ReduceError> {
+    chain(driver, this, that, None)
+}
+
+/// [`convert_intrinsics`] entered again with the partition its atoms were classed into: the whole chain, step 7 reading the pair with each atom spelled as its class's representative.
+pub fn convert_classed(
+    driver: &mut impl Driver,
+    this: Intrinsic,
+    that: Intrinsic,
+    classes: &Classes,
 ) -> Result<Outcome, ReduceError> {
+    match chain(driver, this, that, Some(classes))? {
+        Pass::Settled(outcome) => Ok(outcome),
+        // The chain hands its atoms back only where it was given no partition.
+        Pass::Atoms(_) => Ok(Outcome::Unequal),
+    }
+}
+
+/// The chain over one pair: with no partition it stops at step 7 where there are atoms to class, and with one it reads through.
+fn chain(
+    driver: &mut impl Driver,
+    this: Intrinsic,
+    that: Intrinsic,
+    classes: Option<&Classes>,
+) -> Result<Pass, ReduceError> {
     let this = driver.prepare(this);
     let that = driver.prepare(that);
 
@@ -101,25 +133,41 @@ pub fn convert_intrinsics(
                 .unwrap_or(that);
             match (as_intrinsic(&this), as_intrinsic(&that)) {
                 (Some(this), Some(that)) => (this, that),
-                _ => return Ok(Outcome::Residual(this, that)),
+                _ => return Ok(Pass::Settled(Outcome::Residual(this, that))),
             }
         }
     };
 
-    // Steps 3 to 6 read the pair through the carriers' algebra ([`read`]); what they leave undecided is read once more with every atom's arguments forced (step 7, [`read_forced`]), and what that leaves undecided goes on to the congruence as the reading left it.
+    // Steps 3 to 6 read the pair through the carriers' algebra ([`read`]); what they leave undecided is handed back for its atoms to be classed, or read once more as its partition spells it (step 7, [`read_classed`]), and what that leaves undecided goes on to the congruence as the first reading left it.
     let (this, that) = match read(driver, this.clone(), that.clone())? {
-        Read::Decided(outcome) => return Ok(outcome),
-        Read::Undecided(read) => match read_forced(driver, &this, &that)? {
-            Some(outcome) => return Ok(outcome),
-            None => *read,
-        },
+        Read::Decided(outcome) => return Ok(Pass::Settled(outcome)),
+        Read::Undecided(read) => {
+            match classes {
+                None => {
+                    let atoms = atoms_of(
+                        driver,
+                        &Term::intrinsic(this.clone()),
+                        &Term::intrinsic(that.clone()),
+                    )?;
+                    if classable(&atoms) {
+                        return Ok(Pass::Atoms(atoms));
+                    }
+                }
+                Some(classes) => {
+                    if let Some(outcome) = read_classed(driver, &this, &that, classes)? {
+                        return Ok(Pass::Settled(outcome));
+                    }
+                }
+            }
+            *read
+        }
     };
 
     if let Some(view) = driver.packed_view(&this, &that) {
-        return Ok(match view {
+        return Ok(Pass::Settled(match view {
             true => Outcome::Equal,
             false => Outcome::Unequal,
-        });
+        }));
     }
 
     // The shapes carry everything that is not a term — which operation, which grain, which literal, which successor floor, which foreign row — so comparing them settles the operation's identity in one derived equality. Their result levels are the driver's to compare.
@@ -138,7 +186,7 @@ pub fn convert_intrinsics(
         true => {
             let signature = this.signature(&driver.syntax());
             if same_number(&signature.produced, &this, &that) {
-                return Ok(Outcome::Equal);
+                return Ok(Pass::Settled(Outcome::Equal));
             }
             Some(
                 this_operands
@@ -158,11 +206,11 @@ pub fn convert_intrinsics(
         }
     };
 
-    Ok(Outcome::Congruence(Congruence {
+    Ok(Pass::Settled(Outcome::Congruence(Congruence {
         this_levels: this.result_universes().to_vec(),
         that_levels: that.result_universes().to_vec(),
         operands,
-    }))
+    })))
 }
 
 /// What reading a pair through the carriers' algebra came to.
@@ -253,19 +301,20 @@ fn read(driver: &mut impl Driver, this: Intrinsic, that: Intrinsic) -> Result<Re
     Ok(Read::Undecided(Box::new((this, that))))
 }
 
-/// Step 7: `this` and `that` read once more with every atom's arguments forced — `None` where the forcing moved neither side, or the forced pair decided nothing either.
+/// Step 7: `this` and `that` read once more with each atom spelled as its class's representative — `None` where the partition moved neither side, or the classed pair decided nothing either.
 ///
-/// **Every reader above keys an atom on its spelling**, and the fold leaves a stuck application's arguments exactly as written, so `f(a + b)` and `f(b + a)` are two atoms to all of them though conversion decides that pair the moment it compares it directly. Left there, such a pair falls to the congruence, whose operand order is a structural hash, so one equation would hold or fail with the order its binders were declared in. [`force_atoms`] forces what the readers read, once and for all of them, and only where the pair as it stood decided nothing — so it costs nothing on a pair that already decided.
+/// **Every reader above keys an atom on its spelling**, so two atoms that convert without being identical — `f(a + b)` and `f(b + a)`, or one call under two proofs of its bound — are two atoms to all of them, though the checker's conversion decides that pair the moment it compares it. Left there, such a pair falls to the congruence, which compares operands in the order the term holds them, so one equation would hold or fail with the order its operands were written in or its binders declared in. The partition is the checker's answer to which atoms are one, and it is asked for only where the pair as it stood decided nothing.
 ///
-/// **The congruence still meets the spelling it was handed.** A forced pair that decides nothing is dropped, so no reordered term reaches a checker's comparison; one that decides hands on an outcome whose residuals are the forced spelling's, a pair definitionally equal to the one asked about.
-fn read_forced(
+/// **The congruence still meets the spelling it was handed.** A classed pair that decides nothing is dropped, so no respelled term reaches a checker's comparison; one that decides hands on an outcome whose residuals are the classed spelling's, a pair definitionally equal to the one asked about.
+fn read_classed(
     driver: &mut impl Driver,
     this: &Intrinsic,
     that: &Intrinsic,
+    classes: &Classes,
 ) -> Result<Option<Outcome>, ReduceError> {
     let this = Term::intrinsic(this.clone());
     let that = Term::intrinsic(that.clone());
-    let Some((this, that)) = force_atoms(driver, &this, &that)? else {
+    let Some((this, that)) = classed(driver, &this, &that, classes)? else {
         return Ok(None);
     };
     // A node the readers read through is rebuilt as the same node, so both sides are still intrinsics.
@@ -278,21 +327,45 @@ fn read_forced(
     })
 }
 
-/// Whether a `Bool` connective on either side agrees with the other side at every assignment of their atoms — the truth table both checkers put a connective to when the other side is no intrinsic at all, absorption's shape: `b || (b && c)` against the bare `b`, which the intrinsic chain never sees. `false` says nothing, and leaves the pair where it was. Where each checker asks it is its own: the elaborator before its dispatch, the kernel in its fallback ahead of its unfolding retry.
+/// What [`connectives_agree`] came to.
+pub enum Agreement {
+    /// The two sides agree at every assignment of their atoms.
+    Agree,
+    /// Nothing decided, which says nothing of the pair and leaves it where it was.
+    Silent,
+    /// Nothing decided, and some two of the pair's atoms may be one: the checker classes them and asks [`connectives_agree_classed`].
+    Atoms(Vec<Term>),
+}
+
+/// Whether a `Bool` connective on either side agrees with the other side at every assignment of their atoms — the truth table both checkers put a connective to when the other side is no intrinsic at all, absorption's shape: `b || (b && c)` against the bare `b`, which the intrinsic chain never sees. Where each checker asks it is its own: the elaborator before its dispatch, the kernel in its fallback ahead of its unfolding retry.
 ///
-/// The table keys its atoms on spelling, as every reader in the chain does, so a pair it does not decide is put to it once more with every atom's arguments forced ([`force_atoms`]), as the chain's step 7 reads its own: `p(a + b) || (p(b + a) && q)` against `p(a + b)` is absorption once the two leaves are one atom.
+/// The table keys its atoms on spelling, as every reader in the chain does, so a pair it does not decide hands its atoms back to be classed, as the chain's step 7 hands its own: `p(a + b) || (p(b + a) && q)` against `p(a + b)` is absorption once the two leaves are one atom.
 pub fn connectives_agree(
     reducer: &mut impl Reducer,
     this: &Term,
     that: &Term,
-) -> Result<bool, ReduceError> {
+) -> Result<Agreement, ReduceError> {
     if !(is_bool_connective(this) || is_bool_connective(that)) {
-        return Ok(false);
+        return Ok(Agreement::Silent);
     }
     if decide_bool(reducer, this, that)? {
-        return Ok(true);
+        return Ok(Agreement::Agree);
     }
-    match force_atoms(reducer, this, that)? {
+    let atoms = atoms_of(reducer, this, that)?;
+    Ok(match classable(&atoms) {
+        true => Agreement::Atoms(atoms),
+        false => Agreement::Silent,
+    })
+}
+
+/// [`connectives_agree`] asked again of a pair it handed [`Agreement::Atoms`] back for, read with each atom spelled as its class's representative. `false` says nothing.
+pub fn connectives_agree_classed(
+    reducer: &mut impl Reducer,
+    this: &Term,
+    that: &Term,
+    classes: &Classes,
+) -> Result<bool, ReduceError> {
+    match classed(reducer, this, that, classes)? {
         Some((this, that)) => decide_bool(reducer, &this, &that),
         None => Ok(false),
     }
