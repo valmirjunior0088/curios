@@ -305,7 +305,7 @@ f(@Nat, x)
 join(use custom_show, values)
 ```
 
-Omitted implicit arguments are inferred. An omitted implicit whose type is a proposition — a bound — is filled where the proposition reduces to `True`, and otherwise proved from the facts in scope where it follows from them by linear arithmetic ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). Omitted witness arguments are resolved as described in [Witness resolution](#witness-resolution).
+Omitted implicit arguments are inferred, and never picked: where two implicits stand under an operation that commutes — `x * y` against `a * b`, which `x := a` and `x := b` both satisfy — the call is refused as a conversion it cannot decide, naming the implicits never solved, until one is written or the expected type fixes it. An omitted implicit whose type is a proposition — a bound — is filled where the proposition reduces to `True`, and otherwise proved from the facts in scope where it follows from them by linear arithmetic ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). Omitted witness arguments are resolved as described in [Witness resolution](#witness-resolution).
 
 A call fills exactly one parameter list — the one its head's type opens with. A function whose result is itself a function is called once per list: `let f(T: Type) -> (Nat) -> Type` is written `f(T)(n)`, and so is an indexed family, `Sized(T)(n)`. A list whose parameters are all hidden is no exception: its call carries its `@` and `use` arguments, or none, ahead of the next list's call — `Eq()(x, y)`, `Eq(@Nat)(x, y)`. Why is [A call fills one parameter group](design/theory/a-call-fills-one-parameter-group.md).
 

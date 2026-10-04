@@ -5,7 +5,7 @@
 use {
     super::Intrinsic,
     crate::{Subterm, Term},
-    curios_algebra::{Carrier, Operation},
+    curios_algebra::{Carrier, Family, Operation, declares},
     curios_num::Grain,
 };
 
@@ -368,6 +368,20 @@ impl Intrinsic {
                 operation: inner_operation,
                 operands: Operands::One([inner_operand]),
             } if operation.undoes(carrier, inner_operation, inner_carrier) => Some(inner_operand),
+            _ => None,
+        }
+    }
+
+    /// The carrier, the operation and the two operands of this intrinsic, where it is an operation the law table declares commutative — the one statement of which operations denote one value with their operands in either order.
+    pub fn commutative(&self) -> Option<((Carrier, Operation), &Term, &Term)> {
+        match self.algebra() {
+            Declaration::Operation {
+                carrier,
+                operation,
+                operands: Operands::Two([left, right]),
+            } if declares(carrier, operation, Family::Commutativity) => {
+                Some(((carrier, operation), left, right))
+            }
             _ => None,
         }
     }

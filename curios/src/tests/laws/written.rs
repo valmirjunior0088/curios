@@ -946,3 +946,42 @@ fn a_step_taken_through_an_annotation_is_one_the_kernel_takes_in_one() {
         }
     }
 }
+
+/// An item whose body calls a function with two implicit arguments standing under a commutative operation, at `a` declared before `b` and after it.
+fn implicit_under(operation: &str, result: &str, body: &str) -> Vec<String> {
+    ["a: Nat, b: Nat", "b: Nat, a: Nat"]
+        .iter()
+        .map(|declared| {
+            format!(
+                "use /std/{{Nat, Vec, Io}};\npub let item({declared}, g: (@x: Nat, @y: Nat, v: Vec(Nat, x {operation} y)) -> Vec(Nat, x), w: Vec(Nat, a {operation} b)) -> {result} =\n    {body};\nIo/pure(())"
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn an_implicit_with_two_solutions_is_refused_and_never_picked() {
+    // `?x ⋆ ?y` against `a ⋆ b` has two solutions where `⋆` commutes, and the order a term holds its operands in is no reason to commit one: under a product it is a hash, which moves with the order `a` and `b` were declared in, so a pick would make `g(w)` a `Vec(Nat, a)` under one telescope and a `Vec(Nat, b)` under the other. The call is refused under both, naming the conversion it could not decide.
+    for operation in ["*", "+"] {
+        // No expected type reaches the call, so nothing but the argument says what `x` is.
+        for source in implicit_under(operation, "{}", "let _ = g(w); ()") {
+            let error = typecheck(&source).expect_err("an implicit with two solutions is picked");
+            assert!(
+                error.contains("cannot decide a postponed conversion"),
+                "refused, but not as a conversion left undecided:\n{error}"
+            );
+        }
+    }
+}
+
+#[test]
+fn an_implicit_with_one_solution_is_solved_through_a_commutative_operation() {
+    // With `x` written, one operand of each side pairs by identity and the other two are what is left: `?y` against `b`, whichever way the operands stand.
+    for operation in ["*", "+"] {
+        for source in implicit_under(operation, "Vec(Nat, a)", "g(@a, w)") {
+            if let Err(error) = typecheck(&source) {
+                panic!("{source}\n{error}");
+            }
+        }
+    }
+}

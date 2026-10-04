@@ -148,3 +148,42 @@ fn peel_comparison_declines_where_no_side_is_shared() {
         .is_none()
     );
 }
+
+// One operand paired on each side, in either position, leaves the other two as a residual that is sufficient: the congruence of a commutative operation, read without the order the operands stand in.
+#[test]
+fn peel_commutative_pairs_one_operand_and_hands_back_the_other_two() {
+    let (x, y, z) = (sym(0, "x"), sym(1, "y"), sym(2, "z"));
+    for (left, right) in [
+        (and(x.clone(), y.clone()), and(x.clone(), z.clone())),
+        (and(x.clone(), y.clone()), and(z.clone(), x.clone())),
+        (and(y.clone(), x.clone()), and(x.clone(), z.clone())),
+        (and(y.clone(), x.clone()), and(z.clone(), x.clone())),
+    ] {
+        assert_eq!(
+            peel_commutative(&left, &right),
+            Some(Conclusion::Sufficient((y.clone(), z.clone()))),
+        );
+    }
+}
+
+// The controls: no operand paired is no pairing, which is the one case a positional congruence would still compare; an ordered comparison and a difference keep their positions; and two operations are not one.
+#[test]
+fn peel_commutative_declines_where_no_operand_is_paired_or_the_operation_does_not_commute() {
+    let (w, x, y, z) = (sym(0, "w"), sym(1, "x"), sym(2, "y"), sym(3, "z"));
+    assert!(peel_commutative(&and(w, x.clone()), &and(y.clone(), z.clone())).is_none());
+    assert!(
+        peel_commutative(
+            &Intrinsic::NatLt(x.clone(), y.clone()),
+            &Intrinsic::NatLt(x.clone(), z.clone())
+        )
+        .is_none()
+    );
+    assert!(
+        peel_commutative(
+            &Intrinsic::NatSub(x.clone(), y.clone()),
+            &Intrinsic::NatSub(x.clone(), z.clone())
+        )
+        .is_none()
+    );
+    assert!(peel_commutative(&and(x.clone(), y), &Intrinsic::BoolOr(x, z)).is_none());
+}

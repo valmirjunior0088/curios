@@ -180,7 +180,7 @@ fn a_metavariable_is_solved_through_every_law_that_can_solve_it() {
     let items = rows(&declared())
         .iter()
         .enumerate()
-        .filter_map(|(index, row)| Some((solves(row)?, solving(index, row)?)))
+        .filter_map(|(index, row)| Some((solves(row), solving(index, row)?)))
         .collect::<Vec<_>>();
     assert!(items.iter().any(|(expected, _)| *expected));
     let check = |items: &[&String]| {
@@ -214,21 +214,18 @@ fn a_metavariable_is_solved_through_every_law_that_can_solve_it() {
     assert!(misplaced.is_empty(), "{}", misplaced.join("\n\n"));
 }
 
-/// Whether a metavariable standing for one of `row`'s atoms is solved through the law, and `None` where the answer turns on a hash. Not where the law is decided by operand identity or by the truth table: the peel that commutes an operation's operands compares them as written, the `&&` and `||` leaf sets are sets of terms, and the truth table reads a metavariable as one more atom — each decides an equation between known atoms and proposes no solution for an unknown one, which is incompleteness in the refusing direction. A `Nat` or `Int` equality's commutativity solves: the alignment puts each side where its atoms' ranks put it, and a rank is a structural hash, so the two comparisons' sides are paired by identity rather than by that order (`peel_comparison`).
-fn solves(row: &Row) -> Option<bool> {
-    match (row.carrier, row.operation, row.law.family) {
-        (
-            Carrier::Natural | Carrier::Integer,
-            Operation::Equal | Operation::Unequal,
-            Family::Commutativity,
-        ) => Some(true),
-        (
-            _,
-            Operation::And | Operation::Or | Operation::Xor | Operation::Equal | Operation::Unequal,
-            Family::Commutativity,
-        )
-        | (Carrier::Boolean, _, Family::Distribution(_)) => Some(false),
-        _ => Some(true),
+/// Whether a metavariable standing for one of `row`'s atoms is solved through the law. A commutativity solves at every carrier: one operand of each side pairs by identity, in either position, and the two left over are compared, which is where the metavariable meets its partner (`peel_commutative`, and `peel_comparison` and the cancellations before it). A Boolean distribution does not: the truth table reads a metavariable as one more atom, so it decides an equation between known atoms and proposes no solution for an unknown one, which is incompleteness in the refusing direction.
+///
+/// Nor does a factor distributed over two summands, `w * (y + z)` against `x * y + x * z`: distributed, the metavariable stands in both of two summands, neither of which pairs with a summand of the other side by identity, and no pairing is committed by the order the summands stand in. Its mirror, `(w + y) * z`, solves, since one summand of each side cancels and one is left.
+fn solves(row: &Row) -> bool {
+    match (row.carrier, row.law.family) {
+        (Carrier::Boolean, Family::Distribution(_)) => false,
+        (Carrier::Natural | Carrier::Integer, Family::Distribution(_)) => !matches!(
+            &row.law.left,
+            Expr::Apply { operands, .. }
+                if matches!(operands.as_slice(), [Expr::Var { .. }, Expr::Apply { .. }])
+        ),
+        _ => true,
     }
 }
 

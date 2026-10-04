@@ -33,7 +33,8 @@ pub(super) fn convert_intrinsic(
     };
     match outcome {
         Outcome::Equal => Ok(true),
-        Outcome::Unequal => Ok(false),
+        // The kernel is handed finished terms: operands nothing paired are not going to be.
+        Outcome::Unequal | Outcome::Unpaired => Ok(false),
         Outcome::Residual(this, that) => ground(kernel, history, &this, &that),
         Outcome::Congruence(Congruence {
             this_levels,

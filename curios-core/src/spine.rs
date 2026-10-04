@@ -65,6 +65,31 @@ pub fn peel_symmetric(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     }
 }
 
+/// Two applications of one operation the law table declares commutative, with one operand of each paired by identity in either order: the two operands left over are a [`Conclusion::Sufficient`] residual. `None` for anything else — both operands paired is an equality a reader before this one decides, and neither paired is no pairing at all — so nothing is ever concluded from the order a term holds its operands in.
+///
+/// **This is the congruence of a commutative operation.** A positional congruence compares the first operand with the first and the second with the second, and the order a term holds two operands in is how they were written or, where a fold or a view sorts them, a structural hash: so a positional verdict moves with the spelling or with the order binders were declared in, and where an operand is an unsolved metavariable it also picks which of two solutions is committed. Pairing by identity reads neither.
+///
+/// **Conversion's alone**, as the monomial pairing is: `a ⋆ b` against `a ⋆ d` holds where `b` and `d` are one and may hold where they are not — `a && b` against `a && d` at `a = false` — so the residual is sufficient and inversion may not deduce it. It is not in [`peel_intrinsic`].
+pub fn peel_commutative(left: &Intrinsic, right: &Intrinsic) -> Option<Conclusion<(Term, Term)>> {
+    let (this, a, b) = left.commutative()?;
+    let (that, c, d) = right.commutative()?;
+    if this != that {
+        return None;
+    }
+    let (left, right) = if a == c {
+        (b, d)
+    } else if a == d {
+        (b, c)
+    } else if b == c {
+        (a, d)
+    } else if b == d {
+        (a, c)
+    } else {
+        return None;
+    };
+    Some(Conclusion::Sufficient((left.clone(), right.clone())))
+}
+
 /// Two monomials of one carrier — two `Nat` products or two `Int` products — with their factors paired by identity before anything reads them in order: one coefficient and one multiset of factors is `Equal`, and one factor left on each side is `Sufficient` over that pair. `None` for anything else, so the caller's shape congruence decides.
 ///
 /// **A monomial's factor order is a hash, and a hash is not a value.** The product fold sorts factors by their structural hash, which is canonical only while every factor is what it will stay: an unsolved metavariable hashes as itself and not as the term it is solved to, and so does a factor convertible to another without being identical. The shape congruence compared factors in that order, so `c · ?d · k` against `d · c · k` paired `c` with `d` and refused, where cancellation leaves `?d` against `d` and solves it — and whether the positions happened to line up could turn on a comment line elsewhere in the file. Summands have had exactly this pairing, by cancellation, all along; this is the product's.

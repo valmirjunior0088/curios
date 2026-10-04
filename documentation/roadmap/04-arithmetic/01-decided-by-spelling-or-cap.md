@@ -8,15 +8,11 @@ The first capability below, an atom being one where conversion says so, is refin
 
 - **One chain for both checkers.** `curios-analysis`'s `convert_intrinsics` reads two intrinsics through the carriers' algebra and hands back what it cannot settle — a residual pair, the congruence's operands, or the atoms it needs classed — for each checker to discharge its own way; it calls no judgment ([Intrinsic fold laws and the free-monoid peel](../../design/soundness/conversion/intrinsic-fold-laws-and-the-free-monoid-peel.md)).
 - **Atom identity is spelling, and a checker classes what the readers leave undecided.** `curios-algebra` reasons over handles and leaves identity to its caller; `curios-core`'s `atoms` module hands one handle per term as written, up to universe instances at `Nat` and `Int`. Where the readers decide nothing of a pair, each checker says by its own conversion which of the pair's atoms are one, and the pair is read again with each atom spelled as its class's representative.
-- **The congruence compares by position.** What is still undecided is compared operand by operand in the order the term holds them: a sum's summands as they were written, and a product's factors and an equality's sides in the order of their structural hashes.
+- **A commutative operation pairs its operands.** For a row the law table declares commutative, one operand of each side is paired by identity in either position and the other two are a sufficient residual; where none pairs, the kernel answers unequal and the elaborator parks the problem while a metavariable is unsolved. Every other operation is compared operand by operand, in the order its operands mean.
 
 ### The gap
 
-- **An implicit argument is picked.** With `g : (@x: Nat, @y: Nat, v: Vec(Nat, x * y)) -> Vec(Nat, x)` and `w : Vec(Nat, a * b)`, `g(w)` is a `Vec(Nat, a)` where `a` is declared before `b` and a `Vec(Nat, b)` where `b` is declared first: `?x * ?y` against `a * b` has two solutions, and the congruence commits the one its order pairs.
-- **A verdict can still turn on an order where a classing leaves two atoms apart.** A checker is asked only about two atoms that may be one, and the elaborator leaves apart a pair it could make one only by solving a metavariable; two such atoms on each side of a commutative operation fall to the congruence, whose order is how the operands were written or a hash.
 - **A refusal does not say what was declined.** Operands left unpaired and a truth table past its cap both read as a type mismatch.
-
-Neither admits a false equation: every verdict is `Equal` from a pairing or from a residual the checker itself compares.
 
 This is the relation Coq Modulo Theory defines — a term's cap compared in the theory, its aliens by conversion, and the whole transitive (Jouannaud and Strub, 2017) — and the identity Mathlib's `AtomM` keeps, an atom being a class of terms up to definitional equality.
 
@@ -29,23 +25,11 @@ This is the relation Coq Modulo Theory defines — a term's cap compared in the 
 
 ### Stages
 
-1. **A commutative operation pairs its operands.** For a row the table declares commutative the congruence pairs operands by identity in either order: one pair matched hands the other back as a sufficient residual, and none matched is unpaired. The kernel reads unpaired as unequal; the elaborator parks the problem while a metavariable is unsolved and reports a survivor as a postponed conversion. This is the one stage that refuses what was accepted, and a program resting on a picked implicit writes it. Check: `g(w)` is refused at both declaration orders and accepted with `@x`, a single unpaired operand still solves its metavariable at every commutative row, and no verdict and no inferred type moves across a sweep of binder orders.
-2. **A refusal says what was declined.** The chain returns why it declined beside its outcome — operands unpaired, or the truth table past its cap — and the elaborator's mismatch report says so. Check: a diagnostics test for each.
+1. **A refusal says what was declined.** The chain returns why it declined beside its outcome — operands unpaired, or the truth table past its cap — and the elaborator's mismatch report says so. Check: a diagnostics test for each.
 
 ### Verification
 
-Held by tests: `tests::laws::written`'s `every_atom_law_closes_at_every_order_of_its_binders` and `a_step_taken_through_an_annotation_is_one_the_kernel_takes_in_one`, and `tests::laws::audit`'s `every_commutative_law_holds_over_atoms_that_differ_in_a_proof`, each at a sweep of binder orders that keeps a binder after the binders its type names.
-
-The implicit is a program on standard input to `cargo run --release --package curios -- wonder diagnostics -`, whose goal reports `r : Vec(Nat, a)`, and `r : Vec(Nat, b)` with `b` declared before `a`:
-
-```crs
-use /std/{Nat, Vec, Io};
-pub let law0(a: Nat, b: Nat, g: (@x: Nat, @y: Nat, v: Vec(Nat, x * y)) -> Vec(Nat, x), w: Vec(Nat, a * b)) -> {} =
-    let r = g(w);
-    let t: ? = r;
-    ();
-Io/pure(())
-```
+Held by tests: `tests::laws::written`'s `every_atom_law_closes_at_every_order_of_its_binders` and `a_step_taken_through_an_annotation_is_one_the_kernel_takes_in_one`, and `tests::laws::audit`'s `every_commutative_law_holds_over_atoms_that_differ_in_a_proof`, each at a sweep of binder orders that keeps a binder after the binders its type names; and by `an_implicit_with_two_solutions_is_refused_and_never_picked` and `an_implicit_with_one_solution_is_solved_through_a_commutative_operation`, at `a` declared before `b` and after it.
 
 ### Rejected
 
@@ -60,8 +44,6 @@ Io/pure(())
 
 ### Completion criteria
 
-- No verdict and no inferred type moves with the order binders are declared in or operands are written in.
-- An ambiguous implicit is refused with its equation.
 - A refusal for unpaired operands or for the truth table's cap says so.
 
 ### Retirement
@@ -94,11 +76,11 @@ The cap is also a place conversion is not transitive, by design: with `A` the co
 
 ## Polynomial unification proposals
 
-**Capability wanted.** Broader polynomial and sign reasoning, and solving proposals beyond today's, so unification can propose a solution where a metavariable sits inside a polynomial equation.
+**Capability wanted.** Broader polynomial and sign reasoning, and solving proposals beyond today's, so unification can propose a solution where a metavariable sits inside a polynomial equation. Today a metavariable is solved through a commutative operation only where one operand of each side pairs by identity and one is left: `?w * (y + z)` against `x * y + x * z`, which distributes to two summands each holding `?w`, is left undecided though `?w := x` is its one solution, since no pairing is committed by the order the operands stand in.
 
 **Previously discussed.** A ring procedure sharing the appropriate mathematics of `Nat` and `Int`, with its solver on the elaborator's side of the certifier's dependency closure; the elaborator chooses solutions and the certifier checks what reaches it.
 
-**Still to refine.** The fragment, the treatment of natural coefficients and integer signs, opaque atoms, and where a proposal ends and a search belongs to [the elaborator's search over the facts in scope](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md) instead.
+**Still to refine.** Whether each pairing of two unpaired operands is put to the elaborator's sandbox and the one that alone converts committed, which would solve the distributed factor and still refuse `?x * ?y` against `a * b`, where both pairings convert. The fragment, the treatment of natural coefficients and integer signs, opaque atoms, and where a proposal ends and a search belongs to [the elaborator's search over the facts in scope](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md) instead.
 
 ## A reflection law for `Bytes/eql`
 

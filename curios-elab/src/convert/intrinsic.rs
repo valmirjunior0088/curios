@@ -39,6 +39,8 @@ pub(crate) fn convert_intrinsic(
     match outcome {
         Outcome::Equal => Ok(true),
         Outcome::Unequal => Ok(false),
+        // Operands nothing paired: a mismatch, which the drain parks rather than reports where either side still holds an unsolved metavariable, since solving one may pair them. Nothing is enqueued, so no solution is picked by the order the operands stand in.
+        Outcome::Unpaired => Ok(false),
         Outcome::Residual(this, that) => {
             cmp.enqueue(Term::type_ground(), this, that);
             Ok(true)

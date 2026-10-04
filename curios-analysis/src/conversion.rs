@@ -25,8 +25,8 @@ use {
         Aligned, Classes, Intrinsic, Level, Nat, Operand, Probe, Produced, ReduceError, Reducer,
         Subterm, Term, Var, Visit, align_comparisons, atoms_of, classable, classed, decide_bool,
         int_has_stuck_product, int_normalize, int_same, is_bool_connective, normalize_bool,
-        peel_bin, peel_bool, peel_comparison, peel_int_pair, peel_list, peel_monomial,
-        peel_nat_pair, peel_position, peel_symmetric,
+        peel_bin, peel_bool, peel_commutative, peel_comparison, peel_int_pair, peel_list,
+        peel_monomial, peel_nat_pair, peel_position, peel_symmetric,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -59,6 +59,8 @@ pub enum Outcome {
     Residual(Term, Term),
     /// The two sides as one operation: what is left is its congruence.
     Congruence(Congruence),
+    /// The two sides as one commutative operation with no operand of one paired with an operand of the other. To the kernel, which is handed finished terms, they are unequal; to the elaborator they are unequal unless a metavariable still stands in one, which may pair them once it is solved.
+    Unpaired,
 }
 
 /// A congruence to discharge: the two sides' result levels first, then each operand pair in order.
@@ -188,6 +190,10 @@ fn chain(
             if same_number(&signature.produced, &this, &that) {
                 return Ok(Pass::Settled(Outcome::Equal));
             }
+            // A commutative operation's operands are paired by the readers above, never compared by position: the order a term holds them in is a spelling or a hash, and a verdict or a solution that followed it would move with either. What reaches here has no operand paired.
+            if this.commutative().is_some() {
+                return Ok(Pass::Settled(Outcome::Unpaired));
+            }
             Some(
                 this_operands
                     .into_iter()
@@ -296,6 +302,11 @@ fn read(driver: &mut impl Driver, this: Intrinsic, that: Intrinsic) -> Result<Re
             }
             Conclusion::Undecided => {}
         }
+    }
+
+    // A commutative operation with one operand paired on each side: the other two are what is left to compare. Asked last, since every reader above pairs more than one operand where it pairs any.
+    if let Some(Conclusion::Sufficient((left, right))) = peel_commutative(&this, &that) {
+        return Ok(Read::Decided(Outcome::Residual(left, right)));
     }
 
     Ok(Read::Undecided(Box::new((this, that))))
