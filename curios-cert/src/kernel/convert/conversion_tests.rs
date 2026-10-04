@@ -206,29 +206,12 @@ fn any_two_terms_converge_at_a_type_with_no_field() {
     let applied = |head: u32, hint: &str, argument: usize| {
         Term::apply(Term::free_var(&binder(head, hint)), [nat(argument)])
     };
-    let mut declare = |path: &str, fields: Telescope<()>| {
-        let name = Global::Authored(Qualifier::from([path]));
-        kernel.declare_struct(
-            &name,
-            &StructDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(fields),
-                result_sort: Term::type_ground(),
-                module: Qualifier::from([path]),
-                rep_public: true,
-                polarities: Vec::new(),
-                plicities: Vec::new(),
-            },
-        );
-
-        Term::from(Subterm::StructType(StructType {
-            name,
-            universes: Vec::new(),
-            params: Vec::new(),
-        }))
-    };
-    let field_less = declare("U", Telescope::done(()));
-    let one_field = declare("S", Telescope::build([(binder(8, "a"), nat_type())], ()));
+    let field_less = declare_struct(&mut kernel, "U", Telescope::done(()));
+    let one_field = declare_struct(
+        &mut kernel,
+        "S",
+        Telescope::build([(binder(8, "a"), nat_type())], ()),
+    );
 
     let unit = Term::tuple_type_unit();
     let record_of_units = Term::tuple_type([
@@ -253,6 +236,85 @@ fn any_two_terms_converge_at_a_type_with_no_field() {
     );
     assert_eq!(convert(&mut kernel, &record_of_a_number, &u, &v), Ok(false));
     assert_eq!(convert(&mut kernel, &one_field, &u, &v), Ok(false));
+}
+
+/// A literal's eta is the goal type's to refuse. At a type former that is not the literal's own the two sides are not of one type, and the neutral restriction alone would let a literal with no field — whose walk compares nothing — convert with any neutral: a lambda, the unit literal and a field-less struct's literal against a neutral at `Nat`, and that struct's literal at another struct, are refused. Each is still taken at the literal's own type, and at `Type`, which says nothing. The elaborator's twin of this proposition shares the name.
+///
+/// Mutation-checked: without the refusal for a lambda and a tuple the first two goals are accepted, without the struct's the next two are, and with a sort counted a former the goals at `Type` are refused.
+#[test]
+fn eta_by_a_literal_is_refused_at_a_type_former_that_is_not_its_own() {
+    let mut kernel = kernel();
+    let (f, x) = (binder(0, "f"), binder(1, "x"));
+    kernel.assume(&f, &Term::func_type([(x, nat_type())], nat_type()));
+    let field_less = declare_struct(&mut kernel, "U", Telescope::done(()));
+    let one_field = declare_struct(
+        &mut kernel,
+        "S",
+        Telescope::build([(binder(8, "a"), nat_type())], ()),
+    );
+
+    let expansion = Term::func(
+        [(x, nat_type())],
+        Term::apply(
+            Term::free_var(&f),
+            [Term::intrinsic(Intrinsic::nat_add(
+                Term::free_var(&x),
+                nat(0),
+            ))],
+        ),
+    );
+    let unit = Term::tuple(Vec::<Term>::new());
+    let empty = Term::struct_(
+        Global::Authored(Qualifier::from(["U"])),
+        Vec::<Term>::new(),
+        Vec::<Term>::new(),
+    );
+    let (function, neutral) = (Term::free_var(&f), Term::free_var(&binder(2, "n")));
+    let (ground, number) = (Term::type_ground(), nat_type());
+    let mut at = |type_: &Term, this: &Term, that: &Term| convert(&mut kernel, type_, this, that);
+
+    assert_eq!(
+        [
+            at(&number, &expansion, &function),
+            at(&number, &unit, &neutral),
+            at(&number, &empty, &neutral),
+            at(&one_field, &neutral, &empty),
+        ],
+        [Ok(false), Ok(false), Ok(false), Ok(false)]
+    );
+    assert_eq!(
+        [
+            at(&Term::tuple_type_unit(), &unit, &neutral),
+            at(&field_less, &empty, &neutral),
+            at(&ground, &expansion, &function),
+            at(&ground, &unit, &neutral),
+            at(&ground, &neutral, &empty),
+        ],
+        [Ok(true), Ok(true), Ok(true), Ok(true), Ok(true)]
+    );
+}
+
+/// A struct type declared with `fields` and no parameter, for the goals that need a nominal type.
+fn declare_struct(kernel: &mut Kernel, path: &str, fields: Telescope<()>) -> Term {
+    let name = Global::Authored(Qualifier::from([path]));
+    kernel.declare_struct(
+        &name,
+        &StructDecl {
+            universe_context: UniverseContext::default(),
+            arity: Telescope::done(fields),
+            result_sort: Term::type_ground(),
+            module: Qualifier::from([path]),
+            rep_public: true,
+            polarities: Vec::new(),
+            plicities: Vec::new(),
+        },
+    );
+
+    Term::from(Subterm::StructType(StructType {
+        name,
+        universes: Vec::new(),
+        params: Vec::new(),
+    }))
 }
 
 /// A literal's shape fires eta against a neutral inhabitant alone. Against a canonical form — which only a caller comparing two terms of different types could hand over — neither rule fires, and the unit literal's empty walk equates it with no literal of another type.

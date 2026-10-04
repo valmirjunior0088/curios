@@ -948,6 +948,11 @@ impl Convert {
         other: Term,
         type_: Term,
     ) -> Result<bool, ReduceError> {
+        let type_ = reduce(context, type_)?;
+        if !matches!(&*type_, Subterm::FuncType(_)) && another_former(context, &type_) {
+            return Ok(false);
+        }
+
         let (ys, output_type) = self.func_eta_args(context, func.telescope.len(), type_)?;
         let body = func.telescope.open(&ys.iter().collect::<Vec<_>>());
         self.enqueue(output_type, body, Term::apply(other, ys));
@@ -963,10 +968,12 @@ impl Convert {
     ) -> Result<bool, ReduceError> {
         let n = tuple.fields.len();
 
-        let cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
+        let type_ = reduce(context, type_)?;
+        let cur = match &*type_ {
             Subterm::TupleType(TupleType { telescope, .. }) if telescope.len() == n => {
-                Some(telescope)
+                Some(telescope.clone())
             }
+            _ if another_former(context, &type_) => return Ok(false),
             _ => None,
         };
 
@@ -988,23 +995,25 @@ impl Convert {
         let n = struct_.fields.len();
 
         // Recover the field types from the registry, exactly as `compare_struct` does — a `Struct` value carries no telescope of its own, unlike a `Tuple`'s inline `TupleType`.
-        let cur = match Term::unwrap_or_clone(reduce(context, type_)?) {
+        let type_ = reduce(context, type_)?;
+        let cur = match &*type_ {
             Subterm::StructType(StructType {
                 name,
                 universes,
                 params,
-            }) if name == struct_.name => match context.struct_decl(&name).cloned() {
+            }) if *name == struct_.name => match context.struct_decl(name).cloned() {
                 Some(struct_decl) => Some(
                     instantiate_bound_at(
                         context,
                         &struct_decl.universe_context,
                         &struct_decl.arity,
-                        &universes,
+                        universes,
                     )?
                     .open(&params.iter().collect::<Vec<_>>()),
                 ),
                 None => None,
             },
+            _ if another_former(context, &type_) => return Ok(false),
             _ => None,
         };
 
@@ -2051,6 +2060,11 @@ impl Convert {
 
         Ok(true)
     }
+}
+
+/// Whether `type_`, a goal's type in weak-head normal form, is a type former. A literal's eta is refused at one that is not the literal's own, which each caller tells apart first: the two sides are not of one type there, and a literal with no field would convert with anything. A sort, an unsolved metavariable and a neutral type say nothing of the literal's type and keep the expansion — a sort is what a child nothing types is compared at. The kernel refuses the same goals by the same classifier.
+fn another_former(context: &Context, type_: &Term) -> bool {
+    type_.is_type_former(&context.syntax())
 }
 
 /// Whether `type_`, in weak-head normal form, is a type with no field: the empty Σ, or a nominal struct whose declaration has none.

@@ -13,7 +13,7 @@ use {
     curios_abi::ForeignFunction,
     curios_num::{Floating, Integer},
     curios_print::run_printer,
-    curios_utilities::InfixOp,
+    curios_utilities::{InfixOp, SyntaxRegistry},
     std::{
         collections::{BTreeSet, HashSet},
         fmt,
@@ -463,6 +463,20 @@ impl Subterm {
         match self {
             Subterm::Metavar(_) => true,
             _ => self.any_child_term(&mut |t| t.has_metavar()),
+        }
+    }
+
+    /// Whether this term, in weak-head normal form, is a type former: a function, record, struct or family type, or an intrinsic one ([`Intrinsic::is_type_former`]). A sort is none, being where types live and what each checker compares a child it has no type for at; neither is a neutral, which has not said what it is.
+    ///
+    /// Both checkers read it to refuse a literal's eta at a type that is not the literal's.
+    pub fn is_type_former(&self, syntax: &SyntaxRegistry) -> bool {
+        match self {
+            Subterm::FuncType(_)
+            | Subterm::TupleType(_)
+            | Subterm::InductType(_)
+            | Subterm::StructType(_) => true,
+            Subterm::Intrinsic(intrinsic) => intrinsic.is_type_former(syntax),
+            _ => false,
         }
     }
 

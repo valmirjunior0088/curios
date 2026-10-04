@@ -22,7 +22,7 @@
 
 use {
     super::Intrinsic,
-    crate::{Free, Global, Level, Nat, Term, Var},
+    crate::{Free, Global, Level, Nat, Subterm, Term, Var},
     curios_num::{Floating, Grain, Integer},
     curios_utilities::{SyntaxName, SyntaxRegistry},
 };
@@ -57,6 +57,19 @@ pub struct Signature {
 }
 
 impl Intrinsic {
+    /// Whether this intrinsic is a type former, read off [`signature`](Self::signature) so the roster is stated once: a former lands in a sort, a parameterized one by the sort judgment and a closed one with no operand. An operation that produces a type — a fold over types — has operands, and is a neutral.
+    pub fn is_type_former(&self, syntax: &SyntaxRegistry) -> bool {
+        let signature = self.signature(syntax);
+
+        match signature.produced {
+            Produced::Sort => true,
+            Produced::Fixed(produced) => {
+                signature.operands.is_empty()
+                    && matches!(&*produced, Subterm::Type(_) | Subterm::Prop)
+            }
+        }
+    }
+
     /// The operand types and result of this operation, with operands in [`traverse`](Intrinsic::traverse) order.
     ///
     /// Order is the contract: a walker zips this against the operands `traverse` yields, so the two are written to be read together and a mismatch in length is a bug this crate can assert on rather than a silent misalignment downstream.

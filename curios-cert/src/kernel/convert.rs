@@ -153,17 +153,18 @@ fn compare(
         };
         let assumed = history.assumed;
 
-        let outcome = match Term::unwrap_or_clone(kernel.reduce_forced(type_.clone())?) {
+        let at = kernel.reduce_forced(type_.clone())?;
+        let outcome = match &*at {
             Subterm::FuncType(FuncType { telescope, .. }) => {
-                eta_function(kernel, history, telescope, this, that)
+                eta_function(kernel, history, telescope.clone(), this, that)
             }
             Subterm::TupleType(TupleType { telescope }) => {
-                eta_tuple(kernel, history, telescope, this, that)
+                eta_tuple(kernel, history, telescope.clone(), this, that)
             }
             // Unit eta at a nominal struct: one that declares no field has one inhabitant, as the empty Σ has, and the goal is decided as `eta_tuple` decides it there. A struct with fields is left to its literal (`struct_eta`), two neutrals at one staying apart.
             Subterm::StructType(StructType { name, .. })
                 if kernel
-                    .struct_decl(&name)
+                    .struct_decl(name)
                     .is_some_and(|declaration| declaration.field_count() == 0) =>
             {
                 Ok(true)
@@ -174,7 +175,7 @@ fn compare(
                     let this = kernel.reduce_forced(this.clone())?;
                     let that = kernel.reduce_forced(that.clone())?;
 
-                    structural(kernel, history, &this, &that)
+                    structural(kernel, history, &at, &this, &that)
                 }
             },
         };
@@ -294,12 +295,15 @@ fn eta_tuple(
     Ok(true)
 }
 
-/// Compare two weak-head normal forms by their heads.
+/// Compare two weak-head normal forms by their heads, at `at`, the goal's type in weak-head normal form.
 ///
 /// Children with no type the head determines are compared at `Type` through [`ground`]. That is a weaker comparison than a typed one — it declines to fire eta or irrelevance — so it can only reject where a typed comparison would have accepted. See the module documentation on incompleteness.
+///
+/// The goal's type is read by one rule, a literal's eta, and only to refuse it ([`another_former`]).
 fn structural(
     kernel: &mut Kernel,
     history: &mut History,
+    at: &Term,
     this: &Term,
     that: &Term,
 ) -> Result<bool, Error> {
@@ -346,6 +350,18 @@ fn structural(
             Subterm::Tuple(Tuple { fields: left, .. }),
             Subterm::Tuple(Tuple { fields: right, .. }),
         ) => compare_each(kernel, history, left.iter(), right.iter()),
+
+        // A lambda or a tuple literal against a neutral at a type former: `compare` fires eta by a function and a record type before it comes here, so the former is not the literal's, the two sides are not of one type, and the literal's eta is refused.
+        (Subterm::Func(_) | Subterm::Tuple(_), _)
+            if neutral(that) && another_former(kernel, at) =>
+        {
+            Ok(false)
+        }
+        (_, Subterm::Func(_) | Subterm::Tuple(_))
+            if neutral(this) && another_former(kernel, at) =>
+        {
+            Ok(false)
+        }
 
         // Eta at a function and at a record, by the literal against a neutral inhabitant, where the goal's type did not direct it — see `function_eta` and `tuple_eta` for the rule, and `struct_eta` for the restriction. A stuck application may still unfold where a variable and a projection have nothing left to, so a refusal against one falls through to the unfolding retry, as a struct literal's does below.
         (Subterm::Func(function), _) if neutral(that) => {
@@ -500,6 +516,14 @@ fn structural(
                 .ok()
                 .map(|at| at.fields());
             compare_fields_at(kernel, history, telescope, left_fields, right_fields)
+        }
+
+        // A struct literal against a neutral at a type former that is not the literal's own struct: refused, as a lambda's and a tuple's is above.
+        (Subterm::Struct(literal), _) if neutral(that) && another_struct(kernel, at, literal) => {
+            Ok(false)
+        }
+        (_, Subterm::Struct(literal)) if neutral(this) && another_struct(kernel, at, literal) => {
+            Ok(false)
         }
 
         // Eta at a nominal struct, against a neutral inhabitant only — see `struct_eta` for the rule and the restriction.
@@ -691,6 +715,21 @@ fn neutral(term: &Term) -> bool {
     )
 }
 
+/// Whether `at`, a goal's type in weak-head normal form, is a type former a literal met in [`structural`] cannot inhabit. Conversion is asked about two terms of one type, and a literal's eta stands on it: where the goal states a type that is not the literal's, the invariant is broken at this goal and the rule is refused, where the neutral restriction alone would let a literal with no field convert with any neutral.
+///
+/// A sort says nothing: it is what [`ground`] compares a child at when its type is not at hand. Neither does a neutral type. There the rule stands on its callers, as [`struct_eta`] says.
+fn another_former(kernel: &Kernel, at: &Term) -> bool {
+    at.is_type_former(&kernel.syntax())
+}
+
+/// [`another_former`] for a struct literal, whose own type [`compare`] leaves to [`structural`]: a struct type of the literal's name is the literal's, and any other former is not.
+fn another_struct(kernel: &Kernel, at: &Term, literal: &Struct) -> bool {
+    match &**at {
+        Subterm::StructType(StructType { name, .. }) => *name != literal.name,
+        _ => another_former(kernel, at),
+    }
+}
+
 /// Eta at a function, by the lambda: a lambda against a *neutral* inhabitant, where the goal's type did not direct the comparison. The lambda's own telescope is opened at the domains it is annotated with, the neutral is applied to the same binders at the lambda's plicities, and the two are compared at `Type`, the codomain being stated nowhere.
 ///
 /// [`compare`] fires this rule by the goal's type wherever that is a function type ([`eta_function`]); here the type is not at hand — a child [`ground`] compares, a stuck elimination's arm or a projection's head — and the lambda says what the type would have. Without it conversion is no congruence there: an expansion equal to its neutral at the goal is refused once both sit under a stuck `match`, and the elaborator, which fires eta by the lambda at every goal, has accepted the pair by then.
@@ -739,7 +778,7 @@ fn tuple_eta(
 ///
 /// **What licenses the projection is an invariant about the callers, not the shape of `other`.** Conversion is only ever asked whether two terms *of one type* are equal: the entry point carries the type, every typed recursion passes the one its position assigns — a field's from this telescope, an argument's from its head's, an index's from the family's — and [`ground`] discards the kernel's *knowledge* of that type without changing the fact. So `other` inhabits the struct type the literal is a value of, and eta for a single-constructor record — every inhabitant `x` equals `S { x.0, …, x.(n-1) }` — is what decides the pair.
 ///
-/// That invariant is stated here and checked nowhere, which is why the walk is restricted to neutrals at all: it is a proxy, not a second guarantee. A `Var` is as arbitrary a term as any other, so what the restriction actually buys is that a pair arriving from a caller that broke the invariant is unlikely to be *shaped* like an inhabitant — thin, and worth knowing it is thin, because an all-`Prop` or empty struct's field walk compares nothing and answers `true`. Making it load-bearing instead means handing this function the goal type, which `structural` does not receive; under [`ground`] that type is `Type` and would forfeit the walk exactly where it is reached untyped today.
+/// That invariant is checked where the goal states a type and nowhere else. At a goal whose type is a former other than the literal's own struct, [`structural`] refuses the rule before it reaches here ([`another_struct`]). Under [`ground`] the goal's type is `Type`, which says nothing, and there the walk is restricted to neutrals as a proxy, not a second guarantee: a `Var` is as arbitrary a term as any other, so what the restriction buys is that a pair arriving from a caller that broke the invariant is unlikely to be *shaped* like an inhabitant — thin, and worth knowing it is thin, because an all-`Prop` or empty struct's field walk compares nothing and answers `true`.
 fn struct_eta(
     kernel: &mut Kernel,
     history: &mut History,

@@ -898,22 +898,6 @@ fn arm_refinement_does_not_taint_a_committed_solution() {
     );
 }
 
-#[test]
-fn eta_at_unit_trusts_the_goal_type_label() {
-    let mut context = context();
-
-    // Pinned wart, internal to the conversion API: when one side is the unit tuple literal `()`, `eta_expand_tuple` enqueues one goal per field — zero — and succeeds *without ever confirming the goal's type reduces to `{}`. So the kernel, asked directly, judges `() ≈ 1` at type `Nat`. Elaboration never produces a heterotyped goal (both sides of every `expect`/index comparison were checked at the same type), so this is not reachable from the surface language — but the conversion entry point is only sound under that caller invariant. An η-at-unit gated on the type actually being a 0-ary tuple type would answer `Ok(false)` here.
-    assert_eq!(
-        convert(
-            &mut context,
-            &nat_type(),
-            &Term::tuple(Vec::<Term>::new()),
-            &nat(1)
-        ),
-        Ok(true)
-    );
-}
-
 /// Two goals distinct under their binder types land on one history fingerprint; see `documentation/design/soundness/conversion/conversion-recurrence.md`.
 ///
 /// `history_key` renames the openings a conversion minted to placeholders by mint order and records no local context, so the body goals two telescope walks open — one under a `Nat` binder, one under a `Bool` binder, minted apart — rename onto the same entry. The drain consults `in_history` before the structural dispatch, so when both arise in one run the second is *assumed* rather than compared. The goals here are built through the same `compare_func_type` walk the drain dispatches to, and the collision fires inside a real drain too: `a_goal_assumed_by_key_collision_cannot_move_the_verdict`'s `Bool`-bound goal is skipped on the `Nat`-bound goal's entry, in both of that fixture's halves.
