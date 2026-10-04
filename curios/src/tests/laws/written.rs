@@ -1,7 +1,7 @@
 //! The rows stated by hand: every carrier's laws no family states, the controls beside the laws a rule must stop short of, and the refused candidates with the reason conversion does not take each.
 
 use {
-    super::{Binder, IMPORTS, closes, misplaced, orders},
+    super::{Binder, IMPORTS, closes, misplaced, misplaced_by_the_kernel, orders},
     crate::tests::typecheck,
 };
 
@@ -867,6 +867,18 @@ fn every_row_is_on_the_side_the_compiler_puts_it() {
     let found = CARRIERS
         .iter()
         .flat_map(|carrier| misplaced(carrier.name, &carrier.rows(), carrier.held.len()))
+        .collect::<Vec<_>>();
+    assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+#[test]
+fn every_row_is_on_the_side_the_kernel_puts_it_asked_alone() {
+    // The same rows put to the kernel with the elaborator's verdict left out: a held row it refuses is the reader's fault, and a refused row it holds is an equation the trusted checker believes and the elaborator has been keeping from every program. Mutation-checked: a held law planted among a carrier's refused rows is named.
+    let found = CARRIERS
+        .iter()
+        .flat_map(|carrier| {
+            misplaced_by_the_kernel(carrier.name, &carrier.rows(), carrier.held.len())
+        })
         .collect::<Vec<_>>();
     assert!(found.is_empty(), "{}", found.join("\n"));
 }

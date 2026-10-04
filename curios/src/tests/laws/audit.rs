@@ -4,7 +4,8 @@
 
 use {
     super::{
-        Binder, IMPORTS, Row, applied, closes, declared, name, orders, rows, spell, type_name,
+        Binder, IMPORTS, Row, applied, closes, declared, name, orders, rows, spell, top_level,
+        type_name,
     },
     crate::tests::typecheck,
     curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation},
@@ -304,26 +305,6 @@ fn distinct_constructors_stay_distinct() {
         typecheck(&control).is_err(),
         "an equation that may hold still demands its arm"
     );
-}
-
-/// A binder list's binders: split at its top-level commas, so a proof binder's proposition stays whole.
-fn top_level(binders: &str) -> Vec<&str> {
-    let mut parts = Vec::new();
-    let (mut depth, mut start) = (0usize, 0usize);
-    for (at, character) in binders.char_indices() {
-        match character {
-            '(' | '[' => depth += 1,
-            ')' | ']' => depth -= 1,
-            ',' if depth == 0 => {
-                parts.push(binders[start..at].trim());
-                start = at + 1;
-            }
-            _ => {}
-        }
-    }
-    parts.push(binders[start..].trim());
-    parts.retain(|part| !part.is_empty());
-    parts
 }
 
 fn first_var(expr: &Expr) -> Option<Expr> {

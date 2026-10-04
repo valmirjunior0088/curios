@@ -7,8 +7,17 @@
 //! **Two sources of rows.** `generated` states every family `curios-algebra`'s law table declares, at every carrier declaring it, and holds each instance against the carrier's semantics at closed values as well (`semantics`). `written` states the rest by hand: the laws no family states, the controls beside the laws a rule must stop short of, and the refused candidates. A law a family states is not also written.
 //!
 //! Every refused row is a candidate law or a control, never a bug. A candidate needs a rule in `curios-core`'s `reduce::intrinsic`, which both checkers share, so taking one is an addition to the trusted base and is recorded in `documentation/design/soundness/conversion/intrinsic-fold-laws-and-the-free-monoid-peel.md` beside the grid that probes it over values. A control is a claim that is *not* a law, stated beside the held rows whose rule must stop short of it and marked as one where it stands: a rule widened past its soundness moves a control to the held side, and the goal test names it.
+//!
+//! **Each checker is asked by itself.** The candidate line is the elaborator's answer, and a compilation asks the kernel only once the elaborator accepts, so neither says what the kernel makes of a row the elaborator refuses: a kernel that held a control would pass both. [`kernel_alone`] puts every row to the kernel with the elaborator's verdict left out, and a refused row must be refused there too, as a mismatch — a budget that ran out compared nothing.
 
-use super::typecheck;
+use {
+    super::typecheck,
+    curios_cert::Error,
+    curios_core::{Definition, FuncType, Global, Item, Subterm, Term, Zonked},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, recheck_with_prelude, typecheck_with_prelude},
+    curios_text::{Entrypoint, RootSource},
+    curios_utilities::Qualifier,
+};
 
 mod audit;
 
@@ -86,6 +95,148 @@ fn misplaced(name: &str, rows: &[(String, String)], held: usize) -> Vec<String> 
         }
     }
     misplaced
+}
+
+/// What the kernel says of each row when it alone is asked, in the rows' order: `None` where it holds the row, and its refusal where it does not.
+///
+/// One program states each row twice: `stated`, a function into `Prop` whose body is the claim, and `proved`, `Eq/refl()` at the claim's left side against itself. Both elaborate whatever the row's side, and [`typecheck_with_prelude`] stops short of the kernel. The claim the kernel then judges takes `stated`'s lambda as its type, a function type over the same telescope, and `proved`'s as its body: every term in it is one the elaborator built, and the one comparison it leaves the kernel is the row's left side against its right, at their type.
+fn kernel_alone(rows: &[(String, String)]) -> Vec<Option<Error>> {
+    let items = rows
+        .iter()
+        .enumerate()
+        .map(|(index, (binders, claim))| {
+            let (left, _) = sides(claim);
+            format!(
+                "let stated{index}({binders}) -> Prop = {claim};\nlet proved{index}({binders}) -> Eq()({left}, {left}) = Eq/refl();"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let entrypoint = format!("{IMPORTS}\n{items}\nIo/pure(())")
+        .parse::<Entrypoint>()
+        .expect("the rows parse");
+    let mut program = typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+        .unwrap_or_else(|refused| panic!("a row's statement does not elaborate:\n{refused}"))
+        .program;
+
+    let named = |name: String| Global::Authored(Qualifier::from([name]));
+    let claims = (0..rows.len())
+        .map(|index| {
+            let definition = |name: Global| {
+                program
+                    .module
+                    .items
+                    .iter()
+                    .find_map(|item| match item {
+                        Item::Let(definition) if definition.name == name => Some(definition),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| panic!("the program defines {name}"))
+            };
+            let stated = definition(named(format!("stated{index}")));
+            let proved = definition(named(format!("proved{index}")));
+            // Both are stated under one binder list, so the elaborator generalizes them alike; a claim typed under one context and proved under another would be refused for its levels and say nothing of the row.
+            assert_eq!(stated.universe_context, proved.universe_context);
+            let Subterm::Func(function) = &*stated.body else {
+                panic!("a row's statement is a function of its binders");
+            };
+
+            Definition {
+                name: named(format!("claim{index}")),
+                type_: Term::from(Subterm::FuncType(FuncType::new(
+                    function.telescope.clone(),
+                    function.plicities().to_vec(),
+                ))),
+                ..proved.clone()
+            }
+        })
+        .collect::<Vec<_>>();
+    let names = claims.iter().map(|claim| claim.name).collect::<Vec<_>>();
+    program
+        .module
+        .items
+        .extend(claims.into_iter().map(Item::Let));
+
+    let program = Zonked::project(&program).expect("an elaborated program is zonked");
+    let verdicts = recheck_with_prelude(&program, DEFAULT_STEP_BUDGET);
+    // The statements and the reflexivity proofs are the elaborator's own, so a refusal of anything but a claim is the reader's fault and not a row's verdict.
+    for verdict in &verdicts {
+        assert!(
+            verdict.name.is_some_and(|name| names.contains(&name)),
+            "the kernel refuses more than a row's claim: {verdict:?}"
+        );
+    }
+
+    names
+        .iter()
+        .map(|name| {
+            verdicts
+                .iter()
+                .find(|verdict| verdict.name == Some(*name))
+                .map(|verdict| verdict.error.clone())
+        })
+        .collect()
+}
+
+/// The rows the kernel, asked alone, puts on the other side than stated: the first `held` are stated as held and the rest as refused. A refused row counts as refused only where the kernel compares its sides and finds them apart, so one it refuses any other way — a spent budget among them — is reported too.
+fn misplaced_by_the_kernel(name: &str, rows: &[(String, String)], held: usize) -> Vec<String> {
+    kernel_alone(rows)
+        .into_iter()
+        .zip(rows)
+        .enumerate()
+        .filter_map(|(index, (refusal, (_, row)))| match (index < held, refusal) {
+            (true, None) | (false, Some(Error::Mismatch { .. })) => None,
+            (true, Some(error)) => Some(format!(
+                "{name}: `{row}` is held but the kernel, asked alone, refuses it: {error}"
+            )),
+            (false, None) => Some(format!(
+                "{name}: `{row}` is refused but the kernel, asked alone, holds it"
+            )),
+            (false, Some(error)) => Some(format!(
+                "{name}: `{row}` is refused, but the kernel, asked alone, does not refuse it as a mismatch: {error}"
+            )),
+        })
+        .collect()
+}
+
+/// The two sides of a claim `Eq()(left, right)`.
+fn sides(claim: &str) -> (&str, &str) {
+    let inner = claim
+        .strip_prefix("Eq()(")
+        .and_then(|rest| rest.strip_suffix(')'))
+        .unwrap_or_else(|| panic!("`{claim}` is no equation"));
+    match top_level(inner)[..] {
+        [left, right] => (left, right),
+        _ => panic!("`{claim}` does not have two sides"),
+    }
+}
+
+/// A comma-separated list's items: split at its top-level commas, those outside every bracket and every quoted literal, so a binder's proposition or a claim's side stays whole.
+fn top_level(list: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let (mut depth, mut start) = (0usize, 0usize);
+    let mut quote = None;
+    let mut characters = list.char_indices();
+    while let Some((at, character)) = characters.next() {
+        match (quote, character) {
+            (Some(_), '\\') => {
+                characters.next();
+            }
+            (Some(open), _) if character == open => quote = None,
+            (Some(_), _) => {}
+            (None, '"' | '\'') => quote = Some(character),
+            (None, '(' | '[' | '{') => depth += 1,
+            (None, ')' | ']' | '}') => depth -= 1,
+            (None, ',') if depth == 0 => {
+                parts.push(list[start..at].trim());
+                start = at + 1;
+            }
+            (None, _) => {}
+        }
+    }
+    parts.push(list[start..].trim());
+    parts.retain(|part| !part.is_empty());
+    parts
 }
 
 /// One binder of a telescope the sweep reorders: its name, its type, and the binders its type names.

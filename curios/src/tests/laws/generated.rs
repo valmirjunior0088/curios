@@ -3,7 +3,7 @@
 //! A law declared at two carriers is stated at both by construction, and a family a carrier's procedure does not decide fails at that carrier rather than going unstated.
 
 use {
-    super::{closes, holds, misplaced},
+    super::{closes, holds, misplaced, misplaced_by_the_kernel},
     curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation, TABLE},
     curios_num::Grain,
 };
@@ -314,6 +314,15 @@ fn every_generated_law_is_a_fit_for_refl() {
     let found = by_carrier(&rows(&declared()))
         .into_iter()
         .flat_map(|(name, group)| misplaced(&name, &group, group.len()))
+        .collect::<Vec<_>>();
+    assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+#[test]
+fn every_generated_law_is_held_by_the_kernel_asked_alone() {
+    let found = by_carrier(&rows(&declared()))
+        .into_iter()
+        .flat_map(|(name, group)| misplaced_by_the_kernel(&name, &group, group.len()))
         .collect::<Vec<_>>();
     assert!(found.is_empty(), "{}", found.join("\n"));
 }
