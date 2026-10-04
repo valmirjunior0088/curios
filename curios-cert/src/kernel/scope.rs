@@ -36,6 +36,8 @@ struct Refinement {
     value: Term,
     /// The weak-head normal form of `key`, computed at most once and only when a probe has already missed the written spelling. See [`Scope::unasked_refinement`].
     reduct: Reduct,
+    /// The depth the equation stack stood at when an arm restated this equation under its solution, or `None` while it answers as recorded. See [`Scope::restate`].
+    restated_at: Option<usize>,
 }
 
 /// Whether an equation's reduced spelling has been asked for yet.
@@ -244,10 +246,52 @@ impl Scope {
                 resolved: resolved.filter(records_case_equation),
                 value,
                 reduct: Reduct::Unasked,
+                restated_at: None,
             });
         }
 
         recorded
+    }
+
+    /// Restate the equations in force under an arm's solution, answering whether any was: each that names a solved variable — in its key, its resolved spelling or its value — is assumed again with the solution substituted through all three, and stops answering until the arm retracts.
+    ///
+    /// **An arm is checked under its solution, and so are the equations it was opened under.** The kernel holds no refinement store, so it substitutes a case's solution through the arm's body, its expectation and the types of the locals it re-types: within the arm a solved variable is spelled as its value. An equation recorded outside still names the variable, so its key is a term the arm never holds, and a guard's fact would be lost at the first match on a variable the guard names. The restated equation is the recorded one at the instance the arm is checked at — what holds of the scrutinee at every value of the variable holds at the one the case fixes — so it is the same hypothesis, read where the arm reads everything else.
+    ///
+    /// **The recorded equation steps aside rather than standing beside its instance.** Nothing the arm holds names a solved variable, so the recorded spelling answers nothing there; left in force, it would be restated again by every arm inside, and an equation naming the variables of `n` nested matches would stand `2^n` times. Stepping aside, each equation stands once however deep the arms go.
+    ///
+    /// A restated equation goes through [`Scope::refine`] like any other, so one the solution leaves with no local is not recorded, for the reason no local-free equation is. It is pushed inside the arm's bracket, and [`Scope::retract`] both drops it and lets the recorded one answer again.
+    pub(super) fn restate(&mut self, solutions: &[(Free, Term)]) -> bool {
+        debug_assert!(
+            self.hidden.is_none(),
+            "an arm's solution restated while an equation's reduced spelling was being settled"
+        );
+
+        let solved = |term: &Term| solutions.iter().any(|(name, _)| term.mentions_free(name));
+        let depth = self.refinements.len();
+        let mut restated = Vec::new();
+        for entry in &mut self.refinements {
+            if entry.restated_at.is_none()
+                && (solved(&entry.key)
+                    || solved(&entry.value)
+                    || entry.resolved.as_ref().is_some_and(solved))
+            {
+                entry.restated_at = Some(depth);
+                restated.push((
+                    entry.key.substitute(solutions),
+                    entry
+                        .resolved
+                        .as_ref()
+                        .map(|resolved| resolved.substitute(solutions)),
+                    entry.value.substitute(solutions),
+                ));
+            }
+        }
+
+        let any = !restated.is_empty();
+        for (key, resolved, value) in restated {
+            self.refine(key, resolved, value);
+        }
+        any
     }
 
     /// The case value the term `term` is refined to under the *written* spelling or its resolved one, innermost arm first.
@@ -283,7 +327,9 @@ impl Scope {
             .enumerate()
             .rev()
             .find(|(_, entry)| {
-                matches!(entry.reduct, Reduct::Unasked) && could_reduce_to(&entry.key, candidate)
+                entry.restated_at.is_none()
+                    && matches!(entry.reduct, Reduct::Unasked)
+                    && could_reduce_to(&entry.key, candidate)
             })
             .map(|(index, entry)| (index, entry.key.clone()))
     }
@@ -293,7 +339,7 @@ impl Scope {
     pub(super) fn reachable_refinements(&self, candidate: &Term) -> usize {
         self.refinements[..self.in_force()]
             .iter()
-            .filter(|entry| could_reduce_to(&entry.key, candidate))
+            .filter(|entry| entry.restated_at.is_none() && could_reduce_to(&entry.key, candidate))
             .count()
     }
 
@@ -362,7 +408,7 @@ impl Scope {
         }
     }
 
-    /// Close every binder opened — and drop every case equation assumed — since `mark`, answering whether any equation was dropped.
+    /// Close every binder opened — and drop every case equation assumed — since `mark`, answering whether the equations in force changed: one was dropped, or one an arm inside had restated answers as recorded again.
     ///
     /// No settlement can be in progress here, and that is structural rather than checked by discipline: `Kernel::scoped` is this method's only caller, and reduction — the only thing a settlement runs — never opens a binder scope.
     pub(super) fn retract(&mut self, mark: Mark) -> bool {
@@ -381,7 +427,20 @@ impl Scope {
         }
         let dropped = self.refinements.len() > mark.refinements;
         self.refinements.truncate(mark.refinements);
-        dropped
+
+        // An equation restated at or past the mark was restated by an arm this bracket held, which is gone with its restatement.
+        let mut revived = false;
+        for entry in &mut self.refinements {
+            if entry
+                .restated_at
+                .is_some_and(|depth| depth >= mark.refinements)
+            {
+                entry.restated_at = None;
+                revived = true;
+            }
+        }
+
+        dropped || revived
     }
 
     /// How many equations are in force: all of them, unless a settlement is withholding the inner ones.
@@ -389,8 +448,11 @@ impl Scope {
         self.hidden.unwrap_or(self.refinements.len())
     }
 
-    /// The equations in force, innermost first — the order every probe reads them in.
+    /// The equations in force that answer, innermost first — the order every probe reads them in. One an arm has restated answers through its restatement.
     fn in_force_innermost_first(&self) -> impl Iterator<Item = &Refinement> {
-        self.refinements[..self.in_force()].iter().rev()
+        self.refinements[..self.in_force()]
+            .iter()
+            .rev()
+            .filter(|entry| entry.restated_at.is_none())
     }
 }

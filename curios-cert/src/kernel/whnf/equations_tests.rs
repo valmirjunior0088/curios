@@ -704,3 +704,103 @@ fn an_arm_that_records_no_equation_leaves_what_was_remembered() {
     assert_eq!(inside, 0);
     assert_eq!(after, 0);
 }
+
+/// An equation in force follows the solution an arm is checked under.
+///
+/// The kernel substitutes a case's solution through the arm, so under `match f(n) < 5` a second match on `n` checks its `0` arm with `f(0) < 5` where the program wrote `f(n) < 5`, and the guard's equation, keyed on the term that names `n`, would answer nothing the arm holds — the kernel refusing a fact the elaborator, which refines `n` in a store and keeps it spelled, accepts. Restated, the equation answers the instance for as long as the arm stands, and as it was recorded once the arm is gone.
+///
+/// Mutation-checked three ways. With `Scope::restate` assuming nothing the instance stays stuck inside the arm. With the recorded equation left answering beside its restatement, the recorded spelling still answers there. With `Scope::retract` reviving nothing, the recorded spelling answers nothing after the arm.
+#[test]
+fn a_case_equation_follows_the_solution_an_arm_is_checked_under() {
+    let n = binder(1, "n");
+    let f = binder(2, "f");
+    let x = binder(3, "x");
+    let guard = |argument: Term| {
+        Term::intrinsic(Intrinsic::nat_lt(
+            Term::apply(Term::free_var(&f), [argument]),
+            nat(5),
+        ))
+    };
+    let written = guard(Term::free_var(&n));
+    let at_zero = guard(nat(0));
+
+    let mut kernel = kernel();
+    kernel.assume(&n, &nat_type());
+    kernel.assume(&f, &Term::func_type([(x, nat_type())], nat_type()));
+
+    kernel.scoped(|kernel| {
+        kernel
+            .refine(written.clone(), Term::intrinsic(Intrinsic::Bool(true)))
+            .expect("the equation records");
+        assert_eq!(
+            whnf(kernel, at_zero.clone()).expect("reduces").as_bool(),
+            None,
+            "the instance is no term the guard was written as, or the arm below proves nothing"
+        );
+
+        kernel.scoped(|kernel| {
+            kernel.restate_refinements(&[(n, nat(0))]);
+
+            assert_eq!(
+                whnf(kernel, at_zero.clone()).expect("reduces").as_bool(),
+                Some(true),
+                "the equation answers at the arm's solution"
+            );
+            assert_eq!(
+                kernel.refinement_of(&written),
+                None,
+                "and the recorded spelling steps aside for it"
+            );
+        });
+
+        assert_eq!(
+            whnf(kernel, at_zero.clone()).expect("reduces").as_bool(),
+            None,
+            "the restatement does not outlive the arm"
+        );
+        assert_eq!(
+            kernel
+                .refinement_of(&written)
+                .and_then(|value| value.as_bool()),
+            Some(true),
+            "and the recorded equation answers again"
+        );
+    });
+}
+
+/// A restated equation is recorded by the rule every equation is: one the solution leaves naming no local is not.
+///
+/// `g` is a name with no body and no local in it, so `g(n) < 5` at `n := 0` is local-free, and an equation about a local-free term would leave the evaluation memos an entry resting on an equation the arm's exit retracts (`curios_analysis::records_case_equation`). The instance therefore stays the stuck term it is.
+#[test]
+fn a_restated_equation_naming_no_local_is_not_recorded() {
+    let n = binder(1, "n");
+    let g = Free::global(Qualifier::from(["g"]));
+    let x = binder(3, "x");
+    let guard = |argument: Term| {
+        Term::intrinsic(Intrinsic::nat_lt(
+            Term::apply(Term::free_var(&g), [argument]),
+            nat(5),
+        ))
+    };
+    let written = guard(Term::free_var(&n));
+    let at_zero = guard(nat(0));
+
+    let mut kernel = kernel();
+    kernel.assume(&n, &nat_type());
+    kernel.assume(&g, &Term::func_type([(x, nat_type())], nat_type()));
+
+    kernel.scoped(|kernel| {
+        kernel
+            .refine(written.clone(), Term::intrinsic(Intrinsic::Bool(true)))
+            .expect("the equation records");
+
+        kernel.scoped(|kernel| {
+            kernel.restate_refinements(&[(n, nat(0))]);
+
+            assert_eq!(
+                whnf(kernel, at_zero.clone()).expect("reduces").as_bool(),
+                None
+            );
+        });
+    });
+}

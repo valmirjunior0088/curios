@@ -405,7 +405,7 @@ const SUBSTITUTIONS: &[Substitution] = &[
         other: "_",
         at_case: "0 < List/len(xs)",
         refused: &[],
-        kernel: &[Under::Qed, Under::Proved, Under::AtCase],
+        kernel: &[],
     },
     Substitution {
         guard: "a + b < 10",
@@ -414,7 +414,7 @@ const SUBSTITUTIONS: &[Substitution] = &[
         other: "_",
         at_case: "a + 0 < 10",
         refused: &[],
-        kernel: &[Under::Qed, Under::Proved, Under::AtCase],
+        kernel: &[],
     },
     Substitution {
         guard: "g(flag) < 5",
@@ -423,7 +423,7 @@ const SUBSTITUTIONS: &[Substitution] = &[
         other: "false",
         at_case: "g(true) < 5",
         refused: &[Under::AtCase],
-        kernel: &[Under::Qed, Under::Proved],
+        kernel: &[],
     },
 ];
 

@@ -152,6 +152,8 @@ fn check_arm(
 /// Stated once because the three arm rules that need it — nominal, boolean-and-dispatch, and free-monoid — were three chances to state it differently, and what a case teaches its arm is precisely what coverage and obligation (V) read back out.
 ///
 /// Appends to `solutions` rather than replacing them, so [`check_arm`] can hand over the index equations it has already solved; `value` is substituted through those first, since a case value built from the constructor's payload may mention a binder they pinned. Must be called inside the arm's [`Kernel::scoped`] bracket — that bracket is what scopes the refinement to the arm.
+///
+/// **The solution reaches the equations already in force.** An arm's body and expectation are substituted, so an equation an outer arm recorded over a variable this case solves would be keyed on a term the arm no longer holds; [`Kernel::restate_refinements`] assumes each such equation again at the solution, for the arm and no longer.
 pub(super) fn assume_case_value(
     kernel: &mut Kernel,
     scrutinee: &Term,
@@ -160,12 +162,14 @@ pub(super) fn assume_case_value(
 ) -> Result<(), ReduceError> {
     let value = value.substitute(solutions);
 
-    if let Some(solution) = scrutinee_solution(&*kernel, scrutinee, &value) {
-        solutions.push(solution);
-        return Ok(());
+    match scrutinee_solution(&*kernel, scrutinee, &value) {
+        Some(solution) => solutions.push(solution),
+        None => kernel.refine(scrutinee.clone(), value)?,
     }
+    // The arm is checked with `solutions` substituted through it, so every equation in force — the one just assumed among them, where the index equations solved a variable its scrutinee names — is restated under them.
+    kernel.restate_refinements(solutions);
 
-    kernel.refine(scrutinee.clone(), value)
+    Ok(())
 }
 
 /// The most-general solution of `actual indices ~ case targets`, both directions, as one idempotent substitution — the shared [`solve_indices`], which carries the rule. Empty when the equations force nothing, including when they *clash*, which makes the arm unreachable and therefore checked as written.

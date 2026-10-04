@@ -533,3 +533,31 @@ fn a_guard_over_a_let_meets_a_definition_that_binds_its_own() {
         b"ok"
     );
 }
+
+// A guard's fact holds under a second match on a variable the guard names. The kernel checks that arm with the variable substituted by its case value, so the guard's equation has to follow the substitution, or the kernel refuses what the elaborator, which keeps the variable spelled, accepts: the `0` arm states the bound as the guard wrote it and with the case value written, and both discharge.
+//
+// Mutation-checked: without `Kernel::restate_refinements` at `assume_case_value` the kernel refuses the program, its expected type reading `0` for `i`.
+#[test]
+fn a_guards_fact_holds_under_a_match_on_a_variable_it_names() {
+    let source = r#"
+        use /std/{Nat, List, Str};
+        use /std/Bool/{Holds, True};
+
+        let first_or(xs : List(Nat), i : Nat) -> Str =
+            match i < List/len(xs)
+            | true =>
+                match i
+                | 0 =>
+                    let _ : Holds(i < List/len(xs)) = True/qed();
+                    let _ : Holds(0 < List/len(xs)) = True/qed();
+                    "first"
+                | _ => "later"
+                end
+            | false => "past"
+            end;
+
+        /std/print(first_or([7, 8], 0))
+        "#;
+
+    assert_eq!(run(source), b"first");
+}

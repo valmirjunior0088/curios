@@ -867,6 +867,13 @@ impl Kernel {
         Ok(())
     }
 
+    /// Restate the equations in force under an arm's solution ([`Scope::restate`](scope::Scope)). Which equations answer has changed where any was restated, so the local-bearing reducts remembered before it go.
+    pub(crate) fn restate_refinements(&mut self, solutions: &[(Free, Term)]) {
+        if self.scope.restate(solutions) {
+            self.memos.begin_equations();
+        }
+    }
+
     /// The case value `term` is refined to under the written spelling, innermost arm first.
     pub(crate) fn refinement_of(&self, term: &Term) -> Option<Term> {
         self.scope.refinement_of(term)
