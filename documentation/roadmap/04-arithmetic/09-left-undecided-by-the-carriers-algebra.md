@@ -1,20 +1,6 @@
-# What conversion still decides by spelling or by cap
+# What the carriers' algebra leaves undecided
 
-**Not refined yet.** This specification preserves what the carriers' algebra does not decide and no consumer has asked for, with the approaches already discussed, and the rows the law grid still refuses, as [the relational layer](08-relational-layer.md) reserves its own. Each opens when a consumer needs what it decides, and refinement establishes its fragment, algorithm contract and acceptance criteria before any implementation. It is not an implementation plan.
-
-## What reduction reads by spelling
-
-**Capability wanted.** A refinement key and a fold read an atom as conversion does, so neither turns on incidental term spelling. Today a case equation is recorded under a few spellings of its scrutinee and found by matching them ([Case equations and their key](../../design/soundness/elimination/case-equations-and-their-key.md)), and the fold pairs atoms by their spelling alone.
-
-The two checkers do not look for an equation in the same places, and which way they part turns on how a guard is spelled. The elaborator escalates a key it missed to its arguments reduced, which the kernel does not, so under `let n = m + 0; match Nat/in_range(n, 240, 244)` the elaborator accepts `Nat/le/of_in_range(m, 240, 244, True/qed())` and the kernel refuses it; [Case equations and their key](../../design/soundness/elimination/case-equations-and-their-key.md) records that direction as admitting and closed at certification. The other refuses: the kernel records a guard over local definitions with them substituted, while the elaborator settles only the spelling that names them, so under `let n = Byte/to_nat(c); match Nat/in_range(n, 0, 0x7F)` the kernel's reduct answers `Byte/to_nat(c) <= 0x7F` and the elaborator's does not; [the findings](00-findings.md) hold what is not yet known of that direction. The procedure that proves a bound from the facts in scope met both, and writes its proofs over the spellings the keys hold ([A bound that follows from the facts in scope is proved by the elaborator](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)); an author writing the same terms still meets them. Settling reduced spellings is also a measured cost of elaboration, and a settled spelling is kept beside its entry for as long as nothing can change what its key reduces to (`Frames::scrutinee_spellings`, `curios-elab/src/context/frames.rs`).
-
-The fold reads atoms by their spelling, where conversion classes them by the checker's own conversion ([An atom is one where conversion says so](../../design/arithmetic/an-atom-is-one-where-conversion-says-so.md)), so a comparison or a difference of two convertible atoms does not reduce: with `p1` and `p2` two proofs of one bound, `f(a, p1) == f(a, p2)` does not reduce to `true`, nor `f(a, p1) <= f(a, p2)`, and `f(a, p1) - f(a, p2)` is not `0`, at every binder order, though conversion holds `f(a, p1) + b` equal to `b + f(a, p2)`. Proof irrelevance reaches conversion and not reduction. Classing atoms in the chain does not change this, since a fold runs inside reduction, below any chain.
-
-**Previously discussed.** A total atom order, complete normalization within each supported fragment, canonical key construction and caching, and retirement of the spelling probes the keys replace. Identity stays separate from presentation order; hashes alone cannot establish equality.
-
-For the fold, three directions, none investigated. Reduction asking its checker which atoms are one, which is Coq Modulo Theory's reduction modulo the theory and makes a reduct depend on a conversion verdict. An atom key that projects a proof argument away as it projects a universe instance, which needs the head's telescope, since an argument carries its plicity and not its sort. And laws taken probe-side, a comparison against a literal read as its sides' equation.
-
-**Still to refine.** The exact fragments, atom relations, placement of normalization, cache lifetime and invalidation, and the consequences for substitution, universes, proof irrelevance, sharing and cost — and whether reduction may depend on a conversion verdict at all, against the evaluation memo and what a case equation assumes. Canonical comparison views do not by themselves justify changing reduction's spelling; the existing spelling decisions remain in force until a measured replacement lands.
+**Not refined yet.** This specification preserves what the carriers' algebra does not decide and no consumer has asked for, with the approaches already discussed, and the rows the law grid still refuses, as [the relational layer](08-relational-layer.md) reserves its own. Each opens when a consumer needs what it decides, and refinement establishes its fragment, algorithm contract and acceptance criteria before any implementation. It is not an implementation plan. What a verdict owes to how a term is spelled is not here: [A term is one where conversion says so](01-a-term-is-one-where-conversion-says-so.md) owns it.
 
 ## Boolean and bitwise normal forms
 
@@ -51,3 +37,7 @@ The cap is also a place conversion is not transitive, by design: with `A` the co
 ## Rows the law grid refuses
 
 `tests::laws::written` holds rows no rule decides yet, each a candidate for a family of its own. Parity read as a clash: the gcd test decides `x * 2 + 1 == y * 2` false as a fold, and read by the `Nat` peel as `Impossible` it would let `match h end` close `Eq()(x * 2 + 1, y * 2)`, so it needs its own row and [Coverage](../../design/soundness/elimination/coverage.md)'s evidence before inversion may rely on it. Map fusion, `map(map(xs, f), g) = map(xs, (x) => g(f(x)))`. A shift by a symbolic count's exponent law, and a literal-count right shift's quotient. Boolean agreement past the truth table's cap, above.
+
+## Retirement
+
+Each section leaves for a working specification of its own when its consumer arrives; this file is deleted with its roadmap entry once none is left.
