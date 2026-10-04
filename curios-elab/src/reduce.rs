@@ -7,6 +7,8 @@ mod partial_arithmetic_tests;
 #[cfg(test)]
 mod reduction_tests;
 #[cfg(test)]
+mod settlement_tests;
+#[cfg(test)]
 pub(crate) mod test_support;
 
 use {
@@ -879,14 +881,14 @@ fn scan_settled(
 ///
 /// **Withheld for the kernel's two reasons.** The entry's own frame holds the equation being settled, which reducing its key would meet at the first probe and answer with the case value it is assuming; and an inner frame retracts before the entry does, so a spelling resting on one would outlive its justification. The frames outside are exactly the equations the entry may rest on, and `Frames::withhold_refinements_from` leaves them live.
 ///
-/// **Capped where the kernel is not**, at the allowance a canonical key takes, because it is the same kind of work: optional, since an unsettled entry answers nothing and the program means what it meant, and unbounded in the worst case, since a guard over a subject an accumulation built reduces that accumulation. The kernel settles each entry once; the elaborator settles one again after every invalidation that clears the settled spellings, which `Caches::settled_keys` accounts for. A refusal or a bail settles the entry as having no reduced spelling, so it is paid once; exhaustion of the declaration itself propagates.
+/// **Capped where the kernel is not**, at the allowance a canonical key takes, because it is the same kind of work: optional, since an unsettled entry answers nothing and the program means what it meant, and unbounded in the worst case, since a guard over a subject an accumulation built reduces that accumulation. The kernel settles each entry once, and so does the elaborator while what its key reduces to cannot have changed: it settles one again where a redefinition, a rollback or a universe rewrite forgot it, and where it held an unsolved metavariable and a solution has landed (`Frames::scrutinee_spellings`). A refusal or a bail settles the entry as having no reduced spelling, so it is paid once; exhaustion of the declaration itself propagates.
 fn settle(
     context: &mut Context,
     frame: usize,
     key: Term,
     original: &Term,
 ) -> Result<(), ReduceError> {
-    // The key and its frame are what a hunt for repeated settlements needs: the same pair recurring is an entry settled again after an invalidation, and the costliest calls name the keys that pay.
+    // The key and its frame are what a hunt for repeated settlements needs: the same pair recurring is an entry settled again, and the costliest calls name the keys that pay.
     curios_profile::profile!("reduce::settle", key = %original, frame);
     let settled = context.with_refinements_withheld_from(frame, |context| {
         context.within_allowance(CANONICAL_KEY_ALLOWANCE, |context| {
@@ -895,17 +897,26 @@ fn settle(
         })
     });
 
+    // What a solution still to land could change: a key reducing through a metavariable, or stuck on one.
+    let unsolved = !zonk_solved_term_metas(context, original)
+        .metavars()
+        .is_empty();
+
     match settled {
         Ok(reduct) => {
+            let unsolved = unsolved
+                || reduct
+                    .as_ref()
+                    .is_some_and(|unerased| !unerased.metavars().is_empty());
             let settled = reduct.map(|unerased| Settled {
                 compared: project_erased_universes(&unerased),
                 unerased,
             });
-            context.record_settled_key(frame, key, settled);
+            context.record_settled_key(frame, key, settled, unsolved);
             Ok(())
         }
         Err(error) => {
-            context.record_settled_key(frame, key, None);
+            context.record_settled_key(frame, key, None, unsolved);
             Err(error)
         }
     }

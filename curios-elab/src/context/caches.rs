@@ -37,13 +37,6 @@ pub(crate) struct ElaborationStamp {
     universes: Entropy,
 }
 
-/// A scrutinee entry's reduced spelling once settled: the form a probe is compared at — solved metavariables materialized and universe instances erased, once, when it settles — and the unerased reduct a hit reads its instance from.
-#[derive(Debug, Clone)]
-pub(crate) struct Settled {
-    pub(crate) compared: Term,
-    pub(crate) unerased: Term,
-}
-
 /// The reduction, elaboration and canonical-key caches with their two write stamps. See the module documentation for the protocol; `Context` holds exactly one of these.
 #[derive(Debug, Default)]
 pub(crate) struct Caches {
@@ -61,12 +54,6 @@ pub(crate) struct Caches {
     ///
     /// Derived by reduction, so it is invalidated wherever a reduct is.
     canonical_keys: HashMap<Term, Term>,
-    /// A registered refinement key's *reduced* spelling, by the frame it was registered in and its key — or `None` where reducing it refused or outran its allowance: `reduce::refined_reduct`'s memo, the elaborator's copy of the kernel's per-entry reduct.
-    ///
-    /// A reduct of a refinement key, exactly as a canonical key is, so it is invalidated wherever one is and by no rule of its own.
-    ///
-    /// **That protocol is coarser than a settled spelling needs, and the cost is accepted.** A spelling is filed under its entry's frame and read only through the window, so it rests on nothing but the frames outside its entry and what reduction reads globally; a suppression bracket, a registration or the exit of a frame inside its entry changes none of that, and each clears it here all the same. Settling again after those clears is most of what the escalation costs. Invalidating by the spelling's own dependencies would recover part of that, at the price of a rule argued at every invalidation site rather than borrowed from one already there.
-    settled_keys: HashMap<(usize, Term), Option<Settled>>,
     /// The sort of each type classified since the context was last written to — `Sort::of_in`'s own answer, remembered so that a type whose graph shares a field is classified once per node where the walk alone classifies it once per path.
     ///
     /// **Valid for a quiet stretch, and that is as long as it needs to be.** A sort is derived by reduction and reads more besides: the type a local is assumed at, what a metavariable is solved to and has for a type, a declaration's sort, the levels the universe solver holds. Each of those changes by a stamped write, by a frame's exit — which closes binders and stamps nothing — or where a reduct is cleared, so the table is emptied at the first probe after either stamp has moved, wherever a frame is left, and wherever the reducts are. One classification does none of the three: it opens its binders beside the context rather than in it, which is why `Sort::of_in` threads them, and it is the classification that is per path without the table.
@@ -170,11 +157,10 @@ impl Caches {
         }
     }
 
-    /// A new declaration: every table is discarded — the reducts, the canonical and settled refinement keys, and the elaborations — so that what one declaration can afford is decided by nothing the declarations before it left behind.
+    /// A new declaration: every table is discarded — the reducts, the canonical refinement keys, and the elaborations — so that what one declaration can afford is decided by nothing the declarations before it left behind.
     pub(crate) fn begin_declaration(&mut self) {
         self.clear_reductions();
         self.canonical_keys.clear();
-        self.settled_keys.clear();
         self.clear_elaborations();
     }
 
@@ -184,15 +170,6 @@ impl Caches {
 
     pub(crate) fn canonical_key_insert(&mut self, key: Term, canonical: Term) {
         self.canonical_keys.insert(key, canonical);
-    }
-
-    /// The settled reduced spelling of the entry `key` registered in `frame`: `None` if it was never asked for, `Some(None)` if reducing it refused.
-    pub(crate) fn settled_key_get(&self, frame: usize, key: &Term) -> Option<&Option<Settled>> {
-        self.settled_keys.get(&(frame, key.clone()))
-    }
-
-    pub(crate) fn settled_key_insert(&mut self, frame: usize, key: Term, settled: Option<Settled>) {
-        self.settled_keys.insert((frame, key), settled);
     }
 
     pub(crate) fn elaboration_get(
@@ -290,7 +267,6 @@ impl Caches {
         self.note_write();
         self.clear_reductions();
         self.canonical_keys.clear();
-        self.settled_keys.clear();
         self.clear_elaborations();
     }
 
@@ -299,7 +275,6 @@ impl Caches {
         self.note_write();
         self.clear_reductions();
         self.canonical_keys.clear();
-        self.settled_keys.clear();
         self.clear_elaborations();
     }
 
@@ -313,14 +288,9 @@ impl Caches {
             .retain(|_, key| reduction.contains_key(key));
         // A sort is read through reducts and names none, so it has nothing to be retained by.
         self.sorts.clear();
-        // A canonical key is a reduct of the same kind, retained by the same test, and so is a settled one.
+        // A canonical key is a reduct of the same kind, retained by the same test.
         self.canonical_keys
             .retain(|_, canonical| !canonical.mentions_free(name));
-        self.settled_keys.retain(|_, settled| {
-            settled
-                .as_ref()
-                .is_some_and(|settled| !settled.unerased.mentions_free(name))
-        });
     }
 
     /// An assumption's type was replaced in place (`reassume`): an entry elaborated between a `rec` group's lowered `assume` and this upgrade could embed the lowered signature, so the elaboration cache clears; reducts never read assumption types, so the reduction cache survives. Stamped.
@@ -340,16 +310,14 @@ impl Caches {
         if dropped_refinements {
             self.clear_reductions();
             self.canonical_keys.clear();
-            self.settled_keys.clear();
             self.clear_elaborations();
         } else if dropped_definitions {
             self.clear_reductions();
             self.canonical_keys.clear();
-            self.settled_keys.clear();
         }
     }
 
-    /// A settlement is withholding, or has stopped withholding, the refinements from the entry it settles inwards: the suppression boundary's reason, facing the other way — what was reduced on one side of that line must not answer on the other — so the reduction tables and canonical keys clear on both sides as they do there. The settled spellings stay, each resting only on frames outside its entry, which a settlement leaves as they were.
+    /// A settlement is withholding, or has stopped withholding, the refinements from the entry it settles inwards: the suppression boundary's reason, facing the other way — what was reduced on one side of that line must not answer on the other — so the reduction tables and canonical keys clear on both sides as they do there.
     pub(crate) fn invalidate_settlement_boundary(&mut self) {
         self.clear_reductions();
         self.canonical_keys.clear();
@@ -361,7 +329,6 @@ impl Caches {
         curios_profile::sample!("caches::suppression_dropped", self.reduction.len() as u64);
         self.clear_reductions();
         self.canonical_keys.clear();
-        self.settled_keys.clear();
         self.clear_elaborations();
     }
 
@@ -369,7 +336,6 @@ impl Caches {
     pub(crate) fn invalidate_for_universe_rewrite(&mut self) {
         self.clear_reductions();
         self.canonical_keys.clear();
-        self.settled_keys.clear();
         self.clear_elaborations();
     }
 
@@ -381,7 +347,6 @@ impl Caches {
         self.note_universe_write();
         self.clear_reductions();
         self.canonical_keys.clear();
-        self.settled_keys.clear();
         // Entries are metavar-free on both key and value, so an un-solve cannot invalidate them in principle; cleared anyway while the rollback bracket is young — conservative and cheap.
         self.clear_elaborations();
     }

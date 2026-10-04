@@ -506,6 +506,7 @@ impl Context {
         self.depth.set(0);
         self.peak_depth.set(0);
         self.caches.begin_declaration();
+        self.frames.forget_spellings();
     }
 
     /// What the declaration being elaborated has consumed so far.
@@ -568,14 +569,24 @@ impl Context {
         }
     }
 
-    /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`: `None` if no probe has asked for it yet, `Some(None)` if reducing it refused. [`Caches::settled_keys`] carries the invalidation protocol.
+    /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`: `None` if no probe has asked for it yet, `Some(None)` if reducing it refused. [`Frames::scrutinee_spellings`] carries how long one stands.
     pub(crate) fn settled_key(&self, frame: usize, key: &Term) -> Option<&Option<Settled>> {
-        self.caches.settled_key_get(frame, key)
+        self.frames
+            .settled_spelling(frame, key, self.solutions.solved_len())
     }
 
     /// Record a settlement. Every one is recorded, whatever its metavariables — unlike [`Context::record_canonical_key`], whose caller recomputes a miss, the escalation loop settles the innermost entry *not yet asked*, so an unrecorded settlement would be asked for again forever.
-    pub(crate) fn record_settled_key(&mut self, frame: usize, key: Term, settled: Option<Settled>) {
-        self.caches.settled_key_insert(frame, key, settled);
+    ///
+    /// `unsolved` says the key or its spelling held an unsolved metavariable, so the settlement is filed beside the solutions committed so far and asked for again once another lands.
+    pub(crate) fn record_settled_key(
+        &mut self,
+        frame: usize,
+        key: Term,
+        settled: Option<Settled>,
+        unsolved: bool,
+    ) {
+        let solved = unsolved.then(|| self.solutions.solved_len());
+        self.frames.settle_spelling(frame, key, settled, solved);
     }
 
     /// Run `attempt` with at most `allowance` units of this declaration's budget in reach, answering `None` when it did not finish inside that.
@@ -979,6 +990,7 @@ impl Context {
         self.frames
             .set_assumption_universe_context(name, universe_context);
         self.caches.invalidate_for_redefinition();
+        self.frames.forget_spellings();
     }
 
     fn is_defined(&self, name: &Free) -> bool {
@@ -997,8 +1009,10 @@ impl Context {
         // A *redefinition* voids both arguments — the frame elaborators define under labels that can rebind or shadow, and the old value may sit consumed inside a reduct or an elaboration result that no longer mentions the label — so there both caches clear wholesale.
         if self.frames.is_defined(&name) {
             self.caches.invalidate_for_redefinition();
+            self.frames.forget_spellings();
         } else {
             self.caches.retain_reductions_without(&name);
+            self.frames.forget_spellings_naming(&name);
         }
 
         self.frames.define(name, entry);
@@ -1040,6 +1054,7 @@ impl Context {
     pub(crate) fn forget(&mut self, name: &Free) {
         self.frames.forget(name);
         self.caches.invalidate_for_redefinition();
+        self.frames.forget_spellings();
     }
 
     // === Refinements (see [`Frames`]) =======================================
@@ -1857,6 +1872,7 @@ impl Context {
             self.solutions.restamp(id, term);
         }
         self.caches.invalidate_for_rollback();
+        self.frames.forget_spellings();
     }
 
     /// Unwind every solution committed since `mark` — the transactional bracket around re-validation. Validating a candidate runs full elaboration, which can solve *other* metavariables along the way; if the candidate is ultimately rejected, those nested solutions were derived from an equation that never held and must not survive the verdict. Removes the unwound ids from the wake signals.
@@ -1872,6 +1888,7 @@ impl Context {
 
         if unwinds_terms {
             self.caches.invalidate_for_rollback();
+            self.frames.forget_spellings();
         } else if self.universe_solver.state_token() != universes_before {
             self.caches.note_universe_write();
             self.caches.invalidate_for_universe_transaction();
@@ -1941,6 +1958,7 @@ impl Context {
             .map(|term| zonk_universe_levels_scoped(*term, &solver).map_err(Error::from))
             .collect::<Result<Vec<_>, _>>()?;
         self.caches.invalidate_for_universe_rewrite();
+        self.frames.forget_spellings();
         Ok(terms)
     }
 
@@ -1960,6 +1978,7 @@ impl Context {
             .finalize(interface, internal, pending)
             .map_err(Error::from)?;
         self.caches.invalidate_for_universe_rewrite();
+        self.frames.forget_spellings();
         Ok(universe_context)
     }
 
@@ -1973,6 +1992,7 @@ impl Context {
             .finalize_at_instance(metas, instance, parameter_count)
             .map_err(Error::from)?;
         self.caches.invalidate_for_universe_rewrite();
+        self.frames.forget_spellings();
         Ok(())
     }
 
@@ -1986,6 +2006,7 @@ impl Context {
             .close_instance(minted, instance, determined)
             .map_err(Error::from)?;
         self.caches.invalidate_for_universe_rewrite();
+        self.frames.forget_spellings();
         Ok(())
     }
 

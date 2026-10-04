@@ -46,6 +46,22 @@ pub(crate) struct ScrutineeEntry {
     pub(crate) alias: bool,
 }
 
+/// A scrutinee entry's reduced spelling once settled: the form a probe is compared at — solved metavariables materialized and universe instances erased, once, when it settles — and the unerased reduct a hit reads its instance from.
+#[derive(Debug, Clone)]
+pub(crate) struct Settled {
+    pub(crate) compared: Term,
+    pub(crate) unerased: Term,
+}
+
+/// What a settlement left for one scrutinee entry.
+#[derive(Debug)]
+struct Spelling {
+    /// The reduced spelling, or `None` where reducing the key refused or outran its allowance.
+    settled: Option<Settled>,
+    /// How many solutions had been committed when it settled, where the key or the spelling held an unsolved metavariable — `None` where neither did, and no solution can change what the key reduces to.
+    solved: Option<usize>,
+}
+
 /// One projection refinement: the base as *written* (unerased, so a probe at another universe instance can be told apart from the spelling the arm actually scrutinized), and the arm's value.
 ///
 /// The key beside it is universes-erased, which is what lets two occurrences of one polymorphic base merge while their instances are still undecided. Erasure cannot tell a decided disagreement from an undecided one, so the base is kept whole and [`Context::proj_reduct`](crate::Context) compares it at the read.
@@ -146,6 +162,12 @@ pub(crate) struct Frames {
     refinement_projections: Vec<HashMap<(Term, usize), ProjectionEntry>>,
     /// Counterfactual refinements keyed by a *stuck application* scrutinee — a non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head` could not record. Keyed by a *canonical* form (head verbatim, arguments reduced to WHNF), so an occurrence that surfaces spelled differently still matches the stored key once both are canonicalized. The term-keyed analogue of the two stores above, suppressed by the same flag.
     refinement_scrutinees: Vec<HashMap<Term, ScrutineeEntry>>,
+    /// Each scrutinee entry's *reduced* spelling once a probe has asked for it, beside the entry: in the frame the entry was registered in, under its key — `reduce::refined_reduct`'s memo, the elaborator's copy of the kernel's per-entry reduct.
+    ///
+    /// **It lives as long as its entry, and is forgotten by what can change what its key reduces to.** A spelling is settled with its entry's frame and every frame inside it withheld, and read only through the window, so it rests on the refinements of the frames outside its entry — which cannot change while the entry stands: a registration lands in the innermost frame, and a frame leaves after every frame inside it — and on what reduction reads of everything else: the definitions, the solutions and the universe levels. So a registration, the exit of an inner frame and a suppression bracket leave it alone, and it is forgotten with its frame, where its key is registered again, at a redefinition, a rollback and a universe rewrite, and at a declaration's boundary, which nothing a budget paid for outlives. A fresh definition forgets the spellings naming it, as it does the reducts; and one settled while its key or its reduct held an unsolved metavariable is asked for again once a solution has landed.
+    ///
+    /// An entry is visible under one window floor only, the one in force where it was registered: a suppression bracket and a retry frame hide every frame that stood when they began, and leave after every frame entered inside them. So a spelling is never read under a floor other than the one it was settled under.
+    scrutinee_spellings: Vec<HashMap<Term, Spelling>>,
     /// How much of the refinement stack is withheld, as the frame depth suppression began at — `None` for none of it.
     ///
     /// A depth rather than a flag, because the refinements a re-validation meets are not all of one kind. The *ambient* ones — the arm the solver is currently inside — are counterfactual with respect to a solution for a metavariable born elsewhere, and withholding them is the whole point (`Convert::solve_at_birth`). Above this depth sit the ones the metavariable was born under, reinstalled by `Context::with_refinements`, and the candidate's own: `check` descending into a match arm of the term being validated re-establishes exactly the equalities that made that arm's body well-typed where it was written. Withholding those rejects correct solutions — a proof discharged by reduction inside an arm, `True/qed()` against `Holds(0 < Bytes/len(b))` in `/std/Str`'s scan fold, fails to re-check and the solution is thrown away — so suppression stops at the depth it started from.
@@ -181,6 +203,7 @@ impl Frames {
             refinements: vec![HashMap::new()],
             refinement_projections: vec![HashMap::new()],
             refinement_scrutinees: vec![HashMap::new()],
+            scrutinee_spellings: vec![HashMap::new()],
             suppress_refinements_below: None,
             withhold_refinements_from: None,
             retry_floor: None,
@@ -202,6 +225,7 @@ impl Frames {
         self.refinements.push(HashMap::new());
         self.refinement_projections.push(HashMap::new());
         self.refinement_scrutinees.push(HashMap::new());
+        self.scrutinee_spellings.push(HashMap::new());
         self.local_marks.push(self.local.len());
         self.witness_marks.push(self.witness_scope.len());
     }
@@ -216,6 +240,7 @@ impl Frames {
         let refinements = self.refinements.pop().unwrap();
         let refinement_projections = self.refinement_projections.pop().unwrap();
         let refinement_scrutinees = self.refinement_scrutinees.pop().unwrap();
+        self.scrutinee_spellings.pop().unwrap();
         self.local.truncate(self.local_marks.pop().unwrap());
         self.witness_scope
             .truncate(self.witness_marks.pop().unwrap());
@@ -538,10 +563,62 @@ impl Frames {
     /// Register a counterfactual refinement of a stuck-application scrutinee (`refine_head` on a non-key head). `canonical` is the cheap key (as written, metas and universes normalized); `original` is the unerased spelling the probe-time canonicalization reduces; `value` is the arm's constructor. Sound for the same reason `refine` is — the arm is reached only when the scrutinee equals `value` — and non-cyclic because `value` is a constructor of the scrutinee's inductive, a normal form. The façade clears the caches first.
     pub(crate) fn refine_scrutinee(&mut self, canonical: Term, entry: ScrutineeEntry) {
         self.refinement_stamp.fresh();
+        // A key registered again is another entry, and what the one before it settled to is not its spelling.
+        self.scrutinee_spellings
+            .last_mut()
+            .unwrap()
+            .remove(&canonical);
         self.refinement_scrutinees
             .last_mut()
             .unwrap()
             .insert(canonical, entry);
+    }
+
+    /// The reduced spelling settled for the entry `key` registered in `frame`: `None` where no probe has asked for it — or it held an unsolved metavariable and a solution has landed since, `solved` being how many are committed now — and `Some(None)` where reducing it refused.
+    pub(crate) fn settled_spelling(
+        &self,
+        frame: usize,
+        key: &Term,
+        solved: usize,
+    ) -> Option<&Option<Settled>> {
+        let spelling = self.scrutinee_spellings.get(frame)?.get(key)?;
+
+        spelling
+            .solved
+            .is_none_or(|settled_at| settled_at == solved)
+            .then_some(&spelling.settled)
+    }
+
+    /// File what the entry `key` registered in `frame` settled to. `solved` is how many solutions were committed, where the key or the spelling held an unsolved metavariable.
+    pub(crate) fn settle_spelling(
+        &mut self,
+        frame: usize,
+        key: Term,
+        settled: Option<Settled>,
+        solved: Option<usize>,
+    ) {
+        if let Some(spellings) = self.scrutinee_spellings.get_mut(frame) {
+            spellings.insert(key, Spelling { settled, solved });
+        }
+    }
+
+    /// Forget every settled spelling: what a key reduces to may have changed everywhere.
+    pub(crate) fn forget_spellings(&mut self) {
+        for spellings in &mut self.scrutinee_spellings {
+            spellings.clear();
+        }
+    }
+
+    /// Forget the settled spellings a fresh definition of `name` can change: the ones naming it, which were stuck on its absence, and the ones that refused.
+    pub(crate) fn forget_spellings_naming(&mut self, name: &Free) {
+        for spellings in &mut self.scrutinee_spellings {
+            spellings.retain(|_, spelling| {
+                spelling
+                    .settled
+                    .as_ref()
+                    .is_some_and(|settled| !settled.unerased.mentions_free(name))
+            });
+        }
     }
 
     /// Whether any scrutinee refinement is registered (regardless of suppression). The cheap outer gate for the reducer probe — skipped on the common refinement-free reduction without hashing anything.
