@@ -1,4 +1,4 @@
-//! Eta at a function and a record, and where irrelevance takes over from comparison.
+//! Eta at a function, a record and a unit, and where irrelevance takes over from comparison.
 
 use {super::test_support::*, crate::tests::run};
 
@@ -47,6 +47,30 @@ fn an_expansion_that_drops_its_binder_is_not_eta_in_an_arm() {
 fn an_expansion_that_swaps_its_components_is_not_eta_in_an_arm() {
     rejected_by(
         AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA_IN_AN_ARM,
+        "type mismatch",
+    );
+}
+
+// **Unit eta is the type's, in both checkers.** A type with no field — the empty Σ, a nominal struct that declares none — has one inhabitant, so any two terms convert at it, and each checker decides the goal by its type ahead of every structural rule. The elaborator reached the rule only between two sides no structural rule claimed and the kernel had it against a literal alone, so two variables elaborated and were refused by the kernel, and two applications or two stuck matches were refused by the elaborator, which held each equal to a variable. The first two programs are the ones that reached the kernel's refusal; the rest are the shapes, and the two eta rules that carry a goal to a unit.
+//
+// The two refusals beside it are what keep the acceptance from reading as "any two records convert": one relevant field keeps two neutrals apart, and a nominal struct that has a field is no unit, whatever the field's type.
+#[test]
+fn any_two_terms_convert_at_a_type_with_no_field() {
+    assert_eq!(run(ANY_TWO_TERMS_CONVERT_AT_A_TYPE_WITH_NO_FIELD), b"1");
+}
+
+#[test]
+fn two_neutrals_at_a_record_with_a_relevant_field_stay_apart() {
+    rejected_by(
+        TWO_NEUTRALS_AT_A_RECORD_WITH_A_RELEVANT_FIELD_STAY_APART,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn two_neutrals_at_a_struct_with_a_field_stay_apart() {
+    rejected_by(
+        TWO_NEUTRALS_AT_A_STRUCT_WITH_A_FIELD_STAY_APART,
         "type mismatch",
     );
 }

@@ -1,4 +1,4 @@
-//! Structural conversion: reflexivity, beta and delta, eta at a function and a pair — by the goal's type, and by a literal where no type directs it — intrinsic congruence, plicity and universe levels.
+//! Structural conversion: reflexivity, beta and delta, eta at a function, a pair and a type with no field — by the goal's type, and by a literal where no type directs it — intrinsic congruence, plicity and universe levels.
 
 use {
     super::test_support::*,
@@ -189,6 +189,70 @@ fn the_unit_literal_converges_with_a_neutral() {
         convert(&mut kernel, &Term::type_ground(), &neutral, &unit),
         Ok(true)
     );
+}
+
+/// Unit eta, by the goal's type: at the empty Σ and at a nominal struct that declares no field, any two terms converge without being read — two variables, and two stuck applications of two heads, which no structural rule equates. It composes with the eta that reaches it: two variables at a record of units converge by their projections, and two at a function into a unit by their applications.
+///
+/// The rule is the type's. At `Type`, what a child with no typed context is compared at, two variables stay apart, and so do two at a record or a struct that has a relevant field.
+///
+/// Mutation-checked: with the empty Σ left to the structural rules the first goal is refused, without the struct's arm the field-less struct's is, and with that arm taken whatever the declaration's fields the last goal is accepted.
+#[test]
+fn any_two_terms_converge_at_a_type_with_no_field() {
+    let mut kernel = kernel();
+    let (u, v) = (
+        Term::free_var(&binder(0, "u")),
+        Term::free_var(&binder(1, "v")),
+    );
+    let applied = |head: u32, hint: &str, argument: usize| {
+        Term::apply(Term::free_var(&binder(head, hint)), [nat(argument)])
+    };
+    let mut declare = |path: &str, fields: Telescope<()>| {
+        let name = Global::Authored(Qualifier::from([path]));
+        kernel.declare_struct(
+            &name,
+            &StructDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(fields),
+                result_sort: Term::type_ground(),
+                module: Qualifier::from([path]),
+                rep_public: true,
+                polarities: Vec::new(),
+                plicities: Vec::new(),
+            },
+        );
+
+        Term::from(Subterm::StructType(StructType {
+            name,
+            universes: Vec::new(),
+            params: Vec::new(),
+        }))
+    };
+    let field_less = declare("U", Telescope::done(()));
+    let one_field = declare("S", Telescope::build([(binder(8, "a"), nat_type())], ()));
+
+    let unit = Term::tuple_type_unit();
+    let record_of_units = Term::tuple_type([
+        (binder(8, "a"), Term::tuple_type_unit()),
+        (binder(9, "b"), Term::tuple_type_unit()),
+    ]);
+    let function_into_unit = Term::func_type([(binder(8, "x"), nat_type())], unit.clone());
+    let record_of_a_number = Term::tuple_type([(binder(8, "a"), nat_type())]);
+
+    assert_eq!(convert(&mut kernel, &unit, &u, &v), Ok(true));
+    assert_eq!(
+        convert(&mut kernel, &unit, &applied(2, "f", 0), &applied(3, "g", 1)),
+        Ok(true)
+    );
+    assert_eq!(convert(&mut kernel, &field_less, &u, &v), Ok(true));
+    assert_eq!(convert(&mut kernel, &record_of_units, &u, &v), Ok(true));
+    assert_eq!(convert(&mut kernel, &function_into_unit, &u, &v), Ok(true));
+
+    assert_eq!(
+        convert(&mut kernel, &Term::type_ground(), &u, &v),
+        Ok(false)
+    );
+    assert_eq!(convert(&mut kernel, &record_of_a_number, &u, &v), Ok(false));
+    assert_eq!(convert(&mut kernel, &one_field, &u, &v), Ok(false));
 }
 
 /// A literal's shape fires eta against a neutral inhabitant alone. Against a canonical form — which only a caller comparing two terms of different types could hand over — neither rule fires, and the unit literal's empty walk equates it with no literal of another type.

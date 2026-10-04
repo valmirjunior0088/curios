@@ -656,6 +656,58 @@ pub(super) const AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA_IN_AN_ARM: &s
         /std/Io/pure(())
         "#;
 
+pub(super) const ANY_TWO_TERMS_CONVERT_AT_A_TYPE_WITH_NO_FIELD: &str = r#"
+        use /std/{Eq, Nat, Bool};
+
+        struct U: pub Type {}
+
+        let at_the_unit(F : ({}) -> Type, r : {}, s : {}, x : F(r)) -> F(s) = x;
+
+        let at_a_struct(F : (U) -> Type, r : U, s : U, x : F(r)) -> F(s) = x;
+
+        let at_a_record_of_units(r : {a: {}, b: {}}, s : {a: {}, b: {}})
+            -> Eq(@({a: {}, b: {}}))(r, s)
+            = Eq/refl();
+
+        let at_a_function_into_a_unit(f : (Nat) -> {}, g : (Nat) -> {})
+            -> Eq(@((Nat) -> {}))(f, g)
+            = Eq/refl();
+
+        let two_applications(f : (Nat) -> {}, g : (Nat) -> {}, n : Nat)
+            -> Eq(@({}))(f(n), g(n))
+            = Eq/refl();
+
+        let two_stuck_matches(b : Bool, r : {}, s : {})
+            -> Eq(@({}))(match b: (_) => {} | true => r | false => r end,
+                         match b: (_) => {} | true => s | false => s end)
+            = Eq/refl();
+
+        let two_stuck_matches_at_a_struct(b : Bool, r : U, s : U)
+            -> Eq(@(U))(match b: (_) => U | true => r | false => r end,
+                        match b: (_) => U | true => s | false => s end)
+            = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const TWO_NEUTRALS_AT_A_RECORD_WITH_A_RELEVANT_FIELD_STAY_APART: &str = r#"
+        use /std/{Eq, Nat};
+
+        let apart(r : {Nat, {}}, s : {Nat, {}}) -> Eq(@({Nat, {}}))(r, s) = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const TWO_NEUTRALS_AT_A_STRUCT_WITH_A_FIELD_STAY_APART: &str = r#"
+        use /std/{Eq, Nat};
+
+        struct W: pub Type { u: {} }
+
+        let apart(r : W, s : W) -> Eq(@(W))(r, s) = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
 pub(super) const A_FUNCTION_INTO_A_PROPOSITION_IS_DISCHARGED_BEFORE_ETA: &str = r#"
         use /std/{Eq, Nat};
 

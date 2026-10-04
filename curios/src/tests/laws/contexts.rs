@@ -112,7 +112,7 @@ const NUMBER: &[&str] = &["Nat"];
 const TYPE: &[&str] = &["Type"];
 
 /// A hole where each checker has the type to compare it at: an argument, a payload, a field, a component, an element, a body.
-pub(super) const TYPED: &[Context] = &[
+const TYPED: &[Context] = &[
     any(
         "a variable's argument",
         Former::Apply,
@@ -282,7 +282,7 @@ const HEADS: &[Context] = &[
 ];
 
 /// A hole that is a type, in each place a type is written.
-pub(super) const TYPES: &[Context] = &[
+const TYPES: &[Context] = &[
     at(
         TYPE,
         "a function type's domain",

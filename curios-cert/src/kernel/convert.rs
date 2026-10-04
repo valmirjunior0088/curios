@@ -4,7 +4,7 @@
 //!
 //! The rules, in the order they are tried:
 //!
-//! 1. **Proof irrelevance.** A goal at a `Prop`-sorted type is discharged without looking at either side. Any two inhabitants of a proposition are definitionally equal, which is what lets erasure drop them wholesale. 2. **Eta.** At a function type both sides are applied to fresh binders and compared at the codomain; at a Σ type both are projected and compared componentwise. So `f` and `(x) => f(x)` convert, and so do `p` and `(p.0, p.1)`, without either side having to be in that shape. 3. **Structure.** Both sides are reduced to weak-head normal form and their heads compared, recursing on the children.
+//! 1. **Proof irrelevance.** A goal at a `Prop`-sorted type is discharged without looking at either side. Any two inhabitants of a proposition are definitionally equal, which is what lets erasure drop them wholesale. 2. **Eta.** At a function type both sides are applied to fresh binders and compared at the codomain; at a Σ type both are projected and compared componentwise; and at a type with no field — the empty Σ, or a nominal struct that declares none — nothing is left to compare, so any two inhabitants convert. So `f` and `(x) => f(x)` convert, and so do `p` and `(p.0, p.1)`, without either side having to be in that shape. 3. **Structure.** Both sides are reduced to weak-head normal form and their heads compared, recursing on the children.
 //!
 //! # Termination, and the recurrence rule
 //!
@@ -20,7 +20,7 @@
 //!
 //! # Where this is incomplete, and why that is the safe direction
 //!
-//! One concession remains. Every child position without a typed context — a stuck elimination's scrutinee, and its motive and arms under their opaque binders, and a projection's or an instance's head — is compared at `Type` rather than at the types its head assigns, which forfeits there what only a type directs: irrelevance, and eta between two neutrals. Eta by a literal needs no type — a lambda, a tuple literal or a struct literal against a neutral inhabitant states what the type would have, and fires there as it does anywhere (`function_eta`, `tuple_eta`, `struct_eta`), which is what keeps conversion a congruence under such a child for every pair the elaborator's own eta, fired by the literal, accepts. Each forfeit is a place where the kernel may reject a term the elaborator accepted. Everything else is typed. An application spine's arguments compare at the telescope its head carries — a variable, a universe instance of one, or a projection of a `rec` group, read by `synth_neutral` as a lookup rather than an inference (`compare_arguments`) — and a head that names no type still grounds. An inductive type-former's arguments compare at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P)(p, q)` at a `Prop`-sorted `P` convert with `Eq(@P)(p, p)`; a struct type's, a struct literal's and a constructor's parameters at the declaration's outer telescope (`params_at`); and a struct literal's fields and a constructor's payload at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read, so two `Str`s built from different proofs of the same bytes are one value. Two applications of one definition are compared by their spines *before* either is unfolded, as the elaborator compares them (`one_definition_by_its_spines`), because unfolded first a proof argument lands in a stuck scrutinee, where it is not typed. Two instances of one `rec` group are decided by their levels under the item's hypotheses (`rec_instances`), the equation `induct_type_args` and the instance arms apply, and two different groups are refused.
+//! One concession remains. Every child position without a typed context — a stuck elimination's scrutinee, and its motive and arms under their opaque binders, and a projection's or an instance's head — is compared at `Type` rather than at the types its head assigns, which forfeits there what only a type directs: irrelevance, and eta between two neutrals, unit eta with it. Eta by a literal needs no type — a lambda, a tuple literal or a struct literal against a neutral inhabitant states what the type would have, and fires there as it does anywhere (`function_eta`, `tuple_eta`, `struct_eta`), which is what keeps conversion a congruence under such a child for every pair the elaborator's own eta, fired by the literal, accepts. Each forfeit is a place where the kernel may reject a term the elaborator accepted. Everything else is typed. An application spine's arguments compare at the telescope its head carries — a variable, a universe instance of one, or a projection of a `rec` group, read by `synth_neutral` as a lookup rather than an inference (`compare_arguments`) — and a head that names no type still grounds. An inductive type-former's arguments compare at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P)(p, q)` at a `Prop`-sorted `P` convert with `Eq(@P)(p, p)`; a struct type's, a struct literal's and a constructor's parameters at the declaration's outer telescope (`params_at`); and a struct literal's fields and a constructor's payload at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read, so two `Str`s built from different proofs of the same bytes are one value. Two applications of one definition are compared by their spines *before* either is unfolded, as the elaborator compares them (`one_definition_by_its_spines`), because unfolded first a proof argument lands in a stuck scrutinee, where it is not typed. Two instances of one `rec` group are decided by their levels under the item's hypotheses (`rec_instances`), the equation `induct_type_args` and the instance arms apply, and two different groups are refused.
 //!
 //! That direction is deliberate. An incomplete conversion refuses programs; an unsound one admits them. A refusal is visible — it is a disagreement between the two checkers, which is precisely the signal this kernel exists to produce — whereas an over-eager acceptance is silent and is exactly what a second opinion is supposed to catch. Every one of these can be strengthened later against a real program that needs it, and none can be strengthened back from having been wrong.
 
@@ -157,8 +157,16 @@ fn compare(
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 eta_function(kernel, history, telescope, this, that)
             }
-            Subterm::TupleType(TupleType { telescope }) if !telescope.is_empty() => {
+            Subterm::TupleType(TupleType { telescope }) => {
                 eta_tuple(kernel, history, telescope, this, that)
+            }
+            // Unit eta at a nominal struct: one that declares no field has one inhabitant, as the empty Σ has, and the goal is decided as `eta_tuple` decides it there. A struct with fields is left to its literal (`struct_eta`), two neutrals at one staying apart.
+            Subterm::StructType(StructType { name, .. })
+                if kernel
+                    .struct_decl(&name)
+                    .is_some_and(|declaration| declaration.field_count() == 0) =>
+            {
+                Ok(true)
             }
             _ => match one_definition_by_its_spines(kernel, history, this, that)? {
                 true => Ok(true),
@@ -260,6 +268,8 @@ fn eta_function(
 /// Eta at a Σ type: compare the two sides componentwise through projections.
 ///
 /// A later field's type may mention an earlier one, and names it by a projection of the *left* side — sound because the earlier components have already been shown equal by the time that type is used.
+///
+/// **At the empty Σ this is unit eta.** No component is left to compare, so any two terms convert at `{}` without either being read: the type has one inhabitant, and conversion is asked about two terms of the goal's type, the invariant irrelevance discharges a proposition on. It composes with the rules above it — two terms at a record of units, or two functions into one, convert by the eta that reaches the unit — and it is forfeited with them wherever a child is compared at `Type`.
 fn eta_tuple(
     kernel: &mut Kernel,
     history: &mut History,
@@ -707,7 +717,7 @@ fn function_eta(
     })
 }
 
-/// Eta at a record, by the literal: a tuple literal against a *neutral* inhabitant, each field compared at `Type` with the neutral's projection, under the invariant and the restriction [`function_eta`] has. [`compare`] fires the rule by the goal's type at a Σ with fields ([`eta_tuple`]), and this is the same rule where no such type is at hand.
+/// Eta at a record, by the literal: a tuple literal against a *neutral* inhabitant, each field compared at `Type` with the neutral's projection, under the invariant and the restriction [`function_eta`] has. [`compare`] fires the rule by the goal's type at a Σ ([`eta_tuple`]), and this is the same rule where no such type is at hand.
 ///
 /// A literal with no field compares nothing and answers `true`, as an empty struct's does at [`struct_eta`]: `{}` has one inhabitant, and a neutral of the literal's type is it.
 fn tuple_eta(

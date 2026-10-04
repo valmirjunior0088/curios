@@ -167,7 +167,7 @@ pub(super) const SEEDS: &[Seeds] = &[
     },
     Seeds {
         type_: "{}",
-        binders: "u: {}, v: {}",
+        binders: "u: {}, v: {}, f: (Nat) -> {}, e: (Nat) -> {}, n: Nat",
         compound: Some(Compound {
             binder: "u: {}",
             term: "()",
@@ -176,6 +176,26 @@ pub(super) const SEEDS: &[Seeds] = &[
         seeds: &[
             held("unit eta, the literal", "()", "u"),
             held("unit eta, two neutrals", "v", "u"),
+            // Two sides of one shape, which a structural rule compares head against head: the type decides them, and no shape does.
+            held("unit eta, two applications", "f(n)", "e(n)"),
+        ],
+    },
+    // A function into a unit has one inhabitant too, and no rule says so but two composed: eta at the function carries the goal to the unit, whose type decides it.
+    Seeds {
+        type_: "(Nat) -> {}",
+        binders: "f: (Nat) -> {}, e: (Nat) -> {}",
+        compound: Some(Compound {
+            binder: "f: (Nat) -> {}",
+            term: "(x: Nat) => ()",
+            binders: "",
+        }),
+        seeds: &[
+            held(
+                "unit eta at a function into a unit, the literal",
+                "(x: Nat) => ()",
+                "f",
+            ),
+            held("unit eta at a function into a unit, two neutrals", "e", "f"),
         ],
     },
     // A record whose fields each have one inhabitant has one too. The literal meets a neutral by its shape and two neutrals meet by nothing but the type, so a checker that takes the first and not the second holds `r` and `s` each equal to the literal and not to each other.

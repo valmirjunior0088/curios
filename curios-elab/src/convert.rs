@@ -1038,17 +1038,19 @@ impl Convert {
                 );
                 Ok(true)
             }
+            // Each projection at the type its field has, opened at the left side's preceding projections, as the kernel's Σ eta compares them: a field at a proposition or at a type with no field is decided by that type, where at `Type` two neutrals' projections never meet.
             Subterm::TupleType(TupleType { telescope, .. }) => {
-                for i in 0..telescope.len() {
-                    self.enqueue(
-                        Term::type_ground(),
-                        Term::proj(this.clone(), i),
-                        Term::proj(that.clone(), i),
-                    );
-                }
+                let n = telescope.len();
+                let projections = |term: &Term| {
+                    (0..n)
+                        .map(|i| Term::proj(term.clone(), i))
+                        .collect::<Vec<_>>()
+                };
+                self.enqueue_fields(projections(&this), projections(&that), Some(telescope));
                 Ok(true)
             }
             // A nominal struct is a named tuple with no constructor tag (`structure.rs`'s own doc: "an Inductive minus the indices and the per-constructor map"), so it gets the same η treatment — recover the field count from the registry (`compare_struct` recovers the field *types* the same way) since, unlike a `TupleType`, a `StructType` doesn't carry its telescope inline.
+            // Its projections stay at `Type`, where the tuple's are at their fields' types: the kernel has no eta between two neutrals at a struct that has fields, so a field decided by its type would be accepted here alone.
             Subterm::StructType(StructType { name, .. }) => {
                 let n = context
                     .struct_decl(&name)
@@ -1709,6 +1711,11 @@ impl Convert {
                 continue;
             }
 
+            // Unit eta, by the goal's type: a type with no field has one inhabitant, so the goal is decided here whatever the two sides' shapes, as the kernel decides it ahead of every structural rule. Left to `eta_expand_neutral`, two sides of one shape — two stuck matches, two applications — would be compared structurally and refused, and conversion would not be transitive at the type. After the metavariable dispatch, as the check above is, so a flexible side is still solved.
+            if field_less(context, &type_) {
+                continue;
+            }
+
             let problem = Problem {
                 type_: type_.clone(),
                 this: this.clone(),
@@ -2043,6 +2050,17 @@ impl Convert {
         }
 
         Ok(true)
+    }
+}
+
+/// Whether `type_`, in weak-head normal form, is a type with no field: the empty Σ, or a nominal struct whose declaration has none.
+fn field_less(context: &Context, type_: &Term) -> bool {
+    match &**type_ {
+        Subterm::TupleType(TupleType { telescope, .. }) => telescope.is_empty(),
+        Subterm::StructType(StructType { name, .. }) => context
+            .struct_decl(name)
+            .is_some_and(|declaration| declaration.field_count() == 0),
+        _ => false,
     }
 }
 

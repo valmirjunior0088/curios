@@ -2,7 +2,7 @@
 //!
 //! One table, held equal to what each audit finds: a row that starts parting fails its audit until it is listed, and a listed row that stops parting fails it until the entry is deleted, which is what the commit that closes its finding does. A row both checkers refuse is no disagreement between them and is listed all the same, since its seed derives that it holds.
 
-use super::{ARMS, Answers, Context, TYPED, TYPES};
+use super::{ARMS, Answers, Context};
 
 /// The audit that states a row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,46 +26,31 @@ pub(super) struct Parted {
     pub(super) finding: &'static str,
 }
 
-const UNIT_ETA: &str = "The two checkers part on unit eta, and a program reaches it.";
+const ETA_BY_TYPE: &str = "The elaborator fires Π and Σ eta by the goal's type only between two terms no structural rule claims.";
 
-/// Two neutrals at a type with no fields, which nothing but the type equates.
-const UNIT_NEUTRALS: &[&str] = &[
-    "unit eta, two neutrals",
-    "unit eta at a struct, two neutrals",
+/// Two neutrals at a type eta carries to a unit: a record of units, by its projections, and a function into a unit, by its application.
+const CARRIED_TO_A_UNIT: &[&str] = &[
+    "unit eta at a record of units, two neutrals",
+    "unit eta at a function into a unit, two neutrals",
 ];
 
-/// Two neutrals at a record of units, which the elaborator refuses wherever it meets them: it compares their projections at `Type`, where it compared the literal's fields at no type at all.
-const RECORD_NEUTRALS: &[&str] = &["unit eta at a record of units, two neutrals"];
-
-/// The one typed context under which the elaborator refuses two neutrals at a unit, as the kernel does: two calls of a definition, which unfold to stuck matches whose arms are compared at `Type`.
+/// The one typed context that hands its two sides over as one stuck shape: two calls of a definition, which unfold to two stuck matches.
 const UNFOLDED: &str = "a definition's argument";
 
 /// Every row listed.
 pub(super) fn parted() -> Vec<Parted> {
-    let kernel_refuses = Answers {
-        elaborator: true,
-        kernel: false,
+    let elaborator_refuses = Answers {
+        elaborator: false,
+        kernel: true,
     };
-    let both_refuse = Answers::both(false);
     let names = |contexts: &[Context]| {
         contexts
             .iter()
             .map(|context| context.name)
             .collect::<Vec<_>>()
     };
-    let (typed, arms, types) = (names(TYPED), names(ARMS), names(TYPES));
-    let folded = typed
-        .iter()
-        .copied()
-        .filter(|context| *context != UNFOLDED)
-        .collect::<Vec<_>>();
+    let arms = names(ARMS);
     // A row's name, as the audit that states it spells it.
-    let alone = |seeds: &[&str], law: &str| {
-        seeds
-            .iter()
-            .map(|seed| format!("{seed}{law}"))
-            .collect::<Vec<_>>()
-    };
     let under = |seeds: &[&str], contexts: &[&str]| {
         seeds
             .iter()
@@ -87,46 +72,18 @@ pub(super) fn parted() -> Vec<Parted> {
         }));
     };
 
-    // Unit eta between two neutrals. The elaborator equates two neutrals at a type with no fields, by the type, and the kernel has no such rule. Both part from the seed where neither has the type — an arm, and a definition's argument once unfolded — and at a record of units wherever the two stand, which is where the elaborator's conversion is not transitive: each neutral is the literal, and the two are not each other.
-    for (audit, law) in [(Audit::Seeds, ""), (Audit::Reversed, ", reversed")] {
-        list(audit, alone(UNIT_NEUTRALS, law), kernel_refuses, UNIT_ETA);
-        list(audit, alone(RECORD_NEUTRALS, law), both_refuse, UNIT_ETA);
-    }
-    for (audit, contexts) in [
-        (Audit::Typed, &typed),
-        (Audit::Arms, &arms),
-        (Audit::Types, &types),
-    ] {
-        list(
-            audit,
-            under(RECORD_NEUTRALS, contexts),
-            both_refuse,
-            UNIT_ETA,
-        );
-    }
-    list(
-        Audit::Types,
-        under(UNIT_NEUTRALS, &types),
-        kernel_refuses,
-        UNIT_ETA,
-    );
-    list(
-        Audit::Typed,
-        under(UNIT_NEUTRALS, &folded),
-        kernel_refuses,
-        UNIT_ETA,
-    );
-    list(
-        Audit::Typed,
-        under(UNIT_NEUTRALS, &[UNFOLDED]),
-        both_refuse,
-        UNIT_ETA,
-    );
+    // Eta by the goal's type, ahead of structure. The kernel projects two sides at a record and applies two at a function whatever their shapes, and so reaches the unit that decides the goal. The elaborator compares two stuck matches arm against arm at `Type`, where two neutrals at such a type stay apart: each match is the literal there, and the two are not each other.
     list(
         Audit::Arms,
-        under(UNIT_NEUTRALS, &arms),
-        both_refuse,
-        UNIT_ETA,
+        under(CARRIED_TO_A_UNIT, &arms),
+        elaborator_refuses,
+        ETA_BY_TYPE,
+    );
+    list(
+        Audit::Typed,
+        under(CARRIED_TO_A_UNIT, &[UNFOLDED]),
+        elaborator_refuses,
+        ETA_BY_TYPE,
     );
 
     parted

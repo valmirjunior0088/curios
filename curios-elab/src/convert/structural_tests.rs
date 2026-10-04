@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_core::{
-        Atom, Exhaustion, InductDecl, InductParam, Intrinsic, Many, MetavarId, Scope, StructDecl,
-        Telescope, Term, UniverseContext,
+        Atom, Exhaustion, Free, InductDecl, InductParam, Intrinsic, Many, MetavarId, Scope,
+        StructDecl, StructType, Subterm, Telescope, Term, UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -141,6 +141,75 @@ fn unit_typed_neutrals_in_type_argument() {
     let that = Term::apply(f, [s]); // F s
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
+}
+
+/// Unit eta, by the goal's type: at the empty Σ and at a nominal struct that declares no field, any two terms converge whatever their shapes — two stuck applications of two heads, which the structural rule compares head against head and would refuse. It composes with the eta between two neutrals that reaches it: two variables at a record of units converge by their projections, each at its field's type, and two at a function into a unit by their applications. The kernel's twin of this proposition shares the name.
+///
+/// The rule is the type's: at `Type` two variables stay apart, and so do two at a record or a struct that has a relevant field.
+///
+/// Mutation-checked: without the check ahead of the structural dispatch the first goal is refused, with a tuple neutral's projections compared at `Type` the record of units' is, and with a struct's fields uncounted the last goal is accepted.
+#[test]
+fn any_two_terms_converge_at_a_type_with_no_field() {
+    let mut context = context();
+    let (f, g) = (context.fresh(Some("f")), context.fresh(Some("g")));
+    let (u, v) = (
+        Term::free_var(&context.fresh(Some("u"))),
+        Term::free_var(&context.fresh(Some("v"))),
+    );
+    let (a, b) = (context.fresh(Some("a")), context.fresh(Some("b")));
+
+    let unit = Term::tuple_type_unit();
+    let function_into_unit = Term::func_type([(a, nat_type())], unit.clone());
+    context.assume(&f, &function_into_unit);
+    context.assume(&g, &function_into_unit);
+
+    let mut declare = |path: &str, fields: Telescope<()>| {
+        context
+            .register_struct(
+                &nominal(path),
+                StructDecl {
+                    universe_context: UniverseContext::empty(),
+                    arity: Telescope::done(fields),
+                    result_sort: Term::type_ground(),
+                    module: Qualifier::empty(),
+                    rep_public: true,
+                    polarities: Vec::new(),
+                    plicities: Vec::new(),
+                },
+            )
+            .unwrap();
+
+        Term::from(Subterm::StructType(StructType {
+            name: nominal(path),
+            universes: Vec::new(),
+            params: Vec::new(),
+        }))
+    };
+    let field_less = declare("U", Telescope::done(()));
+    let one_field = declare("S", Telescope::build([(a, nat_type())], ()));
+
+    let record_of_units = Term::tuple_type([(a, unit.clone()), (b, unit.clone())]);
+    let record_of_a_number = Term::tuple_type([(a, nat_type())]);
+    let applied = |head: &Free, argument: usize| Term::apply(Term::free_var(head), [nat(argument)]);
+
+    assert_eq!(
+        convert(&mut context, &unit, &applied(&f, 0), &applied(&g, 1)),
+        Ok(true)
+    );
+    assert_eq!(convert(&mut context, &unit, &u, &v), Ok(true));
+    assert_eq!(convert(&mut context, &field_less, &u, &v), Ok(true));
+    assert_eq!(convert(&mut context, &record_of_units, &u, &v), Ok(true));
+    assert_eq!(convert(&mut context, &function_into_unit, &u, &v), Ok(true));
+
+    assert_eq!(
+        convert(&mut context, &Term::type_ground(), &u, &v),
+        Ok(false)
+    );
+    assert_eq!(
+        convert(&mut context, &record_of_a_number, &u, &v),
+        Ok(false)
+    );
+    assert_eq!(convert(&mut context, &one_field, &u, &v), Ok(false));
 }
 
 // A struct's fields compare at their declared types, recovered from the registry — so a proof-irrelevant (unit-typed) field equates distinct neutrals, and two structs differing only there are convertible.
