@@ -16,7 +16,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Soundness
 
-- [ ] [Conversion is one relation in both checkers](roadmap/01-soundness/01-conversion-is-one-relation-in-both-checkers.md) — the kernel refuses Π and Σ eta under a child it compares at `Type` and has no unit eta, the elaborator's conversion is not transitive at a record of units, and no test asks the kernel about an equation the elaborator refuses
+- [ ] [Conversion is one relation in both checkers](roadmap/01-soundness/01-conversion-is-one-relation-in-both-checkers.md) — the kernel has no unit eta between two neutrals, the elaborator's conversion is not transitive at a record of units and fires eta at a goal type the literal contradicts, and an implicit is refused against a lambda while its own type is unsolved
 - [ ] [The certifier confirms what it skips](roadmap/01-soundness/02-the-certifier-confirms-what-it-skips.md) — a declaration under a name already in scope is passed over whatever it is, a registry entry among them live and unchecked, and what keeps one from arriving is checked outside `curios-cert`
 - [ ] [Checked evidence and trusted reasoning](roadmap/01-soundness/03-checked-evidence.md) — no procedure in the certifier's closure is classified against the grade, no step of the gate holds the closure, and reasoning found outside the kernel has no evidence the certifier checks, which opens with [the relational layer](roadmap/04-arithmetic/08-relational-layer.md)
 - [x] [Totality of everything erasure deletes](design/soundness/totality-of-the-erased-program.md): nothing reachable from a type and nothing at a proposition is partial, decided per recursive group by size-change termination, so no closed term inhabits `/std/Bool/False`

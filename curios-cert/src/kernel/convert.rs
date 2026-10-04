@@ -20,7 +20,7 @@
 //!
 //! # Where this is incomplete, and why that is the safe direction
 //!
-//! One concession remains. Every child position without a typed context — a stuck elimination's scrutinee, and its motive and arms under their opaque binders, and a projection's or an instance's head — is compared at `Type` rather than at the types its head assigns, which forfeits eta and irrelevance there. Each is a place where the kernel may reject a term the elaborator accepted. Everything else is typed. An application spine's arguments compare at the telescope its head carries — a variable, a universe instance of one, or a projection of a `rec` group, read by `synth_neutral` as a lookup rather than an inference (`compare_arguments`) — and a head that names no type still grounds. An inductive type-former's arguments compare at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P)(p, q)` at a `Prop`-sorted `P` convert with `Eq(@P)(p, p)`; a struct type's, a struct literal's and a constructor's parameters at the declaration's outer telescope (`params_at`); and a struct literal's fields and a constructor's payload at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read, so two `Str`s built from different proofs of the same bytes are one value. Two applications of one definition are compared by their spines *before* either is unfolded, as the elaborator compares them (`one_definition_by_its_spines`), because unfolded first a proof argument lands in a stuck scrutinee, where it is not typed. Two instances of one `rec` group are decided by their levels under the item's hypotheses (`rec_instances`), the equation `induct_type_args` and the instance arms apply, and two different groups are refused.
+//! One concession remains. Every child position without a typed context — a stuck elimination's scrutinee, and its motive and arms under their opaque binders, and a projection's or an instance's head — is compared at `Type` rather than at the types its head assigns, which forfeits there what only a type directs: irrelevance, and eta between two neutrals. Eta by a literal needs no type — a lambda, a tuple literal or a struct literal against a neutral inhabitant states what the type would have, and fires there as it does anywhere (`function_eta`, `tuple_eta`, `struct_eta`), which is what keeps conversion a congruence under such a child for every pair the elaborator's own eta, fired by the literal, accepts. Each forfeit is a place where the kernel may reject a term the elaborator accepted. Everything else is typed. An application spine's arguments compare at the telescope its head carries — a variable, a universe instance of one, or a projection of a `rec` group, read by `synth_neutral` as a lookup rather than an inference (`compare_arguments`) — and a head that names no type still grounds. An inductive type-former's arguments compare at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P)(p, q)` at a `Prop`-sorted `P` convert with `Eq(@P)(p, p)`; a struct type's, a struct literal's and a constructor's parameters at the declaration's outer telescope (`params_at`); and a struct literal's fields and a constructor's payload at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read, so two `Str`s built from different proofs of the same bytes are one value. Two applications of one definition are compared by their spines *before* either is unfolded, as the elaborator compares them (`one_definition_by_its_spines`), because unfolded first a proof argument lands in a stuck scrutinee, where it is not typed. Two instances of one `rec` group are decided by their levels under the item's hypotheses (`rec_instances`), the equation `induct_type_args` and the instance arms apply, and two different groups are refused.
 //!
 //! That direction is deliberate. An incomplete conversion refuses programs; an unsound one admits them. A refusal is visible — it is a disagreement between the two checkers, which is precisely the signal this kernel exists to produce — whereas an over-eager acceptance is silent and is exactly what a second opinion is supposed to catch. Every one of these can be strengthened later against a real program that needs it, and none can be strengthened back from having been wrong.
 
@@ -39,9 +39,9 @@ mod test_support;
 use {
     super::{Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
     curios_core::{
-        Apply, Bound, Carrier, Cases, Cost, Cursor, Field, FuncType, Global, InductType, Instance,
-        InstanceHead, Level, Lockstep, Many, MatchResult, Proj, Reducer, Scope, Step, Struct,
-        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two,
+        Apply, Bound, Carrier, Cases, Cost, Cursor, Field, Func, FuncType, Global, InductType,
+        Instance, InstanceHead, Level, Lockstep, Many, MatchResult, Proj, Reducer, Scope, Step,
+        Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two,
         instantiate_universe_levels_scoped,
     },
     curios_utilities::recurse,
@@ -336,6 +336,40 @@ fn structural(
             Subterm::Tuple(Tuple { fields: left, .. }),
             Subterm::Tuple(Tuple { fields: right, .. }),
         ) => compare_each(kernel, history, left.iter(), right.iter()),
+
+        // Eta at a function and at a record, by the literal against a neutral inhabitant, where the goal's type did not direct it — see `function_eta` and `tuple_eta` for the rule, and `struct_eta` for the restriction. A stuck application may still unfold where a variable and a projection have nothing left to, so a refusal against one falls through to the unfolding retry, as a struct literal's does below.
+        (Subterm::Func(function), _) if neutral(that) => {
+            match function_eta(kernel, history, function, that)? {
+                false if matches!(&**that, Subterm::Apply(_)) => {
+                    unfolded_retry(kernel, history, this, that)
+                }
+                verdict => Ok(verdict),
+            }
+        }
+        (_, Subterm::Func(function)) if neutral(this) => {
+            match function_eta(kernel, history, function, this)? {
+                false if matches!(&**this, Subterm::Apply(_)) => {
+                    unfolded_retry(kernel, history, this, that)
+                }
+                verdict => Ok(verdict),
+            }
+        }
+        (Subterm::Tuple(literal), _) if neutral(that) => {
+            match tuple_eta(kernel, history, literal, that)? {
+                false if matches!(&**that, Subterm::Apply(_)) => {
+                    unfolded_retry(kernel, history, this, that)
+                }
+                verdict => Ok(verdict),
+            }
+        }
+        (_, Subterm::Tuple(literal)) if neutral(this) => {
+            match tuple_eta(kernel, history, literal, this)? {
+                false if matches!(&**this, Subterm::Apply(_)) => {
+                    unfolded_retry(kernel, history, this, that)
+                }
+                verdict => Ok(verdict),
+            }
+        }
 
         // Spine against spine, and when that fails, one definitional unfolding each: two applications of the same fold can differ in an argument position the fold discards — `is_trimmed(h ++ rest)` against `is_trimmed(rest)` — so a spine mismatch is not yet a verdict when either head is a folded recursive call. Two heads that are instances of one group are decided by their levels first: at unequal levels the pair is refused outright, because an unfolding reproduces the same two heads on the recursive call and would recurse until the host died; at equal levels the spines decide, and a mismatch there still earns the retry.
         (Subterm::Apply(left), Subterm::Apply(right)) => {
@@ -634,6 +668,58 @@ fn induct_type_args(
             return Ok(false);
         }
         cursor.advance(left.clone());
+    }
+
+    Ok(true)
+}
+
+/// Whether `term` is a neutral inhabitant: a variable, a projection or a stuck application, which is all an eta fired by a literal's shape is taken against. [`struct_eta`] says what the restriction is for.
+fn neutral(term: &Term) -> bool {
+    matches!(
+        &**term,
+        Subterm::Var(_) | Subterm::Proj(_) | Subterm::Apply(_)
+    )
+}
+
+/// Eta at a function, by the lambda: a lambda against a *neutral* inhabitant, where the goal's type did not direct the comparison. The lambda's own telescope is opened at the domains it is annotated with, the neutral is applied to the same binders at the lambda's plicities, and the two are compared at `Type`, the codomain being stated nowhere.
+///
+/// [`compare`] fires this rule by the goal's type wherever that is a function type ([`eta_function`]); here the type is not at hand — a child [`ground`] compares, a stuck elimination's arm or a projection's head — and the lambda says what the type would have. Without it conversion is no congruence there: an expansion equal to its neutral at the goal is refused once both sit under a stuck `match`, and the elaborator, which fires eta by the lambda at every goal, has accepted the pair by then.
+///
+/// **The invariant and the restriction are [`struct_eta`]'s.** Conversion is asked about two terms of one type, so `other` is a function of the lambda's type and applying it is typed; and the walk is taken against a neutral alone, the proxy for that invariant where nothing checks it.
+fn function_eta(
+    kernel: &mut Kernel,
+    history: &mut History,
+    function: &Func,
+    other: &Term,
+) -> Result<bool, Error> {
+    kernel.scoped(|kernel| {
+        let mut cursor = function.telescope.cursor();
+        while let Some((_, domain)) = cursor.entry() {
+            kernel.advance_assumed(&mut cursor, &domain);
+        }
+        let body = cursor.body().expect("a cursor past every entry");
+        let applied = Term::apply_marked(
+            other.clone(),
+            function.plicities().iter().copied().zip(cursor.into_args()),
+        );
+
+        ground(kernel, history, &body, &applied)
+    })
+}
+
+/// Eta at a record, by the literal: a tuple literal against a *neutral* inhabitant, each field compared at `Type` with the neutral's projection, under the invariant and the restriction [`function_eta`] has. [`compare`] fires the rule by the goal's type at a Σ with fields ([`eta_tuple`]), and this is the same rule where no such type is at hand.
+///
+/// A literal with no field compares nothing and answers `true`, as an empty struct's does at [`struct_eta`]: `{}` has one inhabitant, and a neutral of the literal's type is it.
+fn tuple_eta(
+    kernel: &mut Kernel,
+    history: &mut History,
+    literal: &Tuple,
+    other: &Term,
+) -> Result<bool, Error> {
+    for (index, field) in literal.fields.iter().enumerate() {
+        if !ground(kernel, history, field, &Term::proj(other.clone(), index))? {
+            return Ok(false);
+        }
     }
 
     Ok(true)

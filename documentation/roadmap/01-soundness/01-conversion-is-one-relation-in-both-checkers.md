@@ -2,7 +2,7 @@
 
 Working specification for holding conversion to its laws at every rule it has, with each checker asked by itself. A conversion verdict is a function of the two terms and their type: it follows neither the checker that asked, nor the path that checker took to the question, nor the position the pair sits in. The two checkers never ask the same goals of one program, so what makes a program that elaborates certify is that the relation each decides is closed under its laws, and that it is the same relation. The audit states the laws as rows, derives each row's verdict from the equation it was built from, and reads each checker's answer apart from the other's.
 
-It is independent of every other spec; [Checked evidence and trusted reasoning](03-checked-evidence.md) names it in its verification. Its first four stages change no checker, and its fifth changes both.
+It is independent of every other spec; [Checked evidence and trusted reasoning](03-checked-evidence.md) names it in its verification. The audit stands, and what remains is what it found: three rules to bring into line, and the record of the decision.
 
 ## What this builds on
 
@@ -11,7 +11,8 @@ It is independent of every other spec; [Checked evidence and trusted reasoning](
 - **The audit of the theory.** `tests::laws::audit` puts every declared law reversed, chained through a shared side and substituted at compound terms, and holds constructors free modulo the theory: the conditions [The carriers' algebra stays in conversion](../../design/arithmetic/the-carriers-algebra-stays-in-conversion.md) takes from Coq Modulo Theory.
 - **One fixture states a path.** `written`'s `a_step_taken_through_an_annotation_is_one_the_kernel_takes_in_one` holds that a step the elaborator takes through a `let`'s annotation is one the kernel takes comparing the first type with the last ([An atom is one where conversion says so](../../design/arithmetic/an-atom-is-one-where-conversion-says-so.md)).
 - **Two doors read one checker.** `curios-pipeline`'s `typecheck_with_prelude` lowers and elaborates a program and stops short of the kernel, handing back the program it built. `recheck_with_prelude` puts a program to the kernel alone with the prelude in scope, which is how `xboard` puts a module built by hand.
-- **Where each checker fires eta.** The elaborator fires it by a side's shape, at any goal type: a lambda, a tuple literal or a struct literal against anything (`eta_expand_func`, `eta_expand_tuple`, `eta_expand_struct`, `curios-elab/src/convert.rs`), and by the goal's type only where both sides are neutral (`eta_expand_neutral`). The kernel fires Π and Σ eta by the goal's type (`compare`, `curios-cert/src/kernel/convert.rs`), a nominal struct's by the literal against a neutral (`struct_eta`), and contracts `(x) => f(x)` to `f` in `whnf`. A child the kernel has no type for is compared at `Type` ([Eta and untyped child positions](../../design/soundness/conversion/eta-and-untyped-child-positions.md)).
+- **The audit of conversion's own rules.** `tests::laws::structural` states a seed for each rule no law table states — beta, delta, zeta, iota at each elimination, eta at a function, a record, a struct and a unit, irrelevance — a held equation against a neutral, and the near miss beside it. `contexts` states every seed under each child a term former holds, and a lint reads back where each hole landed against a `match` over Core's formers with no wildcard. `audit` states every seed reversed, chained through a shared side and at a compound term. A row states no side: `asked_alone` reads the elaborator by the proof and the kernel by a claim put to it alone, and `parted` lists every row a checker puts on the other side than its seed derives, held equal to what the audits find.
+- **Where each checker fires eta.** The elaborator fires it by a side's shape, at any goal type: a lambda, a tuple literal or a struct literal against anything (`eta_expand_func`, `eta_expand_tuple`, `eta_expand_struct`, `curios-elab/src/convert.rs`), and by the goal's type only where both sides are neutral (`eta_expand_neutral`). The kernel fires Π and Σ eta by the goal's type (`compare`, `curios-cert/src/kernel/convert.rs`) and, where no type directs it, by a literal against a neutral, as it does a nominal struct's (`function_eta`, `tuple_eta`, `struct_eta`); it contracts `(x) => f(x)` to `f` in `whnf`. A child the kernel has no type for is compared at `Type` ([Eta and untyped child positions](../../design/soundness/conversion/eta-and-untyped-child-positions.md)).
 
 ## The gap
 
@@ -19,28 +20,16 @@ It is independent of every other spec; [Checked evidence and trusted reasoning](
 
 | Law | The difference it absorbs | Where it fails |
 | --- | --- | --- |
-| Transitivity | A step through an annotation against the first type compared with the last | The elaborator at a record of units; the truth table's cap in both, by design ([What conversion still decides by spelling or by cap](../04-arithmetic/01-decided-by-spelling-or-cap.md)) |
-| Congruence | A part compared where it is written against the whole compared where it sits | The kernel, at Π and Σ eta under a child it compares at `Type` |
+| Transitivity | A step through an annotation against the first type compared with the last | The elaborator, at a record of units; the truth table's cap in both, by design ([What conversion still decides by spelling or by cap](../04-arithmetic/01-decided-by-spelling-or-cap.md)) |
+| Congruence | A part compared where it is written against the whole compared where it sits | Both checkers, at two neutrals of a unit under a child compared at `Type` |
 | Stability under respelling | A term compared before a definition is unfolded against after | A case equation's key, which [What conversion still decides by spelling or by cap](../04-arithmetic/01-decided-by-spelling-or-cap.md) holds |
-| One set of rules | — | Unit eta, which the kernel lacks; the elaborator's eta at a goal type the literal contradicts ([the findings](00-findings.md)) |
+| One set of rules | — | Unit eta between two neutrals, which the kernel lacks; the elaborator's eta at a goal type the literal contradicts ([the findings](00-findings.md)) |
 
-**Congruence fails in the kernel.** Record eta holds at the goal, under a variable head, under a constructor payload and under a list element, in both checkers. Under a stuck `match`'s arm the elaborator accepts it and the kernel refuses:
+**The kernel has no unit eta between two neutrals.** `let f(F: ({}) -> Type, r: {}, s: {}, x: F(r)) -> F(s) = x;` elaborates, and `run` stops on `the kernel refused /f`. The audit lists the rows: two neutrals at `{}` and at a field-less struct, alone, reversed, under every typed child and in every type position.
 
-```
-use /std/{Eq, Nat, Bool};
-let arm(b: Bool, p: {Nat, Nat})
-    -> Eq()(match b: (_) => {Nat, Nat} | true => (p.0, p.1) | false => p end,
-            match b: (_) => {Nat, Nat} | true => p | false => p end)
-    = Eq/refl();
-```
+**Transitivity fails in the elaborator.** At a record of units, `r` against `((), ())` and `((), ())` against `s` are held, and `r` against `s` is refused: the literal is expanded by its shape, and two neutrals' projections are compared at `Type`. The audit lists `r` against `s` as refused by both checkers wherever it stands.
 
-`run` stops on `the kernel refused /arm`. So do the same pair under a `Nat` match's arm, under a projection of the two matches, as the bodies of two lambdas in an arm, and `(x: Nat) => g(x + 0)` against `g` in an arm at `(Nat) -> Nat`. `(x: Nat) => g(x)` against `g` there is accepted, by the contraction, and so is a struct literal against its neutral.
-
-**Transitivity fails in the elaborator.** At `{a: {}, b: {}}`, `r` against `((), ())` and `((), ())` against `s` each fit `Eq/refl()`, and `r` against `s` does not: the literal is expanded by its shape, and two neutrals' projections are compared at `Type`.
-
-**The kernel is never asked about a row the elaborator refuses.** The grid's refused rows and controls are read through the candidate line, which is the elaborator's answer and stops before the kernel, and a board test of a refusal asserts the elaborator's diagnostic. A kernel that held a control would pass every test, and it is the direction no program can show, since the kernel is asked only once the elaborator accepts.
-
-**The audit holds the theory's laws alone.** It has no row under a context, and none for a rule no law table states: beta, delta, zeta, iota, eta, irrelevance.
+**Congruence stops where only a type directs a rule.** Two neutrals at a unit are held by the elaborator at the goal and refused by both checkers in a stuck elimination's arm, which neither compares at its type. Eta by a literal holds there in both.
 
 **An implicit is refused against a lambda while its own type is unsolved.** `let t(g: (Nat) -> Nat) -> Eq()((x: Nat) => g(0), (x: Nat) => g(0)) = Eq/refl();` is refused, `inferred: ?` against `expected: (x) => g(0)`, and compiles once either `Eq` or `Eq/refl` states `@((Nat) -> Nat)`. `solve` (`curios-elab/src/convert.rs`) re-validates a candidate by checking it against its metavariable's frozen type under an oracle, where parking is suppressed. `refl`'s `z` has the type `A`, still a bare metavariable when `z` meets the lambda, and `elaborate_func_check` (`curios-elab/src/elaborate/binding.rs`) parks a lambda against one and, with parking suppressed, raises `not_a_function_type`: re-validation reads that as a rejected candidate and the drain as a mismatch. Reflexivity as an author writes it fails at a lambda whose type nothing else states, and so does the candidate line the grid reads the elaborator through.
 
@@ -55,7 +44,7 @@ let arm(b: Bool, p: {Nat, Nat})
 
 ## Decisions
 
-Taken before stage 1, each with its reason, so a stage meets none of them as a fork.
+Each with its reason, so a stage meets none of them as a fork. The audit is built to the first six, and the kernel's eta by a literal to the seventh.
 
 1. **The audit extends `tests::laws`, and a row is a program.** Both sides of a row elaborate at one type before either checker compares them, which is the invariant every conversion in a compilation stands on, so no row asks what no program can.
 2. **A row's verdict is derived from its seed.** A seed is one equation a rule decides, or a near miss beside it. A held seed reversed, chained, substituted or placed under a context is held; a near miss under a context that keeps its hole is refused. No cell states a verdict by hand, and neither checker is the other's oracle.
@@ -71,18 +60,16 @@ Taken before stage 1, each with its reason, so a stage meets none of them as a f
 
 ## Open questions
 
-- Whether the neutrals `struct_eta` takes are the whole set the kernel's Π and Σ eta need. A row that wants a stuck elimination as the neutral is reported before the set grows.
 - Whether a source program reaches the recurrence rule, so that it has a seed.
 
 ## Stages
 
-1. **Both verdicts on every row the grid states.** The kernel is asked alone about each generated and written row. Check: every held row is held by it, the reader's control; every refused row is refused by it as a mismatch; the table of parted rows equals what the run finds.
-2. **Seeds for the rules no law table states**: beta, delta, zeta, iota at each elimination, Π eta, Σ eta, struct eta, unit eta, irrelevance — a held seed against a canonical neutral, and a near miss. Check: every seed is on the side each checker puts it, asked alone.
-3. **Every seed under every position**, one context per child a former holds, with the lint of decision 6. Check: a held seed holds under every context in both checkers; a near miss stays refused under a context that keeps its hole; every context's hole lands under the former it names.
-4. **The other laws over every seed**: reversed, chained through a shared side, substituted at a compound term. Check: each generated row holds in both checkers, or is listed as parted.
-5. **The three fixes**, each emptying its rows of the table and deleting its finding. Check: the fix's own tests in the crate it changes, mutation-checked; the programs it accepts as tests in `curios/src/tests/board/`; `cargo xboard`; `/std` certifies.
-6. **The solver settles a lambda candidate**, decision 10. Check: the program above compiles with neither type stated; a fixture in `curios-elab`'s `convert::solve_tests` holds the solution and the type it pins, with the candidate a written lambda could not take as its control; `/std` elaborates to what it did.
-7. **Landing.** The decision record, the entries and the roadmap.
+Each fix empties its rows of the table of parted rows and deletes its finding. Its check is its own tests in the crate it changes, mutation-checked; the programs it accepts as tests in `curios/src/tests/board/`; `cargo xboard`; and `/std` certifying.
+
+1. **Unit eta**, as [the findings](00-findings.md) state it: the kernel equates any two terms at the empty Σ and at a field-less struct, and the elaborator compares a neutral's projections at their field types.
+2. **The elaborator's tuple and struct eta is gated by the goal type**, as [the findings](00-findings.md) state it.
+3. **The solver settles a lambda candidate**, decision 10. Check: the program above compiles with neither type stated; a fixture in `curios-elab`'s `convert::solve_tests` holds the solution and the type it pins, with the candidate a written lambda could not take as its control; `/std` elaborates to what it did.
+4. **Landing.** The decision record, the entries and the roadmap.
 
 ## Verification
 

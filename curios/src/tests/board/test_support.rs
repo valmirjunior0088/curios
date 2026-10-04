@@ -590,6 +590,72 @@ pub(super) const AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA: &str = r#"
         /std/Io/pure(())
         "#;
 
+pub(super) const A_LITERALS_ETA_HOLDS_WHERE_NO_TYPE_DIRECTS_IT: &str = r#"
+        use /std/{Eq, Nat, Bool};
+
+        let hold(@A : Type, a : A, count : Nat) -> A =
+            match count: (_) => A | 0 => a | pred + 1 => a end;
+
+        let in_an_arm(b : Bool, p : {Nat, Nat})
+            -> Eq()(match b: (_) => {Nat, Nat} | true => (p.0, p.1) | false => p end,
+                    match b: (_) => {Nat, Nat} | true => p | false => p end)
+            = Eq/refl();
+
+        let in_a_fold_arm(n : Nat, p : {Nat, Nat})
+            -> Eq()(match n: (_) => {Nat, Nat} | 0 => (p.0, p.1) | m + 1 => p end,
+                    match n: (_) => {Nat, Nat} | 0 => p | m + 1 => p end)
+            = Eq/refl();
+
+        let under_a_projection(b : Bool, p : {Nat, Nat})
+            -> Eq()((match b: (_) => {Nat, Nat} | true => (p.0, p.1) | false => p end).0,
+                    (match b: (_) => {Nat, Nat} | true => p | false => p end).0)
+            = Eq/refl();
+
+        let under_a_lambda(b : Bool, p : {Nat, Nat})
+            -> Eq()(match b: (_) => (Nat) -> {Nat, Nat}
+                    | true => (x : Nat) => (p.0, p.1)
+                    | false => (x : Nat) => p
+                    end,
+                    match b: (_) => (Nat) -> {Nat, Nat}
+                    | true => (x : Nat) => p
+                    | false => (x : Nat) => p
+                    end)
+            = Eq/refl();
+
+        let a_function(b : Bool, g : (Nat) -> Nat)
+            -> Eq()(match b: (_) => (Nat) -> Nat | true => (x : Nat) => g(x + 0) | false => g end,
+                    match b: (_) => (Nat) -> Nat | true => g | false => g end)
+            = Eq/refl();
+
+        let through_a_definition(p : {Nat, Nat}, count : Nat)
+            -> Eq()(hold((p.0, p.1), count), hold(p, count))
+            = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA_IN_AN_ARM: &str = r#"
+        use /std/{Eq, Nat, Bool};
+
+        let dropped(b : Bool, g : (Nat) -> Nat)
+            -> Eq()(match b: (_) => (Nat) -> Nat | true => (x : Nat) => g(0) | false => g end,
+                    match b: (_) => (Nat) -> Nat | true => g | false => g end)
+            = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA_IN_AN_ARM: &str = r#"
+        use /std/{Eq, Nat, Bool};
+
+        let swapped(b : Bool, p : {Nat, Nat})
+            -> Eq()(match b: (_) => {Nat, Nat} | true => (p.1, p.0) | false => p end,
+                    match b: (_) => {Nat, Nat} | true => p | false => p end)
+            = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
 pub(super) const A_FUNCTION_INTO_A_PROPOSITION_IS_DISCHARGED_BEFORE_ETA: &str = r#"
         use /std/{Eq, Nat};
 

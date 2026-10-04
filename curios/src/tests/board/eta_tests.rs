@@ -27,6 +27,30 @@ fn an_expansion_that_swaps_its_components_is_not_eta() {
     );
 }
 
+// **Eta by a literal needs no type, so it holds where none directs it.** The elaborator fires eta by a side's shape at every goal, and the kernel by the goal's type, which a child it compares at `Type` does not have: a stuck elimination's arm, a projection's head, a lambda's body inside one, and — with no `match` written — the arms a definition unfolds to once a record's eta has projected its two calls. An expansion equal to its neutral at the goal was refused there, by the kernel alone, so conversion was no congruence in the trusted checker and the refusal reached the author as the kernel's. A lambda and a tuple literal against a neutral fire the rule by their own shape (`function_eta`, `tuple_eta`), as a struct literal always has.
+//
+// The two refusals beside it are the near misses of the first fixtures, in the same position: the rule compares what the literal holds, and does not give up on functions and records there.
+#[test]
+fn a_literals_eta_holds_where_no_type_directs_it() {
+    assert_eq!(run(A_LITERALS_ETA_HOLDS_WHERE_NO_TYPE_DIRECTS_IT), b"1");
+}
+
+#[test]
+fn an_expansion_that_drops_its_binder_is_not_eta_in_an_arm() {
+    rejected_by(
+        AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA_IN_AN_ARM,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn an_expansion_that_swaps_its_components_is_not_eta_in_an_arm() {
+    rejected_by(
+        AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA_IN_AN_ARM,
+        "type mismatch",
+    );
+}
+
 // The composition the row named as unattacked — "eta at a function type whose codomain is a proposition, where the expansion's body lands at a `Prop`-sorted goal and irrelevance discharges it without comparing anything" — and at Π there is nothing to attack, because the shape cannot arise. `turn` tries irrelevance *before* it dispatches on the goal type's shape, and `func_sort` makes a Π into a proposition a proposition whatever it quantifies over, so the goal is discharged whole at the top and eta never opens a binder at all. Any two such functions are equal, which is this accepting rung.
 //
 // The relevant-codomain pair beside it is what says the discharge is the proposition's doing rather than conversion giving up on function types: the same two binders at `(Nat) -> Nat` are not identified.

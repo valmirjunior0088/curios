@@ -1,4 +1,4 @@
-//! Structural conversion: reflexivity, beta and delta, eta at a function and a pair, intrinsic congruence, plicity and universe levels.
+//! Structural conversion: reflexivity, beta and delta, eta at a function and a pair — by the goal's type, and by a literal where no type directs it — intrinsic congruence, plicity and universe levels.
 
 use {
     super::test_support::*,
@@ -116,6 +116,93 @@ fn eta_makes_a_pair_converge_with_its_projections() {
         convert(&mut kernel, &pair_type, &Term::free_var(&p), &expanded),
         Ok(true),
     );
+}
+
+/// Eta by the lambda, where no type directs it. At `Type` — what a stuck elimination's arm and a projection's head are compared at — a lambda converges with the neutral it expands, the neutral applied to the lambda's own binder. The lambda is no forwarder, `(x) => f(x + 0)`, so `whnf` does not contract it and the rule is what decides. The near miss drops the binder and is refused: the rule compares the body.
+///
+/// Mutation-checked: without `function_eta`'s arms the first two are refused, and with its body comparison answered `true` the third is accepted.
+#[test]
+fn eta_by_the_lambda_converges_a_function_with_a_neutral_at_no_type() {
+    let mut kernel = kernel();
+    let (f, x) = (binder(0, "f"), binder(1, "x"));
+    kernel.assume(&f, &Term::func_type([(x, nat_type())], nat_type()));
+
+    let expansion = |argument: Term| {
+        Term::func(
+            [(x, nat_type())],
+            Term::apply(Term::free_var(&f), [argument]),
+        )
+    };
+    let past_a_fold = expansion(Term::intrinsic(Intrinsic::nat_add(
+        Term::free_var(&x),
+        nat(0),
+    )));
+    let dropped = expansion(nat(0));
+    let (ground, neutral) = (Term::type_ground(), Term::free_var(&f));
+
+    assert_eq!(
+        convert(&mut kernel, &ground, &past_a_fold, &neutral),
+        Ok(true)
+    );
+    assert_eq!(
+        convert(&mut kernel, &ground, &neutral, &past_a_fold),
+        Ok(true)
+    );
+    assert_eq!(convert(&mut kernel, &ground, &dropped, &neutral), Ok(false));
+}
+
+/// Eta by the literal at a record, where no type directs it: a tuple literal converges with the neutral it projects, field by field, and one with its components swapped does not.
+///
+/// Mutation-checked: without `tuple_eta`'s arms the first two are refused, and with its field comparison answered `true` the third is accepted.
+#[test]
+fn eta_by_the_literal_converges_a_pair_with_a_neutral_at_no_type() {
+    let mut kernel = kernel();
+    let p = binder(0, "p");
+    let project = |index| Term::proj(Term::free_var(&p), index);
+    let expansion = Term::tuple([project(0), project(1)]);
+    let swapped = Term::tuple([project(1), project(0)]);
+    let (ground, neutral) = (Term::type_ground(), Term::free_var(&p));
+
+    assert_eq!(
+        convert(&mut kernel, &ground, &expansion, &neutral),
+        Ok(true)
+    );
+    assert_eq!(
+        convert(&mut kernel, &ground, &neutral, &expansion),
+        Ok(true)
+    );
+    assert_eq!(convert(&mut kernel, &ground, &swapped, &neutral), Ok(false));
+}
+
+/// The unit literal has no field to compare, so against a neutral its walk is empty and answers `true`: `{}` has one inhabitant, and a neutral of the literal's type is it.
+#[test]
+fn the_unit_literal_converges_with_a_neutral() {
+    let mut kernel = kernel();
+    let neutral = Term::free_var(&binder(0, "u"));
+    let unit = Term::tuple(Vec::<Term>::new());
+
+    assert_eq!(
+        convert(&mut kernel, &Term::tuple_type_unit(), &unit, &neutral),
+        Ok(true)
+    );
+    assert_eq!(
+        convert(&mut kernel, &Term::type_ground(), &neutral, &unit),
+        Ok(true)
+    );
+}
+
+/// A literal's shape fires eta against a neutral inhabitant alone. Against a canonical form — which only a caller comparing two terms of different types could hand over — neither rule fires, and the unit literal's empty walk equates it with no literal of another type.
+#[test]
+fn eta_by_a_literal_is_taken_against_a_neutral_alone() {
+    let mut kernel = kernel();
+    let x = binder(0, "x");
+    let ground = Term::type_ground();
+    let identity = Term::func([(x, nat_type())], Term::free_var(&x));
+    let unit = Term::tuple(Vec::<Term>::new());
+
+    assert_eq!(convert(&mut kernel, &ground, &identity, &nat(1)), Ok(false));
+    assert_eq!(convert(&mut kernel, &ground, &unit, &nat(1)), Ok(false));
+    assert_eq!(convert(&mut kernel, &ground, &unit, &identity), Ok(false));
 }
 
 /// A struct literal with fewer fields than its declaration must not convert with a neutral inhabitant.

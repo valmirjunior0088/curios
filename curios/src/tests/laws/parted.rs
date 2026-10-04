@@ -28,18 +28,6 @@ pub(super) struct Parted {
 
 const UNIT_ETA: &str = "The two checkers part on unit eta, and a program reaches it.";
 
-const ETA_AT_TYPE: &str =
-    "The kernel refuses Π and Σ eta under a child it compares at `Type`, and a program reaches it.";
-
-/// The seeds eta decides by a literal's shape alone: a lambda that is no forwarder, and a tuple literal, each against a neutral.
-const BY_THE_LITERAL: &[&str] = &["function eta past a fold", "record eta"];
-
-/// A literal of a type with one inhabitant against a neutral, which the elaborator takes by the literal's shape.
-const UNIT_LITERALS: &[&str] = &[
-    "unit eta, the literal",
-    "unit eta at a record of units, the literal",
-];
-
 /// Two neutrals at a type with no fields, which nothing but the type equates.
 const UNIT_NEUTRALS: &[&str] = &[
     "unit eta, two neutrals",
@@ -49,7 +37,7 @@ const UNIT_NEUTRALS: &[&str] = &[
 /// Two neutrals at a record of units, which the elaborator refuses wherever it meets them: it compares their projections at `Type`, where it compared the literal's fields at no type at all.
 const RECORD_NEUTRALS: &[&str] = &["unit eta at a record of units, two neutrals"];
 
-/// The typed context whose hole the kernel reaches untyped all the same: comparing two calls of a definition at a record, it projects them before it compares their spines, and unfolded they are stuck matches whose arms it compares at `Type`.
+/// The one typed context under which the elaborator refuses two neutrals at a unit, as the kernel does: two calls of a definition, which unfold to stuck matches whose arms are compared at `Type`.
 const UNFOLDED: &str = "a definition's argument";
 
 /// Every row listed.
@@ -99,41 +87,16 @@ pub(super) fn parted() -> Vec<Parted> {
         }));
     };
 
-    // Unit eta. The elaborator equates a literal of a type with one inhabitant with anything, by the literal's shape, and two neutrals at a type with no fields by the type; the kernel has neither rule. Two neutrals part from their seed in both checkers where neither has the type — an arm, and a definition's argument once unfolded — and at a record of units wherever they stand, which is where the elaborator's conversion is not transitive: each neutral is the literal, and the two are not each other.
+    // Unit eta between two neutrals. The elaborator equates two neutrals at a type with no fields, by the type, and the kernel has no such rule. Both part from the seed where neither has the type — an arm, and a definition's argument once unfolded — and at a record of units wherever the two stand, which is where the elaborator's conversion is not transitive: each neutral is the literal, and the two are not each other.
     for (audit, law) in [(Audit::Seeds, ""), (Audit::Reversed, ", reversed")] {
-        list(audit, alone(UNIT_LITERALS, law), kernel_refuses, UNIT_ETA);
         list(audit, alone(UNIT_NEUTRALS, law), kernel_refuses, UNIT_ETA);
         list(audit, alone(RECORD_NEUTRALS, law), both_refuse, UNIT_ETA);
     }
-    list(
-        Audit::Chained,
-        vec![
-            "unit eta, the literal chained with unit eta, two neutrals".to_owned(),
-            "unit eta at a record of units, the literal chained with unit eta at a record of units, two neutrals".to_owned(),
-        ],
-        kernel_refuses,
-        UNIT_ETA,
-    );
-    list(
-        Audit::Substituted,
-        alone(
-            &["unit eta, two neutrals", RECORD_NEUTRALS[0]],
-            ", at a compound term",
-        ),
-        kernel_refuses,
-        UNIT_ETA,
-    );
     for (audit, contexts) in [
         (Audit::Typed, &typed),
         (Audit::Arms, &arms),
         (Audit::Types, &types),
     ] {
-        list(
-            audit,
-            under(UNIT_LITERALS, contexts),
-            kernel_refuses,
-            UNIT_ETA,
-        );
         list(
             audit,
             under(RECORD_NEUTRALS, contexts),
@@ -164,20 +127,6 @@ pub(super) fn parted() -> Vec<Parted> {
         under(UNIT_NEUTRALS, &arms),
         both_refuse,
         UNIT_ETA,
-    );
-
-    // Eta by the literal: the elaborator fires it at any goal type, and the kernel only where the goal's type is the function or the record.
-    list(
-        Audit::Arms,
-        under(BY_THE_LITERAL, &arms),
-        kernel_refuses,
-        ETA_AT_TYPE,
-    );
-    list(
-        Audit::Typed,
-        under(BY_THE_LITERAL, &[UNFOLDED]),
-        kernel_refuses,
-        ETA_AT_TYPE,
     );
 
     parted
