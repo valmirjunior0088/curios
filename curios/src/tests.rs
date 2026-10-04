@@ -1,5 +1,6 @@
 mod aggregates;
 mod algebra;
+mod alignment;
 mod big_num;
 mod binders;
 mod bounds;

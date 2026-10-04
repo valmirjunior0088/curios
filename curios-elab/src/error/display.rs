@@ -504,7 +504,7 @@ impl fmt::Display for Displayed<'_> {
 
                 write!(
                     f,
-                    "this function writes {binders}: each binder claims the next parameter carrying its own mark, and {claimed}"
+                    "this function writes {binders}: a binder binds the next parameter of its run, and {claimed}"
                 )
             }
             Error::BinderPlicityMismatch {
@@ -661,17 +661,6 @@ impl fmt::Display for Displayed<'_> {
                 write!(
                     f,
                     "'use' entries are only legal in concept literals — struct '{name}' is not a concept"
-                )
-            }
-            Error::TooManyUseEntries {
-                name,
-                expected,
-                got,
-            } => {
-                write!(
-                    f,
-                    "literal supplies {got} 'use' entr{} but concept '{name}' has only {expected} 'use' field(s)",
-                    if *got == 1 { "y" } else { "ies" }
                 )
             }
             Error::SpreadNotFirst { name } => {
@@ -911,16 +900,37 @@ impl fmt::Display for Displayed<'_> {
                     "this lambda writes `use _` and nothing states the member\n  a `use` member holds a place: its type is the expected function type's, and this lambda has none\n  write the function as a `let` with a telescope: let f(use C(A), ...) -> ... = ..."
                 )
             }
-            Error::TooManyImplicits { expected, got } => {
+            Error::HiddenMemberOutOfOrder {
+                written,
+                slot,
+                binder,
+            } => {
+                let mark = |plicity: &Plicity| match plicity {
+                    Plicity::Witness => "use",
+                    Plicity::Implicit | Plicity::Explicit => "@",
+                };
+                let placeholder = match slot {
+                    Plicity::Witness => "use _",
+                    Plicity::Implicit | Plicity::Explicit => "@_",
+                };
+                let (written, slot) = (mark(written), mark(slot));
+                let stands = match binder.is_empty() {
+                    true => format!("a `{slot}` member"),
+                    false => format!("the `{slot}` member '{binder}'"),
+                };
                 write!(
                     f,
-                    "call supplies {got} '@' argument(s) but the function has only {expected} implicit parameter(s)"
+                    "a `{written}` member is written where {stands} stands\n  hidden members are written in order from the first of their run, and the rest of the run may be left out\n  write `{placeholder}` first to leave that one to the elaborator"
                 )
             }
-            Error::TooManyWitnessArgs { expected, got } => {
+            Error::HiddenMemberWithoutSlot { written } => {
+                let written = match written {
+                    Plicity::Witness => "use",
+                    Plicity::Implicit | Plicity::Explicit => "@",
+                };
                 write!(
                     f,
-                    "call supplies {got} 'use' argument(s) but the function has only {expected} 'use' parameter(s)"
+                    "this `{written}` member has no slot\n  hidden members are written before the plain member they precede, and every hidden slot there is already written or left out"
                 )
             }
             Error::WitnessCycle { this, that } => {

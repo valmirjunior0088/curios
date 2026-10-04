@@ -93,7 +93,7 @@ fn a_use_lambda_in_a_leading_hidden_telescope_is_named_too() {
     let report = error(
         r#"
         use /std/{Nat, Show, Str};
-        let s: Str = Show/show(use (x) => x, 5);
+        let s: Str = Show/show(@_, use (x) => x, 5);
         /std/print("unreachable")
         "#,
     );

@@ -1,6 +1,6 @@
 # Plicity on a telescope's members
 
-Working specification for making a member's plicity — plain, implicit (`@`) or witness (`use`) — one rule over every telescope the surface writes and every application that fills one, rather than a property of function parameters with a different carve-out at each site. One stage lands what remains of the rule; two more are decided and wait on [typed patterns](01-typed-patterns.md); one waits for a consumer.
+Working specification for making a member's plicity — plain, implicit (`@`) or witness (`use`) — one rule over every telescope the surface writes and every application that fills one, rather than a property of function parameters with a different carve-out at each site. The rule holds at every site that declares, binds or fills a telescope but a pattern; what remains is decided and waits on [typed patterns](01-typed-patterns.md), and one extension waits for a consumer.
 
 ## What this builds on
 
@@ -28,16 +28,6 @@ A signature is a function type, a `let` or `satisfy` telescope, a constructor's 
 - **One alignment rule** serves binders, arguments and concept-literal entries. Plain members are always written, in order. Between two plain members, the hidden members are written in order from the first of the run, and the rest of the run may be left out. A written member's slot is its position in its run, never the next slot of its mark: against `(@A: Type, use Show(A), @B: Type, use Show(B), a: A, b: B)`, each of `(a, b)`, `(@A, a, b)` and `(@A, use _, @B, a, b)` is accepted, `(@B, a, b)` binds `A`, and `(use _, a, b)` is refused. `join(@_, use dict, xs)` supplies a dictionary; `join(use dict, xs)` and `join(xs, use dict)` are refused.
 - **The witness scope is exactly the `use` members in scope.** A dictionary a program names is an ordinary value — a `let`, or a plain or `@` parameter of concept type — and reaches a `use` slot through a written `use value`.
 - **Refused, each by the rule it breaks:** `use name`; `use _` in a signature; `use C(args)` or `@T` in a lambda; a plain member in a `satisfy` telescope; a plain member written as its type alone in a `let` telescope, which names what its body uses; a `use` entry in a `satisfy` body, `use _` included; a `use` parameter on a concept, whose superclass is a field and whose witness keys read every parameter.
-
-## The alignment rule, and the placeholders
-
-One walk over the written members replaces the three queues of a call, the per-mark claiming of a lambda and the pairing of a concept literal's `use` entries, and `@_` and `use _` are read where a value is supplied.
-
-- A written hidden member carries the mark of the next hidden slot of its run or is refused, naming the slot.
-- In a concept literal `use _` leaves an edge to resolution; after a spread it leaves the edge as the spread leaves it, copied from the base.
-- The applications the compiler builds — a method's wrapper, a constructor, `!`'s bind, an operator's dispatch, a derived body, a bound's proof — write their hidden arguments in slot order.
-
-**Acceptance:** the examples under *The rule* behave as stated; `two(@_, use _, @Bool, use other, 1, true)` supplies the second witness alone and `Both { use _, use b2, both(a, b) = … }` the second edge alone; `/std`, `programs/` and the tests compile after reordering and `@_` insertion alone.
 
 ## Decided, waiting on typed patterns
 

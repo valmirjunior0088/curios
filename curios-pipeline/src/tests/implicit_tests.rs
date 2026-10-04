@@ -55,8 +55,8 @@ fn interleaved_implicit_with_partial_override() {
 }
 
 #[test]
-fn argument_queues_are_order_insensitive() {
-    // The two queues are matched independently: an `@`-argument fills the first unfilled implicit binder no matter where it sits among the plain arguments.
+fn a_hidden_argument_is_written_before_the_plain_one_it_precedes() {
+    // One walk matches written arguments to slots: an `@`-argument is written in its run, before the plain argument that run precedes, so one written after the plain arguments has no slot left to fill.
     let at_first = r#"
         use /std/{Nat, Bytes};
         let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
@@ -71,7 +71,13 @@ fn argument_queues_are_order_insensitive() {
     "#;
 
     compile(at_first).unwrap();
-    compile(at_last).unwrap();
+
+    let error = compile(at_last).unwrap_err();
+
+    assert!(
+        error.contains("this `@` member has no slot"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]
@@ -187,7 +193,7 @@ fn surplus_implicit_arguments_are_rejected() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("2 '@' argument(s) but the function has only 1 implicit parameter(s)"),
+        error.contains("this `@` member has no slot"),
         "unexpected error: {error}"
     );
 }

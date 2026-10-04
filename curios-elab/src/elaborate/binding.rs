@@ -1073,7 +1073,7 @@ pub(super) fn elaborate_func_check(
                         e_plicities.len(),
                     ));
                 }
-                (Some((w_hint, w_domain)), Some((_, e_domain))) => {
+                (Some((w_hint, w_domain)), Some((e_hint, e_domain))) => {
                     let w_plicity = written_plicities[w_idx];
                     let e_plicity = e_plicities[e_idx];
                     if w_plicity == e_plicity {
@@ -1086,8 +1086,15 @@ pub(super) fn elaborate_func_check(
                         domains.push((e_plicity, name, e_domain));
                         written.advance(x.clone());
                         expecting.advance(x);
+                    } else if e_plicity != Plicity::Explicit && w_plicity != Plicity::Explicit {
+                        // A hidden binder written where a hidden slot of the other mark stands. Hidden binders are written in order from the first of their run ([`align`]'s rule, met here one slot at a time), so this one skipped a slot it may leave out only together with everything after it.
+                        break Err(Error::hidden_member_out_of_order(
+                            w_plicity,
+                            e_plicity,
+                            e_hint.unwrap_or_default(),
+                        ));
                     } else if e_plicity != Plicity::Explicit {
-                        // Insert this hidden expected slot; the written binder waits for the following expected slot.
+                        // Insert this hidden expected slot; the written plain binder waits for the explicit slot it binds.
                         let name = context.fresh(None);
                         let x = Term::free_var(&name);
                         assume_slot(context, &name, e_plicity, &e_domain);

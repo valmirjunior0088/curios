@@ -440,7 +440,7 @@ fn struct_parts(
     Ok(parts)
 }
 
-/// `C/method(use ?w, args…)`: the concept's method applied to `args`, its `use` argument a witness goal born with the payload's provenance — how a missing witness is reported against the constructor and payload rather than against the method.
+/// `C/method(@_, …, use ?w, args…)`: the concept's method applied to `args`, its `use` argument a witness goal born with the payload's provenance — how a missing witness is reported against the constructor and payload rather than against the method. The wrapper takes the concept's parameters ahead of its witness, and hidden members are written in order from the first of their run, so each parameter is written as the placeholder that leaves it to the elaborator.
 fn witness_call(
     context: &mut Context,
     site: &Site<'_>,
@@ -467,8 +467,19 @@ fn witness_call(
         MetavarOrigin::Witness(provenance),
         Vec::new(),
     ));
-    let method = Term::free_var(&Free::global(field.concept.qualifier().with(field.field)));
-    let arguments = std::iter::once((Plicity::Witness, goal))
+    let wrapper = Free::global(field.concept.qualifier().with(field.field));
+    let parameters = match context.assumption(&wrapper).map(|type_| &**type_) {
+        Some(Subterm::FuncType(function)) => function
+            .plicities()
+            .iter()
+            .take_while(|mark| **mark == Plicity::Implicit)
+            .count(),
+        _ => 0,
+    };
+    let method = Term::free_var(&wrapper);
+    let arguments = (0..parameters)
+        .map(|_| (Plicity::Implicit, Term::hole(context.mint_metavar())))
+        .chain(std::iter::once((Plicity::Witness, goal)))
         .chain(args.into_iter().map(|arg| (Plicity::Explicit, arg)))
         .collect::<Vec<_>>();
     site.at(Term::apply_marked(method, arguments))

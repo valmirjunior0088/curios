@@ -56,7 +56,7 @@ fn explicit_use_argument_overrides() {
         let parens : Show(Nat) =
             Show(Nat) { show = (n) => Str/concat("(", Str/concat(Nat/to_str(n), ")")) };
         let n : Nat = 7;
-        /std/print(Show/show(use parens, n))
+        /std/print(Show/show(@_, use parens, n))
         "#;
 
     assert_eq!(run(source), b"(7)");

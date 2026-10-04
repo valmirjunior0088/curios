@@ -280,7 +280,7 @@ pub enum Error {
     },
     /// A lambda writes binders that claim no parameter of the expected function type.
     ///
-    /// **Not a count mismatch, which is why it is not [`Error::WrongNumberOfArguments`].** Alignment is positional *by plicity* — each written binder claims the next expected parameter carrying its own mark, and every hidden parameter skipped on the way is inserted — so a lambda and a type with the same number of parameters can still fail to align, and one whose explicit counts agree can too. `(x, @A) => …` against `(x: Nat) -> Nat` has one explicit parameter and one explicit binder; what is wrong is that `@A` claims nothing. `surplus` is how many binders were left unclaimed, never zero, and `slots` how many parameters the expected type has.
+    /// **Not a count mismatch, which is why it is not [`Error::WrongNumberOfArguments`].** Alignment is positional *within a run* — a plain binder binds the next explicit parameter, the hidden parameters before it inserted where they are not written, and a hidden binder binds the next hidden parameter of its run — so a lambda and a type with the same number of parameters can still fail to align, and one whose explicit counts agree can too. `(x, @A) => …` against `(x: Nat) -> Nat` has one explicit parameter and one explicit binder; what is wrong is that `@A` claims nothing. `surplus` is how many binders were left unclaimed, never zero, and `slots` how many parameters the expected type has.
     SurplusFuncBinders {
         surplus: usize,
         slots: usize,
@@ -372,12 +372,6 @@ pub enum Error {
     /// A `use <term>` entry in a literal whose head is not a concept.
     UseEntryOutsideConcept {
         name: String,
-    },
-    /// More `use <term>` entries than the concept has `use`-marked fields.
-    TooManyUseEntries {
-        name: String,
-        expected: usize,
-        got: usize,
     },
     /// A `..` spread entry written anywhere but first in the literal.
     SpreadNotFirst {
@@ -472,15 +466,15 @@ pub enum Error {
     },
     /// A lambda writes `use _` where no expected function type states the member. A `use` member holds a place and states no type, so a lambda nothing is checking has none to take: there is no annotation to ask for, unlike [`Error::DomainNeverDetermined`].
     WitnessMemberNeverStated,
-    /// A call supplies more `@`-arguments than the function has implicit binders (the explicit-slot counterpart is `WrongNumberOfArguments`).
-    TooManyImplicits {
-        expected: usize,
-        got: usize,
+    /// A hidden member written where a hidden slot of the other mark stands. Hidden members are written in order from the first of their run, so the slot met is the one the author skipped: `binder` names it, empty where it has no name.
+    HiddenMemberOutOfOrder {
+        written: Plicity,
+        slot: Plicity,
+        binder: String,
     },
-    /// A call supplies more `use`-arguments than the function has witness binders (the `use` counterpart of `TooManyImplicits`).
-    TooManyWitnessArgs {
-        expected: usize,
-        got: usize,
+    /// A hidden member with no slot left: written after its run's last slot, or after the plain member the run precedes.
+    HiddenMemberWithoutSlot {
+        written: Plicity,
     },
     /// A witness goal that resolution could not discharge: no matching local `use` binder, no superclass projection, and no witness-table entry. `callee`/`binder` are the insertion provenance (who the goal was inserted for and the `use` binder it fills).
     NoWitness {
@@ -976,18 +970,6 @@ impl Error {
         Self::UseEntryOutsideConcept { name: name.into() }
     }
 
-    pub(crate) fn too_many_use_entries<N: Into<String>>(
-        name: N,
-        expected: usize,
-        got: usize,
-    ) -> Self {
-        Self::TooManyUseEntries {
-            name: name.into(),
-            expected,
-            got,
-        }
-    }
-
     pub(crate) fn spread_not_first<N: Into<String>>(name: N) -> Self {
         Self::SpreadNotFirst { name: name.into() }
     }
@@ -1096,12 +1078,20 @@ impl Error {
         Self::WitnessMemberNeverStated
     }
 
-    pub(crate) fn too_many_implicits(expected: usize, got: usize) -> Self {
-        Self::TooManyImplicits { expected, got }
+    pub(crate) fn hidden_member_out_of_order(
+        written: Plicity,
+        slot: Plicity,
+        binder: &str,
+    ) -> Self {
+        Self::HiddenMemberOutOfOrder {
+            written,
+            slot,
+            binder: binder.to_string(),
+        }
     }
 
-    pub(crate) fn too_many_witness_args(expected: usize, got: usize) -> Self {
-        Self::TooManyWitnessArgs { expected, got }
+    pub(crate) fn hidden_member_without_slot(written: Plicity) -> Self {
+        Self::HiddenMemberWithoutSlot { written }
     }
 
     pub(crate) fn no_witness<T: Into<Term>>(

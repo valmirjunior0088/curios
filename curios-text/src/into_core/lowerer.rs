@@ -388,7 +388,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 apply
                     .arguments
                     .iter()
-                    .map(|argument| Ok((argument.plicity, self.term(&argument.term)?)))
+                    .map(
+                        |argument| match self.placeholder(argument.plicity, &argument.term) {
+                            Some(hole) => Ok((argument.plicity, hole)),
+                            None => Ok((argument.plicity, self.term(&argument.term)?)),
+                        },
+                    )
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             // A dependent Σ-type: each field type sees the preceding fields' labels, so they lower under a progressively-extended scope. The signature sugar `f(params) -> T` is undone here.
@@ -434,9 +439,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                                 curios_core::StructEntry::Field(field.label.clone()),
                                 self.term(&field.desugared_value())?,
                             )),
-                            StructLitEntry::Use(term) => {
-                                Ok((curios_core::StructEntry::Use, self.term(term)?))
-                            }
+                            StructLitEntry::Use(term) => Ok((
+                                curios_core::StructEntry::Use,
+                                match self.placeholder(Plicity::Witness, term) {
+                                    Some(hole) => hole,
+                                    None => self.term(term)?,
+                                },
+                            )),
                             StructLitEntry::Spread(term) => {
                                 Ok((curios_core::StructEntry::Spread, self.term(term)?))
                             }
@@ -699,7 +708,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 apply
                     .arguments
                     .iter()
-                    .map(|argument| Ok((argument.plicity, self.collect(&argument.term, binds)?)))
+                    .map(
+                        |argument| match self.placeholder(argument.plicity, &argument.term) {
+                            Some(hole) => Ok((argument.plicity, hole)),
+                            None => Ok((argument.plicity, self.collect(&argument.term, binds)?)),
+                        },
+                    )
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Subterm::Tuple(tuple) => curios_core::Term::tuple_named(
@@ -735,9 +749,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                                     self.collect(&value, binds)?,
                                 ))
                             }
-                            StructLitEntry::Use(term) => {
-                                Ok((curios_core::StructEntry::Use, self.collect(term, binds)?))
-                            }
+                            StructLitEntry::Use(term) => Ok((
+                                curios_core::StructEntry::Use,
+                                match self.placeholder(Plicity::Witness, term) {
+                                    Some(hole) => hole,
+                                    None => self.collect(term, binds)?,
+                                },
+                            )),
                             StructLitEntry::Spread(term) => {
                                 Ok((curios_core::StructEntry::Spread, self.collect(term, binds)?))
                             }
@@ -868,6 +886,22 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn pattern_binder(&self, name: &Label) -> Binder {
         self.mint_written([(name.to_string(), name.span().cloned())])
             .remove(0)
+    }
+
+    /// The silent hole a hidden member written `_` lowers to, where a value is supplied: `@_` and `use _` hold a slot's place and say nothing, and elaboration fills the slot as one left out is. A plain `_` is not one — a plain member is always written — and stays the name it is, unbound.
+    fn placeholder(&self, plicity: Plicity, term: &Term) -> Option<curios_core::Term> {
+        let Subterm::Name(name) = term.as_subterm() else {
+            return None;
+        };
+        let written = plicity != Plicity::Explicit && name.is_single() && name.head() == "_";
+
+        written.then(|| {
+            let hole = curios_core::Term::hole(self.context.fresh_metavar());
+            match term.span() {
+                Some(span) => curios_core::Term::spanned(span.clone(), hole),
+                None => hole,
+            }
+        })
     }
 
     /// A lowered struct literal under the head it was written with. A bare head leaves the parameters to elaboration. An applied one is the type former applied as any call applies it — marks, omitted hidden arguments and `?` holes included — so it lowers as that application and the literal is stated at it, rather than the literal carrying a second argument list with rules of its own.

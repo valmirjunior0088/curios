@@ -282,7 +282,7 @@ fn a_concept_parameter_typed_by_a_universe_polymorphic_family_is_admitted() {
         use /std/{Nat, List};
         concept Sized(F : List(Type)) : pub Type { size(Nat) -> Nat, }
         let s : Sized([Nat]) = Sized([Nat]) { size(n) = n };
-        /std/print(Nat/to_str(Sized/size(use s, 4)))
+        /std/print(Nat/to_str(Sized/size(@_, use s, 4)))
         "#;
 
     assert_eq!(run(source), b"4");

@@ -1,5 +1,5 @@
 use {
-    super::{binder_name, check_args_against, premise_label},
+    super::{Misaligned, align, binder_name, check_args_against, is_placeholder, premise_label},
     crate::{
         Context, Error, Mode, attempt_witness_goal, check, elaborate, expect, is_prop, reduce_with,
     },
@@ -211,7 +211,7 @@ pub(super) fn elaborate_struct(
     // Instantiate the field telescope at the resolved parameters.
     let field_telescope = struct_decl.fields_at(&resolved);
 
-    // A concept's `use`-marked (superclass) fields leave the positional field sequence, exactly like witness slots at call sites: plain written fields pair with the plain positions, explicit `use <term>` entries pair with the `use` positions in declaration order (no skipping), and every remaining `use` position becomes a witness-resolution goal. Note the check order is telescope order, not written order — the same model as call-site witness arguments.
+    // A concept's `use`-marked (superclass) fields are the hidden slots of its field telescope, and the entries meet them as a call's arguments meet a function's ([`align`]): the plain entries are the fields, in order, and before each the `use` entries written are the first of the edges that precede it, in order. An edge left out, or written `use _`, becomes a witness-resolution goal. The check order is telescope order.
     // The concept each `use` position edges to is kept beside it rather than dropped: an unfilled position becomes a resolution goal, and that goal's provenance is the one place the superclass can be named as itself.
     let use_positions: Vec<(usize, Global)> = match context.concept(name) {
         Some(concept) => concept.supers.clone(),
@@ -219,31 +219,30 @@ pub(super) fn elaborate_struct(
     };
     debug_assert!(use_positions.windows(2).all(|w| w[0].0 < w[1].0));
 
-    // Partition the written entries; an empty entry list is all-plain-unlabeled (the internal normal form).
-    let mut plain: Vec<(Option<&str>, &Term)> = Vec::new();
-    let mut fills: Vec<&Term> = Vec::new();
-    if entries.is_empty() {
-        plain.extend(fields.iter().map(|field| (None, field)));
-    } else {
-        for (entry, field) in entries.iter().zip(fields) {
-            match entry {
-                StructEntry::Field(label) => plain.push((label.as_deref(), field)),
-                StructEntry::Use => fills.push(field),
+    // The written entries in order, each under its mark; an empty entry list is all-plain-unlabeled (the internal normal form).
+    let written: Vec<(Plicity, Option<&str>, &Term)> = match entries.is_empty() {
+        true => fields
+            .iter()
+            .map(|field| (Plicity::Explicit, None, field))
+            .collect(),
+        false => entries
+            .iter()
+            .zip(fields)
+            .map(|(entry, field)| match entry {
+                StructEntry::Field(label) => (Plicity::Explicit, label.as_deref(), field),
+                StructEntry::Use => (Plicity::Witness, None, field),
                 StructEntry::Spread => unreachable!("a spread literal takes the spread path"),
-            }
-        }
-    }
+            })
+            .collect(),
+    };
+    let plain: Vec<(Option<&str>, &Term)> = written
+        .iter()
+        .filter(|(mark, ..)| *mark == Plicity::Explicit)
+        .map(|(_, label, field)| (*label, *field))
+        .collect();
 
-    if !fills.is_empty() && context.concept(name).is_none() {
+    if plain.len() != written.len() && context.concept(name).is_none() {
         return Err(Error::use_entry_outside_concept(name.symbol()));
-    }
-
-    if fills.len() > use_positions.len() {
-        return Err(Error::too_many_use_entries(
-            name.symbol(),
-            use_positions.len(),
-            fills.len(),
-        ));
     }
 
     // Superclass fields are anonymous, so no written label can target one: a labeled entry naming a superclass is just an unknown field, caught by the positional validation below.
@@ -317,30 +316,54 @@ pub(super) fn elaborate_struct(
         }
     }
 
-    // Merge into one source per declared position: `use` positions consume the written fills first, then fall back to resolution; plain positions consume the plain values (counts validated above).
-    let mut plain_values = plain.iter().map(|(_, field)| *field);
-    let mut fill_values = fills.iter().copied();
-    let mut sources = Vec::with_capacity(field_telescope.len());
-    for position in 0..field_telescope.len() {
-        if let Some((_, edge)) = use_positions.iter().find(|(index, _)| *index == position) {
-            sources.push(match fill_values.next() {
-                Some(fill) => FieldSource::Written(fill),
-                // A `use` position is an anonymous superclass field, so the provenance names the concept it *edges to* rather than reaching for a label: the minted internal one must never surface, and a placeholder label would read as `its 'use' field '_'`. The short name, since the goal's own line already carries the application it is wanted at.
-                None => FieldSource::Resolve {
-                    func: CalleeId::Function(Free::Global(*name)),
-                    edge: edge
-                        .qualifier()
-                        .map(|path| path.last().to_string())
-                        .unwrap_or_default(),
-                },
-            });
-        } else {
-            let field = plain_values
-                .next()
-                .expect("plain field count was validated against the telescope");
-            sources.push(FieldSource::Written(field));
+    // One source per declared position, by the alignment walk. The plain fields were counted against the telescope above, with the labels that report can name, and a literal's only hidden mark is `use`, so the one refusal left is a `use` entry with no edge in its run: written after the field the edges precede, or past the last of them.
+    let slots = (0..field_telescope.len())
+        .map(
+            |position| match use_positions.iter().any(|(index, _)| *index == position) {
+                true => Plicity::Witness,
+                false => Plicity::Explicit,
+            },
+        )
+        .collect::<Vec<_>>();
+    let marks = written.iter().map(|(mark, ..)| *mark).collect::<Vec<_>>();
+    let fills = align(&slots, &marks).map_err(|misaligned| match misaligned {
+        Misaligned::Surplus { member } => {
+            Error::hidden_member_without_slot(Plicity::Witness).at_opt(written[member].2.span())
         }
-    }
+        Misaligned::Plain | Misaligned::Mark { .. } => {
+            unreachable!(
+                "a literal's plain fields are counted, and its hidden entries are all `use`"
+            )
+        }
+    })?;
+    let sources = fills
+        .iter()
+        .zip(&slots)
+        .enumerate()
+        .map(|(position, (fill, slot))| {
+            // An edge written `use _` holds its place and says nothing, so it is resolved as one left out is.
+            let field = fill
+                .map(|member| written[member].2)
+                .filter(|field| *slot == Plicity::Explicit || !is_placeholder(context, field));
+            match field {
+                Some(field) => FieldSource::Written(field),
+                // A `use` position is an anonymous superclass field, so the provenance names the concept it *edges to* rather than reaching for a label: the minted internal one must never surface, and a placeholder label would read as `its 'use' field '_'`. The short name, since the goal's own line already carries the application it is wanted at.
+                None => {
+                    let (_, edge) = use_positions
+                        .iter()
+                        .find(|(index, _)| *index == position)
+                        .expect("only a superclass edge is left to resolution");
+                    FieldSource::Resolve {
+                        func: CalleeId::Function(Free::Global(*name)),
+                        edge: edge
+                            .qualifier()
+                            .map(|path| path.last().to_string())
+                            .unwrap_or_default(),
+                    }
+                }
+            }
+        })
+        .collect::<Vec<_>>();
 
     let mut elaborated = Vec::with_capacity(sources.len());
     check_dependent_fields(context, field_telescope, &sources, term, &mut elaborated)?;
@@ -423,7 +446,7 @@ pub(super) fn seed_struct_expectation(
     Ok(())
 }
 
-/// The `..base` spread path of a struct literal: the base is elaborated once and let-bound in a fresh frame, written overrides claim their declared positions by label — an order-preserving subsequence of the field telescope, so written order stays check order — explicit `use <term>` fills pair with the concept's `use`-marked positions as in the plain path, and every remaining position, plain and `use` alike, copies from the base by positional projection (a superclass field is *copied*, not re-resolved).
+/// The `..base` spread path of a struct literal: the base is elaborated once and let-bound in a fresh frame, written overrides claim their declared positions by label — an order-preserving subsequence of the field telescope, so written order stays check order — a `use <term>` entry claims the next superclass edge after the entries before it, and every remaining position, plain and `use` alike, copies from the base by positional projection (a superclass field is *copied*, not re-resolved, and `use _` says so in writing).
 ///
 /// The parameters are minted *inside* the frame: an omitted parameter's metavariable may need to solve to a projection of the bound base (e.g. `?A := b.A`), which is only in scope there. The result type is reduced before the frame closes — the `elaborate_let` discipline — so occurrences of the binder unfold to the base before escaping the rebuilt `let b = base; Name { … }`, which downstream stages see as existing nodes.
 pub(super) fn elaborate_struct_spread(
@@ -472,86 +495,71 @@ pub(super) fn elaborate_struct_spread(
         };
         debug_assert!(use_positions.windows(2).all(|w| w[0].0 < w[1].0));
 
-        // Partition the overrides (everything after the spread). Positional values are ambiguous across the spread's gaps, so every plain override must be labeled.
-        let mut plain: Vec<(&str, &Term)> = Vec::new();
-        let mut fills: Vec<&Term> = Vec::new();
-        for (entry, field) in entries[1..].iter().zip(&fields[1..]) {
-            match entry {
-                StructEntry::Field(Some(written)) => plain.push((written, field)),
-                StructEntry::Field(None) => {
-                    return Err(Error::unlabeled_spread_override(name.symbol()));
-                }
-                StructEntry::Use => fills.push(field),
-                StructEntry::Spread => unreachable!("spread multiplicity was validated"),
-            }
-        }
-
-        if !fills.is_empty() && context.concept(name).is_none() {
+        if entries[1..]
+            .iter()
+            .any(|entry| matches!(entry, StructEntry::Use))
+            && context.concept(name).is_none()
+        {
             return Err(Error::use_entry_outside_concept(name.symbol()));
         }
 
-        if fills.len() > use_positions.len() {
-            return Err(Error::too_many_use_entries(
-                name.symbol(),
-                use_positions.len(),
-                fills.len(),
-            ));
-        }
-
         let labels = field_telescope.labels();
-        let plain_positions: Vec<(usize, &str)> = labels
-            .iter()
-            .enumerate()
-            .filter(|(position, _)| !use_positions.iter().any(|(index, _)| index == position))
-            .map(|(position, label)| (position, *label))
-            .collect();
+        let is_edge = |position: usize| use_positions.iter().any(|(index, _)| *index == position);
+        let listed = || {
+            labels
+                .iter()
+                .enumerate()
+                .filter(|(position, label)| !is_edge(*position) && !label.is_empty())
+                .map(|(_, label)| label.to_string())
+                .collect::<Vec<_>>()
+        };
 
-        // Overrides claim declared positions by label, as an order-preserving subsequence of the telescope: a label found ahead of the cursor claims its position; found only behind, it is repeated or out of order; found nowhere, it is unknown.
+        // The entries after the spread, in written order, over one cursor: the first position an entry may still claim. A labeled override claims its field, found ahead of the cursor, so the written overrides are an order-preserving subsequence of the fields; positional values would be ambiguous across the spread's gaps, so every plain override is labeled. A `use` entry claims the next superclass edge at or after the cursor — the alignment rule ([`align`]) with the labeled overrides for the plain members written, so between two of them the edges are written from the first. An edge written `use _` is claimed and left as the spread leaves it.
         let mut overrides: Vec<Option<&Term>> = vec![None; field_telescope.len()];
         let mut cursor = 0;
-        for (written, field) in plain {
-            let listed = || {
-                plain_positions
-                    .iter()
-                    .filter(|(_, l)| !l.is_empty())
-                    .map(|(_, l)| l.to_string())
-                    .collect::<Vec<_>>()
-            };
-            match plain_positions[cursor..]
-                .iter()
-                .position(|(_, declared)| *declared == written)
-            {
-                Some(ahead) => {
-                    let (position, _) = plain_positions[cursor + ahead];
-                    overrides[position] = Some(field);
-                    cursor += ahead + 1;
+        for (entry, field) in entries[1..].iter().zip(&fields[1..]) {
+            match entry {
+                StructEntry::Field(Some(written)) => {
+                    let named = |position: &usize| {
+                        !is_edge(*position) && labels[*position] == written.as_str()
+                    };
+                    match (cursor..labels.len()).find(named) {
+                        Some(position) => {
+                            overrides[position] = Some(field);
+                            cursor = position + 1;
+                        }
+                        // Found only behind the cursor: repeated, out of order, or written after a `use` entry whose edge follows it.
+                        None if (0..cursor).any(|position| named(&position)) => {
+                            return Err(Error::spread_override_out_of_order(
+                                name.symbol(),
+                                written.to_string(),
+                                listed(),
+                            ));
+                        }
+                        None => {
+                            return Err(Error::unknown_struct_field(
+                                name.symbol(),
+                                written.to_string(),
+                                listed(),
+                            ));
+                        }
+                    }
                 }
-                None if plain_positions[..cursor]
-                    .iter()
-                    .any(|(_, declared)| *declared == written) =>
-                {
-                    return Err(Error::spread_override_out_of_order(
-                        name.symbol(),
-                        written.to_string(),
-                        listed(),
-                    ));
+                StructEntry::Field(None) => {
+                    return Err(Error::unlabeled_spread_override(name.symbol()));
                 }
-                None => {
-                    return Err(Error::unknown_struct_field(
-                        name.symbol(),
-                        written.to_string(),
-                        listed(),
-                    ));
+                StructEntry::Use => {
+                    let Some(position) = (cursor..labels.len()).find(|position| is_edge(*position))
+                    else {
+                        return Err(Error::hidden_member_without_slot(Plicity::Witness)
+                            .at_opt(field.span()));
+                    };
+                    if !is_placeholder(context, field) {
+                        overrides[position] = Some(field);
+                    }
+                    cursor = position + 1;
                 }
-            }
-        }
-
-        // Explicit `use` fills pair with the `use` positions in declaration order (no skipping), exactly as in the plain path.
-        let mut fill_values = fills.iter().copied();
-        for (position, _) in &use_positions {
-            match fill_values.next() {
-                Some(fill) => overrides[*position] = Some(fill),
-                None => break,
+                StructEntry::Spread => unreachable!("spread multiplicity was validated"),
             }
         }
 

@@ -1,5 +1,5 @@
 use {
-    super::{flexible, trivially_inhabited},
+    super::{Misaligned, align, flexible, trivially_inhabited},
     crate::{
         ArgumentSite, Context, Entailed, Error, FrozenFrame, Mode, ParkedWork, SettleTier,
         attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort, elaborate, entail,
@@ -11,7 +11,7 @@ use {
         MetavarId, One, Probe, Scope, Spelling, Subterm, Telescope, Term, WitnessOrigin,
     },
     curios_utilities::Plicity,
-    std::collections::{BTreeSet, VecDeque},
+    std::collections::BTreeSet,
 };
 
 pub(super) fn elaborate_func_type(
@@ -92,9 +92,7 @@ pub(crate) fn premise_label(index: usize) -> String {
     format!("its {} 'use' premise", ordinal(index))
 }
 
-/// Where each slot of a call sits among the slots of its own kind — the position a report names it by, whether it was written or filled.
-///
-/// Written `@` and `use` arguments fill the slots of their kind in order, so a slot's position among its kind is also the position of the argument written for it, and one count serves both the argument a refusal names and the premise a witness goal names. Every slot a walk visits passes through [`SlotPositions::next`] in telescope order.
+/// Where each slot of a call sits among the slots of its own kind — the position a report names it by, whether it was written or filled: "its 2nd 'use' premise". Every slot a walk visits passes through [`SlotPositions::next`] in telescope order.
 #[derive(Default)]
 pub(crate) struct SlotPositions {
     explicit: usize,
@@ -328,18 +326,6 @@ pub(super) fn elaborate_apply(
     let (head, written_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &written_type)?;
 
-    // The three call-site queues: plain arguments fill explicit binders in telescope order, `@`-arguments fill implicit binders, `use`-arguments fill witness binders — each matched independently, so the relative position of a marked argument among the plain ones carries no meaning.
-    let mut plain: VecDeque<Term> = VecDeque::new();
-    let mut marked: VecDeque<Term> = VecDeque::new();
-    let mut used: VecDeque<Term> = VecDeque::new();
-    for argument in arguments {
-        match argument.plicity {
-            Plicity::Explicit => plain.push_back(argument.term.clone()),
-            Plicity::Implicit => marked.push_back(argument.term.clone()),
-            Plicity::Witness => used.push_back(argument.term.clone()),
-        }
-    }
-
     // One call fills exactly one parameter list: the head's own. A function returning a function is called once per list — `f(a)(b)` — and a list of hidden parameters alone is no exception, so `Eq()(x, y)` is how an all-implicit list is passed on to the one after it. See documentation/design/theory/a-call-fills-one-parameter-group.md.
     let ft = match &*head_type {
         Subterm::FuncType(ft) => ft.clone(),
@@ -347,35 +333,31 @@ pub(super) fn elaborate_apply(
     };
     let mut positions = SlotPositions::default();
 
-    // Arity is checked per queue: plain arguments must exactly cover the explicit slots; `@`- and `use`-arguments may undershoot their slots (the remainder is inserted/resolved) but never overshoot them.
-    let explicit_slots = ft
-        .plicities()
+    // One walk matches the written arguments to the head's slots ([`align`]): the plain ones are the explicit slots, in order, and between two of them the hidden ones written are the first of their run, in order.
+    let written = arguments
         .iter()
-        .filter(|p| matches!(p, Plicity::Explicit))
-        .count();
-    let implicit_slots = ft
-        .plicities()
-        .iter()
-        .filter(|p| matches!(p, Plicity::Implicit))
-        .count();
-    let witness_slots = ft
-        .plicities()
-        .iter()
-        .filter(|p| matches!(p, Plicity::Witness))
-        .count();
-
-    if plain.len() != explicit_slots {
-        return Err(Error::wrong_number_of_arguments(
-            explicit_slots,
-            plain.len(),
-        ));
-    }
-    if marked.len() > implicit_slots {
-        return Err(Error::too_many_implicits(implicit_slots, marked.len()));
-    }
-    if used.len() > witness_slots {
-        return Err(Error::too_many_witness_args(witness_slots, used.len()));
-    }
+        .map(|argument| argument.plicity)
+        .collect::<Vec<_>>();
+    let fills = align(ft.plicities(), &written).map_err(|misaligned| match misaligned {
+        Misaligned::Plain => {
+            let explicit = |marks: &[Plicity]| {
+                marks
+                    .iter()
+                    .filter(|mark| matches!(mark, Plicity::Explicit))
+                    .count()
+            };
+            Error::wrong_number_of_arguments(explicit(ft.plicities()), explicit(&written))
+        }
+        Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
+            written[member],
+            ft.plicities()[slot],
+            ft.telescope.labels()[slot],
+        )
+        .at_opt(arguments[member].term.span()),
+        Misaligned::Surplus { member } => {
+            Error::hidden_member_without_slot(written[member]).at_opt(arguments[member].term.span())
+        }
+    })?;
 
     // Whether the expected type is fully ground. The codomain postponement is only a win when `expect(output, expected)` actually *grounds* the result metavar; if `expected` itself carries an unsolved metavar, that turnaround is flex-flex and the metavar must instead be grounded by the continuation's body — so postponing it would strand the metavar (flex-flex-under-constructor) rather than refine it. When expected is not ground the argument checks eagerly.
     let expected_ground = match &mode {
@@ -395,11 +377,10 @@ pub(super) fn elaborate_apply(
     for (index, plicity) in ft.plicities().iter().enumerate() {
         let (hint, ty) = cursor.entry().expect("plicities parallel the telescope");
         let position = positions.next(*plicity);
-        let written = match plicity {
-            Plicity::Explicit => Some(plain.pop_front().expect("arity checked above")),
-            Plicity::Implicit => marked.pop_front(),
-            Plicity::Witness => used.pop_front(),
-        };
+        // A hidden argument written `_` holds its slot's place and says nothing, so the slot is filled as one left out is.
+        let written = fills[index]
+            .map(|member| arguments[member].term.clone())
+            .filter(|written| *plicity == Plicity::Explicit || !is_placeholder(context, written));
         let arg = match written {
             Some(written) => {
                 let blocked = !context.parking_suppressed()
@@ -484,11 +465,16 @@ pub(super) fn elaborate_apply(
         }
     }
 
-    // The rebuilt application is fully saturated; each argument's mark is its binder's plicity (inserted metavariables recorded like any other argument), so re-elaborating the rebuilt node is stable: both queues then match their slots exactly and nothing is minted twice.
+    // The rebuilt application is fully saturated; each argument's mark is its binder's plicity (inserted metavariables recorded like any other argument), so re-elaborating the rebuilt node is stable: every slot is then written, in telescope order, and nothing is minted twice.
     Ok((
         Term::apply_marked(head, ft.plicities().iter().copied().zip(elaborated)),
         output,
     ))
+}
+
+/// Whether a written hidden member is the placeholder `_`: a silent hole nothing has birthed, which is what lowering writes for it. A birthed one is a term the compiler supplies — the monad a bind is built at, a parked argument's stand-in — and is an argument like any other; a written `?` is a goal.
+pub(super) fn is_placeholder(context: &Context, term: &Term) -> bool {
+    matches!(&**term, Subterm::Metavar(metavar) if metavar.is_hole() && context.metavar_entry(metavar.id).is_none())
 }
 
 /// The link at the cursor's entry, opened at every argument before it: what [`argument_site`] and `result_metavars_from` read, since a later domain's shape can depend on an earlier argument. It costs the remainder's size, so only the paths that read it — a failed check, a literal that might park — ask for it.

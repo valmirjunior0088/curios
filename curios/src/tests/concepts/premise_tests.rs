@@ -284,7 +284,7 @@ fn a_type_naming_another_dictionary_is_read_under_it() {
         let plain: Slot(Nat, Str) = Slot { key = 2, value = "two" };
         let bare: Slot(Nat, use never, Str) = Slot { key = 2, value = "two" };
         let headed = Slot(Nat, use never, Str) { key = 2, value = "two" };
-        let chain: Chain(Nat, use never, Str) = Chain/link(use never, 2, "two", Chain/done());
+        let chain: Chain(Nat, use never, Str) = Chain/link(@_, use never, 2, "two", Chain/done());
         print(Str/concat(
             Str/concat(
                 Str/concat(Bool/to_str(holds(plain, 2)), Bool/to_str(holds(bare, 2))),

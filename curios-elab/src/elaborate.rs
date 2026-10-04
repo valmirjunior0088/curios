@@ -1,3 +1,6 @@
+mod align;
+use align::*;
+
 mod apply;
 use apply::*;
 pub(crate) use apply::{SlotPositions, attempt_discharge, ordinal, premise_label, retry_discharge};

@@ -94,7 +94,7 @@ fn labeled_fill_of_a_former_superclass_is_unknown() {
     assert!(message.contains("no field"), "got: {message}");
 }
 
-// `use` entries are rejected outside concept literals, and surplus entries are rejected against the concept's `use`-field count.
+// `use` entries are rejected outside concept literals, and one written past the concept's last edge has no slot.
 #[test]
 fn misplaced_use_entries_are_errors() {
     let non_concept = r#"
@@ -124,7 +124,7 @@ fn misplaced_use_entries_are_errors() {
         };
         /std/print("no")
         "#;
-    assert!(error(surplus).contains("'use' entr"));
+    assert!(error(surplus).contains("this `use` member has no slot"));
 }
 
 // An omitted superclass field inside a *premised* witness resolves through the local `use` premise (resolution's local step), not the table: the element equality is the premise's, threaded structurally.
@@ -229,9 +229,9 @@ fn a_concept_group_may_name_one_anothers_dictionaries() {
         concept A(T : Type) : pub Type { fa(T) -> B(T) }
         and B(T : Type) : pub Type { fb(T) -> Nat, back(T) -> A(T) }
         let a : A(Nat) = A { fa(x) = B { fb(y) = x + y, back(y) = a } };
-        let b : B(Nat) = A/fa(use a, 1);
-        let again : B(Nat) = A/fa(use B/back(use b, 0), 10);
-        /std/print(Nat/to_str(B/fb(use b, 2) + B/fb(use again, 5)))
+        let b : B(Nat) = A/fa(@_, use a, 1);
+        let again : B(Nat) = A/fa(@_, use B/back(@_, use b, 0), 10);
+        /std/print(Nat/to_str(B/fb(@_, use b, 2) + B/fb(@_, use again, 5)))
         "#;
 
     assert_eq!(run(source), b"18");

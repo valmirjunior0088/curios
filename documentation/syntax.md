@@ -297,16 +297,20 @@ f(x)
 Map/lookup(map, key)
 ```
 
-Arguments are divided into three independent queues:
+An argument is written under the mark of the parameter it supplies:
 
 - `value` supplies an explicit parameter;
 - `@value` supplies an implicit parameter;
 - `use value` supplies a witness parameter explicitly.
 
+The plain arguments are the explicit parameters, in order, and each is written. Between two of them the hidden arguments are written in the order of their parameters, from the first, and the rest may be left out. `@_` and `use _` hold a parameter's place and leave it to the elaborator, which is how a later hidden parameter is written alone.
+
 ```crs
 f(@Nat, x)
-join(use custom_show, values)
+join(@_, use custom_show, values)
 ```
+
+Against `join(@A: Type, use Show(A), values: List(A))`, each of `join(values)`, `join(@Nat, values)` and `join(@_, use custom_show, values)` is accepted. `join(use custom_show, values)` is refused, since the hidden parameters before `values` open with `@A`, and so is `join(values, use custom_show)`, which writes the witness after the argument it precedes. The same rule matches written members to slots wherever a telescope is filled: a call, a [lambda](#lambdas)'s binders and a [concept literal](#superclass-fields-in-literals)'s entries.
 
 Omitted implicit arguments are inferred, and never picked: where two implicits stand under an operation that commutes — `x * y` against `a * b`, which `x := a` and `x := b` both satisfy — the call is refused as a conversion it cannot decide, naming the implicits never solved, until one is written or the expected type fixes it. One implicit standing as a factor has one solution and is solved to it, however the sums are written: `w * (y + z)` against `x * z + x * y` gives `w := x`. An omitted implicit whose type is a proposition — a bound — is filled where the proposition reduces to `True`, and otherwise proved from the facts in scope where it follows from them by linear arithmetic ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). Omitted witness arguments are resolved as described in [Witness resolution](#witness-resolution).
 
@@ -348,7 +352,7 @@ A lambda parameter carries the mark of the slot it binds, and after the mark com
 (@A, use _, value) => Show/show(value)
 ```
 
-An omitted implicit or witness binder is inserted from the expected function type, so hidden binders may be left out when the body does not name them. Alignment is positional by plicity: each written binder claims the next slot of its own plicity, and every skipped implicit or witness slot before it is inserted. A plain binder never silently binds a hidden slot. Against `(@A: Type, use Show(A), value: A) -> Str`, each of `(value) => …`, `(@A, value) => …`, `(use _, value) => …` and `(@A, use _, value) => …` is accepted; `(A, show, value) => …` is not, because `A` binds the sole explicit slot and the rest are surplus.
+An omitted implicit or witness binder is inserted from the expected function type, so hidden binders may be left out when the body does not name them. The binders meet their slots as a call's arguments do: a plain binder binds the next explicit slot, the hidden slots before it inserted where they are not written, and the hidden binders written before it bind the hidden slots in order from the first. A plain binder never binds a hidden slot. Against `(@A: Type, use Show(A), value: A) -> Str`, each of `(value) => …`, `(@A, value) => …` and `(@A, use _, value) => …` is accepted; `(use _, value) => …` is not, because the hidden slots open with `@A`, and `(A, show, value) => …` is not, because `A` binds the sole explicit slot and the rest are surplus.
 
 ### Local `let`
 
@@ -1047,7 +1051,7 @@ To use a second dictionary for the same key on a *transparent* concept, construc
 
 ```crs
 let reverse: Ord(Nat) = Ord { ord(a, b) = reversed(a, b) };
-sort(use reverse, values)
+sort(@_, use reverse, values)
 ```
 
 ### Derived witnesses
@@ -1087,7 +1091,7 @@ A tuple shape is owned by no root, as an intrinsic type former is, so a tuple-ke
 
 ### Superclass fields in literals
 
-A concept's superclass fields remain positional slots in a concept value. Omitting one asks witness resolution to fill it, and in a concept literal `use value` fills the next superclass slot explicitly.
+A concept's superclass fields remain positional slots in a concept value, and a literal's entries follow the declaration as a call's arguments follow a function's parameters: the fields are written in order, and before each the `use value` entries fill the superclass slots that precede it, from the first. A slot left out is filled by witness resolution, and `use _` holds a slot's place to the same effect, so `Both { use _, use second, both = … }` supplies the second of two edges alone.
 
 ```crs
 Ord { use custom_eql, ord(a, b) = reversed(a, b) }
@@ -1095,7 +1099,7 @@ Ord { use custom_eql, ord(a, b) = reversed(a, b) }
 
 A witness body never writes one: a `use` entry in a `satisfy` is refused by name, so resolution fills every superclass slot of a registered witness, and the `Eql(A)` reached through a local `Ord(A)` is the one the table holds ([Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md)).
 
-In a structure update, a spread copies superclass fields from the base. An explicit `use value` after the spread replaces the corresponding slot.
+In a structure update, a spread copies superclass fields from the base. A `use value` after the spread replaces the next superclass slot after the entries before it, and `use _` leaves one as the spread leaves it, copied.
 
 ### Witness parameters and arguments
 
@@ -1110,7 +1114,7 @@ At a call site, `use value` supplies a witness argument explicitly and overrides
 
 ```crs
 join([1, 2, 3])
-join(use custom_show, [1, 2, 3])
+join(@_, use custom_show, [1, 2, 3])
 ```
 
 ### A type declared under a premise
