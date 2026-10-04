@@ -10,7 +10,7 @@ Working specification for two places where [a universe level that settles by whe
 - **A declaration closes over its pending goals.** `UniverseSolver::finalize` takes the levels a still-deferred goal names as `pending` and settles them, and every level a settlement lands on, until the goal is ground (`curios-elab/src/universe_solver.rs`). The design decision states it: the goal's least levels are the one assignment every witness answers.
 - **A late resolution cannot reach the scheme.** The witness's instance is pinned to the levels the goal fixed; a level that slips through is a `UniverseInvariant` attributed to the item that raised the goal, and a constraint the witness brings reaches no scheme.
 - **The lowering orders some uses after their witnesses.** `witness_dep_nodes` (`curios-text/src/into_core/order.rs`) adds a soft edge from an item to every witness row of a concept it reaches by infix operator or by naming one of the concept's method wrappers. Postfix `!` adds none, by a stated choice: `!` cannot appear in a type, and its edges would widen the deadlocks the soft edges already meet. A soft edge is dropped where it deadlocks.
-- **Three places commit two levels equal.** `identify_universe_levels` (`curios-elab/src/convert/neutral.rs`) is asked by `drain` ahead of reduction for two sides differing only in levels, by `compare_same_global_apply` once two spines of one polymorphic global have converted, and by `level_question` at a recurrence. It commits a pair where either level is undecided, and declines, inserting nothing, on two unequal ground levels and on a pair under a universe binder.
+- **Four places commit two levels equal.** `identify_universe_levels` (`curios-elab/src/convert/neutral.rs`) is asked by `drain` ahead of reduction for two sides differing only in levels, by `compare_same_global_apply` once two spines of one polymorphic global have converted, and by `level_question`, at a recurrence and in `drain`'s arm for two applied projections of one group. It commits a pair where either level is undecided, and declines, inserting nothing, on two unequal ground levels and on a pair under a universe binder.
 
 ## The gap
 
@@ -37,7 +37,16 @@ Each is refused at `big`, and each is accepted with the witness declared first. 
 
 **The refusal says none of it.** Both read `type mismatch`, `inferred: Type`, `expected: ?`, "a type was given where a value of it was expected". It names neither the level, nor the declaration that sits at it, nor the witness whose position put it there. Where the report is raised has not been traced: it reads as a candidate solution, `?A := Type`, refused on re-validation at a level `rewrap` no longer offers, and stage 1 begins by confirming that.
 
-**A commitment unfolding would not need.** Two instances of one definition whose body does not carry the level convert by unfolding with their levels unrelated; identification relates them. What that costs is not known: an occurrence's level settles at its floor, which two occurrences over one argument share, so a pair identification commits may be a pair `finalize` would have equated anyway.
+**A commitment unfolding would not need.** Two instances of one definition whose body does not carry the level convert by unfolding with their levels unrelated; identification relates them. A bare former passed as a family is the program it refuses:
+
+```crs
+use /std/{Nat, Io};
+let small(n: Nat) -> Io(Nat) = Io/pure(n);
+let through(F: (Type) -> Type, x: F(Nat), y: F(Type)) -> Nat = 0;
+let probe(n: Nat) -> Nat = through(Io, small(n), Io/pure(Nat));
+```
+
+It is refused, `this Type would need to be strictly below itself`, `1 ≤ 0`, and is accepted with `(A) => Io(A)` in `Io`'s place. `List` in `Io`'s place and an alias, `let Act(A: Type) -> Type = Io(A)`, are refused alike. The cause is not traced; it reads as `F(Nat)` being `Io(Nat)` at the instance `F` was passed at, so the sides differ in levels alone and the pair is committed before `Io` unfolds to a former that carries none, where under the lambda `F(Nat)` is a redex, the sides differ in more than levels, and both are reduced. What the commitment costs across `/std` is not known: an occurrence's level settles at its floor, which two occurrences over one argument share, so a pair identification commits may be a pair `finalize` would have equated anyway.
 
 ## Prior art
 
@@ -49,7 +58,7 @@ Each is refused at `big`, and each is accepted with the witness declared first. 
 
 1. **Deferral is removed, not scheduled around.** One environment resolves a goal against a key index built from every `satisfy` head before any body elaborates, and choosing a witness waits for its declaration; the deferred store, its sweeps, `finalize`'s `pending` and the settlement loop behind it are deleted there. The design decision rejects elaborating a missing witness on demand because elaboration would have to be re-entrant, which holds of one context per unit; one environment's context per item is what answers that reason. No edge is added to the lowering's sort, which that spec's second stage deletes.
 2. **Until then the refusal states the level.** A candidate solution refused for a level alone is reported as the level constraint, with the declaration whose level it is, as a call above a recursive group's level already is.
-3. **Identification is measured before it is touched.** It is Rocq's rule, and nothing here shows a program it refuses.
+3. **Identification is measured before it is touched.** It is Rocq's rule, and the one program here it refuses is accepted eta-expanded.
 
 ## Stages
 
