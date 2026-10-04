@@ -39,7 +39,7 @@ const PARSE_DIGITS: &str = include_str!(concat!(
     "/../programs/parse_digits.crs"
 ));
 
-/// The recorder's end-to-end pin: the shapes erasure records on `/std/Map/Node` survive to the schema a compiled program's module carries. `leaf(key: Bytes, value: V)` reads packed-at-byte-grain and polymorphic-opaque; `fork(crit: Nat, zero: Node(V), one: Node(V))` reads immediate and family. The names are the schema's qualified debug names, per `curios_ersd::test_support`'s convention.
+/// The recorder's end-to-end pin: the shapes erasure records on `/std/Map/Node` survive to the schema a compiled program's module carries. `leaf(key: K, value: V)` reads polymorphic-opaque twice; `fork(crit: Nat, zero: Node(K, V), one: Node(K, V))` reads immediate and family. The names are the schema's qualified debug names, per `curios_ersd::test_support`'s convention.
 #[test]
 fn a_recorded_shape_survives_to_the_program_schema() {
     let module = ersd_optm(SPINES);
@@ -63,8 +63,8 @@ fn a_recorded_shape_survives_to_the_program_schema() {
 
     assert_eq!(
         shapes["leaf"],
-        vec![FieldShape::Packed(Grain::X), FieldShape::Opaque],
-        "leaf: a Bytes key and a polymorphic value",
+        vec![FieldShape::Opaque, FieldShape::Opaque],
+        "leaf: a polymorphic key and a polymorphic value",
     );
     let [crit, zero, one] = shapes["fork"].as_slice() else {
         panic!(

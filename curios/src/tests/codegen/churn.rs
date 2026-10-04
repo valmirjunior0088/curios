@@ -238,8 +238,8 @@ let drain(c: Chain, acc: Nat) -> Nat =
     | cons(v, tail) => drain(tail, (acc + v) % 1000003)
     end;
 
-let walk(n: Nat, i: Nat, x: Nat, m: Map(Nat)) -> Map(Nat) =
-    match n: (_) => Map(Nat)
+let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
+    match n: (_) => Map(Bytes, Nat)
     | 0 => m
     | k + 1; ih =>
         let y = 75 * x % 65537;

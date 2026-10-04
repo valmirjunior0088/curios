@@ -403,9 +403,7 @@ test a_nan_spells_its_pattern_and_toml_keeps_its_sign =
             | _ => false
             end,
             true),
-        Test/equal(
-            Result/unwrap_or(Toml/encode(Map/insert(Map/empty(), "v", Toml/flt(-nan.0))), ""),
-            "v = -nan\n")]);
+        Test/equal(Toml/encode(Map/insert(Map/empty(), "v", Toml/flt(-nan.0))), "v = -nan\n")]);
 
 -- Every class reads back from what `to_str` writes, bit for bit — the NaNs with their signs, kinds and payloads — and from what `to_hex_str` writes.
 let _a_nan_spells_its_kind_in_a_type: Eq()(Flt/to_str(Flt/signaling_nan(+18.0)), "+snan(0x12)") =

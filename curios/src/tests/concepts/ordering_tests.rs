@@ -45,16 +45,16 @@ fn lists_options_and_results_order_through_ord() {
     assert_eq!(run(source), b"lt,eq,lt,gt,lt,gt,lt,lt,true,true");
 }
 
-// The trie is canonical, so two maps with the same entries are one map whatever order built them, and `Show` renders the entries in key order — the keys as the `Bytes` the trie holds, so `"x"` is `78`.
+// The trie is canonical, so two maps with the same entries are one map whatever order built them, and `Show` renders the entries in key order, each key as its own type shows it.
 #[test]
 fn maps_compare_and_show_by_their_entries() {
     let source = r#"
         use /std/{Str, Nat, Map, Show, Bool};
-        let a: Map(Nat) = Map/of([("x", 1), ("y", 2)]);
-        let b: Map(Nat) = Map/of([("y", 2), ("x", 1)]);
-        let c: Map(Nat) = Map/of([("x", 1), ("y", 3)]);
+        let a: Map(Str, Nat) = Map/of([("x", 1), ("y", 2)]);
+        let b: Map(Str, Nat) = Map/of([("y", 2), ("x", 1)]);
+        let c: Map(Str, Nat) = Map/of([("x", 1), ("y", 3)]);
         /std/print(Str/join(" ", [Bool/to_str(a == b), Bool/to_str(a == c), Bool/to_str(a != c), Show/show(a)]))
         "#;
 
-    assert_eq!(run(source), b"true false true {78: 1, 79: 2}");
+    assert_eq!(run(source), b"true false true {x: 1, y: 2}");
 }

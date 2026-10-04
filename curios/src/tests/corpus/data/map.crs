@@ -1,13 +1,14 @@
 -- `Map`, the crit-bit trie over `Key`-encoded bytes, and `Set` over it: lookups, the canonical shape, and the rewriting functions.
-use /std/{Str, Bytes, Nat, Int, Bool, Option, List, Map, Set, Test};
+use /std/{Str, Nat, Int, Bool, Option, Map, Set, Test};
 
 test get_on_empty_is_none =
-    let m: Map(Str) = Map/empty();
+    let m: Map(Str, Str) = Map/empty();
     Test/equal(Map/get(m, "missing"), Option/none());
 
 -- "", "a", "ab", "abc" and "b" force the trie to branch on the presence-marker bits: a key that is a proper prefix of another differs from it only at a marker position, the case a plain per-byte comparison would miss.
 test roundtrips_prefix_related_keys =
-    let m: Map(Str) = Map/of([("", "nil"), ("ab", "AB"), ("a", "A"), ("abc", "ABC"), ("b", "B")]);
+    let m: Map(Str, Str) =
+        Map/of([("", "nil"), ("ab", "AB"), ("a", "A"), ("abc", "ABC"), ("b", "B")]);
     let at(k: Str) -> Str = Option/unwrap_or(Map/get(m, k), "?");
     Test/equal(
         Str/join(",", [at(""), at("a"), at("ab"), at("abc"), at("b"), at("c")]),
@@ -15,19 +16,19 @@ test roundtrips_prefix_related_keys =
 
 -- An integer key encodes its sign before its magnitude, so a negative key, its negation and zero are three entries, and a key never inserted is absent.
 test integer_keys_keep_their_signs_apart =
-    let m: Map(Str) = Map/of([(-2, "minus two"), (+0, "zero"), (+2, "two")]);
+    let m: Map(Int, Str) = Map/of([(-2, "minus two"), (+0, "zero"), (+2, "two")]);
     let at(k: Int) -> Str = Option/unwrap_or(Map/get(m, k), "?");
     Test/equal(Str/join(",", [at(-2), at(+0), at(+2), at(-1)]), "minus two,zero,two,?");
 
 -- Setting an existing key goes down the `replace` path: same size, new value, no duplicate leaf.
 test insert_replaces_without_growing =
-    let m: Map(Nat) = Map/insert(Map/insert(Map/empty(), "k", 1), "k", 2);
+    let m: Map(Str, Nat) = Map/insert(Map/insert(Map/empty(), "k", 1), "k", 2);
     Test/equal(m, Map/of([("k", 2)]));
 
 -- Deleting a present key collapses its parent fork — the sibling is spliced up — deleting an absent key is the identity, and deleting the last key returns to the empty map.
 test remove_collapses_and_is_the_identity_on_an_absent_key =
-    let m: Map(Nat) = Map/of([("a", 1), ("b", 2), ("c", 3)]);
-    let d: Map(Nat) = Map/remove(m, "b");
+    let m: Map(Str, Nat) = Map/of([("a", 1), ("b", 2), ("c", 3)]);
+    let d: Map(Str, Nat) = Map/remove(m, "b");
     Test/all([
         Test/equal(d, Map/of([("a", 1), ("c", 3)])),
         Test/equal(Map/remove(d, "b"), d),
@@ -35,22 +36,20 @@ test remove_collapses_and_is_the_identity_on_an_absent_key =
 
 -- Iteration order is a property of the canonical shape, not of insertion order: the zero side of a fork holds the smaller keys, and the marker bits sort a prefix before its extensions.
 test iterates_in_lexicographic_key_order =
-    let m: Map(Nat) = Map/of([("b", 0), ("abc", 0), ("", 0), ("a", 0), ("ab", 0)]);
-    Test/equal(
-        Str/join(",", List/map(Map/keys(m), (k) => Option/unwrap_or(Str/of_bytes(k), "?"))),
-        ",a,ab,abc,b");
+    let m: Map(Str, Nat) = Map/of([("b", 0), ("abc", 0), ("", 0), ("a", 0), ("ab", 0)]);
+    Test/equal(Str/join(",", Map/keys(m)), ",a,ab,abc,b");
 
 -- Canonicity, observed through the API: the same entry set reached by two insertion histories — one of them through a later-deleted key — is the same map.
 test entries_agree_across_insertion_orders =
-    let m1: Map(Nat) = Map/of([("x", 1), ("y", 2), ("z", 3)]);
-    let m2: Map(Nat) = Map/remove(Map/of([("z", 3), ("w", 0), ("y", 2), ("x", 1)]), "w");
+    let m1: Map(Str, Nat) = Map/of([("x", 1), ("y", 2), ("z", 3)]);
+    let m2: Map(Str, Nat) = Map/remove(Map/of([("z", 3), ("w", 0), ("y", 2), ("x", 1)]), "w");
     Test/equal(m1, m2);
 
 -- 300 sequential keys rendered as decimal share long prefixes — "1" against "10" against "100" — exercising deep shared paths and the presence markers that separate a key from its own extensions; deleting the even half exercises collapse at scale. Keys are `Str` because the shared prefixes are what this exercises, and a decimal rendering is how you get them.
 test holds_many_keys_with_shared_prefixes =
-    let build(i: Nat, acc: Map(Str)) -> Map(Str) =
+    let build(i: Nat, acc: Map(Str, Str)) -> Map(Str, Str) =
         match i | 0 => acc | _ => build(i - 1, Map/insert(acc, Nat/to_str(i), Nat/to_str(i))) end;
-    let drop_even(i: Nat, acc: Map(Str)) -> Map(Str) =
+    let drop_even(i: Nat, acc: Map(Str, Str)) -> Map(Str, Str) =
         match i
         | 0 => acc
         | _ =>
@@ -59,8 +58,8 @@ test holds_many_keys_with_shared_prefixes =
             | false => drop_even(i - 1, acc)
             end
         end;
-    let m: Map(Str) = build(300, Map/empty());
-    let d: Map(Str) = drop_even(300, m);
+    let m: Map(Str, Str) = build(300, Map/empty());
+    let d: Map(Str, Str) = drop_even(300, m);
     let at(n: Nat) -> Str = Option/unwrap_or(Map/get(d, Nat/to_str(n)), "?");
     Test/equal(
         Str/join(",", [
@@ -75,7 +74,7 @@ test holds_many_keys_with_shared_prefixes =
 
 -- `update` is the one rewriting entry point: the function sees the current value or `none`, and answers the value to keep or `none` to remove. `map` and `filter` walk the entries, `union` is right-biased, and `get_or` reads with a default.
 test update_map_filter_union_and_get_or_rewrite_entries =
-    let m: Map(Nat) = Map/of([("a", 1), ("b", 2), ("c", 3)]);
+    let m: Map(Str, Nat) = Map/of([("a", 1), ("b", 2), ("c", 3)]);
     Test/all([
         Test/equal(
             Map/update(m, "a", (o: Option(Nat)) => Option/map(o, (n: Nat) => n + 10)),
@@ -88,7 +87,7 @@ test update_map_filter_union_and_get_or_rewrite_entries =
             Map/of([("a", 1), ("b", 2), ("c", 3), ("d", 4)])),
         Test/equal(Map/map(m, (n: Nat) => n * 2), Map/of([("a", 2), ("b", 4), ("c", 6)])),
         Test/equal(
-            Map/filter(m, (_k: Bytes, n: Nat) => Bool/not(Nat/is_even(n))),
+            Map/filter(m, (_k: Str, n: Nat) => Bool/not(Nat/is_even(n))),
             Map/of([("a", 1), ("c", 3)])),
         Test/equal(
             Map/union(Map/of([("a", 1), ("x", 9)]), Map/of([("a", 100), ("y", 8)])),
@@ -96,7 +95,7 @@ test update_map_filter_union_and_get_or_rewrite_entries =
         Test/equal(Map/get_or(m, "z", 0), 0),
         Test/equal(Map/get_or(m, "c", 0), 3)]);
 
--- A `Set(K)` is a `Map(K)` storing each key as its own value, so `to_list` hands the elements back typed — `List(Str)` here, joined without a decoder — where a set over `Map({})` would hand back the trie's `Bytes`.
+-- A `Set(K)` is a structure over `Map(K, {})`, whose leaves hold the keys themselves, so `to_list` hands the elements back typed — `List(Str)` here, joined without a decoder.
 test a_set_stores_its_keys_typed_and_unions =
     let s = Set/of(["b", "a", "c", "a"]);
     let u = Set/union(s, Set/insert(Set/of(["d"]), "a"));

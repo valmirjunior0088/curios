@@ -77,7 +77,7 @@ Core pairs a telescope with its marks by hand at three doors — `FuncType::new`
 
 ## Rejected
 
-- **A `use` field on a structure.** With no label it cannot be projected, a structure's value is not in the witness scope, and resolving through the fields of a local is a second resolution rule. [`Map`](../08-standard-library/04-a-map-keyed-by-its-key-type.md) names its dictionary in its type instead.
+- **A `use` field on a structure.** With no label it cannot be projected, a structure's value is not in the witness scope, and resolving through the fields of a local is a second resolution rule. `/std/Map` names its dictionary in its type instead.
 - **Three queues at a call**, and **claiming the next slot of a mark**: which slot a written member fills then depends on the marks written before it, and two rules decide one question.
 - **Resolving a `use` slot only after the later arguments are checked**, so that a type naming a dictionary decides it whatever the order. A numeral resolves eagerly, so a numeral at an associated type would meet a type still stuck on the witness; and a signature whose key type is an implicit is undecided at the slot already.
 - **A block form bringing a value into the witness scope**, which a local `let` with a `use` premise already is, and **a generic `summon`**, which needs `use` at a type variable.

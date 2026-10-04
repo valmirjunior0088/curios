@@ -80,7 +80,7 @@ fn the_standard_library_documents_from_the_archive() {
     );
     assert!(!induct.opaque);
 
-    // `pub struct Map(V: Type): Type` exports its name and not its fields, and the record says so rather than leaving an empty member list to be read either way.
+    // `pub struct Map(K: Type, use Key(K), V: Type): Type` exports its name and not its fields, and the record says so rather than leaving an empty member list to be read either way.
     let map = documentation
         .modules
         .iter()

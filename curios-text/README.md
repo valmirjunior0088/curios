@@ -64,11 +64,23 @@ The Curios surface language: the scannerless parser, surface AST, printer and fo
 
 ### `Map` is a crit-bit trie, and its shape is its API
 
-**Decision.** `/std/Map` is a crit-bit trie keyed by the byte string a `Key` witness produces, with byte-string identity and write-side injectivity stated at the `Key` boundary where they can be checked. Its canonicity is API: `Toml/encode` promises one deterministic document in the map's structural order, and same entries, same shape is what makes map equality structural, so a proof about a map binds to its entries and get-extensionality rather than its nodes.
+**Decision.** `/std/Map` is a crit-bit trie shaped by the byte string a `Key` witness produces for each key, with byte-string identity and write-side injectivity stated at the `Key` boundary where they can be checked. Its canonicity is API: `Toml/encode` promises one deterministic document in the map's structural order, and same entries, same shape is what makes map equality structural, so a proof about a map binds to its entries and get-extensionality rather than its nodes.
 
 **Rationale.** A map's performance is bought by the compiler classes every consumer shares ([A value costs when it is kept, not when it is named](../documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md)), and a shape that stays canonical is what lets it be a value.
 
 **Rejected.** A qp-trie, built and measured slower per insert once the key was an immediate: its bit test costs a few register operations while a wide fork copies an O(width) child array per rebuilt level, and a get-weighted consumer reopens it against `map_wall_spines_slope`. A 16-field `fork16`, a 16-way `br_table` per descent and a 17-ary constructor hostile to certification; a flat child carrier, a parallel storage abstraction for one consumer; HAMT or CHAMP, which needs a hash and loses the sorted order; balanced trees and treaps, whose shape depends on history or hashing; an intrinsic `Map` carrier, which grows the trusted base with map laws. Persistent index-update functions, `List/set`, `insert`, `delete`: `/std` has no index-update vocabulary, and mutation stays in `Cell`.
+
+### A map names its key type and the dictionary it was built under
+
+**Decision.** `Map(K: Type, use Key(K), V: Type)`: a leaf holds the key itself, its encoding derived where a comparison needs it, and the `Key(K)` dictionary is a parameter of the type, so every operation walks under the dictionary its map's type names. Enumeration is typed — `fold`, `entries`, `keys` and `filter` hand keys back as they went in — and a byte-string key is `Map(Bytes, V)`. `union` takes two maps of one type; a map moves to another dictionary by `rekey`, which inserts every entry again. `Set(K: Type, use Key(K))` is its own nominal type over `Map(K, {})`.
+
+**Rationale.**
+
+- **The key is held once and no invariant is invented.** Storing the encoding hands enumeration back `Bytes` and makes keys of two types with one encoding one key; storing both holds the key twice under an agreement nothing checks. Deriving the encoding is free in order: a lookup already compares the whole byte string at the leaf, linear in the key, and re-encoding the leaf's key is the same order as the comparison it feeds.
+- **The stored encoding was a self-check, and the type takes its place.** A walk under another dictionary once ended in a failed byte comparison; with the encoding derived it would match under the same wrong dictionary, and an insert would break the invariant that a fork's bit discriminates its subtrees. Global coherence does not prevent it, since `use value` bypasses resolution, so the dictionary is an argument of the type and conversion holds every operation to it ([Concepts resolve with global coherence](../documentation/design/surface/concepts-resolve-with-global-coherence.md)). [Lean's `Std.HashMap`](https://github.com/leanprover/lean4/blob/master/src/Std/Data/HashMap/Basic.lean) is this design, and `/std/Parse` is it already, as a family.
+- **`Set` is nominal because a witness is keyed by a type's head.** As an alias of `Map(K, {})` it could carry no `Show`, `Spell` or `Eql` of its own, and a set would print as a map of units.
+
+**Rejected.** A phantom key type over the stored encoding, safe across types and still answering `Bytes`. The key beside its encoding. The dictionary carried in the value as a `use` field, which no label reads and which lets two maps of one type differ in it, leaving `union` to re-insert. The dictionary taken at each operation and named nowhere, sound only while the stored encoding is there to refuse a walk gone astray. Refusing an explicit dictionary for a key: `use value` is how a program chooses a second witness, and a type that names its dictionary makes the choice safe.
 
 ### A screen is a size-indexed frame and a layout is a typed pane tree
 

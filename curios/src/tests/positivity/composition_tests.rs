@@ -106,7 +106,7 @@ fn recursion_through_an_anonymous_tuple_is_admitted() {
     assert_eq!(run(source), b"tupled");
 }
 
-// `/std/Toml`, whose recursion travels `Toml → Map(Toml) → struct field → Option → Node`. This is the shape that makes "modulo polarity" load-bearing on day one rather than a later refinement: a check that only recognizes recursive occurrences in immediate payload positions rejects it.
+// `/std/Toml`, whose recursion travels `Toml → Map(Str, Toml) → struct field → Option → Node`. This is the shape that makes "modulo polarity" load-bearing on day one rather than a later refinement: a check that only recognizes recursive occurrences in immediate payload positions rejects it.
 #[test]
 fn recursion_through_a_struct_into_a_parameterized_inductive_is_admitted() {
     let source = r#"

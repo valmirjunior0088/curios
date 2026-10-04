@@ -1,5 +1,5 @@
-use /std/{Nat, Int, Flt, Bool, Bytes, Char, Str, List, Map, Option, Result};
-use /std/Toml/{Toml, Date, Time, Error};
+use /std/{Nat, Int, Flt, Bool, Bytes, Char, Str, List, Map, Option};
+use /std/Toml/{Toml, Date, Time};
 use /std/Toml/scan/{is_bare_byte};
 
 let bare_ok(s: Str) -> Bool =
@@ -35,12 +35,8 @@ let escaped(c: Char) -> Option(Str) =
 let quote_str(s: Str) -> Str =
     Str/flatten(["\"", Str/escape(s, escaped), "\""]);
 
-let spell_key(kb: Bytes) -> Result(Error, Str) =
-    match Str/of_bytes(kb)
-    | none() => Result/failure(Error/invalid_key(kb))
-    | some(s) =>
-        match bare_ok(s) | true => Result/success(s) | false => Result/success(quote_str(s)) end
-    end;
+let spell_key(k: Str) -> Str =
+    match bare_ok(k) | true => k | false => quote_str(k) end;
 
 let pad(n: Nat, width: Nat) -> Str =
     let s = Nat/to_str(n);
@@ -106,76 +102,59 @@ let flt_str(f: Flt) -> Str =
         end
     end;
 
-let value_str(v: Toml) -> Result(Error, Str) =
+let value_str(v: Toml) -> Str =
     match v
-    | str(s) => Result/success(quote_str(s))
-    | int(n) => Result/success(int_str(n))
-    | flt(f) => Result/success(flt_str(f))
-    | bool(x) => Result/success(Bool/to_str(x))
+    | str(s) => quote_str(s)
+    | int(n) => int_str(n)
+    | flt(f) => flt_str(f)
+    | bool(x) => Bool/to_str(x)
     | offset_date_time(odt) =>
-        Result/success(
-            Str/flatten([
-                date_str(odt.date),
-                "T",
-                time_str(odt.time),
-                offset_str(odt.offset_minutes)]))
-    | local_date_time(ldt) =>
-        Result/success(Str/flatten([date_str(ldt.date), "T", time_str(ldt.time)]))
-    | local_date(d) => Result/success(date_str(d))
-    | local_time(t) => Result/success(time_str(t))
+        Str/flatten([date_str(odt.date), "T", time_str(odt.time), offset_str(odt.offset_minutes)])
+    | local_date_time(ldt) => Str/flatten([date_str(ldt.date), "T", time_str(ldt.time)])
+    | local_date(d) => date_str(d)
+    | local_time(t) => time_str(t)
     | arr(items) =>
-        let start: Result(Error, List(Str)) = Result/success([]);
-        let parts =
-            List/fold(items, start, (item, acc) =>
-                let parts = acc!;
-                let s = value_str(item)!;
-                Result/success([..parts, s]))!;
-        Result/success(Str/flatten(["[", Str/join(", ", parts), "]"]))
+        let start: List(Str) = [];
+        let parts = List/fold(items, start, (item, parts) => [..parts, value_str(item)]);
+        Str/flatten(["[", Str/join(", ", parts), "]"])
     | table(m) =>
         match List/len(Map/entries(m)) == 0
-        | true => Result/success("{}")
-        | false =>
-            let body = pairs_str(Map/entries(m))!;
-            Result/success(Str/flatten(["{ ", body, " }"]))
+        | true => "{}"
+        | false => Str/flatten(["{ ", pairs_str(Map/entries(m)), " }"])
         end
     end
-and pairs_str(entries: List({Bytes, Toml})) -> Result(Error, Str) =
-    let start: Result(Error, List(Str)) = Result/success([]);
+and pairs_str(entries: List({Str, Toml})) -> Str =
+    let start: List(Str) = [];
     let parts =
-        List/fold(entries, start, (entry, acc) =>
-            let parts = acc!;
-            let k = spell_key(entry.0)!;
-            let vs = value_str(entry.1)!;
-            Result/success([..parts, Str/flatten([k, " = ", vs])]))!;
-    Result/success(Str/join(", ", parts));
+        List/fold(entries, start, (entry, parts) =>
+            [..parts, Str/flatten([spell_key(entry.0), " = ", value_str(entry.1)])]);
+    Str/join(", ", parts);
 
-let encode_table(prefix: List(Str), m: Map(Toml)) -> Result(Error, Str) =
+let encode_table(prefix: List(Str), m: Map(Str, Toml)) -> Str =
     let entries = Map/entries(m);
-    let start: Result(Error, List(Str)) = Result/success([]);
+    let start: List(Str) = [];
     let value_lines =
-        List/fold(entries, start, (entry, acc) =>
-            let lines = acc!;
+        List/fold(entries, start, (entry, lines) =>
             match entry.1
-            | table(_) => Result/success(lines)
-            | _ =>
-                let k = spell_key(entry.0)!;
-                let vs = value_str(entry.1)!;
-                Result/success([..lines, Str/flatten([k, " = ", vs, "\n"])])
-            end)!;
+            | table(_) => lines
+            | _ => [..lines, Str/flatten([spell_key(entry.0), " = ", value_str(entry.1), "\n"])]
+            end);
     let table_blocks =
-        List/fold(entries, start, (entry, acc) =>
-            let blocks = acc!;
+        List/fold(entries, start, (entry, blocks) =>
             match entry.1
             | table(sub) =>
-                let k = spell_key(entry.0)!;
-                let body = encode_table([..prefix, k], sub)!;
-                Result/success([
+                let k = spell_key(entry.0);
+                [
                     ..blocks,
-                    Str/flatten(["[", Str/join(".", [..prefix, k]), "]\n", body])])
-            | _ => Result/success(blocks)
-            end)!;
-    Result/success(Str/concat(Str/flatten(value_lines), Str/flatten(table_blocks)));
+                    Str/flatten([
+                        "[",
+                        Str/join(".", [..prefix, k]),
+                        "]\n",
+                        encode_table([..prefix, k], sub)])]
+            | _ => blocks
+            end);
+    Str/concat(Str/flatten(value_lines), Str/flatten(table_blocks));
 
---- `m` as one deterministic document: the root's plain values first, then its tables. A key that is not UTF-8 or an invalid calendar value is refused rather than written.
-pub let encode(m: Map(Toml)) -> Result(Error, Str) =
+--- `m` as one deterministic document: the root's plain values first, then its tables. Every table has a spelling, so nothing is refused.
+pub let encode(m: Map(Str, Toml)) -> Str =
     encode_table([], m);

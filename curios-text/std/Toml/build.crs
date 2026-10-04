@@ -42,7 +42,7 @@ let replace_at(
 ) -> List(Toml) =
     [..List/slice(items, 0, index), value, ..List/drop(@Toml, items, index + 1, @ok)];
 
-let may_extend(side: Map(Origin), kp: Bytes, act: Act) -> Result(Rule, {}) =
+let may_extend(side: Map(Bytes, Origin), kp: Bytes, act: Act) -> Result(Rule, {}) =
     match Map/get(side, kp)
     | some(st) =>
         match act
@@ -64,12 +64,12 @@ let may_extend(side: Map(Origin), kp: Bytes, act: Act) -> Result(Rule, {}) =
     end;
 
 let walk_final(
-    m: Map(Toml),
-    side: Map(Origin),
+    m: Map(Str, Toml),
+    side: Map(Bytes, Origin),
     pre: Bytes,
     name: Str,
     act: Act,
-) -> Result(Rule, {Map(Toml), Map(Origin), List(Seg)}) =
+) -> Result(Rule, {Map(Str, Toml), Map(Bytes, Origin), List(Seg)}) =
     let kf = seg_key(pre, Seg/plain(name));
     match act
     | act_table() =>
@@ -118,7 +118,7 @@ let walk_final(
     | act_value(v) =>
         match Map/get(m, name)
         | none() =>
-            let side2: Map(Origin) =
+            let side2: Map(Bytes, Origin) =
                 match v | table(_) => Map/insert(side, kf, Origin/inline()) | _ => side end;
             Result/success((Map/insert(m, name, v), side2, [Seg/plain(name)]))
         | some(_) => Result/failure(Rule/duplicate_key())
@@ -126,13 +126,13 @@ let walk_final(
     end;
 
 let walk(
-    m: Map(Toml),
-    side: Map(Origin),
+    m: Map(Str, Toml),
+    side: Map(Bytes, Origin),
     pre: Bytes,
     segs: List(Seg),
     unchecked: Nat,
     act: Act,
-) -> Result(Rule, {Map(Toml), Map(Origin), List(Seg)}) =
+) -> Result(Rule, {Map(Str, Toml), Map(Bytes, Origin), List(Seg)}) =
     match segs
     | [] => Result/failure(Rule/empty_key_path())
     | [seg, ..rest] =>
@@ -306,7 +306,7 @@ pub let apply_aot(b: Build, path: List(Str)) -> Result(Error, Build) =
     end;
 
 --- An inline table's pairs as a map, each applied in turn, or the first rule one of them broke.
-pub let inline_fold(pairs: List({List(Str), Toml})) -> Result(Error, Map(Toml)) =
+pub let inline_fold(pairs: List({List(Str), Toml})) -> Result(Error, Map(Str, Toml)) =
     let start: Result(Error, Build) = Result/success(build_empty);
     let built =
         List/fold(pairs, start, (pair, acc) =>

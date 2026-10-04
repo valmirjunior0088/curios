@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Str, List, Map};
+use /std/{Nat, Int, Flt, Bool, Bytes, Str, List, Map};
 
 --- A calendar date, and the bound its fields carry.
 pub mod Date;
@@ -39,7 +39,7 @@ pub induct Toml: pub Type
 --- An array, in order.
 | arr(List(Toml))
 --- A table, by key.
-| table(Map(Toml))
+| table(Map(Str, Toml))
 end
 
 pub use Toml/*;
@@ -58,12 +58,12 @@ induct Origin: Type
 end
 
 struct Build: Type {
-    root: Map(Toml),
-    side: Map(Origin),
+    root: Map(Str, Toml),
+    side: Map(Bytes, Origin),
     scope: List(Seg),
 }
 
---- Why a document did not decode or a table did not encode.
+--- Why a document did not decode.
 pub mod Error;
 pub use Error/{let Error};
 

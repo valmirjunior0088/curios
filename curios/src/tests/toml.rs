@@ -566,20 +566,12 @@ fn program() -> String {
         let canon(input : Str) -> Str =
             match Toml/decode(input)
             | failure(e) => Str/concat("reject:", Toml/Error/message(e))
-            | success(root) =>
-                match Toml/encode(root)
-                | success(out) => out
-                | failure(e) => Str/concat("encode-fail:", Toml/Error/message(e))
-                end
+            | success(root) => Toml/encode(root)
             end;
         let decoded(input : Str) -> Str =
             match Toml/decode(input)
             | failure(_) => "reject"
-            | success(root) =>
-                match Toml/encode(root)
-                | success(out) => out
-                | failure(e) => Str/concat("encode-fail:", Toml/Error/message(e))
-                end
+            | success(root) => Toml/encode(root)
             end;
         let reason(input : Str) -> Str =
             match Toml/decode(input)
@@ -676,22 +668,17 @@ fn every_document_prints_what_its_table_expects() {
     );
 }
 
-/// The encoder on a map built by hand rather than decoded, which is the one path no row above reaches.
+/// The encoder on a map built by hand rather than decoded, which is the one path no row above reaches: a key is a string, so every table has a spelling, and a key that is no bare key is quoted.
 #[test]
-fn encode_rejects_a_non_utf8_key() {
+fn encode_spells_a_map_built_by_hand() {
     let source = r#"
-        use /std/{Str, Toml, Result, Map, Nat, Bytes, rand, Io};
+        use /std/{Str, Toml, Map, Nat, Bytes, rand, Io};
         let taint = Bytes/len(rand/bytes(0)!);
         let opaque = Nat/to_int(taint + 1);
-        let outcome : Str =
-            match Toml/encode(Map/insert(Map/empty(@Toml), x[0xff], Toml/int(opaque)))
-            | success(_) => "accepted"
-            | failure(e) => Toml/Error/message(e)
-            end;
-        /std/print(outcome)
+        /std/print(Toml/encode(Map/insert(Map/empty(), "a key", Toml/int(opaque))))
         "#;
 
-    assert_eq!(run(source), b"map key is not valid UTF-8");
+    assert_eq!(run(source), b"\"a key\" = 1\n");
 }
 
 #[test]

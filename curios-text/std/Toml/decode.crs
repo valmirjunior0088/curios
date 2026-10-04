@@ -67,7 +67,7 @@ let stmts(acc: List(Stmt)) -> Parse(Bytes, List(Stmt)) =
     end;
 
 --- Exactly one whole document as its root table; anything after it is refused, as is a document that breaks the table-construction rules.
-pub let decode(source: Str) -> Result(Error, Map(Toml)) =
+pub let decode(source: Str) -> Result(Error, Map(Str, Toml)) =
     match Parse/run(stmts([]), Str/to_bytes(source))
     | failure(e) => Result/failure(Error/syntax(e))
     | success(parsed) =>

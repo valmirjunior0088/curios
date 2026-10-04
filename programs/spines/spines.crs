@@ -1,8 +1,8 @@
 -- spines: N LCG-keyed inserts into /std/Map, then fold the values — death-birth churn on a persistent map's spine, under a live set that plateaus at the LCG's key population (at most 65536 entries) while inserts keep rebuilding root-to-leaf paths that die with the operation. The table compares map algorithms as much as memory management (a crit-bit trie here, hash maps in the imperative contestants, balanced trees in the functional ones), so it orients rather than proves. Keys enter as the Nat they are, as every contestant's enter as its machine integer; the runs published through 09 keyed through Bytes/of_nat instead, and the next benchmark run mentions the change. N is read from stdin; the seed derives from N so nothing is a closed term. Values are the step index, so later writes to a returning key are observable in the printed sum.
 use /std/{Str, Nat, Map, Io};
 
-let walk(n: Nat, i: Nat, x: Nat, m: Map(Nat)) -> Map(Nat) =
-    match n: (_) => Map(Nat)
+let walk(n: Nat, i: Nat, x: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
+    match n: (_) => Map(Nat, Nat)
     | 0 => m
     | k + 1; _ih =>
         let y = 75 * x % 65537;
