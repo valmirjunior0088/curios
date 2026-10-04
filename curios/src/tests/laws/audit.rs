@@ -24,7 +24,7 @@ fn every_law_holds_reversed() {
             })
         })
         .collect::<Vec<_>>();
-    if let Err(failures) = closes(&reversed) {
+    if let Err(failures) = closes(IMPORTS, &reversed) {
         panic!("{}", failures.join("\n"));
     }
 }
@@ -46,7 +46,7 @@ fn every_two_laws_sharing_a_side_chain() {
         }
     }
     assert!(!chains.is_empty());
-    if let Err(failures) = closes(&chains) {
+    if let Err(failures) = closes(IMPORTS, &chains) {
         panic!("{}", failures.join("\n"));
     }
 }
@@ -66,7 +66,7 @@ fn every_law_holds_at_compound_terms() {
         })
         .collect::<Vec<_>>();
     assert!(!instances.is_empty());
-    if let Err(failures) = closes(&instances) {
+    if let Err(failures) = closes(IMPORTS, &instances) {
         panic!("{}", failures.join("\n"));
     }
 }
@@ -122,7 +122,7 @@ fn every_commutative_law_holds_over_atoms_that_differ_in_a_proof() {
                 .iter()
                 .map(|claim| (binders.clone(), claim.clone()))
                 .collect::<Vec<_>>();
-            if let Err(found) = closes(&rows) {
+            if let Err(found) = closes(IMPORTS, &rows) {
                 failures.push(format!(
                     "{carrier:?} under `{binders}`:\n{}",
                     found.join("\n")

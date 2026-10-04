@@ -851,7 +851,7 @@ fn every_held_law_closes_by_refl() {
             continue;
         }
         let held = &carrier.rows()[..carrier.held.len()];
-        if let Err(failures) = closes(held) {
+        if let Err(failures) = closes(IMPORTS, held) {
             panic!(
                 "a held law of {} no longer closes:\n{}",
                 carrier.name,
@@ -866,7 +866,7 @@ fn every_row_is_on_the_side_the_compiler_puts_it() {
     // Every row — held, then refused, then the sentinel — as a written goal, read back through the compiler's own refl-fit line. A held row without the line is a regression in the normalizer; a refused row with it is a law that has been taken and must move to the held rows, which is how the refused half stays a record. Every misplaced row is reported at once, since a change to one rule can move several.
     let found = CARRIERS
         .iter()
-        .flat_map(|carrier| misplaced(carrier.name, &carrier.rows(), carrier.held.len()))
+        .flat_map(|carrier| misplaced(IMPORTS, carrier.name, &carrier.rows(), carrier.held.len()))
         .collect::<Vec<_>>();
     assert!(found.is_empty(), "{}", found.join("\n"));
 }
@@ -877,7 +877,7 @@ fn every_row_is_on_the_side_the_kernel_puts_it_asked_alone() {
     let found = CARRIERS
         .iter()
         .flat_map(|carrier| {
-            misplaced_by_the_kernel(carrier.name, &carrier.rows(), carrier.held.len())
+            misplaced_by_the_kernel(IMPORTS, carrier.name, &carrier.rows(), carrier.held.len())
         })
         .collect::<Vec<_>>();
     assert!(found.is_empty(), "{}", found.join("\n"));
@@ -891,14 +891,14 @@ fn every_atom_law_closes_at_every_order_of_its_binders() {
             .iter()
             .map(|claim| (binders.clone(), (*claim).to_owned()))
             .collect::<Vec<_>>();
-        if let Err(failures) = closes(&rows) {
+        if let Err(failures) = closes(IMPORTS, &rows) {
             panic!(
                 "an atom law no longer closes under `{binders}`:\n{}",
                 failures.join("\n")
             );
         }
         if order == 0 {
-            let found = misplaced("Atoms up to conversion", &rows, rows.len());
+            let found = misplaced(IMPORTS, "Atoms up to conversion", &rows, rows.len());
             assert!(found.is_empty(), "{}", found.join("\n"));
         }
     }

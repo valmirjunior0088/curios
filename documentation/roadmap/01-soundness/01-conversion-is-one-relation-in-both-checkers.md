@@ -42,6 +42,8 @@ let arm(b: Bool, p: {Nat, Nat})
 
 **The audit holds the theory's laws alone.** It has no row under a context, and none for a rule no law table states: beta, delta, zeta, iota, eta, irrelevance.
 
+**An implicit is refused against a lambda while its own type is unsolved.** `let t(g: (Nat) -> Nat) -> Eq()((x: Nat) => g(0), (x: Nat) => g(0)) = Eq/refl();` is refused, `inferred: ?` against `expected: (x) => g(0)`, and compiles once either `Eq` or `Eq/refl` states `@((Nat) -> Nat)`. `solve` (`curios-elab/src/convert.rs`) re-validates a candidate by checking it against its metavariable's frozen type under an oracle, where parking is suppressed. `refl`'s `z` has the type `A`, still a bare metavariable when `z` meets the lambda, and `elaborate_func_check` (`curios-elab/src/elaborate/binding.rs`) parks a lambda against one and, with parking suppressed, raises `not_a_function_type`: re-validation reads that as a rejected candidate and the drain as a mismatch. Reflexivity as an author writes it fails at a lambda whose type nothing else states, and so does the candidate line the grid reads the elaborator through.
+
 ## Prior art
 
 - **Lennon-Bertrand** ([*What does it take to certify a conversion checker?*, FSCD 2025](https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.FSCD.2025.27)). "In Rocq and Lean, conversion does not maintain any type information, and Agda's conversion, while primarily type-directed, similarly uses term-directed η-expansion of functions." An untyped checker replaces the type-directed rule by term-directed ones, with "no η-rule when the two sides are neutrals"; a definitional unit type and strict propositions "completely wreck completeness of neutral comparison" and need the type.
@@ -63,7 +65,9 @@ Taken before stage 1, each with its reason, so a stage meets none of them as a f
 6. **The positions are held by a lint.** Where each context's hole landed is read back from the term the elaborator built, and the formers are matched with no wildcard, so a former added to Core states its contexts before the audit compiles. The lint holds formers and kinds of elimination; which child of a former a context targets is the context's to state.
 7. **Three fixes land with the audit.** The kernel fires Π and Σ eta by the literal against a neutral, the set `struct_eta` takes, under the invariant `struct_eta` states. Unit eta lands as [the findings](00-findings.md) state it. The elaborator's tuple and struct eta is gated by the goal type, as they state it.
 8. **What needs a type the position does not carry stays a stated row.** Unit eta and irrelevance between two neutrals, in a stuck elimination's arm or under a projection's head, and two neutrals at a nominal struct compared by their projections, stay rows both checkers refuse, under an open roadmap line of their own.
-9. **Out of the audit.** A case equation's key is [What conversion still decides by spelling or by cap](../04-arithmetic/01-decided-by-spelling-or-cap.md)'s. A level is solved by the elaborator and judged by the kernel, which is not one question, so rows keep their levels ground. Recurrence stays with `kernel::convert::recursion_tests` unless a source program reaches it.
+9. **A seed's row states its sides' type**, `Eq(@T)(left, right)`, so that neither reader leaves `Eq/refl()`'s implicit a type to infer and a row asks for a comparison, never for a solution.
+10. **The solver settles a candidate its metavariable's type cannot check**, last of the fixes. Where the frozen type reduces to a bare unsolved metavariable, re-validation synthesizes a lambda candidate's type and pins the metavariable's type to it, through `settle_against` at the drain tier, as checking already does for a candidate that infers. A candidate is a term the other side of an equation holds, so no expectation is left to send it a hidden binder, which is the reason a written lambda waits for one.
+11. **Out of the audit.** A case equation's key is [What conversion still decides by spelling or by cap](../04-arithmetic/01-decided-by-spelling-or-cap.md)'s. A level is solved by the elaborator and judged by the kernel, which is not one question, so rows keep their levels ground. Recurrence stays with `kernel::convert::recursion_tests` unless a source program reaches it.
 
 ## Open questions
 
@@ -77,7 +81,8 @@ Taken before stage 1, each with its reason, so a stage meets none of them as a f
 3. **Every seed under every position**, one context per child a former holds, with the lint of decision 6. Check: a held seed holds under every context in both checkers; a near miss stays refused under a context that keeps its hole; every context's hole lands under the former it names.
 4. **The other laws over every seed**: reversed, chained through a shared side, substituted at a compound term. Check: each generated row holds in both checkers, or is listed as parted.
 5. **The three fixes**, each emptying its rows of the table and deleting its finding. Check: the fix's own tests in the crate it changes, mutation-checked; the programs it accepts as tests in `curios/src/tests/board/`; `cargo xboard`; `/std` certifies.
-6. **Landing.** The decision record, the entries and the roadmap.
+6. **The solver settles a lambda candidate**, decision 10. Check: the program above compiles with neither type stated; a fixture in `curios-elab`'s `convert::solve_tests` holds the solution and the type it pins, with the candidate a written lambda could not take as its control; `/std` elaborates to what it did.
+7. **Landing.** The decision record, the entries and the roadmap.
 
 ## Verification
 

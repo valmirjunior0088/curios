@@ -3,7 +3,7 @@
 //! A law declared at two carriers is stated at both by construction, and a family a carrier's procedure does not decide fails at that carrier rather than going unstated.
 
 use {
-    super::{closes, holds, misplaced, misplaced_by_the_kernel},
+    super::{IMPORTS, closes, holds, misplaced, misplaced_by_the_kernel},
     curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation, TABLE},
     curios_num::Grain,
 };
@@ -302,7 +302,7 @@ fn constant(value: Constant, carrier: Carrier) -> &'static str {
 fn every_generated_law_closes_by_refl() {
     let mut failed = Vec::new();
     for (name, group) in by_carrier(&rows(&declared())) {
-        if let Err(failures) = closes(&group) {
+        if let Err(failures) = closes(IMPORTS, &group) {
             failed.push(format!("{name}:\n{}", failures.join("\n")));
         }
     }
@@ -313,7 +313,7 @@ fn every_generated_law_closes_by_refl() {
 fn every_generated_law_is_a_fit_for_refl() {
     let found = by_carrier(&rows(&declared()))
         .into_iter()
-        .flat_map(|(name, group)| misplaced(&name, &group, group.len()))
+        .flat_map(|(name, group)| misplaced(IMPORTS, &name, &group, group.len()))
         .collect::<Vec<_>>();
     assert!(found.is_empty(), "{}", found.join("\n"));
 }
@@ -322,7 +322,7 @@ fn every_generated_law_is_a_fit_for_refl() {
 fn every_generated_law_is_held_by_the_kernel_asked_alone() {
     let found = by_carrier(&rows(&declared()))
         .into_iter()
-        .flat_map(|(name, group)| misplaced_by_the_kernel(&name, &group, group.len()))
+        .flat_map(|(name, group)| misplaced_by_the_kernel(IMPORTS, &name, &group, group.len()))
         .collect::<Vec<_>>();
     assert!(found.is_empty(), "{}", found.join("\n"));
 }
@@ -367,5 +367,5 @@ fn a_family_declared_where_nothing_decides_it_fails_at_that_carrier() {
         .iter()
         .map(|row| row.source.clone())
         .collect::<Vec<_>>();
-    assert!(closes(&group).is_err());
+    assert!(closes(IMPORTS, &group).is_err());
 }
