@@ -9,13 +9,13 @@ A consumer states a fact of this kind that must hold by conversion, with the rea
 ## The direction to preserve
 
 - **Hypothesis-free.** Validity of a quantifier-free linear formula over atoms, with the context's hypotheses out of conversion. This is Coq Modulo Theory's fragment, whose metatheory with strong elimination is Jouannaud and Strub's (2017).
-- **Search outside, checking inside.** The search is [the elaborator's](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md), `curios-elab`'s `entailment`. A verdict carries a certificate keyed by the canonical linear view of the formula, which `curios-core`'s `linear` module publishes ([the carriers' algebra](../../design/arithmetic/the-carriers-algebra-stays-in-conversion.md)) and is checked by a certifier-grade checker in `curios-algebra`. The evidence travels with the module, and missing evidence is a refusal, never an acceptance ([the certifier's checked evidence](../01-soundness/03-checked-evidence.md)'s design direction).
+- **Search outside, checking inside.** The search is [the elaborator's](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md), `curios-elab`'s `entailment`. A verdict carries a certificate keyed by the canonical linear view of the formula, which `curios-core`'s `linear` module publishes ([the carriers' algebra](../../design/arithmetic/the-carriers-algebra-stays-in-conversion.md)) and is checked by a certifier-grade checker in `curios-algebra`. The evidence travels with the module, and missing evidence is a refusal, never an acceptance ([the certifier's checked evidence](../01-soundness/03-checked-evidence.md)'s decisions).
 - **Integer completeness stated.** Farkas certificates decide rational validity; a consequence that holds only over the integers needs cuts or the omega test's shadows, and the certificate language states which it admits. A proposed certificate family is not a complete integer decision procedure until it says so.
 - **The audit extended.** Symmetry, transitivity and substitution with the layer in conversion, and freeness as inversion reads it. A relational clash becomes an impossibility inversion may use only where a certificate proves one; the truth table's disagreement over opaque atoms remains no counterexample.
 
 ## Coordination
 
-This is the algebra half of [the certifier's checked evidence](../01-soundness/03-checked-evidence.md)'s first evidence item, "evidence checked, beginning with linear integer arithmetic's certificates". When the trigger is met, the two are refined together: this specification owns the checker and the certificate language, and the certifier's owns the evidence's transport, its identity and the trusted-code grade the checker must meet.
+This is the algebra half of [the certifier's checked evidence](../01-soundness/03-checked-evidence.md)'s fifth stage. When the trigger is met, the two are refined together: this specification owns the checker and the certificate language, and the certifier's owns the evidence's transport, its identity and the trusted-code grade the checker must meet.
 
 ## Rejected
 

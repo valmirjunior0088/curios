@@ -17,8 +17,8 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 ## Soundness
 
 - [ ] [The two checkers' conversion held to each other](roadmap/01-soundness/01-conversion-held-across-checkers.md) — not refined yet; their conversion meets only where the corpus sends both, and their recurrence keys and untyped child positions differ
-- [ ] [The certifier confirms what it skips](roadmap/01-soundness/02-the-certifier-confirms-what-it-skips.md) — not refined yet; an item under a name already in scope is not judged, and the mount disjointness that keeps one from arriving is checked in `curios-text`
-- [ ] [Checked evidence and trusted reasoning](roadmap/01-soundness/03-checked-evidence.md) — not refined yet; certificate transport and stronger restrictions on trusted implementations, beginning once [the relational layer](roadmap/04-arithmetic/08-relational-layer.md) has a consumer
+- [ ] [The certifier confirms what it skips](roadmap/01-soundness/02-the-certifier-confirms-what-it-skips.md) — a declaration under a name already in scope is passed over whatever it is, a registry entry among them live and unchecked, and what keeps one from arriving is checked outside `curios-cert`
+- [ ] [Checked evidence and trusted reasoning](roadmap/01-soundness/03-checked-evidence.md) — no procedure in the certifier's closure is classified against the grade, no step of the gate holds the closure, and reasoning found outside the kernel has no evidence the certifier checks, which opens with [the relational layer](roadmap/04-arithmetic/08-relational-layer.md)
 - [x] [Totality of everything erasure deletes](design/soundness/totality-of-the-erased-program.md): nothing reachable from a type and nothing at a proposition is partial, decided per recursive group by size-change termination, so no closed term inhabits `/std/Bool/False`
 - [x] [An independent kernel re-checks what the elaborator accepts](design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md), the trusted base being `curios-cert` and the layer both checkers share
 - [x] [The soundness board](design/soundness/the-soundness-board.md): every rule that can admit a term, graded probed, argued or auditable, with its fixtures
@@ -29,8 +29,8 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 ## Theory
 
 - [ ] [A universe level only a parameter's type mentions is irrelevant](roadmap/02-theory/01-irrelevant-universe-levels.md) — both checkers compare a nominal type's levels for equality, so `!` holds its region at the level of a nominal action it binds
-- [ ] [A universe level settled before its evidence is in](roadmap/02-theory/02-levels-settled-before-their-evidence.md) — not refined yet; a generic declaration dispatching through a witness declared later settles at its least levels, and two instances' levels are identified where unfolding alone would decide
-- [ ] [A subsumption blocked on a metavariable waits as a subsumption](roadmap/02-theory/03-blocked-subsumption.md) — not refined yet; the elaborator hands it to conversion, refusing what the relation admits
+- [ ] [A universe level settled before its evidence is in](roadmap/02-theory/02-levels-settled-before-their-evidence.md) — a declaration reaching a witness declared after it settles at its least levels and is refused at a larger type as a mismatch against `?`, and what identifying two instances' levels commits beyond unfolding is unmeasured
+- [ ] [A subsumption blocked on a metavariable waits as a subsumption](roadmap/02-theory/03-blocked-subsumption.md) — the elaborator hands a pair blocked on a metavariable to conversion as an equation, and solves a metavariable met in one by equality, so one call is admitted or refused by the order of its arguments
 - [ ] [Flex–flex problems with distinct heads](roadmap/02-theory/04-flex-flex-intersection.md) — not refined yet; `?0(x) ~ ?1(x)` parks undecided, with no intersection
 - [ ] [Strict positivity through a type-former parameter](roadmap/02-theory/05-positivity-through-type-formers.md) — not refined yet; `induct Mu(F : (Type) -> Type)` is refused, since its body cannot say how `F` uses its argument
 - [ ] [K-like reduction](roadmap/02-theory/06-k-reduction.md) — not refined yet; a relevant match on a stuck `Eq` proof does not reduce; waits for a program that needs it
