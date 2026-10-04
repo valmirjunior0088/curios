@@ -1,11 +1,13 @@
 //! The audit of the theory conversion decides, generated from the law table's rows: the conditions a theory kept in conversion must meet — Coq Modulo Theory's, whose metatheory with strong elimination is Jouannaud and Strub's (2017) — put to both checkers at every declared law.
 //!
 //! Conversion stays symmetric (each law reversed), transitive (two laws chained through a side they share), and closed under substitution (each law at compound terms that change its atoms, and through a solved metavariable); and constructors stay free modulo the theory, which is what inversion reads when it concludes a clash (a case split on an equation between distinct constructors needs no arm). A finite grid is evidence about the implemented fragment, not a metatheorem, and it grows with the law table it is generated from.
+//!
+//! The seeds of the rules no law table states are held to the first three conditions too — reversed, chained and at a compound term — with each checker asked alone, and a seed a checker lets go under one of them is a row of the table of parted rows.
 
 use {
     super::{
-        Binder, IMPORTS, Row, applied, closes, declared, name, orders, rows, spell, top_level,
-        type_name,
+        Answers, Audit, Binder, IMPORTS, Row, SEEDS, STRUCTURAL, applied, asked_alone, claim,
+        closes, declared, hold_to_the_table, name, orders, rows, spell, top_level, type_name,
     },
     crate::tests::typecheck,
     curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation},
@@ -340,4 +342,128 @@ fn substitute(expr: &Expr, var: &Expr, replacement: &Expr) -> Expr {
                 .collect(),
         },
     }
+}
+
+/// Hold `rows` — each a name, a row and whether its seeds derive that it holds — to their derived sides in both checkers asked alone, but for the rows the table lists.
+fn seeds_keep_their_side(audit: Audit, name: &str, rows: Vec<(String, (String, String), bool)>) {
+    // An audit that generated nothing would pass having asked nothing.
+    assert!(!rows.is_empty());
+    let stated = rows
+        .iter()
+        .map(|(_, row, _)| row.clone())
+        .collect::<Vec<_>>();
+    let answers = asked_alone(STRUCTURAL, name, &stated);
+    let found = rows
+        .into_iter()
+        .zip(answers)
+        .filter(|((_, _, holds), answers)| *answers != Answers::both(*holds))
+        .map(|((name, _, _), answers)| (name, answers))
+        .collect::<Vec<_>>();
+    hold_to_the_table(audit, &found);
+}
+
+/// Every seed with its sides swapped: a relation a checker decided in one direction alone would follow which side a walk happens to hold.
+#[test]
+fn every_seed_keeps_its_side_reversed() {
+    let rows = SEEDS
+        .iter()
+        .flat_map(|seeds| {
+            seeds.seeds.iter().map(|seed| {
+                (
+                    format!("{}, reversed", seed.rule),
+                    (
+                        seeds.binders.to_owned(),
+                        claim(seeds.type_, seed.right, seed.left),
+                    ),
+                    seed.holds,
+                )
+            })
+        })
+        .collect();
+    seeds_keep_their_side(Audit::Reversed, "seeds reversed", rows);
+}
+
+/// Every two held seeds of one type that share their right side, chained through it: `a = n` and `b = n` give `a = b`. That is two rules composed, and the step one checker takes through an annotation where the other compares the first type with the last.
+#[test]
+fn every_two_seeds_sharing_a_side_chain() {
+    let mut rows = Vec::new();
+    for seeds in SEEDS {
+        let held = seeds
+            .seeds
+            .iter()
+            .filter(|seed| seed.holds)
+            .collect::<Vec<_>>();
+        for (at, seed) in held.iter().enumerate() {
+            for other in &held[at + 1..] {
+                if seed.right == other.right {
+                    rows.push((
+                        format!("{} chained with {}", seed.rule, other.rule),
+                        (
+                            seeds.binders.to_owned(),
+                            claim(seeds.type_, seed.left, other.left),
+                        ),
+                        true,
+                    ));
+                }
+            }
+        }
+    }
+    seeds_keep_their_side(Audit::Chained, "seeds chained", rows);
+}
+
+/// Every seed with its neutral replaced by a compound term of its type, which changes what each rule meets: a literal where it met a binder, a redex where it met a head.
+#[test]
+fn every_seed_keeps_its_side_at_a_compound_term() {
+    let rows = SEEDS
+        .iter()
+        .filter_map(|seeds| Some((seeds, seeds.compound.as_ref()?)))
+        .flat_map(|(seeds, compound)| {
+            let binders = top_level(seeds.binders)
+                .into_iter()
+                .filter(|binder| *binder != compound.binder)
+                .chain(top_level(compound.binders))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let neutral = compound.binder.split(':').next().unwrap_or_default().trim();
+            let term = format!("({})", compound.term);
+            seeds
+                .seeds
+                .iter()
+                .map(|seed| {
+                    (
+                        format!("{}, at a compound term", seed.rule),
+                        (
+                            binders.clone(),
+                            claim(
+                                seeds.type_,
+                                &replace_word(seed.left, neutral, &term),
+                                &replace_word(seed.right, neutral, &term),
+                            ),
+                        ),
+                        seed.holds,
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    seeds_keep_their_side(Audit::Substituted, "seeds at compound terms", rows);
+}
+
+/// `text` with every occurrence of the identifier `name` replaced, an occurrence being one no letter, digit or underscore stands beside.
+fn replace_word(text: &str, name: &str, with: &str) -> String {
+    let word = |character: char| character.is_alphanumeric() || character == '_';
+    let mut replaced = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find(name) {
+        let within = rest[..at].chars().next_back().is_some_and(word)
+            || rest[at + name.len()..].chars().next().is_some_and(word);
+        replaced.push_str(&rest[..at]);
+        replaced.push_str(match within {
+            true => name,
+            false => with,
+        });
+        rest = &rest[at + name.len()..];
+    }
+    replaced.push_str(rest);
+    replaced
 }

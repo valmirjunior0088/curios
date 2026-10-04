@@ -12,6 +12,9 @@ pub(super) enum Audit {
     Arms,
     Heads,
     Types,
+    Reversed,
+    Chained,
+    Substituted,
 }
 
 /// One row a checker puts on the other side than derived.
@@ -31,13 +34,20 @@ const ETA_AT_TYPE: &str =
 /// The seeds eta decides by a literal's shape alone: a lambda that is no forwarder, and a tuple literal, each against a neutral.
 const BY_THE_LITERAL: &[&str] = &["function eta past a fold", "record eta"];
 
-const UNIT_LITERAL: &[&str] = &["unit eta, the literal"];
+/// A literal of a type with one inhabitant against a neutral, which the elaborator takes by the literal's shape.
+const UNIT_LITERALS: &[&str] = &[
+    "unit eta, the literal",
+    "unit eta at a record of units, the literal",
+];
 
-/// Two neutrals at a type with one inhabitant, which nothing but the type equates.
+/// Two neutrals at a type with no fields, which nothing but the type equates.
 const UNIT_NEUTRALS: &[&str] = &[
     "unit eta, two neutrals",
     "unit eta at a struct, two neutrals",
 ];
+
+/// Two neutrals at a record of units, which the elaborator refuses wherever it meets them: it compares their projections at `Type`, where it compared the literal's fields at no type at all.
+const RECORD_NEUTRALS: &[&str] = &["unit eta at a record of units, two neutrals"];
 
 /// The typed context whose hole the kernel reaches untyped all the same: comparing two calls of a definition at a record, it projects them before it compares their spines, and unfolded they are stuck matches whose arms it compares at `Type`.
 const UNFOLDED: &str = "a definition's argument";
@@ -61,63 +71,97 @@ pub(super) fn parted() -> Vec<Parted> {
         .copied()
         .filter(|context| *context != UNFOLDED)
         .collect::<Vec<_>>();
-
-    let mut parted = Vec::new();
-    let mut list = |audit, seeds: &[&str], contexts: Option<&[&str]>, answers, finding| {
-        for seed in seeds {
-            let rows = match contexts {
-                None => vec![(*seed).to_owned()],
-                Some(contexts) => contexts
+    // A row's name, as the audit that states it spells it.
+    let alone = |seeds: &[&str], law: &str| {
+        seeds
+            .iter()
+            .map(|seed| format!("{seed}{law}"))
+            .collect::<Vec<_>>()
+    };
+    let under = |seeds: &[&str], contexts: &[&str]| {
+        seeds
+            .iter()
+            .flat_map(|seed| {
+                contexts
                     .iter()
-                    .map(|context| format!("{seed} under {context}"))
-                    .collect(),
-            };
-            parted.extend(rows.into_iter().map(|row| Parted {
-                audit,
-                row,
-                answers,
-                finding,
-            }));
-        }
+                    .map(move |context| format!("{seed} under {context}"))
+            })
+            .collect::<Vec<_>>()
     };
 
-    // Unit eta: the elaborator equates any two terms at a type with no fields, by the literal or by the type, and the kernel has no such rule. Where neither checker has the type — an arm, and a definition's argument once unfolded — two neutrals part from their seed in both.
-    for units in [UNIT_LITERAL, UNIT_NEUTRALS] {
-        list(Audit::Seeds, units, None, kernel_refuses, UNIT_ETA);
-        list(Audit::Types, units, Some(&types), kernel_refuses, UNIT_ETA);
+    let mut parted = Vec::new();
+    let mut list = |audit, rows: Vec<String>, answers, finding| {
+        parted.extend(rows.into_iter().map(|row| Parted {
+            audit,
+            row,
+            answers,
+            finding,
+        }));
+    };
+
+    // Unit eta. The elaborator equates a literal of a type with one inhabitant with anything, by the literal's shape, and two neutrals at a type with no fields by the type; the kernel has neither rule. Two neutrals part from their seed in both checkers where neither has the type — an arm, and a definition's argument once unfolded — and at a record of units wherever they stand, which is where the elaborator's conversion is not transitive: each neutral is the literal, and the two are not each other.
+    for (audit, law) in [(Audit::Seeds, ""), (Audit::Reversed, ", reversed")] {
+        list(audit, alone(UNIT_LITERALS, law), kernel_refuses, UNIT_ETA);
+        list(audit, alone(UNIT_NEUTRALS, law), kernel_refuses, UNIT_ETA);
+        list(audit, alone(RECORD_NEUTRALS, law), both_refuse, UNIT_ETA);
     }
     list(
-        Audit::Typed,
-        UNIT_LITERAL,
-        Some(&typed),
+        Audit::Chained,
+        vec![
+            "unit eta, the literal chained with unit eta, two neutrals".to_owned(),
+            "unit eta at a record of units, the literal chained with unit eta at a record of units, two neutrals".to_owned(),
+        ],
         kernel_refuses,
         UNIT_ETA,
     );
     list(
-        Audit::Arms,
-        UNIT_LITERAL,
-        Some(&arms),
+        Audit::Substituted,
+        alone(
+            &["unit eta, two neutrals", RECORD_NEUTRALS[0]],
+            ", at a compound term",
+        ),
+        kernel_refuses,
+        UNIT_ETA,
+    );
+    for (audit, contexts) in [
+        (Audit::Typed, &typed),
+        (Audit::Arms, &arms),
+        (Audit::Types, &types),
+    ] {
+        list(
+            audit,
+            under(UNIT_LITERALS, contexts),
+            kernel_refuses,
+            UNIT_ETA,
+        );
+        list(
+            audit,
+            under(RECORD_NEUTRALS, contexts),
+            both_refuse,
+            UNIT_ETA,
+        );
+    }
+    list(
+        Audit::Types,
+        under(UNIT_NEUTRALS, &types),
         kernel_refuses,
         UNIT_ETA,
     );
     list(
         Audit::Typed,
-        UNIT_NEUTRALS,
-        Some(&folded),
+        under(UNIT_NEUTRALS, &folded),
         kernel_refuses,
         UNIT_ETA,
     );
     list(
         Audit::Typed,
-        UNIT_NEUTRALS,
-        Some(&[UNFOLDED]),
+        under(UNIT_NEUTRALS, &[UNFOLDED]),
         both_refuse,
         UNIT_ETA,
     );
     list(
         Audit::Arms,
-        UNIT_NEUTRALS,
-        Some(&arms),
+        under(UNIT_NEUTRALS, &arms),
         both_refuse,
         UNIT_ETA,
     );
@@ -125,15 +169,13 @@ pub(super) fn parted() -> Vec<Parted> {
     // Eta by the literal: the elaborator fires it at any goal type, and the kernel only where the goal's type is the function or the record.
     list(
         Audit::Arms,
-        BY_THE_LITERAL,
-        Some(&arms),
+        under(BY_THE_LITERAL, &arms),
         kernel_refuses,
         ETA_AT_TYPE,
     );
     list(
         Audit::Typed,
-        BY_THE_LITERAL,
-        Some(&[UNFOLDED]),
+        under(BY_THE_LITERAL, &[UNFOLDED]),
         kernel_refuses,
         ETA_AT_TYPE,
     );

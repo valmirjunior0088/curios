@@ -22,7 +22,16 @@ let carry(@A: Type, count: Nat, a: A) -> A = match count: (_) => A | 0 => a | pr
 pub(super) struct Seeds {
     pub(super) type_: &'static str,
     pub(super) binders: &'static str,
+    /// What the audit puts in place of these seeds' neutral to state them closed under substitution, where the neutral is a binder no other binder's type names.
+    pub(super) compound: Option<Compound>,
     pub(super) seeds: &'static [Seed],
+}
+
+/// A compound term for a neutral: the binder it replaces, as declared, the term, and the binders the term is over.
+pub(super) struct Compound {
+    pub(super) binder: &'static str,
+    pub(super) term: &'static str,
+    pub(super) binders: &'static str,
 }
 
 /// One equation: the rule it is a seed of, its two sides, and whether the rule holds it.
@@ -55,6 +64,11 @@ pub(super) const SEEDS: &[Seeds] = &[
     Seeds {
         type_: "(Nat) -> Nat",
         binders: "g: (Nat) -> Nat, k: (Nat) -> Nat",
+        compound: Some(Compound {
+            binder: "g: (Nat) -> Nat",
+            term: "(z: Nat) => k(z + 1)",
+            binders: "",
+        }),
         seeds: &[
             held("function eta", "(x: Nat) => g(x)", "g"),
             held("function eta past a fold", "(x: Nat) => g(x + 0)", "g"),
@@ -124,6 +138,11 @@ pub(super) const SEEDS: &[Seeds] = &[
     Seeds {
         type_: "{Nat, Nat}",
         binders: "p: {Nat, Nat}",
+        compound: Some(Compound {
+            binder: "p: {Nat, Nat}",
+            term: "(a, b)",
+            binders: "a: Nat, b: Nat",
+        }),
         seeds: &[
             held("record eta", "(p.0, p.1)", "p"),
             miss("record eta, its components swapped", "(p.1, p.0)", "p"),
@@ -132,6 +151,11 @@ pub(super) const SEEDS: &[Seeds] = &[
     Seeds {
         type_: "Record",
         binders: "s: Record",
+        compound: Some(Compound {
+            binder: "s: Record",
+            term: "Record { a = m, b = n }",
+            binders: "m: Nat, n: Nat",
+        }),
         seeds: &[
             held("struct eta", "Record { a = s.a, b = s.b }", "s"),
             miss(
@@ -144,14 +168,42 @@ pub(super) const SEEDS: &[Seeds] = &[
     Seeds {
         type_: "{}",
         binders: "u: {}, v: {}",
+        compound: Some(Compound {
+            binder: "u: {}",
+            term: "()",
+            binders: "",
+        }),
         seeds: &[
             held("unit eta, the literal", "()", "u"),
             held("unit eta, two neutrals", "v", "u"),
         ],
     },
+    // A record whose fields each have one inhabitant has one too. The literal meets a neutral by its shape and two neutrals meet by nothing but the type, so a checker that takes the first and not the second holds `r` and `s` each equal to the literal and not to each other.
+    Seeds {
+        type_: "{{}, {}}",
+        binders: "r: {{}, {}}, s: {{}, {}}",
+        compound: Some(Compound {
+            binder: "r: {{}, {}}",
+            term: "((), ())",
+            binders: "",
+        }),
+        seeds: &[
+            held(
+                "unit eta at a record of units, the literal",
+                "((), ())",
+                "r",
+            ),
+            held("unit eta at a record of units, two neutrals", "s", "r"),
+        ],
+    },
     Seeds {
         type_: "Empty",
         binders: "u: Empty, v: Empty",
+        compound: Some(Compound {
+            binder: "u: Empty",
+            term: "Empty {}",
+            binders: "",
+        }),
         seeds: &[
             held("unit eta at a struct, the literal", "Empty {}", "u"),
             held("unit eta at a struct, two neutrals", "v", "u"),
@@ -160,6 +212,7 @@ pub(super) const SEEDS: &[Seeds] = &[
     Seeds {
         type_: "Nat",
         binders: "a: Nat, b: Nat, f: (Holds(a < 10)) -> Nat, c: (Nat) -> Nat, p1: Holds(a < 10), p2: Holds(a < 10)",
+        compound: None,
         seeds: &[
             held("irrelevance through a variable head", "f(p1)", "f(p2)"),
             miss("relevance through a variable head", "c(a)", "c(b)"),
@@ -168,6 +221,7 @@ pub(super) const SEEDS: &[Seeds] = &[
     Seeds {
         type_: "Bounded",
         binders: "a: Nat, b: Nat, p1: Holds(a < 10), p2: Holds(a < 10), q: Holds(b < 10)",
+        compound: None,
         seeds: &[
             held(
                 "irrelevance in a proof field",
