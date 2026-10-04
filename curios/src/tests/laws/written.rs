@@ -985,3 +985,54 @@ fn an_implicit_with_one_solution_is_solved_through_a_commutative_operation() {
         }
     }
 }
+
+/// A function whose one implicit stands under `pattern`, applied to a vector of `actual` elements where nothing but that equation says what the implicit is: no type is expected of the call, and the item's own result does not mention it. `body` is what follows the call's binding to `r`.
+fn linear_in(pattern: &str, actual: &str, body: &str) -> String {
+    format!(
+        "use /std/{{Nat, Vec, Io}};\npub let item(x: Nat, y: Nat, z: Nat, g: (@w: Nat, v: Vec(Nat, {pattern})) -> Vec(Nat, w), v: Vec(Nat, {actual})) -> {{}} =\n    let r = g(v);\n    {body};\nIo/pure(())"
+    )
+}
+
+#[test]
+fn a_metavariable_an_equation_is_linear_in_is_solved_however_the_equation_is_written() {
+    // One unknown, standing as a factor: the equation is `A * w + B = 0` over its atoms and has the one solution `-B / A`, which is the same term whichever way either side's summands stand, and need not be an atom. No operand is paired by position to find it, and nothing else in the item says what `w` is, so an item that elaborates has had it solved through the equation — to the term a goal over the result then reports.
+    for (pattern, actual, solution) in [
+        ("w * (y + z)", "x * y + x * z", "x"),
+        ("w * (y + z)", "x * z + x * y", "x"),
+        ("w * (y + z)", "(y + z) * x", "x"),
+        ("w * (y + z)", "(x + 1) * y + (x + 1) * z", "x + 1"),
+        ("w * (y + z) + z", "x * y + x * z + z", "x"),
+        ("w * (x + y + z)", "y * z + y * y + y * x", "y"),
+        ("w * y + w", "x + x * y", "x"),
+        ("w * y + w", "2 * y + 2", "2"),
+        ("2 * w", "x + x", "x"),
+    ] {
+        let source = linear_in(pattern, actual, "()");
+        if let Err(error) = typecheck(&source) {
+            panic!("{source}\n{error}");
+        }
+        let asked = linear_in(pattern, actual, "let t: ? = r; ()");
+        let report = typecheck(&asked).expect_err("a program holding a goal never compiles");
+        assert!(
+            report.contains(&format!("r : Vec(Nat, {solution})")),
+            "{asked}\nsolved, but not to `{solution}`:\n{report}"
+        );
+    }
+}
+
+#[test]
+fn a_metavariable_no_division_solves_is_left_undecided() {
+    // The controls, each refused as a conversion that cannot be decided and none as a mismatch, since nothing was compared: a division that leaves a remainder, a coefficient that divides nothing, and an unknown at a power, which is not linear though `x` solves it.
+    for (pattern, actual) in [
+        ("w * (y + z)", "x * y + z"),
+        ("2 * w + 1", "2 * x"),
+        ("w * w + w * y", "x * x + x * y"),
+    ] {
+        let source = linear_in(pattern, actual, "()");
+        let error = typecheck(&source).expect_err("an equation this does not solve is accepted");
+        assert!(
+            error.contains("cannot decide a postponed conversion"),
+            "{source}\nrefused, but not as a conversion left undecided:\n{error}"
+        );
+    }
+}

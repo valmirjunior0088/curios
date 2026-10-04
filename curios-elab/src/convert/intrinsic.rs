@@ -5,7 +5,7 @@
 //! The rule is stated *generically* rather than as one arm per operation, and once for both checkers: `curios-analysis`'s `convert_intrinsics` runs the carriers' algebra and reads the congruence off the traversal that defines an intrinsic's operands. A hand-written pair match over a roster of upwards of a hundred entries is a list whose omissions are silent — `convert` short-circuits on syntactic identity before reaching here, so a missing arm only surfaces on two spellings that are convertible without being identical, as a *hard mismatch* rather than a postponement. What this module keeps is the elaborator's own part: its preparation, its packed-literal view, and its discharge.
 
 use {
-    super::{Convert, convert},
+    super::{Convert, convert, solved_linearly},
     crate::{Context, zonk_solved_term_metas},
     curios_algebra::{Cut, split},
     curios_analysis::{
@@ -33,14 +33,19 @@ pub(crate) fn convert_intrinsic(
         Pass::Settled(outcome) => outcome,
         Pass::Atoms(atoms) => {
             let classes = classes(context, &atoms)?;
-            convert_classed(&mut Elaborating { cmp, context }, this, that, &classes)?
+            convert_classed(
+                &mut Elaborating { cmp, context },
+                this.clone(),
+                that.clone(),
+                &classes,
+            )?
         }
     };
     match outcome {
         Outcome::Equal => Ok(true),
         Outcome::Unequal => Ok(false),
-        // Operands nothing paired: a mismatch, which the drain parks rather than reports where either side still holds an unsolved metavariable, since solving one may pair them. Nothing is enqueued, so no solution is picked by the order the operands stand in.
-        Outcome::Unpaired => Ok(false),
+        // Operands nothing paired: nothing is enqueued, so no solution is picked by the order the operands stand in.
+        Outcome::Unpaired => unsettled(cmp, context, this, that),
         Outcome::Residual(this, that) => {
             cmp.enqueue(Term::type_ground(), this, that);
             Ok(true)
@@ -54,13 +59,29 @@ pub(crate) fn convert_intrinsic(
                 return Ok(false);
             }
             let Some(operands) = operands else {
-                return Ok(false);
+                return unsettled(cmp, context, this, that);
             };
             for Obligation { type_, this, that } in operands {
                 cmp.enqueue(type_.unwrap_or_else(Term::type_ground), this, that);
             }
             Ok(true)
         }
+    }
+}
+
+/// A pair the chain settled nothing of and handed nothing back for: operands unpaired, or two sides that are not one operation. Where it is an equation linear in its one unsolved metavariable, that metavariable has one solution and is solved to it, and the pair, now without it, is compared again. Otherwise it is a mismatch, which the drain parks rather than reports where either side still holds an unsolved metavariable, since solving one may yet settle it.
+fn unsettled(
+    cmp: &mut Convert,
+    context: &mut Context,
+    this: Intrinsic,
+    that: Intrinsic,
+) -> Result<bool, ReduceError> {
+    match solved_linearly(context, &this, &that)? {
+        true => {
+            cmp.progress = true;
+            convert_intrinsic(cmp, context, this, that)
+        }
+        false => Ok(false),
     }
 }
 

@@ -214,19 +214,12 @@ fn a_metavariable_is_solved_through_every_law_that_can_solve_it() {
     assert!(misplaced.is_empty(), "{}", misplaced.join("\n\n"));
 }
 
-/// Whether a metavariable standing for one of `row`'s atoms is solved through the law. A commutativity solves at every carrier: one operand of each side pairs by identity, in either position, and the two left over are compared, which is where the metavariable meets its partner (`peel_commutative`, and `peel_comparison` and the cancellations before it). A Boolean distribution does not: the truth table reads a metavariable as one more atom, so it decides an equation between known atoms and proposes no solution for an unknown one, which is incompleteness in the refusing direction.
-///
-/// Nor does a factor distributed over two summands, `w * (y + z)` against `x * y + x * z`: distributed, the metavariable stands in both of two summands, neither of which pairs with a summand of the other side by identity, and no pairing is committed by the order the summands stand in. Its mirror, `(w + y) * z`, solves, since one summand of each side cancels and one is left.
+/// Whether a metavariable standing for one of `row`'s atoms is solved through the law. A commutativity solves at every carrier: one operand of each side pairs by identity, in either position, and the two left over are compared, which is where the metavariable meets its partner (`peel_commutative`, and `peel_comparison` and the cancellations before it). A distribution at `Nat` or `Int` solves though no operand pairs, the metavariable standing in both of two summands: the equation is linear in it, and the elaborator solves it to the quotient. A Boolean distribution does not: the truth table reads a metavariable as one more atom, so it decides an equation between known atoms and proposes no solution for an unknown one, which is incompleteness in the refusing direction.
 fn solves(row: &Row) -> bool {
-    match (row.carrier, row.law.family) {
-        (Carrier::Boolean, Family::Distribution(_)) => false,
-        (Carrier::Natural | Carrier::Integer, Family::Distribution(_)) => !matches!(
-            &row.law.left,
-            Expr::Apply { operands, .. }
-                if matches!(operands.as_slice(), [Expr::Var { .. }, Expr::Apply { .. }])
-        ),
-        _ => true,
-    }
+    !matches!(
+        (row.carrier, row.law.family),
+        (Carrier::Boolean, Family::Distribution(_))
+    )
 }
 
 /// The item that reads `row`'s law through a metavariable, where the law's first variable stands on both of its sides.

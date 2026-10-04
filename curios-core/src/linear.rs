@@ -25,7 +25,7 @@
 //!
 //! **It decides nothing else about a comparison whose view keeps an atom** — `x + 1 <= y`, `0 < x`, `i + 1 > 0` stay open. Each clause is a held row of `curios`'s law grid, carrier "What conversion decides about a comparison", with its complement a control beside it.
 //!
-//! A view is read-only: it prepares and reports, and it neither searches nor commits anything. A procedure outside the converters reads the carrier beside a view and the term behind an atom through the same reader, and never rebuilds either.
+//! A view is read-only: it prepares and reports, and it neither searches nor commits anything. A procedure outside the converters reads the carrier beside a view and the term behind an atom through the same reader, and never rebuilds either; one that proposes a term of its own over a view's atoms spells it through the reader too ([`LinearViews::spell`]), and what it proposes is the proposer's to have judged.
 
 use {
     super::{
@@ -108,6 +108,21 @@ impl LinearViews {
         self.atoms.term(atom)
     }
 
+    /// The term a combination over this reader's atoms spells at `carrier`: each monomial the product of its atoms' terms, summed over the constant, through the carriers' own sums, so the term is in the normal form a fold leaves. `nonnegative` are the atoms read as naturals, which an `Int` spelling widens back. `None` where no term of the carrier spells it: at `Nat` a coefficient that is not positive or a negative constant, and any other carrier.
+    pub fn spell(&self, carrier: Carrier, part: &Part, nonnegative: &[Atom]) -> Option<Term> {
+        let zero = Integer::from(0);
+        match carrier {
+            Carrier::Natural => (part.constant >= zero
+                && part
+                    .terms
+                    .iter()
+                    .all(|(coefficient, _)| *coefficient > zero))
+            .then(|| self.nat_side(part)),
+            Carrier::Integer => Some(self.int_side(part, nonnegative)),
+            _ => None,
+        }
+    }
+
     /// The comparison an aligned view spells: the positive part of its difference on the left, the negated negative part on the right, at the comparison's own carrier — or at `Nat` where every atom is a widened natural, which is what makes an `Int` comparison of widened naturals the `Nat` comparison of their preimages. Rebuilt through the carriers' own sums, so the operands are in the normal form a fold leaves.
     fn respell(&self, carrier: Carrier, relation: Operation, form: &LinearForm) -> Intrinsic {
         let (left, right) = form.sides();
@@ -127,7 +142,10 @@ impl LinearViews {
                 }
             }
             false => {
-                let (left, right) = (self.int_side(&left, form), self.int_side(&right, form));
+                let (left, right) = (
+                    self.int_side(&left, &form.nonnegative),
+                    self.int_side(&right, &form.nonnegative),
+                );
                 match relation {
                     Operation::AtMost => Intrinsic::IntLe(left, right),
                     Operation::Equal => Intrinsic::IntEql(left, right),
@@ -160,7 +178,7 @@ impl LinearViews {
     }
 
     /// One side as an `Int`: each monomial over its atoms, a widened natural widened back.
-    fn int_side(&self, side: &Part, form: &LinearForm) -> Term {
+    fn int_side(&self, side: &Part, nonnegative: &[Atom]) -> Term {
         let monomials = side
             .terms
             .iter()
@@ -170,7 +188,7 @@ impl LinearViews {
                     .iter()
                     .map(|atom| {
                         let term = self.atoms.term(*atom).clone();
-                        match form.nonnegative.contains(atom) {
+                        match nonnegative.contains(atom) {
                             true => Term::intrinsic(Intrinsic::NatToInt(term)),
                             false => term,
                         }

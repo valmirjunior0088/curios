@@ -1,6 +1,9 @@
 mod intrinsic;
 use intrinsic::*;
 
+mod linear;
+use linear::*;
+
 mod neutral;
 pub(crate) use neutral::*;
 
