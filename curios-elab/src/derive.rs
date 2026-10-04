@@ -324,14 +324,6 @@ fn classify(
     })
 }
 
-/// A label as the declaration wrote it: empty where the lowerer minted the `_{position}` an unlabeled field or payload carries.
-fn written_label(label: &str, position: usize) -> &str {
-    match label == format!("_{position}") {
-        true => "",
-        false => label,
-    }
-}
-
 /// One constructor of the declaration a derivation is eliminating, at the key's parameters.
 struct Constructor<'a> {
     owner: &'a Global,
@@ -346,11 +338,7 @@ impl Constructor<'_> {
     fn binders(&self, context: &mut Context) -> Vec<Free> {
         self.signature.telescope.labels()[self.param_count..]
             .iter()
-            .enumerate()
-            .map(|(position, label)| {
-                let label = written_label(label, position);
-                context.fresh((!label.is_empty()).then_some(label))
-            })
+            .map(|label| context.fresh((!label.is_empty()).then_some(*label)))
             .collect()
     }
 
@@ -391,7 +379,7 @@ impl Constructor<'_> {
                 if index >= self.param_count {
                     let position = index - self.param_count;
                     if plicities[index] == Plicity::Explicit {
-                        let label = written_label(&labels[index], position);
+                        let label = labels[index].as_str();
                         let payload = Payload::new(self.owner, Some(self.tag), label, position + 1);
                         parts.push(classify(
                             context,
@@ -432,7 +420,7 @@ fn struct_parts(
     let mut opened = vec![(*value, site.key.clone())];
     let mut parts = Vec::new();
     fields.walk(&projections, |index, _, type_| {
-        let label = written_label(&labels[index], index);
+        let label = labels[index].as_str();
         let payload = Payload::new(name, None, label, index + 1);
         parts.push(classify(context, site, &mut opened, index, payload, type_)?);
         Ok::<(), Error>(())
@@ -493,7 +481,7 @@ fn spell_body(
     row: SpellDerivation,
     string: &StringSyntax,
 ) -> Result<Term, Error> {
-    let value = context.fresh(Some("value"));
+    let value = context.fresh(None);
 
     // The spelling of one classified payload read through `read`.
     let spell = |context: &mut Context, classified: &Classified, read: Term| match &classified.part
@@ -584,7 +572,7 @@ fn hash_body(
     subject: &Subject,
     row: HashDerivation,
 ) -> Result<Term, Error> {
-    let value = context.fresh(Some("value"));
+    let value = context.fresh(None);
 
     // The encoding of one classified payload read through `read`, or nothing where the payload is a proof.
     let encode = |context: &mut Context, classified: &Classified, read: Term| match &classified.part
@@ -669,8 +657,8 @@ fn eql_body(
     row: EqlDerivation,
 ) -> Result<Term, Error> {
     let method = |context: &mut Context, negated: bool| -> Result<Term, Error> {
-        let left = context.fresh(Some("left"));
-        let right = context.fresh(Some("right"));
+        let left = context.fresh(None);
+        let right = context.fresh(None);
         let compared = compare(context, site, subject, row.eql, &left, &right)?;
         let body = match negated {
             false => compared,
@@ -798,8 +786,8 @@ fn ord_body(
     subject: &Subject,
     row: OrdDerivation,
 ) -> Result<Term, Error> {
-    let left = context.fresh(Some("left"));
-    let right = context.fresh(Some("right"));
+    let left = context.fresh(None);
+    let right = context.fresh(None);
     let ordered = order(context, site, subject, row, &left, &right)?;
     let method = Term::func(
         [

@@ -1,6 +1,6 @@
 //! Resolving a goal through a superclass edge of a `use` binder in scope, and an edge's scope over the fields of its own concept.
 
-use crate::tests::run;
+use crate::tests::{error, run};
 
 // A superclass edge resolved by projection: inside `same`, the goal `Equal(A)` has a bound-variable head (no table entry), so it is solved by projecting the local `use Ordered(A)` binder's (anonymous) superclass field, keyed by index. The `use Ordered(A)` slot itself resolves through the table to the `Ordered(Nat)` witness, whose own omitted superclass field resolves to the `Equal(Nat)` witness — no field names a witness anywhere.
 #[test]
@@ -85,4 +85,40 @@ fn a_superclass_edge_is_in_scope_for_a_later_field_type() {
         "#;
 
     assert_eq!(run(source), b"resolved");
+}
+
+// A superclass edge has no name: lowering gives its field no label, so no projection reaches it, and a concept is free to declare a field of the spelling an edge once had.
+#[test]
+fn a_superclass_edge_is_reached_by_no_label() {
+    let projected = r#"
+        use /std/{Nat, Bool, Str, Ord, print};
+        use /std/ops/{Eql};
+        let peek(@A: Type, o: Ord(A)) -> Eql(A) = o._super0;
+        print("no")
+        "#;
+
+    let message = error(projected);
+    assert!(message.contains("'_super0'"), "got: {message}");
+    assert!(message.contains("no field"), "got: {message}");
+
+    let declared = r#"
+        use /std/{Nat, Bool, Str, print};
+        pub concept Base(A: Type): pub Type {
+            base: Nat
+        }
+        pub concept Over(A: Type): pub Type {
+            use Base(A),
+            _super0: Nat
+        }
+        satisfy Base(Nat) {
+            base = 1
+        }
+        satisfy Over(Nat) {
+            _super0 = 2
+        }
+        let own(@A: Type, o: Over(A)) -> Nat = o._super0;
+        print(Nat/to_str(Over/_super0(@Nat)))
+        "#;
+
+    assert_eq!(run(declared), b"2");
 }

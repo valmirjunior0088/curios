@@ -1,8 +1,9 @@
 use {
     super::{Context, Error, Mode, check, elaborate, expect},
     crate::{
-        FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_intrinsic_head, check_motive,
-        fill_placeholder, is_prop, reduce_with, refine_head, stuck_on_metavar, unreachable_arm,
+        BinderSite, FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_intrinsic_head,
+        check_motive, fill_placeholder, is_prop, reduce_with, refine_head, stuck_on_metavar,
+        unreachable_arm,
     },
     curios_analysis::{
         Invert, invert_indices, pinned_by_targets, retyped, scrutinee_solution, solve_indices,
@@ -989,7 +990,11 @@ fn elaborate_induct_match(
         {
             if written != canonical {
                 return Err(Error::BinderPlicityMismatch {
+                    site: BinderSite::Payload {
+                        constructor: tag.to_string(),
+                    },
                     position: position + 1,
+                    binder: String::new(),
                     expected: *canonical,
                     written: *written,
                 });

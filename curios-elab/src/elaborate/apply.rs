@@ -39,7 +39,29 @@ pub(super) fn elaborate_func_type(
         }
 
         let output = cursor.body().expect("a cursor past every entry");
-        check_is_sort(context, &output).map(|(term, _)| term)
+        let output = check_is_sort(context, &output).map(|(term, _)| term)?;
+
+        // An `@` member is filled by unification, which needs a later type to mention it, and resolution answers only `use` slots. One at a concept's type that nothing later mentions could only ever be written out, so every call leaving it out would fail far from here, as an implicit that was not inferred: refused where it is declared, beside the dual [`check_witness_domain`] refuses. One a later type does mention — `@from: Key(K)` beside `map: Map(K, use from, V)` — is determined, and stays.
+        for (index, (name, domain)) in domains.iter().enumerate() {
+            let mentioned = || {
+                domains[index + 1..]
+                    .iter()
+                    .map(|(_, later)| later)
+                    .chain([&output])
+                    .any(|later| later.free_vars().contains(name))
+            };
+            if ft.plicities().get(index) != Some(&Plicity::Implicit) || mentioned() {
+                continue;
+            }
+            let reduced = reduce_with(context, domain)?;
+            if matches!(&*reduced, Subterm::StructType(struct_type) if context.concept(&struct_type.name).is_some())
+            {
+                return Err(Error::implicit_concept_member_unfillable(domain.clone())
+                    .at_opt(domain.span()));
+            }
+        }
+
+        Ok::<_, Error>(output)
     })?;
 
     let rebuilt = Term::func_type_marked(

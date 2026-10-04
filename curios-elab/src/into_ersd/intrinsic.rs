@@ -549,10 +549,8 @@ pub(super) fn erase_intrinsic(
         } => {
             let list_atom =
                 emitted!(lowering.walk(context, list, &list_type(domain.clone()), None)?);
-            let mapper_type = Term::func_type(
-                [(context.fresh(Some("x")), domain.clone())],
-                codomain.clone(),
-            );
+            let mapper_type =
+                Term::func_type([(context.fresh(None), domain.clone())], codomain.clone());
             let mapper_atom = emitted!(lowering.walk(context, mapper, &mapper_type, None)?);
             Ok(lowering.bind(
                 hint,
@@ -729,8 +727,7 @@ pub(super) fn erase_intrinsic(
             let action_atom = emitted!(lowering.walk(context, action, &io_from, None)?);
 
             let io_to: Term = Subterm::Intrinsic(Intrinsic::IoType(to.clone())).into();
-            let continuation_type =
-                Term::func_type([(context.fresh(Some("x")), from.clone())], io_to);
+            let continuation_type = Term::func_type([(context.fresh(None), from.clone())], io_to);
             let continuation_atom =
                 emitted!(lowering.walk(context, continuation, &continuation_type, None)?);
 

@@ -87,7 +87,7 @@ fn a_use_lambda_is_named_among_the_use_arguments_without_a_parameter_name() {
     );
 }
 
-// A method wrapper's telescope holds no explicit slot, so its hidden arguments are checked by the saturating walk rather than the main one. The wrapper names its `use` binder `w`, which appears in no program and must not surface.
+// A method wrapper's telescope holds no explicit slot, so its hidden arguments are checked by the saturating walk rather than the main one. The wrapper's `use` binder has no name, so the report can only say which argument it is.
 #[test]
 fn a_use_lambda_in_a_leading_hidden_telescope_is_named_too() {
     let report = error(
@@ -98,8 +98,7 @@ fn a_use_lambda_in_a_leading_hidden_telescope_is_named_too() {
         "#,
     );
     assert!(
-        report.contains("checked as the 1st 'use' argument of 'Show/show'")
-            && !report.contains("`w`"),
+        report.contains("checked as the 1st 'use' argument of 'Show/show'"),
         "unexpected report:\n{report}"
     );
 }

@@ -237,7 +237,9 @@ fn constructor_pattern_plain_on_implicit_payload_is_rejected() {
         /std/print(Nat/to_str(head3(Vec/cons(1, Vec/cons(2, Vec/cons(3, Vec/nil()))))))
         "#;
     assert!(
-        error(source).contains("implicit parameter"),
+        error(source).contains(
+            "payload 1 of 'cons' is an implicit payload (written with `@`), but was written with no mark"
+        ),
         "{}",
         error(source)
     );
@@ -259,7 +261,9 @@ fn constructor_pattern_mark_on_explicit_payload_is_rejected() {
         /std/print(Nat/to_str(head3(Vec/cons(1, Vec/cons(2, Vec/cons(3, Vec/nil()))))))
         "#;
     assert!(
-        error(source).contains("explicit parameter"),
+        error(source).contains(
+            "payload 2 of 'cons' is an explicit payload (written with no mark), but was written with `@`"
+        ),
         "{}",
         error(source)
     );
@@ -330,4 +334,33 @@ fn a_payload_takes_an_unnamed_implicit_member() {
         "#;
 
     assert_eq!(run(source), b"4");
+}
+
+// A member written without a name has none: lowering mints no placeholder for an unnamed payload or a positional field, so no later type and no projection can spell one.
+#[test]
+fn an_unnamed_member_is_reached_by_no_name() {
+    let payload = error(
+        r#"
+        use /std/{Nat, Str, print};
+        use /std/Bool/{Holds};
+        induct Positive: pub Type
+        | at(Nat, Holds(0 < _0))
+        end
+        print("no")
+        "#,
+    );
+    assert!(payload.contains("unbound variable: _0"), "got: {payload}");
+
+    let field = error(
+        r#"
+        use /std/{Nat, Str, print};
+        struct Meters: pub Type { Nat }
+        let m: Meters = Meters { 4 };
+        print(Nat/to_str(m._0))
+        "#,
+    );
+    assert!(
+        field.contains("'_0'") && field.contains("no field"),
+        "got: {field}"
+    );
 }

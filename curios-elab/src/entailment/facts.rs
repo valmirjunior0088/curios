@@ -1298,9 +1298,9 @@ pub(super) fn eliminate(context: &mut Context, refuted: Term) -> Term {
     Term::induct_match_scoped_marked(refuted, motive, cases, None)
 }
 
-/// `let conjunct: statement = body; conjunct`: `body` elaborated against `statement` rather than against whatever position it is put in.
+/// `let x: statement = body; x`: `body` elaborated against `statement` rather than against whatever position it is put in.
 fn bound(context: &mut Context, statement: Term, body: Term) -> Term {
-    let binder = context.fresh(Some("conjunct"));
+    let binder = context.fresh(None);
     Term::let_(&binder, statement, body, Term::free_var(&binder))
 }
 

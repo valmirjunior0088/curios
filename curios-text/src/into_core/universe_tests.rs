@@ -288,7 +288,7 @@ fn a_concept_field_may_reference_a_preceding_field() {
     );
 }
 
-/// Superclass fields occupy positions in the field telescope under minted `_super{i}` labels, but generate no wrapper. A wrapper must therefore read its field type at that field's *absolute* telescope index; using its position among the non-super fields would read `law`'s type one slot early here and hand the wrapper `op`'s.
+/// Superclass fields occupy positions in the field telescope, with no label, and generate no wrapper. A wrapper must therefore read its field type at that field's *absolute* telescope index; using its position among the non-super fields would read `law`'s type one slot early here and hand the wrapper `op`'s.
 #[test]
 fn a_superclass_does_not_shift_a_dependent_field_reference() {
     elaborate_source(

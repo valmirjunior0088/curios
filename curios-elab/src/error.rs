@@ -285,9 +285,11 @@ pub enum Error {
         surplus: usize,
         slots: usize,
     },
-    /// A written function binder claims a slot whose plicity it does not match. `position` is the binder's 1-based position among the written binders, `expected` the plicity of the expected slot it aligned with, and `written` the mark it carries. Under automatic hidden-binder insertion this fires when a marked (`@`/`use`) binder reaches an *explicit* expected slot — an explicit slot is never skipped and never marked.
+    /// A written binder meets a slot whose plicity it does not carry. `site` says what the slot is a slot of, `position` is the slot's 1-based position there and `binder` its name where it has one, `expected` the slot's plicity and `written` the mark the binder carries. In a lambda this fires when a marked (`@`/`use`) binder reaches an *explicit* slot — an explicit slot is never skipped and never marked; a hidden binder at a hidden slot of the other mark is [`Error::HiddenMemberOutOfOrder`]. In a constructor pattern every payload is written, so any difference fires it.
     BinderPlicityMismatch {
+        site: BinderSite,
         position: usize,
+        binder: String,
         expected: Plicity,
         written: Plicity,
     },
@@ -549,6 +551,10 @@ pub enum Error {
     UseParameterNotAConcept {
         found: Box<Term>,
         proposition: bool,
+    },
+    /// An `@` member whose type is a concept application and that no later member's type nor the result mentions. Unification fills an `@` slot from a later type and resolution fills only `use` slots, so nothing can fill this one; the dual of [`Error::UseParameterNotAConcept`].
+    ImplicitConceptMemberUnfillable {
+        found: Box<Term>,
     },
     /// A `use` premise of a witness that is not smaller than the witness's own concept application — a variable its telescope does not bind, a variable used more often than there, or no fewer nodes — so resolution through it would not be decreasing.
     NonRegularWitnessPremise {
@@ -1243,6 +1249,12 @@ impl Error {
         }
     }
 
+    pub(crate) fn implicit_concept_member_unfillable<T: Into<Term>>(found: T) -> Self {
+        Self::ImplicitConceptMemberUnfillable {
+            found: Box::new(found.into()),
+        }
+    }
+
     pub(crate) fn non_regular_witness_premise<T: Into<Term>>(premise: T) -> Self {
         Self::NonRegularWitnessPremise {
             premise: Box::new(premise.into()),
@@ -1725,11 +1737,21 @@ impl Error {
             }
             Self::InvalidWitnessHead { head, .. } => out.push(head),
             Self::WitnessNotAConcept { found, .. }
-            | Self::UseParameterNotAConcept { found, .. } => out.push(found),
+            | Self::UseParameterNotAConcept { found, .. }
+            | Self::ImplicitConceptMemberUnfillable { found } => out.push(found),
             Self::NonRegularWitnessPremise { premise, .. } => out.push(premise),
             _ => {}
         }
     }
+}
+
+/// What a binder written under the wrong mark was a binder of.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BinderSite {
+    /// A lambda's parameter, met against its expected function type's.
+    Parameter,
+    /// A constructor pattern's argument, met against the constructor's payload.
+    Payload { constructor: String },
 }
 
 impl Exhaustion for Error {

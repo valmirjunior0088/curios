@@ -64,7 +64,7 @@ pub(crate) fn check_group<R>(
         //
         // This is the discipline Agda checks a mutual block under, and the one `curios-elab`'s `elaborate_rec` already follows. Coq forbids the question outright — its `Fix` rule checks each `A_i` in a context without the fixpoint names — which is a language restriction rather than a rule this kernel could adopt while `rec` admits an inductive-recursive group.
         let names = (0..group.length())
-            .map(|_| kernel.fresh(Some("rec")))
+            .map(|_| kernel.fresh(None))
             .collect::<Vec<_>>();
 
         let members = names.iter().map(Term::free_var).collect::<Vec<_>>();

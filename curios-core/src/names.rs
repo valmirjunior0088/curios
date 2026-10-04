@@ -50,7 +50,7 @@ impl fmt::Display for WitnessId {
     }
 }
 
-/// A compiler-minted binder's identity: a dense index, plus the display hint the minting site chose.
+/// A local binder's identity: a dense index, plus the hint it renders under — what its author called it, and none where the compiler introduced the binder or its author left it unnamed.
 ///
 /// The index alone is the identity. The hint is display metadata, excluded from equality, ordering, and hashing exactly as a [`Term`](crate::Term)'s span and a [`Scope`](crate::Scope)'s binder names already are — so a hint can neither make two binders collide nor split one binder in two. Carrying it on the identity rather than only at the binding site means a diagnostic can name a variable wherever the occurrence turns up, instead of recovering the written name by cutting a minted spelling apart.
 #[derive(Debug, Clone, Copy)]

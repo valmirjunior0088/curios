@@ -312,3 +312,43 @@ fn a_use_parameter_through_an_alias_of_a_concept_application_resolves() {
 
     assert_eq!(run(source), b"3");
 }
+
+// An `@` parameter is filled by unification and a `use` parameter by resolution, so an `@` parameter at a concept's type that no later type mentions has nothing to fill it: refused where it is declared, with the mark that would. One a later type mentions is determined by that type and stays.
+#[test]
+fn an_implicit_parameter_at_a_concept_nothing_mentions_is_refused_where_it_is_declared() {
+    let report = error(
+        r#"
+        use /std/{Nat, Str, Show};
+        let shown(@A: Type, @s: Show(A), x: A) -> Str = "x";
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        report.contains(
+            "an '@' parameter at a concept's type that no later type mentions can never be filled"
+        ) && report.contains("found: Show(A)")
+            && report.contains("write 'use' in place of '@'"),
+        "unexpected report:\n{report}"
+    );
+
+    let determined = r#"
+        use /std/{Nat, Bool, Str, print};
+        pub concept Key(K: Type): pub Type {
+            same(K, K) -> Bool
+        }
+        satisfy Key(Nat) {
+            same(a, b) = a == b
+        }
+        pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
+            key: K,
+            value: V
+        }
+        let under(@K: Type, @from: Key(K), @V: Type, at: Slot(K, use from, V), key: K) -> Bool =
+            Key/same(@_, use from, at.key, key);
+        let never: Key(Nat) = Key { same(a, b) = false };
+        let bare: Slot(Nat, use never, Str) = Slot { key = 2, value = "two" };
+        print(Bool/to_str(under(bare, 2)))
+        "#;
+
+    assert_eq!(run(determined), b"false");
+}

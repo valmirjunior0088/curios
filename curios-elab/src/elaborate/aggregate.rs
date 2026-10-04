@@ -251,21 +251,13 @@ fn project(
             match labels.iter().position(|l| l == label) {
                 Some(index) => index,
                 None => {
-                    // A concept's superclass fields carry a minted internal label and are not projectable by name — never surface them among the available fields.
-                    let supers: Vec<usize> = match &**head_type {
-                        Subterm::StructType(StructType { name, .. }) => context
-                            .concept(name)
-                            .map(|concept| concept.supers.iter().map(|(i, _)| *i).collect())
-                            .unwrap_or_default(),
-                        _ => Vec::new(),
-                    };
+                    // The fields a program can name: a positional field and a concept's superclass edge have no label.
                     return Err(Error::unknown_tuple_label(
                         label.clone(),
                         labels
                             .iter()
-                            .enumerate()
-                            .filter(|(i, l)| !l.is_empty() && !supers.contains(i))
-                            .map(|(_, l)| l.to_string())
+                            .filter(|label| !label.is_empty())
+                            .map(|label| label.to_string())
                             .collect(),
                     ));
                 }

@@ -6,7 +6,10 @@
 mod tests;
 
 use {
-    super::{Callee, Declined, Erased, Error, GoalReport, ShapeDiagnosis, Underivable, WitnessKey},
+    super::{
+        BinderSite, Callee, Declined, Erased, Error, GoalReport, ShapeDiagnosis, Underivable,
+        WitnessKey,
+    },
     crate::{Conclusion, Origin, Refusal, ordinal},
     curios_algebra::BOOL_ATOM_CAP,
     curios_core::{CalleeId, Free, Level, ReaderPosition, Spelling, Subterm, Term, UniverseMetaId},
@@ -508,24 +511,40 @@ impl fmt::Display for Displayed<'_> {
                 )
             }
             Error::BinderPlicityMismatch {
+                site,
                 position,
+                binder,
                 expected,
                 written,
             } => {
+                let member = match site {
+                    BinderSite::Parameter => "parameter",
+                    BinderSite::Payload { .. } => "payload",
+                };
                 let requirement = match expected {
-                    Plicity::Explicit => "an explicit parameter (written with no mark)",
-                    Plicity::Implicit => "an implicit parameter (written with `@`)",
-                    Plicity::Witness => "a witness parameter (written with `use`)",
+                    Plicity::Explicit => format!("an explicit {member} (written with no mark)"),
+                    Plicity::Implicit => format!("an implicit {member} (written with `@`)"),
+                    Plicity::Witness => format!("a witness {member} (written with `use`)"),
                 };
                 let written = match written {
                     Plicity::Explicit => "written with no mark",
                     Plicity::Implicit => "written with `@`",
                     Plicity::Witness => "written with `use`",
                 };
-                write!(
-                    f,
-                    "function parameter {position} is {requirement}, but was {written}"
-                )
+                let named = match binder.is_empty() {
+                    true => String::new(),
+                    false => format!(" '{binder}'"),
+                };
+                match site {
+                    BinderSite::Parameter => write!(
+                        f,
+                        "function parameter {position}{named} is {requirement}, but was {written}"
+                    ),
+                    BinderSite::Payload { constructor } => write!(
+                        f,
+                        "payload {position}{named} of '{constructor}' is {requirement}, but was {written}"
+                    ),
+                }
             }
             Error::UnknownMatchConstructor {
                 type_name,
@@ -1134,6 +1153,13 @@ impl fmt::Display for Displayed<'_> {
                     )?;
                 }
                 Ok(())
+            }
+            Error::ImplicitConceptMemberUnfillable { found } => {
+                let found = found.spelled(spelling);
+                write!(
+                    f,
+                    "an '@' parameter at a concept's type that no later type mentions can never be filled\n  found: {found}\n  an '@' parameter is inferred from the types after it, and resolution fills only 'use' parameters\n  write 'use' in place of '@' to have it resolved, or no mark to have it passed"
+                )
             }
             Error::NonRegularWitnessPremise { premise } => {
                 let premise = premise.spelled(spelling);

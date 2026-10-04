@@ -6,7 +6,7 @@ use {
 
 /// One constructor's registry signature: its full telescope.
 ///
-/// The telescope is the constructor's *full* signature — the parameter binders first, then the payload binders, terminating in the constructed type. E.g. `success ↦ (A : Type, E : Type, _0 : A) -> InductType { Result, [A, E] }`. For an indexed inductive the terminal is *per-case*: its indices are that case's target expressions over the payload binders. Instantiating peels the leading `params.len()` binders by opening each with the corresponding parameter.
+/// The telescope is the constructor's *full* signature — the parameter binders first, then the payload binders, terminating in the constructed type. E.g. `success ↦ (A : Type, E : Type, A) -> InductType { Result, [A, E] }`. For an indexed inductive the terminal is *per-case*: its indices are that case's target expressions over the payload binders. Instantiating peels the leading `params.len()` binders by opening each with the corresponding parameter.
 ///
 /// Erasure is sort-driven: `erase` drops a payload field whose type is a proof or a type — no per-payload mark is stored.
 #[derive(Debug, Clone, PartialEq)]
@@ -120,7 +120,7 @@ impl InductDecl {
         }
     }
 
-    /// Instantiate `tag`'s signature at the given type parameters, yielding the payload-only telescope: `success` at `[Nat, Bin]` becomes `(_0 : Nat) -> InductType { Result, [Nat, Bin] }`.
+    /// Instantiate `tag`'s signature at the given type parameters, yielding the payload-only telescope: `success` at `[Nat, Bin]` becomes `(Nat) -> InductType { Result, [Nat, Bin] }`.
     pub fn instantiate(&self, tag: &Atom, params: &[Term]) -> Option<Telescope<Vec<Term>>> {
         Some(self.constructor(tag)?.telescope.clone().open_params(params))
     }

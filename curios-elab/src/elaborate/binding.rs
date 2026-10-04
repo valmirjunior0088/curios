@@ -1,9 +1,10 @@
 use {
     super::{check_witness_domain, insert_auto_argument},
     crate::{
-        Context, DomainScope, EmbeddingSite, Error, HeadKey, Mode, ParkedWork, SlotPositions,
-        WitnessKey, attempt_witness_goal, check, check_is_sort, check_rec_totality, convert,
-        display_mismatch, elaborate, expect, reduce_with, written_monad, zonk_solved_term_metas,
+        BinderSite, Context, DomainScope, EmbeddingSite, Error, HeadKey, Mode, ParkedWork,
+        SlotPositions, WitnessKey, attempt_witness_goal, check, check_is_sort, check_rec_totality,
+        convert, display_mismatch, elaborate, expect, reduce_with, written_monad,
+        zonk_solved_term_metas,
     },
     curios_core::{
         Advance, Bang, Bound, CalleeId, Free, Func, Global, Infix, Intrinsic, Let, Metavar,
@@ -1103,7 +1104,9 @@ pub(super) fn elaborate_func_check(
                     } else {
                         // A marked written binder reached an explicit slot.
                         break Err(Error::BinderPlicityMismatch {
-                            position: w_idx + 1,
+                            site: BinderSite::Parameter,
+                            position: e_idx + 1,
+                            binder: e_hint.unwrap_or_default().to_string(),
                             expected: e_plicity,
                             written: w_plicity,
                         });

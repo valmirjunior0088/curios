@@ -526,9 +526,9 @@ fn witness_concept_application(concept: &Name, args: &[Argument]) -> Term {
     written(applied, args.last().and_then(|arg| arg.term.span()))
 }
 
-/// The name a declaration's parameter is minted under: its own, or `_` for a `use` parameter, which occupies a binder and names nothing.
+/// The name a declaration's parameter is minted under: its own, or none for a `use` parameter, which occupies a binder and names nothing.
 fn param_name(param: &FuncTypeParam) -> String {
-    param.label.clone().unwrap_or_else(|| "_".to_string())
+    param.label.clone().unwrap_or_default()
 }
 
 /// What a declaration's parameter binds as at a value constructor: a `use` parameter stays the witness slot it is at the type constructor, and every other is implicit, inferred from the payload or the expected type.
@@ -790,9 +790,7 @@ fn process_items(
                         // Parameters and indices are minted before any of their types is lowered, and each type sees the binders before it — a later index type naming an earlier parameter must mean *that* binder.
                         let head_binders =
                             lower.mint(u.params.iter().map(param_name).chain(
-                                u.indices.iter().enumerate().map(|(i, (n, _))| {
-                                    n.clone().unwrap_or_else(|| format!("_{i}"))
-                                }),
+                                u.indices.iter().map(|(n, _)| n.clone().unwrap_or_default()),
                             ));
                         let (param_binders, index_binders) = head_binders.split_at(u.params.len());
 
@@ -817,7 +815,7 @@ fn process_items(
                             .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
                             .collect::<Vec<_>>();
 
-                        // The head's index telescope. Unnamed entries got a positional placeholder above — the name only matters for dependency capture among the index types.
+                        // The head's index telescope. An unnamed entry has no name, so no later index type depends on it.
                         let index_tys = u
                             .indices
                             .iter()
@@ -840,10 +838,11 @@ fn process_items(
                             .cases
                             .iter()
                             .map(|c| {
-                                let payload_binders =
-                                    lower.mint(c.payload.iter().enumerate().map(|(i, param)| {
-                                        param.label.clone().unwrap_or_else(|| format!("_{i}"))
-                                    }));
+                                let payload_binders = lower.mint(
+                                    c.payload
+                                        .iter()
+                                        .map(|param| param.label.clone().unwrap_or_default()),
+                                );
                                 let mut scope = param_binders.to_vec();
                                 let fields = c
                                     .payload
@@ -954,11 +953,6 @@ fn process_items(
                         context.record_import_scope(Some(&name));
                         let lower = Lowerer::new(context, Some(name));
 
-                        // Per-case payload binder names: the declared name, or a positional placeholder.
-                        let payload_name = |i: usize, n: &Option<String>| {
-                            n.clone().unwrap_or_else(|| format!("_{i}"))
-                        };
-
                         // Output type term `T`, `T(A, ...)`, `T(target...)`, or — indexed with parameters — the case's full terminal `T(A, ...)(target...)`: a name ref applied the way a use site writes it, one call for the parameters and one for the target's index expressions. A `use` parameter has no name to write and is left out as a use site leaves it: the slot resolves to the constructor's own premise, the nearest witness in scope.
                         let parameters: Vec<Argument> = u
                             .params
@@ -989,13 +983,12 @@ fn process_items(
                                 |head, arguments| Subterm::Apply(Apply { head, arguments }).into(),
                             );
 
-                        // Constructor type: (params..., _0 : T_0, ...) -> T. Every plain or `@` inductive parameter is implicit at the value constructor — `Result/success(42)` infers them, the call-site `@` supplies one positionally — and a `use` parameter stays a witness slot, while the payload binders keep their declared marks (`@m` makes one implicit; the default is explicit).
+                        // Constructor type: (params..., payload...) -> T. Every plain or `@` inductive parameter is implicit at the value constructor — `Result/success(42)` infers them, the call-site `@` supplies one positionally — and a `use` parameter stays a witness slot, while the payload binders keep their declared marks (`@m` makes one implicit; the default is explicit).
                         let binders = lower.mint(
                             u.params.iter().map(param_name).chain(
                                 c.payload
                                     .iter()
-                                    .enumerate()
-                                    .map(|(i, param)| payload_name(i, &param.label)),
+                                    .map(|param| param.label.clone().unwrap_or_default()),
                             ),
                         );
                         let plicities = u
@@ -1025,7 +1018,7 @@ fn process_items(
                             param_tys.clone(),
                             lower.bound(&binders, || lower.term(&output_type))?,
                         );
-                        // Constructor body: (params..., _0, ...) => the variant's injection, an intrinsic `Variant` normal form.
+                        // Constructor body: (params..., payload...) => the variant's injection, an intrinsic `Variant` normal form.
                         let args: Vec<curios_core::Term> = payload_binders
                             .iter()
                             .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
@@ -1099,16 +1092,15 @@ fn process_items(
                         }
                     }
 
-                    // Field types, with declared or positional (`_i`) names so a later field type can depend on an earlier field. The signature sugar `f(params) -> T` is undone here.
-                    let field_binders =
-                        lower.mint(s.fields.iter().enumerate().map(|(i, field)| {
-                            field
-                                .param
-                                .label
-                                .as_deref()
-                                .map(str::to_string)
-                                .unwrap_or_else(|| format!("_{i}"))
-                        }));
+                    // Field types, each under the fields before it, so a later field type can depend on an earlier field that has a name. The signature sugar `f(params) -> T` is undone here.
+                    let field_binders = lower.mint(s.fields.iter().map(|field| {
+                        field
+                            .param
+                            .label
+                            .as_deref()
+                            .map(str::to_string)
+                            .unwrap_or_default()
+                    }));
                     let mut field_scope = param_binders.clone();
                     let field_tys = s
                         .fields
@@ -1213,18 +1205,20 @@ fn process_items(
                         .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
                         .collect::<Vec<_>>();
 
-                    // Superclass fields are anonymous in the surface syntax; mint a unique internal label per super so the record telescope and the registry's field list stay well-formed. The name is never surfaced — a superclass is reached by resolution, keyed by index, and never projected or wrapped by name.
+                    // A superclass field is anonymous: it has no label, so nothing projects it or names it in a later field's type, and resolution reaches it by index.
                     let field_labels = concept
                         .fields
                         .iter()
-                        .enumerate()
-                        .map(|(i, field)| match &field.label {
-                            Some(label) => label.to_string(),
-                            None => format!("_super{i}"),
+                        .map(|field| {
+                            field
+                                .label
+                                .as_ref()
+                                .map(|label| label.to_string())
+                                .unwrap_or_default()
                         })
                         .collect::<Vec<_>>();
 
-                    // Field types, lowered under the parameter scope (a method field's label is the binder for later fields; a super field's minted label is inert). The signature sugar `f(params) -> T` is undone here.
+                    // Field types, lowered under the parameter scope (a method field's label is the binder for later fields; a superclass field binds nothing). The signature sugar `f(params) -> T` is undone here.
                     let field_binders = lower.mint(field_labels.iter().cloned());
                     let mut field_scope = param_binders.clone();
                     let field_tys = concept
@@ -1321,7 +1315,7 @@ fn process_items(
                         .filter_map(|(index, field)| Some((index, field.label.as_ref()?)))
                     {
                         // `index` is the field's position in the *whole* telescope, superclass slots included. Counting only the fields that get wrappers would read every method after a superclass one slot early.
-                        let witness_id = lower.mint(["w".to_string()]).remove(0).1;
+                        let witness_id = lower.mint([String::new()]).remove(0).1;
                         let witness = curios_core::Term::var(curios_core::Var::free(witness_id));
 
                         let params = param_tys

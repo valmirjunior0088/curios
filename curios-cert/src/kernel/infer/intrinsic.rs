@@ -47,7 +47,7 @@ pub(super) fn check_operands<'a>(
             Operand::Function { domains, codomain } => {
                 let params = domains
                     .iter()
-                    .map(|domain| (kernel.fresh(Some("x")), domain.clone()))
+                    .map(|domain| (kernel.fresh(None), domain.clone()))
                     .collect::<Vec<_>>();
                 check(kernel, operand, &Term::func_type(params, codomain.clone()))?;
             }

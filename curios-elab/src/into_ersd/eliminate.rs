@@ -178,7 +178,7 @@ impl Lowering {
         if matches!(&**head, Subterm::Var(_)) {
             return Ok(Ok((head.clone(), atom)));
         }
-        let name = context.fresh(Some("scrutinee"));
+        let name = context.fresh(None);
         context.define_assuming(&name, head_type, head, None);
         self.environment.bind(&name, atom);
         Ok(Ok((Term::free_var(&name), atom)))
@@ -422,8 +422,8 @@ impl Lowering {
         };
         let function_type = Term::func_type(
             [
-                (context.fresh(Some("x")), element.clone()),
-                (context.fresh(Some("acc")), result.clone()),
+                (context.fresh(None), element.clone()),
+                (context.fresh(None), result.clone()),
             ],
             result.clone(),
         );
@@ -439,8 +439,8 @@ impl Lowering {
 
         let zero = self.open_arm(context, result, init)?;
 
-        let index_label = context.fresh(Some("i"));
-        let accumulator_label = context.fresh(Some("acc"));
+        let index_label = context.fresh(None);
+        let accumulator_label = context.fresh(None);
         let predecessor = self.builder.value(Some("i".to_string()));
         let hypothesis = self.builder.value(Some("acc".to_string()));
         self.environment

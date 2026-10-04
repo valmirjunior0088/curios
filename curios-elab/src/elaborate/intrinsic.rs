@@ -111,7 +111,7 @@ pub(super) fn elaborate_demand(
         Operand::Function { domains, codomain } => {
             let params = domains
                 .iter()
-                .map(|domain| (context.fresh(Some("x")), domain.clone()))
+                .map(|domain| (context.fresh(None), domain.clone()))
                 .collect::<Vec<_>>();
             let expected = Term::func_type(params, codomain.clone());
 
