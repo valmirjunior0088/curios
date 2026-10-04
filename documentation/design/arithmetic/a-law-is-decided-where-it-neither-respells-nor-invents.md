@@ -23,7 +23,7 @@ A held law is a declaration's generated row. The law's family is declared for th
 - **A normal form for `Bool`.** A reduced ordered BDD is the respelling fold the records reject, and probe-side it is the truth table under the same cap; algebraic normal form over GF(2) makes an `n`-way `||` `2ⁿ - 1` monomials.
 - **Reducing a tautology to `true`**, which takes the table into the fold; `Bool/holds_of_eq` over `Eq/refl()` proves it in one written step.
 - **Reducing through a window with a library lemma**, which makes the trusted reducer's output name a `/std` declaration and fail where the slot is unfilled, as while the library compiles itself.
-- **Asking conversion whether a mapped function is the identity**, which only equates, so `len` and `get` would not see through the map, and which the elaborator's worklist cannot ask without a sandboxed sub-conversion.
+- **Asking conversion whether a mapped function is the identity**, which only equates, so `len` and `get` would not see through the map, and which makes a fold's reduct depend on a conversion verdict.
 - **A right shift through a division node**: `NatDiv` carries a proof its divisor is nonzero that a reducer may not invent.
 - **Teaching conversion the mirror**, or keeping `Gt`/`Ge` heads below the rows: a case in the trusted comparison, or a head no producer reaches and no test exercises, where a mirrored row is one line.
 - **Rewriting the decided propositions to the canonical spelling**, which leaves one spelling a user must match.

@@ -6,8 +6,9 @@
 mod tests;
 
 use {
-    super::{Callee, Erased, Error, GoalReport, ShapeDiagnosis, Underivable, WitnessKey},
+    super::{Callee, Declined, Erased, Error, GoalReport, ShapeDiagnosis, Underivable, WitnessKey},
     crate::{Conclusion, Origin, Refusal, ordinal},
+    curios_algebra::BOOL_ATOM_CAP,
     curios_core::{CalleeId, Free, Level, ReaderPosition, Spelling, Subterm, Term, UniverseMetaId},
     curios_num::Grain,
     curios_utilities::{Plicity, Qualifier},
@@ -251,7 +252,11 @@ impl fmt::Display for Displayed<'_> {
                 let this = this.spelled(spelling);
                 write!(f, "conversion ran out of steps between {this} and {that}")
             }
-            Error::TypeMismatch { inferred, expected } => {
+            Error::TypeMismatch {
+                inferred,
+                expected,
+                declined,
+            } => {
                 // Reports erase universe instances and splice nested concatenations, which reads better everywhere except here: when the instances or the grouping *are* the disagreement, both sides render as one string and the message states nothing. Detected on the rendering rather than on the terms, so it covers every axis that could collapse two sides into one spelling and not merely the ones that are known to. Grouping is tried first because it changes nothing where no nesting is present, whereas two polymorphic instances always differ once their levels are shown, so trying the universes first would answer with two metavariable ids where the nesting was the difference.
                 let plain = (
                     inferred.spelled(spelling).to_string(),
@@ -293,6 +298,17 @@ impl fmt::Display for Displayed<'_> {
                         _ => ("a type", "a value of it"),
                     };
                     write!(f, "\n  {what} was given where {held} was expected")?;
+                }
+                match declined {
+                    Some(Declined::Unpaired) => write!(
+                        f,
+                        "\n  not compared: no operand of one side of a commutative operation is an operand of the other, and operands are paired where they are one term, never by the order they stand in"
+                    )?,
+                    Some(Declined::PastCap) => write!(
+                        f,
+                        "\n  not compared: two Boolean terms over more than {BOOL_ATOM_CAP} atoms are past what the truth table that decides them reads"
+                    )?,
+                    None => {}
                 }
                 Ok(())
             }

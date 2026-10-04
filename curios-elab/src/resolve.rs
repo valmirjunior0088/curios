@@ -346,7 +346,7 @@ pub(crate) fn probe_match(
 
     Ok(match outcome {
         Outcome::Converts => Probe::Yes,
-        Outcome::Mismatch => Probe::No,
+        Outcome::Mismatch(_) => Probe::No,
         Outcome::Blocked(_) => Probe::Undecided,
     })
 }
@@ -367,7 +367,7 @@ fn commit_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<
 
     let probe = match outcome {
         Outcome::Converts => Probe::Yes,
-        Outcome::Mismatch => {
+        Outcome::Mismatch(_) => {
             context.rollback_solutions(mark);
             Probe::No
         }

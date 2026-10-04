@@ -644,7 +644,7 @@ fn rejects_an_out_of_image_variable() {
         &occurrence,
         &Term::free_var(&z),
     );
-    assert!(matches!(outcome, Ok(Outcome::Mismatch)));
+    assert!(matches!(outcome, Ok(Outcome::Mismatch(_))));
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }
 
@@ -875,7 +875,7 @@ fn rigid_head_mismatch_with_a_metavar_inside_still_fails_fast() {
         &induct_decl,
         &nat_type(),
     );
-    assert!(matches!(outcome, Ok(Outcome::Mismatch)));
+    assert!(matches!(outcome, Ok(Outcome::Mismatch(_))));
 }
 
 #[test]

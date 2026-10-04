@@ -128,6 +128,15 @@ pub enum Callee {
     Anonymous,
 }
 
+/// What conversion left uncompared on the way to a mismatch. The two sides a mismatch shows are then two it did not decide between, which is another thing to tell an author than that they differ.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Declined {
+    /// A commutative operation's operands, none of one side paired with one of the other.
+    Unpaired,
+    /// Two `Bool` terms whose atoms pass the truth table's cap.
+    PastCap,
+}
+
 /// Source-location anchoring is the [`Error::Located`] wrapper's job — the elaborate/erase/zonk drivers attach the offending term's span as the error propagates. Variants therefore carry only what their message displays; a variant carries a `Term` only when the message prints it.
 #[derive(Debug)]
 pub enum Error {
@@ -187,6 +196,8 @@ pub enum Error {
     TypeMismatch {
         inferred: Box<Term>,
         expected: Box<Term>,
+        /// What conversion declined to compare on the way here, where it declined anything.
+        declined: Option<Declined>,
     },
     /// The `/std/Monad/bind` application a postfix `!` desugars to, checked against a region that has nothing to sequence in: `bind` produces `M(B)` and the region's type stands over no result at all.
     ///
@@ -670,6 +681,21 @@ impl Error {
         Self::TypeMismatch {
             inferred: Box::new(inferred.into()),
             expected: Box::new(expected.into()),
+            declined: None,
+        }
+    }
+
+    /// This report with what conversion declined to compare on the way to it, where it is a type mismatch; any other report says what it says already.
+    pub(crate) fn declined(self, declined: Option<Declined>) -> Self {
+        match self {
+            Self::TypeMismatch {
+                inferred, expected, ..
+            } => Self::TypeMismatch {
+                inferred,
+                expected,
+                declined,
+            },
+            other => other,
         }
     }
 
@@ -1606,7 +1632,9 @@ impl Error {
                 out.push(this);
                 out.push(that);
             }
-            Self::TypeMismatch { inferred, expected } => {
+            Self::TypeMismatch {
+                inferred, expected, ..
+            } => {
                 out.push(inferred);
                 out.push(expected);
             }

@@ -109,6 +109,22 @@ pub fn is_bool_connective(term: &Term) -> bool {
     )
 }
 
+/// Whether the truth table declines `this` against `that` because their atoms pass its cap: the one way [`decide_bool`]'s `false` is a question left unasked, where every other is two formulas compared and found to disagree at some assignment of atoms that may not be independent. For a report that says so; it decides nothing.
+pub fn past_bool_cap(
+    reducer: &mut impl Reducer,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, ReduceError> {
+    if !is_bool_connective(this) && !is_bool_connective(that) {
+        return Ok(false);
+    }
+    let mut table = Table::default();
+    Ok(
+        table.read(reducer, this.clone())?.is_none()
+            || table.read(reducer, that.clone())?.is_none(),
+    )
+}
+
 /// Whether `this` and `that` are one `Bool` at every assignment of their atoms: `true` is a definitional equality, `false` is *undecided* and never a disequality — see the module documentation for why both halves of that are forced. Declines at once unless a side is headed by a connective, so a pair this has nothing to say about costs two shape tests.
 pub fn decide_bool(
     reducer: &mut impl Reducer,

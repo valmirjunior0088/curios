@@ -319,7 +319,7 @@ fn apply_fit_within(
 
     // The goal first: what it pins, it pins.
     let mut outcome = convert_outcome(context, &Term::type_ground(), output, goal_type).ok()?;
-    if matches!(outcome, Outcome::Mismatch) {
+    if matches!(outcome, Outcome::Mismatch(_)) {
         return None;
     }
 
@@ -402,7 +402,7 @@ fn apply_fit_within(
                 return None;
             }
         }
-        Outcome::Mismatch => return None,
+        Outcome::Mismatch(_) => return None,
     }
 
     // An explicit parameter list nothing pinned is an arity, not a suggestion.

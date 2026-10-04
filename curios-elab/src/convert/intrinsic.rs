@@ -6,7 +6,7 @@
 
 use {
     super::{Convert, convert, solved_linearly},
-    crate::{Context, zonk_solved_term_metas},
+    crate::{Context, Declined, zonk_solved_term_metas},
     curios_algebra::{Cut, split},
     curios_analysis::{
         Agreement, Congruence, Driver, Obligation, Outcome, Pass, connectives_agree,
@@ -44,8 +44,14 @@ pub(crate) fn convert_intrinsic(
     match outcome {
         Outcome::Equal => Ok(true),
         Outcome::Unequal => Ok(false),
-        // Operands nothing paired: nothing is enqueued, so no solution is picked by the order the operands stand in.
-        Outcome::Unpaired => unsettled(cmp, context, this, that),
+        // Operands nothing paired: nothing is enqueued, so no solution is picked by the order the operands stand in. Where that is the end of it, the mismatch it becomes says the operands were not paired.
+        Outcome::Unpaired => {
+            let converts = unsettled(cmp, context, this, that)?;
+            if !converts {
+                cmp.declined = Some(Declined::Unpaired);
+            }
+            Ok(converts)
+        }
         Outcome::Residual(this, that) => {
             cmp.enqueue(Term::type_ground(), this, that);
             Ok(true)

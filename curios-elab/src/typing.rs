@@ -276,7 +276,9 @@ fn subsume_telescope(
 
                 match outcome {
                     Outcome::Converts => {}
-                    Outcome::Mismatch => return Ok(Some(Outcome::Mismatch)),
+                    Outcome::Mismatch(declined) => {
+                        return Ok(Some(Outcome::Mismatch(declined)));
+                    }
                     Outcome::Blocked(_) => return Ok(None),
                 }
                 context.advance_assumed(&mut walk, &left);
@@ -288,7 +290,7 @@ fn subsume_telescope(
                 });
             }
             // Different arities. A function type is not curried in this representation, so this is a real mismatch rather than a shape to normalize.
-            Step::Mismatch => return Ok(Some(Outcome::Mismatch)),
+            Step::Mismatch => return Ok(Some(Outcome::Mismatch(None))),
         }
     }
 }
@@ -304,7 +306,9 @@ pub(crate) fn expect(
 
     match outcome {
         Outcome::Converts => context.retry_parked(),
-        Outcome::Mismatch => Err(display_mismatch(context, term, inferred, expected)),
+        Outcome::Mismatch(declined) => {
+            Err(display_mismatch(context, term, inferred, expected).declined(declined))
+        }
         // Undecided: blocked on unsolved metavariables. Park the goals to be retried when a watched metavariable is solved and succeed provisionally — unless conversion is currently a yes/no oracle, in which case undecided must stay a mismatch.
         Outcome::Blocked(goals) => {
             if context.parking_suppressed() {
@@ -837,9 +841,9 @@ fn retry_one(context: &mut Context, parked: ParkedProblem) -> Result<(), Error> 
             match convert_outcome(context, &goal.type_, &goal.this, &goal.that)? {
                 Outcome::Converts => Retry::Converts,
                 // Built here, inside the restored frame, rather than at the report below: `display_mismatch` reads the sides through whatever solutions have landed, so they name the actual disagreement rather than the metavariables it arrived wrapped in (see `resolved_for_display`). A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
-                Outcome::Mismatch => {
-                    Retry::Mismatch(display_mismatch(context, &origin, &goal.this, &goal.that))
-                }
+                Outcome::Mismatch(declined) => Retry::Mismatch(
+                    display_mismatch(context, &origin, &goal.this, &goal.that).declined(declined),
+                ),
                 Outcome::Blocked(goals) => Retry::Blocked(goals),
             },
         )
@@ -883,9 +887,9 @@ pub(crate) fn fill_placeholder(
     })?;
     match outcome {
         Outcome::Converts => Ok(()),
-        Outcome::Mismatch => {
-            Err(display_mismatch(context, origin, &rebuilt, &existing).at_opt(origin.span()))
-        }
+        Outcome::Mismatch(declined) => Err(display_mismatch(context, origin, &rebuilt, &existing)
+            .declined(declined)
+            .at_opt(origin.span())),
         Outcome::Blocked(goals) => {
             for goal in goals {
                 context.park(ParkedWork::Conversion(goal), origin.clone());

@@ -4,6 +4,8 @@
 
 use {
     super::*,
+    crate::Declined,
+    curios_algebra::BOOL_ATOM_CAP,
     curios_core::{Free, Global, Intrinsic, Level, Term},
     curios_utilities::Qualifier,
 };
@@ -78,4 +80,25 @@ fn a_disagreement_the_reader_can_already_see_keeps_its_spelling() {
         shown.contains("inferred: /Bool") && shown.contains("expected: /Nat"),
         "expected the reader's own spelling:\n{shown}"
     );
+}
+
+/// What conversion declined to compare is said beneath the two sides, since they are then two it did not decide between; a mismatch that declined nothing says nothing more.
+#[test]
+fn a_mismatch_says_what_was_not_compared() {
+    let shown = |declined: Option<Declined>| {
+        let error = Error::type_mismatch(family("Left", vec![]), family("Right", vec![]))
+            .declined(declined);
+        let spelling = Rc::new(
+            Spelling::default()
+                .with_erased_universes()
+                .with_anonymous_metavars(),
+        );
+        Displayed(&error, spelling).to_string()
+    };
+
+    assert!(!shown(None).contains("not compared"));
+    assert!(shown(Some(Declined::Unpaired)).contains("not compared: no operand of one side"));
+    assert!(shown(Some(Declined::PastCap)).contains(&format!(
+        "not compared: two Boolean terms over more than {BOOL_ATOM_CAP} atoms"
+    )));
 }

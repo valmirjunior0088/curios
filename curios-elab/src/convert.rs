@@ -31,13 +31,13 @@ use {
         Context, applied_head, check, infer, reduce, reduce_forced, stalled_unfolding, unfold_rec,
         unfold_rec_apply,
     },
-    crate::{metavar_origins, metavar_spines, zonk_solved_term_metas},
+    crate::{Declined, metavar_origins, metavar_spines, zonk_solved_term_metas},
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Free, Func, FuncType,
         InductType, Instance, InstanceHead, Intrinsic, Level, Lockstep, Many, Match, MatchResult,
         Metavar, Probe, Proj, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm,
         Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, Variant,
+        UniverseContext, Variant, past_bool_cap,
     },
     curios_utilities::Plicity,
     std::{
@@ -95,8 +95,8 @@ pub(crate) fn convert_outcome(
 pub(crate) enum Outcome {
     /// Definitionally equal.
     Converts,
-    /// A hard structural mismatch — provably unequal, no solution can help.
-    Mismatch,
+    /// A hard structural mismatch — provably unequal, no solution can help — beside what the problem that ended the run declined to compare, where it declined anything: the report then says the two sides were not compared rather than found different.
+    Mismatch(Option<Declined>),
     /// Quiesced with constraints still blocked on unsolved metavariables: undecided either way. The blocked problems are surrendered to the caller — the elaboration turnaround parks them on the `Context` to be retried when a watched metavariable is solved.
     Blocked(Vec<Problem>),
 }
@@ -118,6 +118,8 @@ pub(crate) struct Convert {
     blocked: Vec<Problem>,
     // Whether a metavariable was solved since the last `blocked` sweep — the signal that retrying `blocked` could make further progress.
     progress: bool,
+    // What the problem in hand declined to compare. Cleared as each problem is taken up, so one that is parked leaves nothing behind and only the problem a mismatch ends on speaks in its report.
+    declined: Option<Declined>,
     // The opening labels this conversion minted to compare under binders (label → mint sequence), and the placeholder pool `history_key` renames them into. Fingerprints only — the problems actually processed keep their globally-unique labels.
     minted: HashMap<Free, usize>,
     placeholders: Vec<Term>,
@@ -151,6 +153,7 @@ impl Convert {
             pending: VecDeque::from([Problem { type_, this, that }]),
             blocked: Vec::new(),
             progress: false,
+            declined: None,
             minted: HashMap::new(),
             placeholders: Vec::new(),
         }
@@ -438,7 +441,7 @@ impl Convert {
             match convert_outcome(context, &param_type, a, b)? {
                 Outcome::Converts => {}
                 Outcome::Blocked(_) => blocked = true,
-                Outcome::Mismatch => {
+                Outcome::Mismatch(_) => {
                     let this = unfold_rec_apply(context, this)?;
                     let that = unfold_rec_apply(context, that)?;
                     return match (this, that) {
@@ -1575,7 +1578,7 @@ impl Convert {
     fn outcome(&mut self, context: &mut Context) -> Result<Outcome, ReduceError> {
         loop {
             if !self.drain(context)? {
-                return Ok(Outcome::Mismatch);
+                return Ok(Outcome::Mismatch(self.declined.take()));
             }
 
             // Fixpoint: retry postponed constraints only when a fresh solution since the last sweep could have unblocked them.
@@ -1598,6 +1601,7 @@ impl Convert {
     fn drain(&mut self, context: &mut Context) -> Result<bool, ReduceError> {
         curios_profile::profile!("convert::drain");
         while let Some(Problem { type_, this, that }) = self.dequeue(context)? {
+            self.declined = None;
             // Reflexivity needs no evaluation. In particular, do not force an identical folded recursive computation merely because it sits under a strict intrinsic operation.
             if this == that {
                 continue;
@@ -2029,6 +2033,10 @@ impl Convert {
                     self.history.remove(&key);
                     self.blocked.push(raw_problem(&problem.type_));
                     continue;
+                }
+                // Two `Bool` terms the truth table declined are a mismatch nothing compared, and the report says so — ahead of their operands being unpaired, which is only what the table's silence left them.
+                if past_bool_cap(context, &problem.this, &problem.that)? {
+                    self.declined = Some(Declined::PastCap);
                 }
                 return Ok(false);
             }

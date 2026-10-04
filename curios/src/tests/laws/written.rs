@@ -1,7 +1,7 @@
 //! The rows stated by hand: every carrier's laws no family states, the controls beside the laws a rule must stop short of, and the refused candidates with the reason conversion does not take each.
 
 use {
-    super::{Binder, closes, misplaced, orders},
+    super::{Binder, IMPORTS, closes, misplaced, orders},
     crate::tests::typecheck,
 };
 
@@ -1035,4 +1035,56 @@ fn a_metavariable_no_division_solves_is_left_undecided() {
             "{source}\nrefused, but not as a conversion left undecided:\n{error}"
         );
     }
+}
+
+#[test]
+fn a_mismatch_nothing_compared_says_so() {
+    let refusal = |binders: &str, claim: &str| {
+        typecheck(&format!(
+            "{IMPORTS}\nlet law({binders}) -> {claim} = Eq/refl();\nIo/pure(())"
+        ))
+        .expect_err("the claim is no law conversion decides")
+    };
+
+    // Past the truth table's cap. Each of two contradictions over five atoms converts with `false`, and the two are not compared with each other: their pair holds ten atoms, and the table reads eight.
+    let atoms = (0..10)
+        .map(|index| format!("a{index}: Bool"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let contradiction = |from: usize| {
+        let names = (from..from + 5)
+            .map(|index| format!("a{index}"))
+            .collect::<Vec<_>>();
+        let negated = names
+            .iter()
+            .map(|name| format!("Bool/not({name})"))
+            .collect::<Vec<_>>();
+        format!("(({}) && {})", names.join(" || "), negated.join(" && "))
+    };
+    let past_cap = refusal(
+        &atoms,
+        &format!("Eq()({}, {})", contradiction(0), contradiction(5)),
+    );
+    assert!(
+        past_cap.contains("type mismatch") && past_cap.contains("not compared: two Boolean terms"),
+        "{past_cap}"
+    );
+
+    // Operands nothing pairs: no factor of one product is a factor of the other.
+    let unpaired = refusal(
+        "a: Nat, b: Nat, f: (Nat) -> Nat, g: (Nat) -> Nat",
+        "Eq()(f(a) * g(b), g(a) * f(b))",
+    );
+    assert!(
+        unpaired.contains("type mismatch")
+            && unpaired.contains("not compared: no operand of one side"),
+        "{unpaired}"
+    );
+
+    // The control: two terms that were compared and differ are a mismatch and nothing more.
+    let compared = refusal("a: Nat, b: Nat", "Eq()(a, b)");
+    assert!(
+        compared.contains("type mismatch") && !compared.contains("not compared"),
+        "{compared}"
+    );
 }
