@@ -7,9 +7,8 @@
 use {
     super::{
         Atom, Carrier, Cases, Context, Error, InductArm, InductDecl, InductType, Intrinsic,
-        IntrinsicHead, Lowering, Many, Match, Nat, Outcome, Scope, Subterm, Telescope, Term, Three,
-        Two, emitted, expect_intrinsic_head, infer, is_erasable, narrow_case_key, reduce_with,
-        refine_head,
+        Lowering, Many, Match, Nat, Outcome, Scope, Subterm, Telescope, Term, Three, Two, emitted,
+        is_erasable, narrow_case_key, reduce_with, refine_head,
     },
     curios_analysis::{Invert, case_target_indices, pinned_by_targets, solve_indices},
     curios_core::{Free, Level, MatchResult},
@@ -29,6 +28,14 @@ impl SeqCarrier<'_> {
             SeqCarrier::List { .. } => curios_ersd::SequenceGrain::List,
             SeqCarrier::Bin { grain } => curios_ersd::SequenceGrain::Bin(grain),
         }
+    }
+
+    /// The type of the sequence eliminated, which the form states: a list of its element, or the packed carrier of its grain.
+    fn sequence_type(self) -> Term {
+        Term::intrinsic(match self {
+            SeqCarrier::List { element } => Intrinsic::ListType(element.clone()),
+            SeqCarrier::Bin { grain } => Intrinsic::BinType(grain),
+        })
     }
 
     /// The type of the element the cons arm binds — the list element type, or the grain's own scalar shape for a packed binary.
@@ -217,7 +224,8 @@ impl Lowering {
         true_case: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let head_type = expect_intrinsic_head(context, head, IntrinsicHead::Bool)?;
+        // The form states its scrutinee's type, so none is read.
+        let head_type = Term::intrinsic(Intrinsic::BoolType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let if_false = self.refined_arm(
@@ -255,7 +263,7 @@ impl Lowering {
         default: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let head_type = expect_intrinsic_head(context, head, IntrinsicHead::Nat)?;
+        let head_type = Term::intrinsic(Intrinsic::NatType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let mut nat_cases = Vec::with_capacity(cases.len());
@@ -295,7 +303,7 @@ impl Lowering {
         cons_case: &Scope<Two>,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let head_type = expect_intrinsic_head(context, head, IntrinsicHead::Nat)?;
+        let head_type = Term::intrinsic(Intrinsic::NatType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let zero = self.refined_arm(
@@ -484,8 +492,7 @@ impl Lowering {
         cons_case: &Scope<Three>,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let head_type = infer(context, head)?;
-        let head_type = reduce_with(context, &head_type)?;
+        let head_type = carrier.sequence_type();
         let sequence = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let empty = self.refined_arm(context, head, &carrier.empty_value(), result, empty_case)?;
@@ -610,7 +617,7 @@ impl Lowering {
             return Ok(Outcome::Diverged(curios_ersd::Terminator::Unreachable));
         }
 
-        let head_type = infer(context, head)?;
+        let head_type = self.type_of(context, head)?;
         let head_type = reduce_with(context, &head_type)?;
         let (name, universes, params, actual_indices) = match &*head_type {
             Subterm::InductType(InductType {
@@ -794,7 +801,7 @@ impl Lowering {
             let atom = match pinned.position(label) {
                 Some(position) => {
                     let index = &m.actual_indices[position];
-                    let index_type = infer(context, index)?;
+                    let index_type = self.type_of(context, index)?;
                     match is_erasable(context, &index_type)? {
                         true => self.unit(),
                         false => emitted!(self.walk(context, index, &index_type, hint)?),

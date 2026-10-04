@@ -8,7 +8,7 @@ use {
     super::{
         ConstructorRow, Context, Error, FamilyRow, Lowering, Outcome, ProductRow, Proj, Struct,
         StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, constructor_entries,
-        emitted, erasure_mask, infer, reduce_with,
+        emitted, erasure_mask, reduce_with,
     },
     curios_core::Bound,
 };
@@ -276,7 +276,7 @@ impl Lowering {
             unreachable!("unresolved label projection reached erasure");
         };
 
-        let head_type = infer(context, head)?;
+        let head_type = self.type_of(context, head)?;
         let head_type = reduce_with(context, &head_type)?;
 
         // Projecting an *erased* field yields proof content only: the unit constant, never a runtime projection (the field has no slot).

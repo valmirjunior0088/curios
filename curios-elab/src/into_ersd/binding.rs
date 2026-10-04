@@ -18,6 +18,7 @@ impl Lowering {
     ) -> Result<(), Error> {
         for index in dominance_order(module) {
             let item = &module.items[index];
+            self.types.clear();
             match item {
                 Item::Let(definition) => {
                     let symbol = definition.name.symbol();

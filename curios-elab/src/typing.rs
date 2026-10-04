@@ -1299,18 +1299,6 @@ pub(crate) fn check_intrinsic_head(
     }
 }
 
-/// Infer the scrutinee's type, reduce it, and require it to be the given intrinsic type. Returns the reduced head type — used by `erase` to erase the head.
-pub(crate) fn expect_intrinsic_head(
-    context: &mut Context,
-    head: &Term,
-    expected: IntrinsicHead,
-) -> Result<Term, Error> {
-    let head_type = infer(context, head)?;
-    let head_type = reduce_with(context, &head_type)?;
-
-    check_intrinsic_head(expected, head_type)
-}
-
 /// The error for the *root* of a blocking chain, when a surviving conversion goal waited on a metavariable that was itself blocked.
 ///
 /// `Convert::solve`'s embedded-metavariable guard postpones a candidate carrying an unsolved metavariable of a wider context, and records the edge (`Context::note_solve_blockers`). Walking those edges reaches the metavariable nothing was ever going to solve — characteristically an undischarged decided bound riding inside a helper whose body the candidate unfolded — and reporting it is the difference between naming the proposition the author must discharge, at the call that demands it, and naming an implicit they never wrote, at a line that is not where the fault is.

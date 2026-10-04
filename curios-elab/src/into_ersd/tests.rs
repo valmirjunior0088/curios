@@ -1334,3 +1334,131 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
     );
     assert_eq!(payload(&erased, "/Selfy"), vec![("x", FieldShape::Opaque)]);
 }
+
+/// An applied lambda is transcribed as the function and the call it is, whatever its parameters are marked: erasure reads the callee's type off the lambda itself and holds no opinion on what a declaration may type a `use` parameter at.
+#[test]
+fn an_applied_lambda_with_a_witness_slot_erases() {
+    let mut context = context();
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let held = context.fresh(Some("held"));
+    let x = context.fresh(Some("x"));
+    let lambda = Term::func_marked(
+        [
+            (Plicity::Witness, held, struct_type_of("Dict")),
+            (Plicity::Explicit, x, nat.clone()),
+        ],
+        Term::free_var(&x),
+    );
+    let call = Term::apply_marked(
+        lambda,
+        [
+            (
+                Plicity::Witness,
+                Term::struct_at(
+                    nominal("Dict"),
+                    Vec::<Level>::new(),
+                    Vec::<Term>::new(),
+                    [nat_lit(1)],
+                ),
+            ),
+            (Plicity::Explicit, nat_lit(3)),
+        ],
+    );
+    let mut fixture = module(Vec::new(), call);
+    fixture
+        .module
+        .struct_decls
+        .insert(nominal("Dict"), newtype_struct("held", nat.clone()));
+
+    let erased = erase(&mut context, &fixture, nat);
+
+    assert_eq!(
+        shape(&erased),
+        "\
+entry
+  Functions
+    function ~f0$main/1(~v0$held, ~v1$x)
+      Return ~v1$x
+  Let ~v2 = Apply ~f0$main/1 [Nat(1), Nat(3)]
+  Return ~v2
+"
+    );
+}
+
+/// What erasing a function over a chain of `depth` eliminations spends, in budget units. `step` wraps the type one level deeper and `eliminate` the term.
+fn chain_cost(
+    depth: usize,
+    step: impl Fn(&mut Context, Term) -> Term,
+    eliminate: impl Fn(Term) -> Term,
+) -> u64 {
+    let mut context = context();
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let mut domain = nat.clone();
+    for _ in 0..depth {
+        domain = step(&mut context, domain);
+    }
+    let x = context.fresh(Some("x"));
+    let mut body = Term::free_var(&x);
+    for _ in 0..depth {
+        body = eliminate(body);
+    }
+    let function = Term::func([(x, domain.clone())], body);
+    let function_type = Term::func_type_marked([(Plicity::Explicit, x, domain)], nat.clone());
+
+    erase(
+        &mut context,
+        &module(
+            vec![definition("reads", function_type, function)],
+            nat_lit(0),
+        ),
+        nat,
+    );
+
+    context.consumed().units()
+}
+
+/// A head's type is read once however many eliminations stand on it, so twice the chain is at most twice the work. Reading each head afresh at every level it sits under makes it four times.
+#[test]
+fn a_projection_chain_erases_in_work_proportional_to_its_depth() {
+    let cost = |depth| {
+        chain_cost(
+            depth,
+            |context, inner| {
+                let kept = context.fresh(Some("kept"));
+                let pad = context.fresh(Some("pad"));
+                Term::tuple_type([(kept, inner), (pad, Term::intrinsic(Intrinsic::NatType))])
+            },
+            |head| Term::proj(head, 0),
+        )
+    };
+    let (short, long) = (cost(256), cost(512));
+
+    assert!(
+        long < 2 * short,
+        "a 512-deep chain spent {long} where a 256-deep one spent {short}",
+    );
+}
+
+/// The same for a function applied once per parameter list.
+#[test]
+fn a_curried_call_chain_erases_in_work_proportional_to_its_depth() {
+    let cost = |depth| {
+        chain_cost(
+            depth,
+            |context, inner| {
+                let n = context.fresh(Some("n"));
+                Term::func_type_marked(
+                    [(Plicity::Explicit, n, Term::intrinsic(Intrinsic::NatType))],
+                    inner,
+                )
+            },
+            |head| Term::apply(head, [nat_lit(1)]),
+        )
+    };
+    let (short, long) = (cost(256), cost(512));
+
+    assert!(
+        long < 2 * short,
+        "a 512-deep chain spent {long} where a 256-deep one spent {short}",
+    );
+}

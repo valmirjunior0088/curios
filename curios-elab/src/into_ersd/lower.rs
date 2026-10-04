@@ -14,7 +14,7 @@ use {
     },
     curios_utilities::{Span, grown},
     std::{
-        collections::{BTreeMap, BTreeSet},
+        collections::{BTreeMap, BTreeSet, HashMap},
         sync::Arc,
     },
 };
@@ -39,6 +39,8 @@ pub(super) struct Lowering {
     pub(super) pending_families: BTreeMap<Global, curios_ersd::FamilyId>,
     /// The structures whose row is being registered right now. A self-referential structure is uninhabited but elaborates, and unlike an inductive its schema is only decided *after* its fields are classified — so the cycle is cut by declining to name a schema rather than by naming one early.
     pub(super) in_flight: BTreeSet<Global>,
+    /// The type each term was read at ([`Lowering::type_of`]), for the item being erased. Dropped at every top-level item and before the entry, which is what bounds it.
+    pub(super) types: HashMap<Term, Term>,
     /// The span of each computed recursive member's initializer, by the identity it was minted as. The erased verifier refuses a member by that identity after the module holding it is gone, so the frame for the refusal is kept here rather than in the representation, whose nodes are the stored-unit format and carry no spans.
     pub(super) spans: BTreeMap<curios_ersd::ValueId, Span>,
 }
@@ -181,6 +183,7 @@ fn seal_entry(
     body: &Term,
     expected: &Term,
 ) -> Result<ErasedArena, Error> {
+    lowering.types.clear();
     lowering.builder.open_block();
     let outcome = lowering.with_owner("main".to_string(), |lowering| {
         lowering.walk(context, body, expected, None)
@@ -531,69 +534,67 @@ fn erase_within(
     let module = UniverseErased::<Zonked<Module>>::project(module)?
         .into_inner()
         .into_module();
-    // Erasure is re-derivation of elaborated terms, never surface elaboration, so the representation-privacy checks are suppressed for the whole walk.
-    context.with_suppressed_privacy(|context| {
-        // Every half: `module` declares only its own, so each scope unit's nominal entries reach the context from that unit itself. They are disjoint by mount — no unit can reuse another's name — which is why `register_*` rejecting a duplicate key is not a constraint here.
-        for unit in &predecessors {
-            seed_registries(context, unit)?;
-        }
-        seed_registries(context, &module)?;
+    // Every half: `module` declares only its own, so each scope unit's nominal entries reach the context from that unit itself. They are disjoint by mount — no unit can reuse another's name — which is why `register_*` rejecting a duplicate key is not a constraint here.
+    for unit in &predecessors {
+        seed_registries(context, unit)?;
+    }
+    seed_registries(context, &module)?;
 
-        // Re-seed the Core context with the scope's definitions, in dependency order: later items and the entrypoint reduce through them.
-        for item in predecessors.iter().flat_map(|unit| &unit.items) {
-            match item {
-                Item::Let(definition) => {
-                    context.define_assuming_scheme(
-                        &Free::from(&definition.name),
-                        &definition.type_,
-                        &definition.body,
-                        Some(&definition.kind),
-                        definition.universe_context.clone(),
+    // Re-seed the Core context with the scope's definitions, in dependency order: later items and the entrypoint reduce through them.
+    for item in predecessors.iter().flat_map(|unit| &unit.items) {
+        match item {
+            Item::Let(definition) => {
+                context.define_assuming_scheme(
+                    &Free::from(&definition.name),
+                    &definition.type_,
+                    &definition.body,
+                    Some(&definition.kind),
+                    definition.universe_context.clone(),
+                );
+            }
+            Item::Rec(rec) => {
+                let definitions = rec.definitions();
+                for definition in &definitions {
+                    let name = Free::from(&definition.name);
+                    context.assume(&name, &definition.type_);
+                    context.set_assumption_universe_context(
+                        &name,
+                        rec.group.universe_context().clone(),
                     );
                 }
-                Item::Rec(rec) => {
-                    let definitions = rec.definitions();
-                    for definition in &definitions {
-                        let name = Free::from(&definition.name);
-                        context.assume(&name, &definition.type_);
-                        context.set_assumption_universe_context(
-                            &name,
-                            rec.group.universe_context().clone(),
-                        );
-                    }
-                    for (index, definition) in definitions.iter().enumerate() {
-                        context.define(
-                            &Free::from(&definition.name),
-                            &Term::rec_proj(rec.group.clone(), index),
-                            Some(&definition.kind),
-                        );
-                    }
+                for (index, definition) in definitions.iter().enumerate() {
+                    context.define(
+                        &Free::from(&definition.name),
+                        &Term::rec_proj(rec.group.clone(), index),
+                        Some(&definition.kind),
+                    );
                 }
             }
         }
+    }
 
-        let prefix = resumed.into_arena();
-        let mut lowering = Lowering {
-            builder: curios_ersd::ErsdBuilder::resume(prefix.module),
-            environment: prefix.environment,
-            dangled: Default::default(),
-            owners: Default::default(),
-            pending_families: Default::default(),
-            in_flight: Default::default(),
-            spans: Default::default(),
-        };
-        lowering.erase_items(context, &module)?;
+    let prefix = resumed.into_arena();
+    let mut lowering = Lowering {
+        builder: curios_ersd::ErsdBuilder::resume(prefix.module),
+        environment: prefix.environment,
+        dangled: Default::default(),
+        owners: Default::default(),
+        pending_families: Default::default(),
+        in_flight: Default::default(),
+        spans: Default::default(),
+        types: Default::default(),
+    };
+    lowering.erase_items(context, &module)?;
 
-        match entry {
-            Some((body, type_)) => seal_entry(lowering, context, &body, &type_),
-            // No entrypoint: the arena stays open, which is exactly what a successor resumes over. The hand-off still checks every rule a prefix can satisfy, so an image reaches the archive walked rather than merely constructed.
-            None => Ok(ErasedArena {
-                module: lowering
-                    .builder
-                    .into_module()
-                    .map_err(|error| Error::refused_by_verifier(error, &lowering.spans))?,
-                environment: lowering.environment,
-            }),
-        }
-    })
+    match entry {
+        Some((body, type_)) => seal_entry(lowering, context, &body, &type_),
+        // No entrypoint: the arena stays open, which is exactly what a successor resumes over. The hand-off still checks every rule a prefix can satisfy, so an image reaches the archive walked rather than merely constructed.
+        None => Ok(ErasedArena {
+            module: lowering
+                .builder
+                .into_module()
+                .map_err(|error| Error::refused_by_verifier(error, &lowering.spans))?,
+            environment: lowering.environment,
+        }),
+    }
 }

@@ -7,7 +7,7 @@
 use {
     super::{
         Apply, Context, Error, Func, FuncType, Lowering, Outcome, Subterm, Term, emitted,
-        erasure_mask, infer, is_erasable, reduce_with,
+        erasure_mask, is_erasable, reduce_with,
     },
     curios_core::{DefinitionKind, Global, Lockstep, Step},
 };
@@ -121,7 +121,7 @@ impl Lowering {
         let head = &apply.head;
         let params = apply.params().cloned().collect::<Vec<_>>();
 
-        let head_type = infer(context, head)?;
+        let head_type = self.type_of(context, head)?;
         let head_type = reduce_with(context, &head_type)?;
         let ft = match &*head_type {
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.clone(),
