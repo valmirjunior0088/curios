@@ -61,7 +61,14 @@ The binders are `a: Nat, b: Nat, c: Nat, f: (Nat) -> Nat, w: (n: Nat, at: Holds(
 
 A cell is held where `wonder diagnostics -` reports nothing but warnings, the kernel's where its report opens "the kernel refused", and refused otherwise.
 
-**The count**, `counted`: two samples in each checker's reducer — a stuck operation the readers read through whose atoms `classable` says may be one, and a stuck reduct that misses every equation in force — read from the profiles `cargo xtask clippy` files for `/std`, folded by `curios profile`.
+**The count**, `counted`, at `6b3ae2c3c`: two samples in each checker's reducer, read from the profiles `cargo xtask clippy` files for `/std` — `curios-prelude-archive/.artifacts/profile.tsv` for elaboration, `curios-prelude/.artifacts/profile.tsv` for certification — folded by `curios profile`. `classable_fold` is the atoms of a stuck operation the readers read through, where `classable` says some two may be one; `missed_lookup` is the equations in force a stuck reduct could be a reduct of, where none answers.
+
+| Sample | Stuck terms | Asked in all | At most |
+| --- | --- | --- | --- |
+| `reduce::classable_fold`, elaboration | 4,334 | 14,866 atoms | 10 |
+| `reduce::missed_lookup`, elaboration | 32,978 | 95,421 equations | 14 |
+| `whnf::classable_fold`, certification | 1,265 | 3,777 atoms | 10 |
+| `whnf::missed_lookup`, certification | 11,368 | 26,243 equations | 7 |
 
 ## Stages
 
