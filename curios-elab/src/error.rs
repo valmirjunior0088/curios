@@ -608,6 +608,8 @@ pub enum Error {
     InUnreachableArm {
         guard: Box<Term>,
         case: Box<Term>,
+        /// Whether `guard` is the guard of an arm around this one, which this arm's case contradicts, rather than the arm's own.
+        enclosing: bool,
         error: Box<Error>,
     },
     /// The witness binders in scope where `error` arose, outermost first: the reader position its terms are spelled for, so a `use` argument resolution would restore reads as left out (the printer's axis (h)). A sibling of [`Error::Located`], attached by the same drivers.
@@ -1330,6 +1332,17 @@ impl Error {
         Self::InUnreachableArm {
             guard: Box::new(guard),
             case: Box::new(case),
+            enclosing: false,
+            error: Box::new(self),
+        }
+    }
+
+    /// Say that the arm this error arose in is dead: in it `guard`, the guard of an arm around it, is always `case`, a case other than the one that arm assumed.
+    pub(crate) fn under_contradicted_guard(self, guard: Term, case: Term) -> Self {
+        Self::InUnreachableArm {
+            guard: Box::new(guard),
+            case: Box::new(case),
+            enclosing: true,
             error: Box::new(self),
         }
     }
@@ -1594,10 +1607,15 @@ impl Error {
             Self::InDeclaration { name, error, .. } => {
                 format!("while elaborating {name}:\n{}", error.render_body(spelling))
             }
-            Self::InUnreachableArm { guard, case, error } => format!(
+            Self::InUnreachableArm {
+                guard,
+                case,
+                enclosing,
+                error,
+            } => format!(
                 "{}\n{}",
                 error.render_body(spelling),
-                unreachable_arm_note(guard, case, spelling)
+                unreachable_arm_note(guard, case, *enclosing, spelling)
             ),
             error => Displayed(error, Rc::clone(spelling)).to_string(),
         }
@@ -1625,7 +1643,9 @@ impl Error {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
             | Self::InScope { error, .. } => error.collect_terms(out),
-            Self::InUnreachableArm { guard, case, error } => {
+            Self::InUnreachableArm {
+                guard, case, error, ..
+            } => {
                 out.push(guard);
                 out.push(case);
                 error.collect_terms(out);

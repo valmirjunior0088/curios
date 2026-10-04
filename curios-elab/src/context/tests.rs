@@ -439,3 +439,98 @@ fn a_proof_credits_the_written_binder_a_local_was_opened_from_and_a_rollback_wit
     context.credit(&Term::free_var(&unrelated));
     assert_eq!(context.credited(), BTreeSet::from([(Some(declaration), 2)]));
 }
+
+/// An equation whose scrutinee names no local once an arm refines a variable answers nothing in that arm, and answers again after it. The kernel substitutes an arm's solution through the equations in force and records none under a closed spelling, so an equation left answering here would accept in the arm a proof the kernel refuses.
+///
+/// The control is an equation over a second variable the arm does not refine: it still names a local, the kernel still records it, and it still answers.
+///
+/// Mutation-checked: with `Context::refine` withholding nothing, the closed equation answers inside the arm.
+#[test]
+fn an_equation_a_refinement_closes_is_withheld_for_the_arm() {
+    let mut context = context();
+    let n = context.fresh(Some("n"));
+    let m = context.fresh(Some("m"));
+    let literal = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
+    let closing = Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&n), literal(3)));
+    let open = Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&n), Term::free_var(&m)));
+
+    context.with_frame(|context| {
+        context.assume(&n, &nat());
+        context.assume(&m, &nat());
+        context.refine_scrutinee_spellings(
+            vec![
+                (closing.clone(), closing.clone(), false),
+                (open.clone(), open.clone(), false),
+            ],
+            &truth,
+        );
+        assert_eq!(context.scrutinee_reduct(&closing, &closing), Some(&truth));
+
+        context.with_frame(|context| {
+            context.refine(&n, &literal(5));
+
+            assert_eq!(
+                context.scrutinee_reduct(&closing, &closing),
+                None,
+                "the guard is about a closed term in this arm"
+            );
+            assert_eq!(
+                context.scrutinee_reduct(&open, &open),
+                Some(&truth),
+                "an equation that still names a local stands"
+            );
+            assert_eq!(
+                context
+                    .visible_scrutinee_entries()
+                    .map(|(_, key, _)| key.clone())
+                    .collect::<Vec<_>>(),
+                vec![open.clone()]
+            );
+        });
+
+        assert_eq!(
+            context.scrutinee_reduct(&closing, &closing),
+            Some(&truth),
+            "and the guard answers again once the arm is left"
+        );
+    });
+}
+
+/// A withheld equation stays withheld where the refinements it was withheld under are installed again, as a metavariable's solution and a parked problem's retry install the ones they were born under: the entry that withholds it travels with them and shadows the equation as it did in the arm.
+#[test]
+fn a_withheld_equation_stays_withheld_where_its_refinements_are_installed_again() {
+    let mut context = context();
+    let n = context.fresh(Some("n"));
+    let literal = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
+    let guard = Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&n), literal(3)));
+
+    let (outside, inside) = context.with_frame(|context| {
+        context.assume(&n, &nat());
+        context.refine_scrutinee_spellings(vec![(guard.clone(), guard.clone(), false)], &truth);
+        let outside = context.refinement_snapshot();
+
+        let inside = context.with_frame(|context| {
+            context.refine(&n, &literal(5));
+            context.refinement_snapshot()
+        });
+
+        (outside, inside)
+    });
+
+    assert_eq!(
+        context.with_refinements(&outside, |context| context
+            .scrutinee_reduct(&guard, &guard)
+            .cloned()),
+        Some(truth),
+        "the guard's own arm answers"
+    );
+    assert_eq!(
+        context.with_refinements(&inside, |context| context
+            .scrutinee_reduct(&guard, &guard)
+            .cloned()),
+        None,
+        "the arm that closed it does not"
+    );
+}

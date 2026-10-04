@@ -19,6 +19,7 @@ use {
         WitnessKey, zonk_universe_levels_scoped,
     },
     crate::{Refusal, Sort, levels_clash_on_a_decided_instance, zonk_solved_term_metas},
+    curios_analysis::{Unfolding, records_case_equation},
     curios_core::{
         Advance, Bound, ConceptDecl, Consumption, Cost, DefinitionKind, Free, Global, HeadTag,
         ImplicitOrigin, Imports, InductDecl, Level, Metavar, MetavarId, MetavarOrigin, Probe,
@@ -1065,10 +1066,46 @@ impl Context {
 
     // === Refinements (see [`Frames`]) =======================================
 
-    /// [`Frames::refine`], with the refinement cache protocol — the variable now reduces differently.
+    /// [`Frames::refine`], with the refinement cache protocol — the variable now reduces differently — and with every equation the refinement closes withheld ([`Context::withhold_closed_equations`]).
     pub(crate) fn refine(&mut self, name: &Free, term: &Term) {
         self.caches.invalidate_for_refinement();
         self.frames.refine(name, term);
+        self.withhold_closed_equations();
+    }
+
+    /// `term` as the kernel is handed it under the arms in force: its solved metavariables materialized, its local definitions substituted, and every variable an arm refined spelled as the value it was refined to. The kernel substitutes a case's solution through the arm it checks, where the elaborator records it and keeps the variable spelled, so this is the reading a rule shared with the kernel is judged on.
+    ///
+    /// A solved metavariable is materialized first because it stands over a spine of the locals in scope where it was born, and would read as naming them: a guard written through a concept holds its witness as one, and names no local of its own once the witness is the global it resolved to.
+    pub(crate) fn kernel_spelling(&self, term: &Term) -> Term {
+        let mut spelled = Unfolding::everything(self).term(&zonk_solved_term_metas(self, term));
+        let variables = self.frames.refined_variables();
+        // A refinement's value may name a variable an arm inside refined in turn, so the substitution is taken until it moves nothing: at most once per variable.
+        for _ in 0..variables.len() {
+            let next = spelled.substitute(&variables);
+            if next == spelled {
+                break;
+            }
+            spelled = next;
+        }
+        spelled
+    }
+
+    /// Withhold, for as long as the current frame stands, every equation in force whose scrutinee names no local as the kernel spells it now ([`Context::kernel_spelling`]).
+    ///
+    /// **The recording rule, read where the kernel reads it.** No checker records an equation under a spelling that mentions no local (`curios_analysis::records_case_equation`). The kernel substitutes an arm's solution through the equations in force, so a guard over a variable an arm inside refines to a closed value is, to the kernel, an equation about a closed term, which it does not record; the elaborator's key still names the variable, and left answering it would accept in that arm a proof the kernel refuses. A closed scrutinee computes, so nothing is lost where the arm is one a value reaches: the fact holds by reduction. Where it computes to another case than its guard assumed the arm is dead, and a proof resting on the guard is refused where it is written.
+    fn withhold_closed_equations(&mut self) {
+        if !self.frames.has_scrutinee_refinements() {
+            return;
+        }
+        let closed = self
+            .frames
+            .scrutinee_equations()
+            .into_iter()
+            .filter(|(_, entry)| !records_case_equation(&self.kernel_spelling(&entry.original)))
+            .collect::<Vec<_>>();
+        for (key, entry) in closed {
+            self.frames.withhold_scrutinee(key, entry);
+        }
     }
 
     /// [`Frames::refine_projection`], with the refinement cache protocol.
@@ -1115,6 +1152,7 @@ impl Context {
                     original,
                     value: value.clone(),
                     alias,
+                    withheld: false,
                 },
             );
         }
@@ -1135,11 +1173,24 @@ impl Context {
     /// A universe error declines too. That is the same direction the whole guard moves in — fewer refinements fire, never more — so it can cost a reduction and never admit one.
     pub(crate) fn scrutinee_reduct(&self, canonical: &Term, probe: &Term) -> Option<&Term> {
         let entry = self.frames.scrutinee_entry(canonical)?;
+        if entry.withheld {
+            return None;
+        }
 
         match levels_clash_on_a_decided_instance(self, probe, &entry.original) {
             Ok(false) => Some(&entry.value),
             Ok(true) | Err(_) => None,
         }
+    }
+
+    /// Every equation in force with the key it is held under, aliases among them, innermost frame first.
+    pub(crate) fn scrutinee_equations(&self) -> Vec<(Term, ScrutineeEntry)> {
+        self.frames.scrutinee_equations()
+    }
+
+    /// Every equation an arm in force withholds, innermost frame first.
+    pub(crate) fn withheld_equations(&self) -> Vec<ScrutineeEntry> {
+        self.frames.withheld_equations()
     }
 
     pub(crate) fn scrutinee_entries(&self, head: HeadTag<'_>) -> Vec<(Term, ScrutineeEntry)> {
@@ -1182,11 +1233,19 @@ impl Context {
             self.refine_projection(entry.original.clone(), *index, entry.value.clone());
         }
 
+        // In order, so an entry that withholds an equation lands after the equation it withholds and shadows it here as it did where they were taken.
         for (canonical, entry) in &refinements.scrutinees {
-            self.refine_scrutinee_spellings(
-                vec![(canonical.clone(), entry.original.clone(), entry.alias)],
-                &entry.value,
-            );
+            match entry.withheld {
+                true => {
+                    self.caches.invalidate_for_refinement();
+                    self.frames
+                        .withhold_scrutinee(canonical.clone(), entry.clone());
+                }
+                false => self.refine_scrutinee_spellings(
+                    vec![(canonical.clone(), entry.original.clone(), entry.alias)],
+                    &entry.value,
+                ),
+            }
         }
     }
 

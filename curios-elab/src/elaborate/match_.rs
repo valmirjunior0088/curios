@@ -2,8 +2,8 @@ use {
     super::{Context, Error, Mode, check, elaborate, expect},
     crate::{
         BinderSite, FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_intrinsic_head,
-        check_motive, fill_placeholder, is_prop, reduce_with, refine_head, stuck_on_metavar,
-        unreachable_arm,
+        check_motive, contradicted_guard, fill_placeholder, is_prop, reduce_with, refine_head,
+        stuck_on_metavar, unreachable_arm,
     },
     curios_analysis::{
         Invert, invert_indices, pinned_by_targets, retyped, scrutinee_solution, solve_indices,
@@ -179,10 +179,13 @@ fn check_fold_arm(
         .map_err(|error| from_arm(context, head, value, error))
 }
 
-/// `error`, raised in the arm at `value`, reported as one in a dead arm where the guard is always another case — see [`unreachable_arm`].
+/// `error`, raised in the arm at `value`, reported as one in a dead arm where the guard is always another case — see [`unreachable_arm`] — or where the arm's case contradicts the guard of an arm around it — see [`contradicted_guard`].
 fn from_arm(context: &mut Context, head: &Term, value: &Term, error: Error) -> Error {
-    match unreachable_arm(context, head, value) {
-        Some(case) => error.in_unreachable_arm(head.clone(), case),
+    if let Some(case) = unreachable_arm(context, head, value) {
+        return error.in_unreachable_arm(head.clone(), case);
+    }
+    match contradicted_guard(context, head, value) {
+        Some((guard, case)) => error.under_contradicted_guard(guard, case),
         None => error,
     }
 }

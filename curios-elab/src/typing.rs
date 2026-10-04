@@ -9,7 +9,9 @@ use {
         refold_recs, refused_scrutinee, retry_discharge, retry_match, retry_projection,
         retry_witness, shallow_scrutinee, zonk_solved_term_metas,
     },
-    curios_analysis::{RESOLVED_SPELLING_LAYERS, Unfolding, records_case_equation},
+    curios_analysis::{
+        RESOLVED_SPELLING_LAYERS, Unfolding, records_case_equation, scrutinee_solution,
+    },
     curios_core::{
         Advance, Apply, Bound, Field, Free, Func, FuncType, Global, ImplicitOrigin, Intrinsic,
         IntrinsicHead, Level, Lockstep, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError,
@@ -21,6 +23,7 @@ use {
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
         rc::Rc,
+        slice,
     },
 };
 
@@ -947,13 +950,13 @@ fn retry_checking(
 ///
 /// A scrutinee's *indices* are not refined here: an arm solves their equations with `curios_analysis::solve_indices`, the kernel's own function, and records the variables it solves. Keying a non-variable index — a constructor, a stuck application — as an equation on the index itself would record the reverse of what the inverter pins, or a fact the kernel does not have.
 ///
-/// Nothing is recorded under a spelling [`records_case_equation`] refuses — one that mentions no local, which is where the kernel records none either — judged on the scrutinee as the kernel spells it, its local definitions substituted, and again on each spelling the term-keyed store would hold: an equation one checker records and the other does not reads a dead arm two ways.
+/// Nothing is recorded under a spelling [`records_case_equation`] refuses — one that mentions no local, which is where the kernel records none either — judged on the scrutinee as the kernel spells it, its local definitions substituted and the variables the arms around it refined spelled as their values ([`Context::kernel_spelling`]), and again on each spelling the term-keyed store would hold: an equation one checker records and the other does not reads a dead arm two ways.
 ///
 /// All three rest on one premise — the arm is reached only when the scrutinee *equals* the case's value — and every scrutinee has it, because a term of non-`Io` type denotes one value.
 ///
 /// That is a typing fact, not an analysis, because every host operation returns `Io`. `Cell/get(c)` denotes differently before and after a `Cell/set`, and an equation for it would read one term as `true` in one arm and `false` in a nested one — an equation between two `Bool` literals, and from there a closed inhabitant of `False` — but it has type `Io(T)`, which is opaque and has no cases, so it cannot be a scrutinee at all. And no inhabitant of `(Bool) -> Bool` performs an effect, so `f(true)` fixes a value for every possible caller binding, a binder `f` included.
 pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
-    if !records_case_equation(&Unfolding::everything(&*context).term(head)) {
+    if !records_case_equation(&context.kernel_spelling(head)) {
         return Ok(());
     }
 
@@ -989,7 +992,9 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
                 }
             }
 
-            spellings.retain(|(_, original, _)| records_case_equation(original));
+            spellings.retain(|(_, original, _)| {
+                records_case_equation(&context.kernel_spelling(original))
+            });
             context.refine_scrutinee_spellings(spellings, value);
         }
     }
@@ -1001,15 +1006,52 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
 pub(crate) fn unreachable_arm(context: &mut Context, head: &Term, value: &Term) -> Option<Term> {
     let spelled = Unfolding::everything(&*context).term(head);
     let case = reduce_with(context, &spelled).ok()?;
-    let another = match (&*case, &**value) {
+    another_case(&case, value).then_some(case)
+}
+
+/// The guard of an arm around this one that the arm at `value` contradicts, with the case that guard always is there: where `head` is a variable, an equation in force — or one the arm already withholds — whose scrutinee names no local once the variable is spelled as `value`, and which computes to another case than the one its arm assumed. The arm is then never taken, and a proof resting on that guard fails in it, since the equation answers nothing there ([`Context::kernel_spelling`], and the withholding `Context::refine` does).
+pub(crate) fn contradicted_guard(
+    context: &mut Context,
+    head: &Term,
+    value: &Term,
+) -> Option<(Term, Term)> {
+    let solution = scrutinee_solution(&*context, head, value)?;
+    let equations = context
+        .scrutinee_equations()
+        .into_iter()
+        .map(|(_, entry)| entry)
+        .chain(context.withheld_equations())
+        .filter(|entry| !entry.alias)
+        .collect::<Vec<_>>();
+
+    for entry in equations {
+        let spelled = context
+            .kernel_spelling(&entry.original)
+            .substitute(slice::from_ref(&solution));
+        if records_case_equation(&spelled) {
+            continue;
+        }
+        let Ok(case) = reduce_with(context, &spelled) else {
+            continue;
+        };
+        if another_case(&case, &entry.value) {
+            return Some((entry.original, case));
+        }
+    }
+
+    None
+}
+
+/// Whether `case`, a literal or a constructed value, is another case than `value`.
+fn another_case(case: &Term, value: &Term) -> bool {
+    match (&**case, &**value) {
         (
             Subterm::Intrinsic(this @ (Intrinsic::Bool(_) | Intrinsic::Nat(_))),
             Subterm::Intrinsic(that @ (Intrinsic::Bool(_) | Intrinsic::Nat(_))),
         ) => this != that,
         (Subterm::Variant(this), Subterm::Variant(that)) => this.tag != that.tag,
         _ => false,
-    };
-    another.then_some(case)
+    }
 }
 
 /// The spellings a scrutinee that is neither a variable nor a projection is met by, each with the term it was registered from: as written, and resolved through a concept dispatch where it has one.

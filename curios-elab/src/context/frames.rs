@@ -11,7 +11,10 @@ use {
         project_erased_universes,
     },
     curios_utilities::Entropy,
-    std::{collections::HashMap, rc::Rc},
+    std::{
+        collections::{BTreeMap, HashMap},
+        rc::Rc,
+    },
 };
 
 /// One definition: the definiens, plus the [`DefinitionKind`] of the module item that introduced it. Every `DefEntry` — whether a plain `let`/`rec` member or mid-window rec-group registration — is treated uniformly; there is no `recursive` marker distinguishing them.
@@ -44,6 +47,8 @@ pub(crate) struct ScrutineeEntry {
     pub(crate) value: Term,
     /// Whether this spelling is an alias of an equation recorded under another: the kernel's spelling of a guard written over local definitions, which an occurrence reached by unfolding a definition presents exactly. The exact lookup reads it; settlement and canonicalization skip it, which leaves a reduct over the definitions' values unanswered — `typing`'s registration states the case.
     pub(crate) alias: bool,
+    /// Whether this entry withholds the equation its key holds in a frame outside, rather than recording one: an arm that refines a variable leaves it under every equation whose scrutinee, as the kernel spells it under the arm's solution, names no local. `Context::withhold_closed_equations` states the rule. It keeps the equation's spelling and value, which a report on the arm names.
+    pub(crate) withheld: bool,
 }
 
 /// A scrutinee entry's reduced spelling once settled: the form a probe is compared at — solved metavariables materialized and universe instances erased, once, when it settles — and the unerased reduct a hit reads its instance from.
@@ -637,16 +642,13 @@ impl Frames {
     ///
     /// Filtered here rather than by the caller so a key under another head is never cloned: the store is keyed by written spelling, and reducing arguments cannot change an application's head, so such a key could not have become the candidate however it canonicalizes. Owned rather than borrowed because canonicalizing a key reduces, which needs the context mutably while this borrow would still be live.
     pub(crate) fn scrutinee_entries(&self, head: HeadTag<'_>) -> Vec<(Term, ScrutineeEntry)> {
-        self.refinement_scrutinees[self.refinement_window()]
-            .iter()
-            .rev()
-            .flat_map(|frame| frame.iter())
-            .filter(|(key, entry)| !entry.alias && key.head_key() == Some(head))
-            .map(|(key, entry)| (key.clone(), entry.clone()))
+        self.visible_scrutinee_entries()
+            .filter(|(_, key, _)| key.head_key() == Some(head))
+            .map(|(_, key, entry)| (key.clone(), entry.clone()))
             .collect()
     }
 
-    /// The entry a canonical stuck scrutinee is registered under, from the frames suppression does not withhold (re-validation).
+    /// The entry a canonical stuck scrutinee is registered under, from the frames suppression does not withhold (re-validation) — the innermost, so one an arm inside withholds is answered by the entry withholding it.
     ///
     /// The whole entry rather than its value, because the read above this one needs the `original` beside it: the key is universes-erased and cannot decide an instance, so [`Context::scrutinee_reduct`](crate::Context) compares the unerased spellings and declines where they disagree on one both sides have decided.
     pub(crate) fn scrutinee_entry(&self, canonical: &Term) -> Option<&ScrutineeEntry> {
@@ -661,7 +663,7 @@ impl Frames {
         &self,
     ) -> impl Iterator<Item = (usize, &Term, &ScrutineeEntry)> {
         let window = self.refinement_window();
-        let floor = window.start;
+        let (floor, ceiling) = (window.start, window.end);
         self.refinement_scrutinees[window]
             .iter()
             .enumerate()
@@ -669,9 +671,71 @@ impl Frames {
             .flat_map(move |(offset, frame)| {
                 frame
                     .iter()
-                    .filter(|(_, entry)| !entry.alias)
+                    .filter(move |(key, entry)| {
+                        !entry.alias
+                            && !entry.withheld
+                            && !self.withheld_inside(floor + offset, ceiling, key)
+                    })
                     .map(move |(key, entry)| (floor + offset, key, entry))
             })
+    }
+
+    /// Every equation the window leaves in force with the key it is held under, aliases among them, innermost frame first: what a variable's refinement is read against.
+    pub(crate) fn scrutinee_equations(&self) -> Vec<(Term, ScrutineeEntry)> {
+        let window = self.refinement_window();
+        let (floor, ceiling) = (window.start, window.end);
+        self.refinement_scrutinees[window]
+            .iter()
+            .enumerate()
+            .rev()
+            .flat_map(|(offset, frame)| {
+                frame
+                    .iter()
+                    .filter(move |(key, entry)| {
+                        !entry.withheld && !self.withheld_inside(floor + offset, ceiling, key)
+                    })
+                    .map(|(key, entry)| (key.clone(), entry.clone()))
+            })
+            .collect()
+    }
+
+    /// Every equation an arm in the window withholds, as the entry withholding it, innermost frame first.
+    pub(crate) fn withheld_equations(&self) -> Vec<ScrutineeEntry> {
+        self.refinement_scrutinees[self.refinement_window()]
+            .iter()
+            .rev()
+            .flat_map(|frame| frame.values().filter(|entry| entry.withheld).cloned())
+            .collect()
+    }
+
+    /// Withhold, for as long as the current frame stands, the equation `entry` holds under `key` in a frame outside. The façade clears the caches first.
+    pub(crate) fn withhold_scrutinee(&mut self, key: Term, entry: ScrutineeEntry) {
+        self.refinement_stamp.fresh();
+        self.refinement_scrutinees.last_mut().unwrap().insert(
+            key,
+            ScrutineeEntry {
+                withheld: true,
+                ..entry
+            },
+        );
+    }
+
+    /// Whether a frame inside `frame`, below `ceiling`, withholds the equation `key` holds there.
+    fn withheld_inside(&self, frame: usize, ceiling: usize, key: &Term) -> bool {
+        self.refinement_scrutinees[frame + 1..ceiling]
+            .iter()
+            .any(|inner| inner.get(key).is_some_and(|entry| entry.withheld))
+    }
+
+    /// The variables the arms in the window refine, each with the value its innermost arm gives it.
+    pub(crate) fn refined_variables(&self) -> Vec<(Free, Term)> {
+        let mut variables = BTreeMap::new();
+        for frame in self.visible_refinements() {
+            for (name, value) in frame {
+                variables.insert(*name, value.clone());
+            }
+        }
+        variables.into_iter().collect()
     }
 
     /// Whether `canonical` is itself a registered scrutinee key — checked *past* suppression. A `Var`/`Proj` key stays neutral under suppression for free (its reduct is withheld, so it does not unfold); an application key would otherwise unfold to its definition body and stop being a key. The reducer consults this to keep such a key neutral while suppressed, so a solution `solve_at_birth` commits with the live refinements suppressed stays a term the live refinement can still fire on.
