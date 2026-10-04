@@ -12,8 +12,8 @@ use {
 pub(super) type Waiting = (WireType, curios_wasm::LocalName);
 
 impl<'a> Context<'a, '_> {
-    /// The operands a builtin's checks measure, by name: what `host_call_instrs` keeps in locals as they cross.
-    pub(super) fn measured_operands(function: &ForeignFunction) -> Vec<&'static str> {
+    /// The operands a builtin's checks measure, by position in the row: what `host_call_instrs` keeps in locals as they cross.
+    pub(super) fn measured_operands(function: &ForeignFunction) -> Vec<usize> {
         let ForeignFunction::Builtin(op) = function else {
             return Vec::new();
         };
@@ -27,17 +27,23 @@ impl<'a> Context<'a, '_> {
                 Check::Piped { mode, .. } => Some(mode),
                 _ => None,
             })
+            .map(|operand| op.operand(operand))
             .collect()
     }
 
     /// Whether a reply of `function`'s needs checking at all, and so its results waiting in locals: a builtin with a status or a check, or any row with a result a wire type does not fill with every value its lane holds.
     pub(super) fn reply_checked(function: &ForeignFunction) -> bool {
-        let physical = function.signature().results.iter().any(|(_, wire_type)| {
-            matches!(
-                wire_type,
-                WireType::Bool | WireType::Byte | WireType::List(WireLeaf::Bool)
-            )
-        });
+        let physical = function
+            .signature()
+            .results
+            .types()
+            .iter()
+            .any(|wire_type| {
+                matches!(
+                    wire_type,
+                    WireType::Bool | WireType::Byte | WireType::List(WireLeaf::Bool)
+                )
+            });
 
         physical
             || match function {
@@ -64,26 +70,10 @@ impl<'a> Context<'a, '_> {
             return output;
         };
 
-        let labels = function
-            .signature()
-            .results
-            .iter()
-            .map(|(label, _)| label)
-            .collect::<Vec<_>>();
-        let field = |name: &str| {
-            let index = labels
-                .iter()
-                .position(|label| *label == name)
-                .unwrap_or_else(|| panic!("`{}` checks a field it has no `{name}` of", op.name()));
-
-            &results[index]
-        };
-        let params = &function.signature().params;
+        let field = |name: &str| &results[op.field(name)];
         let operand = |name: &str| {
-            params
-                .iter()
-                .position(|(param, _)| param == name)
-                .and_then(|index| operands[index].as_ref())
+            operands[op.operand(name)]
+                .as_ref()
                 .unwrap_or_else(|| panic!("`{}` reads `{name}`, which it did not keep", op.name()))
         };
         let payload = || results.last().expect("a row check reads a payload");

@@ -1251,6 +1251,8 @@ fn print_term_inner(term: Term) -> Printer {
             };
             print_intrinsic_call(name, vec![], args)
         }
+        // The row a declaration binds reads as the name it is bound under.
+        Subterm::ForeignRow(function) => pure(function.label().to_string()),
         Subterm::Name(name) => named(name.join()),
         // Both spell `?`: the written/desugared distinction matters to zonk's reporting, not to how the term reads.
         Subterm::Hole | Subterm::Goal => pure("?"),
@@ -1653,14 +1655,7 @@ fn print_wire_signature(signature: WireSignature) -> Printer {
     }
 
     flat([
-        listed(
-            "(",
-            params
-                .into_iter()
-                .map(|(_, type_)| print_wire_type(type_))
-                .collect(),
-            ")",
-        ),
+        listed("(", params.into_iter().map(print_wire_type).collect(), ")"),
         pure(" -> "),
         print_wire_results(&results),
     ])

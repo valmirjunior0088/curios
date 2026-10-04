@@ -61,7 +61,7 @@ fn a_monoid_deferred_recursion_gains_a_worker() {
         label: "poll".into(),
         signature: WireSignature {
             params: vec![],
-            results: WireResults::single("r".into(), WireType::Nat),
+            results: WireResults::single(WireType::Nat),
         },
     }));
     let foreign = builder.foreign(row);

@@ -130,10 +130,10 @@ fn shared() -> Option<PathBuf> {
 /// What version of the verdict family's layout a key names.
 ///
 /// In the key rather than in a file beside it, so an entry written by an older layout is not found rather than found and misread. Bump it whenever what a slot holds, or what a hit is verified against, changes.
-const SCHEMA: &str = "u18";
+const SCHEMA: &str = "u19";
 
 /// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
-const PAYLOAD_SCHEMA: &str = "p5";
+const PAYLOAD_SCHEMA: &str = "p6";
 
 /// The slot a unit compiled by `compiler`, after `predecessors`, claiming `mounts` and declaring `declared`, is filed under.
 ///

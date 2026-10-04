@@ -148,57 +148,81 @@ impl From<WireReference> for WireType {
     }
 }
 
-/// The named results of one foreign function, in the order they cross, a scalar or a reference in whatever slot the row gives it.
+/// The results of one foreign function, in the order they cross, a scalar or a reference in whatever slot the row gives it.
 ///
-/// The count fixes the guest-facing shape, as [`ResultShape`] states. Where a reference stands is no constraint on anyone: the guest waits a row's results out in locals and embeds each reference where it stands, and the runtime lowers each result into its own slot; `README.md` states the decision and what it rejected.
+/// The count fixes the guest-facing shape, as [`ResultShape`] states, and a result is labelled only where that shape reads a label: the fields of a record. One result crosses bare, so a name for it is nothing the wire carries — a builtin's is its row's, which a check reads it by ([`HostOp::fields`]), and a declared row writes none. Where a reference stands is no constraint on anyone: the guest waits a row's results out in locals and embeds each reference where it stands, and the runtime lowers each result into its own slot; `README.md` states the decision and what it rejected.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct WireResults {
-    results: Vec<(String, WireType)>,
+    slots: Slots,
+}
+
+/// The results as their count shapes them, so no label stands where nothing reads one.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+enum Slots {
+    None,
+    Single(WireType),
+    Record(Vec<(String, WireType)>),
 }
 
 impl WireResults {
     /// No results: the unit value.
     pub fn none() -> Self {
+        Self { slots: Slots::None }
+    }
+
+    /// One result of any wire type, forwarded through as itself — a user `foreign` declaration's bare result, well-formed whatever the type.
+    pub fn single(wire_type: WireType) -> Self {
         Self {
-            results: Vec::new(),
+            slots: Slots::Single(wire_type),
         }
     }
 
-    /// One result of any wire type — a user `foreign` declaration's shape, well-formed whatever the type.
-    pub fn single(label: String, wire_type: WireType) -> Self {
-        Self::of(vec![(label, wire_type)])
-    }
+    /// `slots` in the order they cross, shaped by their count: none is the unit value, one crosses bare and leaves its label with whoever wrote it, and two or more are the record of the fields they name.
+    pub fn of(mut slots: Vec<(String, WireType)>) -> Self {
+        let slots = match slots.len() {
+            0 => Slots::None,
+            1 => Slots::Single(slots.remove(0).1),
+            _ => Slots::Record(slots),
+        };
 
-    /// `results`, labelled, in the order they cross.
-    pub fn of(results: Vec<(String, WireType)>) -> Self {
-        Self { results }
+        Self { slots }
     }
 
     /// How many results cross — the count the guest-facing shape is read off.
     pub fn len(&self) -> usize {
-        self.results.len()
+        match &self.slots {
+            Slots::None => 0,
+            Slots::Single(_) => 1,
+            Slots::Record(fields) => fields.len(),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.results.is_empty()
+        matches!(self.slots, Slots::None)
     }
 
-    /// Every result by label and wire type, in the order they cross.
-    pub fn iter(&self) -> impl Iterator<Item = (&str, WireType)> + '_ {
-        self.results
-            .iter()
-            .map(|(label, wire_type)| (label.as_str(), *wire_type))
+    /// Every result's wire type, in the order they cross.
+    pub fn types(&self) -> Vec<WireType> {
+        match &self.slots {
+            Slots::None => Vec::new(),
+            Slots::Single(wire_type) => vec![*wire_type],
+            Slots::Record(fields) => fields.iter().map(|(_, wire_type)| *wire_type).collect(),
+        }
     }
 
     /// The shape the guest sees these results in, read off their count — the one statement of the arity rule the prelude's declaration, the elaborator's and the kernel's types are all built from.
     pub fn shape(&self) -> ResultShape<'_> {
-        let mut results = self.iter();
-
-        match (results.next(), results.next()) {
-            (None, _) => ResultShape::Unit,
-            (Some((_, wire_type)), None) => ResultShape::Single(wire_type),
-            (Some(_), Some(_)) => ResultShape::Record(self.iter().collect()),
+        match &self.slots {
+            Slots::None => ResultShape::Unit,
+            Slots::Single(wire_type) => ResultShape::Single(*wire_type),
+            Slots::Record(fields) => ResultShape::Record(
+                fields
+                    .iter()
+                    .map(|(label, wire_type)| (label.as_str(), *wire_type))
+                    .collect(),
+            ),
         }
     }
 }
@@ -211,11 +235,11 @@ pub enum ResultShape<'a> {
     Record(Vec<(&'a str, WireType)>),
 }
 
-/// The signature of one foreign function: named operands and named results, the results shaped as [`WireResults`] states.
+/// The signature of one foreign function: what crosses. Each operand is its wire type, in order, and the results are shaped as [`WireResults`] states. An operand has no name here: a builtin's is its row's, which a requirement or a check reads it by ([`HostOp::operands`]), and a declared row's operands are positions.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct WireSignature {
-    pub params: Vec<(String, WireType)>,
+    pub params: Vec<WireType>,
     pub results: WireResults,
 }
 

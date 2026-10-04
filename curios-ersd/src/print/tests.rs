@@ -424,7 +424,7 @@ fn an_unreached_schema_or_foreign_row_is_not_declared() {
         label: "beep".into(),
         signature: WireSignature {
             params: vec![],
-            results: WireResults::single("r".into(), WireType::Nat),
+            results: WireResults::single(WireType::Nat),
         },
     })));
 

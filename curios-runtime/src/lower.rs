@@ -338,7 +338,7 @@ impl<R: WireReply, const N: usize> Replied<R, N> {
 impl<R: WireReply, const N: usize> Lower for Replied<R, N> {
     fn shape() -> Vec<WireType> {
         R::results("value")
-            .iter()
+            .into_iter()
             .map(|(_, wire_type)| wire_type)
             .collect()
     }

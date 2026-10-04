@@ -364,3 +364,21 @@ fn an_unnamed_member_is_reached_by_no_name() {
         "got: {field}"
     );
 }
+
+// A `foreign` declaration writes no operand name, so its type has none: the row is bound as the function of its operands, and a report spells the type as the declaration did.
+#[test]
+fn a_foreign_declarations_operands_have_no_names() {
+    let message = error(
+        r#"
+        use /std/{Nat, Bytes, Str, print};
+        foreign frobnicate: (Nat, Bytes) -> Nat;
+        let f: Str = frobnicate;
+        print("no")
+        "#,
+    );
+
+    assert!(
+        message.contains("inferred: (Nat, Bytes) -> /std/Io(Nat)"),
+        "got: {message}"
+    );
+}

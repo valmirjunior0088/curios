@@ -32,8 +32,8 @@ fn a_byte_result_past_255_is_refused_as_a_host_reply() {
         name: "/flip".to_string(),
         label: "flip".to_string(),
         signature: WireSignature {
-            params: vec![("b".to_string(), WireType::Byte)],
-            results: WireResults::single("flipped".to_string(), WireType::Byte),
+            params: vec![WireType::Byte],
+            results: WireResults::single(WireType::Byte),
         },
     }));
 

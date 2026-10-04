@@ -9,7 +9,7 @@ use {
         Decl, applied, bin, bool_, branch, byte, flt, handle, int, intrinsic, io_of, lambda,
         list_of, name, nat, nat_lit, project, record, sys_op, tuple, type_, unit,
     },
-    crate::{Doc, Intrinsic, LetSignature, Subterm, Term, TopForeign},
+    crate::{Doc, FuncType, FuncTypeParam, Intrinsic, LetSignature, Subterm, Term, TopForeign},
     curios_abi::{
         Check, DeclaredForeign, ForeignFunction, ForeignStore, Outcome, ResultShape, WireType,
         status, stdio_mode,
@@ -34,18 +34,41 @@ fn wire_type(type_: &WireType) -> Term {
     }
 }
 
+/// The surface type of a function over `domains`, none of them named, as a declaration that writes no operand name states it.
+fn function_over(domains: Vec<Term>, output: Term) -> Term {
+    Subterm::FuncType(FuncType {
+        params: domains
+            .into_iter()
+            .map(|type_| FuncTypeParam {
+                plicity: Plicity::Explicit,
+                label: None,
+                type_,
+            })
+            .collect(),
+        output,
+    })
+    .into()
+}
+
 /// The guest's reading of a builtin row's outcome: the type a `/sys` declaration answers and the body that answers it, from the row's raw result type and its raw call. The call is bound with `/sys/Io/bind` and answered with `/sys/Io/pure`, called as any caller calls them rather than built inline from their intrinsics — an inline bind leaves a description the erased optimizer cannot fold, and every dead top-level value holding one, `/std/Tui/Session/enter` among them, then survives pruning into every program. The status is read before anything else, so a payload is projected only under the status that makes it one — `Result(Nat, T)` for a fallible row, `ok` a success and every other status the failure it names; `Result(Nat, Option(T))` for a stream, `eof` its end; and `Option(T)` for a lookup, `not_found` its absence. `T` is the payload the status stands beside: `{}` for none, the one value, or the record of several. A field a `Piped` check governs is an `Option` decided by the mode operand the check names — present exactly when the call asked for a pipe, which the check holds the host to — so its token is never what decides it. A row whose outcome needs no reading — one that returns, and every declared row — answers its raw call.
 fn adapted(function: &ForeignFunction, raw: Term, call: Term) -> (Term, Term) {
-    let outcome = match function {
-        ForeignFunction::Builtin(op) => op.outcome(),
-        ForeignFunction::Declared(_) => Outcome::Returns,
+    let op = match function {
+        ForeignFunction::Builtin(op)
+            if !matches!(op.outcome(), Outcome::Returns | Outcome::Diverges) =>
+        {
+            *op
+        }
+        _ => return (io_of(raw), call),
     };
+    let outcome = op.outcome();
 
-    if matches!(outcome, Outcome::Returns | Outcome::Diverges) {
-        return (io_of(raw), call);
-    }
-
-    let results = function.signature().results.iter().collect::<Vec<_>>();
+    // Each slot under the label the row reads it by: the status first, then the payload's.
+    let results = op
+        .fields()
+        .iter()
+        .map(String::as_str)
+        .zip(op.signature().results.types())
+        .collect::<Vec<_>>();
     let ((label, _), payload) = results
         .split_first()
         .expect("a row with a status answers one");
@@ -145,7 +168,7 @@ fn adapted(function: &ForeignFunction, raw: Term, call: Term) -> (Term, Term) {
     (io_of(answer), body)
 }
 
-/// A host-function declaration generated from a foreign-store row: parameter names/types and the raw result shape (unit, bare type, named record) come off the `WireSignature`, and the body bakes the generic `Foreign` intrinsic applied to the parameter names, read through [`adapted`]. Used both for the builtin store's rows (always `pub`) and, via [`foreign_signature`], for a user's own `foreign` declaration (`vis_pub` follows what they wrote).
+/// A host-function declaration generated from a foreign-store row: the parameter types and the raw result shape (unit, bare type, named record) come off the `WireSignature`. A builtin's parameters are named as its row names its operands, and the body bakes the generic `Foreign` call over those names, read through [`adapted`]. A user's own `foreign` declaration writes no operand name, so it binds the row itself, at the function type its operands and result state ([`Subterm::ForeignRow`]). Used both for the builtin store's rows (always `pub`) and, via [`foreign_signature`], for a user's own (`vis_pub` follows what they wrote).
 ///
 /// The result is an `Io`, and this one site is what makes that true of every row the store describes — a user's own `foreign` declaration included, since a call across the wire is a host effect whoever declared it. The wire contract does not move: `curios-abi` describes the same shapes, and only the guest-facing type is read out of them, so `/sys/Handle/read` answers `Io(Result(Nat, Option(Bytes)))` where the wire carries `{status: Nat, bytes: Bytes}`.
 ///
@@ -171,6 +194,28 @@ pub(super) fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> Decl {
                 .collect(),
         ),
     };
+    // A declared row's operands have no names, so no call over them can be written here: the declaration binds the row as the function the lowering opens, at the type this states.
+    let ForeignFunction::Builtin(op) = &**function else {
+        let (output, body) = adapted(
+            function,
+            result,
+            Subterm::ForeignRow(Arc::clone(function)).into(),
+        );
+
+        return Decl {
+            doc,
+            vis_pub,
+            label: function.label().to_string(),
+            params: Vec::new(),
+            output: match signature.params.is_empty() {
+                true => output,
+                false => function_over(signature.params.iter().map(wire_type).collect(), output),
+            },
+            body,
+        };
+    };
+    let operands = op.operands();
+
     // A diverging row takes the type its description yields as an implicit operand ahead of its wire parameters, so an exiting arm ends a region of any type — sound because `Io` has no eliminator, and an inhabitant of `Io(False)` proves nothing.
     let yielded = function
         .diverges()
@@ -180,7 +225,7 @@ pub(super) fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> Decl {
         yielded
             .iter()
             .map(|(_, param, _)| name(param))
-            .chain(signature.params.iter().map(|(param, _)| name(param)))
+            .chain(operands.iter().map(|operand| name(operand)))
             .collect(),
     ));
     let (output, body) = match yielded {
@@ -195,10 +240,12 @@ pub(super) fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> Decl {
         params: yielded
             .into_iter()
             .chain(
-                signature
-                    .params
+                operands
                     .iter()
-                    .map(|(param, type_)| (Plicity::Explicit, param.clone(), wire_type(type_))),
+                    .zip(&signature.params)
+                    .map(|(operand, type_)| {
+                        (Plicity::Explicit, operand.to_string(), wire_type(type_))
+                    }),
             )
             .collect(),
         output,

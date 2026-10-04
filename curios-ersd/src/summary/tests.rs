@@ -22,7 +22,7 @@ fn a_self_recursive_function_that(total: bool, effectful: bool) -> Module {
             label: "beep".into(),
             signature: WireSignature {
                 params: vec![],
-                results: WireResults::single("r".into(), WireType::Nat),
+                results: WireResults::single(WireType::Nat),
             },
         }));
         let foreign = builder.foreign(row);

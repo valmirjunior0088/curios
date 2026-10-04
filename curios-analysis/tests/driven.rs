@@ -686,7 +686,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
                 label: "planted".to_string(),
                 signature: WireSignature {
                     params: Vec::new(),
-                    results: WireResults::single("value".to_string(), WireType::Nat),
+                    results: WireResults::single(WireType::Nat),
                 },
             }));
             Term::foreign(row, vec![markers.visited()])

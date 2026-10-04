@@ -18,8 +18,8 @@ fn doubling() -> ForeignBindings {
         name: "/double".to_string(),
         label: "double".to_string(),
         signature: WireSignature {
-            params: vec![("x".to_string(), WireType::Nat)],
-            results: WireResults::single("value".to_string(), WireType::Nat),
+            params: vec![WireType::Nat],
+            results: WireResults::single(WireType::Nat),
         },
     }));
 
@@ -60,8 +60,8 @@ fn a_bits_row_is_read_by_the_bytes_codec() {
         name: "/echo".to_string(),
         label: "echo".to_string(),
         signature: WireSignature {
-            params: vec![("runs".to_string(), WireType::List(WireLeaf::Bits))],
-            results: WireResults::single("value".to_string(), WireType::List(WireLeaf::Bits)),
+            params: vec![WireType::List(WireLeaf::Bits)],
+            results: WireResults::single(WireType::List(WireLeaf::Bits)),
         },
     }));
 

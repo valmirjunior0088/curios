@@ -111,14 +111,19 @@ fn ops_rows_name_a_subject() {
 fn result_records_keep_their_labels() {
     let store = host_ops();
     let labels = |name: &str| -> Vec<String> {
-        store
+        match store
             .get(name)
             .unwrap_or_else(|| panic!("host_ops lacks {name}"))
             .signature()
             .results
-            .iter()
-            .map(|(label, _)| label.to_string())
-            .collect()
+            .shape()
+        {
+            ResultShape::Record(fields) => fields
+                .into_iter()
+                .map(|(label, _)| label.to_string())
+                .collect(),
+            _ => Vec::new(),
+        }
     };
 
     assert_eq!(labels("handle_read"), ["status", "bytes"]);
@@ -149,34 +154,44 @@ fn result_records_keep_their_labels() {
     assert_eq!(labels("proc_wait"), ["status", "code", "signal"]);
 }
 
-/// Every signature is well-formed: single results ride a name too (the guest type is the bare wire type, but the printer uses the label), and parameter names are unique within a signature. Nothing asserts that `List` does not nest — [`WireLeaf`](super::WireLeaf) makes it unrepresentable.
+/// Every row is well-formed: it names each operand once, since a requirement or a check finds an operand by its name, and its names stand beside what crosses — one per operand, one per result, a record's fields under the labels the row reads them by.
 #[test]
-fn signatures_are_well_formed() {
-    for function in host_ops().iter() {
-        let signature = function.signature();
+fn rows_are_well_formed() {
+    for &op in HostOp::ALL {
+        let signature = op.signature();
+        let names: BTreeSet<_> = op.operands().iter().collect();
 
-        let params: BTreeSet<_> = signature.params.iter().map(|(name, _)| name).collect();
         assert_eq!(
-            params.len(),
-            signature.params.len(),
-            "{} repeats a parameter name",
-            function.name()
+            names.len(),
+            op.operands().len(),
+            "{} repeats an operand name",
+            op.name()
         );
+        assert_eq!(op.operands().len(), signature.params.len(), "{op:?}");
+        assert_eq!(op.fields().len(), signature.results.len(), "{op:?}");
+
+        if let ResultShape::Record(fields) = signature.results.shape() {
+            assert_eq!(
+                fields.iter().map(|(label, _)| *label).collect::<Vec<_>>(),
+                op.fields(),
+                "{op:?}"
+            );
+        }
     }
 }
 
 /// Results cross in the order they are written, whatever their shapes: a single result of any type, a row's status before its payload, and references in any slot — two of them, or one before a scalar — each read back where it stands.
 #[test]
 fn results_cross_in_the_order_they_are_written() {
-    let single = WireResults::single("_".to_string(), WireType::Bytes);
+    let single = WireResults::single(WireType::Bytes);
     assert_eq!(single.len(), 1);
-    assert_eq!(single.iter().collect::<Vec<_>>(), [("_", WireType::Bytes)]);
+    assert_eq!(single.types(), [WireType::Bytes]);
 
     let store = host_ops();
     let read = store.get("handle_read").expect("host_ops defines read");
     assert_eq!(
-        read.signature().results.iter().collect::<Vec<_>>(),
-        [("status", WireType::Nat), ("bytes", WireType::Bytes)]
+        read.signature().results.types(),
+        [WireType::Nat, WireType::Bytes]
     );
 
     let written = [
@@ -186,11 +201,11 @@ fn results_cross_in_the_order_they_are_written() {
     ];
     let mixed = WireResults::of(written.to_vec());
     assert_eq!(
-        mixed.iter().collect::<Vec<_>>(),
+        mixed.types(),
         [
-            ("head", WireType::Bytes),
-            ("count", WireType::Nat),
-            ("rest", WireType::List(WireLeaf::Bytes)),
+            WireType::Bytes,
+            WireType::Nat,
+            WireType::List(WireLeaf::Bytes),
         ]
     );
 }
@@ -306,7 +321,8 @@ fn exit_is_the_one_row_that_diverges() {
     );
 
     let exit = diverging[0].signature();
-    assert_eq!(exit.params, [("code".to_string(), WireType::Byte)]);
+    assert_eq!(exit.params, [WireType::Byte]);
+    assert_eq!(diverging[0].operands(), ["code"]);
     assert!(exit.results.is_empty());
     assert!(!HostOp::HandleClose.diverges());
 }
@@ -344,28 +360,14 @@ fn every_check_reads_what_its_row_has() {
 
     for &op in HostOp::ALL {
         let signature = op.signature();
-        let operand = |name: &str| {
-            signature
-                .params
-                .iter()
-                .find(|(param, _)| param == name)
-                .map(|(_, wire_type)| *wire_type)
-                .unwrap_or_else(|| panic!("{op:?} checks an operand `{name}` it does not take"))
-        };
-        let result = |name: &str| {
-            signature
-                .results
-                .iter()
-                .find(|(label, _)| *label == name)
-                .map(|(_, wire_type)| wire_type)
-                .unwrap_or_else(|| panic!("{op:?} checks a field `{name}` it does not answer"))
-        };
+        let results = signature.results.types();
+        let operand = |name: &str| signature.params[op.operand(name)];
+        let result = |name: &str| results[op.field(name)];
         // A row's own checks read its one payload: every result but the status.
         let payload = || {
-            let mut results = signature.results.iter().map(|(_, wire_type)| wire_type);
             let payload = match op.outcome() {
-                Outcome::Returns => results.collect::<Vec<_>>(),
-                _ => results.by_ref().skip(1).collect(),
+                Outcome::Returns => &results[..],
+                _ => &results[1..],
             };
             assert_eq!(payload.len(), 1, "{op:?} checks a payload of one value");
             payload[0]

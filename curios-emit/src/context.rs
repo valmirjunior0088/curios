@@ -857,12 +857,12 @@ impl<'a, 'b> Context<'a, 'b> {
         vec![curios_wasm::Instr::Call { func_name: embed }]
     }
 
-    /// Load `operands` at their wire types, force each reference to its flat payload, and call `function`'s import — the half of a host call that does not depend on whether it returns. The operands named in `kept` are also left in locals as they cross, at their row positions, for the checks of the reply that read them.
+    /// Load `operands` at their wire types, force each reference to its flat payload, and call `function`'s import — the half of a host call that does not depend on whether it returns. The operands at the row positions in `kept` are also left in locals as they cross, for the checks of the reply that read them.
     fn host_call_instrs(
         &mut self,
         function: &Arc<ForeignFunction>,
         operands: &'a [EmissionValueName],
-        kept: &[&str],
+        kept: &[usize],
     ) -> (Vec<curios_wasm::Instr>, Vec<Option<Waiting>>) {
         let signature = function.signature();
 
@@ -875,11 +875,11 @@ impl<'a, 'b> Context<'a, 'b> {
 
         let mut output = Vec::new();
         let mut waiting = Vec::with_capacity(operands.len());
-        for (operand, (name, wire_type)) in operands.iter().zip(&signature.params) {
+        for (position, (operand, wire_type)) in operands.iter().zip(&signature.params).enumerate() {
             output.extend(self.load_value_instrs(operand, wire_type.into()));
             output.extend(self.wire_force_instrs(wire_type));
 
-            waiting.push(kept.contains(&name.as_str()).then(|| {
+            waiting.push(kept.contains(&position).then(|| {
                 let val_type = nullable(self.table().wire_type(wire_type));
                 let local = self.push_local("operand", val_type);
 
@@ -917,11 +917,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 output.extend(call);
 
                 // A scalar result crosses as the number it is and is boxed here, where every box is this crate's to build (see `Table::wire_type`), and a reference crosses as a flat payload and is embedded back into a rope. Both work on the top of the stack only, so a row with a result to box, a reference below the top, or a reply to check — a check reads its values before any is boxed — waits its results out in locals of their own and brings them back in order, boxing or embedding each where it stands. A row with none of those at most embeds its last result, which is already on top.
-                let results = signature
-                    .results
-                    .iter()
-                    .map(|(_, wire_type)| wire_type)
-                    .collect::<Vec<_>>();
+                let results = signature.results.types();
                 let reference = |wire_type: &WireType| match wire_type.shape() {
                     WireShape::Reference(reference) => Some(reference),
                     WireShape::Scalar(_) => None,

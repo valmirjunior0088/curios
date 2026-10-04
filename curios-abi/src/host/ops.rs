@@ -14,7 +14,8 @@ use {
     super::{
         Check, ChildExit, ChildHandles, Failure, FileStat, ForeignFunction, ForeignStore, Handle,
         Mark, Mode, Outcome, Poll, Refusal, Requirement, SerialFlow, SerialOp, SerialParity,
-        StdioMode, Termination, Timestamp, TtySize, WireOperand, WireReply, WireSignature,
+        StdioMode, Termination, Timestamp, TtySize, WireOperand, WireReply, WireResults,
+        WireSignature,
     },
     std::sync::LazyLock,
 };
@@ -185,14 +186,18 @@ macro_rules! declare_host_rows {
                     // The row's own checks, which read its operands by name, then its reply type's.
                     let mut checks = vec![$($(Check::$check $({ $($check_field: stringify!($check_operand)),* })?),*)?];
                     checks.extend(<$r as WireReply>::checks(label));
+                    // The reply's slots under their labels. The row keeps every label, for the checks that read a field by one; the wire keeps a record's, which are the type the guest projects.
+                    let slots = <$r as WireReply>::results(label);
 
                     Row {
                         name: stringify!($name),
                         subject: stringify!($subject),
                         label: stringify!($label),
+                        operands: vec![$(stringify!($p)),*],
+                        fields: slots.iter().map(|(field, _)| field.clone()).collect(),
                         signature: WireSignature {
-                            params: vec![$((stringify!($p).to_string(), <$t as WireOperand>::WIRE)),*],
-                            results: <$r as WireReply>::results(label),
+                            params: vec![$(<$t as WireOperand>::WIRE),*],
+                            results: WireResults::of(slots),
                         },
                         outcome: <$r as WireReply>::OUTCOME,
                         blocks: marks.contains(&Mark::Blocks),
@@ -222,6 +227,8 @@ struct Row {
     name: &'static str,
     subject: &'static str,
     label: &'static str,
+    operands: Vec<&'static str>,
+    fields: Vec<String>,
     signature: WireSignature,
     outcome: Outcome,
     blocks: bool,
@@ -256,9 +263,45 @@ impl HostOp {
         self.row().label
     }
 
-    /// The row's operands and results.
+    /// The row's operands and results, as they cross.
     pub fn signature(self) -> &'static WireSignature {
         &self.row().signature
+    }
+
+    /// The name each operand is written under, in the order they cross: what the row's requirements and checks read an operand by, and what `/sys` declares its parameters as.
+    pub fn operands(self) -> &'static [&'static str] {
+        &self.row().operands
+    }
+
+    /// The position of the operand the row names `name`: the one lookup every reader of a requirement or a check makes.
+    pub fn operand(self, name: &str) -> usize {
+        self.operands()
+            .iter()
+            .position(|operand| *operand == name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "`{}` reads an operand `{name}` it does not take",
+                    self.name()
+                )
+            })
+    }
+
+    /// The label each result slot is read under, in the order they cross: a record's are the fields the guest projects, and a lone result's is the row's alone, since one result crosses bare.
+    pub fn fields(self) -> &'static [String] {
+        &self.row().fields
+    }
+
+    /// The position of the result slot the row labels `name`.
+    pub fn field(self, name: &str) -> usize {
+        self.fields()
+            .iter()
+            .position(|field| field == name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "`{}` checks a field `{name}` it does not answer",
+                    self.name()
+                )
+            })
     }
 
     /// What the row's reply promises, read off its type.

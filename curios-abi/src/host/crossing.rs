@@ -8,7 +8,7 @@ use {
     super::{
         Check, ChildExit, ChildHandles, ClosedCode, Failure, FileKind, FileStat, Handle, Mode,
         Poll, Refusal, SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp,
-        TtySize, WireLeaf, WireResults, WireType,
+        TtySize, WireLeaf, WireType,
     },
     crate::status,
 };
@@ -389,8 +389,8 @@ impl WirePayload for ChildHandles {
 pub trait WireReply: Sized {
     const OUTCOME: Outcome;
 
-    /// The result slots, a lone payload's labelled `label`.
-    fn results(label: &'static str) -> WireResults;
+    /// The result slots, each under its label, a lone payload's labelled `label`.
+    fn results(label: &'static str) -> Vec<(String, WireType)>;
 
     /// The checks a success answers to by its payload's type, a lone payload's slot labelled `label`.
     fn checks(label: &'static str) -> Vec<Check>;
@@ -399,13 +399,11 @@ pub trait WireReply: Sized {
 }
 
 /// The slots a reply crosses with that carries a status: the status first, then the payload's.
-fn with_status<T: WirePayload>(label: &'static str) -> WireResults {
-    WireResults::of(
-        [("status".to_string(), WireType::Nat)]
-            .into_iter()
-            .chain(T::slots(label))
-            .collect(),
-    )
+fn with_status<T: WirePayload>(label: &'static str) -> Vec<(String, WireType)> {
+    [("status".to_string(), WireType::Nat)]
+        .into_iter()
+        .chain(T::slots(label))
+        .collect()
 }
 
 /// A status, then either the payload or its padding.
@@ -423,8 +421,8 @@ fn with_payload<T: WirePayload>(status: u64, payload: Option<T>) -> Encoded {
 impl<T: WirePayload> WireReply for T {
     const OUTCOME: Outcome = Outcome::Returns;
 
-    fn results(label: &'static str) -> WireResults {
-        WireResults::of(T::slots(label))
+    fn results(label: &'static str) -> Vec<(String, WireType)> {
+        T::slots(label)
     }
 
     fn checks(label: &'static str) -> Vec<Check> {
@@ -442,7 +440,7 @@ impl<T: WirePayload> WireReply for T {
 impl<T: WirePayload> WireReply for Result<T, Failure> {
     const OUTCOME: Outcome = Outcome::Fallible;
 
-    fn results(label: &'static str) -> WireResults {
+    fn results(label: &'static str) -> Vec<(String, WireType)> {
         with_status::<T>(label)
     }
 
@@ -462,7 +460,7 @@ impl<T: WirePayload> WireReply for Result<T, Failure> {
 impl<T: WirePayload> WireReply for Result<Option<T>, Failure> {
     const OUTCOME: Outcome = Outcome::Stream;
 
-    fn results(label: &'static str) -> WireResults {
+    fn results(label: &'static str) -> Vec<(String, WireType)> {
         with_status::<T>(label)
     }
 
@@ -483,7 +481,7 @@ impl<T: WirePayload> WireReply for Result<Option<T>, Failure> {
 impl<T: WirePayload> WireReply for Option<T> {
     const OUTCOME: Outcome = Outcome::Lookup;
 
-    fn results(label: &'static str) -> WireResults {
+    fn results(label: &'static str) -> Vec<(String, WireType)> {
         with_status::<T>(label)
     }
 
@@ -503,8 +501,8 @@ impl<T: WirePayload> WireReply for Option<T> {
 impl<T: WirePayload> WireReply for Result<T, Refusal> {
     const OUTCOME: Outcome = Outcome::Returns;
 
-    fn results(label: &'static str) -> WireResults {
-        WireResults::of(T::slots(label))
+    fn results(label: &'static str) -> Vec<(String, WireType)> {
+        T::slots(label)
     }
 
     fn checks(label: &'static str) -> Vec<Check> {
@@ -523,8 +521,8 @@ impl<T: WirePayload> WireReply for Result<T, Refusal> {
 impl WireReply for Termination {
     const OUTCOME: Outcome = Outcome::Diverges;
 
-    fn results(_: &'static str) -> WireResults {
-        WireResults::none()
+    fn results(_: &'static str) -> Vec<(String, WireType)> {
+        Vec::new()
     }
 
     fn checks(_: &'static str) -> Vec<Check> {

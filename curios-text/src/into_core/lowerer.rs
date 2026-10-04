@@ -365,6 +365,28 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     .map(|arg| self.term(arg))
                     .collect::<Result<_, _>>()?,
             ),
+            // The row as the function of its operands: one binder for each, with no name, in the row's order. A row that takes none is the call itself, a description being a constant already.
+            Subterm::ForeignRow(function) => {
+                let params = &function.signature().params;
+                let binders = self.mint(params.iter().map(|_| String::new()));
+                let call = curios_core::Term::foreign(
+                    Arc::clone(function),
+                    binders
+                        .iter()
+                        .map(|(_, binder)| curios_core::Term::free_var(binder))
+                        .collect(),
+                );
+
+                match binders.is_empty() {
+                    true => call,
+                    false => curios_core::Term::func(
+                        binders.iter().zip(params).map(|((_, binder), wire_type)| {
+                            (*binder, curios_core::wire_term(wire_type))
+                        }),
+                        call,
+                    ),
+                }
+            }
             Subterm::NumLit(num_lit) => {
                 curios_core::Term::num_lit(num_lit.magnitude.clone(), num_lit.sign)
             }

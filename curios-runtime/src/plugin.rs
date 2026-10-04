@@ -210,7 +210,7 @@ fn define_row(
     let params = signature
         .params
         .iter()
-        .map(|(_, wire)| crossing(*wire, subject, &declaration))
+        .map(|wire| crossing(*wire, subject, &declaration))
         .collect::<Result<Vec<_>, _>>()?;
 
     let result = match signature.results.shape() {

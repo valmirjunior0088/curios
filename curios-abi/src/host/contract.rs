@@ -80,7 +80,7 @@ impl HostOp {
             match *requirement {
                 Requirement::SameLength { a, b } => {
                     let (a_length, b_length) =
-                        (self.operand(operands, a), self.operand(operands, b));
+                        (self.measure(operands, a), self.measure(operands, b));
 
                     if a_length != b_length {
                         return Err(format!(
@@ -96,7 +96,7 @@ impl HostOp {
 
     /// Refuse a reply outside the row's contract: a status it cannot answer, or a success whose values break a check. `values` are the reply's in slot order and `operands` the call's measures, as [`admit`](Self::admit) read them.
     pub fn check_reply(self, values: &[WireValue], operands: &[Option<u64>]) -> Result<(), String> {
-        let labels = self.signature().results.iter().map(|(label, _)| label);
+        let labels = self.fields().iter().map(String::as_str);
         let mut fields = labels.zip(values).collect::<Vec<_>>();
 
         match self.outcome() {
@@ -135,7 +135,7 @@ impl HostOp {
         for check in self.checks() {
             match *check {
                 Check::Progress { request } => {
-                    let (length, request) = (length(payload()), self.operand(operands, request));
+                    let (length, request) = (length(payload()), self.measure(operands, request));
 
                     if (request > 0 && !(1..=request).contains(&length))
                         || (request == 0 && length > 0)
@@ -146,7 +146,7 @@ impl HostOp {
                     }
                 }
                 Check::Accepted { buffer } => {
-                    let (accepted, offered) = (nat(payload()), self.operand(operands, buffer));
+                    let (accepted, offered) = (nat(payload()), self.measure(operands, buffer));
 
                     if (offered > 0 && !(1..=offered).contains(&accepted))
                         || (offered == 0 && accepted > 0)
@@ -155,7 +155,7 @@ impl HostOp {
                     }
                 }
                 Check::Exact { request } => {
-                    let (length, request) = (length(payload()), self.operand(operands, request));
+                    let (length, request) = (length(payload()), self.measure(operands, request));
 
                     if length != request {
                         return Err(format!(
@@ -164,7 +164,7 @@ impl HostOp {
                     }
                 }
                 Check::Parallel { list } => {
-                    let (length, expected) = (length(payload()), self.operand(operands, list));
+                    let (length, expected) = (length(payload()), self.measure(operands, list));
 
                     if length != expected {
                         return Err(format!(
@@ -173,7 +173,7 @@ impl HostOp {
                     }
                 }
                 Check::Piped { field: name, mode } => {
-                    let piped = self.operand(operands, mode) == stdio_mode::PIPE;
+                    let piped = self.measure(operands, mode) == stdio_mode::PIPE;
 
                     if let WireValue::Handle(handle) = field(name)
                         && handle.is_none() == piped
@@ -255,18 +255,13 @@ impl HostOp {
     }
 
     /// The measure of the operand the row names `name`.
-    fn operand(self, operands: &[Option<u64>], name: &str) -> u64 {
-        self.signature()
-            .params
-            .iter()
-            .position(|(param, _)| param == name)
-            .and_then(|index| operands[index])
-            .unwrap_or_else(|| {
-                panic!(
-                    "`{}` reads `{name}`, which it has no measure of",
-                    self.name()
-                )
-            })
+    fn measure(self, operands: &[Option<u64>], name: &str) -> u64 {
+        operands[self.operand(name)].unwrap_or_else(|| {
+            panic!(
+                "`{}` reads `{name}`, which it has no measure of",
+                self.name()
+            )
+        })
     }
 }
 

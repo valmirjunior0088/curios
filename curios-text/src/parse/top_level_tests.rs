@@ -88,11 +88,8 @@ fn top_foreign_without_pub() {
             vis_pub: false,
             label: "frobnicate".into(),
             signature: WireSignature {
-                params: vec![
-                    ("a0".to_string(), WireType::Nat),
-                    ("a1".to_string(), WireType::Bytes)
-                ],
-                results: WireResults::single("_".to_string(), WireType::Nat),
+                params: vec![WireType::Nat, WireType::Bytes],
+                results: WireResults::single(WireType::Nat),
             },
         })]
     );
@@ -110,11 +107,8 @@ fn top_foreign_with_pub() {
             vis_pub: true,
             label: "frobnicate".into(),
             signature: WireSignature {
-                params: vec![
-                    ("a0".to_string(), WireType::Nat),
-                    ("a1".to_string(), WireType::Bytes)
-                ],
-                results: WireResults::single("_".to_string(), WireType::Nat),
+                params: vec![WireType::Nat, WireType::Bytes],
+                results: WireResults::single(WireType::Nat),
             },
         })]
     );
@@ -130,7 +124,7 @@ fn top_foreign_zero_arg() {
             label: "clock".into(),
             signature: WireSignature {
                 params: vec![],
-                results: WireResults::single("_".to_string(), WireType::Nat),
+                results: WireResults::single(WireType::Nat),
             },
         })]
     );
@@ -149,7 +143,7 @@ fn top_foreign_takes_no_result() {
             vis_pub: false,
             label: "close".into(),
             signature: WireSignature {
-                params: vec![("a0".to_string(), WireType::Handle)],
+                params: vec![WireType::Handle],
                 results: WireResults::none(),
             },
         })]
@@ -169,10 +163,7 @@ fn top_foreign_takes_a_tuple_of_results() {
             vis_pub: false,
             label: "read".into(),
             signature: WireSignature {
-                params: vec![
-                    ("a0".to_string(), WireType::Handle),
-                    ("a1".to_string(), WireType::Nat)
-                ],
+                params: vec![WireType::Handle, WireType::Nat],
                 results: WireResults::of(vec![
                     ("status".to_string(), WireType::Nat),
                     ("bytes".to_string(), WireType::Bytes),
@@ -209,7 +200,7 @@ fn top_foreign_keeps_references_in_the_slots_written() {
             vis_pub: false,
             label: "f".into(),
             signature: WireSignature {
-                params: vec![("a0".to_string(), WireType::Nat)],
+                params: vec![WireType::Nat],
                 results: WireResults::of(vec![
                     ("bytes".to_string(), WireType::Bytes),
                     ("status".to_string(), WireType::Nat),
@@ -274,10 +265,10 @@ fn top_foreign_list_of_leaf() {
             label: "frobnicate".into(),
             signature: WireSignature {
                 params: vec![
-                    ("a0".to_string(), WireType::List(WireLeaf::Bytes)),
-                    ("a1".to_string(), WireType::List(WireLeaf::Handle))
+                    WireType::List(WireLeaf::Bytes),
+                    WireType::List(WireLeaf::Handle)
                 ],
-                results: WireResults::single("_".to_string(), WireType::List(WireLeaf::Nat)),
+                results: WireResults::single(WireType::List(WireLeaf::Nat)),
             },
         })]
     );

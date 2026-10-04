@@ -89,15 +89,12 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
 
     FuncType::new(
         engine,
-        signature
-            .params
-            .iter()
-            .map(|(_, wire_type)| val_type(wire_type))
-            .collect::<Vec<_>>(),
+        signature.params.iter().map(val_type).collect::<Vec<_>>(),
         signature
             .results
+            .types()
             .iter()
-            .map(|(_, wire_type)| val_type(&wire_type))
+            .map(val_type)
             .collect::<Vec<_>>(),
     )
 }
@@ -141,12 +138,13 @@ impl ForeignBindings {
         let params = signature
             .params
             .iter()
-            .map(|(_, wire_type)| codec(*wire_type))
+            .map(|wire_type| codec(*wire_type))
             .collect::<Vec<_>>();
         let results = signature
             .results
-            .iter()
-            .map(|(_, wire_type)| codec(wire_type))
+            .types()
+            .into_iter()
+            .map(codec)
             .collect::<Vec<_>>();
 
         assert_eq!(Li::shape(), params, "'{name}' takes {params:?}");

@@ -827,7 +827,7 @@ pub(super) fn forged_row() -> ForeignFunction {
         label: "forged".to_string(),
         signature: WireSignature {
             params: Vec::new(),
-            results: WireResults::single("value".to_string(), WireType::Nat),
+            results: WireResults::single(WireType::Nat),
         },
     })
 }

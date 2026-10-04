@@ -183,24 +183,17 @@ fn parse_wire_results<'a>() -> Parser<'a, WireResults> {
             // A brace has been read, so nothing else could have been meant: the refusal is the diagnosis rather than a backtrack into a vaguer one.
             Err(message) => commit(fail(message)),
         })
-        .or(parse_wire_type().map(|output| WireResults::single("_".to_string(), output)))
+        .or(parse_wire_type().map(WireResults::single))
 }
 
-// `(T, T, ...) -> R` (a foreign function) or a bare `R` (a zero-argument foreign, like `host_ops`'s `clock_wall`). Params carry no surface label — `a0`, `a1`, … name them positionally — while a result names its own, because a row of two or more results reaches the guest as a tuple type whose labels it projects by.
+// `(T, T, ...) -> R` (a foreign function) or a bare `R` (a zero-argument foreign, like `host_ops`'s `clock_wall`). An operand is its wire type alone and so is a bare result, while a braced result names its fields, because a row of two or more results reaches the guest as a tuple type whose labels it projects by.
 pub(super) fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
     parse_literal("(")
         .and_keep(sep_by0_trailing(parse_wire_type, || parse_literal(",")))
         .and_drop(parse_literal(")"))
         .and_drop(parse_literal("->"))
         .and(lazy(parse_wire_results))
-        .map(|(params, results)| WireSignature {
-            params: params
-                .into_iter()
-                .enumerate()
-                .map(|(index, type_)| (format!("a{index}"), type_))
-                .collect(),
-            results,
-        })
+        .map(|(params, results)| WireSignature { params, results })
         .or(parse_wire_results().map(|results| WireSignature {
             params: vec![],
             results,

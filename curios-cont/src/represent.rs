@@ -165,10 +165,10 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
                 ..
             } => {
                 if let Some(continuation) = module.continuation(*return_to) {
-                    let results = function.signature().results.iter().collect::<Vec<_>>();
+                    let results = function.signature().results.types();
 
                     for (index, &param) in continuation.params.iter().enumerate() {
-                        match results.get(index).map(|(_, wire)| wire) {
+                        match results.get(index) {
                             Some(WireType::Flt) => {
                                 offers.insert(param, Offer::Fixed(Repr::Flt));
                             }
@@ -325,7 +325,7 @@ pub fn storage(module: &Module) -> BTreeMap<ValueId, Storage> {
 
                 // A host call reads its scalar parameters raw and its reference parameters as shapes, whether or not it returns.
                 Node::Foreign { function, args, .. } | Node::Halt { function, args } => {
-                    for (arg, (_, wire)) in args.iter().zip(&function.signature().params) {
+                    for (arg, wire) in args.iter().zip(&function.signature().params) {
                         demand(arg, wire_carrier(wire), &offers, solver);
                     }
                 }

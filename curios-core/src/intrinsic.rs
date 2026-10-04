@@ -54,7 +54,7 @@ pub fn foreign_operands(function: &ForeignFunction) -> Vec<Operand> {
                 .signature()
                 .params
                 .iter()
-                .map(|(_, wire_type)| Operand::At(wire_term(wire_type))),
+                .map(|wire_type| Operand::At(wire_term(wire_type))),
         )
         .collect()
 }
