@@ -63,10 +63,13 @@ impl Calls {
         }
     }
 
-    /// Close whatever the bracket `mark` opened — the arm knowledge entered and the groups opened within it.
-    pub(super) fn retract(&mut self, mark: CallsMark) {
+    /// Close whatever the bracket `mark` opened — the arm knowledge entered and the groups opened within it — answering whether any knowledge was closed.
+    pub(super) fn retract(&mut self, mark: CallsMark) -> bool {
+        let established = self.context.depth() > mark.context;
         self.context.exit_to(mark.context);
         self.frames.truncate(mark.frames);
+
+        established
     }
 
     /// Whether the judgment about to run types a spine head, clearing the flag for the ones after it.
@@ -87,6 +90,18 @@ impl Calls {
     /// Mark the next check as still opening a member's leading lambdas — the body of one that was.
     pub(super) fn continue_parameters(&mut self) {
         self.parameters = true;
+    }
+
+    /// Whether `term` names a member of a group whose body is being checked. Such a term may hold a call, which is recorded where it is typed and graded against the member whose body states it, so no judgment about it is remembered: [`Kernel::infer_hit`](super::Kernel::infer_hit).
+    pub(super) fn names_member(&self, term: &Term) -> bool {
+        term.has_local_free()
+            && self.frames.iter().any(|frame| {
+                frame.caller.is_some()
+                    && frame
+                        .members
+                        .iter()
+                        .any(|member| term.mentions_free(member))
+            })
     }
 
     /// `term`'s typing closed a group that does not descend.
@@ -207,6 +222,8 @@ impl Kernel {
         let mut context = std::mem::take(&mut self.calls.context);
         let entered = context.enter(self, refine, nonzero, payloads);
         self.calls.context = context;
+        // A group typed inside a term closes under what the arms around it established, so a typing remembered outside this one does not answer inside it. Most arms assume an equation beside what they establish, which clears as much; the default arm of a `switch` assumes none.
+        self.memos.begin_sizes();
         entered
     }
 

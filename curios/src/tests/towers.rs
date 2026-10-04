@@ -239,3 +239,15 @@ fn a_sixty_line_chain_compiles() {
         assert_eq!(compiles(&tower(Shape::Chain(stands), 60)), Ok(()));
     }
 }
+
+/// The towers both checkers walk in their size, at sixty lines: calls in a function's body, and lists there and in a recursive member's.
+#[test]
+fn a_sixty_line_tower_compiles() {
+    for shape in [
+        Shape::Calls(Stands::Function),
+        Shape::Lists(Stands::Function),
+        Shape::Lists(Stands::Member),
+    ] {
+        assert_eq!(compiles(&tower(shape, 60)), Ok(()));
+    }
+}

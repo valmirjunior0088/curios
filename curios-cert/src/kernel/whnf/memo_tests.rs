@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Kernel, Sort},
+    crate::{Kernel, Sort, check, infer},
     curios_analysis::test_support::SYNTAX,
     curios_core::{Intrinsic, Reducer, Term, UniverseContext},
 };
@@ -166,5 +166,51 @@ fn restoring_the_budget_forgets_a_remembered_sort() {
         assert!(first > 0, "classifying it reduces it");
         assert_eq!(second, 0);
         assert_eq!(after_boundary, first);
+    }
+}
+
+type Judge = fn(&mut Kernel, &Term);
+
+/// What `judge` costs `kernel` on `term`, read off the remaining budget on either side.
+fn spent_judging(kernel: &mut Kernel, judge: Judge, term: &Term) -> u64 {
+    let (before, _) = kernel.consumption();
+    judge(kernel, term);
+    let (after, _) = kernel.consumption();
+
+    before - after
+}
+
+/// A remembered type and a remembered check live as long as the budget does too, under both lives.
+///
+/// Mutation-checked: with `Memos::begin_declaration` leaving either table alone, the closed term after the boundary is judged for less than it costs.
+#[test]
+fn restoring_the_budget_forgets_a_remembered_type_and_a_remembered_check() {
+    let inferring: Judge = |kernel, term| {
+        infer(kernel, term).expect("is typed");
+    };
+    let checking: Judge = |kernel, term| check(kernel, term, &Term::type_ground()).expect("checks");
+
+    let x = binder(0, "x");
+    let closed = Term::apply(
+        Term::func([(x, Term::type_ground())], Term::free_var(&x)),
+        [nat_type()],
+    );
+    let alias = binder(1, "alias");
+    let scoped = Term::free_var(&alias);
+
+    for judge in [inferring, checking] {
+        for term in [&closed, &scoped] {
+            let mut kernel = kernel();
+            kernel.define(&alias, &Term::type_ground(), &nat_type(), &monomorphic());
+
+            let first = spent_judging(&mut kernel, judge, term);
+            let second = spent_judging(&mut kernel, judge, term);
+            kernel.restore_budget();
+            let after_boundary = spent_judging(&mut kernel, judge, term);
+
+            assert!(first > 0, "judging it spends");
+            assert_eq!(second, 0);
+            assert_eq!(after_boundary, first);
+        }
     }
 }

@@ -54,10 +54,10 @@ use {
 ///
 /// Deferring children onto an explicit worklist instead would change the *rule*: a deferred child is inferred and subsumed, which skips the three checked rules `check` dispatches first — let-descent, Π-introduction, Σ-introduction — and the deferred positions are exactly arguments, constructor payloads and record fields, so a lambda or a dependent tuple in argument position would take the inferred route and manufacture the non-dependent type those rules exist to avoid. See `documentation/design/soundness/introduction/checked-rules-at-deferred-child-positions.md`.
 ///
-/// A local-free term's type is remembered for the rest of the declaration, as its reduct is (`Kernel::infer_hit`): a term the kernel types can be a graph whose tree is exponential in its depth — a text position built a character at a time mentions the one before it four times, and a claim about text in a type carries such values, which its print does not finish unfolding — so typing it per path is exponential in the claim's length. The position a hit answers is still recorded as checked, and the positions inside it were recorded when it was first typed.
+/// A term's type is remembered as its reduct is (`Kernel::infer_hit`) — for the rest of the declaration where the term is local-free, and while the scope it was read off stands where it names a local or stands under an arm: a term the kernel types can be a graph whose tree is exponential in its depth — a text position built a character at a time mentions the one before it four times, and a claim about text in a type carries such values, which its print does not finish unfolding — so typing it per path is exponential in the claim's length. The position a hit answers is still recorded as checked, and the positions inside it were recorded when it was first typed.
 pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, Error> {
     recurse(|| {
-        // Taken before the memo is consulted, so a hit cannot leave it standing for the next judgment. A hit records no call either, and need not: a local-free term names no member.
+        // Taken before the memo is consulted, so a hit cannot leave it standing for the next judgment. A hit records no call either, and need not: a term naming a member whose body is being checked is never one.
         let spine_head = kernel.calls.take_spine_head();
         // Whether a group that does not descend is typed inside this term, read off the count before and after. A hit types nothing, so it counts again what the term's first typing closed.
         let before = kernel.partial_groups();
@@ -817,7 +817,25 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Er
     // Seed for the erasure obligations, recorded before the rules dispatch so a position counts however it is checked. Classified here rather than afterwards: the expectation routinely mentions binders this item opened, and they are retracted the moment its check returns, so nothing later can ask for their sorts. The answer is remembered beside the kernel's sorts, which keeps that to one question per distinct type.
     let before = kernel.partial_groups();
     let position = kernel.record_checked(term, expected);
-    let checked = check_rules(kernel, term, expected, parameters);
+    // A check is remembered as an inferred type is, and a hit counts again what the first check closed. The three rules that never reach `infer` are why it has a table of its own: a tuple whose two fields are one node is checked against its record once per path unless the check itself is remembered.
+    let checked = match kernel.check_hit(term, expected) {
+        true => {
+            kernel.calls.recall_partial(term);
+
+            Ok(())
+        }
+        false => {
+            let checked = check_rules(kernel, term, expected, parameters);
+            if checked.is_ok() {
+                if kernel.partial_groups() > before {
+                    kernel.calls.remember_partial(term);
+                }
+                kernel.check_store(term, expected);
+            }
+
+            checked
+        }
+    };
     // Whether a group that does not descend was typed inside this term — noted on the position, since the group was typed with the binders around it opened and the position's term holds it closed.
     if kernel.partial_groups() > before {
         kernel.enclose_partial(position);

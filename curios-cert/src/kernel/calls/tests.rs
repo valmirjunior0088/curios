@@ -6,8 +6,8 @@ use {
     crate::{Error, Kernel, infer},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Carrier, Cases, Free, Global, Intrinsic, Nat, Scope, StructDecl, Telescope, Term, Two,
-        UniverseContext,
+        Carrier, Cases, Free, Global, Intrinsic, Nat, Scope, StructDecl, Subterm, Telescope, Term,
+        Two, UniverseContext,
     },
     curios_utilities::Qualifier,
 };
@@ -188,4 +188,68 @@ fn a_call_in_a_nominal_values_parameter_is_recorded() {
         infer(&mut kernel, &term),
         Err(Error::NotDescending { .. }),
     ));
+}
+
+/// A term naming a member is typed wherever it stands, whatever the kernel remembers of it. `rec a : Type = List(b), b : Type = List(b)` states one body twice, and the call it holds is `a`'s to `b` in the first and `b`'s to itself in the second — the cycle the gate refuses. Mutation-checked: with a remembered judgment answering for a term that names a member, the second body's call is never recorded, and the group is accepted.
+#[test]
+fn a_call_is_recorded_in_every_body_that_states_it() {
+    let a = binder(0, "a");
+    let b = binder(1, "b");
+    let body = || Term::intrinsic(Intrinsic::ListType(Term::free_var(&b)));
+    let term = Term::rec(
+        [
+            (a, Term::type_ground(), body()),
+            (b, Term::type_ground(), body()),
+        ],
+        Term::free_var(&a),
+    );
+
+    assert!(matches!(
+        infer(&mut kernel(), &term),
+        Err(Error::NotDescending { .. }),
+    ));
+}
+
+/// What inferring `term` costs `kernel`, read off the remaining budget on either side.
+fn spent_inferring(kernel: &mut Kernel, term: &Term) -> u64 {
+    let (before, _) = kernel.consumption();
+    infer(kernel, term).expect("is typed");
+    let (after, _) = kernel.consumption();
+
+    before - after
+}
+
+/// A typing remembered on one side of what an arm establishes for the recorder does not answer on the other. A group typed inside a term closes under what the arms around it established, and the default arm of a `switch` rules zero out for its scrutinee while assuming no equation and opening no binder, so nothing else stands between a term typed outside it and the same term inside. Mutation-checked: without the clear where the arm's knowledge is entered the term is answered inside the bracket for nothing, and without the one where it is retracted, after it.
+#[test]
+fn a_remembered_type_does_not_outlive_what_an_arm_established() {
+    let (f, signature) = member();
+    let n = binder(1, "n");
+    let stated = group(&f, signature, &n, nat_type());
+    let Subterm::Rec(rec) = &*stated else {
+        unreachable!("a group")
+    };
+
+    let mut kernel = kernel();
+    let assumed = binder(5, "rec");
+    let k = binder(6, "k");
+    kernel.assume(&assumed, &rec.group.member_type(0));
+    kernel.assume(&k, &nat_type());
+    kernel.open_group(&rec.group, &[assumed]);
+    kernel.begin_member(0);
+
+    let term = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&k), nat(1)));
+    let first = spent_inferring(&mut kernel, &term);
+    let again = spent_inferring(&mut kernel, &term);
+    let inside = kernel.scoped(|kernel| {
+        kernel
+            .assume_nonzero(k)
+            .expect("the arm's knowledge enters");
+        spent_inferring(kernel, &term)
+    });
+    let after = spent_inferring(&mut kernel, &term);
+
+    assert!(first > 0, "typing it spends");
+    assert_eq!(again, 0, "and a second typing is remembered");
+    assert!(inside > 0, "the arm's knowledge is entered");
+    assert!(after > 0, "and retracted");
 }

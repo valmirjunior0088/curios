@@ -1,4 +1,4 @@
-//! Every walk the kernel runs over whole terms, over one doubling term: sixty levels that each hold the one below twice, a tree no walk per path finishes and a graph of sixty-one nodes — a sum of the level below with itself around a local, and a record of two fields at the level below. A walk the kernel adds joins the table here, so one a change makes per-path again stalls its row rather than waiting for a profile; the walks it shares with the elaborator are `curios-core`'s, held by that crate's table. Inference and checking are not rows: the `infer` memo keeps local-free terms alone, so a term mentioning a local is typed once per path and such a row would stall.
+//! Every walk the kernel runs over whole terms, over one doubling term: sixty levels that each hold the one below twice, a tree no walk per path finishes and a graph of sixty-one nodes — a sum of the level below with itself around a local, and a record of two fields at the level below. A walk the kernel adds joins the table here, so one a change makes per-path again stalls its row rather than waiting for a profile; the walks it shares with the elaborator are `curios-core`'s, held by that crate's table. Inference and checking are rows over a pair of the level below with itself, sixty deep over the same local: the first infers each field and the second checks it against a record of two fields at the level below, so neither is answered by the other's table.
 
 use {
     crate::*,
@@ -22,6 +22,11 @@ fn doubled_record(base: Term) -> Term {
 
         Term::tuple_type([(first, type_.clone()), (second, type_)])
     })
+}
+
+/// A pair of `base` with itself, sixty levels deep.
+fn doubled_pair(base: Term) -> Term {
+    (0..60).fold(base, |value, _| Term::tuple([value.clone(), value]))
 }
 
 /// A kernel with `n: Nat` and `a: Type` assumed, and a fresh budget: each row spends its own, so one row's cost cannot exhaust the next.
@@ -62,6 +67,19 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
         (
             "the sort of a type over a local",
             Sort::of(&mut kernel(&n, &a), &doubled_record(Term::free_var(&a))) == ground,
+        ),
+        (
+            "inference",
+            infer(&mut kernel(&n, &a), &doubled_pair(Term::free_var(&n))).is_ok(),
+        ),
+        (
+            "checking",
+            check(
+                &mut kernel(&n, &a),
+                &doubled_pair(Term::free_var(&n)),
+                &doubled_record(nat.clone()),
+            )
+            .is_ok(),
         ),
     ];
 

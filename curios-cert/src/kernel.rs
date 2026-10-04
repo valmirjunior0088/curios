@@ -504,23 +504,42 @@ impl Kernel {
         Some(self.spend.charge_nothing(replay))
     }
 
-    /// The remembered type of a local-free `term`, with nothing spent and nothing minted.
+    /// The remembered type of `term`, with nothing spent and nothing minted.
     ///
     /// **Nothing minted, unlike a reduct's hit.** A reduct's hit mints the identities its computation did, so that every later identity lands where a recomputation would have put it. For this table that recomputation is what it exists to avoid: it types a graph once per node where recomputing types it once per path, so the identities a recomputation would mint are counted over the tree, and on the graphs the table is for they outgrow the identity space — replayed, a `Str/split_once` claim stated in a type exhausts the 32-bit identity space. What the replay protected holds without it: the counter never falls, so every identity minted after a hit is above those the remembered inference opened, and it closed them before it returned. [`Spend`]'s module documentation states what is given up.
     ///
-    /// **Never while a case equation is in force.** Inside an arm a closed scrutinee *is* the arm's case value, so typing under one may reduce a type to something it does not reduce to outside, and the key cannot say which equations stood. The machine stands aside under the same condition for the same reason. Declining there costs the inference and nothing else.
+    /// **Read off the scope where it is.** A term naming a local is typed off the binders in scope, and a term typed while a case equation is in force is filed as one that may rest on it — the machine stands aside under an equation for that reason. Such a type is filed beside the binders it was inferred under and taken only while they stand, in a table cleared wherever an equation moves or a local is re-typed; [`Memos`] states the two lives.
+    ///
+    /// **Never a term naming a member of a group whose body is being checked.** A recursive call is an application of that local, recorded where it is typed and graded against the member whose body states it. A hit types nothing, so a term that can hold a call is typed at every occurrence: one body stated by two members holds a call from each.
     pub(crate) fn infer_hit(&self, term: &Term) -> Option<Term> {
-        if self.has_refinements() {
+        if self.calls.names_member(term) {
             return None;
         }
 
-        self.memos.infer(term)
+        self.standing(self.memos.infer(term, self.has_refinements()))
     }
 
-    /// Remember a local-free `term`'s type, unless a case equation is in force — see [`Kernel::infer_hit`].
+    /// Remember `term`'s type, under the life and the refusal [`Kernel::infer_hit`] reads it by.
     pub(crate) fn infer_store(&mut self, term: Term, type_: Term) {
-        if !self.has_refinements() {
-            self.memos.store_infer(term, type_);
+        if !self.calls.names_member(&term) {
+            self.memos
+                .store_infer(term, self.has_refinements(), self.scope.prefix(), type_);
+        }
+    }
+
+    /// Whether `term` is remembered to check at `expected`, as [`Kernel::infer_hit`] remembers a type and under its refusal.
+    pub(crate) fn check_hit(&self, term: &Term, expected: &Term) -> bool {
+        !self.calls.names_member(term)
+            && self
+                .standing(self.memos.checked(term, expected, self.has_refinements()))
+                .is_some()
+    }
+
+    /// Remember that `term` checks at `expected`.
+    pub(crate) fn check_store(&mut self, term: &Term, expected: &Term) {
+        if !self.calls.names_member(term) {
+            self.memos
+                .store_checked(term, expected, self.has_refinements(), self.scope.prefix());
         }
     }
 
@@ -715,10 +734,12 @@ impl Kernel {
         // What the call recorder learned inside the bracket — an arm's refinements, a group opened for its bodies — is about the binders the bracket opened, so it retracts with them.
         let calls = self.calls.mark();
         let outcome = walk(self);
-        self.calls.retract(calls);
-        // Retracting an equation changes what a local-bearing term reduces to, so the reducts remembered under it go with it. A bracket that assumed none leaves the tables alone — most do, and what they remembered is still true; a sort read under a binder closed here is refused by its `Prefix` instead.
+        let established = self.calls.retract(calls);
+        // Retracting an equation changes what a local-bearing term reduces to, so what was read off the scope under it goes with it; retracting what an arm established for the call recorder changes how a group typed under it closes, so the typings do. A bracket that assumed neither leaves the tables alone — most do, and what they remembered is still true; an answer read under a binder closed here is refused by its `Prefix` instead.
         if self.scope.retract(mark) {
             self.memos.begin_equations();
+        } else if established {
+            self.memos.begin_sizes();
         }
 
         outcome
