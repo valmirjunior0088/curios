@@ -51,6 +51,7 @@ mod soundness;
 mod strings;
 mod structs;
 mod toml;
+mod towers;
 
 mod tui;
 // Only the two profile suites replay the listing.

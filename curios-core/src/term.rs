@@ -106,7 +106,7 @@ impl Term {
                     Enter::Descend
                 }
             },
-            |_, term, _| term.inner.scalars.fill(Scalars::of(&term.inner.subterm)),
+            |_, term, _| term.inner.scalars.fill(Scalars::of(term.look())),
         );
     }
 
@@ -189,7 +189,7 @@ impl Term {
                 if !seen.insert(Rc::as_ptr(&term.inner)) || !term.has_universe_meta() {
                     return ControlFlow::Continue(Enter::Skip(()));
                 }
-                if term.inner.subterm.any_direct_universe_meta(&mut pred) {
+                if term.look().any_direct_universe_meta(&mut pred) {
                     return ControlFlow::Break(());
                 }
                 ControlFlow::Continue(Enter::Descend)
@@ -254,11 +254,11 @@ impl Term {
                 if !seen.insert(Rc::as_ptr(&term.inner)) {
                     return Enter::Skip(());
                 }
-                term.inner.subterm.any_direct_universe_meta(&mut |meta| {
+                term.look().any_direct_universe_meta(&mut |meta| {
                     universes.insert(meta);
                     false
                 });
-                if let Subterm::Metavar(Metavar { id, .. }) = &term.inner.subterm {
+                if let Subterm::Metavar(Metavar { id, .. }) = term.look() {
                     term_metas.insert(*id);
                 }
                 Enter::Descend
@@ -356,6 +356,8 @@ impl Term {
     }
 
     pub fn unwrap_or_clone(this: Self) -> Subterm {
+        Self::looked();
+
         match Rc::try_unwrap(this.inner) {
             // Swapped out rather than moved out: [`Node`] dismantles itself on drop, and a type with a `Drop` impl cannot have a field moved away. The husk left behind is childless, so dropping it is free.
             Ok(mut node) => mem::replace(&mut node.subterm, Subterm::Prop),
@@ -365,7 +367,7 @@ impl Term {
 
     /// The free-variable identity at the head of an application spine, descending through curried `Apply` heads: `classify(c)` and `f(a)(b)` report the name of `classify` / `f`. A bare free variable reports itself; anything else is `None`. Used to cheaply gate scrutinee-refinement canonicalization on the applied symbol before paying for argument reduction.
     pub fn head_name(&self) -> Option<&Free> {
-        match &self.inner.subterm {
+        match self.look() {
             Subterm::Apply(Apply { head, .. }) => head.head_name(),
             Subterm::Instance(Instance { head, .. }) => head.head_name(),
             Subterm::Var(var) => var.as_free(),
@@ -597,7 +599,7 @@ impl Term {
 
     /// What a scrutinee-refinement key is gated on: the identity at an application spine's head, or the intrinsic standing in for one where the normal form is an `Intrinsic` node rather than an application. Never a name a program could write — the two sides of every comparison come from here, so this only ever has to agree with itself.
     pub fn head_key(&self) -> Option<HeadTag<'_>> {
-        match &self.inner.subterm {
+        match self.look() {
             Subterm::Apply(Apply { head, .. }) => head.head_key(),
             Subterm::Instance(Instance { head, .. }) => head.head_name().map(HeadTag::Name),
             Subterm::Var(var) => var.as_free().map(HeadTag::Name),
@@ -629,7 +631,7 @@ impl Term {
 
     /// Return the canonical target when this term is a straightforward transparent alias body: either a single free variable or its eta-expanded parameterized form `(xs) => Original(xs)`. The text-stage interface audit uses this after name resolution to preserve representation provenance; computed bodies are not classified as aliases.
     pub fn transparent_alias_target(&self) -> Option<&Free> {
-        match &self.inner.subterm {
+        match self.look() {
             Subterm::Var(var) => var.as_free(),
             Subterm::Func(Func { telescope, .. }) => {
                 // Read the eta-expansion under its binders instead of opening it: the parameters are exactly the innermost de Bruijn indices there, counting outwards, so the shape is decided without minting probe binders that would have to be proven not to collide with the body's own.
@@ -1381,9 +1383,9 @@ impl PartialEq for Term {
             return false;
         }
         // Past both O(1) verdicts, one more before anything is allocated: two nodes whose children are pairwise one allocation differ, if at all, in their own payload — variant, names, plicities, levels, scope labels, arities — which the derived comparison settles at once, every child's comparison being the pointer verdict above. This is the memo probe's common case, a key rebuilt one step later over the same operands, and the loop below would answer it by allocating a placeholder, a work vector and a visited set to compare one node — thousands of allocations a byte for a literal folded at the type level.
-        match children_pairwise_shared(&self.inner.subterm, &other.inner.subterm) {
+        match children_pairwise_shared(self.look(), other.look()) {
             Some(true) => {
-                return self.inner.subterm == other.inner.subterm;
+                return self.look() == other.look();
             }
             Some(false) => return false,
             None => {}
@@ -1413,8 +1415,8 @@ impl PartialEq for Term {
                 continue;
             }
 
-            let (this_masked, this_children) = mask(&this.inner.subterm);
-            let (that_masked, that_children) = mask(&that.inner.subterm);
+            let (this_masked, this_children) = mask(this.look());
+            let (that_masked, that_children) = mask(that.look());
 
             // Derived equality, over nodes whose children are all placeholders: it compares this node's own payload — variant, names, plicities, levels, scope labels and arities — and bottoms out immediately.
             if this_masked != that_masked {
@@ -1458,8 +1460,8 @@ impl Term {
                 continue;
             }
 
-            let (this_masked, this_children) = mask(&this.inner.subterm);
-            let (that_masked, that_children) = mask(&that.inner.subterm);
+            let (this_masked, this_children) = mask(this.look());
+            let (that_masked, that_children) = mask(that.look());
             if this_masked != that_masked || this_children.len() != that_children.len() {
                 return false;
             }
@@ -1504,8 +1506,8 @@ impl Term {
                 continue;
             }
 
-            let (this_masked, this_children, this_levels) = mask(&this.inner.subterm);
-            let (that_masked, that_children, that_levels) = mask(&that.inner.subterm);
+            let (this_masked, this_children, this_levels) = mask(this.look());
+            let (that_masked, that_children, that_levels) = mask(that.look());
             if this_masked != that_masked
                 || this_children.len() != that_children.len()
                 || this_levels.len() != that_levels.len()
@@ -1611,7 +1613,7 @@ impl Term {
                 continue;
             }
 
-            match (&this.inner.subterm, &that.inner.subterm) {
+            match (this.look(), that.look()) {
                 (Subterm::Type(this_level), Subterm::Type(that_level)) => {
                     if !renaming.levels_equal(this_level, that_level) {
                         return false;
@@ -1637,8 +1639,8 @@ impl Term {
                 _ => {}
             }
 
-            let (this_masked, this_children) = mask(&this.inner.subterm);
-            let (that_masked, that_children) = mask(&that.inner.subterm);
+            let (this_masked, this_children) = mask(this.look());
+            let (that_masked, that_children) = mask(that.look());
             if this_masked != that_masked || this_children.len() != that_children.len() {
                 return false;
             }
@@ -1680,9 +1682,37 @@ fn children_pairwise_shared(this: &Subterm, that: &Subterm) -> Option<bool> {
     }
 }
 
+#[cfg(feature = "profile")]
+thread_local! {
+    static LOOKS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// How many times a term handed out its node on this thread since the last call.
+///
+/// The count of what walks cost, as budget units are the count of what reduction builds: a walk has to look at a node to see its children, and every way a node is read — [`Deref`], [`AsRef`], [`Term::unwrap_or_clone`] and this module's own derivations and comparisons — is counted. A walk that visits a shared node once per path shows as looks outgrowing the nodes there are to look at, on any machine, where a wall clock needs a quiet one.
+#[cfg(feature = "profile")]
+pub fn take_looks() -> u64 {
+    LOOKS.with(|looks| looks.replace(0))
+}
+
+impl Term {
+    /// Count one look at a node, under `profile`.
+    fn looked() {
+        #[cfg(feature = "profile")]
+        LOOKS.with(|looks| looks.set(looks.get() + 1));
+    }
+
+    /// This term's node, as one look.
+    fn look(&self) -> &Subterm {
+        Self::looked();
+
+        &self.inner.subterm
+    }
+}
+
 impl AsRef<Subterm> for Term {
     fn as_ref(&self) -> &Subterm {
-        &self.inner.subterm
+        self.look()
     }
 }
 
@@ -1690,7 +1720,7 @@ impl Deref for Term {
     type Target = Subterm;
 
     fn deref(&self) -> &Subterm {
-        &self.inner.subterm
+        self.look()
     }
 }
 
@@ -1968,11 +1998,7 @@ impl Term {
                     Enter::Descend
                 }
             },
-            |_, term, _| {
-                term.inner
-                    .frees
-                    .fill(term.inner.subterm.free_vars_from_children())
-            },
+            |_, term, _| term.inner.frees.fill(term.look().free_vars_from_children()),
         );
     }
 
@@ -2118,7 +2144,7 @@ impl Term {
                     return ControlFlow::Continue(Enter::Skip(()));
                 }
 
-                if let Subterm::Metavar(Metavar { id, .. }) = &term.inner.subterm
+                if let Subterm::Metavar(Metavar { id, .. }) = term.look()
                     && state.0(*id)
                 {
                     return ControlFlow::Break(());

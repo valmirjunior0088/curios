@@ -10,25 +10,26 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 - **The kernel's memos.** Term-keyed tables live one declaration; the reduct tables keep a local-bearing term for as long as the equations in force stand; the `infer` memo keeps local-free terms outside every arm and hands back a remembered type without replaying its mints, the freshness counter being monotone. Sort-hood is remembered per distinct type for one item (`Positions`), at the type a position is recorded at and no deeper.
 - **Re-validation and rollbacks.** Inside an oracle bracket each memoizable node is elaborated once, whether or not the global cache keeps it; a rollback clears the reducts and elaborations only when it unwound a term solution, and the elaborations and the universe stamp when only the universe solver moved.
 - **Settlement.** A term-keyed refinement's reduced spelling is settled at most once per entry between two clears and cached as `settled_keys` (`curios-elab/src/context/caches.rs`); `reduce::settle` computes it with the entry's own frame and every frame inside it withheld, so it rests only on the frames outside. The kernel keeps the same spelling in the equation's own entry (`Scope::settle_refinement`), where it lives exactly as long as the equation.
+- **The hold.** The towers are generated programs in `curios/src/tests/towers.rs`, each value shape in a function's body and in a recursive member's; `a_sixty_line_chain_compiles` is the control's fixture, and `tower_measurements` prints each shape's verdict and each checker's units and looks at 12 and 16 lines. A look is counted where `Term` hands out its node (`curios_core::take_looks`, under `profile`) and sampled per declaration as `term::looks` beside `budget::consumed`, in both checkers.
 - **The profile.** `curios-profile`'s spans, samples and notes, written through as each row is made, so a run that aborts leaves its open spans on disk. Kept for hunts: the spans `convert::outcome`, `convert::drain`, `typing::expect`, `typing::retry_parked`, `typing::drain_parked`, `ctx::park`, `ctx::wake_parked`, `reduce::settle` carrying the key and frame it settles, and the kernel's `Sort::of`, `convert` and `convert::unfolded_retry`; the samples `caches::rollback_dropped`, `caches::suppression_dropped` and, in both checkers, `budget::consumed` where a declaration's budget is restored.
 - **Peers.** Lean 4's kernel keeps a table per judgment — inferred types, both weak-head forms, and plain sets of the pairs conversion accepted and refused, plain because "taking a transitive closure of successful pairs would make its result depend on evaluation order" ([`type_checker.h`](https://github.com/leanprover/lean4/blob/master/src/kernel/type_checker.h)) — and its `replace`, which substitution and lifting go through, remembers a shared node per binder depth unless a caller opts out ([`replace_fn.cpp`](https://github.com/leanprover/lean4/blob/master/src/kernel/replace_fn.cpp)). rustc's type walker visits each type once ([`walk.rs`](https://doc.rust-lang.org/nightly/nightly-rustc/src/rustc_type_ir/walk.rs.html)) and its suite keeps a thirty-line tower ([`issue-72408-nested-closures-exponential.rs`](https://rust.googlesource.com/rust/+/HEAD/tests/ui/closures/issue-72408-nested-closures-exponential.rs)); the shape was reported walker by walker ([#54540](https://github.com/rust-lang/rust/issues/54540), [#72412](https://github.com/rust-lang/rust/pull/72412), [#83031](https://github.com/rust-lang/rust/issues/83031), [#140004](https://github.com/rust-lang/rust/issues/140004)), and a walker that skips repeats stopped the type-length limit that counted them ([#125507](https://github.com/rust-lang/rust/pull/125507)). [Selsam, Hudon and de Moura](https://arxiv.org/abs/2003.01685) state the problem — "traversing a term requires time proportional to the tree size of the term as opposed to its graph size" — and their remedy, a stored hash, pointer-accelerated equality and a remembered traversal, is the representation `Term` already has. [Accattoli and Dal Lago](https://arxiv.org/abs/1601.01233) show a count of reduction steps is a reasonable cost model only over shared terms, and [Condoluci, Accattoli and Sacerdoti Coen](https://arxiv.org/abs/1907.06101) that equality of shared terms is linear. GHC's Core inlines types and pays their tree ([type lets](https://www.tweag.io/blog/2024-08-15-type-lets)).
 
 ## The gap
 
-**A tower is refused or does not finish.** A tower of `n` lines is a first line and `n` lines after it, each naming the line before it twice: a graph of `n + 1` nodes whose tree has `2ⁿ`. Taken at `b900e392f`, verdicts and calls counted, "no answer" a run stopped after a minute:
+**A tower is refused or does not finish.** A tower of `n` lines is a first line and `n` lines after it, each naming the line before it twice: a graph of `n + 1` nodes whose tree has `2ⁿ`. Taken at `b900e392f`, verdicts and looks counted, "no answer" a run stopped after a minute:
 
-| Each line is | 20 lines | 60 lines | Kernel calls at 12 and 16 lines |
-| --- | --- | --- | --- |
-| `g(x)`, the chain every tower is read against | accepted | accepted | `Sort::of` 32 and 32, `convert` 124 and 194 |
-| `g(x, x)` | refused by the kernel | | `convert` 49,140 and 786,416 |
-| `(x, x)` | accepted | no answer | `Sort::of` 32,777 and 524,293, `convert` 24,580 and 393,220 |
-| `[x, x]` | refused by the kernel | | `Sort::of` 24,796 and 393,564, `convert` 49,140 and 786,416 |
-| `match b \| true => x \| false => x end` | accepted | refused by the kernel | `Sort::of` 12,317 and 196,637, `convert` 24,566 and 393,202 |
-| `{T, T}`, a type alias | accepted | refused by the elaborator | `Sort::of` 24,596 and 393,236 |
-| `(T) -> T`, a type alias | accepted | refused by the elaborator | `Sort::of` 24,596 and 393,236 |
-| `(x, x)` twice, the two towers claimed equal | no answer | | `Sort::of` 65,553 and 1,048,589, `convert` 57,347 and 917,507 |
+| Each line is | 20 lines | 60 lines | Kernel looks at 12 and 16 lines | Elaborator looks at 12 and 16 lines |
+| --- | --- | --- | --- | --- |
+| `g(x)`, the chain every tower is read against | accepted | accepted | 142,884 and 143,808 | 54,185 and 55,573 |
+| `g(x, x)` | refused by the kernel | | 583,848 and 7,219,464 | 55,326 and 57,114 |
+| `(x, x)` | accepted | no answer | 681,575 and 8,791,327 | 220,301 and 2,681,841 |
+| `[x, x]` | refused by the kernel | | 3,316,313 and 50,876,129 | 83,679 and 106,743 |
+| `match b \| true => x \| false => x end` | accepted | refused by the kernel | 1,396,545 and 20,198,793 | 67,494 and 78,110 |
+| `{T, T}`, a type alias | accepted | refused by the elaborator | 487,630 and 5,651,386 | 218,069 and 2,677,197 |
+| `(T) -> T`, a type alias | accepted | refused by the elaborator | 365,976 and 3,687,316 | 218,468 and 2,677,732 |
+| `(x, x)` twice, the two towers claimed equal | no answer | | 2,296,932 and 34,614,392 | 1,632,345 and 24,994,503 |
 
-The value shapes are the body of one function — `let tower(g: (Nat) -> Nat, n: Nat) -> Nat` from `g(n)`, `let tower(g: (Nat, Nat) -> Nat, n: Nat) -> Nat` from `g(n, n)`, `let tower(n: Nat) -> Nat` from `(n, n)` and from `[n, n]` ending in `match xₙ | _ => n end`, `let tower(b: Bool, n: Nat) -> Nat` from `n` — each line a `let xᵢ = …;` and the last name the result; the type shapes are top-level aliases from `let T0 = Nat;` read by `let keep(x: Tₙ) -> Tₙ = x;`; the two towers are two top-level chains from `(1, 2)` under `let _same: Eq()(xₙ, yₙ) = Eq/refl();`, which answers at 16 lines. Every program imports what it names from `/std` and ends in `/std/print("ok\n")`. A verdict is the release compiler's, `curios run -` at the default budget; the calls are the `Sort::of` and `convert` rows `curios profile` folds from a stream a debug `profile` build files with `curios --profile <stream> run -`. Every refusal is for the budget — "the kernel's reduction budget ran out", "reduction ran out of steps" — on a program that reduces nothing: the kernel refuses three towers the elaborator accepts, which [two checkers given one budget must cost alike](../../design/soundness/a-reduction-step-costs-what-it-builds.md) forbids.
+The value shapes are the body of one function — `let tower(g: (Nat) -> Nat, n: Nat) -> Nat` from `g(n)`, `let tower(g: (Nat, Nat) -> Nat, n: Nat) -> Nat` from `g(n, n)`, `let tower(n: Nat) -> Nat` from `(n, n)` and from `[n, n]` ending in `match xₙ | _ => n end`, `let tower(b: Bool, n: Nat) -> Nat` from `n` — each line a `let xᵢ = …;` and the last name the result; the type shapes are top-level aliases from `let T0 = Nat;` read by `let keep(x: Tₙ) -> Tₙ = x;`; the two towers are two top-level chains from `(1, 2)` under `let _same: Eq()(xₙ, yₙ) = Eq/refl();`, which answers at 16 lines. Every program imports what it names from `/std` and ends in `/std/print("ok\n")`. A verdict is the release compiler's, `curios run -` at the default budget; the looks — how many times a term handed out its node while a checker ran — are `tower_measurements`' (`curios/src/tests/towers/measurement_tests.rs`), which builds these programs and prints each checker's units beside them. Every refusal is for the budget — "the kernel's reduction budget ran out", "reduction ran out of steps" — on a program that reduces nothing: the kernel refuses three towers the elaborator accepts, which [two checkers given one budget must cost alike](../../design/soundness/a-reduction-step-costs-what-it-builds.md) forbids.
 
 **Work over a term is one of four kinds, and one of them holds.**
 
@@ -53,7 +54,7 @@ The value shapes are the body of one function — `let tower(g: (Nat) -> Nat, n:
 
 **The Core printer prints the tree.** `wonder stage core-elab` over the pairs tower prints 24,977 bytes at 8 lines and 393,741 at 12, each `let`'s type written out, and a report that shows a tower's type has the same print.
 
-**The totality analysis walks a body per path.** `walk_term` (`curios-analysis/src/totality.rs`) carries each arm's effects, so it is not a pure walk; no tower above stands in a recursive member's body, where it runs.
+**In a recursive member's body the elaborator walks more towers per path.** `tower_measurements` puts each value shape in the successor arm of a function that calls itself: there the elaborator's looks at 12 and 16 lines are 173,738 and 1,896,474 for the calls and 360,404 and 4,673,508 for the arms, which outside a member it walks in their size. What does it is not established; the totality analysis's `walk_term` (`curios-analysis/src/totality.rs`) carries each arm's effects, so it is not a pure walk, and it runs over a member's body alone.
 
 ## Decisions settled
 
@@ -69,16 +70,15 @@ The value shapes are the body of one function — `let tower(g: (Nat) -> Nat, n:
 
 Each lands alone, with its fixture mutation-checked: with its table off, the row does not answer.
 
-1. **The hold.** The towers as generated programs in `curios/src/tests/towers.rs`, each value shape also inside a recursive member's body; `tower_measurements`, counted, printing each shape's verdict and each checker's units and looks at 12 and 16 lines, which the table above is then read from; the looks sample, `term::looks`, counted where `Term` hands out its node. The chain's fixture lands here and each tower's with the stage that unblocks it.
-2. **The kernel remembers a type's sort**, under both lives, in `Memos`; `Positions`' own memo goes, whose one life spans every arm of an item whatever equations a type's sort rests on. `Sort::of` joins `curios-cert`'s harness.
-3. **The kernel remembers a type under both lives**, for a term naming no member of an open group. Inference and checking join the harness. Unblocks the kernel's side of the call, list, arm and pair towers.
-4. **The elaborator remembers a type's sort**, for as long as nothing is written and no reduct is cleared. `Sort::of_in` joins `curios-elab`'s harness. Unblocks the alias, arrow and pair towers and the elaborator's side of the two towers.
-5. **The kernel's conversion remembers a clean pair.** Unblocks the two towers.
-6. **A settled spelling lives in its entry.** The settlements over `/std` are counted before and after.
-7. **Rebuilds keep sharing.** `shift` and `release` remember a shared node per depth, `capture` returns a node it has nothing to do to, and both join `curios-core`'s harness.
-8. **The print is bounded**, its constant set from the largest ratio of tree to graph a declaration of `/std` prints at, taken first.
+1. **The kernel remembers a type's sort**, under both lives, in `Memos`; `Positions`' own memo goes, whose one life spans every arm of an item whatever equations a type's sort rests on. `Sort::of` joins `curios-cert`'s harness.
+2. **The kernel remembers a type under both lives**, for a term naming no member of an open group. Inference and checking join the harness. Unblocks the kernel's side of the call, list, arm and pair towers.
+3. **The elaborator remembers a type's sort**, for as long as nothing is written and no reduct is cleared. `Sort::of_in` joins `curios-elab`'s harness. Unblocks the alias, arrow and pair towers and the elaborator's side of the two towers.
+4. **The kernel's conversion remembers a clean pair.** Unblocks the two towers.
+5. **A settled spelling lives in its entry.** The settlements over `/std` are counted before and after.
+6. **Rebuilds keep sharing.** `shift` and `release` remember a shared node per depth, `capture` returns a node it has nothing to do to, and both join `curios-core`'s harness.
+7. **The print is bounded**, its constant set from the largest ratio of tree to graph a declaration of `/std` prints at, taken first.
 
-A recursive-member tower no stage unblocks is the totality walk's, and is designed before it is built.
+Each tower's fixture lands with the stage that unblocks it. A recursive-member tower no stage unblocks is designed before it is built.
 
 ## Budgets
 
