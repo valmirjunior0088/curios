@@ -80,6 +80,27 @@ pub fn atoms_of(
     Ok(atoms)
 }
 
+/// The atoms the readers read in one stuck operation, each once, in the order a walk of its operands meets them: empty where the readers do not read through it.
+///
+/// **The operation is taken as it stands.** It is the reduct a reducer has just reached, and forcing it again would ask that reducer for the term it is in the middle of reducing; its operands are forced as every node below them is.
+pub fn atoms_within(
+    reducer: &mut impl Reducer,
+    operation: &Intrinsic,
+) -> Result<Vec<Term>, ReduceError> {
+    if !read_through(operation) {
+        return Ok(Vec::new());
+    }
+    let mut atoms = Vec::new();
+    let mut walk = Walk::new(reducer, |atom: &Term| {
+        if !atoms.contains(atom) {
+            atoms.push(atom.clone());
+        }
+        atom.clone()
+    });
+    walk.operands(&Term::intrinsic(operation.clone()), operation)?;
+    Ok(atoms)
+}
+
 /// Whether some two of `atoms` may be one, so classing them could change what the readers read.
 pub fn classable(atoms: &[Term]) -> bool {
     atoms

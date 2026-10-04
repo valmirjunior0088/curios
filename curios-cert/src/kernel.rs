@@ -882,6 +882,12 @@ impl Kernel {
         self.scope.unasked_refinement(candidate)
     }
 
+    /// How many equations in force `candidate` could be a reduct of.
+    #[cfg(feature = "profile")]
+    pub(crate) fn reachable_refinements(&self, candidate: &Term) -> usize {
+        self.scope.reachable_refinements(candidate)
+    }
+
     /// Settle the reduced spelling of the equation at `index`, reducing `key` with that equation — and every equation inside it — withheld.
     ///
     /// **The whole of what the two-tier key defers.** Recording an equation costs nothing; this is where the reduction happens — at most once per equation, and only because a probe presented a term the written spelling did not answer.

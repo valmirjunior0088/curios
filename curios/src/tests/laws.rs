@@ -398,16 +398,16 @@ fn top_level(list: &str) -> Vec<&str> {
 }
 
 /// One binder of a telescope the sweep reorders: its name, its type, and the binders its type names.
-struct Binder<'a> {
-    name: &'a str,
-    type_: &'a str,
-    needs: &'a [&'a str],
+pub(super) struct Binder<'a> {
+    pub(super) name: &'a str,
+    pub(super) type_: &'a str,
+    pub(super) needs: &'a [&'a str],
 }
 
 /// `count` orders of `binders`, each a telescope as source: the order they are declared in, that order reversed, and shuffles drawn from a fixed sequence, so every run states the same orders. A binder is kept after the binders its type names, by taking from each candidate order the first binder whose needs are already placed.
 ///
 /// **An order is a verdict's adversary.** A binder's identity is minted where it is declared, so a structural hash — the order a product holds its factors in, the side a linear view puts an atom on — moves with the declaration order, and a verdict that rests on a hash holds at one order and fails at another. Two fixed orders cannot tell such a verdict from a law; a sweep can.
-fn orders(binders: &[Binder<'_>], count: usize) -> Vec<String> {
+pub(super) fn orders(binders: &[Binder<'_>], count: usize) -> Vec<String> {
     let declared = (0..binders.len()).collect::<Vec<_>>();
     let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
     let mut draw = move |below: usize| {

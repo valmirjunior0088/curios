@@ -45,6 +45,7 @@ mod positivity;
 mod recovery;
 mod recursion;
 mod reduction;
+mod respelling;
 mod runtime;
 mod scheduler;
 mod soundness;

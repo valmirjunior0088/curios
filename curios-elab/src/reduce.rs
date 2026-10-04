@@ -27,6 +27,9 @@ use {
     std::collections::HashMap,
 };
 
+#[cfg(feature = "profile")]
+use curios_core::{atoms_within, classable};
+
 /// The elaborator's side of the closed-machine seam: the same delta `reduce_var` and `reduce_instance` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
 impl ClosedHost for Context {
     fn closed_body(&self, name: &Free) -> Option<&Term> {
@@ -809,9 +812,38 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
                 key,
                 original,
             } => settle(context, frame, key, &original)?,
-            Scan::Miss => return Ok(None),
+            Scan::Miss => {
+                // What a lookup that asked conversion would have been put to: the entries this stuck form could be a reduct of, each settled and none answering.
+                #[cfg(feature = "profile")]
+                if let asked @ 1.. = context
+                    .visible_scrutinee_entries()
+                    .filter(|(_, _, entry)| could_reduce_to(&entry.original, &probe))
+                    .count()
+                {
+                    curios_profile::sample!("reduce::missed_lookup", asked);
+                }
+                return Ok(None);
+            }
         }
     }
+}
+
+/// Report, under `profile`, what a stuck operation would put to the elaborator's conversion were reduction to class its atoms: how many atoms the readers read in it, where some two of them may be one. Counted before the rule that asks, so what the rule costs over `/std` is known first.
+#[cfg(feature = "profile")]
+fn sample_classable(context: &mut Context, folded: &Term) -> Result<(), ReduceError> {
+    let Subterm::Intrinsic(operation) = &**folded else {
+        return Ok(());
+    };
+    let atoms = atoms_within(context, operation)?;
+    if classable(&atoms) {
+        curios_profile::sample!("reduce::classable_fold", atoms.len());
+    }
+    Ok(())
+}
+
+#[cfg(not(feature = "profile"))]
+fn sample_classable(_context: &mut Context, _folded: &Term) -> Result<(), ReduceError> {
+    Ok(())
 }
 
 /// What one pass over the visible entries found for a stuck reduct.
@@ -1026,7 +1058,10 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
 
                     match refined_after_fold(context, &folded)? {
                         Some(value) => Reduce::Continue(value),
-                        None => Reduce::Break(folded),
+                        None => {
+                            sample_classable(context, &folded)?;
+                            Reduce::Break(folded)
+                        }
                     }
                 }
                 // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for. The nested call probes and stores the reduction cache under the scrutinee itself, so a warm scrutinee needs no special case here.

@@ -32,6 +32,9 @@ use {
     curios_utilities::recurse,
 };
 
+#[cfg(feature = "profile")]
+use curios_core::{atoms_within, classable};
+
 /// The kernel's side of the closed-machine seam: the same delta `step_var` and `step_instance` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
 impl ClosedHost for Kernel {
     fn closed_body(&self, name: &Free) -> Option<&Term> {
@@ -183,6 +186,7 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
                 match refined_reduct(kernel, &value)? {
                     Some(refined) => term = refined,
                     None => {
+                        sample_classable(kernel, &value)?;
                         // Remembered under the term this level was *entered* with, not the one the loop finished on — the same key the probe above will present.
                         let replay = kernel.replay_since(value.clone(), before);
                         kernel.whnf_store(entry, false, replay);
@@ -254,11 +258,34 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
                 .find_map(|(spelling, _)| kernel.unasked_refinement(spelling))
         });
         let Some((index, key)) = unasked else {
+            // What a lookup that asked conversion would have been put to: the equations this stuck form could be a reduct of, each settled and none answering.
+            #[cfg(feature = "profile")]
+            if let asked @ 1.. = kernel.reachable_refinements(&canonical) {
+                curios_profile::sample!("whnf::missed_lookup", asked);
+            }
             return Ok(None);
         };
 
         kernel.settle_refinement(index, key)?;
     }
+}
+
+/// Report, under `profile`, what a stuck operation would put to the kernel's conversion were reduction to class its atoms: how many atoms the readers read in it, where some two of them may be one. Counted before the rule that asks, so what the rule costs over `/std` is known first.
+#[cfg(feature = "profile")]
+fn sample_classable(kernel: &mut Kernel, value: &Term) -> Result<(), ReduceError> {
+    let Subterm::Intrinsic(operation) = &**value else {
+        return Ok(());
+    };
+    let atoms = atoms_within(kernel, operation)?;
+    if classable(&atoms) {
+        curios_profile::sample!("whnf::classable_fold", atoms.len());
+    }
+    Ok(())
+}
+
+#[cfg(not(feature = "profile"))]
+fn sample_classable(_kernel: &mut Kernel, _value: &Term) -> Result<(), ReduceError> {
+    Ok(())
 }
 
 /// `term` with each operand in weak-head normal form, where it is a tagged intrinsic — the form a refinement's reduced spelling and the value probed against it are both held in. Anything else is its own canonical form.

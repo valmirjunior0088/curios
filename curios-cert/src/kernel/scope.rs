@@ -288,6 +288,15 @@ impl Scope {
             .map(|(index, entry)| (index, entry.key.clone()))
     }
 
+    /// How many equations in force `candidate` could be a reduct of — what a profile counts a missed probe by.
+    #[cfg(feature = "profile")]
+    pub(super) fn reachable_refinements(&self, candidate: &Term) -> usize {
+        self.refinements[..self.in_force()]
+            .iter()
+            .filter(|entry| could_reduce_to(&entry.key, candidate))
+            .count()
+    }
+
     /// Record what the equation at `index` reduces to, or that reducing it refused.
     pub(super) fn settle_refinement(&mut self, index: usize, reduct: Option<Term>) {
         self.refinements[index].reduct = Reduct::Known(reduct);
