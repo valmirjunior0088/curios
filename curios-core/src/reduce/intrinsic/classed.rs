@@ -26,7 +26,7 @@ pub struct Classes {
 impl Classes {
     /// `atoms` classed by `same`, in the order they were handed out: an atom joins the first class whose representative `same` says it converts with, and otherwise opens one.
     ///
-    /// **A pair is asked only where it may be one** ([`may_be_one`]), which is a cost filter failing toward refusal: a pair it skips stays two atoms, as every pair was before any was classed.
+    /// **A pair is asked only where it may be one**, read off the two atoms' heads: two applications of one head to as many arguments, two stuck operations of one kind, or two other terms neither of which is a variable, a metavariable or a stuck operation. It is a cost filter failing toward refusal: a pair it skips stays two atoms, as every pair was before any was classed.
     pub fn of<E>(
         atoms: &[Term],
         mut same: impl FnMut(&Term, &Term) -> Result<bool, E>,
