@@ -2,7 +2,7 @@
 
 Working specification for two places where [a universe level that settles by where it came from](../../design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md) settles before what would decide it is known: a declaration whose witness goal resolves after its scheme has closed, and two instances whose levels conversion commits equal without unfolding. The first is closed by [one environment](../05-compilation/02-one-environment.md)'s first stage and held here; the second is measured before anything is changed.
 
-[Irrelevant universe levels](01-irrelevant-universe-levels.md) takes what a nominal type's levels compare as, and is independent of this.
+[`!` sequences actions whatever level their payloads sit at](01-bang-sequences-at-every-level.md) takes what a nominal type's levels compare as, what the commitments below pair at a nominal type's irrelevant level, and the closing of a witness resolved while its consumer is open; what is held here is independent of it.
 
 ## What this builds on
 
@@ -43,7 +43,7 @@ Each is refused at `big`, and each is accepted with the witness declared first. 
 
 - **GHC reads every instance head before it checks any body.** "Typechecking instance declarations is done in two passes. The first pass, made by `tcInstDecls1`, collects information to be used in the second pass", whose bindings "are type-checked in the second pass, when the class-instance envs and GVE contain all the info from all the instance and value decls. Indeed that's the reason we need two passes over the instance declarations" ([`GHC.Tc.TyCl.Instance`](https://hackage.haskell.org/package/ghc-9.6.4/docs/src/GHC.Tc.TyCl.Instance.html)). So what a binding resolves through does not depend on where an instance is written. The design decision rejects taking a witness's scheme from its head, since a Curios witness's scheme depends on its body; what a head does give is its key.
 - **Rocq commits a level unification that unfolding might not have needed, and gives up the attempt where it cannot.** "Lub constraints … correspond to unification of two levels which might not be necessary if unfolding is performed. UWeak constraints come from irrelevant universes in cumulative polymorphism" ([`engine/univProblem.mli`](https://github.com/rocq-prover/rocq/blob/master/engine/univProblem.mli)). `ULub (l, r)` is processed as `equalize_variables true l r`: a flexible level is instantiated to the other, and two rigid levels that differ raise `UniversesDiffer`, failing the first-order attempt. Only `UWeak` waits: it is stored while `Cumulativity Weak Constraints` is set, and at minimization becomes an equality or is forgotten ([`engine/uState.ml`](https://github.com/rocq-prover/rocq/blob/master/engine/uState.ml)). Identification is `ULub`'s rule already: commit where a level is undecided, decline where both are decided.
-- **A weak constraint is licensed by irrelevance**, which is why Rocq may forget one: the two instances convert whatever the levels are. That license belongs to [irrelevant universe levels](01-irrelevant-universe-levels.md), where an irrelevant level is compared at nothing, and no definition has one.
+- **A weak constraint is licensed by irrelevance**, which is why Rocq may forget one: the two instances convert whatever the levels are. That license belongs to [irrelevant universe levels](01-bang-sequences-at-every-level.md), where an irrelevant level is compared at nothing, and no definition has one.
 
 ## Decisions
 

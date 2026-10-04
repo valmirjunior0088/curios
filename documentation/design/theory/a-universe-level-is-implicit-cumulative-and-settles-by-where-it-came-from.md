@@ -8,7 +8,7 @@
 - a deferred witness goal still pending is made ground, with every level a settlement lands on;
 - a result sort is determined only where the declaration's terminal is a sort.
 
-Where two levels are identified, the member of greater provenance represents the class, so a written type lands in the sort its reduct does and the kernel types a type as written. Two instances of an `induct` or a `struct` compare their levels by variance: a level that no constructor payload, field or index type mentions, except through a position itself irrelevant, is irrelevant and compared at nothing; every other level is invariant, and none is covariant.
+Where two levels are identified, the member of greater provenance represents the class, so a written type lands in the sort its reduct does and the kernel types a type as written. Two instances of an `induct` or a `struct` compare their levels by variance: a level that no constructor payload, index target, field or index type mentions, except through a position itself irrelevant, is irrelevant and compared at nothing; every other level is invariant, and none is covariant.
 
 **Rationale.**
 
@@ -30,5 +30,5 @@ Where two levels are identified, the member of greater provenance represents the
 - **Sizing by the written spelling in both checkers**, **resolving `/sys` formers to their intrinsics**, or **declaring the reduct the truth**: the first keeps every floating level, the second misses aliases and nominal occurrences, the third leaves the kernel accepting a declared type it never typed.
 - **Settling only a deferred goal's own levels**, **retrying goals before the scheme closes**, **elaborating a missing witness on demand**, or **holding a scheme open until its goals resolve**: a constraint the late witness needs reaches no scheme; no witness registers mid-declaration; elaboration would have to be re-entrant; later items would take the levels rather than instances of them.
 - **Covariant nominal levels**, `Value.{u} ≤ Value.{v}`, which need subsumption to reach nominal types for no program that asks.
-- **Inferring variance by checking two fresh instances against each other**, as Rocq does, which blew up on the HoTT library; it is inferred by occurrence, compositionally, so a `Tree(A)` holding `List(Tree(A))` stays irrelevant.
+- **Inferring variance by checking two fresh instances against each other**, as Coq 8.7 did, which blew up on the HoTT library; it is inferred by occurrence, as Rocq infers it now, compositionally, so a `Tree(A)` holding `List(Tree(A))` stays irrelevant.
 - **MetaCoq's rule that a fully applied constructor compares no level**: the kernel compares unfoldings untyped, so "compared at the same supertype" does not hold here, and a value compares at its family's variance.

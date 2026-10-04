@@ -28,7 +28,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Theory
 
-- [ ] [A universe level only a parameter's type mentions is irrelevant](roadmap/02-theory/01-irrelevant-universe-levels.md) — both checkers compare a nominal type's levels for equality, so `!` holds its region at the level of a nominal action it binds
+- [ ] [`!` sequences actions whatever level their payloads sit at](roadmap/02-theory/01-bang-sequences-at-every-level.md) — a region whose actions' payloads sit at different levels is refused in every monad: both checkers compare a nominal type's levels for equality, and a witness's levels are closed where it resolves, before the rest of its region is read
 - [ ] [A universe level settled before its evidence is in](roadmap/02-theory/02-levels-settled-before-their-evidence.md) — a declaration reaching a witness declared after it settles at its least levels and is refused at a larger type as a mismatch against `?`, and what identifying two instances' levels commits beyond unfolding is unmeasured
 - [ ] [A subsumption blocked on a metavariable waits as a subsumption](roadmap/02-theory/03-blocked-subsumption.md) — the elaborator hands a pair blocked on a metavariable to conversion as an equation, and solves a metavariable met in one by equality, so one call is admitted or refused by the order of its arguments
 - [ ] [Flex–flex problems with distinct heads](roadmap/02-theory/04-flex-flex-intersection.md) — not refined yet; `?0(x) ~ ?1(x)` parks undecided, with no intersection
