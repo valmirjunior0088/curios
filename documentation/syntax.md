@@ -1126,6 +1126,8 @@ The parameter has no name and is in the witness scope of the declaration, so a f
 
 A structure literal with a bare head takes the dictionary from its expected type, or from resolution where there is none. At an inductive's value constructors the parameter stays a witness slot — resolved, or supplied with `use value` — where a plain or `@` parameter is implicit.
 
+A value is read under the dictionary its type names. `holds(slot, key)` over a `slot: Slot(Nat, use reversed, Str)` runs under `reversed`: the call's own slot is still open when the argument is checked, the argument's type fills it, and resolution leaves a filled slot alone ([Witness resolution](#witness-resolution)). Two values under two dictionaries cannot both be arguments of an operation whose signature names the dictionary once, and the call is a type mismatch.
+
 A concept takes no `use` parameter: its premise is a superclass field, and a witness is keyed by the type heads of its concept's parameters, which a dictionary does not have.
 
 ### Witness resolution
@@ -1135,6 +1137,8 @@ An omitted witness argument is resolved in this order:
 1. Search local `use` parameters from innermost to outermost; the first direct match wins.
 2. Search superclass projections of local witnesses breadth-first; more than one match at the same minimum depth is ambiguous.
 3. Look up the concept and the rigid heads of every parameter in the global witness table.
+
+A slot is resolved only while it is open: one that unification has already solved — an expected type or an argument's type named the dictionary — is left as it stands. A slot is also resolved where it stands, so a premise whose concept arguments are known when the call reaches it takes the registered witness before a later argument could name another, and that argument is then a type mismatch; `use value` at the slot says which is meant.
 
 If any concept parameter is still headed by an unsolved metavariable, resolution waits until that metavariable is solved. A selected global witness is instantiated with fresh implicit arguments, its witness premises are resolved recursively, and its full result type is unified with the goal. A rigid key with no entry yet defers rather than failing, so a witness may be declared after the code that resolves through it; what is still deferred once the unit has elaborated is reported then.
 

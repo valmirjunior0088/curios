@@ -247,3 +247,128 @@ fn a_literal_head_is_held_to_the_formers_marks() {
         "got: {message}"
     );
 }
+
+// A type naming a dictionary other than the registered one is read under the one it names. Each of these leaves its `use` slot to the elaborator while the key type is still open, so the slot is solved by unification — against the expected type, or against the argument's — and resolution, which would write the registered `Key(Nat)` over it, finds the slot taken: the bare literal, the applied head, a constructor its expected type fixes, the operation and the witness over the type all answer through `never`. A constructor whose payload fixes the key type first states the dictionary, as `link` does here; `a_key_type_fixed_before_the_slot_takes_the_registered_dictionary` holds why.
+#[test]
+fn a_type_naming_another_dictionary_is_read_under_it() {
+    let source = r#"
+        use /std/{Nat, Bool, Str, Show, print};
+        pub concept Key(K: Type): pub Type {
+            same(K, K) -> Bool
+        }
+        satisfy Key(Nat) {
+            same(a, b) = a == b
+        }
+        pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
+            key: K,
+            value: V
+        }
+        let never: Key(Nat) = Key { same(a, b) = false };
+        pub induct Chain(K: Type, use Key(K), V: Type): pub Type
+        | done()
+        | link(K, V, Chain(K, V))
+        end
+        let holds(@K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K) -> Bool =
+            Key/same(at.key, key);
+        let find(@K: Type, use Key(K), @V: Type, chain: Chain(K, V), key: K, otherwise: V) -> V =
+            match chain
+            | done() => otherwise
+            | link(at, value, rest) => choose
+                | Key/same(at, key) => value
+                | _ => find(rest, key, otherwise)
+                end
+            end;
+        satisfy (@K: Type, use Key(K), @V: Type) => Show(Slot(K, V)) {
+            show(at) = Bool/to_str(Key/same(at.key, at.key))
+        }
+        let plain: Slot(Nat, Str) = Slot { key = 2, value = "two" };
+        let bare: Slot(Nat, use never, Str) = Slot { key = 2, value = "two" };
+        let headed = Slot(Nat, use never, Str) { key = 2, value = "two" };
+        let chain: Chain(Nat, use never, Str) = Chain/link(use never, 2, "two", Chain/done());
+        print(Str/concat(
+            Str/concat(
+                Str/concat(Bool/to_str(holds(plain, 2)), Bool/to_str(holds(bare, 2))),
+                Str/concat(Bool/to_str(holds(headed, 2)), find(chain, 2, "none"))),
+            Str/concat(Show/show(plain), Show/show(bare))))
+        "#;
+
+    assert_eq!(run(source), b"truefalsefalsenonetruefalse");
+}
+
+// One premise is one dictionary: two values under different ones cannot both be the arguments of an operation whose signature names the dictionary once, and the elaborator says so rather than choosing.
+#[test]
+fn two_dictionaries_in_one_call_are_refused() {
+    let source = r#"
+        use /std/{Nat, Bool, Str, Show, print};
+        pub concept Key(K: Type): pub Type {
+            same(K, K) -> Bool
+        }
+        satisfy Key(Nat) {
+            same(a, b) = a == b
+        }
+        pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
+            key: K,
+            value: V
+        }
+        let never: Key(Nat) = Key { same(a, b) = false };
+        let alike(@K: Type, use Key(K), @V: Type, left: Slot(K, V), right: Slot(K, V)) -> Bool =
+            Key/same(left.key, right.key);
+        let plain: Slot(Nat, Str) = Slot { key = 2, value = "two" };
+        let bare: Slot(Nat, use never, Str) = Slot { key = 2, value = "two" };
+        print(Bool/to_str(alike(plain, bare)))
+        "#;
+
+    let message = error(source);
+    assert!(message.contains("type mismatch"), "got: {message}");
+    assert!(
+        message.contains("use Key { (a, b) => false }"),
+        "got: {message}"
+    );
+}
+
+// A slot is resolved where it stands. With the key type written ahead of the premise, the goal is closed when the walk reaches it and takes the registered dictionary, so a value under another is a mismatch the elaborator reports — and the same call with the dictionary written is accepted.
+#[test]
+fn a_key_type_fixed_before_the_slot_takes_the_registered_dictionary() {
+    let refused = r#"
+        use /std/{Nat, Bool, Str, Show, print};
+        pub concept Key(K: Type): pub Type {
+            same(K, K) -> Bool
+        }
+        satisfy Key(Nat) {
+            same(a, b) = a == b
+        }
+        pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
+            key: K,
+            value: V
+        }
+        let never: Key(Nat) = Key { same(a, b) = false };
+        let holds_at(K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K) -> Bool =
+            Key/same(at.key, key);
+        let bare: Slot(Nat, use never, Str) = Slot { key = 2, value = "two" };
+        print(Bool/to_str(holds_at(Nat, bare, 2)))
+        "#;
+
+    let message = error(refused);
+    assert!(message.contains("type mismatch"), "got: {message}");
+
+    let supplied = r#"
+        use /std/{Nat, Bool, Str, Show, print};
+        pub concept Key(K: Type): pub Type {
+            same(K, K) -> Bool
+        }
+        satisfy Key(Nat) {
+            same(a, b) = a == b
+        }
+        pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
+            key: K,
+            value: V
+        }
+        let never: Key(Nat) = Key { same(a, b) = false };
+        let holds_at(K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K) -> Bool =
+            Key/same(at.key, key);
+        let bare: Slot(Nat, use never, Str) = Slot { key = 2, value = "two" };
+        print(Bool/to_str(holds_at(Nat, use never, bare, 2)))
+        "#;
+
+    assert_eq!(run(supplied), b"false");
+}

@@ -7,6 +7,8 @@
 //!
 //! A rigid, keyable head with no table entry *defers* rather than failing: items elaborate in order, and a later item may register the witness. The deferred store is retried after every item and drained — erroring — once the whole module has elaborated.
 //!
+//! **A goal is attempted only while its slot is open.** The slot is a metavariable like any other, so unification may solve it first — against an expected type or an argument's type that names a dictionary, as a type declared under a `use` premise does — and that solution is the answer: a value built under one dictionary is read under the same one. Resolving the goal anyway would write the table's entry over it, which the elaborator would accept and the kernel refuse, the argument's type no longer converting with the parameter's. Every door that commits a resolution asks first: the first attempt, a parked or deferred retry, and the end-of-module sweep.
+//!
 //! **Rule 1 beating rule 3 is why a concept cannot state a law about the *registered* witness.** A field whose own telescope takes `use C(A)` states its law over an arbitrary `C` rather than the one the program registered, so no witness can discharge it — which rules out checking a copy of a resolved witness from inside the concept that copies it. Removing the copy is the move that remains: a superclass edge, whose slot resolution fills.
 
 use {
@@ -730,7 +732,7 @@ fn instantiate(
     Ok(Resolution::Solved(term))
 }
 
-/// Attempt a freshly minted witness goal: solve it now, park it on a flex key, or defer it on a missing table entry. A definite failure is an error at `origin`'s span.
+/// Attempt a freshly minted witness goal: solve it now, park it on a flex key, or defer it on a missing table entry. A definite failure is an error at `origin`'s span. A slot unification has already solved is left as it stands.
 pub(crate) fn attempt_witness_goal(
     context: &mut Context,
     slot: MetavarId,
@@ -738,6 +740,10 @@ pub(crate) fn attempt_witness_goal(
     provenance: WitnessOrigin,
     origin: &Term,
 ) -> Result<(), Error> {
+    if context.metavar_solution(slot).is_some() {
+        return Ok(());
+    }
+
     match resolve_witness(context, goal, origin)? {
         Resolution::Solved(term) => {
             context.solve_metavar(slot, term);
@@ -778,7 +784,7 @@ pub(crate) fn attempt_witness_goal(
     }
 }
 
-/// Retry a parked or deferred witness goal under its frozen frame. Called by `retry_parked`'s wake path and the deferred-goal sweeps.
+/// Retry a parked or deferred witness goal under its frozen frame. Called by `retry_parked`'s wake path and the deferred-goal sweeps. A goal whose slot was solved while it waited — the metavariable it was parked on and the slot solved by one unification — is dropped, as [`attempt_witness_goal`] drops it.
 pub(crate) fn retry_witness(
     context: &mut Context,
     slot: MetavarId,
@@ -787,6 +793,10 @@ pub(crate) fn retry_witness(
     origin: Term,
     frame: FrozenFrame,
 ) -> Result<(), Error> {
+    if context.metavar_solution(slot).is_some() {
+        return Ok(());
+    }
+
     let resolution =
         context.with_retry_frame(&frame, |context| resolve_witness(context, &goal, &origin))?;
 
@@ -895,15 +905,22 @@ pub(crate) fn finish_deferred_witnesses(
 
     for (item, parked) in context.take_deferred_witnesses() {
         let ParkedProblem {
-            work: ParkedWork::Witness {
-                goal, provenance, ..
-            },
+            work:
+                ParkedWork::Witness {
+                    slot,
+                    goal,
+                    provenance,
+                },
             origin,
             ..
         } = parked
         else {
             unreachable!("only witness goals defer");
         };
+        // The retry above woke the parked constraints, and one of them may have solved this slot after its goal was deferred again.
+        if context.metavar_solution(slot).is_some() {
+            continue;
+        }
         refusals.push(DeferredRefusal {
             item,
             error: no_witness_error(context, &goal, &provenance, origin.span().as_ref())
