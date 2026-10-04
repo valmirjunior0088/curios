@@ -101,7 +101,7 @@ Certifying anything below Core; a verified certifier; a certifier runnable apart
 
 ## Verification
 
-- `curios/src/tests/board/` and `kernel_disagreements` stay clean at every stage, and [the conversion differential](01-conversion-held-across-checkers.md) holds the two checkers' conversion to each other.
+- `curios/src/tests/board/` and `kernel_disagreements` stay clean at every stage, and [the audit of conversion's laws](01-conversion-is-one-relation-in-both-checkers.md) holds the two checkers' conversion to each other.
 - Stage 3's differential and stage 4's step, each failing on the mutation its stage names.
 - The certificate checker is held against certificates corrupted one step at a time, each corruption refused.
 - The certifier's time is measured before and after stages 3 and 5, and reported by the stage.
