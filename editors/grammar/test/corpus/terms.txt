@@ -416,3 +416,75 @@ compose
       (goal)))
   (path
     (identifier)))
+
+================================================================================
+A member written as its type alone, and a lambda holding a witness slot's place
+================================================================================
+
+induct Positive: Type
+| at(n: Nat, @Holds(0 < n))
+end
+let f(n: Nat, @Holds(0 < n)) -> Nat = n;
+let g = (@A, use _, x) => x;
+f
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (induct_item
+    (induct_body
+      (identifier)
+      (sort)
+      (constructor
+        (identifier)
+        (payload
+          (identifier)
+          (path
+            (identifier)))
+        (payload
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (binary
+                  (number)
+                  (path
+                    (identifier))))))))))
+  (let_item
+    (let_member
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (path
+            (identifier)))
+        (parameter
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (binary
+                  (number)
+                  (path
+                    (identifier))))))))
+      (path
+        (identifier))
+      (path
+        (identifier))))
+  (let_term
+    (let_binding
+      (identifier)
+      (lambda
+        (lambda_parameters
+          (lambda_parameter
+            (identifier))
+          (lambda_parameter
+            (identifier))
+          (lambda_parameter
+            (identifier)))
+        (path
+          (identifier))))
+    (path
+      (identifier))))

@@ -35,6 +35,15 @@ where
     Parser::new(move |state| Err(ParserError::new(state, message).from(start)))
 }
 
+/// The failure [`fail_from`] would report here, as a value and without failing: for a grammar that reads a form it will refuse before it has read the token that makes the refusal its own, and [`raise`]s it once it has. The report covers the text from `start` to the current offset, as `fail_from`'s does.
+pub fn refusal<'a, S>(start: &Mark, message: S) -> Parser<'a, ParserError>
+where
+    S: Into<String> + 'a,
+{
+    let start = start.offset();
+    Parser::new(move |state| Ok((ParserError::new(state, message).from(start), state)))
+}
+
 /// Consumes exactly the literal `expected`, yielding nothing. On mismatch the error sits at the *pre-consumption* offset, so it loses [`Parser::or`]'s tie-break to any alternative that read further — which, the failure being uncommitted, is what makes a keyword or punctuation probe safe as the first token of an alternative. The mismatch message shows what actually follows, counted in characters rather than the literal's bytes, so non-ASCII input never truncates mid-character or misreports as end-of-file — and cut at the first whitespace, so a token shorter than the literal is quoted alone rather than with its neighbour: `=` where `=>` was expected read as `'= '`.
 pub fn take_exact<'a>(expected: &'static str) -> Parser<'a, ()> {
     Parser::new(move |state| match state.string.starts_with(expected) {

@@ -571,13 +571,13 @@ fn a_parameter_the_result_mentions_is_used_when_an_earlier_parameter_has_a_funct
     );
 }
 
-/// A named `use` binder joins the instance scope: resolution reads it, whether or not the body names it.
+/// A `use` member has no binder to report: its place is held by `_`, and resolution reads it whether or not the body does.
 #[test]
-fn a_named_use_lambda_binder_is_never_reported() {
+fn a_use_lambda_member_is_never_reported() {
     assert_eq!(
         lints(
             r#"
-        (use w, a : Type) => a
+        (use _, a : Type) => a
     "#
         ),
         Vec::<String>::new()

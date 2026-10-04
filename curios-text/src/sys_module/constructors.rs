@@ -40,7 +40,7 @@ impl Decl {
                 .into_iter()
                 .map(|(plicity, label, type_)| FuncSugarParam {
                     plicity,
-                    label: Pattern::Binder(Some(label.into())),
+                    binder: Some(Pattern::Binder(label.into())),
                     type_,
                 })
                 .collect(),

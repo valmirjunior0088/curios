@@ -207,18 +207,6 @@ fn a_law_over_its_concepts_methods_reads_back() {
 }
 
 #[test]
-fn a_lambda_naming_its_witness_reads_back() {
-    // A lambda may name its witness and its type may not: the type prints `use Show(A)` unnamed.
-    let source = r#"
-        use /std/{Show, Str};
-        pub let t: ? = (@A: Type, use s: Show(A), a: A) => Show/show(a);
-        /std/print("")
-    "#;
-
-    reads_back(source).unwrap();
-}
-
-#[test]
 fn an_operator_under_an_abstract_witness_reads_back() {
     // `a + a` elaborates to a projection off the `use Add(A)` binder, which prints as the operator.
     let source = r#"

@@ -283,20 +283,19 @@ fn a_witness_premise_at_a_proposition_is_refused() {
     );
 }
 
-// A lambda's annotated `use` binder meets the rule too, and a type that is no proposition gets no hint about `@`.
+// A lambda's `use` member states no type, so one that no expected function type states is refused by that rule, where an unannotated plain binder is asked for its annotation.
 #[test]
-fn an_annotated_use_binder_at_a_plain_type_is_refused_without_the_proof_hint() {
+fn an_inferred_lambda_has_no_use_member() {
     let report = error(
         r#"
         use /std/{Nat};
-        let g = (use s: Nat) => 0;
+        let g = (use _, n: Nat) => n;
         /std/print("unreachable")
         "#,
     );
     assert!(
-        report.contains("a 'use' parameter's type must be a concept application")
-            && report.contains("found: Nat")
-            && !report.contains("write '@'"),
+        report.contains("this lambda writes `use _` and nothing states the member")
+            && !report.contains("annotate the parameter"),
         "unexpected report:\n{report}"
     );
 }

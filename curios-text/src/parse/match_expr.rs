@@ -1,6 +1,7 @@
 use {
     super::{
-        parse_func_pattern_param, parse_keyword, parse_literal, parse_match_pattern, parse_pattern,
+        members, parse_func_pattern_param, parse_keyword, parse_literal, parse_match_pattern,
+        parse_pattern,
     },
     crate::{
         Choose, ChooseArm, ChooseTest, Func, Match, MatrixArm, Pattern, Subterm, Term, parse_term,
@@ -18,7 +19,8 @@ pub(super) fn parse_func<'a>() -> Parser<'a, Term> {
         }))
         .and_drop(parse_literal(")"))
         .and_drop(parse_literal("=>"))
-        // Past the arrow this is a lambda and nothing else, so its body owns the diagnosis. Left to backtrack, the parameter list would be re-read as a tuple or a parenthesized term and the arrow itself would become the complaint.
+        // Past the arrow this is a lambda and nothing else, so a parameter it refuses and its body own the diagnosis. Left to backtrack, the parameter list would be re-read as a tuple or a parenthesized term and the arrow itself would become the complaint.
+        .flat_map(members)
         .and(commit(lazy(parse_term)))
         .map(|(params, body)| Subterm::Func(Func { params, body }).into())
 }

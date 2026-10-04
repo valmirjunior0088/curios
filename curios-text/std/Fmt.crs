@@ -86,8 +86,8 @@ let go_with(T: Type, finish: (Str) -> T, f: Fmt, acc: Str) -> format_type_with(T
     match f
     | nil() => finish(acc)
     | lit(piece, rest) => go_with(T, finish, rest, Str/concat(acc, piece))
-    | show(rest) => (use w, a) => go_with(T, finish, rest, Str/concat(acc, Show/show(a)))
-    | spell(rest) => (use w, a) => go_with(T, finish, rest, Str/concat(acc, Spell/spell(a)))
+    | show(rest) => (use _, a) => go_with(T, finish, rest, Str/concat(acc, Show/show(a)))
+    | spell(rest) => (use _, a) => go_with(T, finish, rest, Str/concat(acc, Spell/spell(a)))
     end;
 
 --- The text of `s` with its places filled by the arguments that follow.

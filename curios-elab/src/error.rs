@@ -470,6 +470,8 @@ pub enum Error {
     DomainNeverDetermined {
         binder: String,
     },
+    /// A lambda writes `use _` where no expected function type states the member. A `use` member holds a place and states no type, so a lambda nothing is checking has none to take: there is no annotation to ask for, unlike [`Error::DomainNeverDetermined`].
+    WitnessMemberNeverStated,
     /// A call supplies more `@`-arguments than the function has implicit binders (the explicit-slot counterpart is `WrongNumberOfArguments`).
     TooManyImplicits {
         expected: usize,
@@ -1088,6 +1090,10 @@ impl Error {
 
     pub(crate) fn domain_never_determined(binder: String) -> Self {
         Self::DomainNeverDetermined { binder }
+    }
+
+    pub(crate) fn witness_member_never_stated() -> Self {
+        Self::WitnessMemberNeverStated
     }
 
     pub(crate) fn too_many_implicits(expected: usize, got: usize) -> Self {

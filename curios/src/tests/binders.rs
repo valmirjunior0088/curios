@@ -111,12 +111,12 @@ fn lambda_inserts_an_omitted_witness_binder() {
     assert_eq!(run(source), b"7");
 }
 
-// The witness binder may be written and named with `use`; the body may then reference it directly.
+// The witness member may be written, as `use _`: it holds its place, and the body reaches the witness by resolution.
 #[test]
-fn lambda_may_write_the_witness_binder() {
+fn lambda_may_write_the_witness_member() {
     let source = r#"
         use /std/{Nat, Str, Show};
-        let showit : (@A : Type, use Show(A), x : A) -> Str = (@A, use s, x) => Show/show(x);
+        let showit : (@A : Type, use Show(A), x : A) -> Str = (@A, use _, x) => Show/show(x);
         /std/print(showit(7))
         "#;
     assert_eq!(run(source), b"7");
@@ -299,4 +299,35 @@ fn bare_reference_keeps_its_type_at_a_hidden_expectation() {
         /std/print(Nat/to_str(keep(9)))
         "#;
     assert_eq!(run(source), b"9");
+}
+
+// An `@` member of a definition telescope may be its type alone. The unnamed bound is the implicit argument a named one would be: the call discharges it, and the body has it as a fact in scope, so the bound the body's own call needs follows from it.
+#[test]
+fn a_definition_takes_an_unnamed_member() {
+    let source = r#"
+        use /std/{Nat, Str, print};
+        use /std/Bool/{Holds};
+        let positive(n: Nat, @Holds(0 < n)) -> Nat = n;
+        let twice(n: Nat, @Holds(0 < n)) -> Nat = positive(n) + positive(n);
+        let second(_: Nat, n: Nat) -> Nat = n;
+        print(Nat/to_str(twice(second(7, 3))))
+        "#;
+
+    assert_eq!(run(source), b"6");
+}
+
+// A payload takes the unnamed `@` member too: construction discharges the bound, and a pattern binds it under the mark its slot was declared with.
+#[test]
+fn a_payload_takes_an_unnamed_implicit_member() {
+    let source = r#"
+        use /std/{Nat, Str, print};
+        use /std/Bool/{Holds};
+        induct Positive: pub Type
+        | at(n: Nat, @Holds(0 < n))
+        end
+        let value(p: Positive) -> Nat = match p | at(n, @_) => n end;
+        print(Nat/to_str(value(Positive/at(4))))
+        "#;
+
+    assert_eq!(run(source), b"4");
 }

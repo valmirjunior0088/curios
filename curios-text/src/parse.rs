@@ -1,6 +1,9 @@
 mod literals;
 use literals::*;
 
+mod marks;
+use marks::*;
+
 mod tuples;
 use tuples::*;
 
@@ -25,6 +28,8 @@ mod expr_tests;
 mod grammar_tests;
 #[cfg(test)]
 mod literals_tests;
+#[cfg(test)]
+mod marks_tests;
 #[cfg(test)]
 mod match_expr_tests;
 #[cfg(test)]

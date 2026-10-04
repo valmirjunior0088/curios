@@ -1218,12 +1218,9 @@ fn process_items(
                         .fields
                         .iter()
                         .enumerate()
-                        .map(|(i, field)| {
-                            if field.is_super {
-                                format!("_super{i}")
-                            } else {
-                                field.label.to_string()
-                            }
+                        .map(|(i, field)| match &field.label {
+                            Some(label) => label.to_string(),
+                            None => format!("_super{i}"),
                         })
                         .collect::<Vec<_>>();
 
@@ -1269,7 +1266,7 @@ fn process_items(
                         .fields
                         .iter()
                         .enumerate()
-                        .filter(|(_, field)| field.is_super)
+                        .filter(|(_, field)| field.is_super())
                         .map(|(idx, field)| {
                             let head = field.type_.concept_app_head().ok_or_else(|| {
                                 Error::MalformedSuperField {
@@ -1317,11 +1314,11 @@ fn process_items(
                     //
                     // Type and body are constructed together so both close over the one `w`, and both index the field positionally. Superclass fields are anonymous and get no wrapper: an instance of the outer concept already yields the inner one by resolution.
                     let param_refs = param_vars.iter().collect::<Vec<_>>();
-                    for (index, field) in concept
+                    for (index, label) in concept
                         .fields
                         .iter()
                         .enumerate()
-                        .filter(|(_, field)| !field.is_super)
+                        .filter_map(|(index, field)| Some((index, field.label.as_ref()?)))
                     {
                         // `index` is the field's position in the *whole* telescope, superclass slots included. Counting only the fields that get wrappers would read every method after a superclass one slot early.
                         let witness_id = lower.mint(["w".to_string()]).remove(0).1;
@@ -1383,7 +1380,7 @@ fn process_items(
                                 owner: context.prefixed(&concept.label),
                             },
                             name: curios_core::Global::Authored(
-                                context.prefixed(&concept.label).with(&field.label),
+                                context.prefixed(&concept.label).with(label),
                             ),
                             island: context.island(),
                             type_,

@@ -354,18 +354,13 @@ fn print_func_type_param(param: FuncTypeParam) -> Printer {
     flat([print_plicity(param.plicity), body])
 }
 
-/// One function-sugar binder (a `let`/`satisfy` telescope parameter). A `use` binder is anonymous — `use type`, no label; otherwise the plicity prefixes the name (`@x` = implicit).
+/// One member of a definition telescope (`let`, `satisfy`): its mark, then the binder with its type, or the type alone where the member has no binder — every `use` premise, and an unnamed `@T` or `T`.
 fn print_func_sugar_param(param: FuncSugarParam) -> Printer {
-    if param.plicity == Plicity::Witness {
-        flat([pure("use "), print_term(param.type_)])
-    } else {
-        flat([
-            print_plicity(param.plicity),
-            print_pattern(param.label),
-            pure(": "),
-            print_term(param.type_),
-        ])
-    }
+    let member = match param.binder {
+        Some(binder) => flat([print_pattern(binder), pure(": "), print_term(param.type_)]),
+        None => print_term(param.type_),
+    };
+    flat([print_plicity(param.plicity), member])
 }
 
 /// One lambda parameter: the binder name with its optional domain annotation.
@@ -423,9 +418,7 @@ fn print_pattern_field(field: PatternField) -> Printer {
 /// A binder pattern: a plain name, a tuple pattern, or a struct pattern — the literal mirror of the `Tuple`/`StructLit` term-printing arms below, with `Term` replaced by `Pattern`.
 fn print_pattern(pattern: Pattern) -> Printer {
     match pattern {
-        Pattern::Binder(Some(name)) => pure(name),
-        // Only a function-sugar `use` parameter (`Plicity::Witness`) has no source binder at all — and that path never calls `print_pattern` (see `print_func_sugar_param`), so this is unreachable.
-        Pattern::Binder(None) => unreachable!("an anonymous binder has no pattern to print"),
+        Pattern::Binder(name) => pure(name),
         Pattern::Tuple(fields) => {
             if fields.len() == 1 {
                 let field = fields.into_iter().next().unwrap();
@@ -542,7 +535,7 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
     }
 }
 
-/// One lambda parameter: its plicity mark (`@`/`use`), the binder pattern, and its optional domain annotation — the pattern-accepting counterpart of `print_func_param`, forked for the same reason `parse_func_pattern_param` is (see `parse.rs`). A lambda's `use` binder is named (`use show`), so the mark precedes the pattern rather than an anonymous domain type.
+/// One lambda parameter: its plicity mark (`@`/`use`), the binder pattern, and its optional domain annotation — the pattern-accepting counterpart of `print_func_param`, forked for the same reason `parse_func_pattern_param` is (see `parse.rs`). A lambda's `use` member is `use _`, the wildcard holding its place.
 fn print_func_pattern_param(param: FuncParam) -> Printer {
     let FuncParam {
         plicity,
@@ -1956,8 +1949,8 @@ fn print_concept_field(field: ConceptField) -> (Option<usize>, Printer) {
     let begins_at = doc_start(&field.doc).or(start);
     let doc = print_doc(field.doc);
 
-    // A superclass field is anonymous: `use <type>`, no label.
-    if field.is_super {
+    // A superclass edge is a `use` member: the mark and its type, no label.
+    let Some(label) = field.label else {
         return (
             begins_at,
             flat([
@@ -1965,11 +1958,11 @@ fn print_concept_field(field: ConceptField) -> (Option<usize>, Printer) {
                 marked(start, || flat([pure("use "), print_term(field.type_)])),
             ]),
         );
-    }
+    };
     let spelled = match field.func_params {
         Some(params) => marked(start, || {
             flat([
-                pure(field.label),
+                pure(label),
                 listed(
                     "(",
                     params.into_iter().map(print_func_type_param).collect(),
@@ -1980,7 +1973,7 @@ fn print_concept_field(field: ConceptField) -> (Option<usize>, Printer) {
             ])
         }),
         None => marked(start, || {
-            flat([pure(field.label), pure(": "), print_term(field.type_)])
+            flat([pure(label), pure(": "), print_term(field.type_)])
         }),
     };
     (begins_at, flat([doc, spelled]))
@@ -2318,12 +2311,12 @@ pub(crate) fn print_concept_head(item: &TopConcept) -> Printer {
 
 /// One concept field as a page lists it: a superclass as `use T`, a method as written, sugar included.
 pub(crate) fn print_concept_field_head(field: &ConceptField) -> Printer {
-    if field.is_super {
+    let Some(label) = &field.label else {
         return flat([pure("use "), print_term(field.type_.clone())]);
-    }
+    };
     match &field.func_params {
         Some(params) => flat([
-            pure(field.label.clone()),
+            pure(label.clone()),
             listed(
                 "(",
                 params.iter().cloned().map(print_func_type_param).collect(),
@@ -2333,7 +2326,7 @@ pub(crate) fn print_concept_field_head(field: &ConceptField) -> Printer {
             print_term(field.type_.clone()),
         ]),
         None => flat([
-            pure(field.label.clone()),
+            pure(label.clone()),
             pure(": "),
             print_term(field.type_.clone()),
         ]),

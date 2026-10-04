@@ -106,7 +106,7 @@ pub struct TopForeign {
     pub signature: WireSignature,
 }
 
-/// One payload binder of an `induct` case. The name is optional (`success(A)` stays positional); it is required when a later payload type or the case target mentions the binder. `plicity` is the `@`-on-the-name mark (implicit at the value-constructor function — `cons(@m : Nat, …)`, `m` recoverable from a later payload's type). Erasure is sort-driven, so no per-field mark is kept.
+/// One payload binder of an `induct` case. The name is optional (`success(A)` stays positional); it is required when a later payload type or the case target mentions the binder. `plicity` is plain or `@` — implicit at the value-constructor function, named (`cons(@m : Nat, …)`, `m` recoverable from a later payload's type) or not (`at(n : Nat, @Holds(0 < n))`); the parser refuses `use` here. Erasure is sort-driven, so no per-field mark is kept.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CasePayloadParam {
     pub plicity: Plicity,
@@ -162,19 +162,23 @@ pub struct TopStruct {
     pub fields: Vec<StructField>,
 }
 
-/// One field of a `concept` declaration. `is_super` marks a `use`-prefixed field, whose type must elaborate to a concept application (a superclass edge).
+/// One field of a `concept` declaration: a method, or a `use`-prefixed superclass edge, whose type must elaborate to a concept application.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConceptField {
     pub doc: Option<Doc>,
-    pub is_super: bool,
-    /// The method's name, carrying the span of the word alone, as [`TopCase::label`] does and for the same reasons — a field is reached as a path segment (`Show/show`) through the wrapper it generates. Empty and spanless on a superclass field, which is an anonymous positional slot with no name to reach it by.
-    pub label: Label,
-    /// `Some` for the signature sugar `label(params) -> type_` — the written parameter list, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label : (params) -> type_` (see `ConceptField::desugared_type`). Never set on a super field.
+    /// The method's name, carrying the span of the word alone, as [`TopCase::label`] does and for the same reasons — a field is reached as a path segment (`Show/show`) through the wrapper it generates. `None` on a superclass edge, which is a `use` member: a type and no binder.
+    pub label: Option<Label>,
+    /// `Some` for the signature sugar `label(params) -> type_` — the written parameter list, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label : (params) -> type_` (see `ConceptField::desugared_type`). Never set on a superclass edge.
     pub func_params: Option<Vec<FuncTypeParam>>,
     pub type_: Term,
 }
 
 impl ConceptField {
+    /// Whether this field is a superclass edge rather than a method.
+    pub fn is_super(&self) -> bool {
+        self.label.is_none()
+    }
+
     /// The field's type with the signature sugar undone: the written type when the field is plain, the Π-type `(params) -> type_` when it was written `label(params) -> type_`.
     pub(crate) fn desugared_type(&self) -> Term {
         match &self.func_params {

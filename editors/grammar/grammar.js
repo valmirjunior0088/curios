@@ -167,10 +167,11 @@ module.exports = grammar({
         optional(seq(":", "(", commaList($._term), ")")),
       ),
 
+    // Plain or `@`, named or the type alone.
     payload: ($) =>
       choice(
         seq(optional("@"), field("name", $.identifier), ":", field("type", $._term)),
-        field("type", $._term),
+        seq(optional("@"), field("type", $._term)),
       ),
 
     // One structure, or a `struct A … and B …` group whose fields name one another; each member takes its own `pub`.
@@ -276,13 +277,14 @@ module.exports = grammar({
 
     // ---- Telescopes ----
 
-    // A `let`/`satisfy` telescope: every parameter annotated, `use` ones anonymous.
+    // A `let`/`satisfy` telescope: a `use` premise is its type, a plain or `@` parameter a pattern with its type, and an `@` one may be its type alone.
     parameters: ($) => seq("(", commaList($.parameter), ")"),
 
     parameter: ($) =>
       choice(
         seq("use", field("type", $._term)),
         seq(optional("@"), field("pattern", $._pattern), ":", field("type", $._term)),
+        seq("@", field("type", $._term)),
       ),
 
     function_type_parameters: ($) => seq("(", commaList($.function_type_parameter), ")"),

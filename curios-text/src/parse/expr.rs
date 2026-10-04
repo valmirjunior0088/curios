@@ -1,9 +1,10 @@
 use {
     super::{
-        MEMO_ATOMIC_TERM, MEMO_TERM, comment_ending_at, parse_choose, parse_func, parse_func_type,
-        parse_intrinsic, parse_keyword, parse_let_binder, parse_literal, parse_match, parse_name,
-        parse_parens, parse_pattern, parse_plicity, parse_prop, parse_qualified_name,
-        parse_struct_lit, parse_tuple, parse_tuple_type, parse_type, parse_usize_raw,
+        DEFINITION_NAMES_ITS_PLAIN_MEMBERS, MEMO_ATOMIC_TERM, MEMO_TERM, Read, comment_ending_at,
+        members, parse_choose, parse_func, parse_func_type, parse_intrinsic, parse_keyword,
+        parse_let_binder, parse_literal, parse_mark, parse_match, parse_name, parse_parens,
+        parse_pattern, parse_premise, parse_prop, parse_qualified_name, parse_struct_lit,
+        parse_tuple, parse_tuple_type, parse_type, parse_usize_raw, refused,
     },
     crate::{
         Apply, Argument, Field, FuncSugarParam, Infix, Label, Let, LetBinding, LetGroup,
@@ -34,7 +35,7 @@ fn parse_let_group<'a>() -> Parser<'a, LetGroup> {
             parse_keyword("and")
                 .and_keep(commit(parse_binding()))
                 .map(|(label, signature)| LetBinding {
-                    binder: Pattern::Binder(Some(label)),
+                    binder: Pattern::Binder(label),
                     signature,
                 })
         }))
@@ -44,29 +45,37 @@ fn parse_let_group<'a>() -> Parser<'a, LetGroup> {
         })
 }
 
-// A `use` binder in function-definition sugar (`let`/`satisfy` telescopes): `use term`. Always anonymous — there is no source binder position at all (lowering mints a fresh name directly) and joins the instance scope; an instance is reached by resolution, never by name.
-pub(super) fn parse_use_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
-    parse_keyword("use")
-        .and_keep(lazy(parse_term))
-        .map(|type_| FuncSugarParam {
-            plicity: Plicity::Witness,
-            label: Pattern::Binder(None),
-            type_,
+// One member of a definition telescope (`let`, `satisfy`): `use Concept(args)`, which has no binder and joins the witness scope, or under `@` or no mark a binder pattern with its type. An `@` member may be its type alone — a bound, which the body uses as a fact and never by name. A plain member may not: a parameter the body cannot name is an annotation forgotten far more often than a parameter meant, so it is read and reported.
+pub(super) fn parse_func_sugar_param<'a>() -> Parser<'a, Read<FuncSugarParam>> {
+    mark()
+        .and(parse_mark())
+        .flat_map(|(start, plicity)| match plicity {
+            Plicity::Witness => parse_premise(start).map(|read| {
+                read.map(|type_| FuncSugarParam {
+                    plicity: Plicity::Witness,
+                    binder: None,
+                    type_,
+                })
+            }),
+            Plicity::Explicit | Plicity::Implicit => parse_pattern()
+                .and_drop(parse_literal(":"))
+                .and(lazy(parse_term))
+                .map(move |(binder, type_)| {
+                    Ok(FuncSugarParam {
+                        plicity,
+                        binder: Some(binder),
+                        type_,
+                    })
+                })
+                .or(lazy(parse_term).flat_map(move |type_| match plicity {
+                    Plicity::Explicit => refused(&start, DEFINITION_NAMES_ITS_PLAIN_MEMBERS),
+                    Plicity::Implicit | Plicity::Witness => pure(Ok(FuncSugarParam {
+                        plicity,
+                        binder: None,
+                        type_,
+                    })),
+                })),
         })
-}
-
-pub(super) fn parse_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
-    parse_use_func_sugar_param().or(parse_plicity()
-        .and(parse_pattern())
-        .and_drop(parse_literal(":"))
-        .and(lazy(parse_term))
-        .map(
-            |((plicity, label), type_): ((Plicity, Pattern), Term)| FuncSugarParam {
-                plicity,
-                label,
-                type_,
-            },
-        ))
 }
 
 // The function-definition sugar `(p : T, ...) -> R = body`. Shared by both the type-required and the local (type-optional) signature parsers.
@@ -77,6 +86,8 @@ pub(super) fn parse_func_let_signature<'a>(owns_body: bool) -> Parser<'a, LetSig
         }))
         .and_drop(parse_literal(")"))
         .and_drop(parse_literal("->"))
+        // Past the arrow this is the definition sugar, so a member it refuses is its own to report.
+        .flat_map(members)
         .and(lazy(parse_term))
         .and_drop(parse_literal("="))
         .and(body(owns_body))
@@ -173,11 +184,9 @@ pub(super) enum Suffix {
     Bang,
 }
 
-// A call-site argument's plicity: `use <term>` fills a witness slot, `@<term>` an implicit slot, a plain term an explicit slot. `use` is reserved, so it can never begin a plain-argument term.
+// A call-site argument under its mark: `use <term>` fills a witness slot, `@<term>` an implicit slot, a plain term an explicit slot. Neither mark can begin a plain-argument term.
 pub(super) fn parse_apply_argument<'a>() -> Parser<'a, Argument> {
-    parse_keyword("use")
-        .map(|()| Plicity::Witness)
-        .or(parse_plicity())
+    parse_mark()
         .and(lazy(parse_term))
         .map(|(plicity, term)| Argument { term, plicity })
 }

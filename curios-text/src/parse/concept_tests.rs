@@ -23,14 +23,17 @@ fn parse_concept_item() {
     // `: Type` without `pub` is a sealed (private-representation) concept.
     assert!(!concept.rep_pub);
 
-    // The `use` field is a superclass edge — anonymous, so its label is empty (lowering mints an internal `_superN`).
-    assert!(concept.fields[0].is_super);
-    assert_eq!(concept.fields[0].label, "");
+    // The `use` field is a superclass edge — a type and no label (lowering mints an internal one for the record's telescope).
+    assert!(concept.fields[0].is_super());
+    assert_eq!(concept.fields[0].label, None);
     assert_eq!(concept.fields[0].func_params, None);
 
     // The sugar field keeps its written parameter list; the annotation slot holds the output type, and only `desugared_type` builds the Π-type.
-    assert!(!concept.fields[1].is_super);
-    assert_eq!(concept.fields[1].label, "cmp");
+    assert!(!concept.fields[1].is_super());
+    assert_eq!(
+        concept.fields[1].label.as_ref().map(|label| label.as_str()),
+        Some("cmp")
+    );
     let params = concept.fields[1].func_params.as_ref().unwrap();
     assert_eq!(params.len(), 2);
     assert!(matches!(
@@ -43,7 +46,10 @@ fn parse_concept_item() {
     ));
 
     // The plain field keeps its written type.
-    assert_eq!(concept.fields[2].label, "top");
+    assert_eq!(
+        concept.fields[2].label.as_ref().map(|label| label.as_str()),
+        Some("top")
+    );
     assert_eq!(concept.fields[2].func_params, None);
     assert!(matches!(
         concept.fields[2].type_.as_subterm(),
@@ -150,9 +156,9 @@ fn use_parameter_forms() {
     assert_eq!(params.len(), 4);
     assert_eq!(params[0].plicity, Plicity::Implicit);
     assert_eq!(params[1].plicity, Plicity::Witness);
-    assert_eq!(params[1].label, Pattern::Binder(None)); // anonymous
+    assert_eq!(params[1].binder, None); // a premise: a type and no binder
     assert_eq!(params[2].plicity, Plicity::Witness);
-    assert_eq!(params[2].label, Pattern::Binder(None)); // anonymous
+    assert_eq!(params[2].binder, None);
     assert_eq!(params[3].plicity, Plicity::Explicit);
 }
 

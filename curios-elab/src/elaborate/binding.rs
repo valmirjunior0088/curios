@@ -1135,6 +1135,12 @@ pub(super) fn elaborate_func_infer(
             // A domain nothing pins is refused here rather than left to fail obscurely downstream — but only a silent hole is: a written `?` domain is the author asking what the domain is, and it rides on to zonk's report (`MetavarOrigin` states the rule). A settle tier instead admits the hole as a named domain metavariable, per the function's contract above.
             let reduced = reduce_with(context, &domain)?;
             let domain = match &*reduced {
+                // A `use` member states no type of its own, so one no annotation states has none here: a settle tier cannot admit it either, a domain left to unification being no concept application, which is all resolution answers.
+                Subterm::Metavar(metavar)
+                    if metavar.is_hole() && plicities[domains.len()] == Plicity::Witness =>
+                {
+                    return Err(Error::witness_member_never_stated());
+                }
                 Subterm::Metavar(metavar) if metavar.is_hole() => match settle {
                     None => {
                         return Err(Error::domain_never_determined(

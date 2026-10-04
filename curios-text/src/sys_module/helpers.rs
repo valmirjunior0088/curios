@@ -170,7 +170,7 @@ pub(super) fn lambda(binder: &str, annotation: Term, body: Term) -> Term {
     Subterm::Func(Func {
         params: vec![FuncParam {
             plicity: Plicity::Explicit,
-            pattern: Pattern::Binder(Some(Label::from(binder))),
+            pattern: Pattern::Binder(Label::from(binder)),
             annotation: Some(annotation),
         }],
         body,

@@ -223,14 +223,17 @@ All inhabitants of the same proposition are definitionally irrelevant, so a proo
 
 A function type is a parenthesized dependent parameter list followed by `->` and its result. The list may be empty: `() -> T` is a nullary function, whose call site writes `f()`.
 
-An explicit parameter is written `name: type` or as an unlabeled type. An implicit parameter begins with `@`. A witness parameter begins with `use` and is anonymous.
+A parameter is plain, implicit (`@`) or a witness (`use`), and after the mark comes its type. A plain or implicit parameter is written `name: type` or as the type alone. A witness parameter is its type alone, `use Show(A)`: it has no name here or anywhere, since a witness is reached by resolution and never by name.
 
 ```crs
 (Nat) -> Nat
 (x: Nat, y: Nat) -> Nat
 (@A: Type, x: A) -> A
+(n: Nat, @Holds(0 < n)) -> Nat
 (@A: Type, use Show(A), value: A) -> Str
 ```
+
+Every site that declares a telescope writes its members this way — a function type, a `let` or `satisfy` telescope, a constructor's payload and a declaration's type parameters — and `use _`, which states no type, is refused in each. A definition and a declaration's parameters name their plain members, since what follows is what uses them.
 
 Later parameter types and the result may refer to earlier named parameters.
 
@@ -338,14 +341,14 @@ A lambda's parameter list is a dependent telescope, exactly as a function type's
 ((lo, hi), q: Eq()(lo, hi)) => lo
 ```
 
-A lambda parameter carries the same plicity mark as a function-type parameter: `@name` binds an implicit slot, `use name` binds a witness slot, and an unmarked binder binds an explicit slot. The mark applies to the slot the parameter occupies whatever the pattern shape. Each written binder is checked against the plicity of the slot it claims when the lambda is checked against an expected function type.
+A lambda parameter carries the mark of the slot it binds, and after the mark comes a binder: `@name` binds an implicit slot, an unmarked binder an explicit one, and `use _` holds a witness slot's place. A witness has no binder — the body reaches it by resolution — and a lambda never states a witness slot's type: the expected function type states it. A lambda with no expected function type therefore has no `use` member, and a function that must declare one is a `let` with a telescope. After `@` a lambda reads a binder and never a type, so an implicit slot the body does not name is `@_`, or `@_: T` to state its type. The mark applies to the slot the parameter occupies whatever the pattern shape, and each written binder is checked against the plicity of the slot it claims when the lambda is checked against an expected function type.
 
 ```crs
 (@A, value) => value
-(@A, use show, value) => Show/show(value)
+(@A, use _, value) => Show/show(value)
 ```
 
-An omitted implicit or witness binder is inserted from the expected function type, so hidden binders may be left out when the body does not name them. Alignment is positional by plicity: each written binder claims the next slot of its own plicity, and every skipped implicit or witness slot before it is inserted. A plain binder never silently binds a hidden slot. Against `(@A: Type, use Show(A), value: A) -> Str`, each of `(value) => …`, `(@A, value) => …`, `(use show, value) => …` and `(@A, use show, value) => …` is accepted; `(A, show, value) => …` is not, because `A` binds the sole explicit slot and the rest are surplus.
+An omitted implicit or witness binder is inserted from the expected function type, so hidden binders may be left out when the body does not name them. Alignment is positional by plicity: each written binder claims the next slot of its own plicity, and every skipped implicit or witness slot before it is inserted. A plain binder never silently binds a hidden slot. Against `(@A: Type, use Show(A), value: A) -> Str`, each of `(value) => …`, `(@A, value) => …`, `(use _, value) => …` and `(@A, use _, value) => …` is accepted; `(A, show, value) => …` is not, because `A` binds the sole explicit slot and the rest are surplus.
 
 ### Local `let`
 
@@ -364,7 +367,7 @@ let increment(n: Nat) -> Nat = n + 1;
 increment(4)
 ```
 
-Every parameter of a `let` or `satisfy` telescope must be annotated; only a `use` parameter is written without one. The `label(params) = value` sugar inside tuple, struct, and witness bodies takes the annotation as optional, since the field's declared type supplies it.
+A `let` or `satisfy` telescope is a signature, and its parameters are written as a [function type](#function-types)'s are, with one difference: a plain parameter is always named, `name: type`, since the body is what uses it. An `@` parameter may be its type alone — `let positive(n: Nat, @Holds(0 < n)) -> Nat = n;` takes the bound as an implicit argument, and the body has it as a fact in scope — and a witness parameter is `use Concept(args)`. The `label(params) = value` sugar inside tuple, struct, and witness bodies binds as a [lambda](#lambdas) does instead: a binder under `@` or no mark, its annotation optional since the field's declared type supplies it, and `use _`.
 
 The binder may be an irrefutable tuple or struct pattern:
 
@@ -844,7 +847,7 @@ pub induct Option(A: Type): pub Type
 end
 ```
 
-Parameters follow the name. A parameter marked `@` is implicit at the type constructor, and a plain or `@` parameter is implicit at every value constructor. A parameter written `use Concept(args)` is a premise the family is declared under, a witness slot of the type constructor and of every value constructor alike — see [A type declared under a premise](#a-type-declared-under-a-premise).
+Parameters follow the name, each named. A parameter marked `@` is implicit at the type constructor, and a plain or `@` parameter is implicit at every value constructor. A parameter written `use Concept(args)` is a premise the family is declared under, a witness slot of the type constructor and of every value constructor alike — see [A type declared under a premise](#a-type-declared-under-a-premise).
 
 The required result annotation is either a sort or an index telescope followed by a sort:
 
@@ -866,6 +869,8 @@ end
 ```
 
 Each constructor of an indexed family must state the indices it produces after `:`. A non-indexed constructor does not accept a target.
+
+A constructor's payload is a signature: each member is `name: type` or its type alone, plain or `@`, so `at(n: Nat, @Holds(0 < n))` takes its bound as an implicit argument. A payload takes no `use` member, and an index takes no mark.
 
 An inductive proposition is declared with `Prop`:
 
@@ -1094,7 +1099,7 @@ In a structure update, a spread copies superclass fields from the base. An expli
 
 ### Witness parameters and arguments
 
-A witness parameter is written `use Concept(args)` in a function type or definition telescope. It is anonymous but joins the witness scope of the function body. Its type must reduce to a concept application, since resolution answers nothing else: any other type is refused where the parameter is declared — in a signature, a witness telescope, or a lambda's annotation — and a proof meant to be discharged is an implicit `@` parameter instead.
+A witness parameter is written `use Concept(args)` in a function type or definition telescope. It has no name and joins the witness scope of the function body, which is exactly the `use` members in scope. Its type must reduce to a concept application, since resolution answers nothing else: any other type is refused where the parameter is declared — in a signature or a witness telescope — and a proof meant to be discharged is an implicit `@` parameter instead. A dictionary a program wants to name is an ordinary value — a `let`, or a plain or `@` parameter of the concept's type — and reaches a witness slot through a written `use value`.
 
 ```crs
 pub let join(@A: Type, use Show(A), values: List(A)) -> Str =
@@ -1209,8 +1214,8 @@ A bound the facts do not imply is refused. The report names the facts considered
 | `-- ` | Line comment |
 | `--- ` | Documentation comment, attached to the declaration below it |
 | `{}` / `()` | Unit type / unit value |
-| `@A: Type` / `@value` | Implicit binder / explicitly supplied implicit argument |
-| `use C(A)` / `use value` | Witness binder / explicitly supplied witness argument, or superclass field of a concept literal |
+| `@A: Type` / `@T` / `@value` | Implicit parameter, named or as its type alone / explicitly supplied implicit argument |
+| `use C(A)` / `use _` / `use value` | Witness parameter of a signature / its place in a lambda / explicitly supplied witness argument, or superclass field of a concept literal |
 | `?` | Written goal — reports scope, type and fits, then fails compilation |
 | `term!` | Monadic bind through `Monad`, lifting a cross-monad action through `Lift` |
 | `"""` … `"""` | Block string literal — the lines between the delimiters, their shared indentation removed |

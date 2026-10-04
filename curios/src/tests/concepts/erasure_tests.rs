@@ -67,7 +67,7 @@ fn prop_laws_concept_resolves() {
             stable(use Show(A), x : A) -> Eq()(Show/show(x), Show/show(x))
         }
         satisfy ShowLaws(Nat) {
-            stable(use w, x) = Eq/refl()
+            stable(use _, x) = Eq/refl()
         }
         let take(q : Eq()(Show/show(7), Show/show(7)), n : Nat) -> Nat = n;
         /std/print(Nat/to_str(take(ShowLaws/stable(7), 42)))

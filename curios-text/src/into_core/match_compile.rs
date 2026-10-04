@@ -919,7 +919,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// The single-row hypothesis slot: a plain-name pattern keeps the fast path — its spelling becomes the core node's binder hint directly — while a compound pattern mints an unwritten binder for the node and binds each written leaf to its projection chain off it through the row-binds mechanism (`finish_row` materializes the `let`s), the same projection sugar an irrefutable `let` pattern lowers to.
     fn cons_ih_pattern(&self, row: &mut MatrixRow<'_>, ih: &Option<Pattern>) -> Binder {
         match ih {
-            Some(Pattern::Binder(name)) => self.cons_ih_binder(name),
+            Some(Pattern::Binder(name)) => self.cons_ih_binder(&Some(name.clone())),
             None => self.cons_ih_binder(&None),
             Some(pattern) => {
                 let bound = self.cons_ih_binder(&None);
@@ -929,7 +929,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }
     }
 
-    /// The multi-row hypothesis slot, against the group's one shared synthetic variable: a row that omitted `; ih` (or wrote an anonymous binder) references nothing and gets no bind; a plain name binds the shared variable directly; a compound pattern binds its leaves to projections off it.
+    /// The multi-row hypothesis slot, against the group's one shared synthetic variable: a row that omitted `; ih` references nothing and gets no bind; a plain name binds the shared variable directly; a compound pattern binds its leaves to projections off it.
     fn push_shared_ih_binds(
         &self,
         row: &mut MatrixRow<'_>,
@@ -937,8 +937,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         shared: &curios_core::Free,
     ) {
         match ih {
-            None | Some(Pattern::Binder(None)) => {}
-            Some(Pattern::Binder(Some(name))) => row.binds.push((
+            None => {}
+            Some(Pattern::Binder(name)) => row.binds.push((
                 self.pattern_binder(name),
                 curios_core::Term::var(curios_core::Var::free(*shared)),
             )),
@@ -955,8 +955,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     ) {
         let base = curios_core::Term::var(curios_core::Var::free(*ih));
         match pattern {
-            Pattern::Binder(Some(name)) => row.binds.push((self.pattern_binder(name), base)),
-            Pattern::Binder(None) => {}
+            Pattern::Binder(name) => row.binds.push((self.pattern_binder(name), base)),
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                 self.push_ih_field_binds(row, fields, base)
             }
@@ -975,8 +974,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 None => curios_core::Term::proj(base.clone(), index),
             };
             match &field.value {
-                Pattern::Binder(Some(name)) => row.binds.push((self.pattern_binder(name), proj)),
-                Pattern::Binder(None) => {}
+                Pattern::Binder(name) => row.binds.push((self.pattern_binder(name), proj)),
                 Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                     self.push_ih_field_binds(row, fields, proj)
                 }

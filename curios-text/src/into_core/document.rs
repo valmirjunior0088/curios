@@ -463,7 +463,10 @@ impl Reader<'_> {
                 let holder = members
                     .iter()
                     .find(|member| member.label.as_str() == owner.last())?;
-                let field = holder.fields.iter().find(|field| field.label == label)?;
+                let field = holder
+                    .fields
+                    .iter()
+                    .find(|field| field.label.as_ref().is_some_and(|name| *name == label))?;
                 (
                     self.method(&declaring, &imports, &param_binders(&holder.params), field)
                         .signature,
@@ -760,7 +763,12 @@ impl Reader<'_> {
         field: &ConceptField,
     ) -> Member {
         Member {
-            name: field.label.to_string(),
+            // A superclass edge has no name, and a page lists it by its signature alone.
+            name: field
+                .label
+                .as_ref()
+                .map(|label| label.to_string())
+                .unwrap_or_default(),
             signature: self.signature(module, imports, binders, print_concept_field_head(field)),
             prose: lines(&field.doc),
         }
@@ -912,9 +920,9 @@ fn lines(doc: &Option<Doc>) -> Option<Vec<String>> {
 fn sugar_binders(params: &[FuncSugarParam]) -> HashSet<String> {
     params
         .iter()
-        .filter_map(|param| match &param.label {
-            Pattern::Binder(label) => label.as_ref().map(|label| label.to_string()),
-            Pattern::Tuple(_) | Pattern::Struct { .. } => None,
+        .filter_map(|param| match &param.binder {
+            Some(Pattern::Binder(label)) => Some(label.to_string()),
+            Some(Pattern::Tuple(_) | Pattern::Struct { .. }) | None => None,
         })
         .collect()
 }

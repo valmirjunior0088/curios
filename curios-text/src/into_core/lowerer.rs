@@ -93,14 +93,17 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         let LetSignature::Func { params, output, .. } = signature.written else {
             return self.term(&signature.written.type_());
         };
+        // Read off the lambda the sugar's body is, whose patterns are the ones `signature` minted its leaves from: a member with no binder is that lambda's `_`, one leaf nothing can name.
         let mut seen = 0;
-        let binders = params
+        let binders = func_sugar_params(params)
             .iter()
             .map(|param| {
-                let leaves = pattern_names(&param.label).len();
-                let binder = match &param.label {
-                    Pattern::Binder(Some(_)) => signature.leaves[seen].clone(),
-                    _ => (String::new(), self.context.fresh_binder(None)),
+                let leaves = pattern_names(&param.pattern).len();
+                let binder = match &param.pattern {
+                    Pattern::Binder(_) => signature.leaves[seen].clone(),
+                    Pattern::Tuple(_) | Pattern::Struct { .. } => {
+                        (String::new(), self.context.fresh_binder(None))
+                    }
                 };
                 seen += leaves;
                 binder
@@ -625,7 +628,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             None => error,
         };
         for member in &group.members {
-            let Pattern::Binder(Some(label)) = &member.binder else {
+            let Pattern::Binder(label) = &member.binder else {
                 return Err(located(Error::RecursivePatternBinding, member));
             };
             if matches!(member.signature, LetSignature::Name { type_: None, .. }) {
@@ -822,10 +825,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // The mark applies to the outer function slot the parameter occupies, whatever the pattern shape: a compound pattern's fresh core binder still claims a slot of the written plicity.
             let leaves = &binders[seen..seen + pattern_names(pattern).len()];
             match pattern {
-                Pattern::Binder(Some(_)) => lowered.push((*plicity, leaves[0].1, domain)),
-                Pattern::Binder(None) => {
-                    lowered.push((*plicity, self.context.fresh_binder(None), domain))
-                }
+                Pattern::Binder(_) => lowered.push((*plicity, leaves[0].1, domain)),
                 Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                     let synthetic = self.context.fresh_binder(None);
                     chains.push((fields, synthetic, leaves));
@@ -922,12 +922,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         tail: curios_core::Term,
     ) -> curios_core::Term {
         match pattern {
-            Pattern::Binder(Some(_)) => {
+            Pattern::Binder(_) => {
                 let (_, id) = binders.next().expect("one mint per written leaf");
                 curios_core::Term::let_(id, type_, value, tail)
-            }
-            Pattern::Binder(None) => {
-                curios_core::Term::let_(&self.context.fresh_binder(None), type_, value, tail)
             }
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                 let synthetic = self.context.fresh_binder(None);
@@ -1676,7 +1673,7 @@ fn param_labels(params: &[FuncParam]) -> Vec<(String, Option<Span>)> {
         .iter()
         .flat_map(|param| {
             let labels = pattern_labels(&param.pattern);
-            // A `use` binder joins the instance scope, and resolution uses it whether or not the body names it, so it is never a candidate.
+            // A `use` member has no binder to name, and resolution uses it whether or not the body does, so it is never a candidate.
             match param.plicity {
                 Plicity::Witness => labels.into_iter().map(|(name, _)| (name, None)).collect(),
                 _ => labels,
@@ -1688,8 +1685,7 @@ fn param_labels(params: &[FuncParam]) -> Vec<(String, Option<Span>)> {
 /// Every `Pattern::Binder` leaf in `pattern` with its span, recursing through nested tuple/struct fields in field order.
 fn pattern_labels(pattern: &Pattern) -> Vec<(String, Option<Span>)> {
     match pattern {
-        Pattern::Binder(Some(name)) => vec![(name.to_string(), name.span().cloned())],
-        Pattern::Binder(None) => vec![],
+        Pattern::Binder(name) => vec![(name.to_string(), name.span().cloned())],
         Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => fields
             .iter()
             .flat_map(|field| pattern_labels(&field.value))
@@ -1710,9 +1706,7 @@ fn pattern_span(pattern: &Pattern) -> Option<Span> {
 /// Every `Pattern::Binder` leaf name in `pattern`, recursing through nested tuple/struct fields in field order.
 fn pattern_names(pattern: &Pattern) -> Vec<String> {
     match pattern {
-        Pattern::Binder(Some(name)) => vec![name.to_string()],
-        // No source name at all — nothing to shadow-track.
-        Pattern::Binder(None) => vec![],
+        Pattern::Binder(name) => vec![name.to_string()],
         Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => fields
             .iter()
             .flat_map(|field| pattern_names(&field.value))

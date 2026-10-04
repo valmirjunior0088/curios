@@ -1,8 +1,9 @@
 use {
     super::{
+        FIELD_TAKES_NO_MARK, INDEX_TAKES_NO_MARK, PAYLOAD_TAKES_NO_USE, members,
         parse_apply_argument, parse_binding, parse_func_sugar_param, parse_func_type_param,
-        parse_identifier, parse_keyword, parse_literal, parse_name, parse_plicity, parse_prop,
-        parse_tuple_field_prefix, parse_tuple_type_field, parse_type, parse_use_func_type_param,
+        parse_identifier, parse_keyword, parse_literal, parse_mark, parse_name, parse_premise,
+        parse_prop, parse_tuple_field_prefix, parse_tuple_type_field, parse_type, raised,
     },
     crate::{
         CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem, Label,
@@ -344,24 +345,23 @@ pub(super) fn parse_top_use<'a>(vis_pub: bool, start: Mark) -> Parser<'a, TopIte
         })
 }
 
-// A payload binder: `@m : Nat` (named, implicit at the constructor function), `m : Nat` (named), or a bare type (positional). Plicity's `@` (on the name) requires a name — a positional binder has nothing for a later type or the target to mention.
+// A payload binder, plain or `@` (implicit at the constructor function): `m : Nat` (named) or a bare type (positional), under either mark. A payload is no other grammar's, so `use` is refused where it stands.
 pub(super) fn parse_induct_payload_field<'a>() -> Parser<'a, CasePayloadParam> {
-    parse_plicity()
-        .and(parse_identifier())
-        .and_drop(parse_literal(":"))
-        .and(lazy(parse_term))
-        .map(
-            |((plicity, name), type_): ((Plicity, &str), Term)| CasePayloadParam {
-                plicity,
-                label: Some(name.to_string()),
-                type_,
-            },
-        )
-        .or(lazy(parse_term).map(|type_| CasePayloadParam {
-            plicity: Plicity::Explicit,
-            label: None,
-            type_,
-        }))
+    mark()
+        .and(parse_mark())
+        .flat_map(|(start, plicity)| match plicity {
+            Plicity::Witness => commit(fail_from(&start, PAYLOAD_TAKES_NO_USE)),
+            Plicity::Explicit | Plicity::Implicit => parse_identifier()
+                .and_drop(parse_literal(":"))
+                .and(lazy(parse_term))
+                .map(|(name, type_): (&str, Term)| (Some(name.to_string()), type_))
+                .or(lazy(parse_term).map(|type_| (None, type_)))
+                .map(move |(label, type_)| CasePayloadParam {
+                    plicity,
+                    label,
+                    type_,
+                }),
+        })
 }
 
 pub(super) fn parse_top_induct_case<'a>() -> Parser<'a, TopCase> {
@@ -410,26 +410,38 @@ pub(super) fn parse_top_induct_case<'a>() -> Parser<'a, TopCase> {
 
 // A declaration's parameter: `name : type`, `@name : type` to make it implicit at the type-constructor function (it is implicit at the value constructors either way — the mark's only job is the type constructor, where unmarked parameters are written out), or `use Concept(args)`, a premise the type names the dictionary of. A plain or `@` parameter is always named: the declaration's own types are what mention it.
 pub(super) fn parse_induct_param<'a>() -> Parser<'a, FuncTypeParam> {
-    parse_use_func_type_param().or(parse_plicity()
-        .and(parse_identifier())
-        .and_drop(parse_literal(":"))
-        .and(lazy(parse_term))
-        .map(
-            |((plicity, name), type_): ((Plicity, &str), Term)| FuncTypeParam {
-                plicity,
-                label: Some(name.to_string()),
+    mark()
+        .and(parse_mark())
+        .flat_map(|(start, plicity)| match plicity {
+            // A declaration's parameter list is no other grammar's, so a refused premise is raised where it stands.
+            Plicity::Witness => raised(parse_premise(start)).map(|type_| FuncTypeParam {
+                plicity: Plicity::Witness,
+                label: None,
                 type_,
-            },
-        ))
+            }),
+            Plicity::Explicit | Plicity::Implicit => parse_identifier()
+                .and_drop(parse_literal(":"))
+                .and(lazy(parse_term))
+                .map(move |(name, type_): (&str, Term)| FuncTypeParam {
+                    plicity,
+                    label: Some(name.to_string()),
+                    type_,
+                }),
+        })
 }
 
-// A head index-telescope entry: `n : Nat` or a bare `Nat`. The name is documentary (and a dependency hook for later entries) — never in scope in the cases — so it is optional and never takes `@`.
+// A head index-telescope entry: `n : Nat` or a bare `Nat`. The name is documentary (and a dependency hook for later entries) — never in scope in the cases — so it is optional, and an index is always written, so a mark is refused where it stands.
 pub(super) fn parse_induct_index<'a>() -> Parser<'a, (Option<String>, Term)> {
-    parse_identifier()
-        .and_drop(parse_literal(":"))
-        .and(lazy(parse_term))
-        .map(|(name, ty): (&str, Term)| (Some(name.to_string()), ty))
-        .or(lazy(parse_term).map(|ty| (None, ty)))
+    mark()
+        .and(parse_mark())
+        .flat_map(|(start, plicity)| match plicity {
+            Plicity::Explicit => parse_identifier()
+                .and_drop(parse_literal(":"))
+                .and(lazy(parse_term))
+                .map(|(name, ty): (&str, Term)| (Some(name.to_string()), ty))
+                .or(lazy(parse_term).map(|ty| (None, ty))),
+            Plicity::Implicit | Plicity::Witness => commit(fail_from(&start, INDEX_TAKES_NO_MARK)),
+        })
 }
 
 /// A parsed inductive head arity: the index telescope (each binder optionally named) and the sort it lands in.
@@ -580,19 +592,9 @@ pub(super) fn parse_top_struct<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a
         .map(TopItem::Struct)
 }
 
-// A concept field: `use? label : term`, or the signature sugar `label(params) -> term` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar (mirroring top-level `let`'s function sugar). A `use`-prefixed field is a superclass edge — its type must be a concept application, checked at lowering.
+// A concept field: `label : term`, the signature sugar `label(params) -> term` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar (mirroring top-level `let`'s function sugar) — or `use Concept(args)`, a superclass edge, whose type must be a concept application, checked at lowering. A method takes no mark.
 pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
-    let super_field = parse_keyword("use")
-        .and_keep(lazy(parse_term))
-        .map(|type_| ConceptField {
-            doc: None,
-            is_super: true,
-            label: Label::from(""),
-            func_params: None,
-            type_,
-        });
-
-    let plain_or_sugar = parse_declared_label()
+    let method = parse_declared_label()
         .and(
             parse_literal("(")
                 .and_keep(sep_by0_trailing(parse_func_type_param, || {
@@ -600,6 +602,8 @@ pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
                 }))
                 .and_drop(parse_literal(")"))
                 .and_drop(parse_literal("->"))
+                // Past the arrow the list is this sugar's, so a member it refuses is its own to report.
+                .flat_map(members)
                 // As in `parse_tuple_type_field`: past the `->` or the `:` a type must follow, so the refusal is this one rather than the `}` the field list falls back to.
                 .and(commit(lazy(parse_term)))
                 .map(|(params, output): (Vec<FuncTypeParam>, Term)| (Some(params), output))
@@ -609,16 +613,29 @@ pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
         )
         .map(|(label, (func_params, type_)): (Label, _)| ConceptField {
             doc: None,
-            is_super: false,
-            label,
+            label: Some(label),
             func_params,
             type_,
         });
 
-    // The documentation comment is read first, and a field's two spellings then share it; one before the closing brace documents nothing and says so.
+    // A concept's field list is no other grammar's, so a refused edge or a marked method is raised where it stands.
+    let field = mark()
+        .and(parse_mark())
+        .flat_map(|(start, plicity)| match plicity {
+            Plicity::Witness => raised(parse_premise(start)).map(|type_| ConceptField {
+                doc: None,
+                label: None,
+                func_params: None,
+                type_,
+            }),
+            Plicity::Implicit => commit(fail_from(&start, FIELD_TAKES_NO_MARK)),
+            Plicity::Explicit => method,
+        });
+
+    // The documentation comment is read first, and a field's spellings then share it; one before the closing brace documents nothing and says so.
     parse_doc().flat_map(|doc| {
         documented(&doc, not_ahead("}"))
-            .and_keep(super_field.or(plain_or_sugar))
+            .and_keep(field)
             .map(move |field| ConceptField { doc, ..field })
     })
 }
@@ -697,6 +714,8 @@ fn parse_witness_member<'a>(doc: Option<Doc>) -> Parser<'a, TopWitness> {
         }))
         .and_drop(parse_literal(")"))
         .and_drop(parse_literal("=>"))
+        // Past the separator this is a witness's telescope, so a member it refuses is its own to report.
+        .flat_map(members)
         .or(pure(vec![]))
         .and(parse_name())
         // Past the concept's name this is a witness and nothing else, so the fall-through ends here as `test`'s ends at its label. `satisfy Name` is two names in a row and so no term, and the call `satisfy(…)` the dispatch keeps this arm recoverable for never reaches this point: its argument list is no telescope, and a `(` is no name.

@@ -365,17 +365,25 @@ fn seed(
                     let namespace = prefix.with(&concept.label);
 
                     let mut direct = ModuleInfo::new();
-                    // Superclass fields are anonymous — positional slots with no name to reach them by, and no wrapper (`into_core` filters them out of wrapper generation the same way). Registering their empty labels here would make two superclasses collide as an empty-named duplicate declaration.
-                    for field in concept.fields.iter().filter(|field| !field.is_super) {
-                        direct.insert_binding(&field.label, true)?;
+                    // A superclass edge has no label — a positional slot with no name to reach it by, and no wrapper (`into_core` leaves it out of wrapper generation the same way) — so only the methods declare a binding.
+                    for label in concept
+                        .fields
+                        .iter()
+                        .filter_map(|field| field.label.as_ref())
+                    {
+                        direct.insert_binding(label, true)?;
                     }
                     table.insert(namespace, direct);
 
                     let mut interface = PublicInterface::new();
-                    for field in concept.fields.iter().filter(|field| !field.is_super) {
-                        let target = namespace.with(&field.label);
+                    for label in concept
+                        .fields
+                        .iter()
+                        .filter_map(|field| field.label.as_ref())
+                    {
+                        let target = namespace.with(label);
                         interface.bindings.insert(
-                            field.label.to_string(),
+                            label.to_string(),
                             Entry {
                                 target,
                                 representation: None,

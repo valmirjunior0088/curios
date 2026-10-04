@@ -905,6 +905,12 @@ impl fmt::Display for Displayed<'_> {
                     "the type of parameter '{binder}' was never determined\n  a lambda's parameter type comes from its annotation, its body, or its position's expected type, and none supplied one\n  annotate the parameter: ({binder}: T) => ..."
                 )
             }
+            Error::WitnessMemberNeverStated => {
+                write!(
+                    f,
+                    "this lambda writes `use _` and nothing states the member\n  a `use` member holds a place: its type is the expected function type's, and this lambda has none\n  write the function as a `let` with a telescope: let f(use C(A), ...) -> ... = ..."
+                )
+            }
             Error::TooManyImplicits { expected, got } => {
                 write!(
                     f,

@@ -1394,7 +1394,7 @@ fn parameter_types(
     output
 }
 
-/// A lambda's parameters from `cursor` on, their spellings pushed onto `marked`, then its body indented under them — a witness binder's node in scope for the body (axis (h)). A lambda may name its witness, so the binder keeps its name.
+/// A lambda's parameters from `cursor` on, their spellings pushed onto `marked`, then its body indented under them — a witness binder's node in scope for the body (axis (h)). A lambda's witness member is `use _`, as the surface writes it, and keeps a name only where the body still refers to it by one resolution would not restore: a term no source spells, shown as it is rather than with a reference to nothing.
 fn lambda_parameters(
     mut cursor: Cursor<'_, Term>,
     plicities: &[Plicity],
@@ -1412,20 +1412,35 @@ fn lambda_parameters(
     };
     let label = minting.label(cursor.label());
     let plicity = plicities.get(cursor.args().len());
-    let shown = if label.hint().is_none() && !cursor.binder_used() {
-        "_".to_string()
-    } else {
-        minting.spelling.label(&label)
-    };
-    marked.push(format!("{}{shown}", plicity_mark(plicity)));
+    let mark = plicity_mark(plicity);
+    // Asked before the cursor moves past the binder it asks about.
+    let used = cursor.binder_used();
+    let named = label.hint().is_some() || used;
+    let spelled = minting.spelling.label(&label);
+    let slot = marked.len();
+    marked.push(String::new());
     cursor.advance(Term::free_var(&label));
 
-    if plicity == Some(&Plicity::Witness) && minting.spelling.witnesses.is_some() {
-        let node = WitnessNode::new(label, &ty, minting);
-        lambda_parameters(cursor, plicities, minting.with_witness(&node), marked)
+    let (output, named) = if plicity == Some(&Plicity::Witness) {
+        match minting.spelling.witnesses.is_some() {
+            true => {
+                let node = WitnessNode::new(label, &ty, minting);
+                let output =
+                    lambda_parameters(cursor, plicities, minting.with_witness(&node), marked);
+                (output, node.used.get())
+            }
+            // With no witness spelling the body prints every reference as it stands, so the binder is named exactly where one is made.
+            false => (lambda_parameters(cursor, plicities, minting, marked), used),
+        }
     } else {
-        lambda_parameters(cursor, plicities, minting, marked)
-    }
+        (lambda_parameters(cursor, plicities, minting, marked), named)
+    };
+
+    marked[slot] = match named {
+        true => format!("{mark}{spelled}"),
+        false => format!("{mark}_"),
+    };
+    output
 }
 
 /// An operand of [`print_infix`], wrapped in parentheses when it too prints infix — a nested operator intrinsic, a residual `Infix` node, or a successor over a symbolic tail, which is how reduction stores `k + 1` and which prints as `k + 1` without being an operator intrinsic; self-delimiting operands (variables, literals, applications) print bare.

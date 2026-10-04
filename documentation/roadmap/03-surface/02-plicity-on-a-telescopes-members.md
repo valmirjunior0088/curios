@@ -1,17 +1,13 @@
 # Plicity on a telescope's members
 
-Working specification for making a member's plicity — plain, implicit (`@`) or witness (`use`) — one rule over every telescope the surface writes and every application that fills one, rather than a property of function parameters with a different carve-out at each site. Two stages land the rule; two more are decided and wait on [typed patterns](01-typed-patterns.md); one waits for a consumer.
+Working specification for making a member's plicity — plain, implicit (`@`) or witness (`use`) — one rule over every telescope the surface writes and every application that fills one, rather than a property of function parameters with a different carve-out at each site. One stage lands what remains of the rule; two more are decided and wait on [typed patterns](01-typed-patterns.md); one waits for a consumer.
 
 ## What this builds on
 
-[Plicity is part of function identity](../../design/theory/plicity-is-part-of-function-identity.md) settles plicity for function types, [a call fills one parameter group](../../design/theory/a-call-fills-one-parameter-group.md) settles which list a call fills, and [concepts resolve with global coherence](../../design/surface/concepts-resolve-with-global-coherence.md) settles what a `use` member is filled with. None of them says what a mark is followed by, or how written members are matched to slots, and the code answers both differently at each site.
+[Plicity is part of function identity](../../design/theory/plicity-is-part-of-function-identity.md) settles plicity for function types, [a call fills one parameter group](../../design/theory/a-call-fills-one-parameter-group.md) settles which list a call fills, and [concepts resolve with global coherence](../../design/surface/concepts-resolve-with-global-coherence.md) settles what a `use` member is filled with. The first of them says what a mark is followed by at each kind of site. None says how written members are matched to slots, and the code answers that differently at each site.
 
-- **`use` is followed by three different things.** A type in a function type, a definition telescope and a concept field (`parse_use_func_type_param`, `parse_use_func_sugar_param`, the superclass alternative of `parse_concept_field`); a binder in a lambda and in field definition sugar (`parse_func_binder_plicity`); a term at a call and in a concept literal. The binder is never read: every `use` binder `/std`, `programs/` and the tests name leaves the name unreferenced, and the two in `/std/Fmt` compile with the binder dropped.
-- **Each site assembles its own marks.** Three parsers read a mark — `parse_plicity`, `parse_func_binder_plicity` and the one inline in `parse_apply_argument` — beside four alternatives that read `use` by themselves, so which marks a site takes, and what may follow one, is decided site by site.
-- **Anonymity is represented three ways.** `FuncTypeParam` carries `label: Option<String>`; `FuncSugarParam` and `FuncParam` carry a `Pattern` whose `Binder(None)` only a `use` member holds; `ConceptField` carries `is_super: bool` beside `label: Label::from("")`.
 - **Written members meet their slots by three rules.** A call sorts its arguments into three queues, one per mark, each matched independently (`elaborate_apply`), so `join(3, use dict)` and `join(use dict, @Nat, 3)` are one call. A lambda's binder claims the next slot of its own mark and skips slots of another (`elaborate_func_check`). A concept literal pairs its `use` entries with the `use` positions wherever they are written (`elaborate_struct`). A constructor pattern writes every member.
 - **No written form leaves a slot to the elaborator**, so a later hidden slot cannot be supplied alone: against two `use` slots, `use value` fills the first, and `_` is an unbound variable.
-- **A refusal names the parser alternative that failed.** `Expected '(', obtained ':'`, `Expected ')', obtained ':'`, `Expected '->', obtained '=>'`, `Expected '}', obtained 'u'`, `Expected keyword 'end', obtained '|'`, `Expected ':', obtained '('` and `Expected 'end-of-file'` each stand for one rule below.
 - **Reading a concept value ignores the marks.** A struct pattern over one counts every slot and binds a superclass edge to a plain name, and `.0` reaches an edge by position, where a literal leaves the edges out of its positional sequence.
 
 ## The rule
@@ -31,15 +27,9 @@ A signature is a function type, a `let` or `satisfy` telescope, a constructor's 
 - **A lambda never states a `use` member's type**, so a lambda with no expected function type has no `use` slot; a local `let` with a telescope declares one.
 - **One alignment rule** serves binders, arguments and concept-literal entries. Plain members are always written, in order. Between two plain members, the hidden members are written in order from the first of the run, and the rest of the run may be left out. A written member's slot is its position in its run, never the next slot of its mark: against `(@A: Type, use Show(A), @B: Type, use Show(B), a: A, b: B)`, each of `(a, b)`, `(@A, a, b)` and `(@A, use _, @B, a, b)` is accepted, `(@B, a, b)` binds `A`, and `(use _, a, b)` is refused. `join(@_, use dict, xs)` supplies a dictionary; `join(use dict, xs)` and `join(xs, use dict)` are refused.
 - **The witness scope is exactly the `use` members in scope.** A dictionary a program names is an ordinary value — a `let`, or a plain or `@` parameter of concept type — and reaches a `use` slot through a written `use value`.
-- **Refused, each by the rule it breaks:** `use name`; `use _` in a signature; `use C(args)` or `@T` in a lambda; a plain member in a `satisfy` telescope; a `use` entry in a `satisfy` body, `use _` included; a `use` parameter on a concept, whose superclass is a field and whose witness keys read every parameter.
+- **Refused, each by the rule it breaks:** `use name`; `use _` in a signature; `use C(args)` or `@T` in a lambda; a plain member in a `satisfy` telescope; a plain member written as its type alone in a `let` telescope, which names what its body uses; a `use` entry in a `satisfy` body, `use _` included; a `use` parameter on a concept, whose superclass is a field and whose witness keys read every parameter.
 
-## Stage 1 — the forms
-
-The table above, with one parser for a mark and one representation in which a `use` member holds a type, or its place in a lambda, and no binder. A definition telescope and a payload list take the unnamed `@T`, and a definition telescope the unnamed plain `T`, as a function type already does. Each refusal in the rule's list names the rule.
-
-**Acceptance:** every cell of the table parses, prints back as written and elaborates; `(@A: Type, use Show(A), value: A) -> Str` is checked by `(value) => …` and by `(@A, use _, value) => …`; `let f(n: Nat, @Holds(0 < n)) -> Nat` behaves as `@_: Holds(0 < n)` does, the bound prover's reading of the hypothesis included; a lambda with no expected type that writes `use _` is refused for stating no type; no refusal names a parser alternative; `curios format` round-trips every form, and the grammar, Zed and VS Code steps pass.
-
-## Stage 2 — the alignment rule, and the placeholders
+## The alignment rule, and the placeholders
 
 One walk over the written members replaces the three queues of a call, the per-mark claiming of a lambda and the pairing of a concept literal's `use` entries, and `@_` and `use _` are read where a value is supplied.
 
@@ -93,13 +83,10 @@ Core pairs a telescope with its marks by hand at three doors — `FuncType::new`
 ## Design decisions this overturns or corrects
 
 - [Plicity is part of function identity](../../design/theory/plicity-is-part-of-function-identity.md): alignment "positionally by plicity" becomes position in the run; its rejection of inserting omitted hidden constructor-pattern arguments falls with typed patterns, whose matrix reaches elaboration with the signature known.
-- [`documentation/syntax.md`](../../syntax.md): the three independent queues of a call, the `use name` binder of a lambda, and a concept literal's `use` entries written anywhere.
+- [`documentation/syntax.md`](../../syntax.md): the three independent queues of a call, and a concept literal's `use` entries written anywhere.
 
 ## Rejected
 
-- **A named `use` member.** No program reads the name, and every job it could do is done without it: resolution passes a witness on, a `use` type parameter puts one in a type, an `@` parameter of concept type names a second dictionary, and a literal over the method wrappers hands the resolved one back as a value.
-- **`use C(args)` in a lambda.** A lambda holds a slot's place and its expected type states the member; the lambda that has no expected type is written as a local `let` with a telescope.
-- **`@T` in a lambda.** After `@` a lambda reads a binder whatever the word looks like — `(@Nat, x) => x` binds a variable called `Nat` — so a type there would make one word mean two things.
 - **A `use` field on a structure.** With no label it cannot be projected, a structure's value is not in the witness scope, and resolving through the fields of a local is a second resolution rule. [`Map`](../08-standard-library/04-a-map-keyed-by-its-key-type.md) names its dictionary in its type instead.
 - **Three queues at a call**, and **claiming the next slot of a mark**: which slot a written member fills then depends on the marks written before it, and two rules decide one question.
 - **Resolving a `use` slot only after the later arguments are checked**, so that a type naming a dictionary decides it whatever the order. A numeral resolves eagerly, so a numeral at an associated type would meet a type still stuck on the witness; and a signature whose key type is an implicit is undecided at the slot already.
@@ -107,4 +94,4 @@ Core pairs a telescope with its marks by hand at three doors — `FuncType::new`
 
 ## Completion and retirement
 
-A mark is read by one parser and followed by one thing at each kind of site, and one walk matches written members to slots. Record the rule in `documentation/syntax.md` and the alignment in the plicity decision; what waits on typed patterns moves to that spec's stages, and `@` fields and the marked telescope stay here until they land. Replace the roadmap entry with a checked summary once nothing but those remains, verify that nothing references this filename, and delete it.
+One walk matches written members to slots. Record the alignment in `documentation/syntax.md` and in the plicity decision; what waits on typed patterns moves to that spec's stages, and `@` fields and the marked telescope stay here until they land. Replace the roadmap entry with a checked summary once nothing but those remains, verify that nothing references this filename, and delete it.

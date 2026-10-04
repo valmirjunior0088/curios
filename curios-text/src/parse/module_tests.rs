@@ -349,7 +349,7 @@ fn a_declaration_below_the_tail_is_refused_as_one() {
         assert!(report.contains("2 |"), "{source:?} reported {report}");
     }
     // A `use`-headed form is read by its own parser before the term grammar sees the word, so the refusal reaches none of them.
-    for source in ["f(use x)", "P { use w, a = 1 }", "(use s, v) => v"] {
+    for source in ["f(use x)", "P { use w, a = 1 }", "(use _, v) => v"] {
         assert!(source.parse::<Term>().is_ok(), "{source:?} stopped parsing");
     }
 }
