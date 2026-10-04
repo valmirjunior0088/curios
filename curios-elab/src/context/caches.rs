@@ -7,6 +7,7 @@
 //! The *policies* — what is cacheable, and what a probe's groundness gate admits — stay on `Context`, which alone can read the solution and universe stores they consult. This type owns the storage and the write discipline.
 
 use {
+    crate::Sort,
     curios_core::{
         Free, Level, LevelHead, Term, UniverseMetaId, rewrite_universe_levels_scoped,
         rewrite_universe_levels_scoped_shared,
@@ -30,7 +31,7 @@ pub(crate) enum ElabProbe {
     Uncacheable,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(crate) struct ElaborationStamp {
     terms: Entropy,
     universes: Entropy,
@@ -66,6 +67,12 @@ pub(crate) struct Caches {
     ///
     /// **That protocol is coarser than a settled spelling needs, and the cost is accepted.** A spelling is filed under its entry's frame and read only through the window, so it rests on nothing but the frames outside its entry and what reduction reads globally; a suppression bracket, a registration or the exit of a frame inside its entry changes none of that, and each clears it here all the same. Settling again after those clears is most of what the escalation costs. Invalidating by the spelling's own dependencies would recover part of that, at the price of a rule argued at every invalidation site rather than borrowed from one already there.
     settled_keys: HashMap<(usize, Term), Option<Settled>>,
+    /// The sort of each type classified since the context was last written to — `Sort::of_in`'s own answer, remembered so that a type whose graph shares a field is classified once per node where the walk alone classifies it once per path.
+    ///
+    /// **Valid for a quiet stretch, and that is as long as it needs to be.** A sort is derived by reduction and reads more besides: the type a local is assumed at, what a metavariable is solved to and has for a type, a declaration's sort, the levels the universe solver holds. Each of those changes by a stamped write, by a frame's exit — which closes binders and stamps nothing — or where a reduct is cleared, so the table is emptied at the first probe after either stamp has moved, wherever a frame is left, and wherever the reducts are. One classification does none of the three: it opens its binders beside the context rather than in it, which is why `Sort::of_in` threads them, and it is the classification that is per path without the table.
+    sorts: HashMap<Term, Sort>,
+    /// The stamps `sorts` was filled under.
+    sorts_at: ElaborationStamp,
     elaboration: HashMap<ElaborationKey, (Term, Term)>,
     /// Elaborations inside an oracle bracket (`Context::with_oracle`) that the table above must refuse, one table per live bracket, innermost last: see `Context::get_or_init_elaborated` for what they admit and why. Cleared wherever the table above is, and discarded with their bracket.
     oracle: Vec<HashMap<ElaborationKey, (Term, Term)>>,
@@ -136,10 +143,31 @@ impl Caches {
         self.reduction.insert(term, reduct);
     }
 
-    /// Every reduct, and the second door indexing them.
+    /// Every reduct, the second door indexing them, and the sorts read through them.
     fn clear_reductions(&mut self) {
         self.reduction.clear();
         self.reduction_erased.clear();
+        self.sorts.clear();
+    }
+
+    /// The remembered sort of `type_`, where nothing was written since it was filed.
+    pub(crate) fn sort_get(&mut self, type_: &Term) -> Option<Sort> {
+        self.settle_sorts();
+
+        self.sorts.get(type_).cloned()
+    }
+
+    pub(crate) fn sort_insert(&mut self, type_: Term, sort: Sort) {
+        self.settle_sorts();
+        self.sorts.insert(type_, sort);
+    }
+
+    /// Empty the sorts where either stamp has moved since they were filed, and file what follows under the stamps as they stand.
+    fn settle_sorts(&mut self) {
+        if !self.stamps_unchanged(&self.sorts_at) {
+            self.sorts.clear();
+            self.sorts_at = self.stamps();
+        }
     }
 
     /// A new declaration: every table is discarded — the reducts, the canonical and settled refinement keys, and the elaborations — so that what one declaration can afford is decided by nothing the declarations before it left behind.
@@ -283,6 +311,8 @@ impl Caches {
         let reduction = &self.reduction;
         self.reduction_erased
             .retain(|_, key| reduction.contains_key(key));
+        // A sort is read through reducts and names none, so it has nothing to be retained by.
+        self.sorts.clear();
         // A canonical key is a reduct of the same kind, retained by the same test, and so is a settled one.
         self.canonical_keys
             .retain(|_, canonical| !canonical.mentions_free(name));
@@ -305,6 +335,8 @@ impl Caches {
         dropped_refinements: bool,
         dropped_definitions: bool,
     ) {
+        // The frame's binders go with it, and a sort is read off a binder's type: the write that opened one was stamped, and nothing stamps its closing.
+        self.sorts.clear();
         if dropped_refinements {
             self.clear_reductions();
             self.canonical_keys.clear();

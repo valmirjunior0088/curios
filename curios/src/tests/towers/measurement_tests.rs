@@ -77,36 +77,36 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 ///
 /// # What it last printed
 ///
-/// Over the checkers of `6993cf607`, every row accepted by both.
+/// Over the checkers of `55902851a`, every row accepted by both.
 ///
 /// | tower | lines | elaborator units | elaborator looks | kernel units | kernel looks |
 /// | --- | --- | --- | --- | --- | --- |
-/// | chain | 12 | 26 791 | 54 185 | 29 048 | 142 859 |
-/// | chain | 16 | 26 791 | 55 573 | 29 048 | 143 783 |
-/// | chain, in a member | 12 | 26 791 | 84 458 | 29 048 | 144 776 |
-/// | chain, in a member | 16 | 26 791 | 60 849 | 29 048 | 146 008 |
-/// | calls | 12 | 26 791 | 55 326 | 173 016 | 583 819 |
-/// | calls | 16 | 26 791 | 57 114 | 2 753 480 | 7 219 435 |
-/// | calls, in a member | 12 | 26 791 | 173 738 | 173 062 | 2 010 048 |
-/// | calls, in a member | 16 | 26 791 | 1 896 474 | 2 753 526 | 30 026 868 |
-/// | pairs | 12 | 26 791 | 220 301 | 74 814 | 391 283 |
-/// | pairs | 16 | 26 791 | 2 681 841 | 1 180 746 | 4 082 035 |
-/// | pairs, in a member | 12 | 26 791 | 453 311 | 74 847 | 981 671 |
-/// | pairs, in a member | 16 | 26 791 | 6 356 675 | 1 180 779 | 13 519 799 |
-/// | lists | 12 | 26 791 | 83 679 | 151 454 | 3 289 772 |
-/// | lists | 16 | 26 791 | 106 743 | 2 365 218 | 50 478 784 |
-/// | lists, in a member | 12 | 26 791 | 79 932 | 151 465 | 2 652 613 |
-/// | lists, in a member | 16 | 26 791 | 96 950 | 2 365 229 | 40 257 665 |
-/// | arms | 12 | 26 791 | 67 494 | 74 807 | 1 384 240 |
-/// | arms | 16 | 26 791 | 78 110 | 1 180 719 | 20 002 168 |
-/// | arms, in a member | 12 | 26 791 | 360 404 | 74 940 | 1 262 851 |
-/// | arms, in a member | 16 | 133 836 | 4 673 508 | 1 180 868 | 18 037 791 |
-/// | aliases | 12 | 26 791 | 218 069 | 29 048 | 148 238 |
-/// | aliases | 16 | 265 315 | 2 677 197 | 29 048 | 155 726 |
-/// | arrows | 12 | 26 791 | 218 468 | 29 048 | 147 186 |
-/// | arrows | 16 | 265 439 | 2 677 732 | 29 048 | 153 130 |
-/// | two towers | 12 | 26 791 | 1 632 345 | 120 311 | 1 582 357 |
-/// | two towers | 16 | 26 791 | 24 994 503 | 1 840 643 | 23 092 113 |
+/// | chain | 12 | 26 791 | 54 185 | 29 048 | 141 779 |
+/// | chain | 16 | 26 791 | 55 573 | 29 048 | 141 963 |
+/// | chain, in a member | 12 | 26 791 | 84 458 | 29 048 | 142 966 |
+/// | chain, in a member | 16 | 26 791 | 60 849 | 29 048 | 143 242 |
+/// | calls | 12 | 26 791 | 55 326 | 29 048 | 141 959 |
+/// | calls | 16 | 26 791 | 57 114 | 29 048 | 142 195 |
+/// | calls, in a member | 12 | 26 791 | 173 738 | 29 048 | 143 000 |
+/// | calls, in a member | 16 | 26 791 | 1 896 474 | 29 048 | 143 344 |
+/// | pairs | 12 | 26 791 | 220 301 | 29 048 | 145 787 |
+/// | pairs | 16 | 26 791 | 2 681 841 | 29 048 | 150 211 |
+/// | pairs, in a member | 12 | 26 791 | 453 311 | 29 048 | 244 812 |
+/// | pairs, in a member | 16 | 26 791 | 6 356 675 | 29 048 | 1 723 836 |
+/// | lists | 12 | 26 791 | 83 679 | 29 048 | 149 205 |
+/// | lists | 16 | 26 791 | 106 743 | 29 048 | 154 721 |
+/// | lists, in a member | 12 | 26 791 | 79 932 | 29 048 | 148 936 |
+/// | lists, in a member | 16 | 26 791 | 96 950 | 29 048 | 153 564 |
+/// | arms | 12 | 26 791 | 67 494 | 50 230 | 970 291 |
+/// | arms | 16 | 26 791 | 78 110 | 787 502 | 13 382 667 |
+/// | arms, in a member | 12 | 26 791 | 360 404 | 50 364 | 890 406 |
+/// | arms, in a member | 16 | 133 836 | 4 673 508 | 787 652 | 12 074 618 |
+/// | aliases | 12 | 26 791 | 218 069 | 29 048 | 148 240 |
+/// | aliases | 16 | 265 315 | 2 677 197 | 29 048 | 155 728 |
+/// | arrows | 12 | 26 791 | 218 468 | 29 048 | 147 188 |
+/// | arrows | 16 | 265 439 | 2 677 732 | 29 048 | 153 132 |
+/// | two towers | 12 | 26 791 | 1 632 345 | 29 048 | 149 601 |
+/// | two towers | 16 | 26 791 | 24 994 503 | 29 048 | 155 717 |
 ///
 /// **The chain is flat, and a tower a checker walks per path multiplies.** Its looks grow by ten to sixteen times across four lines, and where the checker types a term per path its units do too, which is what refuses a tower at twenty lines; a tower walked in its size reads as the chain does. A row's units are its heaviest declaration's, which for the chain is not the tower, so the same 26 791 and 29 048 stand under every row until a tower's own declaration outgrows them.
 #[test]

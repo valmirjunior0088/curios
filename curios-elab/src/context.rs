@@ -18,7 +18,7 @@ use {
         Error, HeadKey, Provenance, UniverseMark, UniverseSolver, UniverseStateToken, Witness,
         WitnessKey, zonk_universe_levels_scoped,
     },
-    crate::{Refusal, levels_clash_on_a_decided_instance, zonk_solved_term_metas},
+    crate::{Refusal, Sort, levels_clash_on_a_decided_instance, zonk_solved_term_metas},
     curios_core::{
         Advance, Bound, ConceptDecl, Consumption, Cost, DefinitionKind, Free, Global, HeadTag,
         ImplicitOrigin, Imports, InductDecl, Level, Metavar, MetavarId, MetavarOrigin, Probe,
@@ -537,6 +537,16 @@ impl Context {
         if cacheable {
             self.caches.reduction_insert(term, result.clone());
         }
+    }
+
+    /// The remembered sort of `type_`, where the context stands as it did when it was filed. [`Caches::sorts`] carries how long that is.
+    pub(crate) fn cached_sort(&mut self, type_: &Term) -> Option<Sort> {
+        self.caches.sort_get(type_)
+    }
+
+    /// Remember `type_`'s sort. Stored for nothing, as a reduct is.
+    pub(crate) fn record_sort(&mut self, type_: Term, sort: Sort) {
+        self.caches.sort_insert(type_, sort);
     }
 
     /// The read half of the canonical-key memo. [`Caches::canonical_keys`] carries why the memo exists.

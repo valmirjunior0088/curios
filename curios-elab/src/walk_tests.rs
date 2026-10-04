@@ -1,9 +1,9 @@
-//! Every walk this crate runs over whole terms, over one doubling term: sixty levels that each sum the one below with itself around a local's application to a metavariable, a tree no walk per path finishes and a graph of sixty-one nodes. A walk the crate adds joins the table here, so one a change makes per-path again stalls its row rather than waiting for a profile; a walk private to its module keeps its fixture beside it — `denoise`'s, `typing`'s and `convert::occurrence`'s — since reaching it from here would widen it for a test.
+//! Every walk this crate runs over whole terms, over one doubling term: sixty levels that each sum the one below with itself around a local's application to a metavariable, a tree no walk per path finishes and a graph of sixty-one nodes — and, for the sort of a type, a record of two fields at the level below. A walk the crate adds joins the table here, so one a change makes per-path again stalls its row rather than waiting for a profile; a walk private to its module keeps its fixture beside it — `denoise`'s, `typing`'s and `convert::occurrence`'s — since reaching it from here would widen it for a test.
 
 use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Free, Intrinsic, MetavarId, Nat, Subterm, Term},
+    curios_core::{Free, Intrinsic, Level, MetavarId, Nat, Subterm, Term},
 };
 
 fn doubled(base: Term) -> Term {
@@ -12,6 +12,16 @@ fn doubled(base: Term) -> Term {
         term = Term::intrinsic(Intrinsic::nat_add(term.clone(), term));
     }
     term
+}
+
+/// A record of two fields at `base`, sixty levels deep.
+fn doubled_record(base: Term) -> Term {
+    (0..60u32).fold(base, |type_, level| {
+        let first = Free::local(2 * level + 100, None);
+        let second = Free::local(2 * level + 101, None);
+
+        Term::tuple_type([(first, type_.clone()), (second, type_)])
+    })
 }
 
 /// Whether both operands of the sum at the root are one node — what a walk that kept the graph hands back.
@@ -60,6 +70,14 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
         (
             "the display rendering",
             resolved_for_display(&mut context, &solved).mentions_free(&f),
+        ),
+        (
+            "the sort of a type",
+            Sort::of(
+                &mut context,
+                &doubled_record(Term::intrinsic(Intrinsic::NatType)),
+            )
+            .is_ok_and(|sort| sort == Sort::Type(Level::zero())),
         ),
     ];
 

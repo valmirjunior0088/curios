@@ -1,16 +1,19 @@
 //! The universe a type inhabits, as conversion classifies it: `Prop` for a strict proposition, `Type` otherwise.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::probe_level_fallback,
     crate::{Context, reduce, reduce_forced, synth_neutral},
     curios_core::{
-        Free, FuncType, InductType, Intrinsic, Level, MatchResult, ReduceError, StructType,
+        Bound, Free, FuncType, InductType, Intrinsic, Level, MatchResult, ReduceError, StructType,
         Subterm, Term, TupleType,
     },
 };
 
 /// The universe a type inhabits — `Prop` for a strict proposition, `Type` otherwise.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Sort {
     Type(Level),
     Prop,
@@ -23,7 +26,32 @@ impl Sort {
     }
 
     /// [`Sort::of`] under the binders a surrounding telescope walk has opened. The `opened` scope is threaded rather than installed on the [`Context`], because assuming a binder bumps the mutation stamp that validates the memoization caches, and a walk that assumed at every binder would invalidate them.
+    ///
+    /// Remembered per type while the context stands as it did (`Caches::sorts`), for a type with no loose index that names none of `opened`: such a type's sort is a function of the context alone, and probing here, at every field and domain the rules below ask about, is what makes a record of two fields at one type cost one classification.
     pub(crate) fn of_in(
+        context: &mut Context,
+        opened: &mut Vec<(Free, Term)>,
+        type_: &Term,
+    ) -> Result<Sort, ReduceError> {
+        let remembered = type_.reach() == 0
+            && (!type_.has_local_free()
+                || opened
+                    .iter()
+                    .all(|(binder, _)| !type_.mentions_free(binder)));
+        if remembered && let Some(sort) = context.cached_sort(type_) {
+            return Ok(sort);
+        }
+
+        let sort = Sort::classify_in(context, opened, type_)?;
+        if remembered {
+            context.record_sort(type_.clone(), sort.clone());
+        }
+
+        Ok(sort)
+    }
+
+    /// [`Sort::of_in`]'s rules, one per type former.
+    fn classify_in(
         context: &mut Context,
         opened: &mut Vec<(Free, Term)>,
         type_: &Term,
