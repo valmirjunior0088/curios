@@ -77,8 +77,22 @@ pub(crate) fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, Erro
 
 impl Sort {
     /// Classify `type_`, which the caller must already have checked to be a type — the **lookup** of the two roles the module header separates, never a judgment.
+    ///
+    /// Remembered per type, and probed here at every field and domain the rules below ask about: a type is a graph, and a record of two fields at one type asks one question where a walk per path asks two at every level. `Memos` states how long an answer stands.
     pub(crate) fn of(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Error> {
         curios_profile::profile!("Sort::of");
+        if let Some(sort) = kernel.sort_hit(type_) {
+            return Ok(sort);
+        }
+
+        let sort = Sort::classify(kernel, type_)?;
+        kernel.sort_store(type_.clone(), sort.clone());
+
+        Ok(sort)
+    }
+
+    /// [`Sort::of`]'s rules, one per type former.
+    fn classify(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Error> {
         let reduced = kernel.reduce_forced(type_.clone())?;
 
         match &*reduced {

@@ -1,6 +1,6 @@
 use {
     crate::{Error, Kernel, Sort},
-    curios_analysis::test_support::SYNTAX,
+    curios_analysis::{Erased, test_support::SYNTAX},
     curios_core::{
         Free, Global, InductDecl, Intrinsic, Level, Many, RecGroup, RecMemberScopes, Scope,
         Telescope, Term, UniverseContext, UniverseParam,
@@ -286,4 +286,159 @@ fn a_universe_instance_over_a_bodiless_scheme_classifies_at_the_instances_level(
         Sort::of(&mut kernel, &Term::instance_of(&scheme, vec![one])),
         Ok(Sort::Type(two)),
     );
+}
+
+/// A record of two fields at one type, `depth` deep: a graph of `depth + 1` nodes whose tree has `2^depth` fields.
+fn doubled(base: Term, depth: usize) -> Term {
+    (0..depth).fold(base, |type_, level| {
+        let first = Free::local(2 * level as u32 + 100, None);
+        let second = Free::local(2 * level as u32 + 101, None);
+
+        Term::tuple_type([(first, type_.clone()), (second, type_)])
+    })
+}
+
+/// A sort is remembered per type, so a record sixty levels deep whose two fields are one type each — a tree no walk per path finishes — is classified in the size of its graph, over a closed base and over a local alike. At a depth the uncached kernel affords, both give the same sort.
+///
+/// Mutation-checked: with no remembered sort answered, neither sixty-level row finishes.
+#[test]
+fn a_shared_type_is_classified_once_per_node() {
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    assert_eq!(
+        Sort::of(&mut kernel(), &doubled(nat.clone(), 60)),
+        Ok(Sort::Type(Level::zero())),
+    );
+
+    let hypothesis = binder(0, "A");
+    let mut over_a_local = kernel();
+    over_a_local.assume(&hypothesis, &Term::type_ground());
+    assert_eq!(
+        Sort::of(&mut over_a_local, &doubled(Term::free_var(&hypothesis), 60)),
+        Ok(Sort::Type(Level::zero())),
+    );
+
+    let mut uncached = Kernel::uncached(100_000, SYNTAX);
+    assert_eq!(
+        Sort::of(&mut kernel(), &doubled(nat.clone(), 8)),
+        Sort::of(&mut uncached, &doubled(nat, 8)),
+    );
+}
+
+/// A remembered sort lives as long as the equations it was taken under: a type whose universe is a scrutinee is a proposition in the arm that makes it `Prop`, data in the arm that makes it `Type`, and unclassified outside both — and the uncached kernel agrees on all three.
+///
+/// Mutation-checked: leaving the scoped sorts standing where an equation moves answers the second arm `Prop`.
+#[test]
+fn a_remembered_sort_does_not_outlive_the_equations_it_was_taken_under() {
+    let sequence = |kernel: &mut Kernel| {
+        let universe = binder(0, "u");
+        let hypothesis = binder(1, "A");
+        kernel.assume(
+            &universe,
+            &Term::type_at(Level::zero().succ().expect("one")),
+        );
+        kernel.assume(&hypothesis, &Term::free_var(&universe));
+        let type_ = Term::free_var(&hypothesis);
+
+        let under = |kernel: &mut Kernel, value: Term| {
+            kernel.scoped(|kernel| {
+                kernel
+                    .refine(Term::free_var(&universe), value)
+                    .expect("the equation records");
+                Sort::of(kernel, &type_)
+            })
+        };
+
+        [
+            under(kernel, Term::prop()),
+            under(kernel, Term::type_ground()),
+            Sort::of(kernel, &type_),
+        ]
+    };
+
+    let cached = sequence(&mut kernel());
+
+    assert_eq!(cached[0], Ok(Sort::Prop));
+    assert_eq!(cached[1], Ok(Sort::Type(Level::zero())));
+    assert!(matches!(cached[2], Err(Error::NotASort(_))));
+    assert_eq!(cached, sequence(&mut Kernel::uncached(100_000, SYNTAX)));
+}
+
+/// What a position is recorded as lives as its type's sort does: a term at a type one arm's equation makes a proposition is a proof in that arm and nothing the obligations constrain in the arm that makes its type data, whichever is checked first.
+///
+/// Mutation-checked: leaving the remembered halves standing where an equation moves records the second arm's position as a proof too.
+#[test]
+fn a_position_is_classified_under_its_own_arm() {
+    let mut kernel = kernel();
+    let universe = binder(0, "u");
+    let hypothesis = binder(1, "A");
+    let inhabitant = binder(2, "a");
+    kernel.assume(
+        &universe,
+        &Term::type_at(Level::zero().succ().expect("one")),
+    );
+    kernel.assume(&hypothesis, &Term::free_var(&universe));
+    kernel.assume(&inhabitant, &Term::free_var(&hypothesis));
+
+    let recorded = [Term::prop(), Term::type_ground()].map(|value| {
+        kernel.scoped(|kernel| {
+            kernel
+                .refine(Term::free_var(&universe), value)
+                .expect("the equation records");
+            kernel.record_checked(&Term::free_var(&inhabitant), &Term::free_var(&hypothesis))
+        })
+    });
+    let (positions, failure) = kernel.take_checked();
+
+    assert_eq!(recorded, [Some(0), None]);
+    assert_eq!(
+        positions
+            .iter()
+            .map(|position| position.erased)
+            .collect::<Vec<_>>(),
+        [Erased::Proof],
+    );
+    assert!(failure.is_none());
+}
+
+/// Nor does it outlive the type a local stands at: an arm re-assumes a local at its specialized type, and a neutral's sort is read off its binder, so the sort remembered before the arm does not answer inside it, nor the arm's after it.
+///
+/// Mutation-checked: with `Kernel::assume` leaving the tables alone where it re-types a binder, the shadowed read answers `Type`.
+#[test]
+fn a_remembered_sort_does_not_outlive_the_type_its_local_stands_at() {
+    let mut kernel = kernel();
+    let hypothesis = binder(0, "h");
+    let type_ = Term::free_var(&hypothesis);
+
+    kernel.assume(&hypothesis, &Term::type_ground());
+    assert_eq!(Sort::of(&mut kernel, &type_), Ok(Sort::Type(Level::zero())));
+
+    let shadowed = kernel.scoped(|kernel| {
+        kernel.assume(&hypothesis, &Term::prop());
+        Sort::of(kernel, &type_)
+    });
+
+    assert_eq!(shadowed, Ok(Sort::Prop));
+    assert_eq!(Sort::of(&mut kernel, &type_), Ok(Sort::Type(Level::zero())));
+}
+
+/// Nor its binder. A name handed in from outside can be assumed again once its first binder is closed, at another type, and a sort read under the first does not answer for the second: the table files each answer with the binders it was read under, and asks whether they stand.
+///
+/// Mutation-checked: answering a scoped sort without asking whether its binders stand classifies the second `h` at `Type`.
+#[test]
+fn a_remembered_sort_does_not_outlive_its_binder() {
+    let mut kernel = kernel();
+    let hypothesis = binder(0, "h");
+    let type_ = Term::free_var(&hypothesis);
+
+    let first = kernel.scoped(|kernel| {
+        kernel.assume(&hypothesis, &Term::type_ground());
+        Sort::of(kernel, &type_)
+    });
+    let second = kernel.scoped(|kernel| {
+        kernel.assume(&hypothesis, &Term::prop());
+        Sort::of(kernel, &type_)
+    });
+
+    assert_eq!(first, Ok(Sort::Type(Level::zero())));
+    assert_eq!(second, Ok(Sort::Prop));
 }

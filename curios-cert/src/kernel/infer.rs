@@ -814,7 +814,7 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Er
     // Whether this check opens a member body's leading lambdas — taken first, so it holds for this term alone and the λ rule is the one reader that carries it on.
     let parameters = kernel.calls.take_parameters();
 
-    // Seed for the erasure obligations, recorded before the rules dispatch so a position counts however it is checked. Classified here rather than afterwards: the expectation routinely mentions binders this item opened, and they are retracted the moment its check returns, so nothing later can ask for their sorts. A memo keyed on the type keeps that to one question per distinct type.
+    // Seed for the erasure obligations, recorded before the rules dispatch so a position counts however it is checked. Classified here rather than afterwards: the expectation routinely mentions binders this item opened, and they are retracted the moment its check returns, so nothing later can ask for their sorts. The answer is remembered beside the kernel's sorts, which keeps that to one question per distinct type.
     let before = kernel.partial_groups();
     let position = kernel.record_checked(term, expected);
     let checked = check_rules(kernel, term, expected, parameters);

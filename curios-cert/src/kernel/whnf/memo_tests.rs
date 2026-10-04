@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::Kernel,
+    crate::{Kernel, Sort},
     curios_analysis::test_support::SYNTAX,
     curios_core::{Intrinsic, Reducer, Term, UniverseContext},
 };
@@ -130,4 +130,41 @@ fn cached_spend_never_exceeds_uncached() {
     let without = spent(&mut uncached, repeated.clone()) + spent(&mut uncached, repeated);
 
     assert!(with_memos < without, "{with_memos} against {without}");
+}
+
+/// What classifying `type_` costs `kernel`, read off the remaining budget on either side.
+fn spent_classifying(kernel: &mut Kernel, type_: &Term) -> u64 {
+    let (before, _) = kernel.consumption();
+    Sort::of(kernel, type_).expect("classifies");
+    let (after, _) = kernel.consumption();
+
+    before - after
+}
+
+/// A remembered sort lives as long as the budget does, as a reduct does: classified twice within one declaration a type pays once, and across a restore it pays again, so a sort one declaration filed never spares the next the reduction it rests on. Both lives are held to it — a closed type's, and that of a type naming a local.
+///
+/// Mutation-checked: with `Memos::begin_declaration` leaving the sorts alone, the closed type after the boundary is answered for nothing.
+#[test]
+fn restoring_the_budget_forgets_a_remembered_sort() {
+    let x = binder(0, "x");
+    let closed = Term::apply(
+        Term::func([(x, Term::type_ground())], Term::free_var(&x)),
+        [nat_type()],
+    );
+    let alias = binder(1, "alias");
+    let scoped = Term::free_var(&alias);
+
+    for type_ in [closed, scoped] {
+        let mut kernel = kernel();
+        kernel.define(&alias, &Term::type_ground(), &nat_type(), &monomorphic());
+
+        let first = spent_classifying(&mut kernel, &type_);
+        let second = spent_classifying(&mut kernel, &type_);
+        kernel.restore_budget();
+        let after_boundary = spent_classifying(&mut kernel, &type_);
+
+        assert!(first > 0, "classifying it reduces it");
+        assert_eq!(second, 0);
+        assert_eq!(after_boundary, first);
+    }
 }

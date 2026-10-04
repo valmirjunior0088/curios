@@ -524,6 +524,25 @@ impl Kernel {
         }
     }
 
+    /// The remembered sort of `type_`, with nothing spent and nothing minted, as a remembered type is handed back: a sort's hit replays nothing for [`Kernel::infer_hit`]'s reason. A local-free type's is the declaration's; one read off the scope, for a type naming a local, is taken only while the binders it was read under stand.
+    pub(crate) fn sort_hit(&self, type_: &Term) -> Option<Sort> {
+        self.standing(self.memos.sort(type_))
+    }
+
+    /// A remembered answer, where it is the declaration's or the binders it was read under all still stand.
+    fn standing<T>(&self, remembered: Option<(Option<Prefix>, T)>) -> Option<T> {
+        let (prefix, answer) = remembered?;
+
+        prefix
+            .is_none_or(|prefix| self.scope.stands(prefix))
+            .then_some(answer)
+    }
+
+    /// Remember `type_`'s sort, beside the binders in scope now.
+    pub(crate) fn sort_store(&mut self, type_: Term, sort: Sort) {
+        self.memos.store_sort(type_, self.scope.prefix(), sort);
+    }
+
     /// Remember a `term`'s weak-head reduct and the identities computing it minted.
     ///
     /// **Stored for nothing.** [`Memos::begin_declaration`] clears the table exactly where [`Spend::restore_budget`] fires, and every node it holds was built under that budget, which charges a construction what it builds — so the budget that built an entry is its bound. Charging it besides, against a compilation-wide allowance at the tree footprint of key and reduct, would bill entries that die with the declaration, and bill them by their trees where a reduct is a graph whose tree has `2^n` nodes.
@@ -675,7 +694,10 @@ impl Kernel {
         if let Some(index) = name.local_index() {
             self.spend.reserve(index);
         }
-        self.scope.assume(name, type_);
+        // A re-typed local is what a remembered sort of a type naming it was read off.
+        if self.scope.assume(name, type_) {
+            self.memos.begin_equations();
+        }
     }
 
     /// Step `walk` past its next binder: mint one from the entry's hint, open it at `domain`, and hand it back for the caller's own capture.
@@ -694,7 +716,7 @@ impl Kernel {
         let calls = self.calls.mark();
         let outcome = walk(self);
         self.calls.retract(calls);
-        // Retracting an equation changes what a local-bearing term reduces to, so the reducts remembered under it go with it. A bracket that assumed none leaves the tables alone — most do, and what they remembered is still true.
+        // Retracting an equation changes what a local-bearing term reduces to, so the reducts remembered under it go with it. A bracket that assumed none leaves the tables alone — most do, and what they remembered is still true; a sort read under a binder closed here is refused by its `Prefix` instead.
         if self.scope.retract(mark) {
             self.memos.begin_equations();
         }
@@ -856,13 +878,16 @@ impl Kernel {
             return None;
         }
 
-        let erased = match self.positions.remembered(type_) {
+        let erased = match self.standing(self.memos.half(type_)) {
             Some(erased) => erased,
             None => {
                 self.positions.begin();
                 let outcome = erased_half(self, type_);
+                let erased = self.positions.settle(outcome);
+                self.memos
+                    .store_half(type_.clone(), self.scope.prefix(), erased);
 
-                self.positions.settle(type_, outcome)
+                erased
             }
         };
 

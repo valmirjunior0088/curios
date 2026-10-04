@@ -16,6 +16,15 @@ pub(super) struct Mark {
     refinements: usize,
 }
 
+/// The binders in scope at one moment, as a later moment can ask whether they all still stand: how many there were, and which opening the innermost of them was.
+///
+/// Locals are a stack, so the innermost opening identifies everything beneath it: a binder is only ever closed after every binder opened inside it, and an opening is never numbered twice. A judgment that read a local's type is true for as long as its prefix stands — and no longer, whatever the binder is called, since a name a caller hands in can come back at another type once the first is closed.
+#[derive(Clone, Copy)]
+pub(super) struct Prefix {
+    depth: usize,
+    opening: u64,
+}
+
 /// One arm's case equation, under the three spellings a probe may present its subject in.
 struct Refinement {
     /// The scrutinee **as written** — the spelling the equation is recorded under, and the one a probe is asked about first.
@@ -43,6 +52,8 @@ struct Local {
     type_: Term,
     /// `type_` as the conversion history keys it, with every binder opened before it renamed to its position — or `None` for a type with loose indices, whose renaming depends on how many binders stand beside it and is taken at each key instead. See [`Scope::history_context`].
     keyed: Option<Term>,
+    /// Which opening this is, counted over the whole walk — what a [`Prefix`] names.
+    opening: u64,
 }
 
 #[derive(Default)]
@@ -53,11 +64,14 @@ pub(super) struct Scope {
     refinements: Vec<Refinement>,
     /// How many equations are currently in force, when that is fewer than there are. `Some(n)` withholds everything from `n` inwards for the duration of one [`Scope::unasked_refinement`] settlement — see [`Scope::hide_refinements_from`].
     hidden: Option<usize>,
+    /// How many binders this walk has opened, closed ones included.
+    openings: u64,
 }
 
 impl Scope {
-    /// Open a binder: bring `name : type_` into scope for the walk in progress.
-    pub(super) fn assume(&mut self, name: &Free, type_: &Term) {
+    /// Open a binder: bring `name : type_` into scope for the walk in progress, answering whether that re-types a binder already in scope — an arm re-assumes a local at its specialized type, and the shadow is what a lookup finds for as long as the arm stands, which changes what a term naming it is typed at.
+    pub(super) fn assume(&mut self, name: &Free, type_: &Term) -> bool {
+        let retyped = self.locals.iter().any(|local| local.name == *name);
         let keyed = (type_.reach() == 0).then(|| {
             let opened = self
                 .locals
@@ -66,11 +80,34 @@ impl Scope {
                 .collect::<Vec<_>>();
             type_.capture(&opened)
         });
+        self.openings += 1;
         self.locals.push(Local {
             name: *name,
             type_: type_.clone(),
             keyed,
+            opening: self.openings,
         });
+
+        retyped
+    }
+
+    /// The binders in scope now, for [`Scope::stands`] to be asked about later.
+    pub(super) fn prefix(&self) -> Prefix {
+        Prefix {
+            depth: self.locals.len(),
+            opening: self.locals.last().map_or(0, |local| local.opening),
+        }
+    }
+
+    /// Whether every binder `prefix` held is still in scope, as the opening it was.
+    pub(super) fn stands(&self, prefix: Prefix) -> bool {
+        match prefix.depth.checked_sub(1) {
+            None => true,
+            Some(innermost) => self
+                .locals
+                .get(innermost)
+                .is_some_and(|local| local.opening == prefix.opening),
+        }
     }
 
     /// Whether any arm's case equation is currently in force — the judgment-side half of the closed machine's gate: inside an arm a closed scrutinee *is* the assumed value, so closed evaluation must stand aside for the strategy that consults these.
