@@ -1,4 +1,4 @@
-//! The evaluation memos: what a term weak-head reduces to, the sort a type inhabits, the type inferred for a term and the type a term was checked at — each for the rest of the declaration where it is a function of the declaration alone, and otherwise for as long as what it read of the scope stands.
+//! The evaluation memos: what a term weak-head reduces to, the sort a type inhabits, the type inferred for a term, the type a term was checked at and whether two terms converted — each for the rest of the declaration where it is a function of the declaration alone, and otherwise for as long as what it read of the scope stands.
 //!
 //! This is not the kind of store the [`kernel`](super) module documentation warns about. A metavariable heap or a refinement layer *injects* answers a term alone could not produce; a memo replays the kernel's own pure function of `(term, definitions)`, computed once. Refusing even that multiplies the cost of a whole-prelude re-check, spent re-deriving the same prelude spines for every recursive group the totality gate walks; `curios-prelude-archive`'s `kernel_memo_parity` runs that walk both ways.
 //!
@@ -8,7 +8,7 @@
 //!
 //! **A judgment that reads the scope lives as long as what it read.** A sort rests on more of the scope than a reduct does: on the equations in force, which decide what a type reduces to, and on the type each local stands at, since a neutral's sort is read off its binder. So the scoped sorts are cleared where an equation moves, as the local-bearing reducts are, and where an arm re-assumes a local at its specialized type; and each is filed with the binders in scope when it was read — a [`Prefix`] — and answers only while they stand, because a stale sort is *wrong* where a stale reduct is merely unreachable: a name handed in from outside can be assumed again, at another type, once its first binder is closed. A local-free type's sort is the declaration's inside an arm as outside one, for the reason its reduct is: classifying it reduces local-free terms and terms naming only the binders the classification itself opens, and no case equation is about either — an equation's subject names a local of the walk, and reduction never introduces one.
 //!
-//! An inferred type and a check read the same things and are filed the same way: a term naming a local is typed off the binders in scope, under the equations in force. One rule is stricter than a sort's. A local-free term typed while a case equation is in force is filed with the scope's answers and not the declaration's — the table declined such a term outright before it kept anything read off the scope, and the stricter filing costs one typing per arm. And one refusal is theirs alone: a term naming a member of a group whose body is being checked is neither filed nor answered, for the reason [`Kernel::infer_hit`](super::Kernel::infer_hit) gives.
+//! An inferred type and a check read the same things and are filed the same way: a term naming a local is typed off the binders in scope, under the equations in force. One rule is stricter than a sort's. A local-free term typed while a case equation is in force is filed with the scope's answers and not the declaration's — the table declined such a term outright before it kept anything read off the scope, and the stricter filing costs one typing per arm. And one refusal is theirs alone: a term naming a member of a group whose body is being checked is neither filed nor answered, for the reason [`Kernel::infer_hit`](super::Kernel::infer_hit) gives. A comparison's verdict is filed as a typing is, by its type and its two sides, and only where it was reached with no goal in progress assumed.
 //!
 //! **They are consulted at every reduction level, not only at the crate's boundary.** `whnf_within` probes on entry and stores on exit, so a scrutinee, an application's head, each turn of `force`'s loop and every other internal call is served by the same table. The elaborator's reducer does the same; probing only at the two [`Reducer`](curios_core::Reducer) methods would leave every internal call re-deriving what the table already holds. Reaching every level is safe because the admission test is one test: [`Memos::whnf`] gates the lookup exactly as [`Memos::store_whnf`] gates the store. A sort is probed the same way, at every field and domain [`Sort::of`] classifies, which is what makes a type's sort cost its graph.
 //!
@@ -98,6 +98,8 @@ pub(super) struct Memos {
     types: Lives<Term, Term>,
     /// Each term checked, beside the type it was checked at. The rules that introduce a function and a record, and the one that descends a `let`, check a term without inferring it, so a tuple whose two fields are one node is checked against its record once per path unless the check itself is remembered. Only that a term checked is kept: a refusal ends its item's check.
     checked: Lives<(Term, Term), ()>,
+    /// The verdict of each comparison decided with no goal in progress assumed, at its type: `convert`'s own answer, both ways. Two terms that are equal graphs built apart are compared along every path that reaches a pair of their nodes, and remembered by pair each is compared once. A verdict that rested on the recurrence rule is true of the goals that were in progress when it was reached, and is not kept — see `convert`'s `History`.
+    converted: Lives<(Term, Term, Term), bool>,
 }
 
 impl Memos {
@@ -112,6 +114,7 @@ impl Memos {
             halves: Lives::new(),
             types: Lives::new(),
             checked: Lives::new(),
+            converted: Lives::new(),
         }
     }
 
@@ -206,6 +209,33 @@ impl Memos {
         }
     }
 
+    /// The remembered verdict of comparing `this` with `that` at `type_`, as [`Memos::infer`] hands back a type.
+    pub(super) fn converted(
+        &self,
+        type_: &Term,
+        this: &Term,
+        that: &Term,
+        in_arm: bool,
+    ) -> Option<(Option<Prefix>, bool)> {
+        let life = self.judged(&[type_, this, that], in_arm)?;
+
+        self.converted
+            .get(&(type_.clone(), this.clone(), that.clone()), life)
+    }
+
+    /// Remember the verdict of the comparison `goal` — its type, then its two sides.
+    pub(super) fn store_converted(
+        &mut self,
+        goal: (Term, Term, Term),
+        in_arm: bool,
+        prefix: Prefix,
+        verdict: bool,
+    ) {
+        if let Some(life) = self.judged(&[&goal.0, &goal.1, &goal.2], in_arm) {
+            self.converted.insert(goal, life, prefix, verdict);
+        }
+    }
+
     /// The life of what [`Sort::of`] reads off `type_`: the declaration's where the type is local-free, inside an arm as outside one, and the scope's otherwise. `None` where nothing is remembered — the memos off, or a loose index a binder outside the type gives meaning to.
     fn classified(&self, type_: &Term) -> Option<Life> {
         self.judged(&[type_], false)
@@ -225,7 +255,7 @@ impl Memos {
         )
     }
 
-    /// Discard every remembered reduct, sort, type and check. Called wherever the budget is restored, which is what makes a hit on them free rather than order-dependent.
+    /// Discard every remembered reduct, sort, type, check and verdict. Called wherever the budget is restored, which is what makes a hit on them free rather than order-dependent.
     pub(super) fn begin_declaration(&mut self) {
         self.whnf.clear();
         self.forced.clear();
@@ -233,10 +263,11 @@ impl Memos {
         self.halves.begin_declaration();
         self.types.begin_declaration();
         self.checked.begin_declaration();
+        self.converted.begin_declaration();
         self.begin_equations();
     }
 
-    /// Discard what was read off the scope: the local-bearing reducts, and the scoped sorts, types and checks. Called wherever the set of case equations in force changes, which is the one thing besides the definition store a local-bearing reduct is a function of, and wherever a local is re-typed, which the others are a function of besides.
+    /// Discard what was read off the scope: the local-bearing reducts, and the scoped sorts, types, checks and verdicts. Called wherever the set of case equations in force changes, which is the one thing besides the definition store a local-bearing reduct is a function of, and wherever a local is re-typed, which the others are a function of besides.
     pub(super) fn begin_equations(&mut self) {
         self.local.clear();
         self.local_forced.clear();
@@ -244,6 +275,7 @@ impl Memos {
         self.halves.begin_equations();
         self.types.begin_equations();
         self.checked.begin_equations();
+        self.converted.begin_equations();
     }
 
     /// Discard the typings read off the scope, and nothing else. Called wherever what the enclosing arms established for the call recorder changes: a group typed inside a term closes under it, so a type or a check remembered on one side of that change does not answer on the other. A reduct and a sort read none of it.

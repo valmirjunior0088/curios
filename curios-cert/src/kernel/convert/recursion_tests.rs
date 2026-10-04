@@ -350,3 +350,28 @@ fn a_peel_residual_is_compared_under_the_active_history() {
         "the control: from an empty history, `x + a` and `x + b` differ",
     );
 }
+
+/// A verdict that rested on the recurrence rule is not remembered. The two equirecursive spellings converge because the domain goal is the goal in progress, assumed: that is true of the path it was reached on, and it is filed nowhere — where a comparison that meets no goal in progress is filed, and forgotten with the budget.
+///
+/// Mutation-checked: with a verdict filed whatever was assumed while deciding it, the equirecursive goal is remembered; and with the declaration's verdicts kept across a restore, the control still answers after it.
+#[test]
+fn a_verdict_that_assumed_a_goal_in_progress_is_not_remembered() {
+    let mut kernel = kernel();
+    let ground = Term::type_ground();
+    let left = equirecursive(binder(20, "a"), binder(21, "x"), nat_type(), false);
+    let right = equirecursive(binder(30, "b"), binder(31, "y"), nat_type(), true);
+
+    assert_eq!(convert(&mut kernel, &ground, &left, &right), Ok(true));
+    assert_eq!(kernel.convert_hit(&ground, &left, &right), None);
+
+    let x = binder(40, "x");
+    let redex = Term::apply(
+        Term::func([(x, Term::type_ground())], Term::free_var(&x)),
+        [nat_type()],
+    );
+    assert_eq!(convert(&mut kernel, &ground, &redex, &nat_type()), Ok(true));
+    assert_eq!(kernel.convert_hit(&ground, &redex, &nat_type()), Some(true));
+
+    kernel.restore_budget();
+    assert_eq!(kernel.convert_hit(&ground, &redex, &nat_type()), None);
+}

@@ -14,6 +14,10 @@
 //!
 //! `curios-elab`'s conversion checker canonicalizes differently: it renames the binders *it* minted, in mint order, and does not key on the context at all. For a strictly nested walk like this one the two orderings coincide, since the binders in scope at a goal are exactly the path to it. The elaborator's walk is not strictly nested — it has a worklist and it parks goals — so whether the two schemes agree there is a genuinely open question, recorded as such in `documentation/design/soundness/conversion/conversion-recurrence.md`. This module deliberately does not inherit the answer. For one population it is answered: two instances of one recursive group would collide under the elaborator's key where this one never could, and each checker decides such a pair by its levels instead — `rec_instances` here, the level identification there — so neither reaches its recurrence rule on it.
 //!
+//! # What is remembered
+//!
+//! A goal decided with no goal in progress assumed is a fact, and its verdict is kept for as long as what it read of the scope stands (`Memos`): two terms that are equal graphs built apart reach each pair of their nodes along every path, and remembered by pair each is compared once. A goal whose deciding met one in progress is not kept, whichever way it went: accepted, it may hold only by the assumption; refused, it may have been refused by a classing that left two atoms apart because their comparison was in progress. `History::assumed` counts both, and a verdict is filed only where the count stood still across it. The sets are plain, with no closure taken over accepted pairs, for the reason Lean's kernel gives for its own: a closure's result would depend on the order goals were met in.
+//!
 //! # Where this is incomplete, and why that is the safe direction
 //!
 //! One concession remains. Every child position without a typed context — a stuck elimination's scrutinee, and its motive and arms under their opaque binders, and a projection's or an instance's head — is compared at `Type` rather than at the types its head assigns, which forfeits eta and irrelevance there. Each is a place where the kernel may reject a term the elaborator accepted. Everything else is typed. An application spine's arguments compare at the telescope its head carries — a variable, a universe instance of one, or a projection of a `rec` group, read by `synth_neutral` as a lookup rather than an inference (`compare_arguments`) — and a head that names no type still grounds. An inductive type-former's arguments compare at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P)(p, q)` at a `Prop`-sorted `P` convert with `Eq(@P)(p, p)`; a struct type's, a struct literal's and a constructor's parameters at the declaration's outer telescope (`params_at`); and a struct literal's fields and a constructor's payload at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read, so two `Str`s built from different proofs of the same bytes are one value. Two applications of one definition are compared by their spines *before* either is unfolded, as the elaborator compares them (`one_definition_by_its_spines`), because unfolded first a proof argument lands in a stuck scrutinee, where it is not typed. Two instances of one `rec` group are decided by their levels under the item's hypotheses (`rec_instances`), the equation `induct_type_args` and the instance arms apply, and two different groups are refused.
@@ -58,6 +62,8 @@ pub fn convert(kernel: &mut Kernel, type_: &Term, this: &Term, that: &Term) -> R
 #[derive(Default)]
 struct History {
     seen: HashSet<Goal>,
+    /// How many times a goal was met while already in progress — and so assumed, or in a classing left apart. A verdict reached while this moved rests on the goals that were in progress then, and is a fact about that path alone; one reached while it stood still rests on none of them, and is what [`compare`] remembers.
+    assumed: u64,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -87,7 +93,11 @@ impl History {
 
         match self.seen.insert(goal.clone()) {
             true => Some(goal),
-            false => None,
+            false => {
+                self.assumed += 1;
+
+                None
+            }
         }
     }
 
@@ -127,9 +137,15 @@ fn compare(
             return Ok(verdict);
         }
 
+        // A verdict reached before with nothing assumed is the verdict here, whatever goals are in progress now: it rested on none.
+        if let Some(verdict) = kernel.convert_hit(type_, this, that) {
+            return Ok(verdict);
+        }
+
         let Some(goal) = history.enter(kernel, type_, this, that) else {
             return Ok(true);
         };
+        let assumed = history.assumed;
 
         let outcome = match Term::unwrap_or_clone(kernel.reduce_forced(type_.clone())?) {
             Subterm::FuncType(FuncType { telescope, .. }) => {
@@ -150,6 +166,12 @@ fn compare(
         };
 
         history.leave(&goal);
+        // Remembered where deciding it met no goal in progress, and never where it ran the budget out, which is no verdict.
+        if let Ok(verdict) = &outcome
+            && history.assumed == assumed
+        {
+            kernel.convert_store(type_, this, that, *verdict);
+        }
         outcome
     })
 }

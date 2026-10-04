@@ -1,4 +1,4 @@
-//! Every walk the kernel runs over whole terms, over one doubling term: sixty levels that each hold the one below twice, a tree no walk per path finishes and a graph of sixty-one nodes — a sum of the level below with itself around a local, and a record of two fields at the level below. A walk the kernel adds joins the table here, so one a change makes per-path again stalls its row rather than waiting for a profile; the walks it shares with the elaborator are `curios-core`'s, held by that crate's table. Inference and checking are rows over a pair of the level below with itself, sixty deep over the same local: the first infers each field and the second checks it against a record of two fields at the level below, so neither is answered by the other's table.
+//! Every walk the kernel runs over whole terms, over one doubling term: sixty levels that each hold the one below twice, a tree no walk per path finishes and a graph of sixty-one nodes — a sum of the level below with itself around a local, and a record of two fields at the level below. A walk the kernel adds joins the table here, so one a change makes per-path again stalls its row rather than waiting for a profile; the walks it shares with the elaborator are `curios-core`'s, held by that crate's table. The first conversion row compares two spellings of one graph, which equality answers; the second compares a tower of applications over a local with one over a redex that reduces to it, which only a remembered verdict answers. Inference and checking are rows over a pair of the level below with itself, sixty deep over the same local: the first infers each field and the second checks it against a record of two fields at the level below, so neither is answered by the other's table.
 
 use {
     crate::*,
@@ -60,6 +60,38 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
             )
             .is_ok_and(|equal| equal),
         ),
+        ("conversion of two spellings", {
+            let f = Free::local(2, Some("f"));
+            let y = Free::local(3, Some("y"));
+            let applied = |base: Term| {
+                (0..60).fold(base, |term, _| {
+                    Term::apply(Term::free_var(&f), [term.clone(), term])
+                })
+            };
+            let redex = Term::apply(
+                Term::func([(y, nat.clone())], Term::free_var(&y)),
+                [Term::free_var(&n)],
+            );
+            let mut kernel = kernel(&n, &a);
+            kernel.assume(
+                &f,
+                &Term::func_type(
+                    [
+                        (Free::local(4, None), nat.clone()),
+                        (Free::local(5, None), nat.clone()),
+                    ],
+                    nat.clone(),
+                ),
+            );
+
+            convert(
+                &mut kernel,
+                &nat,
+                &applied(Term::free_var(&n)),
+                &applied(redex),
+            )
+            .is_ok_and(|equal| equal)
+        }),
         (
             "the sort of a closed type",
             Sort::of(&mut kernel(&n, &a), &doubled_record(nat.clone())) == ground,

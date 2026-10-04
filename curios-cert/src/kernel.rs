@@ -543,6 +543,24 @@ impl Kernel {
         }
     }
 
+    /// The remembered verdict of comparing `this` with `that` at `type_`, under the lives a typing has. Only a verdict reached with no goal in progress assumed is ever filed, so it is the verdict under whatever goals are in progress now.
+    pub(crate) fn convert_hit(&self, type_: &Term, this: &Term, that: &Term) -> Option<bool> {
+        self.standing(
+            self.memos
+                .converted(type_, this, that, self.has_refinements()),
+        )
+    }
+
+    /// Remember the verdict of comparing `this` with `that` at `type_`.
+    pub(crate) fn convert_store(&mut self, type_: &Term, this: &Term, that: &Term, verdict: bool) {
+        self.memos.store_converted(
+            (type_.clone(), this.clone(), that.clone()),
+            self.has_refinements(),
+            self.scope.prefix(),
+            verdict,
+        );
+    }
+
     /// The remembered sort of `type_`, with nothing spent and nothing minted, as a remembered type is handed back: a sort's hit replays nothing for [`Kernel::infer_hit`]'s reason. A local-free type's is the declaration's; one read off the scope, for a type naming a local, is taken only while the binders it was read under stand.
     pub(crate) fn sort_hit(&self, type_: &Term) -> Option<Sort> {
         self.standing(self.memos.sort(type_))

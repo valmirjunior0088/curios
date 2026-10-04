@@ -41,6 +41,8 @@ enum Shape {
     Arrows,
     /// `(x, x)` twice, as two top-level chains built apart and claimed equal.
     TwoTowers,
+    /// `g(x, x)` twice in one function's body, the second chain from a spelling that only reduces to the first's, and the two claimed equal: one spelling is not the other, so equality cannot answer and conversion compares them.
+    Apart,
 }
 
 /// What a tower of values is written from, as the body of `tower`.
@@ -165,6 +167,20 @@ fn tower(shape: Shape, lines: usize) -> String {
                 "\nlet _same: Eq()(x{lines}, y{lines}) =\n    Eq/refl();"
             );
         }
+        Shape::Apart => {
+            source.push_str("use /std/{Nat, Eq};\n\n");
+            source.push_str("let tower(g: (Nat, Nat) -> Nat, n: Nat) -> Nat =\n");
+            chain(&mut source, "    ", "x", lines, "g(n, n)", |x| {
+                format!("g({x}, {x})")
+            });
+            chain(&mut source, "    ", "y", lines, "g(n, n + 0)", |y| {
+                format!("g({y}, {y})")
+            });
+            let _ = writeln!(
+                source,
+                "    let _same: Eq()(x{lines}, y{lines}) = Eq/refl();\n    n;"
+            );
+        }
     }
 
     source.push_str("\n/std/print(\"ok\\n\")\n");
@@ -240,7 +256,7 @@ fn a_sixty_line_chain_compiles() {
     }
 }
 
-/// The towers both checkers walk in their size, at sixty lines: calls and pairs in a function's body, lists there and in a recursive member's, both aliases, and the two towers claimed equal.
+/// The towers both checkers walk in their size, at sixty lines: calls and pairs in a function's body, lists there and in a recursive member's, both aliases, the two towers claimed equal, and the two chains of calls built apart.
 #[test]
 fn a_sixty_line_tower_compiles() {
     for shape in [
@@ -251,6 +267,7 @@ fn a_sixty_line_tower_compiles() {
         Shape::Aliases,
         Shape::Arrows,
         Shape::TwoTowers,
+        Shape::Apart,
     ] {
         assert_eq!(compiles(&tower(shape, 60)), Ok(()));
     }

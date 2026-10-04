@@ -77,36 +77,36 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 ///
 /// # What it last printed
 ///
-/// Over the checkers of `55902851a`, every row accepted by both.
+/// Over the checkers of `22c85eba1`, every row accepted by both.
 ///
 /// | tower | lines | elaborator units | elaborator looks | kernel units | kernel looks |
 /// | --- | --- | --- | --- | --- | --- |
-/// | chain | 12 | 26 791 | 54 185 | 29 048 | 141 779 |
-/// | chain | 16 | 26 791 | 55 573 | 29 048 | 141 963 |
-/// | chain, in a member | 12 | 26 791 | 84 458 | 29 048 | 142 966 |
-/// | chain, in a member | 16 | 26 791 | 60 849 | 29 048 | 143 242 |
-/// | calls | 12 | 26 791 | 55 326 | 29 048 | 141 959 |
-/// | calls | 16 | 26 791 | 57 114 | 29 048 | 142 195 |
-/// | calls, in a member | 12 | 26 791 | 173 738 | 29 048 | 143 000 |
-/// | calls, in a member | 16 | 26 791 | 1 896 474 | 29 048 | 143 344 |
-/// | pairs | 12 | 26 791 | 220 301 | 29 048 | 145 787 |
-/// | pairs | 16 | 26 791 | 2 681 841 | 29 048 | 150 211 |
-/// | pairs, in a member | 12 | 26 791 | 453 311 | 29 048 | 244 812 |
-/// | pairs, in a member | 16 | 26 791 | 6 356 675 | 29 048 | 1 723 836 |
-/// | lists | 12 | 26 791 | 83 679 | 29 048 | 149 205 |
-/// | lists | 16 | 26 791 | 106 743 | 29 048 | 154 721 |
-/// | lists, in a member | 12 | 26 791 | 79 932 | 29 048 | 148 936 |
-/// | lists, in a member | 16 | 26 791 | 96 950 | 29 048 | 153 564 |
-/// | arms | 12 | 26 791 | 67 494 | 50 230 | 970 291 |
-/// | arms | 16 | 26 791 | 78 110 | 787 502 | 13 382 667 |
-/// | arms, in a member | 12 | 26 791 | 360 404 | 50 364 | 890 406 |
-/// | arms, in a member | 16 | 133 836 | 4 673 508 | 787 652 | 12 074 618 |
-/// | aliases | 12 | 26 791 | 218 069 | 29 048 | 148 240 |
-/// | aliases | 16 | 265 315 | 2 677 197 | 29 048 | 155 728 |
-/// | arrows | 12 | 26 791 | 218 468 | 29 048 | 147 188 |
-/// | arrows | 16 | 265 439 | 2 677 732 | 29 048 | 153 132 |
-/// | two towers | 12 | 26 791 | 1 632 345 | 29 048 | 149 601 |
-/// | two towers | 16 | 26 791 | 24 994 503 | 29 048 | 155 717 |
+/// | chain | 12 | 27 292 | 54 987 | 29 254 | 141 797 |
+/// | chain | 16 | 27 292 | 56 375 | 29 254 | 141 981 |
+/// | chain, in a member | 12 | 27 292 | 85 613 | 29 254 | 142 984 |
+/// | chain, in a member | 16 | 27 292 | 61 648 | 29 254 | 143 260 |
+/// | calls | 12 | 27 292 | 56 113 | 29 254 | 141 977 |
+/// | calls | 16 | 27 292 | 57 901 | 29 254 | 142 213 |
+/// | calls, in a member | 12 | 27 292 | 174 522 | 29 254 | 143 018 |
+/// | calls, in a member | 16 | 27 292 | 1 897 258 | 29 254 | 143 362 |
+/// | pairs | 12 | 27 292 | 57 496 | 29 254 | 145 805 |
+/// | pairs | 16 | 27 292 | 61 492 | 29 254 | 150 229 |
+/// | pairs, in a member | 12 | 27 292 | 159 458 | 29 254 | 244 830 |
+/// | pairs, in a member | 16 | 27 292 | 1 639 198 | 29 254 | 1 723 854 |
+/// | lists | 12 | 27 292 | 80 448 | 29 254 | 149 223 |
+/// | lists | 16 | 27 292 | 99 064 | 29 254 | 154 739 |
+/// | lists, in a member | 12 | 27 292 | 77 581 | 29 254 | 148 954 |
+/// | lists, in a member | 16 | 27 292 | 91 171 | 29 254 | 153 582 |
+/// | arms | 12 | 27 292 | 68 324 | 50 230 | 970 309 |
+/// | arms | 16 | 27 292 | 78 940 | 787 502 | 13 382 685 |
+/// | arms, in a member | 12 | 27 292 | 361 231 | 50 364 | 890 424 |
+/// | arms, in a member | 16 | 133 835 | 4 674 335 | 787 652 | 12 074 636 |
+/// | aliases | 12 | 27 292 | 55 837 | 29 254 | 148 258 |
+/// | aliases | 16 | 27 292 | 57 839 | 29 254 | 155 746 |
+/// | arrows | 12 | 27 292 | 56 236 | 29 254 | 147 206 |
+/// | arrows | 16 | 27 292 | 58 374 | 29 254 | 153 150 |
+/// | two towers | 12 | 27 292 | 79 108 | 29 254 | 149 627 |
+/// | two towers | 16 | 27 292 | 95 216 | 29 254 | 155 743 |
 ///
 /// **The chain is flat, and a tower a checker walks per path multiplies.** Its looks grow by ten to sixteen times across four lines, and where the checker types a term per path its units do too, which is what refuses a tower at twenty lines; a tower walked in its size reads as the chain does. A row's units are its heaviest declaration's, which for the chain is not the tower, so the same 26 791 and 29 048 stand under every row until a tower's own declaration outgrows them.
 #[test]
@@ -126,6 +126,7 @@ fn tower_measurements() {
         ("aliases", Shape::Aliases),
         ("arrows", Shape::Arrows),
         ("two towers", Shape::TwoTowers),
+        ("apart", Shape::Apart),
     ];
 
     // The prelude is restored once per thread, and its restore is not a tower's cost.
