@@ -9,7 +9,7 @@
 //! "Interface" is load-bearing in that sentence and is what `a_body_carried_level_is_minimized_rather_than_generalized` pins: the levels reachable only through a body are *minimized* instead, so the set of declarations a use site can instantiate at two levels is narrower than "every declaration".
 
 use {
-    super::{error, run},
+    super::{error, run, typecheck},
     curios_core::Program,
     curios_pipeline::{DEFAULT_STEP_BUDGET, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
@@ -518,4 +518,41 @@ fn a_type_named_through_a_higher_universe_solves_at_its_own() {
         "#;
 
     assert_eq!(run(source), b"true");
+}
+
+// **A bare former passed as a family is held at one instance.** `through(Io, …)` checks both arguments against `Io` at the instance it was passed at, and the refusal reads as that instance being committed before `Io` unfolds to a former that carries no level. Eta-expanded, `F(Nat)` is a redex and both sides are reduced, so the same program is accepted. `/sys/List` and an alias of `Io` are refused alike.
+#[test]
+fn a_bare_former_passed_as_a_family_is_held_at_one_instance() {
+    let through = |declarations: &str, family: &str, small: &str, large: &str| {
+        format!(
+            r#"
+            use /std/{{Nat, Io, List}};
+            {declarations}
+            let through(F: (Type) -> Type, x: F(Nat), y: F(Type)) -> Nat = 0;
+            let probe(n: Nat) -> Nat = through({family}, {small}, {large});
+            /std/print("held")
+            "#
+        )
+    };
+    let io = "let small(n: Nat) -> Io(Nat) = Io/pure(n);";
+    let list = "let small(n: Nat) -> List(Nat) = [n];";
+    let alias = "let Act(A: Type) -> Type = Io(A);
+        let small(n: Nat) -> Act(Nat) = Io/pure(n);
+        let large(n: Nat) -> Act(Type) = Io/pure(Nat);";
+
+    for bare in [
+        through(io, "Io", "small(n)", "Io/pure(Nat)"),
+        through(list, "List", "small(n)", "[Nat]"),
+        through(alias, "Act", "small(n)", "large(n)"),
+    ] {
+        let message = typecheck(&bare).expect_err("a bare former is held at one instance");
+        assert!(message.contains("strictly below itself"), "got: {message}");
+    }
+
+    for expanded in [
+        through(io, "(A) => Io(A)", "small(n)", "Io/pure(Nat)"),
+        through(list, "(A) => List(A)", "small(n)", "[Nat]"),
+    ] {
+        assert_eq!(typecheck(&expanded), Ok(()));
+    }
 }

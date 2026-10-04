@@ -5,7 +5,11 @@ use {
     curios_cert::{
         Error, Globals, certify_module, recheck_module_measured, recheck_module_verdicts_uncached,
     },
-    curios_core::{Bound, Cases, Enter, Global, Item, Match, Subterm, Term, Visit, Zonked},
+    curios_core::{
+        Bound, Cases, Enter, Global, InductDecl, InductType, Instance, InstanceHead, Item, Level,
+        Match, Struct, StructDecl, StructType, Subterm, Telescope, Term, Variant, Visit, Zonked,
+        rewrite_universe_levels_scoped,
+    },
     curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedArena, Resumed, erase_unit},
     curios_text::SYNTAX,
     curios_unit::{Record, Uncertified, segments},
@@ -13,6 +17,7 @@ use {
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap},
+        convert::Infallible,
         path::PathBuf,
         rc::Rc,
         thread,
@@ -529,22 +534,16 @@ fn universe_parameter_census() {
 #[test]
 fn every_sys_former_takes_one_universe_parameter() {
     with_prelude(|prelude| {
-        let formers = [
-            "/sys/List/List",
-            "/sys/Io/Io",
-            "/sys/Cell/Cell",
-            "/sys/Channel/Channel",
-        ];
         let counts = items(prelude)
             .flat_map(|item| item.definitions())
             .map(|definition| (definition.name.to_string(), definition))
-            .filter(|(name, _)| formers.contains(&name.as_str()))
+            .filter(|(name, _)| SYS_FORMERS.contains(&name.as_str()))
             .map(|(name, definition)| (name, definition.universe_context.parameter_count))
             .collect::<BTreeMap<_, _>>();
 
         assert_eq!(
             counts.len(),
-            formers.len(),
+            SYS_FORMERS.len(),
             "a former is missing: {counts:?}"
         );
         assert!(counts.values().all(|&count| count == 1), "{counts:?}");
@@ -631,5 +630,373 @@ fn printed_tree_measurements() {
                 *tree as f64 / *graph as f64
             );
         }
+    });
+}
+
+// What the hand walk reads, so that a second fixpoint with one part left out answers which levels that part alone fixes.
+#[derive(Clone, Copy)]
+struct Reading {
+    // Whether an instance that is no family's and no levelless former's marks every level it carries.
+    instances: bool,
+    // Whether a constructor's index targets are read.
+    targets: bool,
+}
+
+// Every `induct` and `struct` the prelude declares.
+struct Families<'a> {
+    inducts: BTreeMap<Global, &'a InductDecl>,
+    structs: BTreeMap<Global, &'a StructDecl>,
+}
+
+impl<'a> Families<'a> {
+    fn of(prelude: &'a [&'a Uncertified]) -> Self {
+        Self {
+            inducts: prelude
+                .iter()
+                .flat_map(|root| &root.core().induct_decls)
+                .map(|(name, declaration)| (*name, declaration))
+                .collect(),
+            structs: prelude
+                .iter()
+                .flat_map(|root| &root.core().struct_decls)
+                .map(|(name, declaration)| (*name, declaration))
+                .collect(),
+        }
+    }
+
+    // How many parameters and how many indices a full application of `name` supplies.
+    fn shape(&self, name: &Global) -> Option<(usize, usize)> {
+        self.inducts
+            .get(name)
+            .map(|declaration| (declaration.param_count(), declaration.index_count()))
+            .or_else(|| {
+                self.structs
+                    .get(name)
+                    .map(|declaration| (declaration.param_count(), 0))
+            })
+    }
+
+    // Each family's universe parameter count and the parts the walk reads: index types, payloads and index targets, or fields, never a parameter's type or the result sort.
+    fn parts(&self) -> BTreeMap<Global, (usize, Vec<Part>)> {
+        let mut families = BTreeMap::new();
+
+        for (name, declaration) in &self.inducts {
+            let mut parts = Vec::new();
+            let mut arity = &declaration.arity;
+            let mut indices = loop {
+                match arity {
+                    Telescope::Cons(_, rest) => arity = rest.body(),
+                    Telescope::Done(indices) => break &**indices,
+                }
+            };
+            while let Telescope::Cons(type_, rest) = indices {
+                parts.push(Part::read("an index type".to_owned(), type_));
+                indices = rest.body();
+            }
+            for (tag, constructor) in &declaration.constructors {
+                let mut telescope = &constructor.telescope;
+                let mut position = 0;
+                loop {
+                    match telescope {
+                        Telescope::Cons(type_, rest) => {
+                            if position >= declaration.param_count() {
+                                parts.push(Part::read(format!("a payload of `{tag}`"), type_));
+                            }
+                            position += 1;
+                            telescope = rest.body();
+                        }
+                        Telescope::Done(targets) => {
+                            parts.extend(targets.iter().map(|target| Part {
+                                label: format!("an index target of `{tag}`"),
+                                target: true,
+                                type_: target.clone(),
+                            }));
+                            break;
+                        }
+                    }
+                }
+            }
+            families.insert(*name, (declaration.universe_context.parameter_count, parts));
+        }
+
+        for (name, declaration) in &self.structs {
+            let mut parts = Vec::new();
+            let mut fields = declaration.fields();
+            while let Telescope::Cons(type_, rest) = fields {
+                parts.push(Part::read(format!("field {}", parts.len()), type_));
+                fields = rest.body();
+            }
+            families.insert(*name, (declaration.universe_context.parameter_count, parts));
+        }
+
+        families
+    }
+}
+
+// One part of a family the walk reads: what it is called in the printout, whether it is an index target, and the term.
+struct Part {
+    label: String,
+    target: bool,
+    type_: Term,
+}
+
+impl Part {
+    fn read(label: String, type_: &Term) -> Self {
+        Self {
+            label,
+            target: false,
+            type_: type_.clone(),
+        }
+    }
+}
+
+// For each universe parameter of a family, what fixes it, or nothing where it is irrelevant.
+type Vectors = BTreeMap<Global, Vec<Option<String>>>;
+
+// The `/sys` formers reduction turns into an intrinsic former, which carries no level.
+const SYS_FORMERS: [&str; 4] = [
+    "/sys/List/List",
+    "/sys/Io/Io",
+    "/sys/Cell/Cell",
+    "/sys/Channel/Channel",
+];
+
+// The family `term` applies in full, with the instance's levels and the arguments: its name's instance over the parameters, and over the indices too where it has any.
+fn full_application<'a>(
+    term: &'a Term,
+    families: &Families,
+) -> Option<(&'a Global, &'a [Level], Vec<&'a Term>)> {
+    fn family(head: &Term) -> Option<(&Global, &[Level])> {
+        let Subterm::Instance(Instance {
+            head: InstanceHead::Var(var),
+            levels,
+        }) = &**head
+        else {
+            return None;
+        };
+
+        Some((var.as_free()?.as_global()?, levels.as_slice()))
+    }
+
+    if let Some((name, levels)) = family(term) {
+        return (families.shape(name)? == (0, 0)).then(|| (name, levels, Vec::new()));
+    }
+    let Subterm::Apply(outer) = &**term else {
+        return None;
+    };
+    if let Some((name, levels)) = family(&outer.head) {
+        // One spine supplies the parameters of a family with no index, or the indices of one with no parameter.
+        let supplied = outer.arguments.len();
+        let shape = families.shape(name)?;
+
+        return (shape == (supplied, 0) || shape == (0, supplied))
+            .then(|| (name, levels, outer.params().collect()));
+    }
+    let Subterm::Apply(inner) = &*outer.head else {
+        return None;
+    };
+    let (name, levels) = family(&inner.head)?;
+    let (params, indices) = families.shape(name)?;
+
+    (indices > 0 && inner.arguments.len() == params && outer.arguments.len() == indices)
+        .then(|| (name, levels, inner.params().chain(outer.params()).collect()))
+}
+
+// Every universe parameter `term` mentions at all, read at the depth of the universe binders above each mention.
+fn mentioned(term: &Term) -> BTreeSet<usize> {
+    let found = Rc::new(RefCell::new(BTreeSet::new()));
+    let sink = Rc::clone(&found);
+    let _ = rewrite_universe_levels_scoped(term, move |depth, level: &Level| {
+        sink.borrow_mut().extend(
+            level
+                .params()
+                .filter(|param| param.0 >= depth)
+                .map(|param| param.0 - depth),
+        );
+        Ok::<Level, Infallible>(level.clone())
+    });
+
+    found.take()
+}
+
+// The universe parameters `term` fixes under `reading`, each with what fixed it: a `Type`, a family's invariant position, or an instance the walk does not see through.
+fn mark(
+    term: &Term,
+    families: &Families,
+    vectors: &Vectors,
+    reading: Reading,
+    marked: &mut BTreeMap<usize, String>,
+) {
+    fn level(level: &Level, what: &str, marked: &mut BTreeMap<usize, String>) {
+        for param in level.params() {
+            marked.entry(param.0).or_insert_with(|| what.to_owned());
+        }
+    }
+    let nominal = |name: &Global, levels: &[Level], marked: &mut BTreeMap<usize, String>| {
+        for (position, of) in levels.iter().enumerate() {
+            let irrelevant = vectors
+                .get(name)
+                .and_then(|vector| vector.get(position))
+                .is_some_and(Option::is_none);
+            if !irrelevant {
+                level(of, &format!("`{name}` at {position}"), marked);
+            }
+        }
+    };
+
+    if let Some((name, levels, arguments)) = full_application(term, families) {
+        nominal(name, levels, marked);
+        for argument in arguments {
+            mark(argument, families, vectors, reading, marked);
+        }
+        return;
+    }
+
+    let subterm: &Subterm = term;
+    match subterm {
+        Subterm::Type(of) => level(of, "a `Type`", marked),
+        Subterm::InductType(InductType {
+            name, universes, ..
+        })
+        | Subterm::StructType(StructType {
+            name, universes, ..
+        })
+        | Subterm::Variant(Variant {
+            name, universes, ..
+        })
+        | Subterm::Struct(Struct {
+            name, universes, ..
+        }) => nominal(name, universes, marked),
+        Subterm::Instance(Instance {
+            head: InstanceHead::Var(var),
+            levels,
+        }) => {
+            let name = var
+                .as_free()
+                .and_then(|free| free.as_global())
+                .map(Global::to_string);
+            let levelless = name
+                .as_deref()
+                .is_some_and(|name| SYS_FORMERS.contains(&name));
+            if reading.instances && !levelless {
+                let what = match name {
+                    Some(name) => format!("an instance of `{name}`"),
+                    None => "an instance of a bound name".to_owned(),
+                };
+                for of in levels {
+                    level(of, &what, marked);
+                }
+            }
+            return;
+        }
+        // A group carries a universe context of its own, so its levels are read at their depth and it is not walked into.
+        Subterm::Rec(_) | Subterm::Instance(_) => {
+            if reading.instances {
+                for param in mentioned(term) {
+                    marked
+                        .entry(param)
+                        .or_insert_with(|| "a recursive group".to_owned());
+                }
+            }
+            return;
+        }
+        _ => {}
+    }
+
+    subterm.any_child_term(&mut |child| {
+        mark(child, families, vectors, reading, marked);
+        false
+    });
+}
+
+// Each family's vector under `reading`, iterated from every level irrelevant until no vector changes.
+fn family_vectors(families: &Families, reading: Reading) -> Vectors {
+    let parts = families.parts();
+    let mut vectors = parts
+        .iter()
+        .map(|(name, (parameters, _))| (*name, vec![None; *parameters]))
+        .collect::<Vectors>();
+
+    loop {
+        let mut changed = false;
+        for (name, (_, parts)) in &parts {
+            for part in parts.iter().filter(|part| reading.targets || !part.target) {
+                let mut marked = BTreeMap::new();
+                mark(&part.type_, families, &vectors, reading, &mut marked);
+                let vector = vectors.get_mut(name).expect("a vector per family");
+                for (param, what) in marked {
+                    if let Some(fixed) = vector.get_mut(param)
+                        && fixed.is_none()
+                    {
+                        *fixed = Some(format!("{}: {what}", part.label));
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if !changed {
+            return vectors;
+        }
+    }
+}
+
+/// Which universe parameters of the prelude's families are irrelevant, printed rather than asserted: one line per family that takes one, `*` for an irrelevant level and `=` for an invariant one, with the part that fixes each invariant level. Counted, by a hand walk that reduces nothing, so an instance it cannot see through marks every level it carries.
+#[test]
+#[ignore = "inventory: measures which universe parameters of the prelude's families are irrelevant rather than asserting it"]
+fn family_variance_inventory() {
+    with_prelude(|prelude| {
+        let families = Families::of(prelude);
+        let everything = Reading {
+            instances: true,
+            targets: true,
+        };
+        let vectors = family_vectors(&families, everything);
+        let forced = family_vectors(
+            &families,
+            Reading {
+                instances: false,
+                ..everything
+            },
+        );
+        let untargeted = family_vectors(
+            &families,
+            Reading {
+                targets: false,
+                ..everything
+            },
+        );
+        let invariant = |vectors: &Vectors| vectors.values().flatten().flatten().count();
+
+        for (name, vector) in vectors.iter().filter(|(_, vector)| !vector.is_empty()) {
+            let spelled = vector
+                .iter()
+                .map(|fixed| if fixed.is_some() { '=' } else { '*' })
+                .collect::<String>();
+            let reasons = vector
+                .iter()
+                .enumerate()
+                .filter_map(|(param, fixed)| Some(format!("{param} by {}", fixed.as_ref()?)))
+                .collect::<Vec<_>>()
+                .join("; ");
+            println!("{name}\t{spelled}\t{reasons}");
+        }
+
+        let parameters = vectors.values().map(Vec::len).sum::<usize>();
+        println!(
+            "\n=== {} families, {} with no universe parameter; the other {} carry {parameters} ===",
+            vectors.len(),
+            vectors.values().filter(|vector| vector.is_empty()).count(),
+            vectors.values().filter(|vector| !vector.is_empty()).count(),
+        );
+        println!("  {:>4}  irrelevant", parameters - invariant(&vectors));
+        println!("  {:>4}  invariant", invariant(&vectors));
+        println!(
+            "  {:>4}  of them by an instance the walk did not force alone",
+            invariant(&vectors) - invariant(&forced)
+        );
+        println!(
+            "  {:>4}  of them by an index target alone",
+            invariant(&vectors) - invariant(&untargeted)
+        );
     });
 }

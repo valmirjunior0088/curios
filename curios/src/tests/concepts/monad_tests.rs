@@ -1,6 +1,6 @@
 //! `!` sequencing through a user monad witness, including a two-parameter region.
 
-use crate::tests::{error, run};
+use crate::tests::{run, typecheck};
 
 // The List witness: bind is concat-map.
 #[test]
@@ -126,26 +126,240 @@ fn a_large_payload_binds_without_the_witness() {
     assert_eq!(run(&source), b"sf");
 }
 
-// `!` holds its region at the level of the action it binds. A region's monad is one nominal instance, and both checkers compare a nominal type's universe levels for equality, so `small`'s `Result(Str, Nat)`, at zero, pins the region below the `Type` it answers with. `Result/bind` names no witness and instantiates each side apart, so it accepts the same program. `Result`'s levels only type its parameters, and comparing them by variance — Rocq infers such a level irrelevant — would accept both and flip this refusal, which is why `/std/Cli`'s `fill` binds through `Result/bind`.
+// A monad the level matrix is put to: the `/std` names its programs import, its type at a `Nat` payload and at a `Type` one, its unit and its own sequencing function.
+struct Region {
+    uses: &'static str,
+    small: &'static str,
+    large: &'static str,
+    pure: &'static str,
+    bind: &'static str,
+}
+
+const RESULT: Region = Region {
+    uses: "Str, Nat, Bool, Result, Monad",
+    small: "Result(Str, Nat)",
+    large: "Result(Str, Type)",
+    pure: "Result/success",
+    bind: "Result/bind",
+};
+
+const OPTION: Region = Region {
+    uses: "Nat, Bool, Option, Monad",
+    small: "Option(Nat)",
+    large: "Option(Type)",
+    pure: "Option/some",
+    bind: "Option/bind",
+};
+
+const STATE: Region = Region {
+    uses: "Nat, Bool, State, Monad",
+    small: "State(Nat, Nat)",
+    large: "State(Nat, Type)",
+    pure: "State/pure",
+    bind: "State/bind",
+};
+
+const IO: Region = Region {
+    uses: "Nat, Bool, Io, Monad",
+    small: "Io(Nat)",
+    large: "Io(Type)",
+    pure: "Io/pure",
+    bind: "Io/bind",
+};
+
+const TRY: Region = Region {
+    uses: "Str, Nat, Bool, Io, Try, Monad",
+    small: "Try(Io, Str, Nat)",
+    large: "Try(Io, Str, Type)",
+    pure: "Try/pure",
+    bind: "Try/bind",
+};
+
+const REGIONS: [&Region; 5] = [&RESULT, &OPTION, &STATE, &IO, &TRY];
+
+// How a cell sequences its action: `!`, `Monad/bind` written out, or the monad's own function, which names no witness.
+#[derive(Clone, Copy)]
+enum Spelling {
+    Bang,
+    Written,
+    Own,
+}
+
+impl Region {
+    fn program(&self, declarations: &str) -> String {
+        let Region {
+            uses,
+            small,
+            large,
+            pure,
+            ..
+        } = self;
+
+        format!(
+            r#"
+            use /std/{{{uses}}};
+            let small(n: Nat) -> {small} = {pure}(n);
+            let large(n: Nat) -> {large} = {pure}(Nat);
+            {declarations}
+            /std/print("bound")
+            "#
+        )
+    }
+
+    fn sequenced(&self, spelling: Spelling, action: &str, answer: &str) -> String {
+        match spelling {
+            Spelling::Bang => format!("let _ = {action}!; {answer}"),
+            Spelling::Written => format!("Monad/bind({action}, (_) => {answer})"),
+            Spelling::Own => format!("{}({action}, (_) => {answer})", self.bind),
+        }
+    }
+
+    // A large region binding a small action.
+    fn big(&self, spelling: Spelling) -> String {
+        let body = self.sequenced(spelling, "small(n)", &format!("{}(Nat)", self.pure));
+
+        self.program(&format!("pub let big(n: Nat) -> {} = {body};", self.large))
+    }
+
+    fn one_declaration(&self, spelling: Spelling) -> String {
+        let body = self.sequenced(spelling, "large(n)", &format!("{}(n)", self.pure));
+
+        format!("pub let one(n: Nat) -> {} = {body};", self.small)
+    }
+
+    // A small region binding a large action.
+    fn one(&self, spelling: Spelling) -> String {
+        self.program(&self.one_declaration(spelling))
+    }
+
+    // A small region binding both actions.
+    fn both(&self) -> String {
+        let Region { small, pure, .. } = self;
+
+        self.program(&format!(
+            "pub let both(n: Nat) -> {small} = let _ = small(n)!; let _ = large(n)!; {pure}(n);"
+        ))
+    }
+
+    // `one` set beside a region at its own level by a caller.
+    fn pick(&self, spelling: Spelling) -> String {
+        let one = self.one_declaration(spelling);
+        let small = self.small;
+
+        self.program(&format!(
+            "{one}
+            pub let pick(b: Bool, n: Nat) -> {small} =
+                match b | true => one(n) | false => small(n) end;"
+        ))
+    }
+}
+
+const BELOW_ITSELF: &str = "strictly below itself";
+const MISMATCH: &str = "type mismatch";
+
+fn accepted(source: &str) {
+    if let Err(message) = typecheck(source) {
+        panic!("refused: {source}\n{message}");
+    }
+}
+
+fn refused(source: &str, report: &str) {
+    match typecheck(source) {
+        Ok(()) => panic!("accepted: {source}"),
+        Err(message) => assert!(message.contains(report), "got: {message}\nfor: {source}"),
+    }
+}
+
+// `!` holds its region at the level of the action it binds: a region's monad is one nominal instance, and both checkers compare a nominal type's universe levels for equality. `Io` unfolds and its level goes with it. The monad's own function names no witness and instantiates each side apart; `Try`'s is `a_transformers_own_bind_holds_a_bare_base_monad_at_one_instance`'s.
 #[test]
 fn a_bang_holds_its_region_at_a_lower_nominal_actions_level() {
-    let bang = r#"
-        use /std/{Str, Nat, Result};
-        let small(n: Nat) -> Result(Str, Nat) = Result/success(n);
-        pub let big(n: Nat) -> Result(Str, Type) =
-            let _ = small(n)!;
-            Result/success(Nat);
-        /std/print("bound")
-        "#;
-    let message = error(bang);
-    assert!(message.contains("strictly below itself"), "got: {message}");
-    assert!(message.contains("/big"), "got: {message}");
+    for region in [&RESULT, &OPTION, &STATE, &TRY] {
+        refused(&region.big(Spelling::Bang), BELOW_ITSELF);
+    }
+    accepted(&IO.big(Spelling::Bang));
 
-    let bind = r#"
+    for region in [&RESULT, &OPTION, &STATE, &IO] {
+        accepted(&region.big(Spelling::Own));
+    }
+}
+
+// `!` resolves its witness at the region's payload, before the action is read, so an action above the region no longer fits the method. Over `Option` the same program is accepted.
+#[test]
+fn a_bang_refuses_an_action_above_its_region() {
+    for region in [&RESULT, &STATE, &TRY] {
+        refused(&region.one(Spelling::Bang), BELOW_ITSELF);
+    }
+    refused(&IO.one(Spelling::Bang), MISMATCH);
+    accepted(&OPTION.one(Spelling::Bang));
+
+    for region in REGIONS {
+        accepted(&region.one(Spelling::Own));
+    }
+}
+
+// Written out, `Monad/bind` infers its monad from the action and its witness closes at the action's payload, so a larger region does not fit.
+#[test]
+fn a_written_bind_holds_its_region_at_its_actions_level() {
+    for region in REGIONS {
+        refused(&region.big(Spelling::Written), BELOW_ITSELF);
+    }
+}
+
+#[test]
+fn a_written_bind_takes_an_action_above_its_region() {
+    for region in REGIONS {
+        accepted(&region.one(Spelling::Written));
+    }
+}
+
+#[test]
+fn a_region_binding_actions_at_two_levels_is_refused() {
+    for region in [&RESULT, &OPTION, &STATE, &TRY] {
+        refused(&region.both(), BELOW_ITSELF);
+    }
+    refused(&IO.both(), MISMATCH);
+}
+
+// The refusal needs no `!`: a family applied at two payloads holds its nominal instances to one level.
+#[test]
+fn a_family_at_two_payloads_holds_its_nominal_instances_to_one_level() {
+    let through = r#"
         use /std/{Str, Nat, Result};
         let small(n: Nat) -> Result(Str, Nat) = Result/success(n);
-        pub let big(n: Nat) -> Result(Str, Type) = Result/bind(small(n), (_) => Result/success(Nat));
+        let through(F: (Type) -> Type, x: F(Nat), y: F(Type)) -> Nat = 0;
+        let probe(n: Nat) -> Nat = through((A) => Result(Str, A), small(n), Result/success(Nat));
         /std/print("bound")
         "#;
-    assert_eq!(run(bind), b"bound");
+
+    refused(through, BELOW_ITSELF);
+}
+
+// A region accepted below its action carries the action's level in its signature, so a caller setting it beside a region at its own level is refused. `Io`'s level goes with its unfolding.
+#[test]
+fn a_region_raised_to_its_actions_level_is_refused_beside_one_at_its_own() {
+    for region in [&RESULT, &OPTION, &STATE, &TRY] {
+        refused(&region.pick(Spelling::Written), BELOW_ITSELF);
+    }
+    accepted(&IO.pick(Spelling::Written));
+
+    refused(&OPTION.pick(Spelling::Bang), BELOW_ITSELF);
+}
+
+// `Try/bind` takes its base monad as one argument, and a bare former is held at one instance: a larger region is refused over `Io` and over `Option`, and accepted over `Io` eta-expanded.
+#[test]
+fn a_transformers_own_bind_holds_a_bare_base_monad_at_one_instance() {
+    let over = |base: &str| {
+        format!(
+            r#"
+            use /std/{{Str, Nat, Io, Option, Try}};
+            let small(n: Nat) -> Try({base}, Str, Nat) = Try/pure(n);
+            pub let big(n: Nat) -> Try({base}, Str, Type) = Try/bind(small(n), (_) => Try/pure(Nat));
+            /std/print("bound")
+            "#
+        )
+    };
+
+    refused(&over("Io"), BELOW_ITSELF);
+    refused(&over("Option"), BELOW_ITSELF);
+    accepted(&over("(A: Type) => Io(A)"));
 }
