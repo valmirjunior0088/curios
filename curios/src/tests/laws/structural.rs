@@ -6,13 +6,19 @@
 
 use super::{Answers, Audit, asked_alone, closes, hold_to_the_table, parted};
 
-/// What a seed's program states ahead of its rows: its imports, the declarations the seeds are stated over, and the ones a context places a seed under — a struct over any type, and a definition and a recursive function that each hand an argument back from a match stuck on a count.
+/// What a seed's program states ahead of its rows: its imports, the declarations the seeds are stated over, and the ones a context places a seed under — a struct over any type, and a definition and a recursive function that each hand an argument back from a match stuck on a count. `through`, `into` and `pair` eliminate a proof of `Zero`, so unfolding one leaves its proof a stuck elimination's scrutinee: what comparing two calls by their spines first is for.
 pub(super) const STRUCTURAL: &str =
     "use /std/{Eq, Nat, Bool, List, Option, Io}; use /std/Bool/{Holds};
 struct Record: pub Type { a: Nat, b: Nat }
 struct Empty: pub Type {}
 struct Bounded: pub Type { n: Nat, ok: Holds(n < 10) }
 struct Box(A: Type): pub Type { held: A }
+induct Zero: (Nat) -> pub Prop
+| zero(): (0)
+end
+let through(n: Nat, e: Zero(n)) -> Nat = match e | zero() => 1 end;
+let into(n: Nat, e: Zero(n)) -> (Nat) -> Nat = match e: (_, _) => (Nat) -> Nat | zero() => (x: Nat) => x end;
+let pair(n: Nat, e: Zero(n)) -> {Nat, Nat} = match e: (_, _) => {Nat, Nat} | zero() => (1, 2) end;
 let forward(h: (Nat) -> Nat) -> (Nat) -> Nat = h;
 let shifted(h: (Nat) -> Nat) -> (Nat) -> Nat = (x: Nat) => h(x + 1);
 let hold(@A: Type, a: A, count: Nat) -> A = match count: (_) => A | 0 => a | pred + 1 => a end;
@@ -237,6 +243,47 @@ pub(super) const SEEDS: &[Seeds] = &[
             held("irrelevance through a variable head", "f(p1)", "f(p2)"),
             miss("relevance through a variable head", "c(a)", "c(b)"),
         ],
+    },
+    // A spine's arguments are typed under whatever head a lookup types, and two calls of one definition are compared by their spines before either unfolds, at whatever type and through a curried spine. Each right side is the same spine at another proof, so no seed here chains with another.
+    Seeds {
+        type_: "Nat",
+        binders: "n: Nat, m: Nat, p: Zero(n), q: Zero(n), f: (Nat) -> (Zero(n)) -> Nat, r: {(Zero(n)) -> Nat, Nat}, c: (Nat) -> (Nat) -> Nat",
+        compound: None,
+        seeds: &[
+            held("irrelevance past a curried head", "f(n)(p)", "f(n)(q)"),
+            held("irrelevance past a projected head", "r.0(p)", "r.0(q)"),
+            miss("relevance past a curried head", "c(n)(n)", "c(n)(m)"),
+            held(
+                "irrelevance through a definition",
+                "through(n, p)",
+                "through(n, q)",
+            ),
+            held(
+                "irrelevance through a definition's curried call",
+                "into(n, p)(3)",
+                "into(n, q)(3)",
+            ),
+        ],
+    },
+    Seeds {
+        type_: "(Nat) -> Nat",
+        binders: "n: Nat, p: Zero(n), q: Zero(n)",
+        compound: None,
+        seeds: &[held(
+            "irrelevance through a definition, at a function type",
+            "into(n, p)",
+            "into(n, q)",
+        )],
+    },
+    Seeds {
+        type_: "{Nat, Nat}",
+        binders: "n: Nat, p: Zero(n), q: Zero(n)",
+        compound: None,
+        seeds: &[held(
+            "irrelevance through a definition, at a record type",
+            "pair(n, p)",
+            "pair(n, q)",
+        )],
     },
     Seeds {
         type_: "Bounded",

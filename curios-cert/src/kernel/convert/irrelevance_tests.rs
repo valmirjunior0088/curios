@@ -71,6 +71,129 @@ fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
     );
 }
 
+/// The spines of two calls of one definition are compared on the pair as posed, ahead of eta by the goal's type, and through a curried spine. At a function or a record type eta would hand on each call applied or projected, which is no call of a definition at its head: both calls would unfold, and the two proofs would be compared at `Type` as a stuck elimination's scrutinees. The same holds for the definition's call applied once more, `h(p)(3)`, whose head is the call. `tests::board`'s row of the same name is the programs.
+///
+/// The control for each is the same definition over a relevant family, where the spines disagree and the pair stays apart. Mutation-checked: with the spines tried after eta by the type the record's goal is refused — the function's is still caught, through its curried spine once eta has applied both calls — and without the curried head the third goal is.
+#[test]
+fn two_calls_of_one_definition_convert_by_their_spines_at_any_type() {
+    let judged = |sort: Term| {
+        let mut kernel = kernel();
+        let family = declare(&mut kernel, "F", sort);
+        let (e, x) = (binder(61, "e"), binder(64, "x"));
+        let (left, right) = (binder(62, "p"), binder(63, "q"));
+        kernel.assume(&left, &family);
+        kernel.assume(&right, &family);
+
+        // `h(e: F) -> result = match e end`, an elimination with no arm, stuck on a variable.
+        let mut define = |index: u32, result: Term| {
+            let h = binder(index, "h");
+            let eliminated = Term::from(Subterm::Match(Match {
+                head: Term::free_var(&e),
+                result: MatchResult::Ambient(result.clone()),
+                cases: Cases::Induct {
+                    cases: Vec::new(),
+                    default: None,
+                },
+            }));
+            kernel.define(
+                &h,
+                &Term::func_type([(e, family.clone())], result),
+                &Term::func([(e, family.clone())], eliminated),
+                &UniverseContext::default(),
+            );
+
+            move |proof: &Free| Term::apply(Term::free_var(&h), [Term::free_var(proof)])
+        };
+
+        let arrow = Term::func_type([(x, nat_type())], nat_type());
+        let record =
+            Term::tuple_type([(binder(65, "a"), nat_type()), (binder(66, "b"), nat_type())]);
+        let into_a_function = define(70, arrow.clone());
+        let into_a_record = define(71, record.clone());
+
+        [
+            convert(
+                &mut kernel,
+                &arrow,
+                &into_a_function(&left),
+                &into_a_function(&right),
+            ),
+            convert(
+                &mut kernel,
+                &record,
+                &into_a_record(&left),
+                &into_a_record(&right),
+            ),
+            convert(
+                &mut kernel,
+                &nat_type(),
+                &Term::apply(into_a_function(&left), [nat(3)]),
+                &Term::apply(into_a_function(&right), [nat(3)]),
+            ),
+        ]
+    };
+
+    assert_eq!(judged(Term::prop()), [Ok(true), Ok(true), Ok(true)]);
+    assert_eq!(
+        judged(Term::type_ground()),
+        [Ok(false), Ok(false), Ok(false)]
+    );
+}
+
+/// A spine's arguments are compared at the types its head assigns under every head a lookup types: past a curried head, `f(0)(p)`, and past a projected one, `r.0(p)`, as past a variable's own. Compared at `Type` there, two proofs of one proposition would stay apart where the elaborator, which asks the same lookup of whatever the head is, has accepted them.
+///
+/// The control is the same two spines over a relevant family. Mutation-checked: with the head's type read under a variable, an instance and a `rec` projection alone, both goals are refused at the proposition.
+#[test]
+fn a_spines_arguments_are_typed_under_a_curried_and_a_projected_head() {
+    let judged = |sort: Term| {
+        let mut kernel = kernel();
+        let family = declare(&mut kernel, "F", sort);
+        let (f, r) = (binder(60, "f"), binder(61, "r"));
+        let (left, right) = (binder(62, "p"), binder(63, "q"));
+        let (n, e, a, b) = (
+            binder(64, "n"),
+            binder(65, "e"),
+            binder(66, "a"),
+            binder(67, "b"),
+        );
+        kernel.assume(&left, &family);
+        kernel.assume(&right, &family);
+
+        // `f : (Nat) -> (F) -> Nat` and `r : {(F) -> Nat, Nat}`.
+        let taking_a_proof = Term::func_type([(e, family.clone())], nat_type());
+        kernel.assume(
+            &f,
+            &Term::func_type([(n, nat_type())], taking_a_proof.clone()),
+        );
+        kernel.assume(
+            &r,
+            &Term::tuple_type([(a, taking_a_proof), (b, nat_type())]),
+        );
+
+        let curried = |proof: &Free| {
+            Term::apply(
+                Term::apply(Term::free_var(&f), [nat(0)]),
+                [Term::free_var(proof)],
+            )
+        };
+        let projected =
+            |proof: &Free| Term::apply(Term::proj(Term::free_var(&r), 0), [Term::free_var(proof)]);
+
+        [
+            convert(&mut kernel, &nat_type(), &curried(&left), &curried(&right)),
+            convert(
+                &mut kernel,
+                &nat_type(),
+                &projected(&left),
+                &projected(&right),
+            ),
+        ]
+    };
+
+    assert_eq!(judged(Term::prop()), [Ok(true), Ok(true)]);
+    assert_eq!(judged(Term::type_ground()), [Ok(false), Ok(false)]);
+}
+
 /// The same two terms at a *relevant* type are not interchangeable. Irrelevance is a property of the type, and this is the direction that would be unsound to get wrong.
 #[test]
 fn does_not_leak_into_a_relevant_type() {

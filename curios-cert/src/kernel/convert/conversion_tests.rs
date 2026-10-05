@@ -238,6 +238,31 @@ fn any_two_terms_converge_at_a_type_with_no_field() {
     assert_eq!(convert(&mut kernel, &one_field, &u, &v), Ok(false));
 }
 
+/// Eta by the goal's type is fired ahead of every structural rule, whatever the two sides' shapes: two stuck applications of two heads converge at a record of units, by their projections, and at a function into a unit, by their applications, where a structural comparison would set head against head and refuse. At a record with a relevant field the projections are compared, and the two stay apart. The elaborator's twin of this proposition shares the name.
+#[test]
+fn eta_by_the_goals_type_is_fired_whatever_the_two_sides_shapes() {
+    let mut kernel = kernel();
+    let applied = |head: u32, hint: &str, argument: usize| {
+        Term::apply(Term::free_var(&binder(head, hint)), [nat(argument)])
+    };
+    let (this, that) = (applied(0, "s", 0), applied(1, "t", 1));
+    let (a, b) = (binder(8, "a"), binder(9, "b"));
+    let unit = Term::tuple_type_unit();
+
+    let record_of_units = Term::tuple_type([(a, unit.clone()), (b, unit.clone())]);
+    let function_into_unit = Term::func_type([(a, nat_type())], unit.clone());
+    let record_of_a_number = Term::tuple_type([(a, nat_type()), (b, unit)]);
+
+    assert_eq!(
+        [
+            convert(&mut kernel, &record_of_units, &this, &that),
+            convert(&mut kernel, &function_into_unit, &this, &that),
+            convert(&mut kernel, &record_of_a_number, &this, &that),
+        ],
+        [Ok(true), Ok(true), Ok(false)]
+    );
+}
+
 /// A literal's eta is the goal type's to refuse. At a type former that is not the literal's own the two sides are not of one type, and the neutral restriction alone would let a literal with no field — whose walk compares nothing — convert with any neutral: a lambda, the unit literal and a field-less struct's literal against a neutral at `Nat`, and that struct's literal at another struct, are refused. Each is still taken at the literal's own type, and at `Type`, which says nothing. The elaborator's twin of this proposition shares the name.
 ///
 /// Mutation-checked: without the refusal for a lambda and a tuple the first two goals are accepted, without the struct's the next two are, and with a sort counted a former the goals at `Type` are refused.

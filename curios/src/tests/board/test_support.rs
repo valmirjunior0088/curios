@@ -687,6 +687,16 @@ pub(super) const ANY_TWO_TERMS_CONVERT_AT_A_TYPE_WITH_NO_FIELD: &str = r#"
                         match b: (_) => U | true => s | false => s end)
             = Eq/refl();
 
+        let two_stuck_matches_at_a_record_of_units(b : Bool, r : {{}, {}}, s : {{}, {}})
+            -> Eq(@({{}, {}}))(match b: (_) => {{}, {}} | true => r | false => r end,
+                               match b: (_) => {{}, {}} | true => s | false => s end)
+            = Eq/refl();
+
+        let two_stuck_matches_at_a_function_into_a_unit(b : Bool, f : (Nat) -> {}, g : (Nat) -> {})
+            -> Eq(@((Nat) -> {}))(match b: (_) => (Nat) -> {} | true => f | false => f end,
+                                  match b: (_) => (Nat) -> {} | true => g | false => g end)
+            = Eq/refl();
+
         /std/print(Nat/to_str(1))
         "#;
 
@@ -762,6 +772,76 @@ pub(super) const A_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS_BEFORE_UNFOLDING: &
         let same(n : Nat, p : Z(n), q : Z(n), x : Eq()(h(n, p), 0)) -> Eq()(h(n, q), 0) = x;
 
         /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_BY_THEIR_SPINES_AT_ANY_TYPE: &str = r#"
+        use /std/{Eq, Nat};
+
+        induct Z: (Nat) -> pub Prop
+        | mk(): (0)
+        end
+
+        let into(n : Nat, e : Z(n)) -> (Nat) -> Nat =
+            match e: (_, _) => (Nat) -> Nat | mk() => (x : Nat) => x end;
+
+        let pair(n : Nat, e : Z(n)) -> {Nat, Nat} =
+            match e: (_, _) => {Nat, Nat} | mk() => (1, 2) end;
+
+        let through(n : Nat, e : Z(n)) -> Nat = match e | mk() => 1 end;
+
+        let at_a_function_type(n : Nat, k : (Nat) -> Nat, p : Z(n), q : Z(n),
+                               x : Eq(@((Nat) -> Nat))(into(n, p), k))
+            -> Eq(@((Nat) -> Nat))(into(n, q), k) = x;
+
+        let at_a_record_type(n : Nat, k : {Nat, Nat}, p : Z(n), q : Z(n),
+                             x : Eq(@({Nat, Nat}))(pair(n, p), k))
+            -> Eq(@({Nat, Nat}))(pair(n, q), k) = x;
+
+        let through_a_curried_call(n : Nat, p : Z(n), q : Z(n), x : Eq()(into(n, p)(3), 0))
+            -> Eq()(into(n, q)(3), 0) = x;
+
+        let whatever_spells_them(n : Nat, p : Z(n), q : Z(n))
+            -> Eq()(through(n, p), through(n, q)) = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const TWO_CALLS_THAT_DIFFER_IN_A_RELEVANT_ARGUMENT_STAY_APART: &str = r#"
+        use /std/{Eq, Nat};
+
+        let shift(m : Nat) -> (Nat) -> Nat = (x : Nat) => x + m;
+
+        let apart(a : Nat, b : Nat, g : (Nat) -> Nat, x : Eq(@((Nat) -> Nat))(shift(a), g))
+            -> Eq(@((Nat) -> Nat))(shift(b), g) = x;
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const A_SPINES_ARGUMENTS_ARE_TYPED_UNDER_A_CURRIED_AND_A_PROJECTED_HEAD: &str = r#"
+        use /std/{Eq, Nat};
+
+        induct Z: (Nat) -> pub Prop
+        | mk(): (0)
+        end
+
+        let past_a_curried_head(n : Nat, f : (Nat) -> (Z(n)) -> Nat, p : Z(n), q : Z(n),
+                                x : Eq()(f(n)(p), 0))
+            -> Eq()(f(n)(q), 0) = x;
+
+        let past_a_projected_head(n : Nat, r : {(Z(n)) -> Nat, Nat}, p : Z(n), q : Z(n),
+                                  x : Eq()(r.0(p), 0))
+            -> Eq()(r.0(q), 0) = x;
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const A_RELEVANT_ARGUMENT_PAST_A_CURRIED_HEAD_STAYS_APART: &str = r#"
+        use /std/{Eq, Nat};
+
+        let apart(a : Nat, b : Nat, c : (Nat) -> (Nat) -> Nat, x : Eq()(c(0)(a), 0))
+            -> Eq()(c(0)(b), 0) = x;
+
+        /std/Io/pure(())
         "#;
 
 pub(super) const AN_INTRINSIC_APPLIED_TO_TWO_PROOFS_CONVERTS_AT_THEIR_PROPOSITION: &str = r#"

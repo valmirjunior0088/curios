@@ -4,8 +4,9 @@ use {
     super::test_support::*,
     crate::*,
     curios_core::{
-        Atom, Exhaustion, Free, InductDecl, InductParam, Intrinsic, Many, MetavarId, Scope,
-        StructDecl, StructType, Subterm, Telescope, Term, UniverseContext,
+        Atom, Cases, Exhaustion, Free, InductDecl, InductParam, Intrinsic, Many, Match,
+        MatchResult, MetavarId, Scope, StructDecl, StructType, Subterm, Telescope, Term,
+        UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -188,6 +189,91 @@ fn any_two_terms_converge_at_a_type_with_no_field() {
         Ok(false)
     );
     assert_eq!(convert(&mut context, &one_field, &u, &v), Ok(false));
+}
+
+/// Eta by the goal's type is fired ahead of every structural rule, whatever the two sides' shapes: two stuck applications of two heads converge at a record of units, by their projections, and at a function into a unit, by their applications, where the structural rule would set head against head and refuse. At a record with a relevant field the projections are compared, and the two stay apart. The kernel's twin of this proposition shares the name.
+///
+/// Mutation-checked: with eta by the type left to the dispatch's last arm, the two goals a unit decides are refused.
+#[test]
+fn eta_by_the_goals_type_is_fired_whatever_the_two_sides_shapes() {
+    let mut context = context();
+    let (s, t) = (context.fresh(Some("s")), context.fresh(Some("t")));
+    let (a, b) = (context.fresh(Some("a")), context.fresh(Some("b")));
+    let unit = Term::tuple_type_unit();
+    let applied = |head: &Free, argument: usize| Term::apply(Term::free_var(head), [nat(argument)]);
+    let (this, that) = (applied(&s, 0), applied(&t, 1));
+
+    let record_of_units = Term::tuple_type([(a, unit.clone()), (b, unit.clone())]);
+    let function_into_unit = Term::func_type([(a, nat_type())], unit.clone());
+    let record_of_a_number = Term::tuple_type([(a, nat_type()), (b, unit)]);
+
+    assert_eq!(
+        [
+            convert(&mut context, &record_of_units, &this, &that),
+            convert(&mut context, &function_into_unit, &this, &that),
+            convert(&mut context, &record_of_a_number, &this, &that),
+        ],
+        [Ok(true), Ok(true), Ok(false)]
+    );
+}
+
+/// Two calls of one definition are compared by their spines whatever spells them. `h(p)` against `h(q)`, two proofs of one proposition, converges by the spines before either call unfolds, and so does the same pair where a solved metavariable stands for `h(p)` — the side `Eq/refl()`'s implicit leaves once it is solved. Read as written, the rule would not see that side: both calls would unfold, and the two proofs would be compared at `Type` as a stuck elimination's scrutinees.
+///
+/// The control is the same pair over a relevant family, refused under either spelling. Mutation-checked: with each side read as written, the solved spelling is refused at the proposition.
+#[test]
+fn two_calls_of_one_definition_convert_by_their_spines_whatever_spells_them() {
+    let judged = |sort: Term| {
+        let mut context = context();
+        context
+            .register_induct(
+                &nominal("F"),
+                InductDecl {
+                    universe_context: UniverseContext::empty(),
+                    arity: Telescope::done(Telescope::done(())),
+                    constructors: Vec::new(),
+                    result_sort: sort,
+                    module: Qualifier::empty(),
+                    rep_public: true,
+                    polarities: Vec::new(),
+                    plicities: Vec::new(),
+                },
+            )
+            .unwrap();
+        let family = Term::induct_type(nominal("F"), Vec::<Term>::new(), Vec::<Term>::new());
+        let h = Free::global(Qualifier::from(["h"]));
+        let e = context.fresh(Some("e"));
+        let (p, q) = (context.fresh(Some("p")), context.fresh(Some("q")));
+        context.assume(&p, &family);
+        context.assume(&q, &family);
+
+        // `h(e: F) -> Nat = match e end`, an elimination with no arm, stuck on a variable.
+        let eliminated = Term::from(Subterm::Match(Match {
+            head: Term::free_var(&e),
+            result: MatchResult::Ambient(nat_type()),
+            cases: Cases::Induct {
+                cases: Vec::new(),
+                default: None,
+            },
+        }));
+        context.define_assuming(
+            &h,
+            &Term::func_type([(e, family.clone())], nat_type()),
+            &Term::func([(e, family.clone())], eliminated),
+            None,
+        );
+        let call = |proof: &Free| Term::apply(Term::free_var(&h), [Term::free_var(proof)]);
+
+        context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+        context.solve_metavar(MetavarId(0), call(&p));
+
+        [
+            convert(&mut context, &nat_type(), &call(&p), &call(&q)),
+            convert(&mut context, &nat_type(), &Term::hole(0), &call(&q)),
+        ]
+    };
+
+    assert_eq!(judged(Term::prop()), [Ok(true), Ok(true)]);
+    assert_eq!(judged(Term::type_ground()), [Ok(false), Ok(false)]);
 }
 
 /// A literal's eta is the goal type's to refuse. At a type former that is not the literal's own the two sides are not of one type, and a literal with no field — whose walk compares nothing — would convert with anything: a lambda, the unit literal and a field-less struct's literal against a neutral at `Nat`, that struct's literal at another struct, and the unit literal against `1`, are refused. Each is still taken at the literal's own type, and at `Type`, which says nothing. The kernel's twin of this proposition shares the name.

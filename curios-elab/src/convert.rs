@@ -364,6 +364,15 @@ impl Convert {
         this_term: &Term,
         that_term: &Term,
     ) -> Result<bool, ReduceError> {
+        // Each side as the solutions already committed spell it. A side a solved metavariable stands for is the call it was solved to, and read as written this rule would not see it: the verdict would follow whether an implicit was stated or inferred. Only a side that is such a metavariable is read through; an argument one spells is resolved by the comparison it is handed to.
+        let through = |term: &Term| match &**term {
+            Subterm::Metavar(_) => Some(zonk_solved_term_metas(context, term)),
+            _ => None,
+        };
+        let (this_solved, that_solved) = (through(this_term), through(that_term));
+        let this_term = this_solved.as_ref().unwrap_or(this_term);
+        let that_term = that_solved.as_ref().unwrap_or(that_term);
+
         let (Subterm::Apply(this), Subterm::Apply(that)) = (&**this_term, &**that_term) else {
             return Ok(false);
         };
@@ -1774,6 +1783,20 @@ impl Convert {
                         continue;
                     }
                 }
+            }
+
+            // Eta by the goal's type, ahead of every structural rule, as the kernel fires it: at a function type both sides are applied to fresh binders and at a record type both are projected, whatever their shapes. A lambda or a tuple literal is left to its own arm below, which is the same expansion with the literal opened in place. Left to the dispatch's last arm, two sides of one stuck shape would be compared structurally first — two stuck eliminations arm against arm, at `Type` — and held apart where each converts with the literal and the kernel, which projects them, accepts.
+            let literal = |term: &Term| matches!(&**term, Subterm::Func(_) | Subterm::Tuple(_));
+            if matches!(&*type_, Subterm::FuncType(_) | Subterm::TupleType(_))
+                && !literal(&this)
+                && !literal(&that)
+            {
+                let expanded = self.eta_expand_neutral(context, this, that, type_)?;
+                debug_assert!(
+                    expanded,
+                    "eta by a function or a record type enqueues its goals"
+                );
+                continue;
             }
 
             // A `Bool` connective against a term that is no intrinsic at all — absorption's shape, `b || (b && c)` against the bare `b` — which the intrinsic congruence below never sees: `curios-analysis`'s `connectives_agree` decides it equal or says nothing, and saying nothing leaves the pair to the dispatch as it was. The kernel asks the same function in its own fallback.

@@ -2,7 +2,7 @@
 //!
 //! One table, held equal to what each audit finds: a row that starts parting fails its audit until it is listed, and a listed row that stops parting fails it until the entry is deleted, which is what the commit that closes its finding does. A row both checkers refuse is no disagreement between them and is listed all the same, since its seed derives that it holds.
 
-use super::{ARMS, Answers, Context};
+use super::Answers;
 
 /// The audit that states a row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,16 +26,13 @@ pub(super) struct Parted {
     pub(super) finding: &'static str,
 }
 
-const ETA_BY_TYPE: &str = "The elaborator fires Π and Σ eta by the goal's type only between two terms no structural rule claims.";
+const POSED_AS_TWO_CALLS: &str = "Two calls of one definition are compared by their spines only where the pair reaches a checker as two calls.";
 
-/// Two neutrals at a type eta carries to a unit: a record of units, by its projections, and a function into a unit, by its application.
-const CARRIED_TO_A_UNIT: &[&str] = &[
-    "unit eta at a record of units, two neutrals",
-    "unit eta at a function into a unit, two neutrals",
-];
-
-/// The one typed context that hands its two sides over as one stuck shape: two calls of a definition, which unfold to two stuck matches.
-const UNFOLDED: &str = "a definition's argument";
+/// Two calls of one definition that differ in a proof its body eliminates: at `Nat`, applied once more, and at a function and a record type.
+const THROUGH: &str = "irrelevance through a definition";
+const CURRIED: &str = "irrelevance through a definition's curried call";
+const INTO_A_FUNCTION: &str = "irrelevance through a definition, at a function type";
+const INTO_A_RECORD: &str = "irrelevance through a definition, at a record type";
 
 /// Every row listed.
 pub(super) fn parted() -> Vec<Parted> {
@@ -43,13 +40,12 @@ pub(super) fn parted() -> Vec<Parted> {
         elaborator: false,
         kernel: true,
     };
-    let names = |contexts: &[Context]| {
-        contexts
-            .iter()
-            .map(|context| context.name)
-            .collect::<Vec<_>>()
+    let kernel_refuses = Answers {
+        elaborator: true,
+        kernel: false,
     };
-    let arms = names(ARMS);
+    let both_refuse = Answers::both(false);
+    let every = [THROUGH, CURRIED, INTO_A_FUNCTION, INTO_A_RECORD];
     // A row's name, as the audit that states it spells it.
     let under = |seeds: &[&str], contexts: &[&str]| {
         seeds
@@ -72,18 +68,55 @@ pub(super) fn parted() -> Vec<Parted> {
         }));
     };
 
-    // Eta by the goal's type, ahead of structure. The kernel projects two sides at a record and applies two at a function whatever their shapes, and so reaches the unit that decides the goal. The elaborator compares two stuck matches arm against arm at `Type`, where two neutrals at such a type stay apart: each match is the literal there, and the two are not each other.
-    list(
-        Audit::Arms,
-        under(CARRIED_TO_A_UNIT, &arms),
-        elaborator_refuses,
-        ETA_BY_TYPE,
-    );
+    // Two calls of one definition converge by their spines where the pair is posed as two calls. Wherever reduction reaches a call first it unfolds, the two proofs become a stuck elimination's scrutinees, and a scrutinee is compared at `Type`, where nothing says they are proofs of one proposition.
+    //
+    // The kernel alone: its eta by the goal's type applies a lambda and projects a tuple literal, and forces what that yields through the call; the elaborator opens the literal and still meets two calls.
     list(
         Audit::Typed,
-        under(CARRIED_TO_A_UNIT, &[UNFOLDED]),
+        under(&every, &["a lambda's body", "a tuple's component"]),
+        kernel_refuses,
+        POSED_AS_TWO_CALLS,
+    );
+    // Both: reducing what the call sits in unfolds it before the two are paired.
+    list(
+        Audit::Typed,
+        under(&every, &["a let's value", "a list's element"]),
+        both_refuse,
+        POSED_AS_TWO_CALLS,
+    );
+    list(
+        Audit::Heads,
+        under(
+            &[THROUGH, CURRIED],
+            &["a match's scrutinee", "an operation's operand"],
+        ),
+        both_refuse,
+        POSED_AS_TWO_CALLS,
+    );
+    list(
+        Audit::Heads,
+        under(&[INTO_A_RECORD], &["a projection's head"]),
+        both_refuse,
+        POSED_AS_TWO_CALLS,
+    );
+    // The elaborator alone: read by a proof by reflexivity, whose implicit the solver commits as the first call's reduct, where the kernel, put the claim with the calls as written, compares their curried spines.
+    list(
+        Audit::Heads,
+        under(&[INTO_A_FUNCTION], &["an application's head"]),
         elaborator_refuses,
-        ETA_BY_TYPE,
+        POSED_AS_TWO_CALLS,
+    );
+    list(
+        Audit::Seeds,
+        vec![CURRIED.to_owned()],
+        elaborator_refuses,
+        POSED_AS_TWO_CALLS,
+    );
+    list(
+        Audit::Reversed,
+        vec![format!("{CURRIED}, reversed")],
+        elaborator_refuses,
+        POSED_AS_TWO_CALLS,
     );
 
     parted

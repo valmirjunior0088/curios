@@ -24,7 +24,6 @@ use {
 mod audit;
 
 mod contexts;
-use contexts::*;
 
 mod generated;
 use generated::*;

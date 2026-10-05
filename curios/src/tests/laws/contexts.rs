@@ -66,8 +66,8 @@ fn former(parent: &Subterm) -> Option<Former> {
 }
 
 /// A term with a hole, as source: `{T}` stands for the type of what fills the hole, `{hole}` for what fills it, and `{rest}` for another inhabitant of that type, the same on both sides of a row.
-pub(super) struct Context {
-    pub(super) name: &'static str,
+struct Context {
+    name: &'static str,
     under: Former,
     /// The binders it adds to a seed's.
     binders: &'static str,
@@ -179,7 +179,7 @@ const TYPED: &[Context] = &[
 ];
 
 /// A hole in an arm of a stuck elimination, which the kernel compares at `Type`.
-pub(super) const ARMS: &[Context] = &[
+const ARMS: &[Context] = &[
     any(
         "an arm of a Bool match",
         Former::BoolMatch,
