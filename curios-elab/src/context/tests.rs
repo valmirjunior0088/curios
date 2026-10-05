@@ -31,6 +31,24 @@ fn universe_dependencies_of_a_solved_meta_follow_only_its_materialized_solution(
     assert_eq!(context.universe_metas_in(&Term::hole(0)), [solution].into());
 }
 
+/// A rolled-back bracket withdraws what it recorded for the totality obligations, and what was recorded before it stands: a term settled inside belonged to a candidate that is discarded.
+#[test]
+fn a_rollback_forgets_the_terms_settled_inside_it() {
+    let mut context = context();
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
+    context.record_checked(&literal(0), &nat);
+
+    let mark = context.solution_mark();
+    // The type a candidate's subterm settled at, while the metavariable standing for it was solved.
+    context.record_checked(&literal(1), &Term::hole(0));
+    context.rollback_solutions(mark);
+    context.end_solutions(mark);
+
+    assert_eq!(context.checked().len(), 1);
+    assert_eq!(context.checked()[0].0, literal(0));
+}
+
 #[test]
 fn universe_dependencies_of_an_unsolved_meta_keep_its_birth_context() {
     let mut context = context();

@@ -113,6 +113,8 @@ pub(crate) struct SolutionMark {
     term_solution_log_len: usize,
     universe: UniverseMark,
     credited_len: usize,
+    /// How many settled terms the totality obligations had been handed ([`Context::record_checked`]).
+    checked_len: usize,
     /// How many questions reduction had put to conversion ([`Context::note_question`]).
     questions: u64,
 }
@@ -2051,6 +2053,7 @@ impl Context {
             term_solution_log_len: self.solutions.solved_len(),
             universe: self.universe_solver.mark(),
             credited_len: self.credited.len(),
+            checked_len: self.checked.len(),
             questions: self.questions,
         }
     }
@@ -2088,6 +2091,8 @@ impl Context {
         self.universe_solver.rollback(mark.universe);
         // A proof written inside what is rolled back reads nothing that stands.
         self.credited.truncate(mark.credited_len);
+        // Nor does a term settled inside it settle anything. It belonged to a candidate that is discarded, and the type it settled at may be a metavariable whose solution has just been unwound: left recorded, the totality obligations would zonk it at the item's end and report an implicit argument of a call the program never kept.
+        self.truncate_checked(mark.checked_len);
 
         if unwinds_terms {
             self.caches.invalidate_for_rollback();
