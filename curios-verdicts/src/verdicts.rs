@@ -236,6 +236,7 @@ impl Verdicts {
 
     /// The stored unit for `source` when its record still agrees, read through `overlay` where there is one, placed in the chain on a hit.
     fn hit(&self, source: &UnitSource<'_>, overlay: Option<&Overlay>) -> Option<Unit> {
+        curios_profile::profile!("verdicts::hit");
         let slot = self.slot(source, &self.placed.borrow())?;
 
         // The record is judged before the unit is decoded: a slot whose record disagrees is not worth the decode, and a file that is not a slot is a store to ignore.
@@ -300,6 +301,7 @@ impl Verdicts {
         source: &UnitSource<'_>,
         unit: &Unit,
     ) -> Option<(Placed, curios_archive::Serialized)> {
+        curios_profile::profile!("verdicts::placement");
         let slot = self.slot(source, &self.placed.borrow())?;
 
         // The rule a stored unit is checked against, at the second seam a unit is written — the first being the prelude's build script. An identity meaningful only in the compilation that made it has no safe direction to degrade in: restored beside a unit whose own counters hand out the same index, it aliases silently rather than failing, which admits. Storing nothing is always safe, so a unit that would carry one is dropped rather than refused: the compilation it came from is correct, and only the record is withheld.
@@ -326,6 +328,7 @@ impl Cache for Verdicts {
 
     /// Filed and placed whether anything follows or not: filing is the point of this cache, and [`Verdicts::payload_put`] files a payload under the whole chain the fold placed.
     fn put(&self, source: &UnitSource<'_>, unit: &Unit, _followed: bool) {
+        curios_profile::profile!("verdicts::put");
         let Some((placed, bytes)) = self.placement(source, unit) else {
             return;
         };

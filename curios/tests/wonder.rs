@@ -806,3 +806,85 @@ fn the_server_logs_once_that_the_store_takes_nothing() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+/// The server files what it compiled whole from the disk, and nothing for a keystroke: an opened document holding its file's text leaves its library in the store, an edit leaves the store as it was, and a build afterwards starts from what the server filed.
+#[test]
+fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
+    let root = project("server-files");
+    let slots = |root: &Path| {
+        let mut slots = fs::read_dir(root.join(".curios/verdicts"))
+            .map(|entries| {
+                entries
+                    .map(|slot| fs::read(slot.unwrap().path()).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        slots.sort();
+        slots
+    };
+
+    let uri = format!("file://{}", root.join("util.crs").display());
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = \"placed\";\n"}}}}}}"#
+    ));
+    let published = editor.receive();
+    assert!(published.contains(r#""diagnostics":[]"#), "{published}");
+    let filed = slots(&root);
+    assert_eq!(
+        filed.len(),
+        1,
+        "the library, compiled whole from the text on disk"
+    );
+
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"pub let word : /std/Str = \"typed\";\n"}}]}}}}"#
+    ));
+    let republished = editor.receive();
+    assert!(republished.contains(r#""diagnostics":[]"#), "{republished}");
+    assert!(slots(&root) == filed, "a keystroke moved the store");
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let built = curios(&root, &["run", "app"], "");
+    let narrated = String::from_utf8_lossy(&built.stderr);
+    assert!(narrated.contains("/app; reused"), "{narrated}");
+}
+
+/// A question about a file no package governs, or about standard input, opens no store: nothing is written beside it.
+#[test]
+fn a_loose_file_and_standard_input_leave_no_store() {
+    let root = temporary("loose-question");
+    let program = "/std/print(\"loose\")\n";
+    write(&root, "scratch.crs", program);
+
+    for arguments in [
+        ["wonder", "diagnostics", "scratch.crs"],
+        ["wonder", "diagnostics", "-"],
+        ["wonder", "cost", "scratch.crs"],
+    ] {
+        let asked = curios(&root, &arguments, program);
+        assert_eq!(
+            asked.status.code(),
+            Some(0),
+            "{arguments:?}: {}",
+            String::from_utf8_lossy(&asked.stderr)
+        );
+    }
+    let linted = curios(&root, &["lint", "scratch.crs"], "");
+    assert_eq!(linted.status.code(), Some(0), "{}", stdout(&linted));
+
+    assert!(
+        !root.join(".curios").exists(),
+        "a question with no project wrote beside its file"
+    );
+}

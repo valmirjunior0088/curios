@@ -334,6 +334,60 @@ fn a_unit_kept_in_a_new_scope_replaces_what_its_old_scope_kept() {
     );
 }
 
+/// A session files a dependency when it compiles it, and not the unit its editor holds edited: every keystroke after that leaves the store as it was.
+#[test]
+fn a_session_files_a_dependency_and_no_keystroke() {
+    let root = mounted_project("session-files");
+    let session = Session::default();
+
+    assert_eq!(
+        folded_reusing(&root, &edited(&root, "b/lib.crs"), &session),
+        ["compiling /alpha", "compiling /beta"]
+    );
+    let filed = slots(&root);
+    assert_eq!(
+        filed.len(),
+        1,
+        "/alpha, compiled whole from the disk; /beta is held edited"
+    );
+
+    let keystroke = Overlay::of(BTreeMap::from([(
+        root.join("b/lib.crs"),
+        "use /std/{Str};\n\npub let said: Str =\n    \"beta, typed\";\n".to_string(),
+    )]));
+    assert_eq!(
+        folded_reusing(&root, &keystroke, &session),
+        ["reused /alpha", "recompiling /beta"]
+    );
+    assert!(slots(&root) == filed, "a keystroke moved the store");
+}
+
+/// A unit a session compiles whole after a saved manifest edit moved its scope is filed where its new scope addresses it, beside the slots its old scope filed.
+#[test]
+fn a_unit_compiled_whole_in_a_new_scope_is_filed_there() {
+    let root = mounted_project("session-rescoped-files");
+    let session = Session::default();
+
+    folded_reusing(&root, &Overlay::default(), &session);
+    let before = slots(&root);
+    assert_eq!(before.len(), 2, "/alpha, and /beta after it");
+
+    write(&root, "b/curios.toml", "name = \"beta\"\n");
+    assert_eq!(
+        folded_reusing(&root, &Overlay::default(), &session),
+        ["compiling /beta"],
+        "alone, a scope no slot was filed in and nothing was kept for"
+    );
+    let after = slots(&root);
+    assert_eq!(after.len(), 3, "/beta alone is another slot");
+    assert!(
+        before
+            .iter()
+            .all(|(slot, bytes)| after.get(slot) == Some(bytes)),
+        "and the old scope's slots hold what they held"
+    );
+}
+
 /// A kept unit is refused once a unit before it holds something else, and what it would have hidden is reported.
 ///
 /// **The guard a slot cannot provide.** A slot addresses a unit's predecessors by where they are, not by what they hold, and the recompile diffs a unit's own lowered items alone — a reference into an edited predecessor lowers to the same name either way. So without the guard, `/beta`'s kept unit would be offered after `/alpha` changed its declared type, the diff would be empty, every item reused, and the mismatch this asserts never reported.

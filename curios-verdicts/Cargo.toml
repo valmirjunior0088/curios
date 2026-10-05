@@ -8,11 +8,16 @@ description = "The Curios store as a compilation sees it: the fold's units and a
 [lints]
 workspace = true
 
+[features]
+# What restoring a unit from its slot and filing one cost, as spans beside the compilation's own.
+profile = ["curios-profile/enabled", "curios-pipeline/profile"]
+
 # Beside `curios-pipeline` and over `curios-package`, never under either: `Cache` is the pipeline's
 # trait and the store's layout is the package's, and the crate implementing one through the other
 # can belong to neither — see the crate rustdoc. Nothing below here reaches Binaryen or Wasmtime;
 # the engine a payload address carries is handed in by the crate that owns the runtime.
 [dependencies]
+curios-profile = { workspace = true }
 curios-archive = { workspace = true, features = ["enabled"] }
 curios-utilities = { workspace = true }
 curios-core = { workspace = true }

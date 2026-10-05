@@ -888,6 +888,7 @@ dependencies = [
  "curios-core",
  "curios-package",
  "curios-pipeline",
+ "curios-profile",
  "curios-text",
  "curios-unit",
  "curios-utilities",
