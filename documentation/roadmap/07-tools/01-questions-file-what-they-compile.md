@@ -114,7 +114,7 @@ Each is taken with a release build without `profile`, over a copy of `curios-tex
   | first change | 1.15 (0.87 to 1.45) | 1.34 (0.89 to 1.50) | 2.58 (1.39 to 2.99) | 1.11 (0.79 to 1.53) |
   | second change | 0.94 (0.55 to 1.47) | 1.24 (0.70 to 1.25) | 1.22 (0.78 to 1.47) | 0.92 (0.75 to 1.41) |
 
-  The first change after an open the store answered reads the slot a second time, as its baseline ([Tools: findings](00-findings.md)).
+  The first change after an open the store answered read the slot a second time at that commit, as its baseline; a session keeps a unit the store restored since (`a_session_keeps_a_unit_the_store_restored`), so the third column's first change has moved and is not retaken.
 
 ## Open
 

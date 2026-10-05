@@ -334,6 +334,33 @@ fn a_unit_kept_in_a_new_scope_replaces_what_its_old_scope_kept() {
     );
 }
 
+/// A session keeps a unit the store restored for it as it keeps one it compiled: with the slots gone, the next check recompiles each unit over the copy in hand, where a question with no session compiles them whole.
+///
+/// What this spares an editor is the second read of a slot: the first edit after a check the store answered misses, asks for a baseline, and is handed the unit already decoded.
+#[test]
+fn a_session_keeps_a_unit_the_store_restored() {
+    let root = mounted_project("session-restored");
+    built(&root);
+    let session = Session::default();
+
+    assert_eq!(
+        folded_reusing(&root, &Overlay::default(), &session),
+        ["reused /alpha", "reused /beta"]
+    );
+
+    fs::remove_dir_all(root.join(".curios/verdicts")).expect("the slots a build filed");
+    assert_eq!(
+        folded_reusing(&root, &edited(&root, "b/lib.crs"), &session),
+        ["recompiling /alpha", "recompiling /beta"],
+        "each over what the first check restored"
+    );
+    assert_eq!(
+        folded(&root, &edited(&root, "b/lib.crs")),
+        ["compiling /alpha", "compiling /beta"],
+        "and a question with no session has only the store"
+    );
+}
+
 /// A session files a dependency when it compiles it, and not the unit its editor holds edited: every keystroke after that leaves the store as it was.
 #[test]
 fn a_session_files_a_dependency_and_no_keystroke() {
