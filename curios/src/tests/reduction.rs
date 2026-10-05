@@ -870,18 +870,18 @@ fn a_packed_fold_costs_linearly_in_its_length() {
 ///
 /// # What it last printed
 ///
-/// At `99960c4e2`:
+/// At `fd1336daa`:
 ///
 /// ```text
 ///   claim                        units   depth      other       units   depth      other  kernel/elab
-///   Str/split                   172050       3     168978      173715       3     170643     1.0x
-///   Str/split_once              140566       3     137494      103019       3      99947     0.7x
-///   Str/lines                   106237       3     103165      109875       3     106803     1.0x
-///   Str/replace                  66824       3      63752       98686       3      95614     1.5x
-///   Str/trim                    131826       3     128754       98572       3      95500     0.7x
-///   Str/strip_suffix             67509       5      62389       62301       5      57181     0.9x
-///   Flt/of_str                   27292       2      25244       29254       6      23110     1.1x
-///   Str/index_of                 92563       3      89491       98881       3      95809     1.1x
+///   Str/split                   172052       3     168980      177546       3     174474     1.0x
+///   Str/split_once              140573       3     137501      128343       3     125271     0.9x
+///   Str/lines                   106239       3     103167      113526       3     110454     1.1x
+///   Str/replace                  66826       3      63754      102537       3      99465     1.5x
+///   Str/trim                    131829       3     128757      119179       3     116107     0.9x
+///   Str/strip_suffix             67587       5      62467       88224       5      83104     1.3x
+///   Flt/of_str                   27292       2      25244       43041       3      39969     1.6x
+///   Str/index_of                 92571       3      89499      144118       3     141046     1.6x
 /// ```
 ///
 /// **`Flt/of_str` reads the floor**: reading `"-Infinity"` costs less than a program that only prints, so its row is that program's on both checkers and moves only if the claim comes to cost more.
