@@ -258,6 +258,29 @@ pub(super) const SEEDS: &[Seeds] = &[
             ),
         ],
     },
+    // A struct nested in its own parameter is met again while its inhabitants are read, and is judged again: its declaration names no struct.
+    Seeds {
+        type_: "Box(Box(Empty))",
+        binders: "u: Box(Box(Empty)), v: Box(Box(Empty)), f: (Nat) -> Box(Box(Empty)), e: (Nat) -> Box(Box(Empty)), n: Nat",
+        compound: None,
+        seeds: &[
+            held(
+                "one inhabitant at a struct nested in its own parameter, the literal",
+                "Box { held = Box { held = Empty {} } }",
+                "u",
+            ),
+            held(
+                "one inhabitant at a struct nested in its own parameter, two neutrals",
+                "v",
+                "u",
+            ),
+            held(
+                "one inhabitant at a struct nested in its own parameter, two applications",
+                "f(n)",
+                "e(n)",
+            ),
+        ],
+    },
     Seeds {
         type_: "Nat",
         binders: "a: Nat, b: Nat, f: (Holds(a < 10)) -> Nat, c: (Nat) -> Nat, p1: Holds(a < 10), p2: Holds(a < 10)",

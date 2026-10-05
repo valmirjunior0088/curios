@@ -8,6 +8,10 @@
 //!
 //! Acceptance is one predicate: the diagonal of the closed occurrence relation must be [`Polarity::Strict`] or [`Polarity::Unused`] for every declaration — no declaration reaches itself through a non-strict path. That predicate does not change. Every future improvement to the analysis changes how precisely `occurrences` computes, never what the test admits.
 //!
+//! # Asked before the pass has run
+//!
+//! Conversion asks whether a struct reaches itself while a unit's items are still being checked, to end its reading of a type's inhabitants, and the relation above does not exist yet: the pass runs over finished declarations, after the items whose conversions ask. [`struct_reaches_itself`] answers from the declarations as they are written. It reads the same diagonal coarsely — any mention counts, at whatever polarity and whatever it would reduce to — so it answers yes wherever the pass would and in more places besides. Its answer ends a walk early and admits nothing: whatever it says, a type judged to have one inhabitant is one whose every field was judged.
+//!
 //! # Shared, not duplicated
 //!
 //! Both checkers run *this* analysis, through [`Env`]. It is a total function of post-zonk declarations, so a second implementation would be a second run of the same function on the same input rather than a second opinion; what each side supplies for itself is reduction, unfolding, and the registry fallback for declarations outside the analyzed set. A reduction the driver refuses does not stop the walk — the term is read as opaque, which is the conservative direction — but it is kept: a set refused after one is reported as the driver's refusal, since reading the term at `Mixed` may be all that refused it. So the analysis fails in exactly two ways, the refusal it exists to produce and a budget that ran out before it could decide.
@@ -176,6 +180,51 @@ pub fn positivity_vectors<E: Env>(
     }
 
     Ok(vectors.computed)
+}
+
+/// Whether the struct `name` reaches itself: whether its own name is among the globals its parameters' and fields' types name, or among those the structs they name do, each declaration read once.
+///
+/// Read off the declarations as they are stored, with nothing opened or reduced, so any mention counts and the answer errs toward yes. It follows struct declarations alone, a struct's fields being all its caller's walk opens: a path back through a definition is not seen here, and is a walk the caller's budget ends. The module documentation says why this is not the pass's own diagonal.
+pub fn struct_reaches_itself<E: Env>(env: &E, name: &Global) -> bool {
+    let mut pending = vec![*name];
+    let mut met = BTreeSet::new();
+
+    while let Some(declared) = pending.pop() {
+        let Some(declaration) = env.struct_decl(&declared) else {
+            continue;
+        };
+
+        let mut named = BTreeSet::new();
+        let mut params = &declaration.arity;
+        while let Telescope::Cons(type_, rest) = params {
+            globals_named(type_, &mut named);
+            params = rest.body();
+        }
+        let mut fields = declaration.fields();
+        while let Telescope::Cons(type_, rest) = fields {
+            globals_named(type_, &mut named);
+            fields = rest.body();
+        }
+
+        if named.contains(name) {
+            return true;
+        }
+        pending.extend(named.into_iter().filter(|named| met.insert(*named)));
+    }
+
+    false
+}
+
+/// The globals `type_` names: those among its free variables, and the head of each construction and type former in it ([`Subterm::construction_names`]), which no variable names.
+fn globals_named(type_: &Term, named: &mut BTreeSet<Global>) {
+    named.extend(
+        type_
+            .free_vars_shared()
+            .iter()
+            .filter_map(Free::as_global)
+            .copied(),
+    );
+    named.extend(type_.construction_names());
 }
 
 /// One walkable piece of a declaration: a constructor payload binder, a struct field, or an index binder's type — named so a rejection can point at it.

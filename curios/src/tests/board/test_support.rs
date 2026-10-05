@@ -717,6 +717,10 @@ pub(super) const ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_WITH_ONE_INHABITANT: &str = r
 
         struct N: pub Type { w: W, f: (Nat) -> {}, r: {a: {}, b: Proved} }
 
+        struct Pair(A: Type): pub Type { a: A, b: A }
+
+        struct Other(A: Type): pub Type { held: A }
+
         let at_a_struct_of_a_unit(r : W, s : W) -> Eq(@(W))(r, s) = Eq/refl();
 
         let by_a_cast(F : (W) -> Type, r : W, s : W, x : F(r)) -> F(s) = x;
@@ -732,6 +736,14 @@ pub(super) const ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_WITH_ONE_INHABITANT: &str = r
         let two_stuck_matches(b : Bool, r : W, s : W)
             -> Eq(@(W))(match b: (_) => W | true => r | false => r end,
                         match b: (_) => W | true => s | false => s end)
+            = Eq/refl();
+
+        let at_a_struct_nested_in_its_own_parameter(r : Pair(Pair({})), s : Pair(Pair({})))
+            -> Eq(@(Pair(Pair({}))))(r, s)
+            = Eq/refl();
+
+        let at_a_struct_nested_under_another(r : Pair(Other(Pair({}))), s : Pair(Other(Pair({}))))
+            -> Eq(@(Pair(Other(Pair({})))))(r, s)
             = Eq/refl();
 
         /std/print(Nat/to_str(1))
@@ -753,6 +765,42 @@ pub(super) const TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART: &str =
         struct R: pub Type { next: (Nat) -> R }
 
         let apart(r : R, s : R) -> Eq(@(R))(r, s) = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const TWO_NEUTRALS_AT_A_STRUCT_NESTED_OVER_A_RELEVANT_FIELD_STAY_APART: &str = r#"
+        use /std/{Eq, Nat};
+
+        struct Pair(A: Type): pub Type { a: A, b: A }
+
+        let apart(r : Pair(Pair(Nat)), s : Pair(Pair(Nat)))
+            -> Eq(@(Pair(Pair(Nat))))(r, s)
+            = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const TWO_NEUTRALS_AT_STRUCTS_THAT_REACH_EACH_OTHER_STAY_APART: &str = r#"
+        use /std/{Eq, Nat};
+
+        struct Left: pub Type { right: (Nat) -> Right }
+        and Right: pub Type { left: (Nat) -> Left }
+
+        let apart(r : Left, s : Left) -> Eq(@(Left))(r, s) = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART_INSIDE_ITS_DECLARATION:
+    &str = r#"
+        use /std/{Eq, Nat};
+
+        struct R: pub Type {
+            g: (Nat) -> R,
+            h: Eq(@(R))(g(0), g(0)),
+            k: Eq(@(Eq(@(R))(g(0), g(1))))(h, h)
+        }
 
         /std/Io/pure(())
         "#;

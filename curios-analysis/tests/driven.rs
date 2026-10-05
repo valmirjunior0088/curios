@@ -10,15 +10,15 @@ use {
     curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
     curios_analysis::{
         Coverage, Declarations, Invert, Judge, PositivityRefusal, group_totality, invert_indices,
-        positivity_vectors, solve_indices, test_support::SYNTAX,
+        positivity_vectors, solve_indices, struct_reaches_itself, test_support::SYNTAX,
     },
     curios_cert::Kernel,
     curios_core::{
         Apply, Argument, Atom, Bang, Carrier, Cases, Exhaustion, Field, Free, Global, InductArm,
         InductDecl, InductParam, InductType, Infix, Instance, InstanceHead, Intrinsic, Many, Match,
         MatchResult, Metavar, MetavarId, MetavarOrigin, Nat, Polarity, Proj, Rec, Scope, Struct,
-        StructEntry, StructType, Subterm, Telescope, Term, Three, Totality, Transient, Tuple, Two,
-        UniverseContext, Var, Variant,
+        StructDecl, StructEntry, StructType, Subterm, Telescope, Term, Three, Totality, Transient,
+        Tuple, Two, UniverseContext, Var, Variant,
     },
     curios_num::{Grain, Natural},
     curios_utilities::{InfixOp, Plicity, Qualifier},
@@ -426,6 +426,77 @@ fn a_strict_self_occurrence_is_admitted() {
     )
     .expect("a strictly positive declaration is admitted");
     assert_eq!(vectors.get(&name), Some(&Vec::new()));
+}
+
+/// Declare `struct <path>(n: Nat)` with the fields given.
+fn declare_struct_over_a_number(kernel: &mut Kernel, path: &str, fields: Vec<Term>) -> Global {
+    let name = Global::Authored(Qualifier::from([path]));
+    let fields = fields
+        .into_iter()
+        .zip(1..)
+        .map(|(field, index)| (Free::local(index, None), field))
+        .collect::<Vec<_>>();
+
+    kernel.declare_struct(
+        &name,
+        &StructDecl {
+            universe_context: UniverseContext::default(),
+            arity: Telescope::build(
+                [(
+                    Free::local(0, Some("n")),
+                    Term::intrinsic(Intrinsic::NatType),
+                )],
+                Telescope::build(fields, ()),
+            ),
+            result_sort: Term::type_ground(),
+            module: Qualifier::from([path]),
+            rep_public: true,
+            polarities: Vec::new(),
+            plicities: Vec::new(),
+        },
+    );
+
+    name
+}
+
+/// A struct reaches itself where its declaration names it — by a field of its own, in a parameter of another struct, or through another struct's fields, and whether the name is spelled as the type former's normal form or as the global that unfolds to it. One that names no struct does not, and neither does one that names only a struct that reaches itself: the question is the diagonal, and what conversion asks it for is a struct met again.
+///
+/// Mutation-checked: read for its own name alone, a struct that reaches itself through another's fields is missed; read for its free variables alone, one spelled as a normal form is; and read for its constructions alone, one spelled as a global is.
+#[test]
+fn a_struct_reaches_itself_where_its_declaration_names_it_through_whatever_structs() {
+    let mut kernel = kernel();
+    let named = |path: &str| Global::Authored(Qualifier::from([path]));
+    let at = |path: &str, param: Term| {
+        Term::from(Subterm::StructType(StructType {
+            name: named(path),
+            universes: Vec::new(),
+            params: vec![param],
+        }))
+    };
+    let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0u64)));
+    let spelled = |path: &str| Term::apply(Term::free_var(&Free::Global(named(path))), [zero()]);
+
+    declare_struct_over_a_number(&mut kernel, "Plain", vec![Term::tuple_type_unit()]);
+    declare_struct_over_a_number(&mut kernel, "Own", vec![at("Own", zero())]);
+    declare_struct_over_a_number(&mut kernel, "Spelled", vec![spelled("Spelled")]);
+    declare_struct_over_a_number(
+        &mut kernel,
+        "Nested",
+        vec![at("Plain", at("Nested", zero()))],
+    );
+    declare_struct_over_a_number(&mut kernel, "Left", vec![at("Right", zero())]);
+    declare_struct_over_a_number(&mut kernel, "Right", vec![at("Left", zero())]);
+    declare_struct_over_a_number(&mut kernel, "Beside", vec![at("Own", zero())]);
+
+    assert_eq!(
+        ["Own", "Spelled", "Nested", "Left", "Right"]
+            .map(|path| struct_reaches_itself(&kernel, &named(path))),
+        [true, true, true, true, true]
+    );
+    assert_eq!(
+        ["Plain", "Beside", "Undeclared"].map(|path| struct_reaches_itself(&kernel, &named(path))),
+        [false, false, false]
+    );
 }
 
 #[test]

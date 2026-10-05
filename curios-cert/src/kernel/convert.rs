@@ -38,6 +38,7 @@ mod test_support;
 
 use {
     super::{Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
+    curios_analysis::struct_reaches_itself,
     curios_core::{
         Apply, Bound, Carrier, Cases, Cost, Cursor, Field, Func, FuncType, Global, InductType,
         Instance, InstanceHead, Level, Lockstep, Many, Match, MatchResult, Probe, Proj, Reducer,
@@ -285,7 +286,7 @@ fn looked_up(kernel: &mut Kernel, term: &Term) -> Result<Option<Term>, Error> {
 ///
 /// **It is what the rules above derive, read off the type.** Any two inhabitants of such a type convert by them: irrelevance at the proposition, eta at the function and at the record down to each field, and at a struct the eta its literal has against a neutral, taken on both sides. Read off the type it poses no goal about the two sides, so it answers where eta cannot be fired: between two neutrals at a struct, and at the type a lookup gives ([`by_their_own_type`]).
 ///
-/// **It ends at a struct that reaches itself.** A struct met again while it is being judged answers no, at whatever parameters: a declaration is opened by this walk and by no reduction, so nothing else would end it, and the answer is the refusing one. Every other type is forced as eta by the goal's type forces it, a recursive definition's call unfolding as far as it computes, and is bounded as that walk is, by the budget.
+/// **It ends at a struct that reaches itself.** A struct met again while it is being judged answers no where its declaration reaches itself ([`struct_reaches_itself`]): a declaration is opened by this walk and by no reduction, so nothing else would end it, and the answer is the refusing one. One met again through a parameter it was instantiated at is judged again: its declaration abbreviates a record of its fields, and the parameter is a part of the type the walk began at, or what a definition that ends made of one. Every other type is forced as eta by the goal's type forces it, a recursive definition's call unfolding as far as it computes, and is bounded as that walk is, by the budget.
 ///
 /// A field's type is judged under the fields before it, opened at binders, so one that computes from an earlier field counts only where it reduces whatever that field is. A type no sort judgment classifies, and an occurrence its declaration refuses, answer no.
 fn one_inhabitant(kernel: &mut Kernel, type_: &Term) -> Result<bool, Error> {
@@ -334,7 +335,7 @@ fn inhabited_once(
                 if proposition(kernel)? {
                     return Ok(true);
                 }
-                if entered.contains(name) {
+                if entered.contains(name) && struct_reaches_itself(kernel, name) {
                     return Ok(false);
                 }
                 let Ok(declared) = kernel.struct_at(name, universes, params) else {

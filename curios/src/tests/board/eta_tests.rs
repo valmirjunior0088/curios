@@ -69,7 +69,9 @@ fn two_neutrals_at_a_record_with_a_relevant_field_stay_apart() {
 
 // **A nominal struct has no eta by its type, and what eta would decide is read off the type.** Two neutrals at a struct have no literal to open, so neither checker expands them: any two terms convert at a struct every field of which has one inhabitant — a unit, a proof, a function into a unit, a record or a struct of such — and are left to their heads otherwise. The elaborator projected two neutrals at a struct and compared the projections with no type, which decided nothing, and the kernel compared their heads; once a lookup typed those projections the elaborator accepted two variables at a struct of a unit and the kernel refused them, which is the first program.
 //
-// The two refusals beside it are the rule's bounds: one relevant field keeps two neutrals apart, and a struct that reaches itself answers no where it is met again, which is what ends the walk.
+// The refusals beside it are the rule's bounds: one relevant field keeps two neutrals apart, under whatever nesting, and a struct that reaches itself answers no where it is met again, which is what ends the walk — by its own fields or through another struct's, and asked inside its own declaration as after it.
+//
+// A struct nested in its own parameter is met again too, and is judged again: both checkers refused two variables at `Pair(Pair({}))` where they converged at `Pair(Other({}))`, a verdict that followed which name wrapped a unit.
 #[test]
 fn any_two_terms_convert_at_a_struct_with_one_inhabitant() {
     assert_eq!(
@@ -90,6 +92,30 @@ fn two_neutrals_at_a_struct_with_a_relevant_field_stay_apart() {
 fn two_neutrals_at_a_struct_that_reaches_itself_stay_apart() {
     rejected_by(
         TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn two_neutrals_at_a_struct_nested_over_a_relevant_field_stay_apart() {
+    rejected_by(
+        TWO_NEUTRALS_AT_A_STRUCT_NESTED_OVER_A_RELEVANT_FIELD_STAY_APART,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn two_neutrals_at_structs_that_reach_each_other_stay_apart() {
+    rejected_by(
+        TWO_NEUTRALS_AT_STRUCTS_THAT_REACH_EACH_OTHER_STAY_APART,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn two_neutrals_at_a_struct_that_reaches_itself_stay_apart_inside_its_declaration() {
+    rejected_by(
+        TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART_INSIDE_ITS_DECLARATION,
         "type mismatch",
     );
 }

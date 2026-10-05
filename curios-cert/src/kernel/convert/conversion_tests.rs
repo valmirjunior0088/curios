@@ -240,9 +240,9 @@ fn any_two_terms_converge_at_a_type_with_no_field() {
 
 /// A nominal struct has no eta by its type, so what eta would decide between two terms at one is read off the type: any two converge at a struct every field of which has one inhabitant — a unit, a proof, a function into a unit, a record of such, another such struct — whatever their shapes. The elaborator's twin of this proposition shares the name.
 ///
-/// The refusals are the rule's bounds. One relevant field keeps two variables apart, at whatever depth it sits; and a struct that reaches itself answers no where it is met again, which is what ends the walk.
+/// The refusals are the rule's bounds. One relevant field keeps two variables apart, at whatever depth it sits; and a struct that reaches itself, by its own fields or through another's, answers no where it is met again, which is what ends the walk. A struct nested in its own parameter is met again too, and is judged again: its declaration names no struct, and the parameter is what bounds the walk.
 ///
-/// Mutation-checked: with the struct left to the structural rules the four held goals are refused; with every struct counted the three refused goals are accepted; and without the answer at a struct met again the last goal spends the budget.
+/// Mutation-checked: with the struct left to the structural rules the five held goals are refused; with every struct counted the four refused goals are accepted; with every struct met again refused the goal at the struct nested in its own parameter is; with none refused the last two goals spend the budget; and with a declaration read for its own name alone the last one does.
 #[test]
 fn any_two_terms_converge_at_a_struct_with_one_inhabitant() {
     let mut kernel = kernel();
@@ -289,36 +289,57 @@ fn any_two_terms_converge_at_a_struct_with_one_inhabitant() {
             (binder(9, "v"), of_a_number.clone()),
         ],
     );
-    // `struct R(n: Nat) { next: (m: Nat) -> R(m) }`, which reaches itself at another parameter each time.
-    let reaching_itself = {
-        let name = Global::Authored(Qualifier::from(["R"]));
-        let at = |param: Term| {
+    // A struct over one parameter, named by its path: its declaration names a struct only where a field does.
+    let at = |path: &str| {
+        let name = Global::Authored(Qualifier::from([path]));
+
+        move |param: Term| {
             Term::from(Subterm::StructType(StructType {
                 name,
                 universes: Vec::new(),
                 params: vec![param],
             }))
-        };
-        let (n, m) = (binder(8, "n"), binder(9, "m"));
-        let next = Term::func_type([(m, nat_type())], at(Term::free_var(&m)));
+        }
+    };
+    let (n, m) = (binder(8, "n"), binder(9, "m"));
+    let mut over = |path: &str, parameter: Term, fields: Vec<(Free, Term)>| {
         kernel.declare_struct(
-            &name,
+            &Global::Authored(Qualifier::from([path])),
             &StructDecl {
                 universe_context: UniverseContext::default(),
-                arity: Telescope::build(
-                    [(n, nat_type())],
-                    Telescope::build([(binder(10, "next"), next)], ()),
-                ),
+                arity: Telescope::build([(n, parameter)], Telescope::build(fields, ())),
                 result_sort: Term::type_ground(),
-                module: Qualifier::from(["R"]),
+                module: Qualifier::from([path]),
                 rep_public: true,
                 polarities: Vec::new(),
                 plicities: Vec::new(),
             },
         );
-
-        at(nat(0))
     };
+    let after = |path: &str| Term::func_type([(m, nat_type())], at(path)(Term::free_var(&m)));
+    // `struct R(n: Nat) { next: (m: Nat) -> R(m) }`, which reaches itself at another parameter each time.
+    over("R", nat_type(), vec![(binder(10, "next"), after("R"))]);
+    // `struct Left(n: Nat) { right: (m: Nat) -> Right(m) }` and `Right`, its mirror: each reaches itself through the other.
+    over(
+        "Left",
+        nat_type(),
+        vec![(binder(10, "right"), after("Right"))],
+    );
+    over(
+        "Right",
+        nat_type(),
+        vec![(binder(10, "left"), after("Left"))],
+    );
+    // `struct Pair(A: Type) { a: A, b: A }`, which names no struct: nested in its own parameter it is met again, and its declaration does not reach itself.
+    over(
+        "Pair",
+        Term::type_ground(),
+        vec![
+            (binder(10, "a"), Term::free_var(&n)),
+            (binder(11, "b"), Term::free_var(&n)),
+        ],
+    );
+    let pair = at("Pair");
 
     assert_eq!(
         [
@@ -331,16 +352,19 @@ fn any_two_terms_converge_at_a_struct_with_one_inhabitant() {
             ),
             convert(&mut kernel, &of_a_proof, &u, &v),
             convert(&mut kernel, &nested, &u, &v),
+            convert(&mut kernel, &pair(pair(unit())), &u, &v),
         ],
-        [Ok(true), Ok(true), Ok(true), Ok(true)]
+        [Ok(true), Ok(true), Ok(true), Ok(true), Ok(true)]
     );
     assert_eq!(
         [
             convert(&mut kernel, &of_a_number, &u, &v),
             convert(&mut kernel, &over_a_number, &u, &v),
-            convert(&mut kernel, &reaching_itself, &u, &v),
+            convert(&mut kernel, &pair(pair(nat_type())), &u, &v),
+            convert(&mut kernel, &at("R")(nat(0)), &u, &v),
+            convert(&mut kernel, &at("Left")(nat(0)), &u, &v),
         ],
-        [Ok(false), Ok(false), Ok(false)]
+        [Ok(false), Ok(false), Ok(false), Ok(false), Ok(false)]
     );
 }
 
