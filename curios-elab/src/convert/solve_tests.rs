@@ -3,7 +3,11 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_core::{Free, Intrinsic, MetavarId, MetavarOrigin, Nat, Subterm, Term},
+    curios_core::{
+        Atom, Free, InductDecl, InductParam, Intrinsic, MetavarId, MetavarOrigin, Nat, Subterm,
+        Telescope, Term, UniverseContext,
+    },
+    curios_utilities::{Plicity, Qualifier},
 };
 
 // === Metavariables / unification ===========================================
@@ -764,6 +768,7 @@ fn parked_goals_retry_under_their_frozen_refinements() {
                 type_: Term::type_ground(),
                 this: Term::free_var(&b),
                 that: nat_type(),
+                binders: Binders::default(),
             }),
             Term::free_var(&b),
         );
@@ -786,6 +791,7 @@ fn parked_goals_without_their_refinement_mismatch() {
                 type_: Term::type_ground(),
                 this: Term::free_var(&b),
                 that: nat_type(),
+                binders: Binders::default(),
             }),
             Term::free_var(&b),
         );
@@ -966,6 +972,7 @@ fn two_goals_distinct_under_their_binder_types_share_one_history_key() {
     };
 
     let mut cmp = Convert::new(
+        Binders::default(),
         Term::type_ground(),
         Term::type_ground(),
         Term::type_ground(),
@@ -1048,4 +1055,120 @@ fn a_goal_assumed_by_key_collision_cannot_move_the_verdict() {
         conv(&mut context, &side(&nat(1)), &side(&nat(2))),
         Ok(false)
     );
+}
+
+/// A goal conversion surrenders is retried under the binders it was posed under. Two eliminations of one scrutinee hand on, in their arm, a proof the arm binds: one through an elimination stuck on an unsolved metavariable, the other the arm's second proof. The pair cannot be decided while the metavariable is unsolved, so it is surrendered as blocked; once it is solved the first side reduces to the arm's first proof, and the two are one by the proposition the arm's binders were opened at. Retried under no binder they are two labels nothing types, and stay apart — which is what the verdict would be, following whether the goal parked, were the binders kept anywhere but with the goal.
+///
+/// Mutation-checked: with a goal parked under no binder the retry is a mismatch.
+#[test]
+fn a_goal_surrendered_under_a_binder_is_retried_under_it() {
+    let mut context = context();
+    let family = |context: &mut Context, path: &str, constructors, sort| {
+        context
+            .register_induct(
+                &nominal(path),
+                InductDecl {
+                    universe_context: UniverseContext::empty(),
+                    arity: Telescope::done(Telescope::done(())),
+                    constructors,
+                    result_sort: sort,
+                    module: Qualifier::empty(),
+                    rep_public: true,
+                    polarities: Vec::new(),
+                    plicities: Vec::new(),
+                },
+            )
+            .unwrap();
+
+        Term::induct_type(nominal(path), Vec::<Term>::new(), Vec::<Term>::new())
+    };
+    // `induct P : Prop` and `induct Pair : Type | two(a : P, b : P)`.
+    let proposition = family(&mut context, "P", Vec::new(), Term::prop());
+    let (a, b) = (context.fresh(Some("a")), context.fresh(Some("b")));
+    let pair = family(
+        &mut context,
+        "Pair",
+        Vec::from([(
+            Atom::from("two"),
+            InductParam::new(
+                Telescope::build(
+                    [(a, proposition.clone()), (b, proposition.clone())],
+                    Vec::new(),
+                ),
+                vec![Plicity::Explicit, Plicity::Explicit],
+            ),
+        )]),
+        Term::type_ground(),
+    );
+    let scrutinee = context.fresh(Some("t"));
+    context.assume(&scrutinee, &pair);
+    context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+
+    // `match t | two(a, b) => (<handed on>, 1) end`, at the ambient `{P, Nat}`.
+    let (x, y) = (context.fresh(Some("x")), context.fresh(Some("y")));
+    let result = Term::tuple_type([(x, proposition.clone()), (y, nat_type())]);
+    let handing_on = |context: &mut Context, through_the_hole: bool| {
+        let (a, b, m) = (
+            context.fresh(Some("a")),
+            context.fresh(Some("b")),
+            context.fresh(Some("m")),
+        );
+        // `match ?0 | 0 => a | pred + 1; ih => a end`, stuck until the metavariable is solved.
+        let (inner, pred, ih) = (
+            context.fresh(Some("m")),
+            context.fresh(Some("pred")),
+            context.fresh(Some("ih")),
+        );
+        let handed = match through_the_hole {
+            true => Term::nat_match(
+                Term::hole(0),
+                Some(&inner),
+                proposition.clone(),
+                Term::free_var(&a),
+                &pred,
+                &ih,
+                Term::free_var(&a),
+            ),
+            false => Term::free_var(&b),
+        };
+
+        Term::induct_match(
+            Term::free_var(&scrutinee),
+            Some(&m),
+            result.clone(),
+            [("two", vec![a, b], Term::tuple([handed, nat(1)]))],
+        )
+    };
+    let (this, that) = (
+        handing_on(&mut context, true),
+        handing_on(&mut context, false),
+    );
+
+    let Ok(Outcome::Blocked(goals)) =
+        convert_outcome(&mut context, &Term::type_ground(), &this, &that)
+    else {
+        panic!("a pair stuck on an unsolved metavariable was decided");
+    };
+    let [goal] = &goals[..] else {
+        panic!(
+            "one goal is stuck on the metavariable, and {} were surrendered",
+            goals.len()
+        );
+    };
+    context.solve_metavar(MetavarId(0), nat(0));
+
+    assert!(matches!(
+        convert_under(
+            &mut context,
+            &goal.binders,
+            &goal.type_,
+            &goal.this,
+            &goal.that
+        ),
+        Ok(Outcome::Converts)
+    ));
+    assert!(matches!(
+        convert_outcome(&mut context, &goal.type_, &goal.this, &goal.that),
+        Ok(Outcome::Mismatch(_))
+    ));
 }

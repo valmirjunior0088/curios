@@ -12,6 +12,7 @@ use {
         Rec, Scope, StructType, Subterm, Term, Tuple, TupleType, Variant, reduce_with, sort_term,
         synth_neutral,
     },
+    crate::Binders,
     curios_core::{Cost, Produced, ReduceError, foreign_signature},
     curios_utilities::recurse,
 };
@@ -185,9 +186,11 @@ impl Lowering {
             | Subterm::InductType(_)
             | Subterm::StructType(_) => sort_term(context, term),
             // A name, or a member of a group read off the group it carries.
-            Subterm::Var(_) | Subterm::Instance(_) => Ok(synth_neutral(context, &[], term)
-                .map_err(|error| exhausted(error, term))?
-                .expect("erase: a name in scope")),
+            Subterm::Var(_) | Subterm::Instance(_) => {
+                Ok(synth_neutral(context, &Binders::default(), &[], term)
+                    .map_err(|error| exhausted(error, term))?
+                    .expect("erase: a name in scope"))
+            }
             Subterm::Metavar(_) => unreachable!("metavariable survived zonking into erasure"),
             Subterm::Transient(_) => {
                 unreachable!("transient node survived elaboration into erasure")

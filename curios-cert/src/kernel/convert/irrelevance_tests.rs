@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     crate::{Error, convert},
     curios_core::{
-        Atom, Cases, Free, InductDecl, InductParam, Intrinsic, Level, Match, MatchResult,
-        StructDecl, Subterm, Telescope, Term, UniverseContext,
+        Atom, Cases, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Match,
+        MatchResult, Scope, StructDecl, Subterm, Telescope, Term, UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -312,6 +312,325 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
     );
 }
 
+/// A stuck elimination is typed by its result at its scrutinee: an ambient goal as written, and a family opened at the indices its scrutinee's type carries and then at the scrutinee. So where a child is compared with no type, an elimination at a proposition converges with a variable at it and with an elimination of another scrutinee, one at a record of units with a variable at it, and an indexed family's elimination is read at its scrutinee's index. The elaborator's twin of this proposition shares the name.
+///
+/// The refusals are what the type does not decide: an elimination at a relevant type against a variable at it, and one at a proposition against a variable at another.
+///
+/// Mutation-checked: with no type read off an elimination the four held goals are refused, and with a family read at its scrutinee alone the indexed one is.
+#[test]
+fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
+    let mut kernel = kernel();
+    let proposition = declare(&mut kernel, "P", Term::prop());
+    let another = declare(&mut kernel, "Q", Term::prop());
+    let empty = declare(&mut kernel, "E", Term::type_ground());
+    let unit = Term::tuple_type_unit();
+    let units = Term::tuple_type([
+        (binder(90, "a"), unit.clone()),
+        (binder(91, "b"), unit.clone()),
+    ]);
+    // `induct Ix : (n : Nat) -> Type`, a family with one index and no constructor.
+    let indexed = Global::Authored(Qualifier::from(["Ix"]));
+    kernel.declare_induct(
+        &indexed,
+        &InductDecl {
+            universe_context: UniverseContext::default(),
+            arity: Telescope::done(Telescope::build([(binder(92, "n"), nat_type())], ())),
+            constructors: Vec::new(),
+            result_sort: Term::type_ground(),
+            module: Qualifier::empty(),
+            rep_public: true,
+            polarities: Vec::new(),
+            plicities: Vec::new(),
+        },
+    );
+
+    let mut assumed = |index: u32, hint: &str, type_: &Term| {
+        let name = binder(index, hint);
+        kernel.assume(&name, type_);
+
+        Term::free_var(&name)
+    };
+    let (c, d) = (assumed(0, "c", &empty), assumed(1, "d", &empty));
+    let (p, q) = (assumed(2, "p", &proposition), assumed(3, "q", &another));
+    let r = assumed(4, "r", &units);
+    let n = assumed(5, "n", &nat_type());
+    let s = assumed(
+        6,
+        "s",
+        &Term::induct_type(indexed, Vec::<Term>::new(), [nat(3)]),
+    );
+
+    let no_arm = || Cases::Induct {
+        cases: Vec::new(),
+        default: None,
+    };
+    let eliminated = |scrutinee: &Term, goal: &Term| {
+        Term::from(Subterm::Match(Match {
+            head: scrutinee.clone(),
+            result: MatchResult::Ambient(goal.clone()),
+            cases: no_arm(),
+        }))
+    };
+    // `match s : (i, x) => P end`, whose result is a family over the index and the scrutinee.
+    let over_its_index = {
+        let (i, x) = (binder(93, "i"), binder(94, "x"));
+
+        Term::from(Subterm::Match(Match {
+            head: s.clone(),
+            result: MatchResult::Family(Scope::close(Many(2), &[&i, &x], proposition.clone())),
+            cases: no_arm(),
+        }))
+    };
+    let ground = Term::type_ground();
+    let mut at = |this: &Term, that: &Term| convert(&mut kernel, &ground, this, that);
+
+    assert_eq!(
+        [
+            at(&eliminated(&c, &proposition), &p),
+            at(&eliminated(&c, &proposition), &eliminated(&d, &proposition)),
+            at(&eliminated(&c, &units), &r),
+            at(&over_its_index, &p),
+        ],
+        [Ok(true), Ok(true), Ok(true), Ok(true)]
+    );
+    assert_eq!(
+        [
+            at(&eliminated(&c, &nat_type()), &n),
+            at(&eliminated(&c, &proposition), &q),
+        ],
+        [Ok(false), Ok(false)]
+    );
+}
+
+/// A constructor's value is typed by its declaration: the family at the value's parameters and at the index targets its constructor states. So where a child is compared with no type, a proof a constructor builds converges with a proof a variable names and with one another constructor builds. The elaborator's twin of this proposition shares the name.
+///
+/// The refusals: two constructors of a relevant family, a constructor's value against a variable at it, and a proof against a variable at the family's other index.
+///
+/// Mutation-checked: with no type read off a constructor's value the three held goals are refused, and with the index targets left out the indexed one is.
+#[test]
+fn a_constructors_value_is_typed_by_its_declaration() {
+    let mut kernel = kernel();
+    let nullary = |tags: [&str; 2]| {
+        Vec::from(tags.map(|tag| {
+            (
+                Atom::from(tag),
+                InductParam::new(Telescope::done(Vec::new()), Vec::new()),
+            )
+        }))
+    };
+    let mut family = |path: &str,
+                      arity: Telescope<Telescope<()>>,
+                      constructors: Vec<(Atom, InductParam)>,
+                      result_sort: Term| {
+        let name = Global::Authored(Qualifier::from([path]));
+        kernel.declare_induct(
+            &name,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity,
+                constructors,
+                result_sort,
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+                plicities: Vec::new(),
+            },
+        );
+
+        name
+    };
+    // `induct Or : Prop | left() | right()`, the same two at `Type`, and `induct Zero : (n : Nat) -> Prop | zero() : (0)`.
+    let unindexed = || Telescope::done(Telescope::done(()));
+    let either = family("Or", unindexed(), nullary(["left", "right"]), Term::prop());
+    let two = family(
+        "Two",
+        unindexed(),
+        nullary(["left", "right"]),
+        Term::type_ground(),
+    );
+    let zero = family(
+        "Zero",
+        Telescope::done(Telescope::build([(binder(90, "n"), nat_type())], ())),
+        Vec::from([(
+            Atom::from("zero"),
+            InductParam::new(Telescope::done(vec![nat(0)]), Vec::new()),
+        )]),
+        Term::prop(),
+    );
+
+    let built =
+        |name: Global, tag: &str| Term::variant(name, Vec::<Term>::new(), tag, Vec::<Term>::new());
+    let mut assumed = |index: u32, hint: &str, type_: &Term| {
+        let name = binder(index, hint);
+        kernel.assume(&name, type_);
+
+        Term::free_var(&name)
+    };
+    let p = assumed(
+        0,
+        "p",
+        &Term::induct_type(either, Vec::<Term>::new(), Vec::<Term>::new()),
+    );
+    let t = assumed(
+        1,
+        "t",
+        &Term::induct_type(two, Vec::<Term>::new(), Vec::<Term>::new()),
+    );
+    let at_zero = assumed(
+        2,
+        "z",
+        &Term::induct_type(zero, Vec::<Term>::new(), [nat(0)]),
+    );
+    let at_one = assumed(
+        3,
+        "o",
+        &Term::induct_type(zero, Vec::<Term>::new(), [nat(1)]),
+    );
+
+    let ground = Term::type_ground();
+    let mut at = |this: &Term, that: &Term| convert(&mut kernel, &ground, this, that);
+
+    assert_eq!(
+        [
+            at(&built(either, "left"), &p),
+            at(&built(either, "left"), &built(either, "right")),
+            at(&built(zero, "zero"), &at_zero),
+        ],
+        [Ok(true), Ok(true), Ok(true)]
+    );
+    assert_eq!(
+        [
+            at(&built(two, "left"), &built(two, "right")),
+            at(&built(two, "left"), &t),
+            at(&built(zero, "zero"), &at_one),
+        ],
+        [Ok(false), Ok(false), Ok(false)]
+    );
+}
+
+/// An arm's binders are opened at the types its position gives them: a constructor's arm at its telescope over the scrutinee's parameters, and a cons arm at its carrier's domains. Two eliminations whose arms differ in which of two bound proofs they hand on are one term, as are two folds over a list of proofs, one handing on the head it peeled and the other a proof in scope. The elaborator's twin of this proposition shares the name.
+///
+/// The control for each is the same pair over a relevant family, where the two binders stay apart; and where no lookup types the scrutinee the arm keeps the stand-in, under which the first pair stays apart too.
+///
+/// Mutation-checked: with every arm at the stand-in the two held goals are refused.
+#[test]
+fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
+    let judged = |sort: Term| {
+        let mut kernel = kernel();
+        let held = declare(&mut kernel, "F", sort);
+        // `induct Pair : Type | two(a : F, b : F)`.
+        let pair = Global::Authored(Qualifier::from(["Pair"]));
+        kernel.declare_induct(
+            &pair,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: Vec::from([(
+                    Atom::from("two"),
+                    InductParam::new(
+                        Telescope::build(
+                            [
+                                (binder(60, "a"), held.clone()),
+                                (binder(61, "b"), held.clone()),
+                            ],
+                            Vec::new(),
+                        ),
+                        vec![Plicity::Explicit, Plicity::Explicit],
+                    ),
+                )]),
+                result_sort: Term::type_ground(),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+                plicities: Vec::new(),
+            },
+        );
+        let (typed, untyped) = (binder(0, "t"), binder(1, "u"));
+        kernel.assume(
+            &typed,
+            &Term::induct_type(pair, Vec::<Term>::new(), Vec::<Term>::new()),
+        );
+        let in_scope = binder(2, "p");
+        kernel.assume(&in_scope, &held);
+        let list = binder(3, "l");
+        kernel.assume(&list, &Term::intrinsic(Intrinsic::ListType(held.clone())));
+
+        // `match t | two(a, b) => (<chosen>, 1) end`, at the ambient `{F, Nat}`.
+        let handing_on = |scrutinee: &Free, first: bool| {
+            let (a, b, m) = (binder(70, "a"), binder(71, "b"), binder(72, "m"));
+            let chosen = match first {
+                true => a,
+                false => b,
+            };
+
+            Term::induct_match(
+                Term::free_var(scrutinee),
+                Some(&m),
+                Term::tuple_type([
+                    (binder(73, "x"), held.clone()),
+                    (binder(74, "y"), nat_type()),
+                ]),
+                [(
+                    "two",
+                    vec![a, b],
+                    Term::tuple([Term::free_var(&chosen), nat(1)]),
+                )],
+            )
+        };
+        // `match l | [] => (p, 0) | h ++ t; ih => (<chosen>, 1) end`.
+        let folding = |peeled: bool| {
+            let (h, t, ih, m) = (
+                binder(75, "h"),
+                binder(76, "t"),
+                binder(77, "ih"),
+                binder(78, "m"),
+            );
+            let chosen = match peeled {
+                true => h,
+                false => in_scope,
+            };
+
+            Term::list_match(
+                Term::free_var(&list),
+                held.clone(),
+                Some(&m),
+                Term::tuple_type([
+                    (binder(73, "x"), held.clone()),
+                    (binder(74, "y"), nat_type()),
+                ]),
+                Term::tuple([Term::free_var(&in_scope), nat(0)]),
+                &h,
+                &t,
+                &ih,
+                Term::tuple([Term::free_var(&chosen), nat(1)]),
+            )
+        };
+        let ground = Term::type_ground();
+
+        [
+            convert(
+                &mut kernel,
+                &ground,
+                &handing_on(&typed, true),
+                &handing_on(&typed, false),
+            ),
+            convert(&mut kernel, &ground, &folding(true), &folding(false)),
+            convert(
+                &mut kernel,
+                &ground,
+                &handing_on(&untyped, true),
+                &handing_on(&untyped, false),
+            ),
+        ]
+    };
+
+    assert_eq!(judged(Term::prop()), [Ok(true), Ok(true), Ok(false)]);
+    assert_eq!(
+        judged(Term::type_ground()),
+        [Ok(false), Ok(false), Ok(false)]
+    );
+}
+
 /// The same two terms at a *relevant* type are not interchangeable. Irrelevance is a property of the type, and this is the direction that would be unsound to get wrong.
 #[test]
 fn does_not_leak_into_a_relevant_type() {
@@ -509,15 +828,15 @@ fn does_not_fire_at_a_computed_relevant_type() {
     );
 }
 
-/// **The stand-in `ground_scope` opens its binders at, held against the types those binders really carry.**
+/// **The stand-in a binder is opened at where no lookup types its elimination's scrutinee, held against the types such a binder could really carry.**
 ///
-/// `ground_scope` opens both scopes at one shared set of binders and assumes every one of them at `Type`, whatever it really is. The recorded type is not inert: [`synth_neutral`](super::super::sort::synth_neutral) reads the same recorded type through `Kernel::type_of`, so it reaches `Sort::of`, and `Sort::of` is what [`compare`] asks before *every* goal: the proof-irrelevance test at the top of the rule.
+/// A motive's and an arm's binders are opened at the types their position gives them, read off the scrutinee's looked-up type. Where it has none, `ground_scope` and `motive_binders` open them at one shared set of binders and assume every one of them at `Type`, whatever it really is. The recorded type is not inert: [`synth_neutral`](super::super::sort::synth_neutral) reads the same recorded type through `Kernel::type_of`, so it reaches `Sort::of`, and `Sort::of` is what [`compare`] asks before *every* goal: the proof-irrelevance test at the top of the rule.
 ///
 /// What actually holds the stand-in up is narrower, and is about the value rather than about the readers: `Type` is the least informative answer `Sort::of` can return for a binder. Irrelevance fires on `Sort::Prop` and on nothing else, and eta dispatches on the goal type's own *shape* rather than on the binder's, so a binder recorded at `Type` can only lose the accepting rules, never gain one. This walks one goal at each type the binder could really carry and records what each decides.
 ///
 /// The grid is two side-pairs against four assumed types, because a single pair cannot separate the two things being asked. Distinct sides expose which types *discharge* the goal without comparing — only `Prop` does — and convertible-but-not-identical sides expose which types get as far as comparing at all. The stand-in's row matches the relevant-sort row in both, which is the null: it decides every goal the way a real relevant type decides it.
 ///
-/// **One row is not a forfeiture, and it is the one to carry forward.** A binder whose real type is not a sort at all leaves `Sort::of` with nothing to decode, and the typed opening refuses the whole certification with `NotASort` — while the stand-in classifies it `Type 0` and goes on to accept. There the stand-in is strictly *more* permissive than the truth. Nothing in `ground_scope` fences that off; what does is a property of its callers, the same shape as the one `struct_eta`'s neutral restriction rests on. A match motive is typed under its real binders by `infer`'s `check_motive` before any comparison grounds it, so a motive using a `Bool`-typed binder as a type never reaches here. That is written in neither place, and it is what this row exists to record.
+/// **One row is not a forfeiture, and it is the one to carry forward.** A binder whose real type is not a sort at all leaves `Sort::of` with nothing to decode, and the typed opening refuses the whole certification with `NotASort` — while the stand-in classifies it `Type 0` and goes on to accept. There the stand-in is strictly *more* permissive than the truth. Nothing in the stand-in fences that off; what does is a property of its callers, the same shape as the one `struct_eta`'s neutral restriction rests on. A match motive is typed under its real binders by `infer`'s `check_motive` before any comparison grounds it, so a motive using a `Bool`-typed binder as a type never reaches here. Under the typed opening the row does not arise: the binder carries its real type, and the goal is refused as the typed row is.
 #[test]
 fn a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does() {
     let distinct = || {
@@ -599,77 +918,98 @@ fn a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does() {
     );
 }
 
-/// The same stand-in reached through [`ground_scope`] itself rather than through an assumption written by hand.
+/// A motive's binders are opened at the types its family gives them: the index domains, and the scrutinee at the family over those binders.
 ///
-/// Two stuck `bool_match`es differing only inside their motive scopes. Each motive body is `Wit(<motive binder>, i)`, and `Wit`'s index type is its own parameter, so the index pair is compared at the motive binder — which `ground_scope` has opened at `Type`. The pair is refused, matching the grid's stand-in row above rather than its `Prop` row, which is what pins that the production path really does record the stand-in and not something the term carries.
+/// Two stuck eliminations of one scrutinee at a family indexed by a proposition, differing only inside their motives. Each motive body is `Wit(<index binder>, i)`, and `Wit`'s index type is its own parameter, so the index pair is compared at the motive's index binder — which is opened at `Prop`, its real type, and is a proposition there: the pair is discharged by irrelevance, as it is where the motive was typed.
 ///
-/// The counterfactual is the second half: assume that same binder at `Prop` and compare the two motive bodies directly, and the goal is discharged by irrelevance. So the verdict does move when the binder's real type differs from the stand-in, and it moves toward refusal — which is the direction this row's **Assumes** claims.
+/// The fallback is the second half: over a scrutinee no lookup types, the binders are opened at the stand-in, the index pair is compared at a binder recorded at `Type`, and the two stay apart, which is the grid's stand-in row above. The control beside each is a motive pair that differs only by a beta redex, which converges under either opening.
 ///
-/// The control between them is a motive pair that differs only by a beta redex. It must still converge through the same `ground_scope`, so the refusal above is `u ≠ v` decided at a relevant sort rather than the grounded scope declining to compare its bodies at all.
+/// The counterfactual is the last: the name the fallback's binder was opened under, assumed at `Prop` once that binder is closed, is a proposition, and the two bodies compared directly are discharged by irrelevance. So the verdict moves with the binder's type, toward refusal at the stand-in; and a sort read under the closed binder does not answer for the name assumed again.
+///
+/// Mutation-checked: with every motive binder at the stand-in the first typed goal is refused; and with a remembered sort answering without asking whether its binders stand, the sort the fallback read under its closed binder answers for the name opened again, and a goal after it is refused.
 #[test]
-fn a_grounded_motive_binder_carries_the_stand_in_rather_than_its_real_type() {
+fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
     let mut kernel = kernel();
     let wit = declare_indexed(&mut kernel, "Wit", Term::prop());
+    let proposition = declare(&mut kernel, "Q", Term::prop());
+    // `induct Ix : (R : Prop) -> Type`, a family indexed by a proposition.
+    let indexed = Global::Authored(Qualifier::from(["Ix"]));
+    kernel.declare_induct(
+        &indexed,
+        &InductDecl {
+            universe_context: UniverseContext::default(),
+            arity: Telescope::done(Telescope::build([(binder(90, "R"), Term::prop())], ())),
+            constructors: Vec::new(),
+            result_sort: Term::type_ground(),
+            module: Qualifier::empty(),
+            rep_public: true,
+            polarities: Vec::new(),
+            plicities: Vec::new(),
+        },
+    );
+    // The names the kernel is not handed sit below the one it is, so no binder it mints meets one of them.
+    let (typed, untyped) = (binder(80, "s"), binder(70, "t"));
+    kernel.assume(
+        &typed,
+        &Term::induct_type(indexed, Vec::<Term>::new(), [proposition]),
+    );
+    let (u, v) = (binder(71, "u"), binder(72, "v"));
 
-    let scrutinee = binder(80, "b");
-    kernel.assume(&scrutinee, &Term::intrinsic(Intrinsic::BoolType));
+    // `match s : (R, x) => Wit(R, <index>) end`.
+    let elimination = |scrutinee: &Free, index: Term| {
+        let (carried, x) = (binder(84, "R"), binder(85, "x"));
+        let body = Term::induct_type(wit, [Term::free_var(&carried)], [index]);
 
-    let carried = binder(81, "P");
-    let (u, v) = (binder(82, "u"), binder(83, "v"));
-
-    let body = |index: Term| Term::induct_type(wit, [Term::free_var(&carried)], [index]);
-    let elimination = |index: Term| {
-        Term::bool_match(
-            Term::free_var(&scrutinee),
-            Some(&carried),
-            body(index),
-            nat(0),
-            nat(0),
-        )
+        Term::from(Subterm::Match(Match {
+            head: Term::free_var(scrutinee),
+            result: MatchResult::Family(Scope::close(Many(2), &[&carried, &x], body)),
+            cases: Cases::Induct {
+                cases: Vec::new(),
+                default: None,
+            },
+        }))
     };
-
     let redex = |name: &Free| {
-        let x = binder(84, "x");
+        let x = binder(86, "x");
 
         Term::apply(
             Term::func([(x, nat_type())], Term::free_var(&x)),
             [Term::free_var(name)],
         )
     };
-
-    assert_eq!(
+    let ground = Term::type_ground();
+    let mut at = |scrutinee: &Free, this: Term, that: Term| {
         convert(
             &mut kernel,
-            &Term::type_ground(),
-            &elimination(Term::free_var(&u)),
-            &elimination(Term::free_var(&v)),
-        ),
-        Ok(false),
-        "a grounded motive binder discharged two distinct index actuals",
-    );
+            &ground,
+            &elimination(scrutinee, this),
+            &elimination(scrutinee, that),
+        )
+    };
 
+    // The fallback's goals are put first, so that the first binder the kernel mints — the name after the scrutinee's — is the motive's, opened at the stand-in.
+    let fallback = [
+        at(&untyped, Term::free_var(&u), Term::free_var(&v)),
+        at(&untyped, Term::free_var(&u), redex(&u)),
+    ];
     assert_eq!(
-        convert(
-            &mut kernel,
-            &Term::type_ground(),
-            &elimination(Term::free_var(&u)),
-            &elimination(redex(&u)),
-        ),
-        Ok(true),
-        "the grounded scope stopped comparing its bodies up to reduction",
+        [
+            at(&typed, Term::free_var(&u), Term::free_var(&v)),
+            at(&typed, Term::free_var(&u), redex(&u)),
+        ],
+        [Ok(true), Ok(true)]
     );
+    assert_eq!(fallback, [Ok(false), Ok(true)]);
 
+    // That binder is closed, and its name is handed in again at `Prop`.
+    let carried = binder(81, "R");
     kernel.assume(&carried, &Term::prop());
+    let body =
+        |index: &Free| Term::induct_type(wit, [Term::free_var(&carried)], [Term::free_var(index)]);
 
     assert_eq!(
-        convert(
-            &mut kernel,
-            &Term::type_ground(),
-            &body(Term::free_var(&u)),
-            &body(Term::free_var(&v)),
-        ),
-        Ok(true),
-        "the same binder at its real `Prop` stopped licensing the irrelevance grounding forfeits",
+        convert(&mut kernel, &ground, &body(&u), &body(&v)),
+        Ok(true)
     );
 }
 

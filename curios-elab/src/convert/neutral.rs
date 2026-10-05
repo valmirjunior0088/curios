@@ -4,12 +4,13 @@
 
 use {
     super::instantiate_bound_at,
-    crate::{Context, reduce},
+    crate::{Context, reduce, reduce_forced},
     curios_core::{
-        Argument, Field, Free, FuncType, Instance, InstanceHead, Level, Proj, ReduceError,
-        StructType, Subterm, Term, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
-        instantiate_universe_levels_scoped,
+        Argument, Field, Free, FuncType, InductType, Instance, InstanceHead, Level, Match,
+        MatchResult, Proj, ReduceError, StructType, Subterm, Term, TupleType,
+        UniverseConstraintKind, UniverseConstraintOrigin, instantiate_universe_levels_scoped,
     },
+    std::rc::Rc,
 };
 
 /// Decide a problem whose sides differ only in universe levels by *identifying* the levels: commit every differing pair as the same `Conversion` equality constraint the structural path emits for a type's vectors, and accept — after the commitment the two spellings are one term, which is the license the acceptance stands on. Neither side is reduced, which is the point: two spellings of one computation are identified without running it, so registering the fact does not cost the fact's own subject — a partial definition at two fresh instances, an accumulation under a strict operation.
@@ -123,9 +124,64 @@ pub(super) enum Identification {
 /// These deliberately do *not* go into the [`Context`]. `Sort::of` runs on every conversion problem (through `is_prop`), and `Context::assume` bumps `mutation_stamp`, which is what validates the memoization caches — assuming here would invalidate them continuously and starve a coinductive comparison of its budget. Keeping the binders local also keeps `Sort::of` observationally read-only, which the conversion history relies on: labels minted here are never recorded in `Convert::minted`, so they must never reach a problem. They cannot, because `Sort::of` returns a `Sort`.
 pub(crate) type Opened = [(Free, Term)];
 
-/// Synthesize the type of a neutral (a `Var`/`Apply`/`Proj` spine) *without* validating its subterms. Returns `None` when the head is out of scope or the spine is not a typeable neutral — callers fall back conservatively. Built only from the same intrinsics `infer` uses (`Context::assumption`, `reduce`, `Telescope::open`/`nth`), so there is no duplicated typing judgment to drift from `infer`.
+/// The binders a conversion problem is posed under, each at the type its position gave it, innermost first.
+///
+/// Conversion opens a binder at a fresh label and compares under it, and a lookup that meets the label reads its type here, as the kernel reads a binder it assumed. It is carried with the problem and installed nowhere. The elaborator's conversion is a worklist that parks what it cannot decide, so a problem outlives the step that opened its binders, and one retried later is retried under the binders it was posed under: no verdict follows whether a problem parked. A write to the [`Context`] would also invalidate its caches at every binder, which is why [`Opened`] is threaded too.
+///
+/// A label is fresh, so no binder here shadows another, or a name the context holds.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub(crate) struct Binders(Option<Rc<Binder>>);
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct Binder {
+    name: Free,
+    type_: Term,
+    outer: Binders,
+}
+
+impl Binders {
+    /// These binders with `name` opened innermost at `type_`.
+    pub(super) fn opening(&self, name: Free, type_: Term) -> Binders {
+        Binders(Some(Rc::new(Binder {
+            name,
+            type_,
+            outer: self.clone(),
+        })))
+    }
+
+    /// Whether `term` names one of these binders.
+    pub(super) fn names_one_in(&self, term: &Term) -> bool {
+        let mut binders = self;
+        while let Some(binder) = &binders.0 {
+            if term.mentions_free(&binder.name) {
+                return true;
+            }
+            binders = &binder.outer;
+        }
+
+        false
+    }
+
+    /// The type `name` was opened at, where it is one of these.
+    fn type_of(&self, name: &Free) -> Option<&Term> {
+        let mut binders = self;
+        while let Some(binder) = &binders.0 {
+            if binder.name == *name {
+                return Some(&binder.type_);
+            }
+            binders = &binder.outer;
+        }
+
+        None
+    }
+}
+
+/// Synthesize the type of a neutral (a `Var`/`Apply`/`Proj` spine, or a stuck elimination) *without* validating its subterms. Returns `None` when the head is out of scope or the spine is not a typeable neutral — callers fall back conservatively. Built only from the same intrinsics `infer` uses (`Context::assumption`, `reduce`, `Telescope::open`/`nth`), so there is no duplicated typing judgment to drift from `infer`.
+///
+/// A variable is read off the binders a walk opened (`opened`), then the context, then the binders the problem in hand is posed under (`binders`).
 pub(crate) fn synth_neutral(
     context: &mut Context,
+    binders: &Binders,
     opened: &Opened,
     term: &Term,
 ) -> Result<Option<Term>, ReduceError> {
@@ -141,10 +197,13 @@ pub(crate) fn synth_neutral(
             if let Some((_, type_)) = opened.iter().rev().find(|(bound, _)| bound == name) {
                 return Ok(Some(type_.clone()));
             }
-            context
+            match context
                 .instantiate_assumption_universes(name)
-                .map(|instance| instance.map(|(type_, _)| type_))
-                .map_err(ReduceError::Universe)
+                .map_err(ReduceError::Universe)?
+            {
+                Some((type_, _)) => Ok(Some(type_)),
+                None => Ok(binders.type_of(name).cloned()),
+            }
         }
         // A universe-polymorphic head, at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at `levels`; going through the `Var` arm below would instead instantiate it at fresh levels and then have nothing left to substitute.
         Subterm::Instance(Instance { head, levels }) => match head {
@@ -170,7 +229,7 @@ pub(crate) fn synth_neutral(
         },
 
         Subterm::Apply(apply) => {
-            let Some(head_type) = synth_neutral(context, opened, &apply.head)? else {
+            let Some(head_type) = synth_neutral(context, binders, opened, &apply.head)? else {
                 return Ok(None);
             };
             let params = apply.params().cloned().collect::<Vec<_>>();
@@ -197,7 +256,7 @@ pub(crate) fn synth_neutral(
             head,
             field: Field::Index(index),
         }) => {
-            let Some(head_type) = synth_neutral(context, opened, head)? else {
+            let Some(head_type) = synth_neutral(context, binders, opened, head)? else {
                 return Ok(None);
             };
 
@@ -230,6 +289,28 @@ pub(crate) fn synth_neutral(
                 _ => Ok(None),
             }
         }
+        // A stuck elimination's type is its result at its scrutinee: its ambient goal as written, or its motive opened at the indices the scrutinee's type carries and then at the scrutinee. The elimination was checked against that result where it was typed, so this reads what typing established, as a variable's type is read off its binder; the kernel's lookup reads the same.
+        Subterm::Match(Match { head, result, .. }) => {
+            let mut indices = Vec::new();
+            if let MatchResult::Family(motive) = result {
+                if motive.arity() > 1 {
+                    let Some(head_type) = synth_neutral(context, binders, opened, head)? else {
+                        return Ok(None);
+                    };
+                    if let Subterm::InductType(InductType {
+                        indices: actual, ..
+                    }) = &*reduce_forced(context, head_type)?
+                    {
+                        indices.clone_from(actual);
+                    }
+                }
+                if indices.len() + 1 != motive.arity() {
+                    return Ok(None);
+                }
+            }
+
+            Ok(Some(result.of(head, &indices)))
+        }
         _ => Ok(None),
     }
 }
@@ -237,10 +318,11 @@ pub(crate) fn synth_neutral(
 /// Recover the parameter types of an application from the head's function type, opening each successive entry with the actual arguments (dependency). `None` when the head's type is unavailable or not a `FuncType` of matching arity — callers fall back to comparing arguments at `Term::type_ground()`.
 pub(super) fn apply_param_types(
     context: &mut Context,
+    binders: &Binders,
     head: &Term,
     arguments: &[Argument],
 ) -> Result<Option<Vec<Term>>, ReduceError> {
-    let Some(head_type) = synth_neutral(context, &[], head)? else {
+    let Some(head_type) = synth_neutral(context, binders, &[], head)? else {
         return Ok(None);
     };
 

@@ -5,7 +5,7 @@ mod tests;
 
 use {
     super::probe_level_fallback,
-    crate::{Context, reduce, reduce_forced, synth_neutral},
+    crate::{Binders, Context, reduce, reduce_forced, synth_neutral},
     curios_core::{
         Bound, Free, FuncType, InductType, Intrinsic, Level, MatchResult, ReduceError, StructType,
         Subterm, Term, TupleType,
@@ -26,23 +26,34 @@ impl Sort {
     }
 
     /// [`Sort::of`] under the binders a surrounding telescope walk has opened. The `opened` scope is threaded rather than installed on the [`Context`], because assuming a binder bumps the mutation stamp that validates the memoization caches, and a walk that assumed at every binder would invalidate them.
-    ///
-    /// Remembered per type while the context stands as it did (`Caches::sorts`), for a type with no loose index that names none of `opened`: such a type's sort is a function of the context alone, and probing here, at every field and domain the rules below ask about, is what makes a record of two fields at one type cost one classification.
     pub(crate) fn of_in(
         context: &mut Context,
         opened: &mut Vec<(Free, Term)>,
         type_: &Term,
     ) -> Result<Sort, ReduceError> {
+        Sort::of_under(context, &Binders::default(), opened, type_)
+    }
+
+    /// [`Sort::of_in`] for a type a conversion problem holds, under the binders the problem is posed under ([`Binders`]) as well.
+    ///
+    /// Remembered per type while the context stands as it did (`Caches::sorts`), for a type with no loose index that names none of `opened` and none of `binders`: such a type's sort is a function of the context alone, and probing here, at every field and domain the rules below ask about, is what makes a record of two fields at one type cost one classification. A type that names a problem's binder is classified each time: read where the binders are not in hand it falls to the conservative answer, and that answer remembered would be served to a reading that has them, a verdict following the order of questions.
+    pub(crate) fn of_under(
+        context: &mut Context,
+        binders: &Binders,
+        opened: &mut Vec<(Free, Term)>,
+        type_: &Term,
+    ) -> Result<Sort, ReduceError> {
         let remembered = type_.reach() == 0
             && (!type_.has_local_free()
-                || opened
+                || (opened
                     .iter()
-                    .all(|(binder, _)| !type_.mentions_free(binder)));
+                    .all(|(binder, _)| !type_.mentions_free(binder))
+                    && !binders.names_one_in(type_)));
         if remembered && let Some(sort) = context.cached_sort(type_) {
             return Ok(sort);
         }
 
-        let sort = Sort::classify_in(context, opened, type_)?;
+        let sort = Sort::classify_under(context, binders, opened, type_)?;
         if remembered {
             context.record_sort(type_.clone(), sort.clone());
         }
@@ -50,9 +61,10 @@ impl Sort {
         Ok(sort)
     }
 
-    /// [`Sort::of_in`]'s rules, one per type former.
-    fn classify_in(
+    /// [`Sort::of_under`]'s rules, one per type former.
+    fn classify_under(
         context: &mut Context,
+        binders: &Binders,
         opened: &mut Vec<(Free, Term)>,
         type_: &Term,
     ) -> Result<Sort, ReduceError> {
@@ -93,7 +105,7 @@ impl Sort {
                 let mut levels = Vec::new();
                 let mark = opened.len();
                 telescope.walk_producing(|_, hint, ty| {
-                    if let Sort::Type(level) = Sort::of_in(context, opened, &ty)? {
+                    if let Sort::Type(level) = Sort::of_under(context, binders, opened, &ty)? {
                         levels.push(level);
                     }
                     let binder = context.fresh(hint);
@@ -126,7 +138,7 @@ impl Sort {
                 | Intrinsic::ChannelType(element)
                 | Intrinsic::IoType(element) => {
                     let element = element.clone();
-                    match Sort::of_in(context, opened, &element)? {
+                    match Sort::of_under(context, binders, opened, &element)? {
                         Sort::Type(level) => Sort::Type(level),
                         // A list, cell, or description of proofs is not itself a proposition — it has length, identity, or an effect, so its inhabitants are distinguishable and proof irrelevance does not apply. It lands at `Type` instead, and `Prop : Type 0`. For `Io` that is what keeps sort-driven erasure from dropping a description of a proof and its host effect with it.
                         Sort::Prop => Sort::Type(Level::zero()),
@@ -250,7 +262,7 @@ impl Sort {
                 let mut domains = Vec::new();
                 let mark = opened.len();
                 let (_, output) = telescope.walk_producing(|_, hint, domain| {
-                    if let Sort::Type(level) = Sort::of_in(context, opened, &domain)? {
+                    if let Sort::Type(level) = Sort::of_under(context, binders, opened, &domain)? {
                         domains.push(level);
                     }
                     let binder = context.fresh(hint);
@@ -258,7 +270,7 @@ impl Sort {
                     opened.push((binder, domain));
                     Ok(variable)
                 })?;
-                let sort = match Sort::of_in(context, opened, &output)? {
+                let sort = match Sort::of_under(context, binders, opened, &output)? {
                     Sort::Prop => Sort::Prop,
                     Sort::Type(output) => {
                         domains.push(output);
@@ -281,7 +293,7 @@ impl Sort {
             },
             // A neutral type (a `Prop` hypothesis, or a stuck family application): its synthesized type is its sort.
             Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) => {
-                match synth_neutral(context, opened, &reduced)? {
+                match synth_neutral(context, binders, opened, &reduced)? {
                     Some(sort) => Sort::from_universe(context, &sort)?,
                     None => {
                         probe_level_fallback("neutral type unsynthesizable", &reduced);
@@ -290,7 +302,9 @@ impl Sort {
                 }
             }
             Subterm::Type(level) => Sort::Type(level.succ().map_err(ReduceError::Universe)?),
-            Subterm::Instance(instance) => Sort::of_in(context, opened, &instance.head.to_term())?,
+            Subterm::Instance(instance) => {
+                Sort::of_under(context, binders, opened, &instance.head.to_term())?
+            }
             // An unsolved metavariable whose type is `Prop` is a proposition whatever it is solved to, so the answer is exact rather than conservative: `@P: Prop, @p: P` makes `p` a bound before `P` is known. A solved one never reaches here, since reduction substitutes its solution, and `Prop` is closed, so the spine an occurrence carries changes nothing. At any other type an unsolved one keeps the fallback below, since its level is what the solution will say.
             Subterm::Metavar(metavar) => {
                 let result = context

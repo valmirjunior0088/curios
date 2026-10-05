@@ -17,6 +17,9 @@ struct Box(A: Type): pub Type { held: A }
 induct Zero: (Nat) -> pub Prop
 | zero(): (0)
 end
+induct Both: pub Type
+| both(first: Holds(0 < 10), second: Holds(0 < 10))
+end
 let through(n: Nat, e: Zero(n)) -> Nat = match e | zero() => 1 end;
 let into(n: Nat, e: Zero(n)) -> (Nat) -> Nat = match e: (_, _) => (Nat) -> Nat | zero() => (x: Nat) => x end;
 let pair(n: Nat, e: Zero(n)) -> {Nat, Nat} = match e: (_, _) => {Nat, Nat} | zero() => (1, 2) end;
@@ -304,6 +307,34 @@ pub(super) const SEEDS: &[Seeds] = &[
             "pair(n, p)",
             "pair(n, q)",
         )],
+    },
+    // A tuple literal's component in a stuck elimination's arm is a child no type reaches, and what a type directs there is read off the type a lookup gives both sides: a stuck elimination's by its result, a constructor's value's by its declaration, and a binder the arm opened by its constructor's field. Each seed sets its pair there, and projects the two eliminations at the number beside it.
+    Seeds {
+        type_: "Nat",
+        binders: "c: Bool, d: Bool, t: Both, p: Holds(0 < 10), q: Holds(0 < 10), e: Eq()(0, 0), m: Nat, n: Nat",
+        compound: None,
+        seeds: &[
+            held(
+                "irrelevance where a lookup types a stuck elimination",
+                "(match c: (_) => {Holds(0 < 10), Nat} | true => (match d: (_) => Holds(0 < 10) | true => p | false => q end, 1) | false => (p, 2) end).1",
+                "(match c: (_) => {Holds(0 < 10), Nat} | true => (p, 1) | false => (p, 2) end).1",
+            ),
+            held(
+                "irrelevance where a lookup types a constructor's value",
+                "(match c: (_) => {Eq()(0, 0), Nat} | true => (Eq/refl(), 1) | false => (e, 2) end).1",
+                "(match c: (_) => {Eq()(0, 0), Nat} | true => (e, 1) | false => (e, 2) end).1",
+            ),
+            held(
+                "irrelevance between two proofs an arm binds",
+                "(match t: (_) => {Holds(0 < 10), Nat} | both(x, y) => (x, 1) end).1",
+                "(match t: (_) => {Holds(0 < 10), Nat} | both(x, y) => (y, 1) end).1",
+            ),
+            miss(
+                "relevance at an arm's tuple component",
+                "(match c: (_) => {Nat, Nat} | true => (m, 1) | false => (m, 2) end).1",
+                "(match c: (_) => {Nat, Nat} | true => (n, 1) | false => (m, 2) end).1",
+            ),
+        ],
     },
     Seeds {
         type_: "Bounded",

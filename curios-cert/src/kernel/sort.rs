@@ -20,8 +20,8 @@ mod tests;
 use {
     super::{Counted, Error, Kernel, infer_type, whnf},
     curios_core::{
-        Bound, Field, FuncType, Instance, InstanceHead, Intrinsic, Level, MatchResult, Proj,
-        Reducer, StructType, Subterm, Telescope, Term, TupleType,
+        Bound, Field, FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, Match,
+        MatchResult, Proj, Reducer, StructType, Subterm, Telescope, Term, TupleType,
         instantiate_universe_levels_scoped,
     },
 };
@@ -299,7 +299,7 @@ pub(crate) fn sort_of_intrinsic(kernel: &mut Kernel, intrinsic: &Intrinsic) -> R
 
 /// The type of a neutral spine, read off binders and declarations without checking anything.
 ///
-/// `None` where the spine is not one this can type — a shape whose type would need a judgment rather than a lookup. Callers turn that into a refusal; nothing here guesses.
+/// A stuck elimination is a neutral too, and its type is the result it states. `None` where the spine is not one this can type — a shape whose type would need a judgment rather than a lookup. Callers turn that into a refusal; nothing here guesses.
 ///
 /// This must never reach [`convert`](super::convert()): it is what breaks the cycle between conversion and inference, and it stays broken only because every arm below is a lookup, a substitution, or a reduction.
 pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<Term>, Error> {
@@ -391,6 +391,29 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
                 }
                 _ => Ok(None),
             }
+        }
+
+        // A stuck elimination's type is its result at its scrutinee: its ambient goal as written, or its motive opened at the indices the scrutinee's type carries and then at the scrutinee. The elimination was checked against that result where it was typed, and the motive under its real binders (`check_motive`), so this reads what typing established, as a variable's type is read off its binder.
+        Subterm::Match(Match { head, result, .. }) => {
+            let mut indices = Vec::new();
+            if let MatchResult::Family(motive) = result {
+                if motive.arity() > 1 {
+                    let Some(head_type) = synth_neutral(kernel, head)? else {
+                        return Ok(None);
+                    };
+                    if let Subterm::InductType(InductType {
+                        indices: actual, ..
+                    }) = &*kernel.reduce_forced(head_type)?
+                    {
+                        indices.clone_from(actual);
+                    }
+                }
+                if indices.len() + 1 != motive.arity() {
+                    return Ok(None);
+                }
+            }
+
+            Ok(Some(result.of(head, &indices)))
         }
 
         _ => Ok(None),

@@ -1,11 +1,11 @@
 //! The payload each [`Subterm`] variant carries: one named type per shape, so a variant's fields are read by name at every construction and match rather than by position.
 //!
-//! Nothing here judges or reduces. The types are plain records with the binder discipline spelled in their field types — a [`Scope`] where one binder is bound, a [`Telescope`] where several are — and the handful of impls are the operations that discipline forces: [`RecGroup`]'s member arithmetic, [`InductArm`]'s and [`LetBinding`]'s accessors, and the two hand-written [`TupleType`] instances that make an anonymous product compare by its fields.
+//! Nothing here judges or reduces. The types are plain records with the binder discipline spelled in their field types — a [`Scope`] where one binder is bound, a [`Telescope`] where several are — and the handful of impls are the operations that discipline forces: [`RecGroup`]'s member arithmetic, [`InductArm`]'s and [`LetBinding`]'s accessors, the types a [`Carrier`]'s cons arm binds, and the two hand-written [`TupleType`] instances that make an anonymous product compare by its fields.
 
 use {
     crate::{
-        Atom, Bound, CalleeId, Free, Global, Label, Level, Many, Scope, Subterm, Telescope, Term,
-        Three, Two, UniverseContext, UniverseError, UniverseScheme, Var, Visit,
+        Atom, Bound, CalleeId, Free, Global, Intrinsic, Label, Level, Many, Scope, Subterm,
+        Telescope, Term, Three, Two, UniverseContext, UniverseError, UniverseScheme, Var, Visit,
         instantiate_universe_levels_scoped, project_erased_universes,
     },
     curios_num::{Grain, Natural},
@@ -517,6 +517,26 @@ pub enum Carrier {
         empty_case: Term,
         cons_case: Scope<Three>,
     },
+}
+
+impl Carrier {
+    /// The types a cons arm's binders before its induction hypothesis are opened at, in order: the predecessor for `Nat`, and the peeled generator and then the tail for a packed sequence and for a list. The tail is the last.
+    pub fn cons_domains(&self) -> Vec<Term> {
+        match self {
+            Carrier::Nat { .. } => vec![Term::intrinsic(Intrinsic::NatType)],
+            Carrier::Bin { grain, .. } => vec![
+                Term::intrinsic(match grain {
+                    Grain::X => Intrinsic::ByteType,
+                    Grain::B => Intrinsic::BoolType,
+                }),
+                Term::intrinsic(Intrinsic::BinType(*grain)),
+            ],
+            Carrier::List { elem, .. } => vec![
+                elem.clone(),
+                Term::intrinsic(Intrinsic::ListType(elem.clone())),
+            ],
+        }
+    }
 }
 
 /// A straight-line block of `let` bindings: `bindings` in written order, then a `tail` continuation in scope of all of them. Binding `i` is stored under the `i` binders before it — its `type_` and `value` may reference bindings `0..i` but never binding `i` itself; a `let` is non-recursive, self- and mutual reference is [`Rec`]'s job. A whole run of source `let`s is one `Let`, not a nest, so every walk over it (`traverse`/`reach`/`reduce`/ `erase`/`elaborate`) is a loop over `bindings` rather than one native stack frame per binding — which is what keeps a long local `let` sequence from overflowing the stack.

@@ -18,11 +18,11 @@
 //!
 //! A goal decided with no goal in progress assumed is a fact, and its verdict is kept for as long as what it read of the scope stands (`Memos`): two terms that are equal graphs built apart reach each pair of their nodes along every path, and remembered by pair each is compared once. A goal whose deciding met one in progress is not kept, whichever way it went: accepted, it may hold only by the assumption; refused, it may have been refused by a classing that left two atoms apart because their comparison was in progress. `History::assumed` counts both, and a verdict is filed only where the count stood still across it. The sets are plain, with no closure taken over accepted pairs, for the reason Lean's kernel gives for its own: a closure's result would depend on the order goals were met in.
 //!
-//! # Where this is incomplete, and why that is the safe direction
+//! # Where a child has no type of its own, and why refusing is the safe direction
 //!
-//! One concession remains. Every child position without a typed context — a stuck elimination's scrutinee, and its motive and arms under their opaque binders, and a projection's or an instance's head — is compared at `Type` rather than at the types its head assigns. What a type directs between two neutrals is asked there of the type a lookup gives both (`by_their_own_type`) — that it is a proposition, or has one inhabitant by its shape — so what is forfeited is what no lookup reads: a side that is a stuck elimination or a constructor's value, and a binder a motive or an arm opened, which is assumed at a stand-in. Eta by a literal needs no type — a lambda, a tuple literal or a struct literal against a neutral inhabitant states what the type would have, and fires there as it does anywhere (`function_eta`, `tuple_eta`, `struct_eta`), which is what keeps conversion a congruence under such a child for every pair the elaborator's own eta, fired by the literal, accepts. Each forfeit is a place where the kernel may reject a term the elaborator accepted. Everything else is typed. An application spine's arguments compare at the telescope its head carries — a variable, a universe instance of one or a projection of a `rec` group, and an application or a record projection of one, read by `synth_neutral` as a lookup rather than an inference (`compare_arguments`) — and a head that names no type, a stuck elimination, still grounds. An inductive type-former's arguments compare at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P)(p, q)` at a `Prop`-sorted `P` convert with `Eq(@P)(p, p)`; a struct type's, a struct literal's and a constructor's parameters at the declaration's outer telescope (`params_at`); and a struct literal's fields and a constructor's payload at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read, so two `Str`s built from different proofs of the same bytes are one value. Two applications of one definition are compared by their spines *before* either is unfolded and ahead of eta by the goal's type, as the elaborator compares them (`one_definition_by_its_spines`), which keeps the two calls folded: unfolded first a proof argument lands in a stuck scrutinee, where the type a lookup gives it is what equates it, and after eta the pair is no application of the definition at its head. Two instances of one `rec` group are decided by their levels under the item's hypotheses (`rec_instances`), the equation `induct_type_args` and the instance arms apply, and two different groups are refused.
+//! Some child positions are handed no type: a stuck elimination's scrutinee, its motive and its arms' bodies, and a projection's or an instance's head are compared at `Type`. Nothing a type directs is forfeited there. Between two sides a lookup types — a neutral by its head, a stuck elimination by its result at its scrutinee, a constructor's value by its declaration (`looked_up`) — what the type directs is read off it (`by_their_own_type`): that it is a proposition, or has one inhabitant by its shape. Eta by a literal needs no type — a lambda, a tuple literal or a struct literal against a neutral inhabitant states what the type would have, and fires there as it does anywhere (`function_eta`, `tuple_eta`, `struct_eta`) — and two literals are compared by their parts. And a binder a motive or an arm opens is opened at the type its position gives it, read off the scrutinee's looked-up type (`motive_binders`, `ground_cases`), so a lookup under it reads what the elimination's typing read. The stand-in `Type` is what such a binder keeps where no lookup types the scrutinee, which no checked term reaches and which can only refuse. Everything else is typed. An application spine's arguments compare at the telescope its head carries — a variable, a universe instance of one or a projection of a `rec` group, and an application or a record projection of one, and a stuck elimination, each read by `synth_neutral` as a lookup rather than an inference (`compare_arguments`). An inductive type-former's arguments compare at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P)(p, q)` at a `Prop`-sorted `P` convert with `Eq(@P)(p, p)`; a struct type's, a struct literal's and a constructor's parameters at the declaration's outer telescope (`params_at`); and a struct literal's fields and a constructor's payload at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read, so two `Str`s built from different proofs of the same bytes are one value. Two applications of one definition are compared by their spines *before* either is unfolded and ahead of eta by the goal's type, as the elaborator compares them (`one_definition_by_its_spines`), which keeps the two calls folded: unfolded first a proof argument lands in a stuck scrutinee, where the type a lookup gives it is what equates it, and after eta the pair is no application of the definition at its head. Two instances of one `rec` group are decided by their levels under the item's hypotheses (`rec_instances`), the equation `induct_type_args` and the instance arms apply, and two different groups are refused.
 //!
-//! That direction is deliberate. An incomplete conversion refuses programs; an unsound one admits them. A refusal is visible — it is a disagreement between the two checkers, which is precisely the signal this kernel exists to produce — whereas an over-eager acceptance is silent and is exactly what a second opinion is supposed to catch. Every one of these can be strengthened later against a real program that needs it, and none can be strengthened back from having been wrong.
+//! Where a lookup gives no type, the direction is deliberate. An incomplete conversion refuses programs; an unsound one admits them. A refusal is visible — it is a disagreement between the two checkers, which is precisely the signal this kernel exists to produce — whereas an over-eager acceptance is silent and is exactly what a second opinion is supposed to catch. A refusal can be strengthened later against a real program that needs it, and none can be strengthened back from having been wrong.
 
 mod intrinsic;
 use intrinsic::*;
@@ -40,8 +40,8 @@ use {
     super::{Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
     curios_core::{
         Apply, Bound, Carrier, Cases, Cost, Cursor, Field, Func, FuncType, Global, InductType,
-        Instance, InstanceHead, Level, Lockstep, Many, MatchResult, Probe, Proj, Reducer, Scope,
-        Step, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two,
+        Instance, InstanceHead, Level, Lockstep, Many, Match, MatchResult, Probe, Proj, Reducer,
+        Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant,
         instantiate_universe_levels_scoped,
     },
     curios_utilities::recurse,
@@ -222,24 +222,19 @@ fn by_the_type(
 
 /// What a type directs between two terms, asked of the type a lookup reads where the position handed none: two terms a lookup types at one type that has one inhabitant are equal.
 ///
-/// **It is the typed rule, with the type looked up.** Conversion is asked about two terms of one type, and here that is checked rather than assumed: each side's type is read by [`synth_neutral`], a lookup, a substitution and a reduction, and the two are compared. Without it a stuck elimination's scrutinee is compared at `Type`, two eliminations of two proofs of one proposition stay apart, and two calls of one definition that differ in a proof part wherever reduction unfolds them before the pair is posed, their verdict following a spelling.
+/// **It is the typed rule, with the type looked up.** Conversion is asked about two terms of one type, and here that is checked rather than assumed: each side's type is read by [`looked_up`], a lookup, a substitution and a reduction, and the two are compared. Without it a stuck elimination's scrutinee is compared at `Type`, two eliminations of two proofs of one proposition stay apart, and two calls of one definition that differ in a proof part wherever reduction unfolds them before the pair is posed, their verdict following a spelling.
 ///
 /// **It is all a type directs between two neutrals.** Eta between two neutrals decides nothing [`one_inhabitant`] does not: where a field or the codomain has a second inhabitant, the two sides' projections or applications are equal only where their heads are, which the structural rules decide. So nothing is forfeited by reading the type and expanding neither side, and expanding is what cannot be done here. Eta at a looked-up type would apply or project both sides; the projections' heads are compared with no type, this lookup would type them again, and the goal it posed would be one already in progress, which the recurrence rule assumes: any two variables at a record type would convert. Reading the type poses no goal about the two sides, so nothing can recur.
 ///
-/// A binder opened at the stand-in reads as the stand-in, a sort, so nothing fires for a proof that is one: the refusing direction. A lookup that fails for any reason but a spent budget is no answer, and the pair goes on untyped.
+/// A lookup that fails for any reason but a spent budget is no answer, and the pair goes on untyped; so does a pair one side of which is a lambda or a tuple literal, which is decided by its parts.
 fn by_their_own_type(
     kernel: &mut Kernel,
     history: &mut History,
     this: &Term,
     that: &Term,
 ) -> Result<bool, Error> {
-    if !names_a_type(this) || !names_a_type(that) {
-        return Ok(false);
-    }
-    let (Some(this_type), Some(that_type)) = (
-        synth_neutral(kernel, this).probed()?.flatten(),
-        synth_neutral(kernel, that).probed()?.flatten(),
-    ) else {
+    let (Some(this_type), Some(that_type)) = (looked_up(kernel, this)?, looked_up(kernel, that)?)
+    else {
         return Ok(false);
     };
 
@@ -251,6 +246,39 @@ fn by_their_own_type(
             &this_type,
             &that_type,
         )?)
+}
+
+/// The type a lookup reads for one side of a pair its position handed no type: a neutral's, off its head's binder or declaration ([`synth_neutral`]), and a constructor's value's off its declaration — the family at the value's parameters and at the index targets its constructor states for its payload. Each is a lookup and a substitution, and neither reaches conversion. `None` where the side is neither, or its declaration refuses the occurrence.
+fn looked_up(kernel: &mut Kernel, term: &Term) -> Result<Option<Term>, Error> {
+    match &**term {
+        Subterm::Variant(Variant {
+            name,
+            universes,
+            params,
+            tag,
+            payload,
+        }) => {
+            let Ok(at) = kernel.induct_at_params(name, universes, params) else {
+                return Ok(None);
+            };
+            let Some(signature) = at.signature(tag) else {
+                return Ok(None);
+            };
+            if signature.len() != payload.len() {
+                return Ok(None);
+            }
+            let targets = signature.open(&payload.iter().collect::<Vec<_>>());
+
+            Ok(Some(Term::induct_type_at(
+                *name,
+                universes.clone(),
+                params.clone(),
+                targets,
+            )))
+        }
+        _ if names_a_type(term) => Ok(synth_neutral(kernel, term).probed()?.flatten()),
+        _ => Ok(None),
+    }
 }
 
 /// Whether `type_` has one inhabitant by its shape: a proposition, the empty Σ, a Σ or a nominal struct whose every field's type has one, or a function type whose codomain has one.
@@ -454,7 +482,7 @@ fn eta_tuple(
 
 /// Compare two weak-head normal forms by their heads, at `at`, the goal's type in weak-head normal form.
 ///
-/// Children with no type the head determines are compared at `Type` through [`ground`]. That is a weaker comparison than a typed one — it fires no eta, and reads what a type directs off a lookup alone ([`by_their_own_type`]) — so it can only reject where a typed comparison would have accepted. See the module documentation on incompleteness.
+/// Children with no type the head determines are compared at `Type` through [`ground`], which fires no eta and reads what a type directs off a lookup ([`by_their_own_type`]). See the module documentation on a child with no type of its own.
 ///
 /// The goal's type is read by one rule, a literal's eta, and only to refuse it ([`another_former`]).
 fn structural(
@@ -719,22 +747,28 @@ fn structural(
 
         // A stuck elimination. Everything is compared up to conversion: the scrutinee because that is the position an unfolding cycle travels through, and the motive and arms because a delta-unfolded caller and its spelled-out twin differ exactly there — `step(c, st)` against `step(at(cons(c, t), 0, _), st)` reduces to two stuck matches whose arms are convertible but not identical. The shape stays rigid: tags, plicities, arity, and default presence must agree exactly, because two eliminations enumerating different constructors compute differently on some input even where they agree on this one.
         (Subterm::Match(left), Subterm::Match(right)) => {
-            Ok(ground(kernel, history, &left.head, &right.head)?
-                && match (&left.result, &right.result) {
-                    (MatchResult::Family(this), MatchResult::Family(that)) => {
-                        ground_scope(kernel, history, this, that)?
-                    }
-                    (MatchResult::Ambient(this), MatchResult::Ambient(that)) => {
-                        ground(kernel, history, this, that)?
-                    }
-                    // One source match reaches both forms: written over a variable it is an ambient goal, and that goal substituted at an expression — a definition's `match o` unfolded at `o := f(x)` — meets the family the same match elaborates to where it was written over `f(x)`. A family at the scrutinee itself *is* the elimination's type, so the two results compare at that instance.
-                    (MatchResult::Family(motive), MatchResult::Ambient(goal))
-                    | (MatchResult::Ambient(goal), MatchResult::Family(motive)) => {
-                        let at_head = family_at_head(kernel, motive, &left.head)?;
-                        ground(kernel, history, &at_head, goal)?
-                    }
+            if !ground(kernel, history, &left.head, &right.head)? {
+                return Ok(false);
+            }
+            // The two scrutinees are one term by now, so one type is theirs: what the motive's and the arms' binders are opened at.
+            let scrutinee = scrutinee_type(kernel, &left.head)?;
+
+            let results = match (&left.result, &right.result) {
+                (MatchResult::Family(this), MatchResult::Family(that)) => {
+                    compare_motives(kernel, history, scrutinee.as_ref(), this, that)?
                 }
-                && ground_cases(kernel, history, &left.cases, &right.cases)?)
+                (MatchResult::Ambient(this), MatchResult::Ambient(that)) => {
+                    ground(kernel, history, this, that)?
+                }
+                // One source match reaches both forms: written over a variable it is an ambient goal, and that goal substituted at an expression — a definition's `match o` unfolded at `o := f(x)` — meets the family the same match elaborates to where it was written over `f(x)`. A family at the scrutinee itself *is* the elimination's type, so the two results compare at that instance.
+                (MatchResult::Family(motive), MatchResult::Ambient(goal))
+                | (MatchResult::Ambient(goal), MatchResult::Family(motive)) => {
+                    let at_head = family_at_head(kernel, motive, &left.head)?;
+                    ground(kernel, history, &at_head, goal)?
+                }
+            };
+
+            Ok(results && ground_cases(kernel, history, left, scrutinee.as_ref(), &right.cases)?)
         }
 
         // A folded recursive call, and a `rec` that forcing declined to unfold. Two projections of one group are compared up to their universe instance, the levels decided by entailment; two different groups are refused here without a retry, because the interesting case — a cycle that unfolds without disagreeing — is handled by the recurrence rule above, not here. A `rec` whose tail computes something is *not* this case, and falls through to the delta step below.
@@ -1062,7 +1096,94 @@ fn family_at_head(kernel: &mut Kernel, motive: &Scope<Many>, head: &Term) -> Res
     Ok(motive.open(&refs))
 }
 
-/// Open both scopes at one shared set of opaque binders and compare the bodies at `Type`. The binders are assumed at the stand-in `Type`, which `Sort::of` reads like any recorded type: it is the least informative answer it can give a binder, so the stand-in can only lose an accepting rule, never gain one — `irrelevance_tests`' `a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does` holds that, and the one exception it records.
+/// The type of two eliminations' scrutinee, in weak-head normal form, read by a lookup once the two are one term. `None` where no lookup types it, which leaves the motive's and the arms' binders at the stand-in.
+fn scrutinee_type(kernel: &mut Kernel, head: &Term) -> Result<Option<Term>, Error> {
+    let Some(type_) = looked_up(kernel, head)? else {
+        return Ok(None);
+    };
+
+    Ok(kernel.reduce_forced(type_).probed()?)
+}
+
+/// A binder opened at `type_`.
+fn assumed(kernel: &mut Kernel, type_: &Term) -> Term {
+    let binder = kernel.fresh(None);
+    kernel.assume(&binder, type_);
+
+    Term::free_var(&binder)
+}
+
+/// Two motives under one shared set of binders, each at the type its position gives it ([`motive_binders`]), their bodies compared at `Type`, which is what two types are compared at.
+fn compare_motives(
+    kernel: &mut Kernel,
+    history: &mut History,
+    scrutinee: Option<&Term>,
+    this: &Scope<Many>,
+    that: &Scope<Many>,
+) -> Result<bool, Error> {
+    if this.arity() != that.arity() {
+        return Ok(false);
+    }
+
+    kernel.scoped(|kernel| {
+        let binders = motive_binders(kernel, scrutinee, this.arity());
+        let refs = binders.iter().collect::<Vec<_>>();
+
+        ground(kernel, history, &this.open(&refs), &that.open(&refs))
+    })
+}
+
+/// A motive's binders, opened as `check_motive` opens them where it types the motive: the family's index domains and then the scrutinee at the family over those binders, or the scrutinee's own type for a carrier that has no index. Where no lookup typed the scrutinee, or the motive binds another count than its family states, they are opened at the stand-in ([`opaque_binders`]).
+fn motive_binders(kernel: &mut Kernel, scrutinee: Option<&Term>, arity: usize) -> Vec<Term> {
+    match scrutinee.map(|type_| (type_, &**type_)) {
+        Some((_, Subterm::InductType(family))) => {
+            let indices = match kernel.induct_at(family) {
+                Ok(at) => at.indices(),
+                Err(_) => return opaque_binders(kernel, arity),
+            };
+            if indices.len() + 1 != arity {
+                return opaque_binders(kernel, arity);
+            }
+
+            let mut opened = Vec::with_capacity(arity);
+            let mut cursor = indices.cursor();
+            while let Some((_, domain)) = cursor.entry() {
+                let binder = kernel.advance_assumed(&mut cursor, &domain);
+                opened.push(Term::free_var(&binder));
+            }
+            let over_them = Term::induct_type_at(
+                family.name,
+                family.universes.clone(),
+                family.params.clone(),
+                opened.clone(),
+            );
+            opened.push(assumed(kernel, &over_them));
+
+            opened
+        }
+        Some((type_, _)) if arity == 1 => vec![assumed(kernel, type_)],
+        _ => opaque_binders(kernel, arity),
+    }
+}
+
+/// A cons arm's binders: the carrier's own domains, and the hypothesis at the result at the tail, which only a one-binder family states. An ambient goal types no hypothesis and its arm reads none, so that binder is opened at the stand-in.
+fn cons_binders(kernel: &mut Kernel, carrier: &Carrier, result: &MatchResult) -> Vec<Term> {
+    let mut opened = carrier
+        .cons_domains()
+        .iter()
+        .map(|domain| assumed(kernel, domain))
+        .collect::<Vec<_>>();
+    let tail = opened.last().expect("a cons arm binds its tail");
+    let hypothesis = match result {
+        MatchResult::Family(motive) if motive.arity() == 1 => motive.open(&[tail]),
+        _ => Term::type_ground(),
+    };
+    opened.push(assumed(kernel, &hypothesis));
+
+    opened
+}
+
+/// Open both scopes at one shared set of opaque binders and compare the bodies at `Type`: what an arm keeps where no lookup typed its scrutinee, or its family states no constructor of its arity. The binders are assumed at the stand-in `Type`, which `Sort::of` reads like any recorded type: it is the least informative answer it can give a binder, so the stand-in can only lose an accepting rule, never gain one — `irrelevance_tests`' `a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does` holds that, and the one exception it records.
 fn ground_scope(
     kernel: &mut Kernel,
     history: &mut History,
@@ -1080,59 +1201,23 @@ fn ground_scope(
     })
 }
 
-/// [`ground_scope`] at the free-monoid cons arities, whose scopes carry their binder count in the type.
-fn ground_scope_two(
-    kernel: &mut Kernel,
-    history: &mut History,
-    this: &Scope<Two>,
-    that: &Scope<Two>,
-) -> Result<bool, Error> {
-    kernel.scoped(|kernel| {
-        let o = opaque_binders(kernel, 2);
-        ground(
-            kernel,
-            history,
-            &this.open(&[&o[0], &o[1]]),
-            &that.open(&[&o[0], &o[1]]),
-        )
-    })
-}
-
-fn ground_scope_three(
-    kernel: &mut Kernel,
-    history: &mut History,
-    this: &Scope<Three>,
-    that: &Scope<Three>,
-) -> Result<bool, Error> {
-    kernel.scoped(|kernel| {
-        let o = opaque_binders(kernel, 3);
-        ground(
-            kernel,
-            history,
-            &this.open(&[&o[0], &o[1], &o[2]]),
-            &that.open(&[&o[0], &o[1], &o[2]]),
-        )
-    })
-}
-
 fn opaque_binders(kernel: &mut Kernel, arity: usize) -> Vec<Term> {
     (0..arity)
-        .map(|_| {
-            let binder = kernel.fresh(None);
-            kernel.assume(&binder, &Term::type_ground());
-            Term::free_var(&binder)
-        })
+        .map(|_| assumed(kernel, &Term::type_ground()))
         .collect()
 }
 
 /// Compare two stuck eliminations' arm sets up to conversion, shape held rigid: matching variants, tags in the same canonical order, equal plicities, and agreeing default presence.
+///
+/// Each arm's binders are opened at the types its position gives them, read off the left elimination, whose scrutinee and result the right one's have just been compared with: a constructor's arm at its telescope over the scrutinee's parameters, and a cons arm at its carrier's domains and its hypothesis ([`cons_binders`]). So a proof an arm binds is one where the arm's body is compared, as it is where the arm was typed. Where no lookup typed the scrutinee, or its family states no constructor of the arm's arity, the arm keeps the stand-in ([`ground_scope`]). An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
 fn ground_cases(
     kernel: &mut Kernel,
     history: &mut History,
-    this: &Cases,
+    left: &Match,
+    scrutinee: Option<&Term>,
     that: &Cases,
 ) -> Result<bool, Error> {
-    match (this, that) {
+    match (&left.cases, that) {
         (
             Cases::Bool {
                 false_case: this_false,
@@ -1180,11 +1265,40 @@ fn ground_cases(
             if this_cases.len() != that_cases.len() {
                 return Ok(false);
             }
+            let family = match scrutinee.map(|type_| &**type_) {
+                Some(Subterm::InductType(family)) => kernel.induct_at(family).ok(),
+                _ => None,
+            };
             for ((this_tag, this_arm), (that_tag, that_arm)) in this_cases.iter().zip(that_cases) {
                 if this_tag != that_tag
                     || this_arm.plicities() != that_arm.plicities()
-                    || !ground_scope(kernel, history, &this_arm.body, &that_arm.body)?
+                    || this_arm.body.arity() != that_arm.body.arity()
                 {
+                    return Ok(false);
+                }
+                let signature = family
+                    .as_ref()
+                    .and_then(|at| at.signature(this_tag))
+                    .filter(|signature| signature.len() == this_arm.body.arity());
+                let converge = match signature {
+                    Some(signature) => kernel.scoped(|kernel| {
+                        let mut cursor = signature.cursor();
+                        while let Some((_, field)) = cursor.entry() {
+                            kernel.advance_assumed(&mut cursor, &field);
+                        }
+                        let payload = cursor.into_args();
+                        let refs = payload.iter().collect::<Vec<_>>();
+
+                        ground(
+                            kernel,
+                            history,
+                            &this_arm.body.open(&refs),
+                            &that_arm.body.open(&refs),
+                        )
+                    })?,
+                    None => ground_scope(kernel, history, &this_arm.body, &that_arm.body)?,
+                };
+                if !converge {
                     return Ok(false);
                 }
             }
@@ -1209,7 +1323,15 @@ fn ground_cases(
                         cons_case: that_cons,
                     },
                 ) => Ok(ground(kernel, history, this_empty, that_empty)?
-                    && ground_scope_two(kernel, history, this_cons, that_cons)?),
+                    && kernel.scoped(|kernel| {
+                        let o = cons_binders(kernel, this, &left.result);
+                        ground(
+                            kernel,
+                            history,
+                            &this_cons.open(&[&o[0], &o[1]]),
+                            &that_cons.open(&[&o[0], &o[1]]),
+                        )
+                    })?),
                 (
                     Carrier::Bin {
                         grain: this_grain,
@@ -1223,7 +1345,15 @@ fn ground_cases(
                     },
                 ) => Ok(this_grain == that_grain
                     && ground(kernel, history, this_empty, that_empty)?
-                    && ground_scope_three(kernel, history, this_cons, that_cons)?),
+                    && kernel.scoped(|kernel| {
+                        let o = cons_binders(kernel, this, &left.result);
+                        ground(
+                            kernel,
+                            history,
+                            &this_cons.open(&[&o[0], &o[1], &o[2]]),
+                            &that_cons.open(&[&o[0], &o[1], &o[2]]),
+                        )
+                    })?),
                 (
                     Carrier::List {
                         elem: this_elem,
@@ -1237,7 +1367,15 @@ fn ground_cases(
                     },
                 ) => Ok(ground(kernel, history, this_elem, that_elem)?
                     && ground(kernel, history, this_empty, that_empty)?
-                    && ground_scope_three(kernel, history, this_cons, that_cons)?),
+                    && kernel.scoped(|kernel| {
+                        let o = cons_binders(kernel, this, &left.result);
+                        ground(
+                            kernel,
+                            history,
+                            &this_cons.open(&[&o[0], &o[1], &o[2]]),
+                            &that_cons.open(&[&o[0], &o[1], &o[2]]),
+                        )
+                    })?),
                 _ => Ok(false),
             }
         }
@@ -1305,7 +1443,7 @@ fn compare_field_telescope(
 ///
 /// **The head's type is the typed context this position was said to lack.** A variable head carries one — it was assumed or declared at it — so the domains of its function type are what an argument inhabits, exactly as a struct's field telescope is what a field inhabits ([`compare_fields_at`]). Comparing there is what lets eta and irrelevance fire: `f(p)` against `f(q)` for two proofs of one proposition is discharged without reading either.
 ///
-/// **What still grounds.** A universe instance of a variable and a `rec` member carry a telescope as a variable does, and so does an application or a projection of one, whose type is the head's opened at its arguments or read off at its field (see [`spine_telescope`]); a stuck elimination hands back none here, and neither does a variable whose recorded type is not a function of this arity: a binder opened by [`ground_scope`] carries the stand-in `Type`, so a comparison under one keeps the untyped concession it was opened with, and `a_grounded_motive_binder_carries_the_stand_in_rather_than_its_real_type` is the fixture that says so. Reading the type is a lookup rather than an inference, so a spine costs what it did.
+/// **What still grounds.** A universe instance of a variable, a `rec` member and a stuck elimination carry a telescope as a variable does, and so does an application or a projection of one, whose type is the head's opened at its arguments or read off at its field (see [`spine_telescope`]). A head whose looked-up type is no function of this arity hands back none, and its arguments are compared at `Type`, where a lookup reads what their own types direct. Reading the type is a lookup rather than an inference, so a spine costs what it did.
 ///
 /// The justification is the callers': every pair compared here is the corresponding children of two parents already shown convertible, so the two heads have one type and one telescope to assign.
 fn compare_arguments(
@@ -1326,7 +1464,7 @@ fn compare_arguments(
 
 /// The function type a head was bound or declared at, opened for `arity` arguments — or `None` where the head names no type, or names one that is not a function of that arity.
 ///
-/// The heads that name one are a variable, a universe instance of one and a projection of a `rec` group, whose member type the group carries, and an application or a record projection of such a head ([`names_a_type`]) — each read by [`synth_neutral`], which is a lookup, a substitution and a reduction, and never reaches conversion. They are the heads the elaborator types a spine under, so `f(n)(p)` against `f(n)(q)` for two proofs meets irrelevance in both checkers or in neither. A stuck elimination stays untyped here: its type is its motive's to state, and neither checker reads it.
+/// The heads that name one are a variable, a universe instance of one, a projection of a `rec` group, whose member type the group carries, and a stuck elimination, whose result states it, and an application or a record projection of such a head ([`names_a_type`]) — each read by [`synth_neutral`], which is a lookup, a substitution and a reduction, and never reaches conversion. They are the heads the elaborator types a spine under, so `f(n)(p)` against `f(n)(q)` for two proofs meets irrelevance in both checkers or in neither.
 fn spine_telescope(
     kernel: &mut Kernel,
     head: &Term,
@@ -1351,11 +1489,11 @@ fn spine_telescope(
     }
 }
 
-/// Whether `head` is a spine [`synth_neutral`] reads a type for: a variable, a universe instance of one or a projection of a `rec` group, under any run of applications and projections.
+/// Whether `head` is a spine [`synth_neutral`] reads a type for: a variable, a universe instance of one, a projection of a `rec` group or a stuck elimination, under any run of applications and projections.
 fn names_a_type(head: &Term) -> bool {
     match &**head {
         Subterm::Var(var) => var.as_free().is_some(),
-        Subterm::Instance(_) => true,
+        Subterm::Instance(_) | Subterm::Match(_) => true,
         Subterm::Apply(apply) => names_a_type(&apply.head),
         Subterm::Proj(proj) => names_a_type(&proj.head),
         _ => head.as_rec_proj().is_some(),
@@ -1412,7 +1550,7 @@ fn compare_fields_at<B: Bound>(
     Ok(true)
 }
 
-/// [`compare`] at `Type`, for a child position whose type its head does not hand us. Weaker than a typed comparison, never stronger: see the module documentation on incompleteness.
+/// [`compare`] at `Type`, for a child position whose type its head does not hand us: see the module documentation on a child with no type of its own.
 fn ground(
     kernel: &mut Kernel,
     history: &mut History,

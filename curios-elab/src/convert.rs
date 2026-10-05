@@ -37,10 +37,10 @@ use {
     crate::{Declined, metavar_origins, metavar_spines, zonk_solved_term_metas},
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Free, Func, FuncType,
-        InductType, Instance, InstanceHead, Intrinsic, Level, Lockstep, Many, Match, MatchResult,
-        Metavar, Probe, Proj, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm,
-        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, Variant, past_bool_cap,
+        Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Level, Lockstep, Many,
+        Match, MatchResult, Metavar, Probe, Proj, Rec, ReduceError, Scope, Step, Struct,
+        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, Variant, past_bool_cap,
     },
     curios_utilities::Plicity,
     std::{
@@ -99,8 +99,19 @@ pub(crate) fn convert_outcome(
     this: &Term,
     that: &Term,
 ) -> Result<Outcome, ReduceError> {
+    convert_under(context, &Binders::default(), type_, this, that)
+}
+
+/// [`convert_outcome`] for a pair posed under `binders`: a comparison conversion makes of its own while it is under binders it opened, and the retry of a goal it surrendered.
+pub(crate) fn convert_under(
+    context: &mut Context,
+    binders: &Binders,
+    type_: &Term,
+    this: &Term,
+    that: &Term,
+) -> Result<Outcome, ReduceError> {
     curios_profile::profile!("convert::outcome");
-    Convert::new(type_.clone(), this.clone(), that.clone()).outcome(context)
+    Convert::new(binders.clone(), type_.clone(), this.clone(), that.clone()).outcome(context)
 }
 
 /// The verdict of a conversion run, distinguishing "provably unequal" from "not yet decidable".
@@ -120,12 +131,22 @@ pub(crate) struct Problem {
     pub type_: Term,
     pub this: Term,
     pub that: Term,
+    /// The binders this problem is posed under, which a retry of it is posed under too.
+    pub binders: Binders,
+}
+
+/// A problem as the recurrence rule keys it: its type and its sides, every label this conversion minted renamed to a placeholder ([`Convert::history_key`]). The binders it is posed under are no part of it — a label's type is fixed where the label is minted, so two problems equal up to their labels are one problem.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct Recurrence {
+    type_: Term,
+    this: Term,
+    that: Term,
 }
 
 #[derive(Debug)]
 pub(crate) struct Convert {
     // Structural problems already seen, stored as `history_key` fingerprints. A recurring problem is assumed to hold — the coinductive reading: a genuine cycle leaves nothing but itself to check, and any finite disagreement surfaces on a sibling problem first. The one disagreement no sibling surfaces is a universe level inside a `rec` group, so a recurrence whose sides agree modulo levels is a level question rather than a cycle: `level_question` identifies, refuses, or parks it, and never assumes it — at the recurrence, and at the applied head before any unfolding can decide the pair past its levels.
-    history: HashSet<Problem>,
+    history: HashSet<Recurrence>,
     pending: VecDeque<Problem>,
     // Constraints postponed because a side is flexible but not yet solvable (flex–flex with distinct heads, or a candidate carrying an unsolved metavariable). Retried whenever a fresh solution lands.
     blocked: Vec<Problem>,
@@ -136,6 +157,8 @@ pub(crate) struct Convert {
     // The opening labels this conversion minted to compare under binders (label → mint sequence), and the placeholder pool `history_key` renames them into. Fingerprints only — the problems actually processed keep their globally-unique labels.
     minted: HashMap<Free, usize>,
     placeholders: Vec<Term>,
+    // The binders the problem in hand is posed under, and those this step has opened since: what a problem enqueued now is posed under.
+    binders: Binders,
 }
 
 impl Convert {
@@ -160,35 +183,132 @@ impl Convert {
         Ok(true)
     }
 
-    fn new(type_: Term, this: Term, that: Term) -> Self {
+    fn new(binders: Binders, type_: Term, this: Term, that: Term) -> Self {
         Self {
             history: HashSet::new(),
-            pending: VecDeque::from([Problem { type_, this, that }]),
+            pending: VecDeque::from([Problem {
+                type_,
+                this,
+                that,
+                binders: binders.clone(),
+            }]),
             blocked: Vec::new(),
             progress: false,
             declined: None,
             minted: HashMap::new(),
             placeholders: Vec::new(),
+            binders,
         }
     }
 
-    fn in_history(&mut self, problem: &Problem) -> bool {
-        !self.history.insert(problem.clone())
+    fn in_history(&mut self, key: &Recurrence) -> bool {
+        !self.history.insert(key.clone())
     }
 
-    /// Mint a fresh label for opening scopes under structural comparison, recording it for `history_key`. The label itself is ordinary entropy freshness — recording changes nothing about the terms conversion builds.
-    fn opening(&mut self, context: &mut Context, hint: Option<&str>) -> Free {
+    /// Mint a fresh label for opening scopes under structural comparison, recording it for `history_key`, and the type its position gives it, where it gives one, for the lookups that meet the label under it ([`Binders`]). The label itself is ordinary entropy freshness — recording changes nothing about the terms conversion builds.
+    fn opening(&mut self, context: &mut Context, hint: Option<&str>, type_: Option<Term>) -> Free {
         let binder = context.fresh(hint);
         self.minted.insert(binder, self.minted.len());
+        if let Some(type_) = type_ {
+            self.binders = self.binders.opening(binder, type_);
+        }
         binder
+    }
+
+    /// Open every binder of `telescope` at a fresh label recorded at its domain, and hand back the labels and what the telescope ends in.
+    fn open_telescope<B: Bound>(
+        &mut self,
+        context: &mut Context,
+        telescope: &Telescope<B>,
+    ) -> Result<(Vec<Term>, B), ReduceError> {
+        telescope.walk_producing(|_, _, domain| {
+            Ok(Term::free_var(&self.opening(context, None, Some(domain))))
+        })
+    }
+
+    /// A motive's binders, opened as elaboration opens them where it types the motive: the family's index domains and then the scrutinee at the family over those binders, or the scrutinee's own type for a carrier that has no index. Where no lookup typed the scrutinee, or the motive binds another count than its family states, they carry no type. The kernel opens a motive's the same way.
+    fn motive_binders(
+        &mut self,
+        context: &mut Context,
+        scrutinee: Option<&Term>,
+        arity: usize,
+    ) -> Result<Vec<Term>, ReduceError> {
+        let untyped = |convert: &mut Self, context: &mut Context| {
+            (0..arity)
+                .map(|_| Term::free_var(&convert.opening(context, None, None)))
+                .collect::<Vec<_>>()
+        };
+
+        match scrutinee.map(|type_| (type_, &**type_)) {
+            Some((
+                _,
+                Subterm::InductType(InductType {
+                    name,
+                    universes,
+                    params,
+                    ..
+                }),
+            )) => {
+                let Some(declaration) = declared_at(context, name, universes, params)? else {
+                    return Ok(untyped(self, context));
+                };
+                let indices = declaration.indices_at(params);
+                if indices.len() + 1 != arity {
+                    return Ok(untyped(self, context));
+                }
+
+                let (mut opened, ()) = self.open_telescope(context, &indices)?;
+                let over_them =
+                    Term::induct_type_at(*name, universes.clone(), params.clone(), opened.clone());
+                opened.push(Term::free_var(&self.opening(
+                    context,
+                    None,
+                    Some(over_them),
+                )));
+
+                Ok(opened)
+            }
+            Some((type_, _)) if arity == 1 => Ok(vec![Term::free_var(&self.opening(
+                context,
+                None,
+                Some(type_.clone()),
+            ))]),
+            _ => Ok(untyped(self, context)),
+        }
+    }
+
+    /// A cons arm's binders: the carrier's own domains, and the hypothesis at the result at the tail, which only a one-binder family states. An ambient goal types no hypothesis and its arm reads none, so that binder carries no type.
+    fn cons_binders(
+        &mut self,
+        context: &mut Context,
+        domains: Vec<Term>,
+        result: &MatchResult,
+    ) -> Vec<Term> {
+        let mut opened = domains
+            .into_iter()
+            .map(|domain| Term::free_var(&self.opening(context, None, Some(domain))))
+            .collect::<Vec<_>>();
+        let tail = opened.last().expect("a cons arm binds its tail");
+        let hypothesis = match result {
+            MatchResult::Family(motive) if motive.arity() == 1 => Some(motive.open(&[tail])),
+            _ => None,
+        };
+        opened.push(Term::free_var(&self.opening(context, None, hypothesis)));
+
+        opened
     }
 
     /// The history fingerprint of a problem: every opening label this conversion minted (see [`Convert::opening`]) is renamed to a per-run placeholder, in mint order. A comparison recurring under later openings — the same match arm re-opened at a fresh binder on each round of an unfolding cycle — differs from its previous visit only in that entropy, so the rename collapses the rounds onto one `history` entry and the recurrence rule in `drain` fires: a cycle with no finite disagreement is definitional equality, as for equirecursive types. Genuinely growing comparisons never recur and still spend the budget.
     ///
     /// A pure key transform: the problem conversion processes keeps its globally-unique labels, so no freshness contract (`capture` inversion, `abstract_occurrences`) is involved — the placeholders are themselves entropy-fresh and never enter a real term.
-    fn history_key(&mut self, context: &mut Context, problem: &Problem) -> Problem {
+    fn history_key(&mut self, context: &mut Context, problem: &Problem) -> Recurrence {
+        let as_written = || Recurrence {
+            type_: problem.type_.clone(),
+            this: problem.this.clone(),
+            that: problem.that.clone(),
+        };
         if self.minted.is_empty() {
-            return problem.clone();
+            return as_written();
         }
 
         let mut free = problem.type_.free_vars();
@@ -200,7 +320,7 @@ impl Convert {
             .filter_map(|name| self.minted.get(name).map(|&seq| (seq, name)))
             .collect::<Vec<_>>();
         if present.is_empty() {
-            return problem.clone();
+            return as_written();
         }
 
         // Mint order, so a recurrence — whose structural steps minted their openings in the same relative order — maps positionally onto the same placeholders.
@@ -212,7 +332,7 @@ impl Convert {
         }
         let refs = self.placeholders[..labels.len()].iter().collect::<Vec<_>>();
 
-        Problem {
+        Recurrence {
             type_: problem.type_.capture(&labels).release(&refs),
             this: problem.this.capture(&labels).release(&refs),
             that: problem.that.capture(&labels).release(&refs),
@@ -220,23 +340,28 @@ impl Convert {
     }
 
     pub(crate) fn enqueue(&mut self, type_: Term, this: Term, that: Term) {
-        self.pending.push_back(Problem { type_, this, that });
+        self.pending.push_back(Problem {
+            type_,
+            this,
+            that,
+            binders: self.binders.clone(),
+        });
     }
 
-    /// Enqueue the bodies of two arity-3 cons arms (`Bin`/`List`) for comparison, opened under shared fresh binders for `(head, tail, ih)`.
+    /// Enqueue the bodies of two arity-3 cons arms (`Bin`/`List`) for comparison, opened under shared fresh binders for `(head, tail, ih)` at the carrier's domains and the hypothesis ([`Convert::cons_binders`]).
     fn compare_cons_three(
         &mut self,
         context: &mut Context,
+        domains: Vec<Term>,
+        result: &MatchResult,
         this: Scope<Three>,
         that: Scope<Three>,
     ) {
-        let a = Term::free_var(&self.opening(context, None));
-        let b = Term::free_var(&self.opening(context, None));
-        let c = Term::free_var(&self.opening(context, None));
+        let o = self.cons_binders(context, domains, result);
         self.enqueue(
             Term::type_ground(),
-            this.open(&[&a, &b, &c]),
-            that.open(&[&a, &b, &c]),
+            this.open(&[&o[0], &o[1], &o[2]]),
+            that.open(&[&o[0], &o[1], &o[2]]),
         );
     }
 
@@ -261,8 +386,9 @@ impl Convert {
         loop {
             match walk.step() {
                 Step::Entries { left, right, .. } => {
+                    let domain = left.clone();
                     self.enqueue(Term::type_ground(), left, right);
-                    walk.advance_fresh(|hint| self.opening(context, hint));
+                    walk.advance_fresh(|hint| self.opening(context, hint, Some(domain.clone())));
                 }
                 Step::Bodies(left, right) => {
                     self.enqueue(Term::type_ground(), left, right);
@@ -273,23 +399,21 @@ impl Convert {
         }
     }
 
-    /// η-frame at a function type of arity `n`: mint `n` fresh argument variables (recorded openings — see [`Convert::history_key`]) and recover the codomain after instantiating them, falling back to `Type` when `type_` does not reduce to a function type.
+    /// η-frame at a lambda: open its telescope at fresh argument variables (recorded openings — see [`Convert::history_key`]), each at the domain the lambda annotates it with, and recover the codomain from `type_` after instantiating them, falling back to `Type` when `type_` does not reduce to a function type. Hands back the variables, the lambda's body at them, and that codomain.
     fn func_eta_args(
         &mut self,
         context: &mut Context,
-        n: usize,
+        telescope: &Telescope<Term>,
         type_: Term,
-    ) -> Result<(Vec<Term>, Term), ReduceError> {
-        let ys: Vec<Term> = (0..n)
-            .map(|_| Term::free_var(&self.opening(context, None)))
-            .collect();
+    ) -> Result<(Vec<Term>, Term, Term), ReduceError> {
+        let (ys, body) = self.open_telescope(context, telescope)?;
         let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 telescope.open(&ys.iter().collect::<Vec<_>>())
             }
             _ => Term::type_ground(),
         };
-        Ok((ys, output_type))
+        Ok((ys, body, output_type))
     }
 
     fn compare_func(
@@ -303,13 +427,9 @@ impl Convert {
         if this.plicities() != that.plicities() {
             return Ok(false);
         }
-        let (ys, output_type) = self.func_eta_args(context, this.telescope.len(), type_)?;
+        let (ys, this_body, output_type) = self.func_eta_args(context, &this.telescope, type_)?;
         let y_refs = ys.iter().collect::<Vec<_>>();
-        self.enqueue(
-            output_type,
-            this.telescope.open(&y_refs),
-            that.telescope.open(&y_refs),
-        );
+        self.enqueue(output_type, this_body, that.telescope.open(&y_refs));
 
         Ok(true)
     }
@@ -338,7 +458,7 @@ impl Convert {
         }
 
         // Recover the real argument types from the head's function type so η fires at the correct type (e.g. a unit-typed argument is compared at `()`, where proof irrelevance makes distinct neutrals equal). Falls back to `Term::type_ground()` when the head's type is unavailable.
-        let param_types = apply_param_types(context, &this.head, &this.arguments)?;
+        let param_types = apply_param_types(context, &self.binders, &this.head, &this.arguments)?;
 
         self.enqueue(Term::type_ground(), this.head, that.head);
 
@@ -364,6 +484,7 @@ impl Convert {
     /// Nor may accepting a pair depend on whether the definition is universe-polymorphic, which one mentioning `Eq` is: its occurrences are instances of one global at levels minted per occurrence. So an instance head qualifies too, on two conditions that keep it an acceptance rather than a new way to solve. Nothing in either spine may be flexible: the solving this rule exists for stays with monomorphic heads, where it was measured, because extending it to every polymorphic function and type former changes what `/std` elaborates to. And the heads are identified *after* the spines, because identifying two instances commits their levels equal — a commitment made only once the spines have earned it, never on the strength of an attempt that falls through, which is the reading `documentation/design/soundness/elimination/case-equations-and-their-key.md` gives a speculative match. The kernel compares the same pair the same way, before it unfolds either side.
     fn compare_same_global_apply(
         context: &mut Context,
+        binders: &Binders,
         this_term: &Term,
         that_term: &Term,
     ) -> Result<bool, ReduceError> {
@@ -407,11 +528,17 @@ impl Convert {
             return Ok(false);
         }
 
-        let param_types = apply_param_types(context, &this.head, &this.arguments)?;
+        let param_types = apply_param_types(context, binders, &this.head, &this.arguments)?;
         let mark = context.solution_mark();
         let mut converts = polymorphic
             || matches!(
-                convert_outcome(context, &Term::type_ground(), &this.head, &that.head)?,
+                convert_under(
+                    context,
+                    binders,
+                    &Term::type_ground(),
+                    &this.head,
+                    &that.head
+                )?,
                 Outcome::Converts
             );
         for (index, (a, b)) in this.params().zip(that.params()).enumerate() {
@@ -423,7 +550,7 @@ impl Convert {
                 .and_then(|types| types.get(index).cloned())
                 .unwrap_or_else(Term::type_ground);
             converts = matches!(
-                convert_outcome(context, &param_type, a, b)?,
+                convert_under(context, binders, &param_type, a, b)?,
                 Outcome::Converts
             );
         }
@@ -451,7 +578,7 @@ impl Convert {
             return Ok(false);
         }
 
-        let param_types = apply_param_types(context, &this.head, &this.arguments)?;
+        let param_types = apply_param_types(context, &self.binders, &this.head, &this.arguments)?;
         let this_params = this.params().cloned().collect::<Vec<_>>();
         let that_params = that.params().cloned().collect::<Vec<_>>();
         let mut blocked = false;
@@ -460,7 +587,7 @@ impl Convert {
                 .as_ref()
                 .and_then(|types| types.get(index).cloned())
                 .unwrap_or_else(Term::type_ground);
-            match convert_outcome(context, &param_type, a, b)? {
+            match convert_under(context, &self.binders, &param_type, a, b)? {
                 Outcome::Converts => {}
                 Outcome::Blocked(_) => blocked = true,
                 Outcome::Mismatch(_) => {
@@ -495,8 +622,9 @@ impl Convert {
         }
         let mut walk = Lockstep::new(&this.telescope, &that.telescope);
         while let Step::Entries { left, right, .. } = walk.step() {
+            let field = left.clone();
             self.enqueue(Term::type_ground(), left, right);
-            walk.advance_fresh(|hint| self.opening(context, hint));
+            walk.advance_fresh(|hint| self.opening(context, hint, Some(field.clone())));
         }
         Ok(true)
     }
@@ -724,6 +852,7 @@ impl Convert {
         Ok(true)
     }
 
+    /// Two stuck eliminations, part by part. The motive's and the arms' binders are opened at the types their position gives them, read off the left elimination's scrutinee, which the right one's is posed as equal to: a constructor's arm at its telescope over the scrutinee's parameters, a cons arm at its carrier's domains and its hypothesis ([`Convert::cons_binders`]), a motive's as [`Convert::motive_binders`] opens them. So a proof an arm binds is one where the arm's body is compared, as it is in the kernel. Where no lookup types the scrutinee, or its family states no constructor of the arm's arity, the binders carry no type. An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
     fn compare_match(
         &mut self,
         context: &mut Context,
@@ -731,6 +860,11 @@ impl Convert {
         that: Match,
     ) -> Result<bool, ReduceError> {
         let head = this.head.clone();
+        let result = this.result.clone();
+        let scrutinee = match looked_up(context, &self.binders, &head)? {
+            Some(type_) => Some(reduce_forced(context, type_)?),
+            None => None,
+        };
         self.enqueue(Term::type_ground(), this.head, that.head);
 
         // A motive's arity is part of its shape — 1 except for an annotated inductive-match motive (pattern binders then the scrutinee); different arities are structurally distinct. One source match reaches both forms: written over a variable it is an ambient goal, and that goal substituted at an expression — a definition's `match o` unfolded at `o := f(x)` — meets the family the same match elaborates to where it was written over `f(x)`. A family at the scrutinee itself *is* the elimination's type, so the two results compare at that instance.
@@ -740,9 +874,8 @@ impl Convert {
                     return Ok(false);
                 }
 
-                let labels = (0..this_motive.arity())
-                    .map(|_| Term::free_var(&self.opening(context, None)))
-                    .collect::<Vec<_>>();
+                let labels =
+                    self.motive_binders(context, scrutinee.as_ref(), this_motive.arity())?;
                 let label_refs = labels.iter().collect::<Vec<_>>();
                 self.enqueue(
                     Term::type_ground(),
@@ -819,6 +952,16 @@ impl Convert {
                 if this_cases.len() != that_cases.len() {
                     return Ok(false);
                 }
+                let family = match scrutinee.as_deref() {
+                    Some(Subterm::InductType(InductType {
+                        name,
+                        universes,
+                        params,
+                        ..
+                    })) => declared_at(context, name, universes, params)?
+                        .map(|declaration| (declaration, params.clone())),
+                    _ => None,
+                };
 
                 for ((this_atom, this_scope), (that_atom, that_scope)) in
                     this_cases.into_iter().zip(that_cases)
@@ -827,9 +970,18 @@ impl Convert {
                         return Ok(false);
                     }
 
-                    let binders = (0..this_scope.arity())
-                        .map(|_| Term::free_var(&self.opening(context, None)))
-                        .collect::<Vec<_>>();
+                    let signature = family
+                        .as_ref()
+                        .and_then(|(declaration, params)| {
+                            declaration.instantiate(&this_atom, params)
+                        })
+                        .filter(|signature| signature.len() == this_scope.arity());
+                    let binders = match signature {
+                        Some(signature) => self.open_telescope(context, &signature)?.0,
+                        None => (0..this_scope.arity())
+                            .map(|_| Term::free_var(&self.opening(context, None, None)))
+                            .collect::<Vec<_>>(),
+                    };
                     let binder_refs = binders.iter().collect::<Vec<_>>();
 
                     self.enqueue(
@@ -855,68 +1007,71 @@ impl Convert {
                 Cases::FreeMonoid {
                     carrier: that_carrier,
                 },
-            ) => match (this_carrier, that_carrier) {
-                (
-                    Carrier::Nat {
-                        empty_case: this_empty,
-                        cons_case: this_cons,
-                    },
-                    Carrier::Nat {
-                        empty_case: that_empty,
-                        cons_case: that_cons,
-                    },
-                ) => {
-                    self.enqueue(Term::type_ground(), this_empty, that_empty);
+            ) => {
+                let domains = this_carrier.cons_domains();
 
-                    // The unary cons arm binds (predecessor, ih); open both under shared fresh binders and compare the bodies.
-                    let a = Term::free_var(&self.opening(context, None));
-                    let b = Term::free_var(&self.opening(context, None));
-                    self.enqueue(
-                        Term::type_ground(),
-                        this_cons.open(&[&a, &b]),
-                        that_cons.open(&[&a, &b]),
-                    );
+                match (this_carrier, that_carrier) {
+                    (
+                        Carrier::Nat {
+                            empty_case: this_empty,
+                            cons_case: this_cons,
+                        },
+                        Carrier::Nat {
+                            empty_case: that_empty,
+                            cons_case: that_cons,
+                        },
+                    ) => {
+                        self.enqueue(Term::type_ground(), this_empty, that_empty);
 
-                    Ok(true)
+                        // The unary cons arm binds (predecessor, ih); open both under shared fresh binders and compare the bodies.
+                        let o = self.cons_binders(context, domains, &result);
+                        self.enqueue(
+                            Term::type_ground(),
+                            this_cons.open(&[&o[0], &o[1]]),
+                            that_cons.open(&[&o[0], &o[1]]),
+                        );
+
+                        Ok(true)
+                    }
+                    (
+                        Carrier::Bin {
+                            empty_case: this_empty,
+                            cons_case: this_cons,
+                            ..
+                        },
+                        Carrier::Bin {
+                            empty_case: that_empty,
+                            cons_case: that_cons,
+                            ..
+                        },
+                    ) => {
+                        self.enqueue(Term::type_ground(), this_empty, that_empty);
+                        self.compare_cons_three(context, domains, &result, this_cons, that_cons);
+
+                        Ok(true)
+                    }
+                    (
+                        Carrier::List {
+                            elem: this_elem,
+                            empty_case: this_empty,
+                            cons_case: this_cons,
+                        },
+                        Carrier::List {
+                            elem: that_elem,
+                            empty_case: that_empty,
+                            cons_case: that_cons,
+                        },
+                    ) => {
+                        self.enqueue(Term::type_ground(), this_elem, that_elem);
+                        self.enqueue(Term::type_ground(), this_empty, that_empty);
+                        self.compare_cons_three(context, domains, &result, this_cons, that_cons);
+
+                        Ok(true)
+                    }
+                    // Distinct carriers are never structurally convertible.
+                    _ => Ok(false),
                 }
-                (
-                    Carrier::Bin {
-                        empty_case: this_empty,
-                        cons_case: this_cons,
-                        ..
-                    },
-                    Carrier::Bin {
-                        empty_case: that_empty,
-                        cons_case: that_cons,
-                        ..
-                    },
-                ) => {
-                    self.enqueue(Term::type_ground(), this_empty, that_empty);
-                    self.compare_cons_three(context, this_cons, that_cons);
-
-                    Ok(true)
-                }
-                (
-                    Carrier::List {
-                        elem: this_elem,
-                        empty_case: this_empty,
-                        cons_case: this_cons,
-                    },
-                    Carrier::List {
-                        elem: that_elem,
-                        empty_case: that_empty,
-                        cons_case: that_cons,
-                    },
-                ) => {
-                    self.enqueue(Term::type_ground(), this_elem, that_elem);
-                    self.enqueue(Term::type_ground(), this_empty, that_empty);
-                    self.compare_cons_three(context, this_cons, that_cons);
-
-                    Ok(true)
-                }
-                // Distinct carriers are never structurally convertible.
-                _ => Ok(false),
-            },
+            }
 
             // Unreachable under the dispatch guard (same `Cases` discriminant); distinct kinds are never structurally convertible.
             _ => Ok(false),
@@ -933,11 +1088,15 @@ impl Convert {
             return Ok(false);
         }
 
-        let labels = (0..this.group.length())
-            .map(|_| Term::free_var(&self.opening(context, None)))
+        let names = (0..this.group.length())
+            .map(|_| self.opening(context, None, None))
             .collect::<Vec<_>>();
-
+        let labels = names.iter().map(Term::free_var).collect::<Vec<_>>();
         let labels = labels.iter().collect::<Vec<_>>();
+        // Each member at the type the group states for it, which may name every member.
+        for (name, member) in names.iter().zip(this.group.iter()) {
+            self.binders = self.binders.opening(*name, member.type_.open(&labels));
+        }
 
         for (this_member, that_member) in this.group.iter().zip(that.group.iter()) {
             let (this_type, this_body) = (&this_member.type_, &this_member.body);
@@ -975,8 +1134,7 @@ impl Convert {
             return Ok(false);
         }
 
-        let (ys, output_type) = self.func_eta_args(context, func.telescope.len(), type_)?;
-        let body = func.telescope.open(&ys.iter().collect::<Vec<_>>());
+        let (ys, body, output_type) = self.func_eta_args(context, &func.telescope, type_)?;
         self.enqueue(output_type, body, Term::apply(other, ys));
         Ok(true)
     }
@@ -1056,12 +1214,7 @@ impl Convert {
     ) -> Result<bool, ReduceError> {
         match Term::unwrap_or_clone(reduce(context, type_)?) {
             Subterm::FuncType(FuncType { telescope, .. }) => {
-                let n = telescope.len();
-                let ys: Vec<Term> = (0..n)
-                    .map(|_| Term::free_var(&self.opening(context, None)))
-                    .collect();
-                let y_refs: Vec<&Term> = ys.iter().collect();
-                let output_type = telescope.open(&y_refs);
+                let (ys, output_type) = self.open_telescope(context, &telescope)?;
                 self.enqueue(
                     output_type,
                     Term::apply(this, ys.clone()),
@@ -1634,8 +1787,15 @@ impl Convert {
     /// Drain `pending` once. Returns `Ok(false)` on a hard mismatch; `Ok(true)` when the queue empties (possibly leaving `blocked` constraints).
     fn drain(&mut self, context: &mut Context) -> Result<bool, ReduceError> {
         curios_profile::profile!("convert::drain");
-        while let Some(Problem { type_, this, that }) = self.dequeue(context)? {
+        while let Some(Problem {
+            type_,
+            this,
+            that,
+            binders: posed,
+        }) = self.dequeue(context)?
+        {
             self.declined = None;
+            self.binders = posed.clone();
             // Reflexivity needs no evaluation. In particular, do not force an identical folded recursive computation merely because it sits under a strict intrinsic operation.
             if this == that {
                 continue;
@@ -1651,7 +1811,10 @@ impl Convert {
             // Definitional proof irrelevance before either side is reduced, where neither side is flexible — the kernel's order, for the kernel's reason: reducing a proof to discover it equals another proof is work whose answer was already known. Here the work could be unbounded, too: under an arm's case equation a proof can reduce forever, and comparing it with another proof would spend the budget on a goal irrelevance decides outright. A side mentioning a metavariable still goes through the dispatch below, so it is solved against the other side rather than left dangling, and the check after that dispatch covers it.
             if !this.has_metavar()
                 && !that.has_metavar()
-                && matches!(Sort::of(context, &type_)?, Sort::Prop)
+                && matches!(
+                    Sort::of_under(context, &posed, &mut Vec::new(), &type_)?,
+                    Sort::Prop
+                )
             {
                 continue;
             }
@@ -1661,7 +1824,7 @@ impl Convert {
             let that_raw = that.clone();
 
             // Two applications of one global definition are decided by their spines first, on these raw spellings — see `compare_same_global_apply` for why this must precede the reduction below.
-            if Self::compare_same_global_apply(context, &this_raw, &that_raw)? {
+            if Self::compare_same_global_apply(context, &posed, &this_raw, &that_raw)? {
                 continue;
             }
 
@@ -1678,6 +1841,7 @@ impl Convert {
                 type_: type_.clone(),
                 this: this_raw.clone(),
                 that: that_raw.clone(),
+                binders: posed.clone(),
             };
 
             // Flexible heads are dispatched before history and before the structural/η fallthrough — a flexible head must never be η-expanded into a spine.
@@ -1693,7 +1857,10 @@ impl Convert {
                     {
                         let mut entrywise = true;
                         for (a, b) in this_m.spine.iter().zip(that_m.spine.iter()) {
-                            if !convert(context, &Term::type_ground(), a, b)? {
+                            if !matches!(
+                                convert_under(context, &posed, &Term::type_ground(), a, b)?,
+                                Outcome::Converts
+                            ) {
                                 entrywise = false;
                                 break;
                             }
@@ -1739,18 +1906,18 @@ impl Convert {
             }
 
             // Definitional proof irrelevance: any two inhabitants of a strict proposition are convertible. Placed after the metavar dispatch so a flexible side is still solved against the other (a metavar is not left dangling merely because its type is a proposition); a pair with neither side flexible was decided before either was reduced, above.
-            if let Sort::Prop = Sort::of(context, &type_)? {
+            if let Sort::Prop = Sort::of_under(context, &posed, &mut Vec::new(), &type_)? {
                 continue;
             }
 
             // A goal its type decides ahead of every structural rule, as the kernel decides it: the empty Σ, where eta leaves nothing to compare, and two neutrals at a nominal struct with one inhabitant by its shape, which has no eta by its type. Left to the dispatch, two sides of one shape — two stuck matches, two applications — would be compared structurally and refused, and conversion would not be transitive at the type. After the metavariable dispatch, as the check above is, so a flexible side is still solved.
-            if decided_by_its_type(context, &type_, &this, &that)? {
+            if decided_by_its_type(context, &posed, &type_, &this, &that)? {
                 continue;
             }
 
             // Where the problem's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand — a stuck elimination's scrutinee, a projection's head. What a type directs between two neutrals is then asked of the type a lookup gives both sides, as the kernel asks it.
             if matches!(&*type_, Subterm::Type(_) | Subterm::Prop)
-                && by_their_own_type(context, &this, &that)?
+                && by_their_own_type(context, &posed, &this, &that)?
             {
                 continue;
             }
@@ -1759,6 +1926,7 @@ impl Convert {
                 type_: type_.clone(),
                 this: this.clone(),
                 that: that.clone(),
+                binders: posed.clone(),
             };
 
             let key = self.history_key(context, &problem);
@@ -2114,6 +2282,7 @@ fn another_former(context: &Context, type_: &Term) -> bool {
 /// Whether a goal at `type_`, in weak-head normal form, is decided by the type: the empty Σ, where eta leaves nothing to compare, and a nominal struct that has one inhabitant by its shape, between two sides neither of which is its literal. A struct has no eta by its type — a literal opens one, against a neutral and field by field against another — so two neutrals have none to open, and what eta would decide between them is read off the type. A function and a record type with fields are left to eta, which decides the same.
 fn decided_by_its_type(
     context: &mut Context,
+    binders: &Binders,
     type_: &Term,
     this: &Term,
     that: &Term,
@@ -2123,7 +2292,7 @@ fn decided_by_its_type(
     match &**type_ {
         Subterm::TupleType(TupleType { telescope, .. }) => Ok(telescope.is_empty()),
         Subterm::StructType(_) if !literal(this) && !literal(that) => {
-            one_inhabitant(context, type_)
+            one_inhabitant(context, binders, type_)
         }
         _ => Ok(false),
     }
@@ -2131,22 +2300,27 @@ fn decided_by_its_type(
 
 /// What a type directs between two terms, asked of the type a lookup reads where the problem carries none: two terms a lookup types at one type that has one inhabitant are equal. The two looked-up types are compared, so it is the typed rule with its type looked up; `curios-cert`'s rule of the same name says why neither side is expanded — eta between two neutrals decides nothing the type's shape does not, and the goal it would pose at a looked-up type is one the recurrence rule would assume.
 ///
-/// Each side and each looked-up type is read through the solutions already committed, so the verdict does not follow whether an implicit was written or solved. Nothing here solves: one that still mentions an unsolved metavariable is left to the rules that do.
-fn by_their_own_type(context: &mut Context, this: &Term, that: &Term) -> Result<bool, ReduceError> {
+/// Each side and each looked-up type is read through the solutions already committed, so the verdict does not follow whether an implicit was written or solved. Nothing here solves: one that still mentions an unsolved metavariable is left to the rules that do. A side is typed by [`looked_up`], under the binders the problem is posed under.
+fn by_their_own_type(
+    context: &mut Context,
+    binders: &Binders,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, ReduceError> {
     let through = |context: &Context, term: &Term| match term.has_metavar() {
         true => zonk_solved_term_metas(context, term),
         false => term.clone(),
     };
     let (Some(this_type), Some(that_type)) = (
-        synth_neutral(context, &[], this)?,
-        synth_neutral(context, &[], that)?,
+        looked_up(context, binders, this)?,
+        looked_up(context, binders, that)?,
     ) else {
         return Ok(false);
     };
 
     // The type first, and the sides only where it decides: nearly every pair here is two types at a sort, which this leaves at the cost of two lookups.
     let this_type = through(context, &this_type);
-    if this_type.has_metavar() || !one_inhabitant(context, &this_type)? {
+    if this_type.has_metavar() || !one_inhabitant(context, binders, &this_type)? {
         return Ok(false);
     }
     let that_type = through(context, &that_type);
@@ -2158,9 +2332,71 @@ fn by_their_own_type(context: &mut Context, this: &Term, that: &Term) -> Result<
     }
 
     Ok(matches!(
-        convert_outcome(context, &Term::type_ground(), &this_type, &that_type)?,
+        convert_under(
+            context,
+            binders,
+            &Term::type_ground(),
+            &this_type,
+            &that_type
+        )?,
         Outcome::Converts
     ))
+}
+
+/// The type a lookup reads for one side of a pair its position handed no type: a neutral's, off its head's binder or declaration ([`synth_neutral`]), and a constructor's value's off its declaration — the family at the value's parameters and at the index targets its constructor states for its payload. `curios-cert`'s function of the same name reads the same two.
+fn looked_up(
+    context: &mut Context,
+    binders: &Binders,
+    term: &Term,
+) -> Result<Option<Term>, ReduceError> {
+    let Subterm::Variant(Variant {
+        name,
+        universes,
+        params,
+        tag,
+        payload,
+        ..
+    }) = &**term
+    else {
+        return synth_neutral(context, binders, &[], term);
+    };
+    let Some(declaration) = declared_at(context, name, universes, params)? else {
+        return Ok(None);
+    };
+    let Some(signature) = declaration.instantiate(tag, params) else {
+        return Ok(None);
+    };
+    if signature.len() != payload.len() {
+        return Ok(None);
+    }
+    let targets = signature.open(&payload.iter().collect::<Vec<_>>());
+
+    Ok(Some(Term::induct_type_at(
+        *name,
+        universes.clone(),
+        params.clone(),
+        targets,
+    )))
+}
+
+/// `name`'s declaration at one occurrence's universes, where the occurrence states as many parameters as it declares.
+fn declared_at(
+    context: &mut Context,
+    name: &Global,
+    universes: &[Level],
+    params: &[Term],
+) -> Result<Option<InductDecl>, ReduceError> {
+    let Some(declaration) = context.induct_decl(name).cloned() else {
+        return Ok(None);
+    };
+    if declaration.param_count() != params.len() {
+        return Ok(None);
+    }
+
+    context
+        .instantiate_induct_decl_at(&declaration, universes)
+        .map(Some)
+        .map_err(ReduceError::Universe)
 }
 
 /// What a pair of sides is as a level question, once the term metavariables already solved are materialized: [`Identification`]'s four verdicts, plus a pair that could still become a level question once its remaining metavariables are solved.

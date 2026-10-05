@@ -797,6 +797,100 @@ pub(super) const TWO_NEUTRALS_STAY_APART_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_A
         /std/Io/pure(())
         "#;
 
+pub(super) const A_STUCK_ELIMINATION_IS_TYPED_BY_ITS_RESULT_AT_ITS_SCRUTINEE: &str = r#"
+        use /std/{Eq, Nat, Bool};
+
+        let against_a_variable(b : Bool, c : Bool, p : Eq()(0, 0), q : Eq()(0, 0))
+            -> Eq(@(Nat))((match c: (_) => {Eq()(0, 0), Nat}
+                           | true => (match b: (_) => Eq()(0, 0) | true => p | false => q end, 1)
+                           | false => (p, 2) end).1,
+                          (match c: (_) => {Eq()(0, 0), Nat} | true => (p, 1) | false => (p, 2) end).1)
+            = Eq/refl();
+
+        let of_two_scrutinees(a : Bool, b : Bool, c : Bool, p : Eq()(0, 0), q : Eq()(0, 0))
+            -> Eq(@(Nat))((match c: (_) => {Eq()(0, 0), Nat}
+                           | true => (match a: (_) => Eq()(0, 0) | true => p | false => q end, 1)
+                           | false => (p, 2) end).1,
+                          (match c: (_) => {Eq()(0, 0), Nat}
+                           | true => (match b: (_) => Eq()(0, 0) | true => q | false => p end, 1)
+                           | false => (p, 2) end).1)
+            = Eq/refl();
+
+        let at_a_record_of_units(b : Bool, c : Bool, r : {{}, {}}, s : {{}, {}})
+            -> Eq(@(Nat))((match c: (_) => {{{}, {}}, Nat}
+                           | true => (match b: (_) => {{}, {}} | true => r | false => s end, 1)
+                           | false => (r, 2) end).1,
+                          (match c: (_) => {{{}, {}}, Nat} | true => (r, 1) | false => (r, 2) end).1)
+            = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const A_STUCK_ELIMINATION_AT_A_RELEVANT_TYPE_STAYS_APART_FROM_A_VARIABLE: &str = r#"
+        use /std/{Eq, Nat, Bool};
+
+        let apart(b : Bool, c : Bool, m : Nat, n : Nat)
+            -> Eq(@(Nat))((match c: (_) => {Nat, Nat}
+                           | true => (match b: (_) => Nat | true => m | false => n end, 1)
+                           | false => (m, 2) end).1,
+                          (match c: (_) => {Nat, Nat} | true => (m, 1) | false => (m, 2) end).1)
+            = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const A_CONSTRUCTORS_VALUE_IS_TYPED_BY_ITS_DECLARATION: &str = r#"
+        use /std/{Eq, Nat, Bool};
+
+        let a_proof_built_against_one_named(b : Bool, p : Eq()(0, 0))
+            -> Eq(@(Nat))((match b: (_) => {Eq()(0, 0), Nat} | true => (p, 1) | false => (p, 2) end).1,
+                          (match b: (_) => {Eq()(0, 0), Nat} | true => (Eq/refl(), 1) | false => (Eq/refl(), 2) end).1)
+            = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const A_CONSTRUCTORS_VALUE_AT_A_RELEVANT_FAMILY_STAYS_APART_FROM_A_VARIABLE: &str = r#"
+        use /std/{Eq, Nat, Bool, Option};
+
+        let apart(b : Bool, o : Option(Nat))
+            -> Eq(@(Nat))((match b: (_) => {Option(Nat), Nat} | true => (o, 1) | false => (o, 2) end).1,
+                          (match b: (_) => {Option(Nat), Nat} | true => (Option/some(0), 1) | false => (Option/some(0), 2) end).1)
+            = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const AN_ARMS_BINDERS_ARE_OPENED_AT_THE_TYPES_THEIR_CONSTRUCTOR_GIVES_THEM: &str = r#"
+        use /std/{Eq, Nat};
+
+        induct Two : pub Type
+        | two(p : Eq()(0, 0), q : Eq()(0, 0))
+        end
+
+        let either_proof(t : Two)
+            -> Eq(@(Nat))((match t: (_) => {Eq()(0, 0), Nat} | two(p, q) => (p, 1) end).1,
+                          (match t: (_) => {Eq()(0, 0), Nat} | two(p, q) => (q, 1) end).1)
+            = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const TWO_BINDERS_OF_AN_ARM_AT_A_RELEVANT_TYPE_STAY_APART: &str = r#"
+        use /std/{Eq, Nat};
+
+        induct Two : pub Type
+        | two(m : Nat, n : Nat)
+        end
+
+        let apart(t : Two)
+            -> Eq(@(Nat))((match t: (_) => {Nat, Nat} | two(m, n) => (m, 1) end).1,
+                          (match t: (_) => {Nat, Nat} | two(m, n) => (n, 1) end).1)
+            = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
 pub(super) const A_FUNCTION_INTO_A_PROPOSITION_IS_DISCHARGED_BEFORE_ETA: &str = r#"
         use /std/{Eq, Nat};
 

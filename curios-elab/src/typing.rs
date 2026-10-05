@@ -4,8 +4,8 @@ mod tests;
 use {
     super::{
         Context, Error, FrozenFrame, Mode, Outcome, ParkedProblem, ParkedWork, Problem, Sort,
-        callee, convert, convert_outcome, diagnose_embedding, diagnose_shape, elaborate,
-        elaborate_func_settle, embeds, is_monad, monad_shape, normalize, reduce_forced,
+        callee, convert, convert_outcome, convert_under, diagnose_embedding, diagnose_shape,
+        elaborate, elaborate_func_settle, embeds, is_monad, monad_shape, normalize, reduce_forced,
         refold_recs, refused_scrutinee, retry_discharge, retry_match, retry_projection,
         retry_witness, shallow_scrutinee, zonk_solved_term_metas,
     },
@@ -838,7 +838,7 @@ fn retry_one(context: &mut Context, parked: ParkedProblem) -> Result<(), Error> 
 
     let outcome = context.with_retry_frame(&frame, |context| {
         Ok(
-            match convert_outcome(context, &goal.type_, &goal.this, &goal.that)? {
+            match convert_under(context, &goal.binders, &goal.type_, &goal.this, &goal.that)? {
                 Outcome::Converts => Retry::Converts,
                 // Built here, inside the restored frame, rather than at the report below: `display_mismatch` reads the sides through whatever solutions have landed, so they name the actual disagreement rather than the metavariables it arrived wrapped in (see `resolved_for_display`). A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
                 Outcome::Mismatch(declined) => Retry::Mismatch(

@@ -113,6 +113,54 @@ fn two_neutrals_stay_apart_where_a_lookup_gives_them_a_type_with_a_relevant_fiel
     );
 }
 
+// **A lookup types every side a position can hold without inferring, and a binder conversion opens carries its type.** Where a child is compared with no type, each checker read what a type directs off the type a lookup gave both sides, and three sides had none. A stuck elimination, so that one at a proposition met neither a variable at it nor an elimination of another scrutinee: its type is its result at its scrutinee. A constructor's value, so that a proof built by one did not meet a proof a variable names: its type is its declaration's. And a binder an arm opened, which the kernel assumed at a stand-in and the elaborator recorded no type for: it is opened at its constructor's field type, so two proofs an arm binds are one. Each program sets its pair as a tuple literal's component in a stuck elimination's arm, a child no type reaches.
+//
+// The refusal beside each is the same pair at a relevant type.
+#[test]
+fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
+    assert_eq!(
+        run(A_STUCK_ELIMINATION_IS_TYPED_BY_ITS_RESULT_AT_ITS_SCRUTINEE),
+        b"1"
+    );
+}
+
+#[test]
+fn a_stuck_elimination_at_a_relevant_type_stays_apart_from_a_variable() {
+    rejected_by(
+        A_STUCK_ELIMINATION_AT_A_RELEVANT_TYPE_STAYS_APART_FROM_A_VARIABLE,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn a_constructors_value_is_typed_by_its_declaration() {
+    assert_eq!(run(A_CONSTRUCTORS_VALUE_IS_TYPED_BY_ITS_DECLARATION), b"1");
+}
+
+#[test]
+fn a_constructors_value_at_a_relevant_family_stays_apart_from_a_variable() {
+    rejected_by(
+        A_CONSTRUCTORS_VALUE_AT_A_RELEVANT_FAMILY_STAYS_APART_FROM_A_VARIABLE,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
+    assert_eq!(
+        run(AN_ARMS_BINDERS_ARE_OPENED_AT_THE_TYPES_THEIR_CONSTRUCTOR_GIVES_THEM),
+        b"1"
+    );
+}
+
+#[test]
+fn two_binders_of_an_arm_at_a_relevant_type_stay_apart() {
+    rejected_by(
+        TWO_BINDERS_OF_AN_ARM_AT_A_RELEVANT_TYPE_STAY_APART,
+        "type mismatch",
+    );
+}
+
 // The composition the row named as unattacked — "eta at a function type whose codomain is a proposition, where the expansion's body lands at a `Prop`-sorted goal and irrelevance discharges it without comparing anything" — and at Π there is nothing to attack, because the shape cannot arise. `turn` tries irrelevance *before* it dispatches on the goal type's shape, and `func_sort` makes a Π into a proposition a proposition whatever it quantifies over, so the goal is discharged whole at the top and eta never opens a binder at all. Any two such functions are equal, which is this accepting rung.
 //
 // The relevant-codomain pair beside it is what says the discharge is the proposition's doing rather than conversion giving up on function types: the same two binders at `(Nat) -> Nat` are not identified.
