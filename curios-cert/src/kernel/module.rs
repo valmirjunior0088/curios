@@ -165,10 +165,11 @@ pub(crate) fn check_rec_group(
 /// 8. Every constructor states as many index targets as the family declares indices — `check_constructed`.
 /// 9. Every index target inhabits the index telescope at the constructor's own parameters — `check_constructed`. A target is read by inversion and by the arm rule, so this is the judgment that types it.
 /// 10. The declaration is strictly positive modulo polarity. That one is *deliberately* not here: the occurrence relation closes transitively across declarations, so it is decided over the whole set at once by [`positivity_vectors`](curios_analysis::positivity_vectors) rather than per entry.
+/// 11. Its variance vector calls no universe level irrelevant that a constructor payload, index target or index type mentions, except through a position itself irrelevant. Not here either, and for clause 10's reason: a level's variance composes through the families a telescope reaches, so a module's vectors are recomputed together by [`variance_vectors`](curios_analysis::variance_vectors) and held against the carried ones in `recheck`, a unit in scope's having been held when it was certified.
 ///
 /// # What is unspellable rather than checked
 ///
-/// Two agreements need no clause because they cannot be violated. The indices are the terminal of the parameter telescope, so "the index telescope leads with the parameters" cannot fail. And a constructor's signature terminates in its index targets alone, so a terminal naming another family, or standing at parameters other than the declaration's own, cannot be written. And a constructor's `plicities` has one entry per telescope binder by construction, which `InductParam::new` asserts; a restored entry bypasses that constructor, and a short vector there is a panic in `InductDecl::payload_plicities`' slice rather than a judgment this kernel makes — fail-closed.
+/// Two agreements need no clause because they cannot be violated. The indices are the terminal of the parameter telescope, so "the index telescope leads with the parameters" cannot fail. And a constructor's signature terminates in its index targets alone, so a terminal naming another family, or standing at parameters other than the declaration's own, cannot be written. And a constructor's `plicities` has one entry per telescope binder by construction, which `InductParam::new` asserts; a restored entry bypasses that constructor, and a short vector there is a panic in `InductDecl::payload_plicities`' slice rather than a judgment this kernel makes — fail-closed. A variance vector's length needs no clause either: a position it does not reach reads invariant, which is equality, and an entry past the declaration's parameter count has no recomputed counterpart, so the reconciliation denies it if it claims irrelevance and nothing reads it if it does not.
 ///
 /// # The one repetition kept, and why
 ///
@@ -332,7 +333,7 @@ fn check_constructed(
     Ok(())
 }
 
-/// What a well-formed `struct` registry entry asserts: its universe context (clause 1), its absence of residue (clause 2), that its `result_sort` is a literal sort (clause 3), the size condition over its field telescope (clause 6), and that a `Prop`-sorted structure carries only proofs — see `check_non_informative`. Positivity is decided over the whole set as it is for an `induct`.
+/// What a well-formed `struct` registry entry asserts: its universe context (clause 1), its absence of residue (clause 2), that its `result_sort` is a literal sort (clause 3), the size condition over its field telescope (clause 6), and that a `Prop`-sorted structure carries only proofs — see `check_non_informative`. Positivity and variance are decided over the whole set as they are for an `induct`, a field read as a payload is.
 ///
 /// A `struct` has no constructors and no index targets, so clauses 5 through 9 have nothing to range over — and clause 7 could not be violated even if it did, since a structure's fields are the terminal of its own `arity` rather than a separately-stored telescope repeating the parameters: the same nesting, and the same reason, as [`InductDecl::arity`].
 pub(crate) fn check_struct_decl(

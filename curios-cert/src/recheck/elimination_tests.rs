@@ -5,8 +5,8 @@ use {
     crate::{Error, Globals},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Scope, Subterm,
-        Telescope, Term, UniverseContext,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Module, Scope,
+        Subterm, Telescope, Term, UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
@@ -352,5 +352,52 @@ fn a_fold_motive_that_binds_its_scrutinee_is_accepted_at_an_inhabited_goal() {
     assert!(
         verdicts.is_empty(),
         "the reflexive fold was refused: {verdicts:?}"
+    );
+}
+
+// The guard reads a family's declared sort and its constructors, never the instance eliminated: a two-constructor proposition is refused into `Nat` at either instance of a level it is irrelevant in, and a one-constructor one is admitted at either.
+#[test]
+fn an_irrelevant_level_changes_no_elimination() {
+    for instance in [0, 1] {
+        let two = fixture_verdicts(
+            &levelled_extraction(Level::constant(instance), &["mk", "mk2"]),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX,
+        );
+        assert!(
+            two.iter()
+                .any(|verdict| matches!(verdict.error, Error::LargeElimination(_))),
+            "{two:?}"
+        );
+
+        let one = fixture_verdicts(
+            &levelled_extraction(Level::constant(instance), &["mk"]),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX,
+        );
+        assert_eq!(one, Vec::new());
+    }
+}
+
+// The scrutinee's index is `wrap` at another instance than `Ixd`'s target states, which conversion calls the same value: inversion reads the tag and the payloads and no level, so the arm is solved and stays mandatory.
+#[test]
+fn an_arm_is_not_excused_by_an_irrelevant_level() {
+    let (family, vacuous) = excused_arm_module(false);
+    assert!(
+        fixture_verdicts(&vacuous, 1_000_000, &Globals::default(), SYNTAX)
+            .iter()
+            .any(|verdict| verdict.error
+                == Error::MissingArm {
+                    family,
+                    tag: Atom::from("mk"),
+                })
+    );
+
+    let (_, covered) = excused_arm_module(true);
+    assert_eq!(
+        fixture_verdicts(&covered, 1_000_000, &Globals::default(), SYNTAX),
+        Vec::new()
     );
 }

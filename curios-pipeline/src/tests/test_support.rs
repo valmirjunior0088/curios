@@ -4,7 +4,7 @@
 
 use {
     crate::*,
-    curios_core::{Item, Module},
+    curios_core::{Item, Module, Variance},
     curios_elab::{Context, Resumed, erase_program},
     curios_prelude::with_prelude,
     curios_text::{Entrypoint, LintKind, RootSource, SYNTAX, UnitSource},
@@ -305,4 +305,14 @@ pub(super) fn reuses_body(baseline: &Unit, unit: &Unit, name: &str) -> bool {
     let (before, after) = (body(baseline), body(unit));
 
     std::ptr::eq(&*before, &*after)
+}
+
+/// The variance vector `unit` carries for the inductive family named `family`.
+pub(super) fn carried_variances(unit: &Unit, family: &str) -> Vec<Variance> {
+    unit.core()
+        .induct_decls
+        .iter()
+        .find(|(name, _)| name.symbol().ends_with(&format!("/{family}")))
+        .map(|(_, declaration)| declaration.variances.clone())
+        .unwrap_or_else(|| panic!("{family} is an inductive family of the unit"))
 }

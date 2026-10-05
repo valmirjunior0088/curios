@@ -2,9 +2,12 @@
 //!
 //! Reuse is observed by allocation identity — a reused item carries the very terms the baseline holds, which no elaboration could produce twice — and agreement by the differential predicate in `test_support`. Resource verdicts are deliberately outside the predicate: a partial walk runs in a different cache state, so a budget-marginal declaration can move either way, as `documentation/design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md` states.
 
-use super::test_support::{
-    assert_modules_agree, compile_modules, recompile_modules, recompile_over, reuses_body, unit_of,
-    unused_binders, written,
+use {
+    super::test_support::{
+        assert_modules_agree, carried_variances, compile_modules, recompile_modules,
+        recompile_over, reuses_body, unit_of, unused_binders, written,
+    },
+    curios_core::Variance,
 };
 
 /// Three items: `twice` reaches `double`, and `unrelated` reaches neither.
@@ -139,6 +142,39 @@ pub let unrelated: Nat = 7;
     );
     assert!(reuses_body(&baseline, &incremental, "unrelated"));
     assert_modules_agree(unit_of(&sealed).core(), incremental.core());
+}
+
+// A family's variance composes through the families it holds, so an edit that turns one of their levels invariant moves the vector of every family that reaches it. Such a family mentions the edited declaration, so it is elaborated again with the items that read its entry, and the recompile carries the vector a whole compile does.
+#[test]
+fn an_edit_that_moves_a_familys_variance_recompiles_the_families_that_hold_it() {
+    let base = "use /std/{Nat, Eq};
+
+pub induct Wrap(A: Type): pub Type
+| wrap(a: A)
+end
+
+pub induct Held(A: Type): pub Type
+| held(w: Wrap(A))
+end
+
+pub let reader(@A: Type, h: Held(A)) -> Held(A) = h;
+
+pub let unrelated: Nat = 7;
+";
+    // `Eq()(A, A)` holds `A` as a value of its own `Type`, so `A`'s level reaches a `Type` and is invariant in `Wrap`.
+    let pinned = base.replace("| wrap(a: A)", "| wrap(a: A, same: Eq()(A, A))");
+    let baseline = unit_of(base);
+
+    let incremental = recompile_over(&pinned, &baseline).unwrap();
+
+    assert!(!reuses_body(&baseline, &incremental, "reader"));
+    assert!(reuses_body(&baseline, &incremental, "unrelated"));
+    assert_eq!(carried_variances(&baseline, "Held"), [Variance::Irrelevant]);
+    assert_eq!(
+        carried_variances(&incremental, "Held"),
+        [Variance::Invariant]
+    );
+    assert_modules_agree(unit_of(&pinned).core(), incremental.core());
 }
 
 /// A baseline from unrelated text invalidates everything, and the recompile is then a whole compile by another route.

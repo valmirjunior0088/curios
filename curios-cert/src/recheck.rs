@@ -50,11 +50,14 @@ use {
         Error, Globals, Kernel, Position, check_definition, check_entrypoint, check_induct_decl,
         check_positions, check_rec_group, check_struct_decl, partial_definitions, satisfiable,
     },
-    curios_analysis::{Coverage, Declarations, PositivityRefusal, positivity_vectors},
+    curios_analysis::{
+        Coverage, Declarations, PositivityRefusal, positivity_vectors, variance_vectors,
+    },
     curios_core::{
         Bound, Certification, Certified, Definition, Entrypoint, Free, Global, InductDecl, Item,
         Level, MetavarId, Module, Program, Reads, StructDecl, Term, Totality, UniverseContext,
-        Zonked, free_locals_outside, rewrite_universe_levels_scoped_shared, universe_metas,
+        Variance, Zonked, free_locals_outside, rewrite_universe_levels_scoped_shared,
+        universe_metas,
     },
     curios_utilities::{SyntaxRegistry, grown},
     std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -676,7 +679,45 @@ fn verdicts_within(
             },
         });
     }
-    // Positivity is one judgment over the whole declaration set, so what it read belongs to no one item's record.
+    // Variance is reconciled where positivity is decided, and for its reason: a telescope may mention any top-level definition, and the walk above has by now defined them all. The walk compared instances on each carried vector's word, so this module's vectors are recomputed, and a carried irrelevance the recomputation denies refuses the module. A carried invariance it would have granted costs an acceptance and admits nothing. A family of a unit in scope answers from the vector it carries, here as in the walk: that vector was held to its own declarations when the unit was certified, which makes it the certifier's record and not an input, and recomputing it at every certification would buy no verdict the walk does not already rest on.
+    kernel.restore_budget();
+    let recomputed = variance_vectors(
+        kernel,
+        Declarations::of(&module.induct_decls, &module.struct_decls),
+    );
+    let mut exhausted = recomputed.exhausted;
+    let carried = module
+        .induct_decls
+        .iter()
+        .map(|(name, declaration)| (name, &declaration.variances))
+        .chain(
+            module
+                .struct_decls
+                .iter()
+                .map(|(name, declaration)| (name, &declaration.variances)),
+        );
+    for (name, carried) in carried {
+        let granted = recomputed.vectors.get(name);
+        let denied = carried.iter().enumerate().find(|(level, variance)| {
+            **variance == Variance::Irrelevant
+                && granted.and_then(|vector| vector.get(*level)) != Some(&Variance::Irrelevant)
+        });
+        let Some((level, _)) = denied else {
+            continue;
+        };
+        // A refused reduction read its term as invariant throughout, so the denial may be the budget's alone, and the budget is what is reported.
+        verdicts.push(match exhausted.take() {
+            Some((walked, error)) => Verdict {
+                name: Some(walked),
+                error,
+            },
+            None => Verdict {
+                name: Some(*name),
+                error: Error::VarianceDenied { name: *name, level },
+            },
+        });
+    }
+    // Positivity is one judgment over the whole declaration set and variance one over this module's, so what they read belongs to no one item's record.
     kernel.take_reads();
     // A registry entry is accepted as part of its type former, which every declaration has under its own name, so what accepting the entry read joins what typing the former did.
     let mut accepted = |kernel: &mut Kernel, name: &Global| {

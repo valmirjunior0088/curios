@@ -6,10 +6,10 @@ use {
     crate::Kernel,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Free, Global, InductDecl, Intrinsic, Level, Nat, StructDecl, StructType, Subterm,
-        Telescope, Term, UniverseContext,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Nat, StructDecl, StructType,
+        Subterm, Telescope, Term, UniverseContext, UniverseParam, Variance,
     },
-    curios_utilities::Qualifier,
+    curios_utilities::{Plicity, Qualifier},
 };
 
 pub(super) fn kernel() -> Kernel {
@@ -121,6 +121,161 @@ pub(super) fn declare_struct(kernel: &mut Kernel, path: &str, fields: Telescope<
         universes: Vec::new(),
         params: Vec::new(),
     }))
+}
+
+/// How a fixture defines a family's former under the name it answers: as a projection of its own group, the spelling an `induct`'s has, or as the term itself.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum Former {
+    Projected,
+    Plain,
+}
+
+impl Former {
+    /// `value : type_`, generalized over `scheme`, in this spelling.
+    fn spell(self, member: Free, type_: &Term, value: Term, scheme: &UniverseContext) -> Term {
+        match self {
+            Former::Projected => {
+                let projection =
+                    Term::rec([(member, type_.clone(), value)], Term::free_var(&member));
+                let (group, index) = projection
+                    .as_rec_proj()
+                    .expect("a group whose tail is one of its members");
+
+                Term::rec_proj(group.clone().with_universe_context(scheme.clone()), index)
+            }
+            Former::Plain => value,
+        }
+    }
+}
+
+/// `induct Wrap.{u}(A: Type u): Type u | wrap(a: A) end`, declared carrying `variances`, with its former `Wrap.{u} = (A: Type u) => Wrap.{u}(A)` defined under the name it answers in the spelling `former` names: a level only its parameter's type mentions.
+pub(super) fn declare_wrap(
+    kernel: &mut Kernel,
+    variances: Vec<Variance>,
+    former: Former,
+) -> Global {
+    let name = Global::Authored(Qualifier::from(["Wrap"]));
+    let level = Level::param(UniverseParam(0));
+    let scheme = UniverseContext {
+        parameter_count: 1,
+        constraints: Vec::new(),
+    };
+    let carrier = binder(80, "A");
+    let held = binder(81, "a");
+    let sort = Term::type_at(level.clone());
+
+    kernel.declare_induct(
+        &name,
+        &InductDecl {
+            universe_context: scheme.clone(),
+            arity: Telescope::build([(carrier, sort.clone())], Telescope::done(())),
+            constructors: vec![(
+                Atom::from("wrap"),
+                InductParam::new(
+                    Telescope::build(
+                        [(carrier, sort.clone()), (held, Term::free_var(&carrier))],
+                        Vec::new(),
+                    ),
+                    vec![Plicity::Implicit, Plicity::Explicit],
+                ),
+            )],
+            result_sort: sort.clone(),
+            module: Qualifier::default(),
+            rep_public: true,
+            polarities: Vec::new(),
+            variances,
+            plicities: Vec::new(),
+        },
+    );
+    let type_ = Term::func_type([(carrier, sort.clone())], sort.clone());
+    let value = Term::func(
+        [(carrier, sort)],
+        Term::induct_type_at(
+            name,
+            [level],
+            [Term::free_var(&carrier)],
+            Vec::<Term>::new(),
+        ),
+    );
+    let value = former.spell(binder(87, "Wrap"), &type_, value, &scheme);
+    kernel.define(&Free::from(&name), &type_, &value, &scheme);
+
+    name
+}
+
+/// `induct Leaf.{u}: Type | leaf() end`, declared carrying `variances`, with its former defined under the name it answers in the spelling `former` names: a family with no parameter, which its bare name applies in full.
+pub(super) fn declare_leaf(
+    kernel: &mut Kernel,
+    variances: Vec<Variance>,
+    former: Former,
+) -> Global {
+    let name = Global::Authored(Qualifier::from(["Leaf"]));
+    let scheme = UniverseContext {
+        parameter_count: 1,
+        constraints: Vec::new(),
+    };
+
+    kernel.declare_induct(
+        &name,
+        &InductDecl {
+            universe_context: scheme.clone(),
+            arity: Telescope::done(Telescope::done(())),
+            constructors: vec![(
+                Atom::from("leaf"),
+                InductParam::new(Telescope::done(Vec::new()), Vec::new()),
+            )],
+            result_sort: Term::type_ground(),
+            module: Qualifier::default(),
+            rep_public: true,
+            polarities: Vec::new(),
+            variances,
+            plicities: Vec::new(),
+        },
+    );
+    let type_ = Term::type_ground();
+    let node = Term::induct_type_at(
+        name,
+        [Level::param(UniverseParam(0))],
+        Vec::<Term>::new(),
+        Vec::<Term>::new(),
+    );
+    let value = former.spell(binder(86, "Leaf"), &type_, node, &scheme);
+    kernel.define(&Free::from(&name), &type_, &value, &scheme);
+
+    name
+}
+
+/// `induct Box.{u}: Type (u + 1) | box(T: Type u) end`, declared carrying `variances`: a level its payload's `Type` mentions.
+pub(super) fn declare_box(kernel: &mut Kernel, variances: Vec<Variance>) -> Global {
+    let name = Global::Authored(Qualifier::from(["Box"]));
+    let level = Level::param(UniverseParam(0));
+    let held = binder(82, "T");
+
+    kernel.declare_induct(
+        &name,
+        &InductDecl {
+            universe_context: UniverseContext {
+                parameter_count: 1,
+                constraints: Vec::new(),
+            },
+            arity: Telescope::done(Telescope::done(())),
+            constructors: vec![(
+                Atom::from("box"),
+                InductParam::new(
+                    Telescope::build([(held, Term::type_at(level.clone()))], Vec::new()),
+                    vec![Plicity::Explicit],
+                ),
+            )],
+            result_sort: Term::type_at(level.succ().expect("a parameter has a successor")),
+            module: Qualifier::default(),
+            rep_public: true,
+            polarities: Vec::new(),
+            variances,
+            plicities: Vec::new(),
+        },
+    );
+
+    name
 }
 
 /// `induct Wit(P : <param_sort>) : (p : P)` — a family whose index type *is* its own parameter.

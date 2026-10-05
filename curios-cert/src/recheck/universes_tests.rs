@@ -2,12 +2,12 @@
 
 use {
     super::test_support::*,
-    crate::{Error, Globals},
+    crate::{Error, Globals, Verdict},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, Module, Nat, Term,
         Totality, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseMetaId, UniverseParam,
+        UniverseContext, UniverseMetaId, UniverseParam, Variance,
     },
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
@@ -406,4 +406,201 @@ fn a_let_bound_instance_head_dissolves_under_reduction_rather_than_aborting_the_
         Vec::new(),
         "the declared type reduces through the dissolving instance to `Nat`, which `5` inhabits",
     );
+}
+
+fn level_one() -> Level {
+    Level::zero().succ().expect("level zero has a successor")
+}
+
+fn refusals(module: &Module) -> Vec<Verdict> {
+    fixture_verdicts(module, 1_000_000, &Globals::default(), SYNTAX)
+}
+
+/// Whether the identity put at two instances was itself refused: the walk's own verdict on the pair, apart from anything the reconciliation says of the declaration.
+fn coercion_refused(verdicts: &[Verdict]) -> bool {
+    verdicts.iter().any(|verdict| {
+        verdict.name == Some(coercion_name()) && matches!(verdict.error, Error::Mismatch { .. })
+    })
+}
+
+fn denied(verdicts: &[Verdict], family: Global, level: usize) -> bool {
+    verdicts.iter().any(|verdict| {
+        verdict.error
+            == Error::VarianceDenied {
+                name: family,
+                level,
+            }
+    })
+}
+
+// The level types `Wrap`'s parameter and nothing it holds, so the two instances are one type.
+#[test]
+fn two_instances_apart_in_an_irrelevant_level_convert() {
+    let wrap = Global::Authored(Qualifier::from(["Wrap"]));
+    let module = coercion_module(
+        wrap,
+        wrap_declaration(vec![Variance::Irrelevant]),
+        vec![Term::intrinsic(Intrinsic::NatType)],
+        Level::zero(),
+        level_one(),
+    );
+
+    assert_eq!(refusals(&module), Vec::new());
+}
+
+// `Box` holds a `Type u`, carried honestly and carried with no vector at all.
+#[test]
+fn an_invariant_level_is_compared() {
+    let boxed = Global::Authored(Qualifier::from(["Box"]));
+
+    for variances in [vec![Variance::Invariant], Vec::new()] {
+        let module = coercion_module(
+            boxed,
+            box_declaration(variances),
+            Vec::new(),
+            level_one(),
+            Level::zero(),
+        );
+
+        assert!(coercion_refused(&refusals(&module)));
+    }
+}
+
+// The lie that would read `box(Type 0) : Box.{1}` back at `Box.{0}`: the walk believes it and lets the coercion through, and the reconciliation refuses the module. An entry past the declaration's count is denied the same way.
+#[test]
+fn a_carried_irrelevance_the_recomputation_denies_refuses_the_module() {
+    let boxed = Global::Authored(Qualifier::from(["Box"]));
+
+    let believed = refusals(&coercion_module(
+        boxed,
+        box_declaration(vec![Variance::Irrelevant]),
+        Vec::new(),
+        level_one(),
+        Level::zero(),
+    ));
+    assert!(!coercion_refused(&believed));
+    assert!(denied(&believed, boxed, 0));
+
+    let overlong = refusals(&coercion_module(
+        boxed,
+        box_declaration(vec![Variance::Invariant, Variance::Irrelevant]),
+        Vec::new(),
+        level_one(),
+        level_one(),
+    ));
+    assert!(denied(&overlong, boxed, 1));
+}
+
+// `Wrap` carried as invariant in a level its declaration never mentions, which is what a family read before its payload was known carries: the reconciliation says nothing, and the walk compares the level it was told to.
+#[test]
+fn a_carried_invariance_the_recomputation_would_grant_is_compared_and_not_refused() {
+    let wrap = Global::Authored(Qualifier::from(["Wrap"]));
+    let carried = |to: Level| {
+        refusals(&coercion_module(
+            wrap,
+            wrap_declaration(vec![Variance::Invariant]),
+            vec![Term::intrinsic(Intrinsic::NatType)],
+            Level::zero(),
+            to,
+        ))
+    };
+
+    assert_eq!(carried(Level::zero()), Vec::new());
+
+    let apart = carried(level_one());
+    assert!(coercion_refused(&apart));
+    assert!(!denied(&apart, wrap, 0));
+}
+
+// `Fam`'s first level reaches no payload and no index type, and its constructor's target puts it at `Box`'s invariant position: two instances apart in it have different inhabitants at one index. Carried honestly the coercion is refused; carried as irrelevant the declaration is.
+#[test]
+fn a_level_only_an_index_target_mentions_is_invariant() {
+    let (_, honest) = index_target_module(vec![Variance::Invariant, Variance::Invariant]);
+    assert!(coercion_refused(&refusals(&honest)));
+
+    let (family, lying) = index_target_module(vec![Variance::Irrelevant, Variance::Invariant]);
+    assert!(denied(&refusals(&lying), family, 0));
+}
+
+// A concept-shaped struct: the level its method binds at is held by a field, and the level of its carrier's codomain by the parameter's type alone.
+#[test]
+fn a_concepts_method_level_is_compared() {
+    let honest = || vec![Variance::Invariant, Variance::Irrelevant];
+
+    let (_, codomain_apart) = method_level_module(honest(), [0, 0], [0, 1]);
+    assert_eq!(refusals(&codomain_apart), Vec::new());
+
+    let (_, method_apart) = method_level_module(honest(), [0, 1], [1, 1]);
+    assert!(coercion_refused(&refusals(&method_apart)));
+
+    let (name, lying) = method_level_module(vec![Variance::Irrelevant; 2], [0, 1], [1, 1]);
+    assert!(denied(&refusals(&lying), name, 0));
+}
+
+// `Held` reaches a family a unit in scope declares, which answers from the vector it carries: that vector was held to its own declarations when its unit was certified, and the item walk reads it on the same word. So an irrelevance `Held` carries is granted over a scope's irrelevant `Wrap` and denied over its invariant `Box`, and over a scope whose `Box` carries a lie it is granted too, the lie being its own unit's to be refused for.
+#[test]
+fn a_family_of_a_unit_in_scope_answers_from_the_vector_it_carries() {
+    let level = Level::param(UniverseParam(0));
+    let wrap = Global::Authored(Qualifier::from(["Wrap"]));
+    let boxed = Global::Authored(Qualifier::from(["Box"]));
+    let over_wrap = || {
+        held_module(
+            Term::induct_type_at(
+                wrap,
+                [level.clone()],
+                [Term::intrinsic(Intrinsic::NatType)],
+                Vec::<Term>::new(),
+            ),
+            Term::type_at(level.clone()),
+            vec![Variance::Irrelevant],
+        )
+    };
+    let over_box = || {
+        held_module(
+            Term::induct_type_at(
+                boxed,
+                [level.clone()],
+                Vec::<Term>::new(),
+                Vec::<Term>::new(),
+            ),
+            Term::type_at(level.succ().expect("a parameter has a successor")),
+            vec![Variance::Irrelevant],
+        )
+    };
+    let judged =
+        |module: &Module, scope: Globals| fixture_verdicts(module, 1_000_000, &scope, SYNTAX);
+
+    let (_, module) = over_wrap();
+    assert_eq!(
+        judged(
+            &module,
+            scope_of(wrap, wrap_declaration(vec![Variance::Irrelevant]))
+        ),
+        Vec::new()
+    );
+
+    let (held, module) = over_box();
+    assert!(denied(
+        &judged(
+            &module,
+            scope_of(boxed, box_declaration(vec![Variance::Invariant]))
+        ),
+        held,
+        0
+    ));
+    assert_eq!(
+        judged(
+            &module,
+            scope_of(boxed, box_declaration(vec![Variance::Irrelevant]))
+        ),
+        Vec::new()
+    );
+}
+
+// `Uses` mentions its level only on `Alias.{u}(A)`, which unfolds to `A`: the recomputation reads the reduct and grants the irrelevance the entry carries.
+#[test]
+fn a_level_a_reduction_removes_is_carried_as_irrelevant() {
+    let (_, module) = alias_module(vec![Variance::Irrelevant]);
+
+    assert_eq!(refusals(&module), Vec::new());
 }

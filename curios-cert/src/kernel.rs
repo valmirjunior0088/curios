@@ -55,7 +55,7 @@ use {
     curios_core::{
         Advance, Atom, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level, LevelHead,
         Module, Polarity, Probe, Reads, ReduceError, Reducer, Spelling, StructDecl, Term,
-        UniverseConstraint, UniverseContext, UniverseError, build_shorten_layered,
+        UniverseConstraint, UniverseContext, UniverseError, Variance, build_shorten_layered,
     },
     curios_utilities::SyntaxRegistry,
     std::{fmt, rc::Rc},
@@ -155,6 +155,8 @@ pub enum Error {
         part: String,
         polarity: Polarity,
     },
+    /// A declaration carried as indifferent to a universe level its own telescopes mention. The item walk compared two instances of `name` on the carried vector's word, so a vector claiming an irrelevance the recomputation denies is a conversion nothing licensed.
+    VarianceDenied { name: Global, level: usize },
     /// A constructor payload, uniform parameter, or field whose level exceeds the declaring family's result sort — the size condition that keeps an inductive from containing the universe it lives in.
     Oversized { domain: Level, bound: Level },
     /// A proof or a type that reaches something not known to terminate, or that is such a thing itself — an inline `rec` group that does not descend, or a call to a host row that diverges. Erasure deletes both halves, so a proof that may not terminate proves anything and a type that may not terminate reties the negative knot positivity forbids. `reached` names the offending definition, or is absent when the position is partial in itself and there is no name to blame.
@@ -366,6 +368,10 @@ impl fmt::Display for Displayed<'_> {
             } => write!(
                 formatter,
                 "`{part}` of `{name}` reaches back to it at {polarity:?}, which is not strictly positive",
+            ),
+            Error::VarianceDenied { name, level } => write!(
+                formatter,
+                "`{name}` is carried as indifferent to its universe level {level}, which its declaration mentions",
             ),
             Error::Oversized { domain, bound } => write!(
                 formatter,
@@ -629,6 +635,29 @@ impl Kernel {
                 .iter()
                 .zip(right)
                 .all(|(this, that)| self.level_eq(this, that))
+    }
+
+    /// [`Kernel::levels_eq`] at the positions the family `name` is invariant in: a level its vector calls irrelevant is compared at nothing. A name the registry does not hold, or a position its vector does not reach, compares its level, which is what every level was compared at before a vector existed.
+    pub(crate) fn instances_eq(&self, name: &Global, left: &[Level], right: &[Level]) -> bool {
+        left.len() == right.len()
+            && left
+                .iter()
+                .zip(right)
+                .enumerate()
+                .all(|(index, (this, that))| {
+                    self.variance(name, index) == Variance::Irrelevant || self.level_eq(this, that)
+                })
+    }
+
+    /// The family `name`'s variance in its `index`th universe parameter, as its registry entry carries it.
+    fn variance(&self, name: &Global, index: usize) -> Variance {
+        self.induct_decl(name)
+            .map(|declaration| declaration.variance(index))
+            .or_else(|| {
+                self.struct_decl(name)
+                    .map(|declaration| declaration.variance(index))
+            })
+            .unwrap_or(Variance::Invariant)
     }
 
     /// Verify a stated instance satisfies its scheme's constraint set: each declared `lower ≤ upper`, instantiated at this occurrence's levels, must hold under the assumed constraints of the item being checked.
