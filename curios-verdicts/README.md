@@ -14,7 +14,7 @@ The store as a compilation sees it: the `Cache` the fold consults for units alre
 
 ### A disagreeing slot is a baseline for a question and a whole compile for a build
 
-**Decision.** `Verdicts::earlier` hands back a slot's unit when the slot is intact, filed after the current chain, and read from files the asking source could have read, whatever those files hold now. Only the `wonder` engine's read-only cache offers it to the fold as a baseline; the store's own `Cache` offers none, so `run`, `compile` and `test` compile a moved unit whole and file it, and nothing compiled over a baseline is filed.
+**Decision.** `Verdicts::earlier` hands back a slot's unit when the slot is intact, filed after the current chain, and read from files the asking source could have read, whatever those files hold now. Only the `wonder` engine's cache offers it to the fold as a baseline; the store's own `Cache` offers none, so `run`, `compile` and `test` compile a moved unit whole and file it. Nothing compiled over a baseline is filed, nor any unit a fold compiles after one: a question asks `Verdicts::taken_on_disk` and files only while its fold is the one a build would have run.
 
 **Rationale.** A reused item rests on the verdict recorded when the baseline was judged, and the kernel skips it by name, so the guarantee rests on the recompile's closure being closed — an argument the differential gate checks on fixtures and has not earned for a filed unit. A question's answer is corrected by the next build, while a filed unit would become the next baseline and a mistake would compound. The chain clause keeps a baseline to the scope it was compiled in, since an item mentioning a predecessor's name is outside the diff.
 

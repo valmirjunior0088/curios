@@ -566,7 +566,7 @@ fn a_lint_is_published_as_a_warning() {
 fn a_warm_store_does_not_answer_for_the_buffer() {
     let root = project("warm");
 
-    // Filled as a build fills it — `wonder` itself never writes a store.
+    // Filled by a build, so the store is warm before any document is open.
     let built = curios(&root, &["run", "app"], "");
     assert!(
         built.status.success(),

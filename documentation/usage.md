@@ -81,13 +81,13 @@ Ten commands, and `wonder`'s five queries — eleven where the compiler was buil
 | [`curate`](#curate) | the governing package | — | materialized sources | none |
 | [`pin`](#pin) | the governing package's manifest | `foreign`/`dependency <NAME>`, `--path`, `--url`, `--rev`, `--refresh`, `--check` | one manifest row | files what it delivered |
 | [`new`](#new) | — | `<DIR>` | a package | none |
-| [`lint`](#lint) | anything | — | nothing | reads; files the `compiler` memo |
+| [`lint`](#lint) | anything | — | nothing | reads, files the units it compiled whole from disk |
 | [`format`](#format) | files, any number | `--check` | the files, rewritten | none |
-| [`wonder diagnostics`](#wonder) | anything | — | nothing | reads; files the `compiler` memo |
-| [`wonder tests`](#wonder) | anything | — | nothing | reads; files the `compiler` memo |
-| [`wonder cost`](#wonder) | a program | — | nothing | reads; files the `compiler` memo |
-| [`wonder stage`](#wonder) | a program | `<STAGE>`, before the target | nothing | reads; files the `compiler` memo |
-| [`wonder server`](#wonder) | — | — | nothing | reads; files the `compiler` memo |
+| [`wonder diagnostics`](#wonder) | anything | — | nothing | reads, files the units it compiled whole from disk |
+| [`wonder tests`](#wonder) | anything | — | nothing | reads, files the units it compiled whole from disk |
+| [`wonder cost`](#wonder) | a program | — | nothing | reads, files the units it compiled whole from disk |
+| [`wonder stage`](#wonder) | a program | `<STAGE>`, before the target | nothing | reads, files the units it compiled whole from disk |
+| [`wonder server`](#wonder) | — | — | nothing | reads, files the units it compiled whole from disk |
 | [`profile`](#profile) | — | `<PATH>` | nothing | none |
 
 `--manifest` is taken by every command but `new` and `profile`. `--budget` is taken by every command that elaborates, which is every one but `new`, `curate`, `pin`, `format` and `profile`. Both are stated under [Flags](#flags).
@@ -457,7 +457,7 @@ Neither `run` nor `compile` recompiles a declared executable nothing has changed
 
 An edit anywhere the program was built from is a miss, and so is a damaged or half-written store entry; the invocation that misses recompiles and refiles, and the one after it is fast again.
 
-A question — [`wonder`](#wonder), and [`lint`](#lint) with it — reads the store and files nothing in it, the `compiler` memo aside, so a server asking on every keystroke files nothing. A unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, reusing every declaration the edit did not reach, which is what keeps a question about one declaration from costing the whole library it sits in.
+A question — [`wonder`](#wonder), and [`lint`](#lint) with it — reads the store and files the units it compiled whole from the text on disk, the units a build would have filed and no payload, so a build after a question compiles only what the question did not, and the question after it compiles nothing. A unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, reusing every declaration the edit did not reach, which is what keeps a question about one declaration from costing the whole library it sits in; what it compiles that way it does not file, nor any unit after it, and neither does it file a unit compiled from text an editor holds unsaved, so a server asking on every keystroke files nothing.
 
 A loose `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-loose split as everywhere else. Standard input has none either, so its test program is compiled every time.
 

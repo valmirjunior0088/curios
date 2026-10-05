@@ -463,7 +463,7 @@ pin dependency json --refresh — Nothing, store None, leaves Manifest, options 
   takes no subject
 new fresh — Nothing, store None, leaves Package, options none
   takes no subject
-lint TARGET — Any, store Read, leaves Nothing, options --budget --manifest
+lint TARGET — Any, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -503,7 +503,7 @@ format TARGET — Files, store None, leaves Rewritten, options --check --manifes
   work/app/serve: bench → files <root>/work/app/bench.crs
   work/app/nested: (none) → files lib.crs
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-wonder diagnostics TARGET — Any, store Read, leaves Nothing, options --budget --manifest
+wonder diagnostics TARGET — Any, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -523,7 +523,7 @@ wonder diagnostics TARGET — Any, store Read, leaves Nothing, options --budget 
   work/app/serve: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-wonder tests TARGET — Any, store Read, leaves Nothing, options --budget --manifest
+wonder tests TARGET — Any, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -543,7 +543,7 @@ wonder tests TARGET — Any, store Read, leaves Nothing, options --budget --mani
   work/app/serve: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-wonder cost TARGET — Program, store Read, leaves Nothing, options --budget --manifest
+wonder cost TARGET — Program, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -563,7 +563,7 @@ wonder cost TARGET — Program, store Read, leaves Nothing, options --budget --m
   work/app/serve: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-wonder stage core TARGET — Program, store Read, leaves Nothing, options --budget --manifest
+wonder stage core TARGET — Program, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -583,7 +583,7 @@ wonder stage core TARGET — Program, store Read, leaves Nothing, options --budg
   work/app/serve: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-wonder server — Nothing, store Read, leaves Nothing, options --budget --manifest
+wonder server — Nothing, store Write, leaves Nothing, options --budget --manifest
   takes no subject
 "#;
 

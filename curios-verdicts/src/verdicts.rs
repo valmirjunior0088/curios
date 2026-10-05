@@ -29,7 +29,7 @@ use {
 ///
 /// **Shared rather than owned by a store handle, because it outlives every one of them.** A handle lives for one question; this lives for as long as whoever made it. That difference is the whole point: a language server compiles a unit, the next keystroke compiles over what it just produced, and the keystroke after that over *that*, so the closure an edit re-elaborates is the closure of *that* edit rather than of everything done since the last build. Without it the baseline is the last unit the store was written with, which nothing in an editing session ever advances — so one edit to a widely-used declaration leaves every later keystroke re-elaborating its whole reverse closure, for the rest of the session.
 ///
-/// **What this asks of the trusted base is argued in [Cached verdicts](../../documentation/design/soundness/admission/cached-verdicts.md)**, which owns it: an item reused from a unit that was itself a recompile, by induction on the per-item argument, and the guard below for what that argument does not cover. Nothing here is *filed* — a kept unit dies with the process.
+/// **What this asks of the trusted base is argued in [Cached verdicts](../../documentation/design/soundness/admission/cached-verdicts.md)**, which owns it: an item reused from a unit that was itself a recompile, by induction on the per-item argument, and the guard below for what that argument does not cover. A session files nothing: a kept unit dies with the process, and whether the question that kept it also files it is that question's rule, asked of the store ([`Verdicts::taken_on_disk`]).
 ///
 /// **A kept unit is offered only after units that read what they read when it was kept.** The recompile diffs a unit's *own* lowered items and nothing else, so it cannot see that a unit before it changed: a reference into an edited predecessor lowers to the same name either way, the diff comes out empty, and every item reaching the edit would be reused on the strength of a definition that is gone. A slot cannot catch this, since it addresses a place — predecessors by *where* they are, not by what they hold. So each kept unit carries the read log of every unit the fold took before it, and is offered only while this fold's units read the same, position by position.
 ///
@@ -155,6 +155,13 @@ impl Verdicts {
         self.taken.borrow_mut().push(digested(source.reads()));
     }
 
+    /// Whether the disk holds every text the units this fold has taken read — restored, kept or compiled, each by its read log.
+    ///
+    /// What a question asks before it files. A unit's record names what it read and what each unit before it contained, and a later reader verifies both against the disk, so a unit compiled after one the disk does not answer for is a miss wherever it is filed, in the place of a slot that may have held the disk's own. Asked of the disk rather than of an overlay because it is the test that later hit makes: it catches a document held edited, a hit taken on a held text the disk has moved from, and a file rewritten while its unit compiled.
+    pub fn taken_on_disk(&self) -> bool {
+        self.taken.borrow().iter().all(|log| unchanged(log, None))
+    }
+
     /// The compiler's identity, memoized on first use — see the field.
     pub(crate) fn compiler(&self) -> Option<&String> {
         self.compiler.get_or_init(|| compiler(&self.store)).as_ref()
@@ -276,7 +283,7 @@ impl Verdicts {
         curios_archive::from_bytes::<Unit>(bytes).ok()
     }
 
-    /// Place `unit` in the chain without filing it: what a caller that may read the store but not write it — the `wonder` engine, answering a question — does with a unit it had to compile.
+    /// Place `unit` in the chain without filing it: what the `wonder` engine, answering a question, does with a unit it compiled and may not file — one compiled over a baseline, or from text the disk does not hold.
     ///
     /// **Placing and filing are one call but not one decision, and only filing is optional.** A slot is addressed after the units placed before it, so a unit left out of the chain shifts every later unit's address by one — turning one declined hit into a miss for the whole tail, which is the cost declining it was supposed to avoid. Serializing without writing is what placing costs instead: the digest of those bytes is the fact the next unit's record is verified against, and nothing cheaper produces it.
     pub fn place(&self, source: &UnitSource<'_>, unit: &Unit) {

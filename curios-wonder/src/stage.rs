@@ -3,7 +3,7 @@
 //! The rungs are [`Stage::NAMES`], observed exactly where the driver emits them; the last, `wasm-optm`, is emitted by the native product where Binaryen runs rather than by the driver, so the engine cannot render it and hands the module back for the transport to finish — the one rung `curios` can reach and `curios-js` cannot.
 
 use {
-    crate::{Diagnosis, Origin, ReadOnly, of_error, open, overlaid},
+    crate::{Diagnosis, Origin, Overlaid, of_error, open, overlaid},
     curios_pipeline::{Cache, Fold, Stage},
     curios_text::{Overlay, RootSource},
     curios_utilities::Qualifier,
@@ -54,8 +54,8 @@ pub fn stage(
 
     let (entrypoint, loader) = open(origin, declares, overlay).map_err(Refusal::Diagnostics)?;
     let units = overlaid(units, overlay);
-    let read_only = cache.map(|cache| ReadOnly { cache, overlay });
-    let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
+    let reached = cache.map(|cache| Overlaid::over(cache, overlay));
+    let cache = reached.as_ref().map(|cache| cache as &dyn Cache);
 
     let mut text = None;
     let compiled = Fold::new(budget, &units, cache).compile(

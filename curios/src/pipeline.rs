@@ -112,7 +112,7 @@ pub(crate) fn payload_of(
 
 /// The interface of the last of `units` — a package's library, compiled against everything before it — read off the compilation that builds it, and filed into `store` when there is one.
 ///
-/// **A build, where the `wonder` engine's reading of the same record is a question.** A library documented is a library compiled, and what was compiled is worth what `run` and `test` keep of theirs; the engine's `documentation` reads the store and never writes it, which is what a question may do and a build has no reason to. The compilation runs to completion first, the kernel included, so a library that does not check is not documented and reports what stopped it exactly as `run` would.
+/// **A build, where the `wonder` engine's reading of the same record is a question.** A library documented is a library compiled, and what was compiled is worth what `run` and `test` keep of theirs; the engine's `documentation` files the units a build would have and writes no pages, which is as far as a question goes. The compilation runs to completion first, the kernel included, so a library that does not check is not documented and reports what stopped it exactly as `run` would.
 pub(crate) fn documentation_of(
     budget: u64,
     units: &[RootSource],

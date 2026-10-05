@@ -929,7 +929,7 @@ pub trait Cache {
     ///
     /// **Offered rather than imposed, and lent rather than handed over.** The cache decides whether the unit is compiled over the offer, so a question takes the archived unit while a build compiles the package whole and files it as any unit — and a cache holding something nearer copies nothing. Whatever tree the package is, the offer is a correct baseline: an item is reused only where its lowered form matches the offered one and nothing it reaches changed, so a tree far from the archive's is simply a larger closure.
     ///
-    /// **A cache that answers is one whose `put` places without filing.** What is compiled over a baseline is handed to `put` like any other unit, so the units after it stay addressed, and a cache that filed it would file a unit whose judgment rests on the closure having been closed — which the differential gate checks on fixtures and has not earned for a filed unit. The store's own cache keeps the default; the `wonder` engine's read-only cache answers.
+    /// **A cache that answers is one whose `put` places what came of it without filing.** What is compiled over a baseline is handed to `put` like any other unit, so the units after it stay addressed, and a cache that filed it would file a unit whose judgment rests on the closure having been closed — which the differential gate checks on fixtures and has not earned for a filed unit. The store's own cache keeps the default; the `wonder` engine's cache answers, and files nothing of a fold from there on.
     fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
         let _ = (source, offered);
         None
@@ -937,7 +937,7 @@ pub trait Cache {
 
     /// Record what `source` compiled to. Best effort — a store that cannot be written costs the next compilation the work, and nothing else.
     ///
-    /// `followed` is whether another unit follows this one in the fold, which is the one reader a placement has *within* it: the next unit's slot is addressed after this one's. A cache that files, or whose chain is read after the fold — a payload is filed under the whole chain — places either way; one that only answers a question has no use for the placement of a unit nothing follows, and a placement serializes the unit whole.
+    /// `followed` is whether another unit follows this one in the fold, which is the one reader a placement has *within* it: the next unit's slot is addressed after this one's. A cache that files, or whose chain is read after the fold — a payload is filed under the whole chain — places either way; one that does not file a unit has no use for its placement where nothing follows, and a placement serializes the unit whole.
     fn put(&self, source: &UnitSource<'_>, unit: &Unit, followed: bool);
 }
 

@@ -8,7 +8,7 @@ use {
     curios_unit::Unit,
     curios_utilities::{Qualifier, Report, Source, Span},
     curios_verdicts::Verdicts,
-    std::{collections::BTreeSet, path::PathBuf},
+    std::{cell::Cell, collections::BTreeSet, path::PathBuf},
 };
 
 /// What one compilation of a subject reports, and what it reached: every diagnostic, goal and lint, and the prefix of every mount some reference of the subject was *written* under — what `curios lint` reads a package's unused dependencies off.
@@ -111,7 +111,7 @@ pub enum Origin {
 ///
 /// **A lint is reported beside whatever the verdict was**, after it. A lint is decided by the lowering, so a program that lowers has its lints whether elaboration then refused it, left a goal batch, or accepted it; only a program that does not lower — a parse failure, an unresolved name — reports its error alone, since there is nothing to have read the lints off.
 ///
-/// `cache` is consulted for units already built and never written — see the `wonder` module documentation.
+/// `cache` is consulted for units already built, and filed into while the fold is one a build would have run over the disk — see the `wonder` module documentation.
 pub fn diagnostics(
     budget: u64,
     subject: Subject,
@@ -128,8 +128,8 @@ pub fn diagnosed(
     overlay: &Overlay,
     cache: Option<&Verdicts>,
 ) -> Diagnosed {
-    let read_only = cache.map(|cache| ReadOnly { cache, overlay });
-    let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
+    let reached = cache.map(|cache| Overlaid::over(cache, overlay));
+    let cache = reached.as_ref().map(|cache| cache as &dyn Cache);
 
     // Taken before the subject is formed, since it is the one fact about the file asked that no compilation of it says.
     let note = subject.note(overlay);
@@ -277,15 +277,30 @@ pub(crate) fn overlaid(units: Vec<RootSource>, overlay: &Overlay) -> Vec<RootSou
         .collect()
 }
 
-/// A cache that answers about the text the compilation would read and never records: what a query is allowed to do with the store.
+/// The store as a question reaches it: read through the editor's documents, and filed into where what was compiled is what a build would have compiled.
 ///
 /// **A stored unit is verified through the overlay.** A unit is believed on a re-read of every file it was compiled from, and here that re-read takes an open document's text over the disk's (`Verdicts::get_overlaid`), so a unit whose source an editor holds edited is a miss and one whose source is merely open is not. The rule is exact because the record lists what the unit read: a document the unit never read — an executable beside a package's library, in the very directory the library reads from — leaves the hit standing. Refusing on containment instead would cost the language server that library on every keystroke in a program file.
-pub(crate) struct ReadOnly<'a> {
-    pub(crate) cache: &'a Verdicts,
-    pub(crate) overlay: &'a Overlay,
+///
+/// **A unit is filed while the fold is one a build would have run over the disk** — every unit so far restored on a record the disk confirms, or compiled whole from text the disk holds — which is [A command compiles only as far as its answer needs, and a project keeps what it compiled](../../documentation/design/tools/a-command-compiles-only-as-far-as-its-answer-needs-and-a-project-keeps-what-it-compiled.md)'s rule. A fold leaves that path where it is handed a baseline, or where it took a text the disk does not hold, and files nothing from there on: a record names what each unit before it contained, so a unit filed after one nothing on disk reproduces would be a miss for every later reader, in the place of a slot that may have held the disk's own.
+pub(crate) struct Overlaid<'a> {
+    cache: &'a Verdicts,
+    overlay: &'a Overlay,
+    /// Whether this fold has taken a unit a build's fold over the disk would not have. One fold, one value, and it only ever becomes true.
+    departed: Cell<bool>,
 }
 
-impl Cache for ReadOnly<'_> {
+impl<'a> Overlaid<'a> {
+    /// `cache` as one fold of a question reading through `overlay` reaches it.
+    pub(crate) fn over(cache: &'a Verdicts, overlay: &'a Overlay) -> Self {
+        Self {
+            cache,
+            overlay,
+            departed: Cell::new(false),
+        }
+    }
+}
+
+impl Cache for Overlaid<'_> {
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
         self.cache.get_overlaid(source, self.overlay)
     }
@@ -294,25 +309,37 @@ impl Cache for ReadOnly<'_> {
     ///
     /// Nearest first, because the order decides how much a recompile re-elaborates and nothing else — every one of the three is a unit judged when it was made, so the answer is the same over any of them. The session's is the last keystroke's, which is nearer the text being asked about than anything a build filed; a filed unit is nearer than the archived image; and the image is what is there when nothing else is. A build run in another terminal mid-session can leave the store nearer than the session, and then the recompile over the session's unit is merely larger than it had to be.
     ///
-    /// A question is what takes a baseline. What it compiles over one is placed and never filed, which is the reading of this cache the method above already states; the store's own cache offers none, so a build compiles a moved unit whole and files what it compiled.
+    /// A question is what takes a baseline, and the fold compiles over the one it is handed, so handing one out is where this fold stops being a build's: the store's own cache offers none, and a build compiles a moved unit whole and files what it compiled.
     fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
-        self.cache
+        let baseline = self
+            .cache
             .kept(source)
             .or_else(|| self.cache.earlier(source))
-            .or_else(|| offered.cloned())
+            .or_else(|| offered.cloned());
+        if baseline.is_some() {
+            self.departed.set(true);
+        }
+
+        baseline
     }
 
-    /// Kept, and placed where something follows — never filed. This is why the store itself is held rather than a `dyn Cache`.
+    /// Kept, then filed where the fold is still a build's and the disk holds every text it has read, and otherwise placed where something follows. This is why the store itself is held rather than a `dyn Cache`, which cannot place a unit without filing it.
     ///
-    /// Dropping the write is the whole of what read-only means. Dropping the *placement* with it is a second thing nobody asked for: a slot is addressed after the units placed before it, so a unit missing from that chain shifts every later address by one, and one declined hit becomes a miss for every unit after it. A `dyn Cache` has no way to say the first without the second.
+    /// **Every unit is kept, filed or not.** Keeping hands the session its next baseline and adds the unit's reads to the log a kept unit is guarded by, and a filed unit left out of that log would let a kept unit after it be offered once its predecessor had changed. Kept first: a kept unit is addressed after the units placed ahead of it, which is exactly the chain the next question will have built when it asks.
     ///
-    /// **A unit nothing follows is not placed.** Its placement would address no slot, and a question files no payload that would read the chain after the fold — so the one thing placing it would buy is a serialization of the whole unit and a digest of the bytes, which on the standard library is most of what this cache costs a keystroke.
+    /// **The disk is asked as the unit is handed over**, of everything the fold has read so far, which is what catches a file rewritten while its unit compiled.
     ///
-    /// Kept before it is placed: a kept unit is addressed after the units placed ahead of it, which is exactly the chain the next question will have built when it asks.
+    /// **A unit neither filed nor followed is not placed.** A slot is addressed after the units placed before it, so a unit missing from that chain shifts every later address by one, and one declined hit becomes a miss for every unit after it; a unit nothing follows addresses no slot, and a question files no payload that would read the chain after the fold. Placing it would buy a serialization of the whole unit and a digest of the bytes, which on the standard library is most of what this cache costs a keystroke.
     fn put(&self, source: &UnitSource<'_>, unit: &Unit, followed: bool) {
         self.cache.keep(source, unit);
-        if followed {
-            self.cache.place(source, unit);
+        if !self.departed.get() && !self.cache.taken_on_disk() {
+            self.departed.set(true);
+        }
+
+        match self.departed.get() {
+            false => Cache::put(self.cache, source, unit, followed),
+            true if followed => self.cache.place(source, unit),
+            true => {}
         }
     }
 }

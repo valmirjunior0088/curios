@@ -115,9 +115,9 @@ fn one_slot_serves_run_and_compile() {
     );
 }
 
-/// A stage is a question, and a question never writes the store: `wonder stage` compiles to answer and files nothing, so the plain invocation after it still compiles.
+/// A stage is a question, and a question files the units it compiled whole and no payload: after `wonder stage`, the plain invocation finds the library in the store and compiles the program over it.
 #[test]
-fn asking_for_a_stage_compiles_and_files_nothing() {
+fn asking_for_a_stage_files_its_units_and_no_payload() {
     let root = project("asking");
 
     let shown = curios(&root, &["wonder", "stage", "wasm"]);
@@ -131,10 +131,18 @@ fn asking_for_a_stage_compiles_and_files_nothing() {
         "the answer is the rung, on stdout"
     );
     assert!(shown.stderr.is_empty(), "and nothing was narrated");
+    assert_eq!(slots(&root), 0, "a question files no payload");
 
+    let run = curios(&root, &["run"]);
+    let narrated = String::from_utf8_lossy(&run.stderr);
     assert!(
-        !reused(&curios(&root, &["run"])),
-        "and nothing was filed, so the next plain invocation compiles"
+        narrated.contains("/app; reused"),
+        "the library is the unit the question filed: {narrated}"
+    );
+    assert_eq!(
+        slots(&root),
+        1,
+        "and the program was compiled over it, and its payload filed"
     );
 }
 

@@ -1,7 +1,7 @@
-//! The `document` engine: a unit's interface as a [`Documentation`] record, read off the unit the compilation builds — what a `wonder document` transport would print. Nothing executes, and the store is read as every query reads it and never written; `curios document` is a build, and reads the same record off a compilation that files what it compiled, in `curios`'s pipeline. [`std_documentation`] is the same record read off the standard library this compiler was built with, which is how `curios document --std` documents it: it has no package a build would compile it from, and the prelude every compilation starts from already carries its record.
+//! The `document` engine: a unit's interface as a [`Documentation`] record, read off the unit the compilation builds — what a `wonder document` transport would print. Nothing executes, and the store is reached as every query reaches it; `curios document` is a build, which reads the same record off its own compilation, in `curios`'s pipeline, and writes the pages. [`std_documentation`] is the same record read off the standard library this compiler was built with, which is how `curios document --std` documents it: it has no package a build would compile it from, and the prelude every compilation starts from already carries its record.
 
 use {
-    crate::{ReadOnly, overlaid},
+    crate::{Overlaid, overlaid},
     curios_document::Documentation,
     curios_pipeline::{Cache, CompileError, DEFAULT_STEP_BUDGET, Fold},
     curios_text::{Overlay, RootSource},
@@ -31,7 +31,7 @@ pub fn std_documentation() -> Result<Documentation, CompileError> {
     )
 }
 
-/// The interface of the last of `units` — a package's library, compiled against everything before it — for its consumers. `overlay` and `cache` behave exactly as they do for `diagnostics`: unsaved text wins over the disk, and the store is read but never written.
+/// The interface of the last of `units` — a package's library, compiled against everything before it — for its consumers. `overlay` and `cache` behave exactly as they do for `diagnostics`: unsaved text wins over the disk, and the store is read, and filed into where a question may.
 ///
 /// The compilation runs to completion first, the kernel included, so a library that does not check is not documented and reports what stopped it exactly as `run` would. The record itself is the one the lowering built and left on the unit, whether the unit was compiled now or reused from the store.
 pub fn documentation(
@@ -40,8 +40,8 @@ pub fn documentation(
     overlay: &Overlay,
     cache: Option<&Verdicts>,
 ) -> Result<Documentation, CompileError> {
-    let read_only = cache.map(|cache| ReadOnly { cache, overlay });
-    let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
+    let reached = cache.map(|cache| Overlaid::over(cache, overlay));
+    let cache = reached.as_ref().map(|cache| cache as &dyn Cache);
     let units = overlaid(units, overlay);
 
     Fold::new(budget, &units, cache).units(
