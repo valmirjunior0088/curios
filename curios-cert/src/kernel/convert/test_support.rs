@@ -43,7 +43,6 @@ pub(super) fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Ter
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
 
@@ -112,7 +111,6 @@ pub(super) fn declare_struct(kernel: &mut Kernel, path: &str, fields: Telescope<
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
 
@@ -184,7 +182,6 @@ pub(super) fn declare_wrap(
             rep_public: true,
             polarities: Vec::new(),
             variances,
-            plicities: Vec::new(),
         },
     );
     let type_ = Term::func_type([(carrier, sort.clone())], sort.clone());
@@ -229,7 +226,6 @@ pub(super) fn declare_leaf(
             rep_public: true,
             polarities: Vec::new(),
             variances,
-            plicities: Vec::new(),
         },
     );
     let type_ = Term::type_ground();
@@ -271,7 +267,6 @@ pub(super) fn declare_box(kernel: &mut Kernel, variances: Vec<Variance>) -> Glob
             rep_public: true,
             polarities: Vec::new(),
             variances,
-            plicities: Vec::new(),
         },
     );
 
@@ -299,7 +294,6 @@ pub(super) fn declare_indexed(kernel: &mut Kernel, path: &str, param_sort: Term)
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
 

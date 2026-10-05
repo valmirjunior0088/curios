@@ -113,7 +113,6 @@ fn both_checkers_decide_non_informativeness_alike() {
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     };
     context
         .register_induct(&held, declaration.clone())

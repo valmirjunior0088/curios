@@ -120,10 +120,9 @@ fn project_module(module: &Module) -> Module {
                         result_sort: project_erased_universes(&declaration.result_sort),
                         module: declaration.module,
                         rep_public: declaration.rep_public,
-                        // Polarity and the parameters' marks are elaboration-only metadata, projected out here alongside the universe context.
+                        // Polarity is elaboration-only metadata, projected out here alongside the universe context.
                         polarities: Vec::new(),
                         variances: Vec::new(),
-                        plicities: Vec::new(),
                     },
                 )
             })
@@ -140,10 +139,9 @@ fn project_module(module: &Module) -> Module {
                         result_sort: project_erased_universes(&declaration.result_sort),
                         module: declaration.module,
                         rep_public: declaration.rep_public,
-                        // Polarity and the parameters' marks are elaboration-only metadata, projected out here alongside the universe context.
+                        // Polarity is elaboration-only metadata, projected out here alongside the universe context.
                         polarities: Vec::new(),
                         variances: Vec::new(),
-                        plicities: Vec::new(),
                     },
                 )
             })

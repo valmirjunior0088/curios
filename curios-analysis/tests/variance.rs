@@ -82,7 +82,6 @@ fn family(
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     }
 }
 
@@ -238,7 +237,6 @@ fn a_structs_field_is_read() {
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     };
     let structs = BTreeMap::from([
         (

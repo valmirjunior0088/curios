@@ -102,7 +102,6 @@ fn value_conversion_does_not_identify_distinct_type_payloads() {
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     };
 
     let e_type = Term::induct_type(e, Vec::<Term>::new(), Vec::<Term>::new());

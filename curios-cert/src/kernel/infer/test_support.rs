@@ -50,7 +50,6 @@ pub(super) fn parameterized_struct(kernel: &mut Kernel) -> Global {
         rep_public: true,
         polarities: vec![Polarity::Strict],
         variances: Vec::new(),
-        plicities: Vec::new(),
     };
     kernel.declare_struct(&name, &declaration);
 

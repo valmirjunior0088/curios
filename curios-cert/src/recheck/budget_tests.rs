@@ -48,7 +48,6 @@ fn spent_entry_beside_an_aliased_payload() -> Program {
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     };
 
     Program {

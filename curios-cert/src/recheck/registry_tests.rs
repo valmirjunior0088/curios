@@ -146,7 +146,6 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     };
 
     // `Foo.{u, u}` claimed at `Type v`: its sort is `Type u`, and nothing may conflate the two.

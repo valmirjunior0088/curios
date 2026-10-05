@@ -30,7 +30,6 @@ fn declare_wrap(context: &mut Context, variance: Variance) {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: vec![variance],
-                plicities: Vec::new(),
             },
         )
         .unwrap();

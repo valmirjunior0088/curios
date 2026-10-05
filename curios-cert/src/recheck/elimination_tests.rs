@@ -171,7 +171,6 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     };
     // `Held : (t : Two) -> Prop | mk() : (Two/a())`, a proposition, so the guard would be in play.
     let held_decl = InductDecl {
@@ -189,7 +188,6 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     };
 
     let at_b = Term::induct_type(held_name, Vec::<Term>::new(), [at("b")]);

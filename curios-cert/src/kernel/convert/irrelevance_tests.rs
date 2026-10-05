@@ -341,7 +341,6 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
 
@@ -435,7 +434,6 @@ fn a_constructors_value_is_typed_by_its_declaration() {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         );
 
@@ -545,7 +543,6 @@ fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         );
         let (typed, untyped) = (binder(0, "t"), binder(1, "u"));
@@ -674,7 +671,6 @@ fn a_struct_field_at_a_proposition_is_not_read() {
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
     let (p, q) = (binder(62, "p"), binder(63, "q"));
@@ -727,7 +723,6 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
     let (p, q) = (binder(62, "p"), binder(63, "q"));
@@ -950,7 +945,6 @@ fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
     // The names the kernel is not handed sit below the one it is, so no binder it mints meets one of them.
@@ -1041,7 +1035,6 @@ fn a_struct_parameter_at_a_proposition_is_not_read() {
             rep_public: true,
             polarities: vec![curios_core::Polarity::Unused],
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
     let (p, q) = (binder(72, "p"), binder(73, "q"));

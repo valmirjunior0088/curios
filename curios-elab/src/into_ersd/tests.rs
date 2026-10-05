@@ -683,7 +683,6 @@ fn opt_induct() -> InductDecl {
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     }
 }
 
@@ -1216,7 +1215,6 @@ fn newtype_struct(field: &str, type_: Term) -> StructDecl {
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     }
 }
 
@@ -1247,7 +1245,6 @@ fn unary_induct(payload: Term) -> InductDecl {
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     }
 }
 

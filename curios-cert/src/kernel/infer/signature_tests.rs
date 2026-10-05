@@ -30,7 +30,6 @@ fn family(
         rep_public: true,
         polarities: (0..parameters).map(|_| Polarity::Strict).collect(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     }
 }
 

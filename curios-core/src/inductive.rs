@@ -37,7 +37,7 @@ impl InductParam {
 #[curios_archive::archived]
 pub struct InductDecl {
     pub universe_context: UniverseContext,
-    /// The declaration's parameters, terminating in its index telescope: `induct Vec(T : Type) : (n : Nat)` is `(T : Type)` ending in `(n : Nat)` ending in `()`.
+    /// The declaration's parameters, terminating in its index telescope: `induct Vec(T : Type) : (n : Nat)` is `(T : Type)` ending in `(n : Nat)` ending in `()`. Each parameter stands under the mark it binds as at the type constructor — the marks the former's own function type carries, stated here for the elaborator, which opens the parameters over the indices and the signatures — and every index is plain. The value constructors' marks are each signature's own ([`InductParam`]).
     ///
     /// Nested rather than two parallel telescopes. The indices are scoped under the parameters *by construction*, so there is no agreement between two encodings to state, nothing to keep in sync, and no malformed pairing for a judgment to refuse — a declaration claiming one parameter and an index telescope that does not lead with it is unspellable rather than rejected.
     pub arity: Telescope<Telescope<()>>,
@@ -55,8 +55,6 @@ pub struct InductDecl {
     pub polarities: Vec<Polarity>,
     /// How two instances of this family compare in each of its universe parameters, one entry per parameter of `universe_context`. Computed by `curios-elab` and carried into the prelude archive, as the polarities are. Empty until then; read through [`Self::variance`], never indexed directly.
     pub variances: Vec<Variance>,
-    /// What each of its `params` binds as at the type constructor, one mark per parameter in declaration order. See [`StructDecl::plicities`](super::StructDecl). The value constructors' marks are each signature's own ([`InductParam::plicities`]).
-    pub plicities: Vec<Plicity>,
 }
 
 impl InductDecl {
@@ -98,11 +96,6 @@ impl InductDecl {
             .unwrap_or(Variance::Invariant)
     }
 
-    /// What this declaration's `i`th parameter binds as at the type constructor. A declaration that states no marks has plain parameters only.
-    pub fn plicity(&self, i: usize) -> Plicity {
-        self.plicities.get(i).copied().unwrap_or(Plicity::Explicit)
-    }
-
     /// This declaration with every term hash-consed against `sharing`. See [`Module::shared`](crate::Module::shared).
     pub fn shared(&self, sharing: &Sharing) -> Self {
         Self {
@@ -125,7 +118,6 @@ impl InductDecl {
             rep_public: self.rep_public,
             polarities: self.polarities.clone(),
             variances: self.variances.clone(),
-            plicities: self.plicities.clone(),
         }
     }
 

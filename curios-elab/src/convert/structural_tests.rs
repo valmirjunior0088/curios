@@ -265,7 +265,6 @@ fn any_two_terms_converge_at_a_struct_with_one_inhabitant() {
                     rep_public: true,
                     polarities: Vec::new(),
                     variances: Vec::new(),
-                    plicities: Vec::new(),
                 },
             )
             .unwrap();
@@ -339,7 +338,6 @@ fn a_goals_type_is_read_forced() {
                     rep_public: true,
                     polarities: Vec::new(),
                     variances: Vec::new(),
-                    plicities: Vec::new(),
                 },
             )
             .unwrap();
@@ -441,7 +439,6 @@ fn two_calls_of_one_definition_convert_by_their_spines_whatever_spells_them() {
                     rep_public: true,
                     polarities: Vec::new(),
                     variances: Vec::new(),
-                    plicities: Vec::new(),
                 },
             )
             .unwrap();
@@ -689,7 +686,6 @@ fn register(
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -1019,7 +1015,6 @@ fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -1187,7 +1182,6 @@ fn declare_struct(context: &mut Context, path: &str, fields: Telescope<()>) -> T
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -1213,7 +1207,6 @@ fn declare_proposition(context: &mut Context, path: &str) -> Term {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -1248,7 +1241,6 @@ fn struct_unit_field_is_irrelevant() {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -1286,7 +1278,6 @@ fn a_struct_field_at_a_proposition_is_not_read() {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -1308,7 +1299,6 @@ fn a_struct_field_at_a_proposition_is_not_read() {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -1354,7 +1344,6 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -1383,7 +1372,6 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -1447,7 +1435,6 @@ fn variant_unit_payload_is_irrelevant() {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();

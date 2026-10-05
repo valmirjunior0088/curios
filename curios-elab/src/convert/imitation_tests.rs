@@ -27,7 +27,6 @@ fn register_list(context: &mut Context) {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -52,7 +51,6 @@ fn register_vec(context: &mut Context) {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -77,7 +75,6 @@ fn register_wrap(context: &mut Context, variance: Variance) {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: vec![variance],
-                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -199,7 +196,6 @@ fn solves_against_struct_type() {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();

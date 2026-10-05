@@ -287,7 +287,6 @@ fn a_struct_declaration_reaches_its_field_types() {
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
 
@@ -341,7 +340,6 @@ fn restriction_drops_the_registry_entries_witnesses_and_tests_of_excluded_names(
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
     module.witnesses.insert(authored("Box"));

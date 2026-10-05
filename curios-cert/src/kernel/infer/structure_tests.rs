@@ -36,7 +36,6 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
     let proposition = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());

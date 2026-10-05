@@ -168,7 +168,6 @@ fn a_call_in_a_nominal_values_parameter_is_recorded() {
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
 

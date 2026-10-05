@@ -1,7 +1,7 @@
 use {
     super::{Polarity, Telescope, Term, UniverseContext, Variance},
     crate::Sharing,
-    curios_utilities::{Plicity, Qualifier},
+    curios_utilities::Qualifier,
 };
 
 /// One struct declaration's registry entry: the metadata a `struct` declaration produces alongside its type-former binding.
@@ -11,7 +11,7 @@ use {
 #[curios_archive::archived]
 pub struct StructDecl {
     pub universe_context: UniverseContext,
-    /// The declaration's parameters, terminating in its field telescope: `struct Pair(A : Type, B : Type) { fst : A, snd : B }` is `(A : Type, B : Type)` ending in `(fst : A, snd : B)` ending in `()`.
+    /// The declaration's parameters, terminating in its field telescope: `struct Pair(A : Type, B : Type) { fst : A, snd : B }` is `(A : Type, B : Type)` ending in `(fst : A, snd : B)` ending in `()`. Each parameter stands under the mark it binds as — the marks the type former's own function type carries, stated here for the elaborator, which opens the parameters over the fields and has no function type to read them from. A `use` parameter joins the witness scope the field types resolve in. The kernel reads no mark of either telescope.
     ///
     /// Nested rather than two parallel telescopes, for the reason [`InductDecl::arity`](super::InductDecl) gives: the fields are scoped under the parameters *by construction*, so there is no agreement between two encodings to state and no malformed pairing for a judgment to refuse.
     pub arity: Telescope<Telescope<()>>,
@@ -25,8 +25,6 @@ pub struct StructDecl {
     pub polarities: Vec<Polarity>,
     /// How two instances of this struct compare in each of its universe parameters, one entry per parameter of `universe_context`. See [`InductDecl::variances`](super::InductDecl).
     pub variances: Vec<Variance>,
-    /// What each of its `params` binds as, one mark per parameter in declaration order — the marks the type former's own function type carries, kept here for the elaborator, which opens the parameters over the fields and has no function type to read them from. A `use` parameter joins the witness scope the field types resolve in. Read through [`Self::plicity`], never indexed directly; the kernel reads none of it.
-    pub plicities: Vec<Plicity>,
 }
 
 impl StructDecl {
@@ -64,11 +62,6 @@ impl StructDecl {
             .unwrap_or(Variance::Invariant)
     }
 
-    /// What this declaration's `i`th parameter binds as. A declaration that states no marks has plain parameters only.
-    pub fn plicity(&self, i: usize) -> Plicity {
-        self.plicities.get(i).copied().unwrap_or(Plicity::Explicit)
-    }
-
     /// This declaration with every term hash-consed against `sharing`. See [`Module::shared`](crate::Module::shared).
     pub fn shared(&self, sharing: &Sharing) -> Self {
         Self {
@@ -79,7 +72,6 @@ impl StructDecl {
             rep_public: self.rep_public,
             polarities: self.polarities.clone(),
             variances: self.variances.clone(),
-            plicities: self.plicities.clone(),
         }
     }
 

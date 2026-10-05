@@ -102,21 +102,24 @@ fn add_arity_sizing(
     })
 }
 
-/// Walk a (params-first) telescope, checking each binder's type against `Type` under the earlier binders (fresh-gensym, assume), and return the rebuilt `(label, type)` entries alongside the telescope's terminal — opened under those binders. Runs in the caller's frame; the same gensym-then-relabel discipline as `elaborate_tuple_type`.
+/// A telescope's members as a walk opened them: each under its mark, at the binder minted for it.
+type Members = Vec<(Plicity, Free, Term)>;
+
+/// Walk a (params-first) telescope, checking each binder's type against `Type` under the earlier binders (fresh-gensym, assume), and return the rebuilt `(mark, label, type)` entries alongside the telescope's terminal — opened under those binders. Runs in the caller's frame; the same gensym-then-relabel discipline as `elaborate_tuple_type`.
 ///
-/// **`plicity` says what each position binds as, and every caller states it.** A `use` entry joins the witness scope as well as the ordinary one, so resolution in the *later* entries' types finds it — which is what a function telescope does for a `use` premise ([`super::binding`]'s `assume_slot`), and what a concept's superclass edge needs to be visible to the field types below it. A caller whose telescope has no witness entry says so by answering `Explicit` everywhere, rather than inheriting it from a default nobody restates.
+/// **Each member is entered under the mark its entry states.** A `use` entry joins the witness scope as well as the ordinary one, so resolution in the *later* entries' types finds it — which is what a function telescope does for a `use` premise ([`super::binding`]'s `assume_slot`), and what a concept's superclass edge needs to be visible to the field types below it.
 fn check_telescope_entries<B: Bound>(
     context: &mut Context,
     telescope: Telescope<B>,
-    plicity: impl Fn(usize) -> Plicity,
-) -> Result<(Vec<(Free, Term)>, B), Error> {
+) -> Result<(Members, B), Error> {
     let mut entries = Vec::new();
     let mut cursor = telescope.cursor();
     while let Some((_, ty)) = cursor.entry() {
+        let mark = cursor.mark().expect("a mark stands at an entry");
         let rebuilt = check_is_sort(context, &ty)?.0;
         let label = cursor.advance_fresh(|hint| context.fresh(hint));
-        assume_entry(context, &label, &rebuilt, plicity(entries.len()));
-        entries.push((label, rebuilt));
+        assume_entry(context, &label, &rebuilt, mark);
+        entries.push((mark, label, rebuilt));
     }
     Ok((entries, cursor.body().expect("a cursor past every entry")))
 }
@@ -135,14 +138,14 @@ fn assume_entry(context: &mut Context, label: &Free, type_: &Term, plicity: Plic
 fn assume_telescope_entries<B: Bound>(
     context: &mut Context,
     telescope: Telescope<B>,
-    plicity: impl Fn(usize) -> Plicity,
-) -> (Vec<(Free, Term)>, B) {
+) -> (Members, B) {
     let mut entries = Vec::new();
     let mut cursor = telescope.cursor();
     while let Some((_, ty)) = cursor.entry() {
+        let mark = cursor.mark().expect("a mark stands at an entry");
         let label = cursor.advance_fresh(|hint| context.fresh(hint));
-        assume_entry(context, &label, &ty, plicity(entries.len()));
-        entries.push((label, ty));
+        assume_entry(context, &label, &ty, mark);
+        entries.push((mark, label, ty));
     }
     (entries, cursor.body().expect("a cursor past every entry"))
 }
@@ -243,20 +246,17 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
     // Walk the parameters, then the index telescope they terminate in, checking each entry type against `Type` under the binders before it.
     let (param_entries, index_entries) = context.with_frame(|context| {
         // A `use` parameter is in the witness scope of the index types below it, as it is in the type constructor's own function type.
-        let (params, inner) =
-            check_telescope_entries(context, induct_decl.arity.clone(), |position| {
-                induct_decl.plicity(position)
-            })?;
-        let (indices, ()) = check_telescope_entries(context, inner, |_| Plicity::Explicit)?;
+        let (params, inner) = check_telescope_entries(context, induct_decl.arity.clone())?;
+        let (indices, ()) = check_telescope_entries(context, inner)?;
 
         Ok::<_, Error>((params, indices))
     })?;
 
     let param_refs = param_labels.iter().map(String::as_str).collect::<Vec<_>>();
     let index_refs = index_labels.iter().map(String::as_str).collect::<Vec<_>>();
-    let arity = Telescope::build(
+    let arity = Telescope::build_marked(
         param_entries,
-        Telescope::build(index_entries, ()).relabel(&index_refs),
+        Telescope::build_marked(index_entries, ()).relabel(&index_refs),
     )
     .relabel(&param_refs);
 
@@ -271,7 +271,6 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
             rep_public: induct_decl.rep_public,
             polarities: induct_decl.polarities,
             variances: induct_decl.variances,
-            plicities: induct_decl.plicities,
         },
     );
 
@@ -294,17 +293,14 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
             .collect::<Vec<_>>();
 
         let (entries, targets) = context.with_frame(|context| {
-            // The signature's own marks: a `use` parameter of the family is a witness slot of every constructor, in scope for the payload types after it.
-            let (entries, targets) =
-                check_telescope_entries(context, signature.clone(), |position| {
-                    param.plicities()[position]
-                })?;
+            // Under the signature's own marks: a `use` parameter of the family is a witness slot of every constructor, in scope for the payload types after it.
+            let (entries, targets) = check_telescope_entries(context, signature.clone())?;
 
             // The targets are still checked by `elaborate_induct_type`, which is what compares them against the rebuilt index telescope — so the constructed type is rebuilt here from what the declaration fixes (this family, at the constructor's own parameter binders) and the targets the signature states, elaborated, and its indices taken back.
             let params = entries
                 .iter()
                 .take(induct_decl.param_count())
-                .map(|(binder, _)| Term::free_var(binder))
+                .map(|(_, binder, _)| Term::free_var(binder))
                 .collect::<Vec<_>>();
             let constructed = check_is_sort(context, &Term::induct_type(*name, params, targets))?.0;
 
@@ -321,11 +317,10 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
         let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
         constructors.push((
             tag.clone(),
-            // Plicity is metadata parallel to the telescope; elaboration re-checks the types but never changes the calling convention.
-            InductParam::new(
-                Telescope::build(entries, targets).relabel(&label_refs),
-                param.plicities().to_vec(),
-            ),
+            // Each entry is rebuilt under the mark it had: elaboration re-checks the types and never changes the calling convention.
+            InductParam {
+                telescope: Telescope::build_marked(entries, targets).relabel(&label_refs),
+            },
         ));
     }
 
@@ -340,7 +335,6 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
             rep_public: induct_decl.rep_public,
             polarities: induct_decl.polarities,
             variances: induct_decl.variances,
-            plicities: induct_decl.plicities,
         },
     );
 
@@ -386,31 +380,17 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
         Subterm::Prop
     );
 
-    // A concept's superclass edges, as one mark per field. Read before the frame below borrows the context mutably; a plain `struct` is not a concept and answers with no edges at all.
-    let field_plicities = context
-        .concept(name)
-        .map(ConceptDecl::field_plicities)
-        .unwrap_or_default();
-
     // Open the parameters, then check the field telescope they terminate in against `Type` under the binders before it.
     //
     // The parameters are opened rather than checked: `share_struct_params` elaborated them before the former's body was, and they are the terms that body was checked against. Elaborating them again would file a second set of universe instances beside the ones already in play.
     let (param_entries, field_entries) = context.with_frame(|context| -> Result<_, Error> {
-        // Under their declared marks, so a `use` parameter is in the witness scope of the fields, as it is in the former's own function type.
-        let (params, inner) =
-            assume_telescope_entries(context, struct_decl.arity.clone(), |position| {
-                struct_decl.plicity(position)
-            });
-        let (fields, ()) = check_telescope_entries(context, inner, |position| {
-            field_plicities
-                .get(position)
-                .copied()
-                .unwrap_or(Plicity::Explicit)
-        })?;
+        // Under their declared marks, so a `use` parameter is in the witness scope of the fields, as it is in the former's own function type, and a concept's superclass edge in that of the fields below it.
+        let (params, inner) = assume_telescope_entries(context, struct_decl.arity.clone());
+        let (fields, ()) = check_telescope_entries(context, inner)?;
 
         // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof irrelevance, yet projection is an *unguarded* eliminator — it reads a field out of a value the theory believes is interchangeable with any other. That is consistent only when no field is informative, the singleton-elimination condition (`elaborate_match::singleton_eliminable`) checked here at declaration time rather than per projection. A struct carries no indices, so nothing is forced and the condition reduces to: every field type is itself a proposition. With this enforced, every projection lands in a `Prop`, so `elaborate_proj` needs no guard.
         if declared_prop {
-            for ((_, ty), label) in fields.iter().zip(&field_labels) {
+            for ((_, _, ty), label) in fields.iter().zip(&field_labels) {
                 if !is_prop(context, ty)? {
                     return Err(Error::informative_prop_struct(
                         name.symbol(),
@@ -426,9 +406,9 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
 
     let param_refs = param_labels.iter().map(String::as_str).collect::<Vec<_>>();
     let field_refs = field_labels.iter().map(String::as_str).collect::<Vec<_>>();
-    let arity = Telescope::build(
+    let arity = Telescope::build_marked(
         param_entries,
-        Telescope::build(field_entries, ()).relabel(&field_refs),
+        Telescope::build_marked(field_entries, ()).relabel(&field_refs),
     )
     .relabel(&param_refs);
     add_arity_sizing(
@@ -450,7 +430,6 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
             rep_public: struct_decl.rep_public,
             polarities: struct_decl.polarities,
             variances: struct_decl.variances,
-            plicities: struct_decl.plicities,
         },
     );
 
@@ -583,7 +562,6 @@ fn finalize_definition(
                 rep_public: struct_decl.rep_public,
                 polarities: struct_decl.polarities,
                 variances: struct_decl.variances,
-                plicities: struct_decl.plicities,
             },
         );
     }
@@ -648,7 +626,6 @@ fn finalize_definition(
                 rep_public: struct_decl.rep_public,
                 polarities: struct_decl.polarities,
                 variances: struct_decl.variances,
-                plicities: struct_decl.plicities,
             },
         );
     }
@@ -703,12 +680,14 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
                 "the former's telescope and the registry arity lower from one parameter list"
             );
         };
+        // Under the mark the former's own type states, which is the registry arity's too: a `use` parameter is in the witness scope of the fields below it.
+        let mark = written.mark().expect("an entry stands at the cursor");
         // One binder opens both sides, so a later domain and the field telescope below refer to the same one.
         let binder = context.fresh(hint);
         let occurrence = Term::free_var(&binder);
         written.advance(occurrence.clone());
         lowered.advance(occurrence);
-        params.push((binder, domain));
+        params.push((mark, binder, domain));
     }
 
     let fields = lowered
@@ -719,13 +698,12 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
         name,
         StructDecl {
             universe_context: struct_decl.universe_context,
-            arity: Telescope::build(params, fields),
+            arity: Telescope::build_marked(params, fields),
             result_sort: struct_decl.result_sort,
             module: struct_decl.module,
             rep_public: struct_decl.rep_public,
             polarities: struct_decl.polarities,
             variances: struct_decl.variances,
-            plicities: struct_decl.plicities,
         },
     );
 }
@@ -948,7 +926,6 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 rep_public: induct_decl.rep_public,
                 polarities: induct_decl.polarities,
                 variances: induct_decl.variances,
-                plicities: induct_decl.plicities,
             },
         );
     }
@@ -966,7 +943,6 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                     rep_public: struct_decl.rep_public,
                     polarities: struct_decl.polarities,
                     variances: struct_decl.variances,
-                    plicities: struct_decl.plicities,
                 },
             );
         }
@@ -1089,7 +1065,6 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 rep_public: induct_decl.rep_public,
                 polarities: induct_decl.polarities,
                 variances: induct_decl.variances,
-                plicities: induct_decl.plicities,
             },
         );
     }
@@ -1107,7 +1082,6 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                     rep_public: struct_decl.rep_public,
                     polarities: struct_decl.polarities,
                     variances: struct_decl.variances,
-                    plicities: struct_decl.plicities,
                 },
             );
         }

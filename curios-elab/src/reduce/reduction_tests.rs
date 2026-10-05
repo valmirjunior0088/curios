@@ -848,7 +848,6 @@ fn a_case_equation_answers_at_another_instance_of_an_irrelevant_level() {
                     rep_public: true,
                     polarities: Vec::new(),
                     variances: vec![variance],
-                    plicities: Vec::new(),
                 },
             )
             .unwrap();

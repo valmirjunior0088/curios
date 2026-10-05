@@ -60,7 +60,6 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Global {
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
 
@@ -273,7 +272,6 @@ fn single_payload(payload_type: Term, result_sort: Term) -> InductDecl {
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     }
 }
 
@@ -456,7 +454,6 @@ fn declare_struct_over_a_number(kernel: &mut Kernel, path: &str, fields: Vec<Ter
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
 
@@ -1034,7 +1031,6 @@ fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
             // The lie: every parameter claimed strictly positive, while the payload below is a function *out of* the family.
             polarities: vec![Polarity::Strict],
             variances: Vec::new(),
-            plicities: Vec::new(),
             ..single_payload(
                 Term::func_type([(Free::local(0, Some("f")), bad_type)], false_type),
                 Term::type_ground(),
@@ -1081,7 +1077,6 @@ fn an_out_of_set_vector_is_believed_only_under_partial_coverage() {
             constructors: Vec::new(),
             polarities: vec![Polarity::Strict],
             variances: Vec::new(),
-            plicities: Vec::new(),
             ..single_payload(Term::type_ground(), Term::type_ground())
         },
     );

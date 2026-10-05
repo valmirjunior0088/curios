@@ -41,7 +41,6 @@ fn instantiate_struct_decl(
             rep_public: struct_decl.rep_public,
             polarities: struct_decl.polarities,
             variances: struct_decl.variances,
-            plicities: struct_decl.plicities,
         },
         universes,
     ))
@@ -389,7 +388,7 @@ pub(super) fn resolve_struct_params(
     let mut premises = 0;
     let mut cursor = struct_decl.arity.cursor();
     while let Some((hint, ty)) = cursor.entry() {
-        let premise = struct_decl.plicity(cursor.args().len()) == Plicity::Witness;
+        let premise = cursor.mark() == Some(Plicity::Witness);
         let arg = match written.next() {
             Some(arg) => check(context, arg, ty.clone())?,
             None if premise => {

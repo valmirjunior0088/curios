@@ -78,7 +78,6 @@ pub(super) fn shaped(params: usize, indices: usize, variances: &[Variance]) -> I
         rep_public: true,
         polarities: Vec::new(),
         variances: variances.to_vec(),
-        plicities: Vec::new(),
     }
 }
 

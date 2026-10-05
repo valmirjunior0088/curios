@@ -46,7 +46,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 ## Surface
 
 - [ ] [Typed patterns](roadmap/03-surface/01-typed-patterns.md) — a wildcard beside a concrete pattern is refused in any but the first column, coverage is not checked against the scrutinee's constructors, and a redundant arm is not reported
-- [ ] [Plicity on a telescope's members](roadmap/03-surface/02-plicity-on-a-telescopes-members.md) — an arm writes every hidden payload of its constructor, a structure's field takes no mark and its proofs are written at every literal, a concept value is read with its edges in the count, and Core states a declaration's marks beside its telescopes
+- [ ] [Plicity on a telescope's members](roadmap/03-surface/02-plicity-on-a-telescopes-members.md) — an arm writes every hidden payload of its constructor, a structure's field takes no mark and its proofs are written at every literal, a concept value is read with its edges in the count, and what a concept's edge reaches is read off its written head
 - [x] `struct` and `induct` declarations with independent nominal and representation visibility; structure, concept and witness groups
 - [x] [Privacy scoped to a subtree](design/surface/privacy-is-scoped-to-a-subtree.md), with sealed representations and an exact private-item-in-public-interface audit
 - [x] [Concepts resolved with global coherence](design/surface/concepts-resolve-with-global-coherence.md): one witness per key — a type's head, a tuple's shape, a partially applied constructor's stuck head — the orphan rule, decreasing premises, higher-kinded parameters, laws, associated types and superclass edges

@@ -31,7 +31,6 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Term {
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
 

@@ -77,7 +77,6 @@ fn register_opt(context: &mut Context) {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();
@@ -391,7 +390,6 @@ fn register_flag(context: &mut Context) {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
-                plicities: Vec::new(),
             },
         )
         .unwrap();

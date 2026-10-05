@@ -64,7 +64,6 @@ fn a_parameter_named_through_an_instance() -> (Module, Term) {
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     };
 
     let bad_decl = StructDecl {
@@ -78,7 +77,6 @@ fn a_parameter_named_through_an_instance() -> (Module, Term) {
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-        plicities: Vec::new(),
     };
 
     let module = Module {

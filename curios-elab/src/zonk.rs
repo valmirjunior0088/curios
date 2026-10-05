@@ -224,7 +224,6 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                     rep_public: induct_decl.rep_public,
                     polarities: induct_decl.polarities.clone(),
                     variances: induct_decl.variances.clone(),
-                    plicities: induct_decl.plicities.clone(),
                 },
             ))
         })
@@ -245,7 +244,6 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                     rep_public: struct_decl.rep_public,
                     polarities: struct_decl.polarities.clone(),
                     variances: struct_decl.variances.clone(),
-                    plicities: struct_decl.plicities.clone(),
                 },
             ))
         })

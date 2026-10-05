@@ -131,7 +131,6 @@ pub(super) fn declare_at(
             rep_public: true,
             polarities: Vec::new(),
             variances: Vec::new(),
-            plicities: Vec::new(),
         },
     );
 
