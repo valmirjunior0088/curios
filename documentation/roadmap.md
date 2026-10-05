@@ -16,9 +16,9 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Soundness
 
-- [ ] [Conversion is one relation in both checkers](roadmap/01-soundness/01-conversion-is-one-relation-in-both-checkers.md) — the audit stands with no row parted; the record of the decision is not written
 - [ ] [The certifier confirms what it skips](roadmap/01-soundness/02-the-certifier-confirms-what-it-skips.md) — a declaration under a name already in scope is passed over whatever it is, a registry entry among them live and unchecked, and what keeps one from arriving is checked outside `curios-cert`
 - [ ] [Checked evidence and trusted reasoning](roadmap/01-soundness/03-checked-evidence.md) — no procedure in the certifier's closure is classified against the grade, no step of the gate holds the closure, and reasoning found outside the kernel has no evidence the certifier checks, which opens with [the relational layer](roadmap/04-arithmetic/08-relational-layer.md)
+- [x] [Conversion is one relation in both checkers](design/soundness/conversion-is-one-relation-in-both-checkers.md): every rule of conversion held to its laws — reversed, chained, substituted and under every child a term former holds — with each checker asked by itself and near misses among the rows; one order of rules, one set of typed positions and one reading of a goal's type in both; and two neutrals decided by the shape of their type wherever eta cannot be fired
 - [x] [Totality of everything erasure deletes](design/soundness/totality-of-the-erased-program.md): nothing reachable from a type and nothing at a proposition is partial, decided per recursive group by size-change termination, so no closed term inhabits `/std/Bool/False`
 - [x] [An independent kernel re-checks what the elaborator accepts](design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md), the trusted base being `curios-cert` and the layer both checkers share
 - [x] [The soundness board](design/soundness/the-soundness-board.md): every rule that can admit a term, graded probed, argued or auditable, with its fixtures
