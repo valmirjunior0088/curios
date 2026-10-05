@@ -391,6 +391,16 @@ impl Caches {
     pub(crate) fn invalidate_for_universe_transaction(&mut self) {
         self.clear_elaborations();
     }
+
+    /// Level constraints were withdrawn from a scope in which a judgment's reduction put a question to conversion: a reduct taken there may rest on an answer those constraints gave, so the reducts go. No stamp: the withdrawal itself was stamped.
+    pub(crate) fn invalidate_for_withdrawn_answers(&mut self) {
+        // How many reducts the clear throws away.
+        curios_profile::sample!(
+            "caches::withdrawn_dropped",
+            (self.reduction[0].len() + self.reduction[1].len()) as u64
+        );
+        self.clear_reductions();
+    }
 }
 
 /// `reduct`, stored under `key`, as the answer for `query`, which shares `key`'s universe-erased projection: the stored spelling's levels are matched to the asking spelling's position by position, and the reduct's levels rewritten through the metavariables that differ.

@@ -843,6 +843,7 @@ fn proofs_named(context: &mut Context, probe: &Term) -> Result<Vec<Free>, Reduce
 /// Which of `atoms` are one, as reduction asks of the atoms of a stuck fold and of a stuck form beside an equation's scrutinee: each pair put to the elaborator's conversion with nothing committed (`same_uncommitted`), by plain reduction ([`Context::plainly`]). A comparison with no value at the type level is that the two are not known to be one.
 fn asked_classes(context: &mut Context, atoms: &[Term]) -> Result<Classes, ReduceError> {
     curios_profile::profile!("reduce::asked_classes");
+    context.note_question();
     context.plainly(|context| {
         Classes::of(atoms, |this, that| {
             Ok(same_uncommitted(context, this, that)
@@ -860,6 +861,7 @@ fn asked_scrutinee(
     key: &Term,
 ) -> Result<bool, ReduceError> {
     curios_profile::profile!("reduce::asked_scrutinee");
+    context.note_question();
     context.plainly(|context| {
         context.with_refinements_withheld_from(frame, |context| {
             Ok(same_uncommitted(context, term, key)
@@ -975,6 +977,7 @@ fn settle(
 ) -> Result<(), ReduceError> {
     // The key and its frame are what a hunt for repeated settlements needs: the same pair recurring is an entry settled again, and the costliest calls name the keys that pay.
     curios_profile::profile!("reduce::settle", key = %original, frame);
+    let declined = context.declined();
     let settled = context.with_refinements_withheld_from(frame, |context| {
         context.within_allowance(SETTLEMENT_ALLOWANCE, |context| {
             let reduct = reduce(context, original.clone())?;
@@ -986,6 +989,8 @@ fn settle(
     let unsolved = !zonk_solved_term_metas(context, original)
         .metavars()
         .is_empty();
+    // And what either solver could: a question declined for a commit while the key was reduced.
+    let levels = (context.declined() != declined).then(|| context.universe_state());
 
     match settled {
         Ok(reduct) => {
@@ -997,11 +1002,11 @@ fn settle(
                 compared: project_erased_universes(&unerased),
                 unerased,
             });
-            context.record_settled_key(frame, key, settled, unsolved);
+            context.record_settled_key(frame, key, settled, unsolved, levels);
             Ok(())
         }
         Err(error) => {
-            context.record_settled_key(frame, key, None, unsolved);
+            context.record_settled_key(frame, key, None, unsolved, levels);
             Err(error)
         }
     }
@@ -1049,6 +1054,8 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
     }
 
     let entry = term.clone();
+    // How many questions had been declined for a commit when this reduction began: its reduct is remembered only where none was since ([`remember`]).
+    let declined = context.declined();
     // Whether the loop is continuing from an answer the reduced spellings gave. See the `Reduce::Break` arm below.
     let mut answered = false;
 
@@ -1117,7 +1124,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
             // **An answer is final.** What it hands back is a case value — a constructor or a literal, a normal form — so there is nothing left for an equation to say about it, and it is not asked again. That is a rule rather than an observation: a reduced spelling can itself be a case value, where equations outside an entry decide its key, and a frozen frame restored for a retry re-registers an arm's equation in a frame inside its own, whose spelling then settles to the very value it assumes. Asked again, such a value would answer itself, which the loop would take for progress until the budget ran out, and two entries spelled as each other's values would trade it back and forth the same way.
             Reduce::Break(result) => match answered {
                 true => {
-                    context.reduce(entry, &result);
+                    remember(context, declined, entry, &result);
                     return Ok(result);
                 }
                 false => match refined_reduct(context, &result)? {
@@ -1129,13 +1136,22 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                     None => match refolded(context, &result)? {
                         Some(value) => term = value,
                         None => {
-                            context.reduce(entry, &result);
+                            remember(context, declined, entry, &result);
                             return Ok(result);
                         }
                     },
                 },
             },
         }
+    }
+}
+
+/// Remember `result` as `entry`'s reduct, unless a question was declined for a commit since `declined` was read, where the reduction began.
+///
+/// **A reduct taken across a declined question is one the solver can change.** The question was answered no because answering yes would have committed a solution or a level constraint (`same_uncommitted`), so the same reduction, taken once the solver has moved, may reach further. Remembered, the stuck reduct would stand for the declaration and what the elaborator accepts would follow the order its terms were reduced in. A reduct no rule of reduction read a level for is remembered as before.
+fn remember(context: &mut Context, declined: u64, entry: Term, result: &Term) {
+    if context.declined() == declined {
+        context.reduce(entry, result);
     }
 }
 

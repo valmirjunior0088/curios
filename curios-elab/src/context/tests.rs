@@ -2,8 +2,8 @@ use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        CalleeId, Free, Global, Intrinsic, Level, MetavarId, Nat, Term, UniverseContext,
-        UniverseMetaId, WitnessOrigin,
+        CalleeId, Free, Global, Intrinsic, Level, MetavarId, Nat, Term, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseRole, WitnessOrigin,
     },
     curios_utilities::Qualifier,
     std::collections::BTreeSet,
@@ -619,4 +619,44 @@ fn a_sort_is_remembered_by_the_reduction_that_read_it() {
             .is_none()
     );
     assert!(context.cached_sort(&judged).is_some());
+}
+
+/// A rollback that withdrew level constraints clears the reducts where a judgment's reduction put a question to conversion inside the scope, and only there. A question is answered on the constraints that stand, so a reduct taken inside may rest on one the rollback withdraws; a scope that asked nothing leaves the reducts alone, no rule of reduction reading a level.
+///
+/// Mutation-checked both ways: with the reducts kept whatever was asked, the second scope's reduct outlives its constraint, and with them cleared whatever was asked, the first scope loses a reduct it had no reason to.
+#[test]
+fn a_rollback_that_withdrew_a_level_constraint_clears_what_a_question_may_rest_on() {
+    let mut context = context();
+    let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
+    let sum = Term::intrinsic(Intrinsic::nat_add(literal(1), literal(2)));
+    let this = context.fresh_universe(UniverseRole::Flexible, None);
+    let that = context.fresh_universe(UniverseRole::Flexible, None);
+    let equate = |context: &mut Context| {
+        context
+            .universes_mut()
+            .add_eq(
+                this.clone(),
+                that.clone(),
+                UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+            )
+            .expect("two fresh levels may be one");
+    };
+
+    context.reduce(sum.clone(), &literal(3));
+    let mark = context.solution_mark();
+    equate(&mut context);
+    context.rollback_solutions(mark);
+    context.end_solutions(mark);
+    assert_eq!(
+        context.cached_reduced(&sum),
+        Some(literal(3)),
+        "no question was asked inside the scope"
+    );
+
+    let mark = context.solution_mark();
+    equate(&mut context);
+    context.note_question();
+    context.rollback_solutions(mark);
+    context.end_solutions(mark);
+    assert_eq!(context.cached_reduced(&sum), None);
 }

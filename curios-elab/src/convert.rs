@@ -114,8 +114,11 @@ pub(crate) fn same_uncommitted(
             .requires_the_same_as(&universes);
     context.rollback_solutions(mark);
     context.end_solutions(mark);
-    // How many pairs were asked about, and how many of them a solution or a level constraint stood between: an answer of the second kind can change once the solver moves.
+    // How many pairs were asked about, and how many of them a solution or a level constraint stood between: an answer of the second kind can change once the solver moves, so whatever reduction is in progress remembers nothing taken across it.
     curios_profile::sample!("convert::same_uncommitted", u64::from(committed));
+    if committed {
+        context.note_declined();
+    }
     Ok(converts? && !committed)
 }
 

@@ -113,6 +113,8 @@ pub(crate) struct SolutionMark {
     term_solution_log_len: usize,
     universe: UniverseMark,
     credited_len: usize,
+    /// How many questions reduction had put to conversion ([`Context::note_question`]).
+    questions: u64,
 }
 
 /// Which top-level item raised a deferred witness goal: the item's position in its module's order, with the entry after the last item. What attributes a refusal that surfaces only once later items have elaborated — a witness that never registered — to the declaration that raised it rather than to the item the sweep happened to run after.
@@ -145,6 +147,9 @@ pub struct Context {
     island: Option<Qualifier>,
     /// Whether the procedure that proves a bound from the facts in scope is running ([`crate::entail`]). It does not run inside itself: what it elaborates is its own candidate, and a bound one of the candidate's operands carries is not the one it was asked about.
     entailing: bool,
+    /// How many questions a judgment's reduction has put to conversion, and how many of every question asked with nothing committed were declined for a commit — what a remembered reduct is held against ([`Context::note_question`], [`Context::note_declined`]).
+    questions: u64,
+    declined: u64,
     /// Whether reduction is plain: it asks the elaborator's conversion nothing ([`Context::plainly`]).
     plain: bool,
     /// The declaration being elaborated ([`Context::enter_declaration`]); `None` for an entry's final term.
@@ -226,6 +231,8 @@ impl Context {
             program: Program::new(),
             island: Some(Qualifier::empty()),
             entailing: false,
+            questions: 0,
+            declined: 0,
             plain: false,
             declaration: None,
             opened: BTreeMap::new(),
@@ -589,23 +596,29 @@ impl Context {
 
     /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`: `None` if no probe has asked for it yet, `Some(None)` if reducing it refused. [`Frames::scrutinee_spellings`] carries how long one stands.
     pub(crate) fn settled_key(&self, frame: usize, key: &Term) -> Option<&Option<Settled>> {
-        self.frames
-            .settled_spelling(frame, key, self.plain, self.solutions.solved_len())
+        self.frames.settled_spelling(
+            frame,
+            key,
+            self.plain,
+            self.solutions.solved_len(),
+            &self.universe_solver.state_token(),
+        )
     }
 
     /// Record a settlement. Every one is recorded, whatever its metavariables: the loop that asks the reduced spellings settles the innermost entry *not yet asked* (`reduce`'s `refined_reduct`), so an unrecorded settlement would be asked for again forever.
     ///
-    /// `unsolved` says the key or its spelling held an unsolved metavariable, so the settlement is filed beside the solutions committed so far and asked for again once another lands.
+    /// `unsolved` says the key or its spelling held an unsolved metavariable, so the settlement is filed beside the solutions committed so far and asked for again once another lands. `levels` is the universe solver's state where a question was declined for a commit while it settled: it is then asked for again once either solver moves.
     pub(crate) fn record_settled_key(
         &mut self,
         frame: usize,
         key: Term,
         settled: Option<Settled>,
         unsolved: bool,
+        levels: Option<UniverseStateToken>,
     ) {
-        let solved = unsolved.then(|| self.solutions.solved_len());
+        let solved = (unsolved || levels.is_some()).then(|| self.solutions.solved_len());
         self.frames
-            .settle_spelling(frame, key, self.plain, settled, solved);
+            .settle_spelling(frame, key, self.plain, settled, solved, levels);
     }
 
     /// Run `attempt` with at most `allowance` units of this declaration's budget in reach, answering `None` when it did not finish inside that.
@@ -1594,6 +1607,26 @@ impl Context {
         self.plain
     }
 
+    /// A judgment's reduction is putting a question to conversion. Its answer rests on the level constraints that stand, so a scope that is rolled back with constraints withdrawn after one was asked inside it clears what was reduced meanwhile ([`Context::rollback_solutions`]).
+    pub(crate) fn note_question(&mut self) {
+        self.questions += 1;
+    }
+
+    /// A question asked with nothing committed was answered no because answering yes would have committed a solution or a level constraint. The answer can change once the solver moves, so no reduct taken across it is remembered (`reduce`'s `remember`).
+    pub(crate) fn note_declined(&mut self) {
+        self.declined += 1;
+    }
+
+    /// How many questions have been declined for a commit.
+    pub(crate) fn declined(&self) -> u64 {
+        self.declined
+    }
+
+    /// The universe solver's state now, which a settlement made across a declined question is filed beside.
+    pub(crate) fn universe_state(&self) -> UniverseStateToken {
+        self.universe_solver.state_token()
+    }
+
     /// Run `read` with reduction plain: it asks the elaborator's conversion nothing, at a stuck fold or at a missed equation — the kernel's `Kernel::plainly`, for the kernel's two readers. A question reduction puts to conversion is answered by it, which is what ends the regress, and a shared analysis reads a term by it (`Env::force`), since totality may rest on no verdict of conversion's. Each of the two keeps its own answers: the reducts, the sorts read through them and the settled spellings (`Frames::scrutinee_spellings`) are all filed by which reduction took them.
     pub(crate) fn plainly<R>(&mut self, read: impl FnOnce(&mut Self) -> R) -> R {
         let previous = mem::replace(&mut self.plain, true);
@@ -2008,6 +2041,7 @@ impl Context {
             term_solution_log_len: self.solutions.solved_len(),
             universe: self.universe_solver.mark(),
             credited_len: self.credited.len(),
+            questions: self.questions,
         }
     }
 
@@ -2051,6 +2085,11 @@ impl Context {
         } else if self.universe_solver.state_token() != universes_before {
             self.caches.note_universe_write();
             self.caches.invalidate_for_universe_transaction();
+            // A question asked inside the scope was answered on the level constraints it held, and a reduct or a settled spelling may rest on the answer: those go with the constraints. A scope that asked none leaves the reducts alone, which no rule of reduction reads a level for.
+            if self.questions != mark.questions {
+                self.caches.invalidate_for_withdrawn_answers();
+                self.frames.forget_spellings();
+            }
         }
     }
 

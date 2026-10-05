@@ -6,6 +6,7 @@
 
 use {
     super::{SharedSpine, SharedTelescope},
+    crate::UniverseStateToken,
     curios_core::{
         DefinitionKind, Free, Global, HeadTag, RecGroup, Term, UniverseContext,
         project_erased_universes,
@@ -65,6 +66,8 @@ struct Spelling {
     settled: Option<Settled>,
     /// How many solutions had been committed when it settled, where the key or the spelling held an unsolved metavariable — `None` where neither did, and no solution can change what the key reduces to.
     solved: Option<usize>,
+    /// The universe solver's state when it settled, where a question put to conversion on the way was declined for a commit: the spelling is then what the key reduces to only while that state stands.
+    levels: Option<UniverseStateToken>,
 }
 
 /// One projection refinement: the base as *written* (unerased, so a probe at another universe instance can be told apart from the spelling the arm actually scrutinized), and the arm's value.
@@ -588,16 +591,21 @@ impl Frames {
         key: &Term,
         plain: bool,
         solved: usize,
+        levels: &UniverseStateToken,
     ) -> Option<&Option<Settled>> {
         let spelling = self
             .scrutinee_spellings
             .get(frame)?
             .get(&(key.clone(), plain))?;
 
-        spelling
+        (spelling
             .solved
             .is_none_or(|settled_at| settled_at == solved)
-            .then_some(&spelling.settled)
+            && spelling
+                .levels
+                .as_ref()
+                .is_none_or(|settled_at| settled_at == levels))
+        .then_some(&spelling.settled)
     }
 
     /// File what the entry `key` registered in `frame` settled to under the reduction `plain` names. `solved` is how many solutions were committed, where the key or the spelling held an unsolved metavariable.
@@ -608,9 +616,17 @@ impl Frames {
         plain: bool,
         settled: Option<Settled>,
         solved: Option<usize>,
+        levels: Option<UniverseStateToken>,
     ) {
         if let Some(spellings) = self.scrutinee_spellings.get_mut(frame) {
-            spellings.insert((key, plain), Spelling { settled, solved });
+            spellings.insert(
+                (key, plain),
+                Spelling {
+                    settled,
+                    solved,
+                    levels,
+                },
+            );
         }
     }
 

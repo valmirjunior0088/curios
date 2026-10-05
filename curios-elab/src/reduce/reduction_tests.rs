@@ -6,7 +6,8 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Apply, Bound, Exhaustion, Free, InductDecl, Intrinsic, Level, MetavarId, MetavarOrigin,
-        Nat, ReduceError, Subterm, Telescope, Term, UniverseContext, UniverseMetaId, UniverseParam,
+        Nat, ReduceError, Subterm, Telescope, Term, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam, UniverseRole,
         Variance,
     },
     curios_num::{Binary, Floating, Grain, Integer, Rounding},
@@ -1734,5 +1735,147 @@ fn a_guard_over_a_local_definition_answers_a_term_over_its_value() {
             reduce(context, other).map(|reduct| reduct.as_bool()),
             Ok(None)
         );
+    });
+}
+
+/// One call at two level metavariables, and what holds them one: `w(g.{this}(a), a + b)` and `w(g.{that}(a), b + a)` are compared whole, the carriers' readers having no say over an application's first argument, so they are one term only to a conversion that holds `this = that`.
+struct AtTwoLevels {
+    asked: Asked,
+    scrutinee: Term,
+    respelled: Term,
+    this: Level,
+    that: Level,
+}
+
+impl AtTwoLevels {
+    fn over(context: &mut Context) -> Self {
+        let asked = Asked::over(context);
+        let g = context.fresh(Some("g"));
+        let w = context.fresh(Some("w"));
+        let (x, y) = (context.fresh(Some("x")), context.fresh(Some("y")));
+        let nat_type = Term::intrinsic(Intrinsic::NatType);
+        context.assume(
+            &w,
+            &Term::func_type([(x, nat_type.clone()), (y, nat_type.clone())], nat_type),
+        );
+        let this = context.fresh_universe(UniverseRole::Flexible, None);
+        let that = context.fresh_universe(UniverseRole::Flexible, None);
+        let over = |level: &Level, left: &Free, right: &Free| {
+            Term::apply(
+                Term::free_var(&w),
+                [
+                    Term::apply(
+                        Term::instance_of(&g, vec![level.clone()]),
+                        [Term::free_var(&asked.a)],
+                    ),
+                    Term::intrinsic(Intrinsic::nat_add(
+                        Term::free_var(left),
+                        Term::free_var(right),
+                    )),
+                ],
+            )
+        };
+        AtTwoLevels {
+            scrutinee: over(&this, &asked.a, &asked.b),
+            respelled: over(&that, &asked.b, &asked.a),
+            asked,
+            this,
+            that,
+        }
+    }
+
+    fn equate(&self, context: &mut Context) {
+        context
+            .universes_mut()
+            .add_eq(
+                self.this.clone(),
+                self.that.clone(),
+                UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+            )
+            .expect("two fresh levels may be one");
+    }
+}
+
+/// A reduct taken across a question declined for a commit is taken again once the solver has moved. Under the equation of one call, its respelling at another level is the scrutinee only to a conversion that would commit a level constraint: the question is declined and the term stays stuck. Once the two levels are one it is the equation's value, which a stuck reduct remembered from the first reading would hide.
+///
+/// Mutation-checked both ways: with a reduct remembered whatever was declined while it was taken, and with a declined question never noted, the second reading is handed the first's.
+#[test]
+fn a_reduct_taken_across_a_declined_question_is_taken_again() {
+    let mut context = context();
+    let levels = AtTwoLevels::over(&mut context);
+    let (scrutinee, respelled) = (levels.scrutinee.clone(), levels.respelled.clone());
+
+    context.with_frame(|context| {
+        let key = shallow_scrutinee(context, &scrutinee);
+        context.refine_scrutinee_spellings(vec![(key, scrutinee.clone(), false)], &nat(0));
+
+        assert_eq!(
+            reduce(context, respelled.clone()),
+            Ok(respelled.clone()),
+            "the two calls are one only to a conversion that commits a level constraint"
+        );
+        levels.equate(context);
+        assert_eq!(reduce(context, respelled.clone()), Ok(nat(0)));
+    });
+}
+
+/// A reduct taken by a question answered on a level constraint goes with the scope that held the constraint. Inside a scope that holds the two levels one, the respelled call is the equation's scrutinee and reduces to its value; rolled back, the levels are apart again and the call is stuck, which a reduct remembered inside the scope would hide.
+///
+/// Mutation-checked: with no question noted where reduction asks whether a stuck form is an equation's scrutinee, the rollback keeps the reduct taken inside.
+#[test]
+fn a_reduct_that_rested_on_a_level_constraint_goes_with_the_scope_that_held_it() {
+    let mut context = context();
+    let levels = AtTwoLevels::over(&mut context);
+    let (scrutinee, respelled) = (levels.scrutinee.clone(), levels.respelled.clone());
+
+    context.with_frame(|context| {
+        let key = shallow_scrutinee(context, &scrutinee);
+        context.refine_scrutinee_spellings(vec![(key, scrutinee.clone(), false)], &nat(0));
+
+        let mark = context.solution_mark();
+        levels.equate(context);
+        assert_eq!(reduce(context, respelled.clone()), Ok(nat(0)));
+        context.rollback_solutions(mark);
+        context.end_solutions(mark);
+
+        assert_eq!(reduce(context, respelled.clone()), Ok(respelled.clone()));
+    });
+}
+
+/// An equation's reduced spelling settled across a declined question is settled again once the solver has moved. The inner guard `w(g.{that}(a), b + a) + c < 5` reduces through the outer equation only where the two levels are one: settled while they are apart, its spelling keeps the call, and `c < 5` is no spelling of it. Once the levels are one the guard reduces to `c < 5`, which the spelling settled before would not show: the call and `c` are two atoms to any classing.
+///
+/// Mutation-checked both ways: with a settlement filed beside no solver state, and with one read whatever state it was filed beside, `c < 5` stays stuck after the levels are one.
+#[test]
+fn a_spelling_settled_across_a_declined_question_is_settled_again() {
+    let mut context = context();
+    let levels = AtTwoLevels::over(&mut context);
+    let (scrutinee, respelled) = (levels.scrutinee.clone(), levels.respelled.clone());
+    let c = Term::free_var(&levels.asked.c);
+    let guard = Term::intrinsic(Intrinsic::nat_lt(
+        Term::intrinsic(Intrinsic::nat_add(respelled, c.clone())),
+        nat(5),
+    ));
+    let bound = Term::intrinsic(Intrinsic::nat_lt(c, nat(5)));
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
+    let decided = |context: &mut Context, term: &Term| {
+        reduce(context, term.clone()).map(|reduct| reduct.as_bool())
+    };
+
+    context.with_frame(|context| {
+        let key = shallow_scrutinee(context, &scrutinee);
+        context.refine_scrutinee_spellings(vec![(key, scrutinee.clone(), false)], &nat(0));
+
+        context.with_frame(|context| {
+            let key = shallow_scrutinee(context, &guard);
+            context.refine_scrutinee_spellings(vec![(key, guard.clone(), false)], &truth);
+
+            assert_eq!(
+                decided(context, &bound),
+                Ok(None),
+                "the guard keeps its call while the levels are apart"
+            );
+            levels.equate(context);
+            assert_eq!(decided(context, &bound), Ok(Some(true)));
+        });
     });
 }
