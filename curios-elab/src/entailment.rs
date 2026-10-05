@@ -7,6 +7,7 @@
 //! **What it proves.**
 //!
 //! - A decision conversion equates with `true` and reduction does not, `b || Bool/not(b)`: [`tautology`].
+//! - A proposition a fact in scope states outright — a hypothesis, or a proof field one level down, whose statement converts with the bound with nothing solved: [`stated_by_a_fact`]. The fact is the proof, whatever the proposition is: a decision the linear view reads nothing in, or an inductive proposition the procedure never opens, such as an equation.
 //! - A `Nat` or `Int` comparison that follows from the facts in scope ([`Reader`]) by linear arithmetic over the rationals, a strict integer fact strengthened to its successor, within the search's cap ([`refute`]). A consequence that holds only over the integers and needs a cut is refused, as `linarith` and `omega` without its dark and grey shadows refuse it.
 //! - Over `Nat`, through the operations whose definitions are linear facts: a quotient or remainder through the quotient's bounds, and a truncated subtraction through the case split `omega` makes, opened only where the search needs it ([`plan`]).
 //! - Where linear arithmetic finds an assignment, through the products of pairs of facts and the negated goal, as `nlinarith` does ([`products`]): what a multiplier that is no literal needs, `Nat/div_mod`'s among them.
@@ -32,7 +33,7 @@ use search::*;
 mod tests;
 
 use {
-    crate::{Context, Error, Mode, elaborate, reduce_with},
+    crate::{Context, Error, Mode, elaborate, reduce_with, same_uncommitted},
     curios_core::{Cases, Free, Global, LinearViews, Match, Probe, Subterm, Term, Var},
     curios_utilities::SyntaxName,
 };
@@ -99,26 +100,53 @@ pub(crate) fn entail(
     if context.entailing() {
         return Ok(Entailed::Refused(Refusal::default()));
     }
-    let Some(goal) = goal_of(context, reduced)? else {
-        return Ok(Entailed::Refused(Refusal::default()));
-    };
+    // What the search reads in the bound, where it reads anything: a fact that states the bound proves it either way.
+    let goal = goal_of(context, reduced)?;
     // The decision as the bound spells it, which the proof is written over where the bound's reduct is only read.
     let stated = held(context, bound)?;
 
     let entailed = context.with_entailing(|context| {
-        if let Goal::Decision(decision) = &goal
+        if let Some(Goal::Decision(decision)) = &goal
             && let Some(candidate) = tautology(context, stated.as_ref().unwrap_or(decision))
             && let Some(proof) = check(context, &candidate, bound)?
         {
             return Ok(Entailed::Proved(proof));
         }
-        linear(context, &goal, stated.as_ref(), bound)
+        if let Some(proof) = stated_by_a_fact(context, bound)? {
+            return Ok(Entailed::Proved(proof));
+        }
+        match &goal {
+            Some(goal) => linear(context, goal, stated.as_ref(), bound),
+            None => Ok(Entailed::Refused(Refusal::default())),
+        }
     })?;
     // The binders the proof reads are used, though the author wrote no reference to them.
     if let Entailed::Proved(proof) = &entailed {
         context.credit(proof);
     }
     Ok(entailed)
+}
+
+/// The fact that states `bound` outright, as its proof: the first hypothesis, or proof field one level down, in scope order, whose statement converts with the bound and checks against it.
+///
+/// **Conversion alone, and nothing solved.** A statement is put to the bound only where the two convert with no metavariable assigned and no universe constrained, so the step makes no solving choice: a bound still waiting on its subject is stated by no fact yet, and is asked again once the subject is known. Congruence and a fact's consequences are no part of it — within its fragment they are the linear half's, and past it the author's.
+///
+/// **Any proposition.** The bound need be nothing the search reads: a proposition is proof-irrelevant, so the fact that states it is as good a proof as any, and which fact is taken decides nothing.
+fn stated_by_a_fact(context: &mut Context, bound: &Term) -> Result<Option<Term>, Error> {
+    curios_profile::profile!("entailment::stated_by_a_fact");
+    for (name, type_) in binders(context) {
+        for (statement, proof, _) in statements(context, &name, &type_)? {
+            let states = same_uncommitted(context, &statement, bound).map_err(|error| {
+                Error::from_reduce(error, |refusal| {
+                    Error::reduce_exhausted(bound.clone(), refusal)
+                })
+            })?;
+            if states && let Some(proof) = check(context, &proof, bound)? {
+                return Ok(Some(proof));
+            }
+        }
+    }
+    Ok(None)
 }
 
 /// The linear half: the goal and the facts read by one reader, the search over them and the negated goal, and the proof the certificate stands for. An absurd goal has no target and no negation: the facts must refute each other alone.

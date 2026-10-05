@@ -44,6 +44,19 @@ const ROWS: &[Row] = &[
     // A tautology conversion decides and reduction does not.
     claim("b: Bool", "Holds(b || Bool/not(b))"),
     claim("b: Bool", "Holds(Bool/not(b && Bool/not(b)))"),
+    // A decision a fact in scope states outright, which is the proof whatever the decision is: an opaque `Bool`, a call the view reads nothing in, and a proof field one level down.
+    claim("b: Bool, p: Holds(b)", "Holds(b)"),
+    claim("f: (Nat) -> Bool, n: Nat, p: Holds(f(n))", "Holds(f(n))"),
+    claim("v: {flag: Bool, ok: Holds(flag)}", "Holds(v.flag)"),
+    // The same for a proposition the search reads nothing in: an equation, which is no decision, and `Str/Valid`, a decision over a scan of bytes.
+    claim("a: Nat, b: Nat, p: Eq()(a, b)", "Eq()(a, b)"),
+    claim("b: Bytes, v: Str/Valid(b)", "Str/Valid(b)"),
+    // The same through a call: a bound the callee demands is the one the caller was handed.
+    body(
+        "f: (Nat) -> Bool, n: Nat, p: Holds(f(n)), needs: (m: Nat, @Holds(f(m))) -> Nat",
+        "Nat",
+        "needs(n)",
+    ),
     // A strict bound composed with a loose one, from hypotheses and from a guard.
     body(
         "xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/len(xs))",
@@ -269,6 +282,19 @@ const ROWS: &[Row] = &[
 const CONTROLS: &[Row] = &[
     // A decision no tautology settles, with nothing in scope that could.
     claim("b: Bool", "Holds(b)"),
+    // A decision no fact states outright: one of another operand, one conjunct of an opaque conjunction, and one stated two levels down.
+    claim(
+        "f: (Nat) -> Bool, n: Nat, m: Nat, p: Holds(f(n))",
+        "Holds(f(m))",
+    ),
+    claim("b: Bool, c: Bool, p: Holds(b && c)", "Holds(c)"),
+    // An equation no fact states, and one only symmetry would reach.
+    claim("a: Nat, b: Nat", "Eq()(a, b)"),
+    claim("a: Nat, b: Nat, p: Eq()(b, a)", "Eq()(a, b)"),
+    claim(
+        "v: {inner: {flag: Bool, ok: Holds(flag)}}",
+        "Holds(v.inner.flag)",
+    ),
     // No fact in scope.
     claim("i: Nat, n: Nat", "Holds(i < n)"),
     // A fact too weak for the goal.

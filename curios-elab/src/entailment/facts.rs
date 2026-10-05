@@ -239,76 +239,16 @@ impl<'a> Reader<'a> {
         target: Option<&Target>,
     ) -> Result<Facts, Error> {
         curios_profile::profile!("entailment::collect");
-        // The hole's own binders: a global of every mounted unit is an assumption in the base frame too, and none is a fact about this scope.
-        let binders = context
-            .locals()
-            .iter()
-            .filter(|(name, _)| name.as_global().is_none())
-            .cloned()
-            .collect::<Vec<_>>();
-        for (name, type_) in binders {
-            self.hypothesis(context, &name, &type_)?;
+        for (name, type_) in binders(context) {
+            for (statement, proof, origin) in statements(context, &name, &type_)? {
+                self.proposition(context, &statement, proof, origin)?;
+            }
         }
         self.guards(context)?;
         self.definitions(context, target)?;
         // Last, so every monomial a fact or the goal was read over has been handed out.
         self.naturals(context, target)?;
         Ok(self.read)
-    }
-
-    /// A hypothesis: a fact itself, or a tuple or structure whose proof fields are, one level down.
-    fn hypothesis(
-        &mut self,
-        context: &mut Context,
-        name: &Free,
-        type_: &Term,
-    ) -> Result<(), Error> {
-        let reduced = reduce_with(context, type_)?;
-        let telescope = match &*reduced {
-            Subterm::TupleType(TupleType { telescope }) => telescope.clone(),
-            Subterm::StructType(StructType {
-                name: family,
-                universes,
-                params,
-            }) => {
-                let Some(decl) = context.struct_decl(family).cloned() else {
-                    return Ok(());
-                };
-                // `elaborate_proj`'s own rule: a proof the procedure writes reaches no field its author could not.
-                if !decl.rep_public
-                    && context
-                        .island()
-                        .is_some_and(|island| !island.is_within(&decl.module))
-                {
-                    return Ok(());
-                }
-                let arity = context.instantiate_universe_bound_at(
-                    &decl.universe_context,
-                    &decl.arity,
-                    universes,
-                )?;
-                arity.open(&params.iter().collect::<Vec<_>>())
-            }
-            _ => {
-                let origin = Origin::Hypothesis(Term::free_var(name));
-                return self.proposition(context, type_, Term::free_var(name), origin);
-            }
-        };
-        let mut cursor = telescope.cursor();
-        let mut index = 0;
-        while let Some((label, domain)) = cursor.entry() {
-            let field = Term::proj(Term::free_var(name), index);
-            let label = label.map_or_else(|| index.to_string(), str::to_string);
-            self.proposition(
-                context,
-                &domain,
-                field.clone(),
-                Origin::Field(Term::free_var(name), label),
-            )?;
-            cursor.advance(field);
-            index += 1;
-        }
-        Ok(())
     }
 
     /// A proposition `proof` inhabits: the facts it states, if it states any — read as a bound is, through the decision its `Holds` is stuck on, or as an equation.
@@ -973,6 +913,74 @@ impl<'a> Reader<'a> {
 }
 
 /// The goal's negation, a fact of the refuting form's false arm, where a split on the goal's decision refined it to `false`: `a < b` failing is `b <= a`, `a <= b` failing is `b < a`. Read by the same reader, after the facts, proved by `qed` there, and lifted by `lifts` as they were. `None` where the vocabulary is not in scope.
+/// The hole's own binders, in scope order: a global of every mounted unit is an assumption in the base frame too, and none is a fact about this scope.
+pub(super) fn binders(context: &Context) -> Vec<(Free, Term)> {
+    context
+        .locals()
+        .iter()
+        .filter(|(name, _)| name.as_global().is_none())
+        .cloned()
+        .collect()
+}
+
+/// What a hypothesis states, each statement beside the proof that inhabits it and where it came from: the hypothesis itself, or the fields of a tuple or a structure, one level down and in their order.
+pub(super) fn statements(
+    context: &mut Context,
+    name: &Free,
+    type_: &Term,
+) -> Result<Vec<(Term, Term, Origin)>, Error> {
+    let reduced = reduce_with(context, type_)?;
+    let telescope = match &*reduced {
+        Subterm::TupleType(TupleType { telescope }) => telescope.clone(),
+        Subterm::StructType(StructType {
+            name: family,
+            universes,
+            params,
+        }) => {
+            let Some(decl) = context.struct_decl(family).cloned() else {
+                return Ok(Vec::new());
+            };
+            // `elaborate_proj`'s own rule: a proof the procedure writes reaches no field its author could not.
+            if !decl.rep_public
+                && context
+                    .island()
+                    .is_some_and(|island| !island.is_within(&decl.module))
+            {
+                return Ok(Vec::new());
+            }
+            let arity = context.instantiate_universe_bound_at(
+                &decl.universe_context,
+                &decl.arity,
+                universes,
+            )?;
+            arity.open(&params.iter().collect::<Vec<_>>())
+        }
+        _ => {
+            let hypothesis = Term::free_var(name);
+            return Ok(vec![(
+                type_.clone(),
+                hypothesis.clone(),
+                Origin::Hypothesis(hypothesis),
+            )]);
+        }
+    };
+    let mut stated = Vec::with_capacity(telescope.len());
+    let mut cursor = telescope.cursor();
+    let mut index = 0;
+    while let Some((label, domain)) = cursor.entry() {
+        let field = Term::proj(Term::free_var(name), index);
+        let label = label.map_or_else(|| index.to_string(), str::to_string);
+        stated.push((
+            domain,
+            field.clone(),
+            Origin::Field(Term::free_var(name), label),
+        ));
+        cursor.advance(field);
+        index += 1;
+    }
+    Ok(stated)
+}
+
 pub(super) fn negated(
     context: &mut Context,
     views: &mut LinearViews,

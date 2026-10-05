@@ -1,13 +1,13 @@
 # Plicity on a telescope's members
 
-Working specification for making a mark mean on data what it means on a function. [Plicity is part of function identity](../../design/theory/plicity-is-part-of-function-identity.md) states the rule a call, a lambda and a concept literal follow: a hidden member — `@` or `use` — takes no position among the members an author writes, and is written only to be named. A function's precondition is therefore stated once: declared in the signature, filled at each call, a fact in the body. An invariant on data is stated once the same way, on the constructor or the structure that declares it. What is left is a bound a fact in scope states outright, which is filled only where it is arithmetic, and `/std`, which still writes what it may leave out.
+Working specification for making a mark mean on data what it means on a function. [Plicity is part of function identity](../../design/theory/plicity-is-part-of-function-identity.md) states the rule a call, a lambda and a concept literal follow: a hidden member — `@` or `use` — takes no position among the members an author writes, and is written only to be named. A function's precondition is therefore stated once: declared in the signature, filled at each call, a fact in the body. An invariant on data is stated once the same way, on the constructor or the structure that declares it. What is left is `/std`, which still writes what it may leave out.
 
 It is independent of every other spec. [Typed patterns](01-typed-patterns.md) later lifts the one restriction this leaves, on the rows of one constructor.
 
 ## What this builds on
 
 - **The rule, where it holds.** `align` (`curios-elab/src/elaborate/align.rs`) matches written members to slots: plain members are written, in order, and between two of them the hidden ones are written from the first of their run, the rest left out. A call (`elaborate_apply`), a lambda (`elaborate_func_check`), an arm (`elaborate_induct_match`), a concept literal (`elaborate_struct`) and the entries after a spread (`elaborate_struct_spread`) each call it, and a member a walk opens is entered under its mark by one function (`Context::enter`).
-- **A slot left out is filled by its mark.** `insert_auto_argument` (`curios-elab/src/elaborate/apply.rs`) fills an `@` slot by unification, by reduction to `True`, or by `entail` from the facts in scope, and a `use` slot by resolution.
+- **A slot left out is filled by its mark.** `insert_auto_argument` (`curios-elab/src/elaborate/apply.rs`) fills an `@` slot by unification, by reduction to `True`, or by `entail` from the facts in scope, and a `use` slot by resolution. `entail` (`curios-elab/src/entailment.rs`) proves a comparison by linear arithmetic over those facts, and before that search a decision one of them states outright by the fact itself (`stated_by_a_fact`): the first hypothesis, or proof field one level down, whose statement converts with the bound with nothing solved.
 - **A hidden member left out is still in scope.** An unnamed `@` binder's proposition is a fact wherever its telescope is opened: in a definition's body, in an arm, whose payload `assume_payload` assumes, and one level down in a structure- or tuple-typed hypothesis (`Reader::hypothesis`, `curios-elab/src/entailment/facts.rs`). A `use` member is in the witness scope.
 - **A constructor's payload declares `@`** (`parse_induct_payload_field`), and construction fills it as any call does, a constructor being a function: `/std/Io/Chunk/chunk(b)` over `chunk(bytes: Bytes, @some: Holds(0 < Bytes/len(bytes)))`. An arm leaves it out as the call does, `| chunk(bytes) => …`, and binds it hintless, so its bound is a fact there; the elaborated arm binds every payload under the constructor's marks. Lowering holds the rows of one constructor to one written shape (`MatrixInconsistentShape`, `curios-text/src/into_core/match_compile.rs`).
 - **A structure's fields are a telescope.** `StructDecl::arity` is the parameters ending in the fields, and a concept is a structure whose `use` fields are its superclass edges.
@@ -28,7 +28,6 @@ It is independent of every other spec. [Typed patterns](01-typed-patterns.md) la
 Read from the code and from probes of the compiler at `87189c97d`, the counts over `curios-text/std` at that commit:
 
 - **`/std` still writes what it may leave out.** 26 arms write a hidden payload, 18 of them only `@_`. No structure declares a hidden field: `/std/Str/At`'s ten literals write twenty proofs, and 10 of `/std`'s 77 structures carry a proof field.
-- **A bound a fact in scope states outright is filled only where it is arithmetic.** `entail` (`curios-elab/src/entailment.rs`) reads `Nat` and `Int` comparisons, so over `opaque(b: Bool, @Holds(b))`, `let same(b: Bool, @Holds(b)) -> Nat = opaque(b);` reports `nothing discharged Holds(b)`. Seven of `/std/Str/At`'s ten `boundary` proofs are a hypothesis, another value's field or a lemma.
 
 ## Prior art
 
@@ -52,8 +51,7 @@ Read from the code and from probes of the compiler at `87189c97d`, the counts ov
 
 ## Stages
 
-1. **A bound a fact states is filled by it.** Decision 9. Check: an opaque `Holds(b)` under `@Holds(b)`, a field one level down, and a refusal two levels down.
-2. **`/std` reads by the rule.** The arms that write only `@_` drop it, and a structure's proof field becomes `@` where a literal sheds a written proof by it.
+1. **`/std` reads by the rule.** The arms that write only `@_` drop it, and a structure's proof field becomes `@` where a literal sheds a written proof by it.
 
 ## Verification
 
