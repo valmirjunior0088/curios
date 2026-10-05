@@ -1,6 +1,7 @@
 use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Io, Handle};
 use /std/time/{Duration};
 use /std/Handle/{Interest, Readiness};
+use /std/Bool/{Holds};
 
 --- A value fulfilled once, which a fiber parks on until it is. What `await` waits on, and what a primitive of its own hands out.
 pub mod Future;
@@ -9,7 +10,6 @@ pub use Future/{let Future};
 --- A flag one fiber raises and another parks on: the one park a program takes that waits on no handle and no timer.
 pub mod Signal;
 pub use Signal/{let Signal};
-use /std/Bool/{Holds};
 
 --- What a selection is written against: a non-committing attempt at a value and what to wait on while it declines.
 pub mod Offer;

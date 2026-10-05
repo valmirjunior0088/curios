@@ -1,11 +1,11 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
 use /std/{Monad, Bytes, Byte, Nat, Option, Result, Async, Handle};
+use /std/Bool/{Holds};
 
 --- The failure every host operation reports.
 pub mod Error;
 pub use Error/{let Error};
-use /std/Bool/{Holds};
 
 satisfy Monad(Io) {
     pure = pure,

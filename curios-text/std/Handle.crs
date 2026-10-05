@@ -1,6 +1,7 @@
 pub use /sys/{Handle};
 pub use /sys/Handle/{close, stdin, stdout, stderr};
 use /std/{Bool, Byte, Bytes, Nat, Int, List, Result, Io, Async};
+use /std/Bool/{Holds};
 
 --- What a park asks to be woken for.
 pub mod Interest;
@@ -9,7 +10,6 @@ pub use Interest/{let Interest};
 --- What a poll reports for one handle.
 pub mod Readiness;
 pub use Readiness/{let Readiness};
-use /std/Bool/{Holds};
 
 let to_mask(i: Interest) -> Byte =
     Byte/or(
