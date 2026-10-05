@@ -66,7 +66,7 @@ fn operator_scrutinee_refines_a_proof_carrying_arm() {
     assert_eq!(run(source), b"refined");
 }
 
-/// A guard's refinement discharges a window bound whose spelling sits one definitional step away: the slice obligation states its end as `0 + n`, the guard can only spell `n <= List/len(l)`, and the probe-time canonicalization brings the two together. The refinement store records a universes-erased key, and erasure strips the `Instance` a polymorphic global (`List/len`) unfolds through, so the canonicalization reduces the unerased original stored beside the key: the *erased* key would stall where the goal side reduces, and the bound would be reported as an uninferred implicit against a caller who had established it.
+/// A guard's refinement discharges a window bound whose spelling sits one definitional step away: the slice obligation states its end as `0 + n`, the guard can only spell `n <= List/len(l)`, and the guard's reduced spelling brings the two together. The refinement store records a universes-erased key, and erasure strips the `Instance` a polymorphic global (`List/len`) unfolds through, so a settlement reduces the unerased original stored beside the key: the *erased* key would stall where the goal side reduces, and the bound would be reported as an uninferred implicit against a caller who had established it.
 #[test]
 fn a_guard_discharges_a_bound_spelled_one_reduction_away() {
     let source = r#"

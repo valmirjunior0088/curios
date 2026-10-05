@@ -18,7 +18,10 @@ use {
         Error, HeadKey, Provenance, UniverseMark, UniverseSolver, UniverseStateToken, Witness,
         WitnessKey, zonk_universe_levels_scoped,
     },
-    crate::{Refusal, Sort, levels_clash_on_a_decided_instance, zonk_solved_term_metas},
+    crate::{
+        Refusal, Sort, levels_clash_on_a_decided_instance, shallow_scrutinee,
+        zonk_solved_term_metas,
+    },
     curios_analysis::{Unfolding, records_case_equation},
     curios_core::{
         Advance, Bound, ConceptDecl, Consumption, Cost, DefinitionKind, Free, Global, HeadTag,
@@ -561,20 +564,17 @@ impl Context {
         self.caches.sort_insert(type_, self.plain, sort);
     }
 
-    /// `term` with its solved metavariables materialized, remembered where none is left unsolved ([`Caches::materialized`]).
-    pub(crate) fn materialized(&self, term: &Term) -> Term {
-        if !term.has_metavar() {
-            return term.clone();
-        }
-        if let Some(known) = self.caches.materialized_get(term) {
+    /// [`Context::kernel_spelling`] of a recorded scrutinee, remembered where no metavariable in it is left unsolved ([`Caches::kernel_spellings`]).
+    pub(crate) fn kernel_spelled(&self, term: &Term) -> Term {
+        if let Some(known) = self.caches.kernel_spelling_get(term) {
             return known;
         }
-        let materialized = zonk_solved_term_metas(self, term);
-        if !materialized.any_metavar(&mut |id| self.metavar_solution(id).is_none()) {
+        let spelled = self.kernel_spelling(term);
+        if !spelled.any_metavar(&mut |id| self.metavar_solution(id).is_none()) {
             self.caches
-                .materialized_insert(term.clone(), materialized.clone());
+                .kernel_spelling_insert(term.clone(), spelled.clone());
         }
-        materialized
+        spelled
     }
 
     /// Whether the binder `name` is a proof, where that has been asked and remembered ([`Context::remember_proof`]).
@@ -587,33 +587,13 @@ impl Context {
         self.caches.proof_insert(name, proof);
     }
 
-    /// The read half of the canonical-key memo. [`Caches::canonical_keys`] carries why the memo exists.
-    pub(crate) fn cached_canonical_key(&self, key: &Term) -> Option<Term> {
-        if key.has_universe_meta() {
-            return None;
-        }
-        self.caches.canonical_key_get(key, self.plain)
-    }
-
-    /// The write half. Not charged: a canonical key is a fact about one declaration's arms, cleared with the declaration, and computed within that declaration's budget under [`Context::within_allowance`]'s ceiling — the same reason [`Context::reduce`] stores a local-bearing reduct for nothing.
-    ///
-    /// The unsolved-metavariable condition that gate takes is deliberately absent. It keeps a *reduct* from being substituted into a term after a solve invalidated it; an entry here is only ever a comparison representative, so a stale one compares unequal to the candidate a solve produced — a miss, which is the refusing direction where the reduction cache's would be the admitting one. Keeping the condition would also exclude the entries the memo exists for: a guard over a metavariable-bearing subject is exactly the case whose recomputation is unaffordable.
-    pub(crate) fn record_canonical_key(&mut self, key: Term, canonical: &Term) {
-        let cacheable = key.closed() && !key.has_universe_meta();
-
-        if cacheable {
-            self.caches
-                .canonical_key_insert(key, self.plain, canonical.clone());
-        }
-    }
-
     /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`: `None` if no probe has asked for it yet, `Some(None)` if reducing it refused. [`Frames::scrutinee_spellings`] carries how long one stands.
     pub(crate) fn settled_key(&self, frame: usize, key: &Term) -> Option<&Option<Settled>> {
         self.frames
             .settled_spelling(frame, key, self.plain, self.solutions.solved_len())
     }
 
-    /// Record a settlement. Every one is recorded, whatever its metavariables — unlike [`Context::record_canonical_key`], whose caller recomputes a miss, the escalation loop settles the innermost entry *not yet asked*, so an unrecorded settlement would be asked for again forever.
+    /// Record a settlement. Every one is recorded, whatever its metavariables: the loop that asks the reduced spellings settles the innermost entry *not yet asked* (`reduce`'s `refined_reduct`), so an unrecorded settlement would be asked for again forever.
     ///
     /// `unsolved` says the key or its spelling held an unsolved metavariable, so the settlement is filed beside the solutions committed so far and asked for again once another lands.
     pub(crate) fn record_settled_key(
@@ -1109,28 +1089,89 @@ impl Context {
 
     // === Refinements (see [`Frames`]) =======================================
 
-    /// [`Frames::refine`], with the refinement cache protocol — the variable now reduces differently — and with every equation the refinement closes withheld ([`Context::withhold_closed_equations`]).
+    /// [`Frames::refine`], with the refinement cache protocol — the variable now reduces differently — with every equation that names the variable restated under its value ([`Context::restate_equations`]), and with every equation the refinement closes withheld ([`Context::withhold_closed_equations`]).
     pub(crate) fn refine(&mut self, name: &Free, term: &Term) {
         self.caches.invalidate_for_refinement();
         self.frames.refine(name, term);
+        self.restate_equations(name, term);
         self.withhold_closed_equations();
+    }
+
+    /// Restate, for as long as the current frame stands, every equation in force whose scrutinee names `name`, under the value an arm has just refined `name` to: the equation is withheld, and its instance at `value` recorded in its place.
+    ///
+    /// **The kernel's `Scope::restate`, in the elaborator's store.** The kernel substitutes a case's solution through the arm it checks and assumes each equation in force again at that instance, the recorded one stepping aside. The elaborator keeps the variable spelled and refines it, so an equation recorded outside the arm still names it, and a fact written at the case value — `0 < List/len(xs)` under `match i < List/len(xs)` and then `match i | 0` — meets no key: the entry's reduced spelling is settled with the arm's frame withheld, and names the variable still. The instance is the same hypothesis read where the arm reads it, since what holds of the scrutinee at every value of the variable holds at the one the case fixes.
+    ///
+    /// **The recorded equation steps aside, as the kernel's does**, so an equation stands once however deep the arms go: kept beside its instance it would double at every nested match on a variable it names. A term in the arm that still names the variable meets the instance because a key and a probe are spelled as the arm spells them ([`Context::spelled_as_refined`]).
+    ///
+    /// An instance that names no local is recorded by neither checker: [`Context::withhold_closed_equations`], which a refinement runs next, withholds it as it withholds any equation the refinement closes. The value an equation assumes is left as it is, a variable in it being read through its refinement.
+    fn restate_equations(&mut self, name: &Free, value: &Term) {
+        if !self.frames.has_scrutinee_refinements() {
+            return;
+        }
+        let solution = [(*name, value.clone())];
+        let named = self
+            .frames
+            .scrutinee_equations()
+            .into_iter()
+            .filter_map(|(key, entry)| {
+                // Read with its solved metavariables materialized: a metavariable stands over a spine of every local in scope where it was born, and would read as naming the variable.
+                let original = zonk_solved_term_metas(self, &entry.original);
+                original
+                    .mentions_free(name)
+                    .then_some((key, entry, original))
+            })
+            .collect::<Vec<_>>();
+
+        for (key, entry, original) in named {
+            let restated = ScrutineeEntry {
+                original: original.substitute(&solution),
+                value: entry.value.clone(),
+                alias: entry.alias,
+                withheld: false,
+            };
+            self.frames.withhold_scrutinee(key, entry);
+            let key = shallow_scrutinee(self, &restated.original);
+            self.frames.refine_scrutinee(key, restated);
+        }
+    }
+
+    /// `term` with every variable an arm in force refined spelled as the value it was refined to: how the kernel, which substitutes a case's solution through the arm it checks, spells a term of that arm. A refinement's value may name a variable an arm inside refined in turn, so the substitution is taken until the term names no refined variable.
+    ///
+    /// A term that names none is returned as it is, for a walk over its free variables: this is read at every probe of a refined head and at every stuck form put to the reduced spellings.
+    pub(crate) fn spelled_as_refined(&self, term: &Term) -> Term {
+        if !term.has_local_free() || !self.frames.refines_a_variable() {
+            return term.clone();
+        }
+        let refined_in = |spelled: &Term| {
+            spelled
+                .free_vars_shared()
+                .iter()
+                .filter_map(|name| Some((*name, self.frames.refinement_of(name)?.clone())))
+                .collect::<Vec<_>>()
+        };
+        let mut refined = refined_in(term);
+        if refined.is_empty() {
+            return term.clone();
+        }
+        let mut spelled = term.clone();
+        // Each round substitutes at least one refined variable away, so a chain of them is no longer than the variables refined.
+        for _ in 0..self.frames.refined_variables().len() {
+            spelled = spelled.substitute(&refined);
+            refined = refined_in(&spelled);
+            if refined.is_empty() {
+                break;
+            }
+        }
+        spelled
     }
 
     /// `term` as the kernel is handed it under the arms in force: its solved metavariables materialized, its local definitions substituted, and every variable an arm refined spelled as the value it was refined to. The kernel substitutes a case's solution through the arm it checks, where the elaborator records it and keeps the variable spelled, so this is the reading a rule shared with the kernel is judged on.
     ///
     /// A solved metavariable is materialized first because it stands over a spine of the locals in scope where it was born, and would read as naming them: a guard written through a concept holds its witness as one, and names no local of its own once the witness is the global it resolved to.
     pub(crate) fn kernel_spelling(&self, term: &Term) -> Term {
-        let mut spelled = Unfolding::everything(self).term(&zonk_solved_term_metas(self, term));
-        let variables = self.frames.refined_variables();
-        // A refinement's value may name a variable an arm inside refined in turn, so the substitution is taken until it moves nothing: at most once per variable.
-        for _ in 0..variables.len() {
-            let next = spelled.substitute(&variables);
-            if next == spelled {
-                break;
-            }
-            spelled = next;
-        }
-        spelled
+        self.spelled_as_refined(
+            &Unfolding::everything(self).term(&zonk_solved_term_metas(self, term)),
+        )
     }
 
     /// Withhold, for as long as the current frame stands, every equation in force whose scrutinee names no local as the kernel spells it now ([`Context::kernel_spelling`]).
@@ -1234,10 +1275,6 @@ impl Context {
     /// Every equation an arm in force withholds, innermost frame first.
     pub(crate) fn withheld_equations(&self) -> Vec<ScrutineeEntry> {
         self.frames.withheld_equations()
-    }
-
-    pub(crate) fn scrutinee_entries(&self, head: HeadTag<'_>) -> Vec<(Term, ScrutineeEntry)> {
-        self.frames.scrutinee_entries(head)
     }
 
     pub(crate) fn visible_scrutinee_entries(
@@ -1557,7 +1594,7 @@ impl Context {
         self.plain
     }
 
-    /// Run `read` with reduction plain: it asks the elaborator's conversion nothing, at a stuck fold or at a missed equation — the kernel's `Kernel::plainly`, for the kernel's two readers. A question reduction puts to conversion is answered by it, which is what ends the regress, and a shared analysis reads a term by it (`Env::force`), since totality may rest on no verdict of conversion's. Each of the two keeps its own answers: the reducts, the sorts read through them, the canonical keys and the settled spellings (`Frames::scrutinee_spellings`) are all filed by which reduction took them.
+    /// Run `read` with reduction plain: it asks the elaborator's conversion nothing, at a stuck fold or at a missed equation — the kernel's `Kernel::plainly`, for the kernel's two readers. A question reduction puts to conversion is answered by it, which is what ends the regress, and a shared analysis reads a term by it (`Env::force`), since totality may rest on no verdict of conversion's. Each of the two keeps its own answers: the reducts, the sorts read through them and the settled spellings (`Frames::scrutinee_spellings`) are all filed by which reduction took them.
     pub(crate) fn plainly<R>(&mut self, read: impl FnOnce(&mut Self) -> R) -> R {
         let previous = mem::replace(&mut self.plain, true);
         let answer = read(self);

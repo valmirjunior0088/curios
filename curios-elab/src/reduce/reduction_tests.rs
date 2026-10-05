@@ -783,7 +783,7 @@ fn scrutinee_refinement_ignores_fresh_universe_instances() {
         Term::instance_of(&classify, vec![Level::meta(UniverseMetaId(1))]),
         [nat(0)],
     );
-    let canonical = canonical_scrutinee(&mut context, &registered).unwrap();
+    let canonical = shallow_scrutinee(&context, &registered);
     context.refine_scrutinee_spellings(vec![(canonical, registered, false)], &nat(1));
 
     assert_eq!(reduce(&mut context, probe), Ok(nat(1)));
@@ -803,7 +803,7 @@ fn scrutinee_refinement_does_not_fire_at_another_ground_universe_instance() {
     let at = |level: Level| Term::apply(Term::instance_of(&classify, vec![level]), [nat(0)]);
     let registered = at(Level::zero());
     let probe = at(Level::zero().succ().expect("level zero has a successor"));
-    let canonical = canonical_scrutinee(&mut context, &registered).unwrap();
+    let canonical = shallow_scrutinee(&context, &registered);
     context.refine_scrutinee_spellings(vec![(canonical, registered, false)], &nat(1));
 
     assert_eq!(reduce(&mut context, probe.clone()), Ok(probe));
@@ -850,7 +850,7 @@ fn scrutinee_refinement_does_not_fire_at_another_instance_of_an_irrelevant_level
     };
     let registered = at(Level::zero());
     let probe = at(Level::constant(1));
-    let canonical = canonical_scrutinee(&mut context, &registered).unwrap();
+    let canonical = shallow_scrutinee(&context, &registered);
     context.refine_scrutinee_spellings(vec![(canonical, registered.clone(), false)], &nat(1));
 
     assert_eq!(reduce(&mut context, registered), Ok(nat(1)));
@@ -1126,7 +1126,7 @@ fn a_guard_answers_a_term_the_readers_hold_equal_to_it() {
         "with no guard the respelling is the stuck comparison it is"
     );
 
-    let canonical = canonical_scrutinee(&mut context, &guard).unwrap();
+    let canonical = shallow_scrutinee(&context, &guard);
     context.refine_scrutinee_spellings(
         vec![(canonical, guard, false)],
         &Term::intrinsic(Intrinsic::Bool(true)),
@@ -1207,7 +1207,7 @@ impl Asked {
     fn under<T>(&self, context: &mut Context, inside: impl FnOnce(&mut Context) -> T) -> T {
         context.with_frame(|context| {
             let guard = self.guard();
-            let canonical = canonical_scrutinee(context, &guard).unwrap();
+            let canonical = shallow_scrutinee(context, &guard);
             context.refine_scrutinee_spellings(
                 vec![(canonical, guard, false)],
                 &Term::intrinsic(Intrinsic::Bool(true)),
@@ -1235,7 +1235,7 @@ fn a_guard_answers_a_term_conversion_holds_equal_to_it() {
 
     context.with_frame(|context| {
         let scrutinee = asked.call(&asked.a, &asked.b);
-        let canonical = canonical_scrutinee(context, &scrutinee).unwrap();
+        let canonical = shallow_scrutinee(context, &scrutinee);
         context.refine_scrutinee_spellings(vec![(canonical, scrutinee, false)], &nat(0));
 
         assert_eq!(reduce(context, asked.call(&asked.b, &asked.a)), Ok(nat(0)));
@@ -1279,7 +1279,7 @@ fn a_question_is_answered_by_reduction_that_asks_nothing() {
 
     asked.under(&mut context, |context| {
         let guard = asked.over_flag(asked.guard());
-        let canonical = canonical_scrutinee(context, &guard).unwrap();
+        let canonical = shallow_scrutinee(context, &guard);
         context.refine_scrutinee_spellings(
             vec![(canonical, guard, false)],
             &Term::intrinsic(Intrinsic::Bool(true)),
@@ -1350,7 +1350,7 @@ fn assumed<T>(
     inside: impl FnOnce(&mut Context) -> T,
 ) -> T {
     context.with_frame(|context| {
-        let canonical = canonical_scrutinee(context, &scrutinee).unwrap();
+        let canonical = shallow_scrutinee(context, &scrutinee);
         context.refine_scrutinee_spellings(vec![(canonical, scrutinee, false)], &value);
         inside(context)
     })
@@ -1428,7 +1428,7 @@ fn a_reduced_spelling_is_settled_by_the_reduction_that_asks_for_it() {
     let under = |context: &mut Context, inside: &dyn Fn(&mut Context)| {
         asked.under(context, |context| {
             context.with_frame(|context| {
-                let canonical = canonical_scrutinee(context, &inner).unwrap();
+                let canonical = shallow_scrutinee(context, &inner);
                 context.refine_scrutinee_spellings(
                     vec![(canonical, inner.clone(), false)],
                     &Term::intrinsic(Intrinsic::Bool(true)),
@@ -1513,4 +1513,180 @@ fn a_fold_inside_a_question_is_not_taken_again() {
         reduce(&mut context, nested).map(|reduct| reduct.as_bool()),
         Ok(None)
     );
+}
+
+/// An equation in force follows the solution an arm is checked under: under the guard `f(n) < 5`, an arm that refines `n` to `0` holds `f(0) < 5`, the recorded spelling stepping aside for that instance, and gives both back when it is left. The kernel's `whnf::equations_tests` holds this proposition under this name, by substituting the solution through the arm; here the variable stays spelled, so a term of the arm that still names it — the guard as written, or `f(n + 0) < 5`, which is no key — is read as the arm spells it.
+///
+/// Mutation-checked four ways. With `Context::refine` restating nothing the instance stays stuck inside the arm. With the recorded equation left answering beside its instance, the recorded key still answers there. With a key spelled as it is written, the guard and its instance are two keys in the arm. With a stuck form put to the reduced spellings as it is written, `f(n + 0) < 5` is put to no equation, the instance naming no `n`. `context::tests` holds an instance that names no local withheld.
+#[test]
+fn a_case_equation_follows_the_solution_an_arm_is_checked_under() {
+    let mut context = context();
+    let n = context.fresh(Some("n"));
+    let f = context.fresh(Some("f"));
+    let x = context.fresh(Some("x"));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    context.assume(&n, &nat_type);
+    context.assume(&f, &Term::func_type([(x, nat_type.clone())], nat_type));
+    let guard = |argument: Term| {
+        Term::intrinsic(Intrinsic::nat_lt(
+            Term::apply(Term::free_var(&f), [argument]),
+            nat(5),
+        ))
+    };
+    let written = guard(Term::free_var(&n));
+    let at_zero = guard(nat(0));
+    let respelled = guard(Term::intrinsic(Intrinsic::nat_add(
+        Term::free_var(&n),
+        nat(0),
+    )));
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
+    let decided = |context: &mut Context, term: &Term| {
+        reduce(context, term.clone()).map(|reduct| reduct.as_bool())
+    };
+
+    context.with_frame(|context| {
+        let recorded = shallow_scrutinee(context, &written);
+        context
+            .refine_scrutinee_spellings(vec![(recorded.clone(), written.clone(), false)], &truth);
+        assert_eq!(
+            decided(context, &at_zero),
+            Ok(None),
+            "the instance is no term the guard was written as, or the arm below proves nothing"
+        );
+
+        context.with_frame(|context| {
+            context.refine(&n, &nat(0));
+
+            assert_eq!(
+                decided(context, &at_zero),
+                Ok(Some(true)),
+                "the equation answers at the arm's solution"
+            );
+            assert_eq!(
+                context.scrutinee_reduct(&recorded, &written),
+                None,
+                "and the recorded spelling steps aside for it"
+            );
+            assert_eq!(
+                shallow_scrutinee(context, &written),
+                shallow_scrutinee(context, &at_zero),
+                "a key is spelled as the arm spells it, so the guard as written meets the instance for one lookup"
+            );
+            assert_eq!(
+                decided(context, &written),
+                Ok(Some(true)),
+                "a term that still names the variable is read as the arm spells it"
+            );
+            assert_eq!(
+                decided(context, &respelled),
+                Ok(Some(true)),
+                "and so is one that is no key, where it reaches the reduced spellings"
+            );
+        });
+
+        assert_eq!(
+            decided(context, &at_zero),
+            Ok(None),
+            "the restatement does not outlive the arm"
+        );
+        assert_eq!(
+            decided(context, &written),
+            Ok(Some(true)),
+            "and the recorded equation answers again"
+        );
+    });
+}
+
+/// A solution may name a variable an arm inside solves in turn: under the guard `f(n) < 5`, the arm that solves `n` as `k + 1` holds the equation at `f(k + 1) < 5`, and the arm inside it that solves `k` as `0` holds it at that instance again. The kernel has substituted both solutions by then; here both variables stay spelled, so a term is spelled as refined until no refined variable is left in it.
+///
+/// Mutation-checked: with a term spelled as refined for one round only, the guard as written still names `k` in the inner arm and meets no equation.
+#[test]
+fn a_case_equation_follows_a_solution_naming_a_variable_solved_in_turn() {
+    let mut context = context();
+    let n = context.fresh(Some("n"));
+    let k = context.fresh(Some("k"));
+    let f = context.fresh(Some("f"));
+    let x = context.fresh(Some("x"));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    context.assume(&n, &nat_type);
+    context.assume(&k, &nat_type);
+    context.assume(&f, &Term::func_type([(x, nat_type.clone())], nat_type));
+    let guard = |argument: Term| {
+        Term::intrinsic(Intrinsic::nat_lt(
+            Term::apply(Term::free_var(&f), [argument]),
+            nat(5),
+        ))
+    };
+    let written = guard(Term::free_var(&n));
+    let successor = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&k), nat(1)));
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
+    let decided = |context: &mut Context, term: &Term| {
+        reduce(context, term.clone()).map(|reduct| reduct.as_bool())
+    };
+
+    context.with_frame(|context| {
+        let recorded = shallow_scrutinee(context, &written);
+        context.refine_scrutinee_spellings(vec![(recorded, written.clone(), false)], &truth);
+
+        context.with_frame(|context| {
+            context.refine(&n, &successor);
+            assert_eq!(decided(context, &guard(successor.clone())), Ok(Some(true)));
+
+            context.with_frame(|context| {
+                context.refine(&k, &nat(0));
+                assert_eq!(
+                    decided(context, &guard(nat(1))),
+                    Ok(Some(true)),
+                    "the equation followed both solutions"
+                );
+                assert_eq!(
+                    decided(context, &written),
+                    Ok(Some(true)),
+                    "and the guard as written is read under both"
+                );
+            });
+
+            assert_eq!(decided(context, &written), Ok(Some(true)));
+        });
+    });
+}
+
+/// A guard over a local definition answers a term spelled over the definition's value: under `let n = a + 0` and the guard `f(n) < 5`, `f(a) < 5` is `true`. The kernel holds the guard by value, so the filter in front of its equation reads `a`; the elaborator's key names `n`, and its filter reads the scrutinee as the kernel spells it, or the form is put to no equation. `curios`'s `tests::matching` holds a program of this shape under this name, through both checkers.
+///
+/// Mutation-checked: with the filter reading the scrutinee as written, `f(a) < 5` stays stuck.
+#[test]
+fn a_guard_over_a_local_definition_answers_a_term_over_its_value() {
+    let mut context = context();
+    let asked = Asked::over(&mut context);
+    let n = context.fresh(Some("n"));
+    let over = |argument: Term| {
+        Term::intrinsic(Intrinsic::nat_lt(
+            Term::apply(Term::free_var(&asked.f), [argument]),
+            nat(5),
+        ))
+    };
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
+
+    context.with_frame(|context| {
+        context.assume(&n, &Term::intrinsic(Intrinsic::NatType));
+        context.define(
+            &n,
+            &Term::intrinsic(Intrinsic::nat_add(Term::free_var(&asked.a), nat(0))),
+            None,
+        );
+        let guard = over(Term::free_var(&n));
+        let key = shallow_scrutinee(context, &guard);
+        context.refine_scrutinee_spellings(vec![(key, guard, false)], &truth);
+
+        let by_value = over(Term::free_var(&asked.a));
+        assert_eq!(
+            reduce(context, by_value).map(|reduct| reduct.as_bool()),
+            Ok(Some(true))
+        );
+        let other = over(Term::free_var(&asked.b));
+        assert_eq!(
+            reduce(context, other).map(|reduct| reduct.as_bool()),
+            Ok(None)
+        );
+    });
 }

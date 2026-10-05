@@ -946,7 +946,7 @@ fn retry_checking(
 ///
 /// - a `Var` reduces to the value (`refine`), and a local `let`'s definition is refined to the same value in turn: the kernel reads a scrutinee by value, so the one it matches on is the definition, and a name refined alone disagrees with the definition it unfolds to — the solver reifies a local definition into the solution it stores, and that spelling saw nothing;
 /// - a projection — a `Bool`/`Nat` match on a tuple field — refines that projection (`refine_projection`);
-/// - any other head — a stuck application like `classify(c)` / `Nat/in_range(...)` — is canonicalized (head verbatim, arguments in WHNF) and recorded in the term-keyed scrutinee store (`refine_scrutinee`), so an occurrence spelled with differently-reduced arguments still matches.
+/// - any other head — a stuck application like `classify(c)` / `Nat/in_range(...)` — is recorded as written in the term-keyed scrutinee store (`refine_scrutinee`), where an occurrence spelled otherwise is met at the entry's reduced spelling.
 ///
 /// A scrutinee's *indices* are not refined here: an arm solves their equations with `curios_analysis::solve_indices`, the kernel's own function, and records the variables it solves. Keying a non-variable index — a constructor, a stuck application — as an equation on the index itself would record the reverse of what the inverter pins, or a fact the kernel does not have.
 ///
@@ -1056,7 +1056,7 @@ fn another_case(case: &Term, value: &Term) -> bool {
 
 /// The spellings a scrutinee that is neither a variable nor a projection is met by, each with the term it was registered from: as written, and resolved through a concept dispatch where it has one.
 fn scrutinee_spellings(context: &mut Context, head: &Term) -> Result<Vec<(Term, Term)>, Error> {
-    // Registered on the *cheap* key: the scrutinee as written, with metas and universes normalized. Canonicalizing here would make a guard cost its operand's evaluation before any use of the fact — see `shallow_scrutinee`. The reducer's probe escalates on a miss, so a spelling this does not collapse is still found, and found by reducing at the site that needs it rather than at every site that records one.
+    // Registered on the *cheap* key: the scrutinee as written, with metas and universes normalized. Reducing it here would make a guard cost its operand's evaluation before any use of the fact — see `shallow_scrutinee`. An occurrence this spelling does not meet is met at the stuck form reduction leaves it as, against the entry's reduced spelling (`reduce`'s `refined_reduct`), which is settled when a probe first needs it rather than at every site that records one.
     let canonical = shallow_scrutinee(context, head);
 
     // A concept-dispatched scrutinee (`a <= hi`) elaborates to the method projected out of the witness — `(?w).1(a, hi)` — which is not the shape the reducer probes: by then it has become the intrinsic normal form `NatLe(a, hi)`. Registering only the verbatim key leaves the arm unrefined, silently, while the equivalent `Nat/le(a, hi)` spelling refines. Register the probed form alongside it so both spellings agree.
@@ -1070,7 +1070,7 @@ fn scrutinee_spellings(context: &mut Context, head: &Term) -> Result<Vec<(Term, 
         false => None,
     };
 
-    // The operands disagree the same way and are deliberately *not* re-registered here. Their spellings differ by a fold and by an unfolded local as well as by a wrapper, so bringing them together is reduction — and reduction at registration is what would make a guard cost its subject's evaluation before any use of the fact, which is the whole reason `shallow_scrutinee` records the written form. `reduce::canonical_key` does it at the probe instead, under a ceiling and once per key — from the *unerased* spelling stored beside the key, since the erased one cannot unfold the polymorphic heads reduction must see through.
+    // The operands disagree the same way and are deliberately *not* re-registered here. Their spellings differ by a fold and by an unfolded local as well as by a wrapper, so bringing them together is reduction — and reduction at registration is what would make a guard cost its subject's evaluation before any use of the fact, which is the whole reason `shallow_scrutinee` records the written form. `reduce`'s `settle` does it at the first probe that needs it instead, under a ceiling and once per entry — from the *unerased* spelling stored beside the key, since the erased one cannot unfold the polymorphic heads reduction must see through.
     let mut spellings = vec![(canonical, head.clone())];
     spellings.extend(resolved);
     Ok(spellings)

@@ -442,9 +442,9 @@ fn a_proof_credits_the_written_binder_a_local_was_opened_from_and_a_rollback_wit
 
 /// An equation whose scrutinee names no local once an arm refines a variable answers nothing in that arm, and answers again after it. The kernel substitutes an arm's solution through the equations in force and records none under a closed spelling, so an equation left answering here would accept in the arm a proof the kernel refuses.
 ///
-/// The control is an equation over a second variable the arm does not refine: it still names a local, the kernel still records it, and it still answers.
+/// The control is an equation that names a second variable the arm does not refine: its instance still names a local, the kernel still records it, and it answers at that instance, the recorded spelling stepping aside for the arm.
 ///
-/// Mutation-checked: with `Context::refine` withholding nothing, the closed equation answers inside the arm.
+/// Mutation-checked: with `Context::refine` withholding no equation its refinement closes, the guard's instance at the arm's value is in force there, a closed term the kernel records nothing under.
 #[test]
 fn an_equation_a_refinement_closes_is_withheld_for_the_arm() {
     let mut context = context();
@@ -475,19 +475,31 @@ fn an_equation_a_refinement_closes_is_withheld_for_the_arm() {
                 None,
                 "the guard is about a closed term in this arm"
             );
+            let instance = Term::intrinsic(Intrinsic::nat_lt(literal(5), Term::free_var(&m)));
+            assert_eq!(
+                context.scrutinee_reduct(&instance, &instance),
+                Some(&truth),
+                "an equation that still names a local stands, at the instance the arm is checked at"
+            );
             assert_eq!(
                 context.scrutinee_reduct(&open, &open),
-                Some(&truth),
-                "an equation that still names a local stands"
+                None,
+                "and its recorded spelling steps aside for the instance"
             );
             assert_eq!(
                 context
                     .visible_scrutinee_entries()
                     .map(|(_, key, _)| key.clone())
                     .collect::<Vec<_>>(),
-                vec![open.clone()]
+                vec![instance]
             );
         });
+
+        assert_eq!(
+            context.scrutinee_reduct(&open, &open),
+            Some(&truth),
+            "which answers again once the arm is left"
+        );
 
         assert_eq!(
             context.scrutinee_reduct(&closing, &closing),

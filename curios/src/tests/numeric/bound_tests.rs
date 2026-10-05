@@ -37,11 +37,11 @@ fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
     );
 }
 
-// **A window's bound is stated over a sum, and a guard still discharges it.** `Bytes/slice(b, s, l)` demands `s + l <= len(b)`, so the proposition a guard has to meet contains an addition that folds away — `0 + 10` to `10`, `1 + k` to `k + 1` — and the fold happens inside the intrinsic reduction, one step *after* the refinement store is probed. Keying a probe on the operands as written would therefore miss every window bound, since a window is `(start, length)`; `canonical_scrutinee` reduces an intrinsic's operands for exactly this reason, and these are the shapes that say so.
+// **A window's bound is stated over a sum, and a guard still discharges it.** `Bytes/slice(b, s, l)` demands `s + l <= len(b)`, so the proposition a guard has to meet contains an addition that folds away — `0 + 10` to `10`, `1 + k` to `k + 1` — and the fold happens inside the intrinsic reduction, one step *after* the refinement store is probed. Keying a probe on the operands as written would therefore miss every window bound, since a window is `(start, length)`; the store is asked again after the fold, and at the stuck reduct with an intrinsic's operands reduced, for exactly this reason, and these are the shapes that say so.
 //
-// `over_a_definition` is the shape that needs the *key* reduced rather than merely rewritten: the base is a local definition, so the probe unfolds it to the literal and cancels the shared floor while the registered key holds neither. `canonical_key` settles that under a ceiling, once per key. `indexed` is the same story for `Bytes/get`'s strict bound.
+// `over_a_definition` is the shape that needs the *key* reduced rather than merely rewritten: the base is a local definition, so the probe unfolds it to the literal and cancels the shared floor while the registered key holds neither. The entry's reduced spelling settles that, under a ceiling and once per entry. `indexed` is the same story for `Bytes/get`'s strict bound.
 //
-// The control is the last: a guard establishing a *different* window must not discharge this one, or the escalation would be collapsing comparisons rather than spellings of one.
+// The control is the last: a guard establishing a *different* window must not discharge this one, or the probe would be collapsing comparisons rather than spellings of one.
 #[test]
 fn a_guard_discharges_a_window_bound_stated_over_a_sum() {
     assert_eq!(

@@ -388,7 +388,7 @@ impl Term {
         }
     }
 
-    /// The free-variable identity at the head of an application spine, descending through curried `Apply` heads: `classify(c)` and `f(a)(b)` report the name of `classify` / `f`. A bare free variable reports itself; anything else is `None`. Used to cheaply gate scrutinee-refinement canonicalization on the applied symbol before paying for argument reduction.
+    /// The free-variable identity at the head of an application spine, descending through curried `Apply` heads: `classify(c)` and `f(a)(b)` report the name of `classify` / `f`. A bare free variable reports itself; anything else is `None`. What a scrutinee refinement's probe is gated on, through [`Term::head_key`], before a key is built.
     pub fn head_name(&self) -> Option<&Free> {
         match self.look() {
             Subterm::Apply(Apply { head, .. }) => head.head_name(),

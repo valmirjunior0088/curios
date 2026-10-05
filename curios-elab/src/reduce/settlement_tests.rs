@@ -87,7 +87,7 @@ fn settle(context: &mut Context, guard: &Term, probed: Term) -> (usize, Term) {
     at
 }
 
-/// A settled spelling is left alone by what cannot change what its key reduces to: a refinement registered in a frame inside its entry's, that frame's exit, and a suppression bracket. Each of the three cleared every spelling while they were kept in a table beside the reducts, and settling again after them was most of what the escalation cost.
+/// A settled spelling is left alone by what cannot change what its key reduces to: a refinement registered in a frame inside its entry's, that frame's exit, and a suppression bracket. Each of the three cleared every spelling while they were kept in a table beside the reducts, and settling again after them was most of what the probe at a stuck reduct cost.
 #[test]
 fn a_settled_spelling_outlives_what_cannot_change_it() {
     let Guarded {

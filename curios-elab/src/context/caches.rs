@@ -1,6 +1,6 @@
 //! The elaborator's memo tables and the write stamps that police them.
 //!
-//! The reduction, elaboration and canonical-key caches are sound only under an explicit invalidation protocol: every store write that could change a cached answer must either bump a stamp (so a pending insert is refused), clear a cache, or retain selectively. Each combination is a named method carrying its own justification, so a new mutation site chooses a protocol instead of improvising one.
+//! The reduction and elaboration caches are sound only under an explicit invalidation protocol: every store write that could change a cached answer must either bump a stamp (so a pending insert is refused), clear a cache, or retain selectively. Each combination is a named method carrying its own justification, so a new mutation site chooses a protocol instead of improvising one.
 //!
 //! **Every table lives one declaration**, and that is what lets a hit on it be free: [`Caches::begin_declaration`] clears them where the budget is restored, so which entries are present is a fact about the declaration under judgment rather than about the ones compiled before it. `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md` states the rule for both checkers.
 //!
@@ -38,7 +38,7 @@ pub(crate) struct ElaborationStamp {
     universes: Entropy,
 }
 
-/// The reduction, elaboration and canonical-key caches with their two write stamps. See the module documentation for the protocol; `Context` holds exactly one of these.
+/// The reduction and elaboration caches with their two write stamps. See the module documentation for the protocol; `Context` holds exactly one of these.
 #[derive(Debug, Default)]
 pub(crate) struct Caches {
     /// Reducts, for the declaration in progress: [`Caches::begin_declaration`] clears the table where the budget is restored, so every node it holds was built under that budget, a hit on it is free, and nothing charges an insertion.
@@ -49,19 +49,11 @@ pub(crate) struct Caches {
     reduction: [HashMap<Term, Term>; 2],
     /// The reduction table's second door, for the terms mentioning no local binder: each universe-erased spelling to the first exact key stored under it. A reduct is the same function of its term whatever the levels in it, so two spellings differing only in their levels — the one checking wrote with universe metavariables and the one totality reads with them solved — are one computation; the exact table cannot see that, and every phase re-ran the fold. A probe that misses the exact table asks here, and a hit is served through [`adapted_across_levels`], which rewrites the stored reduct's levels to the asking spelling's or declines.
     reduction_erased: [HashMap<Term, Term>; 2],
-    /// A registered refinement key against the canonical form the escalation compares it at (`reduce::canonical_scrutinee`: head verbatim, arguments and operands in weak-head normal form).
-    ///
-    /// **Per *key*, where the escalation is per *probe*.** A store entry is recorded as the guard was written and every occurrence the reducer meets has been reduced, so the two meet only through a canonical form — which nothing but reduction produces. Recomputing it at each probe re-derives one guard's subject once per node of that operation in the declaration, and a subject that reduces to a *stuck* form is not held by the reduction table either, since that one caches reducts rather than the walks that failed to settle. Filled on the first escalation that needs it, so a guard whose fact is never probed against still costs nothing to register — the property `reduce::shallow_scrutinee` exists to keep.
-    ///
-    /// A key the allowance stopped short is memoized *as itself*, so a bail is paid once rather than at every probe.
-    ///
-    /// Derived by reduction, so it is invalidated wherever a reduct is.
-    canonical_keys: HashMap<(Term, bool), Term>,
     /// The sort of each type classified since the context was last written to — `Sort::of_in`'s own answer, remembered so that a type whose graph shares a field is classified once per node where the walk alone classifies it once per path.
     ///
     /// **Valid for a quiet stretch, and that is as long as it needs to be.** A sort is derived by reduction and reads more besides: the type a local is assumed at, what a metavariable is solved to and has for a type, a declaration's sort, the levels the universe solver holds. Each of those changes by a stamped write, by a frame's exit — which closes binders and stamps nothing — or where a reduct is cleared, so the table is emptied at the first probe after either stamp has moved, wherever a frame is left, and wherever the reducts are. One classification does none of the three: it opens its binders beside the context rather than in it, which is why `Sort::of_in` threads them, and it is the classification that is per path without the table.
     ///
-    /// **Filed by the reduction that read it**, as a canonical key is: a sort is read through reducts, and a term's reduct under a judgment's reduction is not its reduct under plain reduction.
+    /// **Filed by the reduction that read it**, as a reduct is: a sort is read through reducts, and a term's reduct under a judgment's reduction is not its reduct under plain reduction.
     sorts: HashMap<(Term, bool), Sort>,
     /// The stamps `sorts` was filled under.
     sorts_at: ElaborationStamp,
@@ -72,8 +64,8 @@ pub(crate) struct Caches {
     proofs: HashMap<Free, bool>,
     /// One tick per *write* to any kernel store — definitions, refinements, assumptions, name/metavariable minting, solves, parked/deferred work, the witness table. `Context::get_or_init_elaborated` snapshots it around a candidate sub-elaboration: an unchanged stamp certifies the run was pure (replaying it would be the identity on the context), which is what makes skipping the replay on a later cache hit sound.
     mutation_stamp: Entropy,
-    /// A recorded scrutinee against itself with its solved metavariables materialized, kept where none is left unsolved: what the filter in front of an entry reads (`reduce`'s `could_settle`), which would otherwise rebuild the scrutinee at every stuck form. It rests on solutions alone, so it goes wherever a canonical key goes, which is wherever one can be withdrawn. Behind a cell because the filter runs while the entries are borrowed.
-    materialized: RefCell<HashMap<Term, Term>>,
+    /// A recorded scrutinee against itself as the kernel spells it — solved metavariables materialized, local definitions substituted, refined variables as their values — kept where no metavariable in it is left unsolved: what the filter in front of an entry reads (`reduce`'s `could_settle`), which would otherwise rebuild the scrutinee at every stuck form. It rests on the solutions, the definitions and the refinements in the window, so it goes wherever the reducts do, and at a settlement's boundary whichever reduction crosses it. Behind a cell because the filter runs while the entries are borrowed.
+    kernel_spellings: RefCell<HashMap<Term, Term>>,
     /// Monotonic universe-solver writes are tracked separately. Elaboration entries may survive them only when their keys and results contain no transitively unresolved universe meta; reducts survive them outright, being parametric in levels (see `Context::cached_reduced`); rollback/finalization clears every cache at the non-monotonic boundaries.
     universe_mutation_stamp: Entropy,
 }
@@ -142,12 +134,13 @@ impl Caches {
         self.reduction[plain].insert(term, reduct);
     }
 
-    /// Every reduct of both reductions, the second doors indexing them, and the sorts read through them.
+    /// Every reduct of both reductions, the second doors indexing them, the sorts read through them, and the scrutinees remembered as the kernel spells them.
     fn clear_reductions(&mut self) {
         for table in self.reduction.iter_mut().chain(&mut self.reduction_erased) {
             table.clear();
         }
         self.sorts.clear();
+        self.kernel_spellings.get_mut().clear();
     }
 
     /// The remembered sort of `type_`, where nothing was written since it was filed: as plain reduction read it where `plain`, and as a judgment's did otherwise.
@@ -170,13 +163,13 @@ impl Caches {
         }
     }
 
-    /// `term` with its solved metavariables materialized, where that has been remembered.
-    pub(crate) fn materialized_get(&self, term: &Term) -> Option<Term> {
-        self.materialized.borrow().get(term).cloned()
+    /// `term` as the kernel spells it, where that has been remembered.
+    pub(crate) fn kernel_spelling_get(&self, term: &Term) -> Option<Term> {
+        self.kernel_spellings.borrow().get(term).cloned()
     }
 
-    pub(crate) fn materialized_insert(&self, term: Term, materialized: Term) {
-        self.materialized.borrow_mut().insert(term, materialized);
+    pub(crate) fn kernel_spelling_insert(&self, term: Term, spelled: Term) {
+        self.kernel_spellings.borrow_mut().insert(term, spelled);
     }
 
     /// Whether the binder `name` is a proof, where that has been asked.
@@ -188,22 +181,11 @@ impl Caches {
         self.proofs.insert(name, proof);
     }
 
-    /// A new declaration: every table is discarded — the reducts, the canonical refinement keys, and the elaborations — so that what one declaration can afford is decided by nothing the declarations before it left behind.
+    /// A new declaration: every table is discarded — the reducts and the elaborations — so that what one declaration can afford is decided by nothing the declarations before it left behind.
     pub(crate) fn begin_declaration(&mut self) {
         self.proofs.clear();
         self.clear_reductions();
-        self.canonical_keys.clear();
-        self.materialized.get_mut().clear();
         self.clear_elaborations();
-    }
-
-    /// A key's canonical form, filed as a reduct is: as plain reduction took it where `plain`, and as a judgment's did otherwise.
-    pub(crate) fn canonical_key_get(&self, key: &Term, plain: bool) -> Option<Term> {
-        self.canonical_keys.get(&(key.clone(), plain)).cloned()
-    }
-
-    pub(crate) fn canonical_key_insert(&mut self, key: Term, plain: bool, canonical: Term) {
-        self.canonical_keys.insert((key, plain), canonical);
     }
 
     pub(crate) fn elaboration_get(
@@ -308,8 +290,6 @@ impl Caches {
     pub(crate) fn invalidate_for_refinement(&mut self) {
         self.note_write();
         self.clear_reductions();
-        self.canonical_keys.clear();
-        self.materialized.get_mut().clear();
         self.clear_elaborations();
     }
 
@@ -317,8 +297,6 @@ impl Caches {
     pub(crate) fn invalidate_for_redefinition(&mut self) {
         self.note_write();
         self.clear_reductions();
-        self.canonical_keys.clear();
-        self.materialized.get_mut().clear();
         self.clear_elaborations();
     }
 
@@ -331,9 +309,6 @@ impl Caches {
         }
         // A sort is read through reducts and names none, so it has nothing to be retained by.
         self.sorts.clear();
-        // A canonical key is a reduct of the same kind, retained by the same test.
-        self.canonical_keys
-            .retain(|_, canonical| !canonical.mentions_free(name));
     }
 
     /// An assumption's type was replaced in place (`reassume`): an entry elaborated between a `rec` group's lowered `assume` and this upgrade could embed the lowered signature, so the elaboration cache clears; reducts never read assumption types, so the reduction cache survives. Stamped.
@@ -352,17 +327,13 @@ impl Caches {
         self.sorts.clear();
         if dropped_refinements {
             self.clear_reductions();
-            self.canonical_keys.clear();
-            self.materialized.get_mut().clear();
             self.clear_elaborations();
         } else if dropped_definitions {
             self.clear_reductions();
-            self.canonical_keys.clear();
-            self.materialized.get_mut().clear();
         }
     }
 
-    /// A settlement is withholding, or has stopped withholding, the refinements from the entry it settles inwards: the suppression boundary's reason, facing the other way — what was reduced on one side of that line must not answer on the other — so the reduction tables and canonical keys clear on both sides as they do there.
+    /// A settlement is withholding, or has stopped withholding, the refinements from the entry it settles inwards: the suppression boundary's reason, facing the other way — what was reduced on one side of that line must not answer on the other — so the reduction tables clear on both sides as they do there.
     ///
     /// **Inside a span of plain reduction only what plain reduction remembered goes.** Nothing but plain reduction runs between the two sides of a settlement made there, so what a judgment's reduction remembered is as true when the refinements are restored as it was before they were withheld.
     pub(crate) fn invalidate_settlement_boundary(&mut self, plain: bool) {
@@ -371,12 +342,11 @@ impl Caches {
                 self.reduction[1].clear();
                 self.reduction_erased[1].clear();
                 self.sorts.retain(|(_, plain), _| !plain);
-                self.canonical_keys.retain(|(_, plain), _| !plain);
+                // A scrutinee's spelling reads the refinements in the window, which this boundary moves.
+                self.kernel_spellings.get_mut().clear();
             }
             false => {
                 self.clear_reductions();
-                self.canonical_keys.clear();
-                self.materialized.get_mut().clear();
             }
         }
     }
@@ -389,16 +359,12 @@ impl Caches {
             (self.reduction[0].len() + self.reduction[1].len()) as u64
         );
         self.clear_reductions();
-        self.canonical_keys.clear();
-        self.materialized.get_mut().clear();
         self.clear_elaborations();
     }
 
     /// Universe levels were rewritten in place (defaulting, finalization, instance closure): cached reducts and elaborations may embed the pre-rewrite levels, so both clear. The solver write itself is stamped by the `UniverseMutation` guard.
     pub(crate) fn invalidate_for_universe_rewrite(&mut self) {
         self.clear_reductions();
-        self.canonical_keys.clear();
-        self.materialized.get_mut().clear();
         self.clear_elaborations();
     }
 
@@ -412,8 +378,6 @@ impl Caches {
         self.note_write();
         self.note_universe_write();
         self.clear_reductions();
-        self.canonical_keys.clear();
-        self.materialized.get_mut().clear();
         // Entries are metavar-free on both key and value, so an un-solve cannot invalidate them in principle; cleared anyway while the rollback bracket is young — conservative and cheap.
         self.clear_elaborations();
     }

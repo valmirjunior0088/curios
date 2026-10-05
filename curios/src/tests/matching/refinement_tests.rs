@@ -9,7 +9,7 @@ use {
 //
 // Three constraints shape the scrutinee, and they pull against each other. It must carry a metavariable, or there is nothing to materialize. It must not reduce away, or the store is never reached — hence a method whose body eliminates the *symbolic* `b`. And its head must be one the kernel's refinement store reads. A concept dispatch is all three at once, and it is what `/std/Str/fold` and `/std/Str/Valid`'s decoder refine on in production — their `rem == 1` guard — rather than a shape invented here.
 //
-// Mutation-checked: dropping `zonk_solved_term_metas` from `canonical_scrutinee` refuses this program, with `p`'s expected type still reading the unrefined method body.
+// The materialized key is what meets the second occurrence for one lookup. With the metavariables left standing in it the program still holds, the occurrence being met at the stuck form reduction leaves it as, against the guard's reduced spelling, which materializes them too.
 #[test]
 fn an_inferred_implicit_does_not_break_a_refinement_key() {
     let source = r#"
@@ -37,11 +37,11 @@ fn an_inferred_implicit_does_not_break_a_refinement_key() {
     assert_eq!(run(source), b"refined");
 }
 
-// A refinement on a boolean connective reaches every spelling of the scrutinee that reduces to it. `x && g(7)` is the scrutinee; the occurrence is spelled `x && h(7)`, with `h` a different function folding to the same `true`, so the written key misses and the escalation has to match the two through their canonical forms — every operand reduced, on both sides. That is the form the elaborator's `refined_after_fold` and the kernel's `refined_reduct` both bring a probed value to, which is what keeps them reaching the same occurrences when `&&` leaves its right operand as written behind a stuck left. The connectives are tagged in `Term::head_key`: untagged, an operator-spelled scrutinee would register a key nothing looks up, and not even `x && g(7)` itself would refine.
+// A refinement on a boolean connective reaches every spelling of the scrutinee that reduces to it. `x && g(7)` is the scrutinee; the occurrence is spelled `x && h(7)`, with `h` a different function folding to the same `true`, so the written key misses and the two have to meet through their canonical forms — every operand reduced, on both sides. That is the form each checker's `refined_reduct` brings a probed value and an entry's key to, which is what keeps them reaching the same occurrences when `&&` leaves its right operand as written behind a stuck left. The connectives are tagged in `Term::head_key`: untagged, an operator-spelled scrutinee would register a key nothing looks up, and not even `x && g(7)` itself would refine.
 //
-// Two occurrences, two routes to the same intrinsic. `x && h(7)` arrives at each reducer as the witness projection the scrutinee was written as; `Bool/and(x, h(7))` arrives under the wrapper's own head, which no key is gated on, and becomes the intrinsic only once the wrapper unfolds. In the elaborator both are decided at the probe *before* decomposition, which re-runs on every continued term and canonicalizes on a miss; in the kernel both are decided at the stuck reduct, brought to operand-canonical form by `refined_reduct`.
+// Two occurrences, two routes to the same intrinsic. `x && h(7)` arrives at each reducer as the witness projection the scrutinee was written as; `Bool/and(x, h(7))` arrives under the wrapper's own head, which no key is gated on, and becomes the intrinsic only once the wrapper unfolds. In both checkers each is decided at the stuck reduct, brought to operand-canonical form by `refined_reduct`.
 //
-// Both checkers run this. Mutation-checked: dropping `BoolAnd` from `head_key` refuses it at `p`, and comparing the kernel's probed value uncanonicalized refuses it at `p` too. The elaborator's `refined_after_fold` canonicalization is not what either occurrence rests on — the probe before decomposition reaches them first — and is kept for the fold that changes a spelling.
+// Both checkers run this. Mutation-checked: dropping `BoolAnd` from `head_key` refuses it at `p`, and so does comparing either checker's probed value uncanonicalized.
 #[test]
 fn a_boolean_refinement_reaches_an_occurrence_spelled_differently_on_its_right() {
     let source = r#"
@@ -560,4 +560,34 @@ fn a_guards_fact_holds_under_a_match_on_a_variable_it_names() {
         "#;
 
     assert_eq!(run(source), b"first");
+}
+
+// A guard over a local definition answers a term written over the definition's value. The kernel reads the guard by value, so `Nat/in_range(m, 240, 244)` is its scrutinee as the kernel holds it; the elaborator's key names `n`, and it meets the term at the guard's reduced spelling, where the filter in front of the equation reads the guard as the kernel spells it. The control is the guard written over `m` itself. `curios-elab`'s `reduce::reduction_tests` holds the filter under this name.
+//
+// Mutation-checked: with the elaborator's filter reading the guard as written, the first program is refused at `True/qed()`, whose expected `Holds(Nat/in_range(m, 240, 244))` is no `True` there.
+#[test]
+fn a_guard_over_a_local_definition_answers_a_term_over_its_value() {
+    for guard in [
+        "let n = m + 0; match Nat/in_range(n, 240, 244)",
+        "match Nat/in_range(m, 240, 244)",
+    ] {
+        let source = format!(
+            r#"
+        use /std/{{Nat, Str}};
+        use /std/Bool/{{Holds, True}};
+
+        let ranged(m : Nat) -> Str =
+            {guard}
+            | true =>
+                let _ : Holds(240 <= m) = Nat/le/of_in_range(m, 240, 244, True/qed()).low;
+                "inside"
+            | false => "outside"
+            end;
+
+        /std/print(ranged(242))
+        "#
+        );
+
+        assert_eq!(run(&source), b"inside", "{guard}");
+    }
 }

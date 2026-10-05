@@ -40,12 +40,12 @@ impl DefEntry {
     }
 }
 
-/// One stuck-application refinement: the scrutinee as *written* (unerased, so the probe-time canonicalization can still unfold its polymorphic heads — erasure strips the `Instance` a global unfolds through, so reduce-then-erase and erase-then-reduce disagree exactly there), and the arm's value.
+/// One stuck-application refinement: the scrutinee as *written* (unerased, so a settlement can still unfold its polymorphic heads — erasure strips the `Instance` a global unfolds through, so reduce-then-erase and erase-then-reduce disagree exactly there), and the arm's value.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ScrutineeEntry {
     pub(crate) original: Term,
     pub(crate) value: Term,
-    /// Whether this spelling is an alias of an equation recorded under another: the kernel's spelling of a guard written over local definitions, which an occurrence reached by unfolding a definition presents exactly. The exact lookup reads it; settlement and canonicalization skip it, which leaves a reduct over the definitions' values unanswered — `typing`'s registration states the case.
+    /// Whether this spelling is an alias of an equation recorded under another: the kernel's spelling of a guard written over local definitions, which an occurrence reached by unfolding a definition presents exactly. The exact lookup reads it; settlement skips it, which leaves a reduct over the definitions' values unanswered — `typing`'s registration states the case.
     pub(crate) alias: bool,
     /// Whether this entry withholds the equation its key holds in a frame outside, rather than recording one: an arm that refines a variable leaves it under every equation whose scrutinee, as the kernel spells it under the arm's solution, names no local. `Context::withhold_closed_equations` states the rule. It keeps the equation's spelling and value, which a report on the arm names.
     pub(crate) withheld: bool,
@@ -165,7 +165,7 @@ pub(crate) struct Frames {
     /// Counterfactual match-arm refinements (`refine_head`), kept parallel to `definitions` but suppressible: re-validation of a metavariable solution must keep stable definitions yet ignore these.
     refinements: Vec<HashMap<Free, Term>>,
     refinement_projections: Vec<HashMap<(Term, usize), ProjectionEntry>>,
-    /// Counterfactual refinements keyed by a *stuck application* scrutinee — a non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head` could not record. Keyed by a *canonical* form (head verbatim, arguments reduced to WHNF), so an occurrence that surfaces spelled differently still matches the stored key once both are canonicalized. The term-keyed analogue of the two stores above, suppressed by the same flag.
+    /// Counterfactual refinements keyed by a *stuck application* scrutinee — a non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head` could not record. Keyed by the scrutinee as written, its metavariables and universes normalized (`reduce`'s `shallow_scrutinee`); an occurrence that surfaces spelled differently is met at the entry's reduced spelling (`Frames::scrutinee_spellings`). The term-keyed analogue of the two stores above, suppressed by the same flag.
     refinement_scrutinees: Vec<HashMap<Term, ScrutineeEntry>>,
     /// Each scrutinee entry's *reduced* spelling once a probe has asked for it, beside the entry: in the frame the entry was registered in, under its key — `reduce::refined_reduct`'s memo, the elaborator's copy of the kernel's per-entry reduct.
     ///
@@ -567,7 +567,7 @@ impl Frames {
         );
     }
 
-    /// Register a counterfactual refinement of a stuck-application scrutinee (`refine_head` on a non-key head). `canonical` is the cheap key (as written, metas and universes normalized); `original` is the unerased spelling the probe-time canonicalization reduces; `value` is the arm's constructor. Sound for the same reason `refine` is — the arm is reached only when the scrutinee equals `value` — and non-cyclic because `value` is a constructor of the scrutinee's inductive, a normal form. The façade clears the caches first.
+    /// Register a counterfactual refinement of a stuck-application scrutinee (`refine_head` on a non-key head). `canonical` is the cheap key (as written, metas and universes normalized); `original` is the unerased spelling a settlement reduces; `value` is the arm's constructor. Sound for the same reason `refine` is — the arm is reached only when the scrutinee equals `value` — and non-cyclic because `value` is a constructor of the scrutinee's inductive, a normal form. The façade clears the caches first.
     pub(crate) fn refine_scrutinee(&mut self, canonical: Term, entry: ScrutineeEntry) {
         self.refinement_stamp.fresh();
         // A key registered again is another entry, and what the one before it settled to is not its spelling.
@@ -638,24 +638,14 @@ impl Frames {
         !self.refinement_scrutinees.iter().all(|f| f.is_empty())
     }
 
-    /// Whether some registered scrutinee key shares `head` as its applied-head symbol. The second gate, past `Term::head_key`: only a head that is actually refined justifies canonicalizing the candidate's arguments.
+    /// Whether some registered scrutinee key shares `head` as its applied-head symbol. The second gate, past `Term::head_key`: only a head that is actually refined justifies building the candidate's key.
     pub(crate) fn scrutinee_head_refined(&self, head: HeadTag<'_>) -> bool {
         self.refinement_scrutinees
             .iter()
             .any(|f| f.keys().any(|k| k.head_key() == Some(head)))
     }
 
-    /// Every registered scrutinee key sharing `head`, with its value, innermost frame first — the escalation path's input, where a canonical comparison replaces the shallow lookup that missed.
-    ///
-    /// Filtered here rather than by the caller so a key under another head is never cloned: the store is keyed by written spelling, and reducing arguments cannot change an application's head, so such a key could not have become the candidate however it canonicalizes. Owned rather than borrowed because canonicalizing a key reduces, which needs the context mutably while this borrow would still be live.
-    pub(crate) fn scrutinee_entries(&self, head: HeadTag<'_>) -> Vec<(Term, ScrutineeEntry)> {
-        self.visible_scrutinee_entries()
-            .filter(|(_, key, _)| key.head_key() == Some(head))
-            .map(|(_, key, entry)| (key.clone(), entry.clone()))
-            .collect()
-    }
-
-    /// The entry a canonical stuck scrutinee is registered under, from the frames suppression does not withhold (re-validation) — the innermost, so one an arm inside withholds is answered by the entry withholding it.
+    /// The entry registered under the key `canonical`, from the frames suppression does not withhold (re-validation) — the innermost, so one an arm inside withholds is answered by the entry withholding it.
     ///
     /// The whole entry rather than its value, because the read above this one needs the `original` beside it: the key is universes-erased and cannot decide an instance, so [`Context::scrutinee_reduct`](crate::Context) compares the unerased spellings and declines where they disagree on one both sides have decided.
     pub(crate) fn scrutinee_entry(&self, canonical: &Term) -> Option<&ScrutineeEntry> {
@@ -732,6 +722,18 @@ impl Frames {
         self.refinement_scrutinees[frame + 1..ceiling]
             .iter()
             .any(|inner| inner.get(key).is_some_and(|entry| entry.withheld))
+    }
+
+    /// The value the innermost arm in the window refines `name` to, where one refines it.
+    pub(crate) fn refinement_of(&self, name: &Free) -> Option<&Term> {
+        self.visible_refinements()
+            .rev()
+            .find_map(|frame| frame.get(name))
+    }
+
+    /// Whether an arm in the window refines any variable.
+    pub(crate) fn refines_a_variable(&self) -> bool {
+        self.visible_refinements().any(|frame| !frame.is_empty())
     }
 
     /// The variables the arms in the window refine, each with the value its innermost arm gives it.

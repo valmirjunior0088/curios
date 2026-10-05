@@ -17,10 +17,10 @@ use {
     curios_analysis::{Answered, Driver, answers, answers_classed, could_reduce_to},
     curios_core::{
         Advance, Apply, Argument, Bound, Carrier, Cases, Classes, ClosedHost, Cost, Demand, Field,
-        Free, FreeMonoid, Func, FuncType, Global, HeadTag, InductDecl, InductType, Instance,
-        InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Probe, Proj, Rec,
-        RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType, Subterm, Telescope, Term,
-        Tuple, TupleType, Var, Variant, Visit, accelerable, atoms_within, classable,
+        Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead,
+        Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Probe, Proj, Rec, RecGroup,
+        ReduceError, Reducer, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
+        TupleType, Var, Variant, Visit, accelerable, atoms_within, classable,
         instantiate_universe_levels_scoped, probe_spellings, project_erased_universes,
         reduce_closed, reduce_intrinsic, refold,
     },
@@ -293,58 +293,20 @@ pub(crate) fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, R
 
 /// The *cheap* refinement key: metavariable solutions materialized and universe instances erased, with every argument left exactly as written.
 ///
-/// [`canonical_scrutinee`] additionally reduces each argument, which is what collapses occurrences differing only in argument spelling — and what makes *recording* a refinement cost whatever its operands cost to evaluate. A guard over an expensive operand then pays for the very computation it was written to avoid, when the arm is entered and before any probe happens; `10 <= Bytes/len(built)` forces `built` to register a fact about it. Both sites therefore key on this form first and escalate to the canonical one only on a miss, which is a strict superset: every occurrence the canonical key matches still matches, and one spelled as the guard was matches without reducing anything.
+/// Nothing is reduced to record a guard or to ask its key: reducing each argument would make *recording* a refinement cost whatever its operands cost to evaluate, so a guard over an expensive operand would pay for the very computation it was written to avoid, when the arm is entered and before any probe happens; `10 <= Bytes/len(built)` would force `built` to register a fact about it. An occurrence spelled otherwise than the guard was is met where the kernel meets it, at the stuck form reduction leaves it as, against the entry's reduced spelling ([`refined_reduct`]).
 ///
 /// Zonking and universe erasure stay eager because they are cheap by construction — the walk returns at a cached `has_metavar` bit — and because the key is wrong without them for the reason each states.
 ///
 /// **The universe erasure is deliberate, and the exactness it gives up is recovered at the read rather than here.** `Type u` embeds a level in a term, so two instances of one applied definition can reduce to different values and erasing identifies them — which is why `curios-cert`'s key keeps its universes (`Scope::refine`, with `recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance` as the fixture). Keeping them *here* would not be the repair: every polymorphic occurrence mints fresh universe metavariables (`UniverseSolver::instantiate`) and this walk materializes *term* metas only, so a verbatim key would split two occurrences of one scrutinee and the prelude would stop elaborating at `/std/List.crs`'s `match i < len(a)`, whose `true` arm supplies `/sys/List/get`'s implicit `ok` by exactly this refinement.
 ///
 /// The asymmetry with the kernel is *when*, not what. The rule is not in dispute — identify only terms already definitionally equal — and the kernel states it exactly because it judges a module whose levels are settled. This key is computed while they are still being solved: an arm records it on entry and it is then probed for as long as the arm stands, with metavariables solved in between. So "concrete levels kept apart, undecided ones collapsed" cannot be a property of a key at all; it is a property of a *comparison*, and the only step that happens after solving is the read. `Context::scrutinee_reduct` and `Context::proj_reduct` make it there, by declining a hit whose two unerased spellings disagree on an instance both sides have decided — the refusing direction, so a coarse key costs reductions and never admits one.
+///
+/// **Spelled as the arm spells it.** A variable an arm in force refined is read as its value ([`Context::spelled_as_refined`]), at a registration and at a probe alike: the kernel substitutes a case's solution through its arm, an equation the arm restates is keyed at that instance ([`Context::restate_equations`]), and a term here may still name the variable.
 pub(crate) fn shallow_scrutinee(context: &Context, term: &Term) -> Term {
-    project_erased_universes(&zonk_solved_term_metas(context, term))
+    project_erased_universes(&context.spelled_as_refined(&zonk_solved_term_metas(context, term)))
 }
 
-/// The canonical form of a (potential) scrutinee refinement key: the head kept verbatim — so the refined function (`classify`, `Nat/in_range`) is *not* unfolded and stays the key — with each argument reduced to WHNF. Probing through one canonicalizer makes occurrences that differ only in argument spelling (`c` vs `Bin/at(cons(c,t),0,_)`, `lo` vs a projection that reduces to it) collapse to the same key. A non-application is its own canonical form.
-///
-/// Reached from the escalation path alone, never from a store: [`shallow_scrutinee`] is what a key is recorded under, and this is what decides a probe the recorded spelling missed.
-///
-/// Argument reduction is a [`Probe`]: an argument that cannot reduce at the type level (a runtime-only IO intrinsic's result, such as `/sys/Handle/poll`'s, or an out-of-range access) is kept verbatim rather than forced. Such an argument was never going to differ in spelling — the only occurrence is the scrutinee itself, which matches the key raw — so keeping it raw both avoids forcing effects at elaboration and still matches.
-pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
-    let canonical = match &**term {
-        Subterm::Apply(Apply { head, arguments }) => {
-            let arguments = arguments
-                .iter()
-                .map(|argument| {
-                    let term = reduce(context, argument.term.clone())
-                        .probed()?
-                        .unwrap_or_else(|| argument.term.clone());
-                    Ok(Argument {
-                        term,
-                        plicity: argument.plicity,
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-
-            Ok(Subterm::Apply(Apply {
-                head: head.clone(),
-                arguments,
-            })
-            .into())
-        }
-        // An intrinsic's operands are arguments in the same sense, and a *key* is where it tells: a guard is recorded as written, so `10 <= Bytes/len(b)` keeps the `/sys` application and the concept dispatch it was spelled with, while every occurrence the reducer meets carries the intrinsics they unfold to, the arithmetic normal form they fold to, and — where the base is a local definition — the value it unfolds to. Only reduction reaches all three.
-        //
-        // The operands, never the node: the discipline the `Apply` arm above states as keeping the head verbatim. Reducing the node would meet this very key's refinement and canonicalize it to the arm's own value.
-        //
-        Subterm::Intrinsic(intrinsic) => canonical_operands(context, intrinsic),
-        _ => Ok(term.clone()),
-    }?;
-    // A *solved* metavariable is materialized rather than left standing as its identity, for the same reason the levels below are erased: two occurrences of one written term elaborate to two independently minted metavariables, and an inferred implicit one level down — `g(@?m, b)` against `g(@?m', b)` with both solved to `Bool` — would then store a key no probe can match, and the refinement would silently not fire where the identical term with the implicit supplied explicitly does. Cheap where it does not apply: the walk returns at a cached `has_metavar` bit.
-    let canonical = zonk_solved_term_metas(context, &canonical);
-    // Erased for the same reason, and unsound for the same reason, as in [`shallow_scrutinee`] — which carries the account and why keeping the levels is not the repair.
-    Ok(project_erased_universes(&canonical))
-}
-
-/// `intrinsic` with each operand in weak-head normal form, each a [`Probe`] as [`canonical_scrutinee`]'s arguments are: an operand that cannot reduce is kept as written.
+/// `intrinsic` with each operand in weak-head normal form, each a [`Probe`]: an operand that cannot reduce at the type level — a runtime-only intrinsic's result, an out-of-range access — is kept as written rather than forced.
 ///
 /// The operands and never the node, and the two passes agree on what an operand is because both are `Intrinsic::traverse`, the one definition of an intrinsic's operands — the correspondence `convert`'s `decompose` already rests on.
 fn canonical_operands(context: &mut Context, intrinsic: &Intrinsic) -> Result<Term, ReduceError> {
@@ -654,32 +616,10 @@ fn reduce_instance(context: &Context, instance: Instance) -> Result<Reduce, Redu
     Ok(Reduce::Continue(reduct))
 }
 
-/// What canonicalizing one refinement key may spend before the attempt is abandoned.
+/// What settling one entry's reduced spelling may spend before the attempt is abandoned.
 ///
 /// A ceiling on *discarded* work, not a limit on what a program may compute: settling a key collapses two spellings of one comparison, and failing to settle it leaves them uncollapsed, so the program means the same either way. Sized to settle the shapes a guard actually takes — a comparison over parameters, over a local definition, over a measured literal — while stopping well short of a subject an accumulation built, which is the case that would otherwise spend a whole declaration on one attempt.
-const CANONICAL_KEY_ALLOWANCE: u64 = 100_000;
-
-/// [`canonical_scrutinee`] of a *registered key*, capped and memoized.
-///
-/// Both halves are load-bearing and neither works alone. The escalation runs per probe while this answer is per key, so without the memo one guard's subject is re-derived at every node of that operation in the declaration. And the first attempt can be the expensive one, so without the cap there is no first success to memoize — a guard over a subject a hundred thousand iterations built consumes the declaration's whole budget on that attempt.
-///
-/// A key the allowance stopped short is memoized as *itself*, so the bail is paid once and the key keeps its written spelling.
-fn canonical_key(context: &mut Context, key: &Term, original: &Term) -> Result<Term, ReduceError> {
-    if let Some(cached) = context.cached_canonical_key(key) {
-        return Ok(cached);
-    }
-
-    // Canonicalized from the *original* spelling, never the key: the key is universes-erased, and erasure strips the `Instance` a polymorphic global unfolds through, so reducing the key stalls exactly where the probe side reduced — reduce-then-erase and erase-then-reduce disagree, and the probe side is reduce-then-erase.
-    let canonical = context
-        .within_allowance(CANONICAL_KEY_ALLOWANCE, |context| {
-            canonical_scrutinee(context, original)
-        })?
-        .unwrap_or_else(|| key.clone());
-
-    context.record_canonical_key(key.clone(), &canonical);
-
-    Ok(canonical)
-}
+const SETTLEMENT_ALLOWANCE: u64 = 100_000;
 
 /// A stuck comparison under a guard recorded on another spelling of it, asked at the shallow key under each of [`probe_spellings`] in turn. The false arm of `n < m` refines `n < m` and nothing else, and `m <= n` is that fact read the other way, so the dual answers with the literal negated. A bound reaches the probe as `i + 1 <= len(l)` while the guard that decided it was written `i < len(l)`, one fact on `Nat` and on `Int`, so the successor spelling answers with the literal carried across — these are the same proposition, where a dual's are opposite ones. And the two compose: the false arm of `x <= 4` is the fact `5 <= x`, which the dual of the successor spelling answers. Lookup only — the store keeps every key as written, which is what the comparison record protects and what keeps this the kernel's rule too.
 fn refined_spelling(context: &Context, term: &Term) -> Option<Term> {
@@ -706,77 +646,28 @@ fn shallow_answer(context: &Context, spelling: &Term, negated: bool) -> Option<T
 ///
 /// **Why one arm needs its own.** Each arm returns a [`Reduce`]: on progress it `Continue`s, the loop comes back around, and the probe at the top runs again on the new term. That is how a refinement keeps up with reduction. This arm answers a normal form in one step and breaks, so without this the store is asked exactly once, about a term whose operands have not been reduced yet.
 ///
-/// **And the key sits between the two shapes, which is what makes both probes necessary.** A guard is recorded as written (`shallow_scrutinee`), so `10 <= Bytes/len(b)` registers `10 <= /sys/Bytes/len(b)`. A window bound instantiated at a call arrives as `(0 + 10) <= /sys/Bytes/len(b)` — matching on the right, not the left — and the fold reduces *both* operands at once, to `10 <= Bytes/len(b)` with the `/sys` global unfolded to its `BinLen` intrinsic — spelled the same, a different node — matching on the left, not the right. Neither probe point alone ever sees a matching pair, which is why the escalation is what decides it and why it belongs here: after the fold the probe side is already canonical, so only the key has to be reduced, where escalating before the fold would reduce both.
-fn refined_after_fold(context: &mut Context, folded: &Term) -> Result<Option<Term>, ReduceError> {
-    if !context.has_scrutinee_refinements() {
-        return Ok(None);
-    }
-
-    let Some(head) = folded.head_key() else {
-        return Ok(None);
-    };
-
-    if let Some(value) = refined_by_spelling(context, folded, head)? {
-        return Ok(Some(value));
-    }
-
-    let Subterm::Intrinsic(intrinsic) = &**folded else {
-        return Ok(None);
-    };
-    // The other spellings, in the order the kernel asks them. A dual is asked at its shallow key alone. The successor spelling goes through the same two steps the written one does, and needs them for the same reason: a guard `i < List/len(l)` records its operand as the call the author wrote, while the bound `i + 1 <= List/len(l)` arrives with that call folded to its `ListLen` intrinsic, so the shallow probe misses on the seam exactly where it misses on a spelling, and only the escalation brings the two together. Its literal is the key's own, this being one proposition spelled twice rather than a negation.
-    for (spelling, negated) in probe_spellings(intrinsic) {
-        let spelling = Term::intrinsic(spelling);
-        let answer = match (negated, spelling.head_key()) {
-            (true, _) => shallow_answer(context, &spelling, true),
-            (false, Some(head)) => refined_by_spelling(context, &spelling, head)?,
-            (false, None) => None,
-        };
-        if answer.is_some() {
-            return Ok(answer);
-        }
-    }
-
-    Ok(None)
-}
-
-/// One spelling's lookup: the shallow key first, then the canonical escalation, or `None` where nothing is registered under `head` at all.
+/// **The written keys alone, under the folded form's own spelling and its dual and successor spellings.** A guard is recorded as written (`shallow_scrutinee`), so `10 <= Bytes/len(b)` registers `10 <= /sys/Bytes/len(b)`, and a fold that turns the term into that spelling is answered here for one hash. Where the fold leaves another spelling of the guard — its `/sys` global unfolded to an intrinsic, a sum cancelled — nothing here reduces a key to find out: the stuck form goes on to [`refined_reduct`], which compares it with each entry's reduced spelling as the kernel does.
 ///
 /// Suppression needs no arm: `scrutinee_reduct` withholds under it, and breaking on the folded term leaves standing the neutral a suppressed key wants.
-///
-/// The escalation brings both sides to the canonical form — the key's, capped and memoized, so once per key rather than once per node; the probe's through the same `canonical_scrutinee` the key's is, so the two meet however either was spelled. The probe side cannot be taken as canonical already, because `reduce_intrinsic` does not leave every operand in weak-head normal form: a `&&` behind a stuck left leaves its right as written. In practice the probe before decomposition reaches a connective first, since the loop re-runs it on every continued term; this one decides the folds that change a spelling, and canonicalizing an already-reduced operand is a cache hit.
-fn refined_by_spelling(
-    context: &mut Context,
-    probe: &Term,
-    head: HeadTag<'_>,
-) -> Result<Option<Term>, ReduceError> {
-    if !context.scrutinee_head_refined(head) {
-        return Ok(None);
+fn refined_after_fold(context: &Context, folded: &Term) -> Option<Term> {
+    if !context.has_scrutinee_refinements() {
+        return None;
     }
 
-    let shallow = shallow_scrutinee(context, probe);
-    if let Some(value) = context.scrutinee_reduct(&shallow, probe) {
-        return Ok(Some(value.clone()));
-    }
-
-    let entries = context.scrutinee_entries(head);
-    if entries.is_empty() {
-        return Ok(None);
-    }
-    let canonical = canonical_scrutinee(context, probe)?;
-    for (key, entry) in entries {
-        if canonical_key(context, &key, &entry.original)? == canonical
-            && !levels_clash_on_a_decided_instance(context, probe, &entry.original)?
-        {
-            return Ok(Some(entry.value));
+    let head = folded.head_key()?;
+    if context.scrutinee_head_refined(head) {
+        let shallow = shallow_scrutinee(context, folded);
+        if let Some(value) = context.scrutinee_reduct(&shallow, folded) {
+            return Some(value.clone());
         }
     }
 
-    Ok(None)
+    refined_spelling(context, folded)
 }
 
-/// The refinement probe at a stuck reduct: an entry's *reduced* spelling, where the written one and its canonical form both missed.
+/// The refinement probe at a stuck reduct: an entry's *reduced* spelling, where the written one missed.
 ///
-/// **The kernel's `refined_reduct`, so that the two checkers look in the same places.** Every other lookup here keeps a key's head as written — the shallow key verbatim, the escalation with only its arguments reduced — so without this a stuck form reduction reached *through* the guard's definition would never meet it: under `match small(k) | true => …`, with `small(n) = n < 10`, the arm's hypothesis `Holds(k < 10)` is the guard itself one definition down, the kernel answers it `true`, and the elaborator would refuse it. A field checked before its struct's parameter is inferred meets the same miss later, parked already unfolded to `?k < 10` and retried as `k < 10`.
+/// **The kernel's `refined_reduct`, so that the two checkers look in the same places.** Every other lookup here asks a key as it was written, so without this a stuck form reduction reached *through* the guard's definition would never meet it: under `match small(k) | true => …`, with `small(n) = n < 10`, the arm's hypothesis `Holds(k < 10)` is the guard itself one definition down, the kernel answers it `true`, and the elaborator would refuse it. A field checked before its struct's parameter is inferred meets the same miss later, parked already unfolded to `?k < 10` and retried as `k < 10`.
 ///
 /// So each entry is compared at the form reduction itself gives it — weak-head, operands canonical where it is a tagged comparison, solved metavariables materialized, universes erased — exactly as the kernel settles and compares. A reduct's dual and its spelling across the successor seam are the shared rule's to answer ([`answered`]), so no spelling but the probe's own is compared with a reduct here. The settled spellings are asked first, innermost first, and only when none answers is the innermost entry not yet asked settled, one at a time, until one answers or none is left: a settlement is the one cost here, and a probe an already-settled spelling answers pays none.
 ///
@@ -910,9 +801,9 @@ fn answered(
     Ok(None)
 }
 
-/// Whether `probe` could be the term the scrutinee recorded as `original` reduces to (`curios_analysis::could_reduce_to`), read on the scrutinee with its solved metavariables materialized. A solved metavariable stands over a spine of every local in scope where it was born — a guard written through a concept holds its witness as one — so left standing it reads as naming them all, and the filter would pass what the kernel's does not, the kernel being handed the witness it resolved to.
+/// Whether `probe` could be the term the scrutinee recorded as `original` reduces to (`curios_analysis::could_reduce_to`), read on the scrutinee as the kernel spells it ([`Context::kernel_spelling`]), whose key the kernel's own filter reads. A solved metavariable stands over a spine of every local in scope where it was born — a guard written through a concept holds its witness as one — so left standing it reads as naming them all, and the filter would pass what the kernel's does not. A local definition left named reads the other way: under `let n = m + 0`, a guard over `n` names no `m`, and a form over `m` would be put to no equation where the kernel, which holds the guard by value, answers it.
 fn could_settle(context: &Context, original: &Term, probe: &Term, proofs: &[Free]) -> bool {
-    could_reduce_to(&context.materialized(original), probe, proofs)
+    could_reduce_to(&context.kernel_spelled(original), probe, proofs)
 }
 
 /// The binders `probe` names that are themselves proofs: assumed at a proposition, so conversion reads them nowhere, and a stuck form naming one a scrutinee does not may still be that scrutinee's term. The kernel's `proofs_named`, by the elaborator's own classifier.
@@ -1070,7 +961,7 @@ fn scan_settled(
 ///
 /// **Withheld for the kernel's two reasons.** The entry's own frame holds the equation being settled, which reducing its key would meet at the first probe and answer with the case value it is assuming; and an inner frame retracts before the entry does, so a spelling resting on one would outlive its justification. The frames outside are exactly the equations the entry may rest on, and `Frames::withhold_refinements_from` leaves them live.
 ///
-/// **Capped where the kernel is not**, at the allowance a canonical key takes, because it is the same kind of work: optional, since an unsettled entry answers nothing and the program means what it meant, and unbounded in the worst case, since a guard over a subject an accumulation built reduces that accumulation. The kernel settles each entry once, and so does the elaborator while what its key reduces to cannot have changed: it settles one again where a redefinition, a rollback or a universe rewrite forgot it, and where it held an unsolved metavariable and a solution has landed (`Frames::scrutinee_spellings`). A refusal or a bail settles the entry as having no reduced spelling, so it is paid once; exhaustion of the declaration itself propagates.
+/// **Capped where the kernel is not** ([`SETTLEMENT_ALLOWANCE`]), because the work is optional, since an unsettled entry answers nothing and the program means what it meant, and unbounded in the worst case, since a guard over a subject an accumulation built reduces that accumulation. The kernel settles each entry once, and so does the elaborator while what its key reduces to cannot have changed: it settles one again where a redefinition, a rollback or a universe rewrite forgot it, and where it held an unsolved metavariable and a solution has landed (`Frames::scrutinee_spellings`). A refusal or a bail settles the entry as having no reduced spelling, so it is paid once; exhaustion of the declaration itself propagates.
 ///
 /// **To count settlements.** Under `profile` each call opens a `reduce::settle` span carrying its key and its frame. In the stream `cargo xtask clippy` files for `/std` (`curios-prelude-archive/.artifacts/profile.tsv`), a span is nested where another `reduce::settle` span is open on its thread as it opens, and one inside a `declaration` span is a repeat where an earlier one in that span carried its frame and key. Counted at `aa026bb2e`: 4,573 spans, 240 of them nested, and in elaboration 2,506 first settlements and 1,828 repeats.
 fn settle(
@@ -1082,7 +973,7 @@ fn settle(
     // The key and its frame are what a hunt for repeated settlements needs: the same pair recurring is an entry settled again, and the costliest calls name the keys that pay.
     curios_profile::profile!("reduce::settle", key = %original, frame);
     let settled = context.with_refinements_withheld_from(frame, |context| {
-        context.within_allowance(CANONICAL_KEY_ALLOWANCE, |context| {
+        context.within_allowance(SETTLEMENT_ALLOWANCE, |context| {
             let reduct = reduce(context, original.clone())?;
             reduct_spelling(context, &reduct)
         })
@@ -1113,7 +1004,7 @@ fn settle(
     }
 }
 
-/// The spelling a reduct is compared in: its operands in weak-head normal form where it is a tagged comparison — a connective's right operand behind a stuck left is otherwise left as written, and the two sides would differ by exactly the fold the escalation exists to see through — and its solved metavariables materialized. Unerased: a hit reads its universe instance from it, and erasure is the comparison's.
+/// The spelling a reduct is compared in: its operands in weak-head normal form where it is a tagged comparison — a connective's right operand behind a stuck left is otherwise left as written, and the two sides would differ by exactly the fold this probe exists to see through — and its solved metavariables materialized. Unerased: a hit reads its universe instance from it, and erasure is the comparison's.
 ///
 /// The kernel's `canonical_operands`, gated the same way, on a `head_key` rather than on every intrinsic.
 fn reduct_spelling(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
@@ -1122,7 +1013,8 @@ fn reduct_spelling(context: &mut Context, term: &Term) -> Result<Term, ReduceErr
         _ => term.clone(),
     };
 
-    Ok(zonk_solved_term_metas(context, &spelled))
+    // A variable an arm in force refined is spelled as its value, as a key is ([`shallow_scrutinee`]): reduction reads one through its refinement only where it meets it at a head.
+    Ok(context.spelled_as_refined(&zonk_solved_term_metas(context, &spelled)))
 }
 
 /// Reduce `term` until its head constructor is stable.
@@ -1174,28 +1066,8 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                 } else if context.refinements_suppressed() && context.is_scrutinee_key(&shallow) {
                     // Withhold the value, but keep an application key neutral — as a `Var` key already is — so `solve_at_birth`'s committed spelling stays a term the live refinement can fire on (the registered form, never the unfolded body). What stays neutral is the probe as spelled, never the key: the key erases universe instances, and a solution committed from it would hold a bare occurrence of a universe scheme, which the kernel refuses.
                     break 'step Reduce::Break(term.clone());
-                } else {
-                    // Escalate: the candidate and the registered key are spelled differently, so decide it by *convertible* arguments rather than written ones. Only here is anything reduced, and only against entries sharing this head — canonicalizing one under another head would spend the declaration's budget to learn nothing.
-                    //
-                    // Under suppression too, since `scrutinee_entries` reads only the frames suppression does not withhold: a re-validated term's own arms answer a respelled occurrence as they answer one spelled like their guard, and the arm the caller sits in answers neither. On the unsuppressed branch alone, a candidate whose arm meets its guard through a `let` in another definition's unfolding — `Str/step`'s `n` — would be rejected where elaborating the same term accepts it.
-                    let candidates = context.scrutinee_entries(head);
-
-                    if !candidates.is_empty() {
-                        let canonical = canonical_scrutinee(context, &term)?;
-
-                        for (key, entry) in candidates {
-                            if canonical_key(context, &key, &entry.original)? == canonical
-                                && !levels_clash_on_a_decided_instance(
-                                    context,
-                                    &term,
-                                    &entry.original,
-                                )?
-                            {
-                                break 'step Reduce::Continue(entry.value);
-                            }
-                        }
-                    }
                 }
+                // A candidate spelled otherwise than its key is decided where the kernel decides it: at the stuck form reduction leaves it as, against the entries' reduced spellings ([`refined_reduct`]).
             }
 
             // Another spelling, when the written one has no key: the false arm of `n < m` recorded `n < m` alone, and `m <= n` is the same fact read the other way; a bound arriving as `i + 1 <= len(l)` under a guard written `i < len(l)` is one fact spelled twice; and the false arm of `x <= 4` is `5 <= x`, the two readings composed. Lookup only — every key stays as written.
@@ -1208,11 +1080,11 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
             match Term::unwrap_or_clone(term) {
                 // **The one arm that answers a normal form and breaks, so the one that has to ask the store a second time.** Every other arm `Continue`s when it makes progress and the loop comes back around, which re-runs the probe above on the new term — that is how a refinement keeps up with reduction, and why no other arm needs anything here. This one folds and leaves, so a fold that turns the term *into* the registered shape would never be asked about again: `Le(s + l, len b)` instantiated at a call is `NatLe(0 + n, len b)`, whose sum folds to `n` only inside `reduce_intrinsic`, and every window bound in the language has that shape.
                 //
-                // The shallow key alone. After the fold the term is a normal form, so the escalation the probe above needs — for a candidate spelled differently — has nothing left to collapse, and reducing operands to find out is what the split between `shallow_scrutinee` and `canonical_scrutinee` exists to avoid: an intrinsic's head tag is its *operation*, so one registered guard would put that cost on every comparison of that operation in the declaration. Suppression needs no arm either: `scrutinee_reduct` withholds under it, and breaking on the folded term is already the neutral a suppressed key wants left standing.
+                // The written keys alone ([`refined_after_fold`]): an intrinsic's head tag is its *operation*, so reducing a key to compare it here would put that cost on every comparison of that operation in the declaration. A fold that leaves another spelling of a guard is met at the stuck-reduct probe below.
                 Subterm::Intrinsic(intrinsic) => {
                     let folded: Term = reduce_intrinsic(context, &intrinsic)?.into();
 
-                    match refined_after_fold(context, &folded)? {
+                    match refined_after_fold(context, &folded) {
                         Some(value) => Reduce::Continue(value),
                         None => Reduce::Break(folded),
                     }
