@@ -546,7 +546,7 @@ pub enum Error {
         position: usize,
         head: Box<Term>,
     },
-    /// A witness whose signature registers under a key its spelling does not say. A witness of the unit answers questions under the key its lowered signature spells before it elaborates ([`Spelled`](crate::Spelled)), so the two are one key or the witness is refused: `spelled` is the key the spelling gives, where it gives one.
+    /// A witness whose signature registers under a key its spelling does not say. A witness of the unit answers questions under the key its lowered signature spells before it elaborates (`Spelled`), so the two are one key or the witness is refused: `spelled` is the key the spelling gives, where it gives one.
     WitnessKeyNotSpelled {
         concept: Global,
         key: WitnessKey,
@@ -604,7 +604,7 @@ pub enum Error {
     },
     /// A witness goal keyed where a refused declaration's witness stood. Never reported: the item that met it is withheld as any dependent of a refusal is, so the one report the reader sees is the refusal's own, and this exists only to carry that verdict out of resolution.
     Poisoned,
-    /// A read of a declaration that has not elaborated. Never reported: the attempt that met it is void and is made again once the declaration has, and this exists only to cut the attempt short — what voids it is the need the read recorded ([`Context::need`](crate::Context::need)), whatever becomes of this.
+    /// A read of a declaration that has not elaborated. Never reported: the attempt that met it is void and is made again once the declaration has, and this exists only to cut the attempt short — what voids it is the need the read recorded (`Context::need`), whatever becomes of this.
     Unfinished,
     Located {
         span: Span,
