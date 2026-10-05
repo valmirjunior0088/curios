@@ -40,6 +40,14 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 **Rejected.** Floors, each unit's counters resuming above every predecessor's: a floor widens safely, but it ties a unit's bytes to its place in the fold and asks every walk to trust a carried number nothing checks.
 
+### A unit is a function of what it was compiled from
+
+**Decision.** Two compilations of one text against one scope, by one compiler, store the same bytes. Whatever a stage walks into a term, a table or a list a unit stores is walked in an order the program states — registration, declaration or label — never a hash's.
+
+**Rationale.** A successor's record vouches for the bytes each predecessor contained, so a unit that differs from one compilation to the next is a miss for every unit after it; two commands filing one slot write one thing only where this holds; and it is what a compilation over several workers is held to. A hash's order reaches further than the table it orders: the elaborator's frames hold one guard under every spelling it is met by, the bound prover read them in a hash's order and minted a different number of binders doing it, and every later proof moved with the count, since a term's structural hash ranks the atoms a bound is searched over and takes each local's index. `curios-elab`'s `a_frames_refinements_are_read_in_the_order_they_were_registered` and `curios-pipeline`'s `a_name_exported_along_several_paths_is_stored_the_same_every_time` hold the two orders that reached the standard library's unit, and `std_unit_reproduction` measures the library whole.
+
+**Rejected.** Ordering a map where it is archived and nowhere else, which `curios-text`'s `OrderedMap` does: it orders the map's own entries, and not a list built by walking the map. Comparing units up to what moved, which leaves a record nothing can compare by its digest.
+
 ### The erased arena is the fold's, not the unit's
 
 **Decision.** The arena a `Unit` carries is cumulative from the first unit forward — each unit's erasure resumes over the previous one's — never an independent arena numbered from zero.

@@ -6,12 +6,12 @@ Working specification for bringing `lint` and the `wonder` queries under [A comm
 
 | Rung | States | Lands |
 | --- | --- | --- |
-| A unit is a function of what it was compiled from | the same bytes from any process | stage 0 here |
+| A unit is a function of what it was compiled from | the same bytes from any process | landed: [`curios-unit`](../../../curios-unit/README.md#a-unit-is-a-function-of-what-it-was-compiled-from) |
 | One unit, whoever files it | a question's slot is a build's | stages 1 to 4 here |
 | One unit, however it was compiled | whole or over a baseline, so what is compiled over one is filed | *Open* |
 | A successor depends on what it read | an edit stops recompiling every unit after it | [One environment](../05-compilation/02-one-environment.md), [item tasks](../05-compilation/03-item-tasks.md) |
 
-It needs no other spec, and lands the first rung itself: [item tasks](../05-compilation/03-item-tasks.md) holds a compilation to the same stored units for every number of workers, which is this rung with the schedule varied. What a question compiles over a baseline stays unfiled, under [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md).
+It needs no other spec. The first rung is what its headliner stands on, and what [item tasks](../05-compilation/03-item-tasks.md) holds a compilation to for every number of workers. What a question compiles over a baseline stays unfiled, under [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md).
 
 ## What this builds on
 
@@ -20,7 +20,7 @@ It needs no other spec, and lands the first rung itself: [item tasks](../05-comp
 - **The engine's cache does not.** `ReadOnly` (`curios-wonder/src/diagnostics.rs`) believes a stored unit on a re-read through the overlay (`Verdicts::get_overlaid`), answers the nearest baseline — the session's (`Verdicts::kept`), then the slot's whatever its files now hold (`Verdicts::earlier`), then the scope's offer — and on `put` keeps the unit for the session and places it where something follows.
 - **A record is what was read, and what came before.** A unit's record lists every file its compilation read with a digest of the text parsed from it, taken at `RootSource::reads`, and a digest of what each predecessor contained; a hit re-reads each file (`unchanged`) and compares each predecessor (`chained`). A record of text the disk does not hold, or of a predecessor no reader will hold, is a miss for every reader of the disk.
 - **A kept unit is guarded by a log.** `Verdicts::keep` adds what a unit read to the fold's log, and `Verdicts::kept` offers a kept unit only while the units before it read what they read when it was kept.
-- **One compile.** A question's unit comes from the fold a build runs, `compile_unit`: lowered, elaborated, certified by the kernel and erased.
+- **One compile, and one unit from it.** A question's unit comes from the fold a build runs, `compile_unit`: lowered, elaborated, certified by the kernel and erased. Two compilations of one text store the same bytes ([`curios-unit`](../../../curios-unit/README.md#a-unit-is-a-function-of-what-it-was-compiled-from)), which [*a unit's reproduction*](#the-measurements) measures over the standard library.
 - **One fold per subject.** `Asked::every` (`curios-wonder/src/ask.rs`) asks about a package entire as its library and then each program it declares, each over a store handle and a fold of its own.
 - **An entry is no unit.** A program's entry and the modules it reaches are checked on top of the fold (`Fold::check`); a build files what they compile to as a payload, and no question reads one.
 - **The contract.** Each command's `Contract` (`curios/src/contract.rs`) states how it reaches the store; `lint` and every `wonder` query read one and file nothing, which the engine holds whatever store it is handed.
@@ -28,13 +28,6 @@ It needs no other spec, and lands the first rung itself: [item tasks](../05-comp
 ## The gap
 
 **A question files nothing but the `compiler` memo.** A unit no build has filed is compiled in memory by every `lint` and every `wonder` invocation that reaches it, once for each subject of the invocation, and by every server session, which then compiles it over what it kept on every check that reaches it (`a_session_recompiles_what_nothing_was_filed_for`, `curios-wonder/src/tests/store_tests.rs`). Over a package and its path dependency that nothing has built, `wonder diagnostics` and then `lint` leave `.curios/` holding the memo alone.
-
-**A unit is not a function of what it was compiled from.** Five builds of one text file five different units at one slot, under [*a unit's reproduction*](#the-measurements), counted at `87189c97d`. They read the same files and erase to the same arena; two of them differ in three of the standard library's 2,170 items, all in `/std/Str`, in the certifier's record, and in one table of the lowering:
-
-- **A bound's proof follows a hash's order.** Two compilations write `/std/Str/At/onward` two valid proofs, one from `q`'s own bound and one from `p`'s and the hypothesis. The bound prover reads its guards from `Frames::visible_scrutinee_entries` (`curios-elab/src/context/frames.rs`), which walks each frame's `HashMap`: read from the code, and stage 0's loop is what says whether it is the only such order.
-- **A global's re-export paths follow one.** `writable_paths` (`curios-text/src/into_core.rs`) pushes each path a module's `bindings` reach, a `HashMap`, onto the global's list.
-
-A package of two one-declaration units is reproduced, across processes and across `run` and `test`, which is why no test has met it.
 
 ## Prior art
 
@@ -58,11 +51,9 @@ Filing where a build files is what makes one command's work the next one's. What
 6. **How far.** The judged unit. A question files no payload: its crates link no runtime.
 7. **A one-shot question takes a baseline as a session does.** Over a slot whose files have moved, `lint` compiles the closure and files nothing, each time it is run, until a build files the unit. Compiling it whole in order to file it would cost a whole compile of the standard library to anyone editing it.
 8. **A store that cannot be written is said.** A one-shot question prints the line a build prints, on standard error, once; the server tells its client once a session, in a `window/logMessage`. The answer and the exit are what they would have been.
-9. **An order that reaches a unit is one the program states.** What is iterated into a term, a table or a report is iterated in the order of registration, declaration or label, never a hash's.
 
 ## Stages
 
-0. **A unit is a function of what it was compiled from.** Scrutinee entries are enumerated in the order they were registered, a global's paths in the order of their labels, and whatever [*a unit's reproduction*](#the-measurements) still names after them is ordered the same way, until eight builds file one unit. Each order removed is held by a fixture compiled sixteen times in one process.
 1. **The seam says how.** `Cache::put` carries whether the unit was compiled whole; the fold passes it; `Verdicts` ignores it and `ReadOnly` does not yet read it. No behaviour moves, and `curios-pipeline`'s tests assert what they asserted.
 2. **The engine files, and the contracts say so.** The engine's cache keeps every unit, files through the store it holds the ones decision 1 names, and places the rest where something follows; its name and documentation say what it now does. `curios-verdicts` answers whether the disk holds what the fold has read. `lint` and the `wonder` queries state the store access a build has, and `curios/src/contract/tests.rs` pins it. The server files from this stage on, since it asks through the same engine.
 3. **A question says what it could not file.** The engine hands the store's refusal back beside its answer; the command line prints it and the server logs it, once each.
@@ -91,7 +82,7 @@ Each is taken with a release build without `profile`, over a copy of `curios-tex
 
 ## Open
 
-- **What is compiled over a baseline is never filed.** Decision 7 leaves a one-shot question recompiling a closure on every run between builds, and a question never files the package `std` at all, since the archived unit is always offered: 6.56 s a question where a filed unit answers in 0.57. Filing it is the third rung, and *whole against over a baseline* says how far a recompiled unit stands from the one a whole compile files, counted at `87189c97d`. For the leaf, two whole compiles differ in two items, and the recompiled unit differs from a whole one in 41, the reused items of `Nat.crs` each by the 38 bytes the edit added: a reused item carries the spans of the text it was elaborated from, so the unit holds both texts of the file, and is 1.0 MB larger of 29.7. Its erased arena differs at one size. For the hub, two whole compiles differ in one item and the recompiled unit in 13, the reused items of `Bool.crs` among them at one size each, the edit keeping the file's length; the arenas agree. Whether the gap can be closed here is decided once stage 0 has made the comparison clean.
+- **What is compiled over a baseline is never filed.** Decision 7 leaves a one-shot question recompiling a closure on every run between builds, and a question never files the package `std` at all, since the archived unit is always offered: 6.56 s a question where a filed unit answers in 0.57. Filing it is the third rung, and *whole against over a baseline* says how far a recompiled unit stands from the one a whole compile files. Two whole compiles of one text agree in every part; a recompiled unit differs from a whole one in the items it reused from the edited file, which keep [the positions of the text they were elaborated from](../05-compilation/00-findings.md), and in definitions the edit never reached, which a whole compile of the new text writes other proofs for, since [a bound's proof follows the indices its locals were minted at](../04-arithmetic/00-findings.md).
 - **A question about a program checks its entry every time.** An entry is no unit, so nothing a question compiles of it is filed and nothing a build filed of it answers one.
 
 ## Rejected

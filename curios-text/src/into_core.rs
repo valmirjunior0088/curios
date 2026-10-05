@@ -183,6 +183,16 @@ fn writable_paths(
             }
         }
     }
+
+    // A declaration's own path, then each path it is exported at, by path: the tables above are walked in a hash's order, which differs from one compilation to the next, and a reader takes the first of two spellings equally short.
+    for (global, written) in &mut paths {
+        written.sort_by(|left, right| {
+            let exported = |path: &Qualifier| curios_core::Global::Authored(*path) != *global;
+
+            (exported(&left.path), &left.path).cmp(&(exported(&right.path), &right.path))
+        });
+    }
+
     paths
 }
 

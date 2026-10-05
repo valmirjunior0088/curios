@@ -121,6 +121,11 @@ impl Audiences {
             }
         }
 
+        // An audience is a set, and the walks above reach its roots in a hash's order: listed by root, so the list a unit stores is the same from every compilation.
+        for audience in modules.values_mut().chain(bindings.values_mut()) {
+            audience.sort();
+        }
+
         Self { modules, bindings }
     }
 

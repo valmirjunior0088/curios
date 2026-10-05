@@ -111,7 +111,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Tools
 
-- [ ] [Questions file what they compile](roadmap/07-tools/01-questions-file-what-they-compile.md) — `lint` and the `wonder` queries file nothing, so each invocation compiles every unit no build has filed again, and a server session starts cold; and two compilations of one text file two units, a bound's proof and a global's paths each following a hash's order
+- [ ] [Questions file what they compile](roadmap/07-tools/01-questions-file-what-they-compile.md) — `lint` and the `wonder` queries file nothing, so each invocation compiles every unit no build has filed again, and a server session starts cold
 - [ ] [Profiling in the budget's own units](roadmap/07-tools/02-profiling-in-budget-units.md) — not refined yet; a profile reports durations rather than the budget's machine-independent units, and counts no priced site
 - [x] [A diagnostic spells what its reader can write](design/tools/a-diagnostic-spells-what-its-reader-can-write.md): spans across every stage, names as resolution reaches them, written goals reporting their scope and verified candidate fits
 - [x] [An argument names one subject, and each command states what it accepts](design/tools/an-argument-names-one-subject-and-each-command-states-what-it-accepts.md): `run`, `compile`, `document`, `test`, `curate`, `pin`, `new`, `lint`, `format`, `wonder` and `profile`

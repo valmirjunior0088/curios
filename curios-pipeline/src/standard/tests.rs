@@ -3,7 +3,7 @@
 use {
     super::{granted, withheld},
     crate::{
-        Cache, DEFAULT_STEP_BUDGET, Fold, compile_unit_over, invalidated,
+        Cache, DEFAULT_STEP_BUDGET, Fold, compile_unit, compile_unit_over, invalidated,
         tests::test_support::compile_with_units,
     },
     curios_core::{DefinitionKind, Global, Item, Module},
@@ -108,6 +108,58 @@ fn std_recompile_closure_census() {
                 "  recompile   {recompiled_in:>10.1?}   (lower, diff, elaborate, judge, erase)"
             );
         }
+    });
+}
+
+/// Whether the standard library compiles to one unit: its tree compiled whole twice in one process, the two stored units compared byte for byte, and where they differ, the parts and the items that do. A measurement, since each compile is the whole library; counted, and it asserts, since a second unit is the fault it is here to name.
+#[test]
+#[ignore = "measurement: compiles the standard library whole twice and compares the two stored units byte for byte"]
+fn std_unit_reproduction() {
+    with_prelude(|prelude| {
+        let [sys, _] = prelude else {
+            panic!("the prelude has two roots")
+        };
+        let roots = [*sys];
+        let predecessors = Predecessors::over(&roots);
+        let compiled = || {
+            let source = std_from_its_tree();
+            let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
+
+            compile_unit(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit)
+                .expect("the library compiles")
+        };
+        let (first, second) = (compiled(), compiled());
+
+        macro_rules! stored {
+            ($value:expr) => {
+                curios_archive::to_bytes($value)
+                    .expect("a stored part serializes")
+                    .to_vec()
+            };
+        }
+        let mut differing = Vec::new();
+        if stored!(first.text()) != stored!(second.text()) {
+            differing.push("the text stage's part".to_string());
+        }
+        if stored!(&first.arena()) != stored!(&second.arena()) {
+            differing.push("the erased arena".to_string());
+        }
+        if stored!(first.certification()) != stored!(second.certification()) {
+            differing.push("the certifier's record".to_string());
+        }
+        for (one, other) in first.core().items.iter().zip(&second.core().items) {
+            if stored!(one) != stored!(other) {
+                differing.push(one.describe());
+            }
+        }
+
+        println!("\n=== /std compiled whole twice ===");
+        println!("  items       {}", first.core().items.len());
+        println!("  differing   {differing:?}");
+        assert!(
+            stored!(&first) == stored!(&second),
+            "two compilations of the standard library store two units, differing in {differing:?}"
+        );
     });
 }
 
