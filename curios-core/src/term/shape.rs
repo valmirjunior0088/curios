@@ -273,7 +273,7 @@ pub enum StructEntry {
 
 /// A struct value as an intrinsic normal form (cf. [`Variant`], no tag). `name`/`params` are recoverable from the inferred type but stored redundantly so `convert` stays purely structural.
 ///
-/// `entries` carries the literal's written entry shapes from `into_core`: elaboration checks plain fields positionally against the declared labels, pairs `use` entries with the concept's `use`-marked positions, and rebuilds the value entry-free. Empty means "all plain, no names written" — the invariant for every internally-built and post-elaboration struct.
+/// `entries` carries the literal's written entry shapes from `into_core`, one per field: elaboration checks plain fields positionally against the declared labels, pairs `use` entries with the concept's `use`-marked positions, and rebuilds the value entry-free. A value with fields and no entries is the normal form — every slot of the field telescope in order, a hidden one included — which is what elaboration rebuilds and what the compiler builds whole; one with neither is the literal written with no entries. Elaborated, it is read as the literal written in full, each field under its slot's mark, so it is elaborated again unchanged.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Struct {

@@ -3,8 +3,8 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Cases, Exhaustion, Free, Global, InductArm, InductDecl, InductParam, Intrinsic, Many,
-        Match, MatchResult, MetavarId, MetavarOrigin, Nat, Scope, StructDecl, StructType, Subterm,
-        Telescope, Term, UniverseContext,
+        Match, MatchResult, MetavarId, MetavarOrigin, Nat, Scope, StructDecl, StructEntry,
+        StructType, Subterm, Telescope, Term, UniverseContext,
     },
     curios_num::{Floating, Natural},
     curios_utilities::{Plicity, Qualifier, Sign},
@@ -576,6 +576,40 @@ fn a_written_position_counts_the_plain_fields() {
     assert!(matches!(
         elaborate(&mut context, &written(1), Mode::Infer),
         Err(Error::TupleIndexOutOfBounds { index: 1, arity: 1 })
+    ));
+}
+
+// A structure value with a field per slot and no entries is the normal form: every slot in order, the hidden one included, read as the literal written in full and so elaborated again unchanged. A literal as written carries its entries, and a plain one never fills a hidden slot.
+#[test]
+fn a_structure_value_in_normal_form_is_elaborated_again_unchanged() {
+    let mut context = context();
+    let marked = register_marked(&mut context);
+    let whole = Term::struct_(
+        nominal("Marked"),
+        Vec::<Term>::new(),
+        [nat_lit(3), nat_lit(5)],
+    );
+
+    let (elaborated, type_) = elaborate(&mut context, &whole, Mode::Infer).unwrap();
+    assert_eq!((&elaborated, &type_), (&whole, &marked));
+    let (again, _) = elaborate(&mut context, &elaborated, Mode::Infer).unwrap();
+    assert_eq!(again, whole);
+
+    let positional = Term::struct_entries(
+        nominal("Marked"),
+        Vec::<Term>::new(),
+        [
+            (StructEntry::Field(None), nat_lit(3)),
+            (StructEntry::Field(None), nat_lit(5)),
+        ],
+    );
+    assert!(matches!(
+        elaborate(&mut context, &positional, Mode::Infer),
+        Err(Error::WrongNumberOfFields {
+            expected: 1,
+            got: 2,
+            ..
+        })
     ));
 }
 

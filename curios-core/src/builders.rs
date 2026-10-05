@@ -524,7 +524,7 @@ impl Term {
         ))))
     }
 
-    /// A struct literal carrying the written entry shapes from `into_core`; elaboration validates them against the declared fields and rebuilds entry-free, exactly like `tuple_named`.
+    /// A struct literal as written, one entry shape per field from `into_core`; elaboration validates them against the declared fields and rebuilds entry-free. A literal of unlabeled plain entries keeps them, where `tuple_named` drops its names: an entry-free value is the normal form, which holds every slot, and a written literal leaves the hidden ones out.
     pub fn struct_entries<I, P, J, T>(name: Global, params: I, fields: J) -> Self
     where
         I: IntoIterator<Item = P>,
@@ -532,14 +532,10 @@ impl Term {
         J: IntoIterator<Item = (StructEntry, T)>,
         T: Into<Term>,
     {
-        let (mut entries, fields): (Vec<_>, Vec<_>) = fields
+        let (entries, fields): (Vec<_>, Vec<_>) = fields
             .into_iter()
             .map(|(entry, term)| (entry, term.into()))
             .unzip();
-
-        if entries.iter().all(|e| *e == StructEntry::Field(None)) {
-            entries = vec![];
-        }
 
         Self::from(Subterm::Struct(Struct {
             name,

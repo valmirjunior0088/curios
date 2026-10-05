@@ -18,8 +18,8 @@ use {
     super::{Context, Error, Mode, Sort, Underivable, elaborate, reduce_with},
     curios_core::{
         CalleeId, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Many,
-        MetavarOrigin, Scope, StructDecl, StructType, Subterm, Term, WitnessOrigin, str_literal,
-        syn_call,
+        MetavarOrigin, Scope, StructDecl, StructEntry, StructType, Subterm, Term, WitnessOrigin,
+        str_literal, syn_call,
     },
     curios_num::Natural,
     curios_utilities::{
@@ -398,6 +398,17 @@ impl Constructor<'_> {
     }
 }
 
+/// The concept's literal of `methods`, written as an author writes one: its plain entries in order, every superclass edge left to resolution.
+fn dictionary<const N: usize>(site: &Site<'_>, methods: [Term; N]) -> Term {
+    Term::struct_entries(
+        *site.concept,
+        Vec::<Term>::new(),
+        methods
+            .into_iter()
+            .map(|method| (StructEntry::Field(None), method)),
+    )
+}
+
 /// The fields of a struct at `params`, each classified with its type read through the projections off `value` before it.
 fn struct_parts(
     context: &mut Context,
@@ -558,7 +569,7 @@ fn spell_body(
     };
 
     let method = Term::func([(value, Term::hole(context.mint_metavar()))], rendered);
-    Ok(site.at(Term::struct_(*site.concept, Vec::<Term>::new(), [method])))
+    Ok(site.at(dictionary(site, [method])))
 }
 
 /// The `Hash` witness record: `hash` over the derived encoding.
@@ -646,7 +657,7 @@ fn hash_body(
     };
 
     let method = Term::func([(value, Term::hole(context.mint_metavar()))], encoded);
-    Ok(site.at(Term::struct_(*site.concept, Vec::<Term>::new(), [method])))
+    Ok(site.at(dictionary(site, [method])))
 }
 
 /// The `Eql` witness record: `eql` over the derived comparison, `neq` over its negation.
@@ -680,7 +691,7 @@ fn eql_body(
 
     let eql = method(context, false)?;
     let neq = method(context, true)?;
-    Ok(site.at(Term::struct_(*site.concept, Vec::<Term>::new(), [eql, neq])))
+    Ok(site.at(dictionary(site, [eql, neq])))
 }
 
 /// Whether `left` and `right` are equal, as a `Bool`-valued term over the two binders.
@@ -797,7 +808,7 @@ fn ord_body(
         ordered,
     );
 
-    Ok(site.at(Term::struct_(*site.concept, Vec::<Term>::new(), [method])))
+    Ok(site.at(dictionary(site, [method])))
 }
 
 /// How `left` orders against `right`, as an `Ordering`-valued term over the two binders.

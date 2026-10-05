@@ -280,6 +280,42 @@ fn a_position_past_a_concept_values_methods_is_out_of_bounds() {
     );
 }
 
+// A concept value in normal form holds its edges and reads as the literal written in full, so one standing in a type is a metavariable's solution as any value is. Read as a literal of plain entries, its edge was a field too many and the solution was refused.
+#[test]
+fn a_concept_value_with_an_edge_is_a_metavariables_solution() {
+    let source = r#"
+        use /std/{Nat, Str, print};
+        concept Base(A : Type) : pub Type { base(A) -> Str }
+        concept Over(A : Type) : pub Type { use Base(A), over(A) -> Str }
+        satisfy Base(Nat) { base(n) = "base" }
+        induct Tagged : (d : Over(Nat)) -> pub Type
+        | tag() : (Over { over(n) = "over" })
+        end
+        let read(@d : Over(Nat), t : Tagged(d)) -> Str = d.over(1);
+        print(read(Tagged/tag()))
+        "#;
+
+    assert_eq!(run(source), b"over");
+}
+
+// A concept of edges alone is witnessed by a body with no entries, which is the literal that leaves every edge to resolution rather than a value short of its slots.
+#[test]
+fn a_concept_of_edges_alone_is_witnessed_by_an_empty_body() {
+    let source = r#"
+        use /std/{Nat, Str, print};
+        concept Left(A : Type) : pub Type { left(A) -> Str }
+        concept Right(A : Type) : pub Type { right(A) -> Str }
+        concept Both(A : Type) : pub Type { use Left(A), use Right(A) }
+        satisfy Left(Nat) { left(n) = "left" }
+        satisfy Right(Nat) { right(n) = "right" }
+        satisfy Both(Nat) {}
+        let through(use Both(Nat), n : Nat) -> Str = Str/concat(Left/left(n), Right/right(n));
+        print(through(1))
+        "#;
+
+    assert_eq!(run(source), b"leftright");
+}
+
 // A superclass edge is read off its field's elaborated type, so an alias of a concept application is an edge, as it is a premise, and what the alias names is reached through it.
 #[test]
 fn an_alias_of_a_concept_application_is_a_superclass_edge() {

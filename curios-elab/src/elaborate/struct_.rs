@@ -219,12 +219,23 @@ pub(super) fn elaborate_struct(
         None => Vec::new(),
     };
 
-    // The written entries in order, each under its mark; an empty entry list is all-plain-unlabeled (the internal normal form).
+    // The written entries in order, each under its mark. A value with fields and no entries is the normal form — what this function rebuilds, and what the compiler builds whole: every slot in order, so each field stands under its slot's mark and the value reads as the literal written in full. One with neither is the literal written with no entries, every hidden slot left out.
     let written: Vec<(Plicity, Option<&str>, &Term)> = match entries.is_empty() {
-        true => fields
+        true if fields.is_empty() => Vec::new(),
+        true if fields.len() == slots.len() => fields
             .iter()
-            .map(|field| (Plicity::Explicit, None, field))
+            .zip(&slots)
+            .map(|(field, mark)| (*mark, None, field))
             .collect(),
+        true => {
+            return Err(Error::wrong_number_of_fields(
+                name.symbol(),
+                slots.len(),
+                fields.len(),
+                Vec::new(),
+                Vec::new(),
+            ));
+        }
         false => entries
             .iter()
             .zip(fields)
@@ -241,7 +252,8 @@ pub(super) fn elaborate_struct(
         .map(|(_, label, field)| (*label, *field))
         .collect();
 
-    if plain.len() != written.len() && context.concept(name).is_none() {
+    if written.iter().any(|(mark, ..)| *mark == Plicity::Witness) && context.concept(name).is_none()
+    {
         return Err(Error::use_entry_outside_concept(name.symbol()));
     }
 
