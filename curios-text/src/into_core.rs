@@ -903,6 +903,7 @@ fn process_items(
                                 rep_public: u.rep_pub,
                                 // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
                                 polarities: Vec::new(),
+                                variances: Vec::new(),
                                 plicities: u.params.iter().map(|param| param.plicity).collect(),
                             },
                         );
@@ -1131,6 +1132,7 @@ fn process_items(
                             rep_public: s.rep_pub,
                             // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
                             polarities: Vec::new(),
+                            variances: Vec::new(),
                             plicities: s.params.iter().map(|param| param.plicity).collect(),
                         },
                     );
@@ -1251,6 +1253,7 @@ fn process_items(
                             rep_public: concept.rep_pub,
                             // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
                             polarities: Vec::new(),
+                            variances: Vec::new(),
                             plicities: concept.params.iter().map(|param| param.plicity).collect(),
                         },
                     );

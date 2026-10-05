@@ -170,6 +170,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
     // `Held : (t : Two) -> Prop | mk() : (Two/a())`, a proposition, so the guard would be in play.
@@ -187,6 +188,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 

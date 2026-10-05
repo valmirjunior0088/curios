@@ -264,6 +264,7 @@ fn any_two_terms_converge_at_a_struct_with_one_inhabitant() {
                     module: Qualifier::empty(),
                     rep_public: true,
                     polarities: Vec::new(),
+                    variances: Vec::new(),
                     plicities: Vec::new(),
                 },
             )
@@ -337,6 +338,7 @@ fn a_goals_type_is_read_forced() {
                     module: Qualifier::empty(),
                     rep_public: true,
                     polarities: Vec::new(),
+                    variances: Vec::new(),
                     plicities: Vec::new(),
                 },
             )
@@ -438,6 +440,7 @@ fn two_calls_of_one_definition_convert_by_their_spines_whatever_spells_them() {
                     module: Qualifier::empty(),
                     rep_public: true,
                     polarities: Vec::new(),
+                    variances: Vec::new(),
                     plicities: Vec::new(),
                 },
             )
@@ -685,6 +688,7 @@ fn register(
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         )
@@ -1014,6 +1018,7 @@ fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         )
@@ -1181,6 +1186,7 @@ fn declare_struct(context: &mut Context, path: &str, fields: Telescope<()>) -> T
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         )
@@ -1206,6 +1212,7 @@ fn declare_proposition(context: &mut Context, path: &str) -> Term {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         )
@@ -1240,6 +1247,7 @@ fn struct_unit_field_is_irrelevant() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         )
@@ -1277,6 +1285,7 @@ fn a_struct_field_at_a_proposition_is_not_read() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         )
@@ -1298,6 +1307,7 @@ fn a_struct_field_at_a_proposition_is_not_read() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         )
@@ -1343,6 +1353,7 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         )
@@ -1371,6 +1382,7 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         )
@@ -1434,6 +1446,7 @@ fn variant_unit_payload_is_irrelevant() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         )

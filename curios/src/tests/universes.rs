@@ -10,7 +10,7 @@
 
 use {
     super::{error, run, typecheck},
-    curios_core::Program,
+    curios_core::{Program, Variance},
     curios_pipeline::{DEFAULT_STEP_BUDGET, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     std::collections::BTreeMap,
@@ -66,6 +66,32 @@ fn universe_parameters(source: &str) -> BTreeMap<String, usize> {
                     definition.universe_context.parameter_count,
                 )
             })
+        })
+        .collect()
+}
+
+/// Every inductive family's variance vector as its unit carries it, keyed by the family's name: `*` for an irrelevant level and `=` for an invariant one.
+fn family_variances(source: &str) -> BTreeMap<String, String> {
+    let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
+    let program: Program =
+        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+            .expect("the fixture type-checks")
+            .program;
+
+    program
+        .module
+        .induct_decls
+        .iter()
+        .map(|(name, declaration)| {
+            let spelled = declaration
+                .variances
+                .iter()
+                .map(|variance| match variance {
+                    Variance::Irrelevant => '*',
+                    Variance::Invariant => '=',
+                })
+                .collect();
+            (name.to_string(), spelled)
         })
         .collect()
 }
@@ -558,6 +584,39 @@ fn a_level_bounded_through_a_witnesses_side_condition_settles_at_zero() {
         parameters.get("/plain"),
         Some(&1),
         "a witness alone took the level, so the control no longer separates the two: {parameters:?}",
+    );
+}
+
+// **A family whose payload waits on a later witness is invariant in every level.** `Holder`'s level only types its parameter. Where its witness cannot be ordered ahead of it, `Sized/Carrier(@Nat)` is still unsolved when `Holder`'s group finalizes and may yet mention any level, so the vector read there calls the level invariant, and the unit carries that reading since its later items were compared under it. The control's witness depends on nothing of `Holder`, the lowering orders it first, and the level is irrelevant.
+#[test]
+fn a_family_whose_payload_waits_on_a_later_witness_is_invariant_in_every_level() {
+    let program = |carrier: &str| {
+        format!(
+            r#"
+            use /std/{{Nat, Str}};
+            pub concept Sized(T: Type): pub Type {{ Carrier: Type }}
+            pub induct Holder(A: Type): pub Type
+            | hold(a: A, held: Sized/Carrier(@Nat))
+            end
+            pub struct Later: pub Type {{ inner: Holder(Str) }}
+            satisfy Sized(Nat) {{ Carrier = {carrier} }}
+            /std/print("settled")
+            "#
+        )
+    };
+
+    let waiting = family_variances(&program("Later"));
+    let ordered = family_variances(&program("Str"));
+
+    assert_eq!(
+        waiting.get("/Holder").map(String::as_str),
+        Some("="),
+        "a family read while its payload was unsolved was carried at its final telescopes' reading: {waiting:?}",
+    );
+    assert_eq!(
+        ordered.get("/Holder").map(String::as_str),
+        Some("*"),
+        "a level that only types a parameter stopped reading irrelevant, so the control no longer separates the two: {ordered:?}",
     );
 }
 

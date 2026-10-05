@@ -56,6 +56,7 @@ pub(super) fn proposition(constructors: Vec<(Atom, InductParam)>) -> InductDecl 
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     }
 }
@@ -362,6 +363,7 @@ pub(super) fn indexed_module(target: Term) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -410,6 +412,7 @@ pub(super) fn level_registry(level: &Level) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -453,6 +456,7 @@ pub(super) fn indexed_by_proof(diverging: bool) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -495,6 +499,7 @@ pub(super) fn clashing_index_decls(
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -517,6 +522,7 @@ pub(super) fn clashing_index_decls(
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -669,6 +675,7 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -683,6 +690,7 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -762,6 +770,7 @@ pub(super) fn scheme_registry(level: &Level, parameter_count: usize) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -792,6 +801,7 @@ pub(super) fn instance_of_width(width: usize) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -872,6 +882,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -930,6 +941,7 @@ pub(super) fn lying_motive(sort: Term) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -1119,6 +1131,7 @@ pub(super) fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -1170,6 +1183,7 @@ pub(super) fn struct_value_module(params: Vec<Term>) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -1225,6 +1239,7 @@ pub(super) fn variant_value_module(params: Vec<Term>) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -1337,6 +1352,7 @@ pub(super) fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -1476,6 +1492,7 @@ pub(super) fn vouched_declaration() -> (Global, InductDecl) {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -1584,6 +1601,7 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -1656,6 +1674,7 @@ pub(super) fn plicity_module(honest: bool, payload_count: usize) -> Module {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         // The declaration's own marks are sealed by nothing, so this lie is a mark for a parameter the family does not have.
         plicities: match honest {
             true => Vec::new(),
@@ -1703,6 +1722,7 @@ pub(super) fn indexed_family(
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     }
 }
@@ -1951,6 +1971,7 @@ pub(super) fn computed_field_wrapper(false_case: Term, true_case: Term) -> Struc
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     }
 }
@@ -2211,6 +2232,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -2225,6 +2247,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -2371,6 +2394,7 @@ pub(super) fn judged_environment() -> Module {
                 module: Qualifier::default(),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         )]),
@@ -2416,6 +2440,7 @@ pub(super) fn shadowing_registry(payload: Term) -> Module {
                 module: Qualifier::default(),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         )]),

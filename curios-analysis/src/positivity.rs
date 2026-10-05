@@ -96,7 +96,7 @@ impl<'a> Declarations<'a> {
         }
     }
 
-    fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.inducts.is_empty()
             && self.structs.is_empty()
             && self
@@ -105,7 +105,7 @@ impl<'a> Declarations<'a> {
     }
 
     /// Every name to analyze: the inductives in name order, then the structs. Grouped that way rather than globally sorted because the refusal reported is the first in this order, and adding a base should not change which refusal a set spanning both kinds reports.
-    fn names(&self) -> Vec<Global> {
+    pub(crate) fn names(&self) -> Vec<Global> {
         let inducts = self
             .base
             .iter()
@@ -122,13 +122,13 @@ impl<'a> Declarations<'a> {
         inducts.into_iter().chain(structs).cloned().collect()
     }
 
-    fn induct(&self, name: &Global) -> Option<&InductDecl> {
+    pub(crate) fn induct(&self, name: &Global) -> Option<&InductDecl> {
         self.inducts
             .get(name)
             .or_else(|| self.base.and_then(|(inducts, _)| inducts.get(name)))
     }
 
-    fn struct_(&self, name: &Global) -> Option<&StructDecl> {
+    pub(crate) fn struct_(&self, name: &Global) -> Option<&StructDecl> {
         self.structs
             .get(name)
             .or_else(|| self.base.and_then(|(_, structs)| structs.get(name)))
@@ -282,7 +282,7 @@ impl Split {
 }
 
 /// One fresh binder per entry of a parameter telescope, carrying the declared hints so a diagnostic reads in the user's own names.
-fn binders<E: Env, B: Bound>(env: &mut E, params: &Telescope<B>) -> Vec<Free> {
+pub(crate) fn binders<E: Env, B: Bound>(env: &mut E, params: &Telescope<B>) -> Vec<Free> {
     params
         .labels()
         .into_iter()
@@ -294,7 +294,10 @@ fn binders<E: Env, B: Bound>(env: &mut E, params: &Telescope<B>) -> Vec<Free> {
 }
 
 /// Split an opened telescope into `(label, type)` entries, minting a fresh binder per entry so each later type holds free occurrences rather than dangling de Bruijn indices — the precondition for reducing it at all.
-fn labelled<E: Env, B: Bound>(env: &mut E, telescope: &Telescope<B>) -> Vec<(String, Term)> {
+pub(crate) fn labelled<E: Env, B: Bound>(
+    env: &mut E,
+    telescope: &Telescope<B>,
+) -> Vec<(String, Term)> {
     let mut entries = Vec::new();
     let mut cursor = telescope.cursor();
     while let Some((hint, type_)) = cursor.entry() {
@@ -561,7 +564,7 @@ struct Walk<'a, E: Env> {
 /// The `rec` member `term` is a folded call to, if it is one: the node [`Term::rec_proj`] builds, standing bare or under an application.
 ///
 /// These are exactly the shapes [`curios_core::RecGroup::member_body`] substitutes for a recursive occurrence, so they are the shapes a cycle in the walk is built from. A head that has yet to unfold to one — a definition's name, a group with a computed tail — carries no key and forces unguarded.
-fn rec_member(term: &Term) -> Option<(RecGroup, usize)> {
+pub(crate) fn rec_member(term: &Term) -> Option<(RecGroup, usize)> {
     let head = match &**term {
         Subterm::Apply(apply) => &apply.head,
         _ => term,

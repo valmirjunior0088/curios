@@ -388,6 +388,25 @@ pub fn universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
         .into_inner()
 }
 
+/// The universe parameters `value` mentions that no universe binder inside it binds, each as its own scheme's index: a parameter met beneath `depth` binders is the scheme's own from `depth` up, and is reported shifted back.
+pub fn universe_params<B: Bound>(value: &B) -> BTreeSet<UniverseParam> {
+    let params = Rc::new(RefCell::new(BTreeSet::new()));
+    let found = Rc::clone(&params);
+    let _: Result<_, Infallible> =
+        rewrite_universe_levels_scoped_shared(value, move |depth, level| {
+            found.borrow_mut().extend(
+                level
+                    .params()
+                    .filter(|param| param.0 >= depth)
+                    .map(|param| UniverseParam(param.0 - depth)),
+            );
+            Ok(level.clone())
+        });
+    Rc::try_unwrap(params)
+        .expect("the universe collector releases its traversal closure")
+        .into_inner()
+}
+
 /// How a declaration's own name reaches the value being stamped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelfReference {

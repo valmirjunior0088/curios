@@ -40,6 +40,7 @@ fn instantiate_struct_decl(
             module: struct_decl.module,
             rep_public: struct_decl.rep_public,
             polarities: struct_decl.polarities,
+            variances: struct_decl.variances,
             plicities: struct_decl.plicities,
         },
         universes,

@@ -112,6 +112,7 @@ fn both_checkers_decide_non_informativeness_alike() {
         module: Qualifier::from(["Held"]),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
     context

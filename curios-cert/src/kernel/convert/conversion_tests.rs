@@ -312,6 +312,7 @@ fn any_two_terms_converge_at_a_struct_with_one_inhabitant() {
                 module: Qualifier::from([path]),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         );
@@ -397,6 +398,7 @@ fn a_goals_type_is_read_forced() {
                 module: Qualifier::from(["Tagged"]),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         );
@@ -650,6 +652,7 @@ fn a_short_struct_literal_does_not_convert_with_a_neutral() {
             module: Qualifier::from(["S"]),
             rep_public: true,
             polarities: Vec::new(),
+            variances: Vec::new(),
             plicities: Vec::new(),
         },
     );

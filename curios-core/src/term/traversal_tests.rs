@@ -405,3 +405,24 @@ fn a_term_holds_a_group_where_a_rec_or_a_members_instance_stands() {
     assert!(!Term::tuple([nat.clone(), Term::free_var(&f)]).has_group());
     assert!(!nat.has_group());
 }
+
+/// A parameter a group's own universe binder binds is the group's, and one above it is the enclosing scheme's, read back at its own index.
+#[test]
+fn universe_params_are_read_at_the_depth_of_the_binders_above_them() {
+    let level = |index| Level::param(UniverseParam(index));
+    let member = |term: Term| Scope::constant(Many(1), term);
+    let group = RecGroup::new(vec![RecMemberScopes {
+        type_: member(Term::type_at(level(0))),
+        body: member(Term::type_at(level(2))),
+    }])
+    .with_universe_context(UniverseContext {
+        parameter_count: 1,
+        constraints: Vec::new(),
+    });
+    let term = Term::tuple([Term::type_at(level(3)), Term::rec_proj(group, 0)]);
+
+    assert_eq!(
+        universe_params(&term),
+        BTreeSet::from([UniverseParam(1), UniverseParam(3)]),
+    );
+}

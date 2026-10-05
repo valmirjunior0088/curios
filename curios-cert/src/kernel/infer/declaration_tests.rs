@@ -36,6 +36,7 @@ fn a_constructor_has_the_type_its_signature_ends_in() {
             module: Qualifier::from(["Wrapped"]),
             rep_public: true,
             polarities: Vec::new(),
+            variances: Vec::new(),
             plicities: Vec::new(),
         },
     );
@@ -67,6 +68,7 @@ fn a_constructor_payload_of_the_wrong_type_is_refused() {
             module: Qualifier::from(["Wrapped"]),
             rep_public: true,
             polarities: Vec::new(),
+            variances: Vec::new(),
             plicities: Vec::new(),
         },
     );
@@ -209,6 +211,7 @@ fn a_recursive_proof_that_does_not_descend_is_refused() {
             module: Qualifier::from(["False"]),
             rep_public: true,
             polarities: Vec::new(),
+            variances: Vec::new(),
             plicities: Vec::new(),
         },
     );

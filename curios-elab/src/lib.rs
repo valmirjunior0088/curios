@@ -26,6 +26,9 @@ pub(crate) use derive::*;
 mod positivity;
 pub use positivity::*;
 
+mod variance;
+pub use variance::*;
+
 mod totality;
 pub use totality::*;
 

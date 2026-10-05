@@ -74,6 +74,9 @@ pub use structure::*;
 mod polarity;
 pub use polarity::*;
 
+mod variance;
+pub use variance::*;
+
 mod print;
 pub use print::*;
 

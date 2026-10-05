@@ -9,10 +9,10 @@ use {
     crate::{
         DeferredRefusal, Established, ItemStamp, ScheduledTest, Zonked, check_concept_registry,
         check_is_sort, check_positivity, check_proof_totality, check_rec_item_totality,
-        check_type_totality, check_written_type_totality, collect_goal_reports,
+        check_type_totality, check_variance, check_written_type_totality, collect_goal_reports,
         finish_deferred_witnesses, is_prop, record_definition_totality, record_totality,
-        reduce_with, register_witness, retry_deferred_witnesses, sort_term, test_program_tail,
-        zonk, zonk_arity, zonk_entry, zonk_module, zonk_solved_term_metas,
+        record_variances, reduce_with, register_witness, retry_deferred_witnesses, sort_term,
+        test_program_tail, zonk, zonk_arity, zonk_entry, zonk_module, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_core::{
@@ -270,6 +270,7 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
             module: induct_decl.module,
             rep_public: induct_decl.rep_public,
             polarities: induct_decl.polarities,
+            variances: induct_decl.variances,
             plicities: induct_decl.plicities,
         },
     );
@@ -338,6 +339,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
             module: induct_decl.module,
             rep_public: induct_decl.rep_public,
             polarities: induct_decl.polarities,
+            variances: induct_decl.variances,
             plicities: induct_decl.plicities,
         },
     );
@@ -447,6 +449,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
             module: struct_decl.module,
             rep_public: struct_decl.rep_public,
             polarities: struct_decl.polarities,
+            variances: struct_decl.variances,
             plicities: struct_decl.plicities,
         },
     );
@@ -579,6 +582,7 @@ fn finalize_definition(
                 module: struct_decl.module,
                 rep_public: struct_decl.rep_public,
                 polarities: struct_decl.polarities,
+                variances: struct_decl.variances,
                 plicities: struct_decl.plicities,
             },
         );
@@ -643,6 +647,7 @@ fn finalize_definition(
                 module: struct_decl.module,
                 rep_public: struct_decl.rep_public,
                 polarities: struct_decl.polarities,
+                variances: struct_decl.variances,
                 plicities: struct_decl.plicities,
             },
         );
@@ -719,6 +724,7 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
             module: struct_decl.module,
             rep_public: struct_decl.rep_public,
             polarities: struct_decl.polarities,
+            variances: struct_decl.variances,
             plicities: struct_decl.plicities,
         },
     );
@@ -776,6 +782,8 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     if context.is_witness_declaration(&def.name) {
         context.update_witness_scheme(&def.name, universe_context.clone(), type_.clone());
     }
+    // A lone `struct` lowers to this `let`: its variance is settled as a group's is, for the later items that compare two of its instances. A name with no registry entry records nothing.
+    record_variances(context, &[def.name]);
 
     context.restore_checked_site(outer_site);
 
@@ -940,6 +948,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 module: induct_decl.module,
                 rep_public: induct_decl.rep_public,
                 polarities: induct_decl.polarities,
+                variances: induct_decl.variances,
                 plicities: induct_decl.plicities,
             },
         );
@@ -957,6 +966,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                     module: struct_decl.module,
                     rep_public: struct_decl.rep_public,
                     polarities: struct_decl.polarities,
+                    variances: struct_decl.variances,
                     plicities: struct_decl.plicities,
                 },
             );
@@ -1080,6 +1090,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 module: induct_decl.module,
                 rep_public: induct_decl.rep_public,
                 polarities: induct_decl.polarities,
+                variances: induct_decl.variances,
                 plicities: induct_decl.plicities,
             },
         );
@@ -1097,6 +1108,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                     module: struct_decl.module,
                     rep_public: struct_decl.rep_public,
                     polarities: struct_decl.polarities,
+                    variances: struct_decl.variances,
                     plicities: struct_decl.plicities,
                 },
             );
@@ -1163,6 +1175,14 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             );
         }
     }
+
+    // A later item may compare two instances of a family this group declares, so each one's variance is settled here, with the formers defined at their finalized bodies and the registry entries stamped.
+    let declared = rec
+        .definitions
+        .iter()
+        .map(|definition| definition.name)
+        .collect::<Vec<_>>();
+    record_variances(context, &declared);
 
     // Classify the whole group at once: its members may mention each other, so no member's verdict is settled until the group's descent is.
     let group = group_totality(context, &rec.group)?;
@@ -1521,7 +1541,7 @@ pub struct FinalizedProgram {
 /// - [`Context::restore_budget`] precedes the passes because they reduce, and each has to spend on the same footing as an item rather than on whatever the last item left.
 /// - [`record_totality`] precedes both gates, which read the flags it stamps.
 ///
-/// `check_positivity` is independent of the rest and could sit anywhere after the zonk. `inherited` carries the classifications of the units in scope, whose own verdicts were settled when each was elaborated; it is empty for a from-scratch elaboration, where the module defines every name it mentions.
+/// `check_positivity` is independent of the rest and could sit anywhere after the zonk, and `check_variance` beside it holds the vectors the unit carries to its final telescopes. `inherited` carries the classifications of the units in scope, whose own verdicts were settled when each was elaborated; it is empty for a from-scratch elaboration, where the module defines every name it mentions.
 fn finalize_and_check(
     context: &mut Context,
     module: Module,
@@ -1558,6 +1578,7 @@ fn finalize_and_check(
 
     // Positivity gates the zonked registries rather than running inside elaboration: the telescopes it reads are final here, and meta-free, so an unsolved hole reports as an unsolved hole instead of as an unseeable occurrence. The module in hand is this unit's own, which is what this must see — a predecessor's entries carry the vectors computed when it was elaborated, and since a predecessor cannot mention a successor they are sinks of the occurrence relation, so no cycle crosses the boundary.
     check_positivity(context, &mut module)?;
+    check_variance(context, &module)?;
     record_totality(context, &mut module, inherited)?;
 
     // Reported rather than raised. `curios-cert` decides these same two obligations independently, and a fixture this checker refuses must still be able to reach it — a short circuit here would return no module at all, leaving "would the kernel have caught it?" unobservable, which is exactly the quadrant the trusted base most needs to see. The public entry points raise the first verdict, so nothing on the compile path is weakened.
@@ -1772,6 +1793,7 @@ fn elaborate_and_zonk_unit_over_within(
     let mut module = reassemble(&recompile, closure, &elaborated.dropped);
     context.restore_budget();
     check_positivity(context, &mut module)?;
+    check_variance(context, &module)?;
     record_totality(context, &mut module, &established.recorded_totality())?;
     debug_assert!(
         agrees_with(&module, recompile.reused),

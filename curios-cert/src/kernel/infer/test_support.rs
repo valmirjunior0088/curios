@@ -49,6 +49,7 @@ pub(super) fn parameterized_struct(kernel: &mut Kernel) -> Global {
         module: Qualifier::default(),
         rep_public: true,
         polarities: vec![Polarity::Strict],
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
     kernel.declare_struct(&name, &declaration);

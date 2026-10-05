@@ -1,5 +1,5 @@
 use {
-    super::{Atom, Polarity, Telescope, Term, UniverseContext},
+    super::{Atom, Polarity, Telescope, Term, UniverseContext, Variance},
     crate::Sharing,
     curios_utilities::{Plicity, Qualifier},
 };
@@ -56,6 +56,8 @@ pub struct InductDecl {
     pub rep_public: bool,
     /// How this inductive uses each of its `params`, one entry per parameter in declaration order — the fact positivity composes through when a recursive occurrence travels via this type. Computed by `check_positivity` after elaboration and carried into the prelude archive so the standard library's are derived once per compiler build. Empty until then; read through [`Self::polarity`], never indexed directly.
     pub polarities: Vec<Polarity>,
+    /// How two instances of this family compare in each of its universe parameters, one entry per parameter of `universe_context`. Computed by `curios-elab` and carried into the prelude archive, as the polarities are. Empty until then; read through [`Self::variance`], never indexed directly.
+    pub variances: Vec<Variance>,
     /// What each of its `params` binds as at the type constructor, one mark per parameter in declaration order. See [`StructDecl::plicities`](super::StructDecl). The value constructors' marks are each signature's own ([`InductParam::plicities`]).
     pub plicities: Vec<Plicity>,
 }
@@ -89,6 +91,16 @@ impl InductDecl {
         self.polarities.get(i).copied().unwrap_or(Polarity::Mixed)
     }
 
+    /// This declaration's variance in its `i`th universe parameter.
+    ///
+    /// [`Variance::Invariant`] when the declaration has not been analyzed — the sound default, equality being what every level was compared at before a vector existed.
+    pub fn variance(&self, i: usize) -> Variance {
+        self.variances
+            .get(i)
+            .copied()
+            .unwrap_or(Variance::Invariant)
+    }
+
     /// What this declaration's `i`th parameter binds as at the type constructor. A declaration that states no marks has plain parameters only.
     pub fn plicity(&self, i: usize) -> Plicity {
         self.plicities.get(i).copied().unwrap_or(Plicity::Explicit)
@@ -116,6 +128,7 @@ impl InductDecl {
             module: self.module,
             rep_public: self.rep_public,
             polarities: self.polarities.clone(),
+            variances: self.variances.clone(),
             plicities: self.plicities.clone(),
         }
     }

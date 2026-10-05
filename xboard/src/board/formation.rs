@@ -63,6 +63,7 @@ fn a_parameter_named_through_an_instance() -> (Module, Term) {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
@@ -76,6 +77,7 @@ fn a_parameter_named_through_an_instance() -> (Module, Term) {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 

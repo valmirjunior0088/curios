@@ -340,6 +340,7 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
             module: Qualifier::empty(),
             rep_public: true,
             polarities: Vec::new(),
+            variances: Vec::new(),
             plicities: Vec::new(),
         },
     );
@@ -433,6 +434,7 @@ fn a_constructors_value_is_typed_by_its_declaration() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         );
@@ -542,6 +544,7 @@ fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
                 module: Qualifier::empty(),
                 rep_public: true,
                 polarities: Vec::new(),
+                variances: Vec::new(),
                 plicities: Vec::new(),
             },
         );
@@ -670,6 +673,7 @@ fn a_struct_field_at_a_proposition_is_not_read() {
             module: Qualifier::empty(),
             rep_public: true,
             polarities: Vec::new(),
+            variances: Vec::new(),
             plicities: Vec::new(),
         },
     );
@@ -722,6 +726,7 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
             module: Qualifier::empty(),
             rep_public: true,
             polarities: Vec::new(),
+            variances: Vec::new(),
             plicities: Vec::new(),
         },
     );
@@ -944,6 +949,7 @@ fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
             module: Qualifier::empty(),
             rep_public: true,
             polarities: Vec::new(),
+            variances: Vec::new(),
             plicities: Vec::new(),
         },
     );
@@ -1034,6 +1040,7 @@ fn a_struct_parameter_at_a_proposition_is_not_read() {
             module: Qualifier::empty(),
             rep_public: true,
             polarities: vec![curios_core::Polarity::Unused],
+            variances: Vec::new(),
             plicities: Vec::new(),
         },
     );

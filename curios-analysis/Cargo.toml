@@ -3,7 +3,7 @@ name = "curios-analysis"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The analyses both Curios checkers run behind the Env/Judge seam: index inversion and the locals a case re-types, case-equation recording, strict positivity, size-change totality, which half of the erased program a position belongs to, and the chain conversion runs when two intrinsics meet"
+description = "The analyses both Curios checkers run behind the Env/Judge seam: index inversion and the locals a case re-types, case-equation recording, strict positivity, a nominal type's universe variance, size-change totality, which half of the erased program a position belongs to, and the chain conversion runs when two intrinsics meet"
 
 [lints]
 workspace = true

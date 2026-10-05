@@ -171,6 +171,7 @@ fn a_withheld_declaring_item_takes_its_registry_entry_out_of_the_module() {
             module: Qualifier::empty(),
             rep_public: true,
             polarities: Vec::new(),
+            variances: Vec::new(),
             plicities: Vec::new(),
         },
     );

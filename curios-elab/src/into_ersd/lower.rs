@@ -123,6 +123,7 @@ fn project_module(module: &Module) -> Module {
                         rep_public: declaration.rep_public,
                         // Polarity and the parameters' marks are elaboration-only metadata, projected out here alongside the universe context.
                         polarities: Vec::new(),
+                        variances: Vec::new(),
                         plicities: Vec::new(),
                     },
                 )
@@ -142,6 +143,7 @@ fn project_module(module: &Module) -> Module {
                         rep_public: declaration.rep_public,
                         // Polarity and the parameters' marks are elaboration-only metadata, projected out here alongside the universe context.
                         polarities: Vec::new(),
+                        variances: Vec::new(),
                         plicities: Vec::new(),
                     },
                 )

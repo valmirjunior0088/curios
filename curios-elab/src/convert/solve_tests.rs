@@ -1075,6 +1075,7 @@ fn a_goal_surrendered_under_a_binder_is_retried_under_it() {
                     module: Qualifier::empty(),
                     rep_public: true,
                     polarities: Vec::new(),
+                    variances: Vec::new(),
                     plicities: Vec::new(),
                 },
             )

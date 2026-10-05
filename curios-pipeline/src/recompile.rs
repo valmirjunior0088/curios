@@ -293,6 +293,7 @@ fn induct_unchanged(this: &InductDecl, that: &InductDecl) -> bool {
         && this.module == that.module
         && this.rep_public == that.rep_public
         && this.polarities == that.polarities
+        && this.variances == that.variances
         && this.constructors.len() == that.constructors.len()
         && arity_unchanged(&this.arity, &that.arity, &mut renaming)
         && this
@@ -325,6 +326,7 @@ fn struct_unchanged(this: &StructDecl, that: &StructDecl) -> bool {
         && this.module == that.module
         && this.rep_public == that.rep_public
         && this.polarities == that.polarities
+        && this.variances == that.variances
         && arity_unchanged(&this.arity, &that.arity, &mut renaming)
         && this
             .result_sort

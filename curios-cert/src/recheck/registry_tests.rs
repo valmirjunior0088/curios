@@ -145,6 +145,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
+        variances: Vec::new(),
         plicities: Vec::new(),
     };
 
