@@ -75,7 +75,7 @@ let request_bytes(c: Socket) -> Async(Result(Io/Error, Bytes)) =
         | false =>
             let next = Socket/read(c, 4096)!;
             match next
-            | chunk(bytes, @_) => go(x[..acc, ..bytes], fuel - 1)
+            | chunk(bytes) => go(x[..acc, ..bytes], fuel - 1)
             | eof() => Async/pure(Result/success(acc))
             | error(e) => Async/pure(Result/failure(e))
             end

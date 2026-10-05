@@ -273,7 +273,7 @@ let claim(
 ) -> Option(Claim(spec)) =
     match slots
     | nil() => Option/none()
-    | cons(@a, @_, found, tail) =>
+    | cons(@a, found, tail) =>
         match wanted(a, found)
         | true => Option/some((arg = a, put = (s) => Slots/cons([..found, s], tail)))
         | false =>
@@ -449,7 +449,7 @@ let field(name: Str, k: Kind, occurrences: List(Str)) -> Result(Failure, KindCar
 let fill(@spec: List(Arg), slots: Slots(spec)) -> Result(Failure, Values(spec)) =
     match slots
     | nil() => Result/success(Values/nil())
-    | cons(@a, @_, found, tail) =>
+    | cons(@a, found, tail) =>
         let head = field(a.long, a.kind, found)!;
         Result/map_success(fill(tail), (more) => Values/cons(head, more))
     end;

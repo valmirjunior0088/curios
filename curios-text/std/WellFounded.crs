@@ -39,7 +39,7 @@ let lifted(
     same: Eq()(f(x), b),
 ) -> Accessible((u: A, v: A) => R(f(u), f(v)))(x) =
     match acc
-    | intro(@_, below) =>
+    | intro(below) =>
         Accessible/intro((y, r) =>
             lifted(f, f(y), below(f(y), Eq/subst((v: B) => R(f(y), v), same, r)), y, Eq/refl()))
     end;

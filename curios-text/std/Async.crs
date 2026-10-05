@@ -154,7 +154,7 @@ pub let drain(
     let go(acc: Bytes) -> M(Result(Io/Error, Bytes)) =
         let r = read(4096)!;
         match r
-        | chunk(bytes, @_) => go(x[..acc, ..bytes])
+        | chunk(bytes) => go(x[..acc, ..bytes])
         | eof() => Monad/pure(Result/success(acc))
         | error(e) => Monad/pure(Result/failure(e))
         end;
@@ -256,7 +256,7 @@ pub let copy(
     let go() -> M(Result(Io/Error, {})) =
         let c = Read/read(from, 4096)!;
         match c
-        | chunk(b, @_) =>
+        | chunk(b) =>
             let w = Write/write(to, b)!;
             match w | success(_) => go() | failure(e) => Monad/pure(Result/failure(e)) end
         | eof() => Monad/pure(Result/success(()))

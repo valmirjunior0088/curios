@@ -92,7 +92,7 @@ let read_to_end(f: File) -> Try(Io, Io/Error, Bytes) =
     let go(acc: Bytes) -> Try(Io, Io/Error, Bytes) =
         let c = read(f, 4096)!;
         match c
-        | chunk(b, @_) => go(x[..acc, ..b])
+        | chunk(b) => go(x[..acc, ..b])
         | eof() => Try/pure(acc)
         | error(e) => Try/raise(e)
         end;

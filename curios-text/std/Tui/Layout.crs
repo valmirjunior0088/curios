@@ -126,9 +126,9 @@ pub let render(
 ) -> Frame(w, h) =
     match s
     | leaf(@name, pw, ph) => paint(name, pw, ph)
-    | stacked(@_, @_, @_, col) => render_column(col, paint)
-    | ranged(@_, @_, @_, row) => render_row(row, paint)
-    | fitted(@_, @_, @_, fw, fh, inner) => Frame/fit(render(inner, paint), fw, fh)
+    | stacked(col) => render_column(col, paint)
+    | ranged(row) => render_row(row, paint)
+    | fitted(fw, fh, inner) => Frame/fit(render(inner, paint), fw, fh)
     end
 and render_column(
     @ps: List({Constraint, Layout}),
@@ -139,8 +139,7 @@ and render_column(
 ) -> Frame(w, h) =
     match col
     | col_stop(@cw) => Frame/blank(cw, 0)
-    | col_part(@_, @_, @_, @_, @_, @_, head, tail) =>
-        Frame/above(render(head, paint), render_column(tail, paint))
+    | col_part(head, tail) => Frame/above(render(head, paint), render_column(tail, paint))
     end
 and render_row(
     @ps: List({Constraint, Layout}),
@@ -151,8 +150,7 @@ and render_row(
 ) -> Frame(w, h) =
     match row
     | row_stop(@rh) => Frame/blank(0, rh)
-    | row_part(@_, @_, @_, @_, @_, @_, head, tail) =>
-        Frame/beside(render(head, paint), render_row(tail, paint))
+    | row_part(head, tail) => Frame/beside(render(head, paint), render_row(tail, paint))
     end;
 
 --- `w` by `h` shared along the tree, each child at its share and the whole fitted to the size asked for.
