@@ -1,4 +1,4 @@
-//! What a question takes from the store and its session, and what it gives back: a hit verified against the text the compilation would read, a unit filed while the fold is one a build would have run over the disk and kept and placed otherwise, and a baseline — filed or kept — that a unit is recompiled over only while the units before it still hold what they held when it was made.
+//! What a question takes from the store and its session, and what it gives back: a hit verified against the text the compilation would read, a unit filed where the disk holds every text the fold has read, whole or over a baseline, and kept and placed otherwise, and a baseline — filed or kept — that a unit is recompiled over only while the units before it still hold what they held when it was made.
 
 use {
     super::test_support::{mounted, mounted_project, write},
@@ -138,10 +138,12 @@ fn a_unit_after_one_compiled_from_unsaved_text_is_not_filed() {
     );
 }
 
-/// A unit compiled after one compiled over a baseline is not filed either, the disk holding every text both read: what a question compiles over a baseline stays its own, and a unit chained after it would be a slot no build reaches.
+/// One unit, however it was compiled: over a text saved since the store was filed, a question compiles the unit over its slot and files it, and the unit after it, and each slot holds the bytes a build files there.
+///
+/// This is what lets a build believe a unit a question compiled over a baseline, and the next question start from it.
 #[test]
-fn a_unit_after_one_compiled_over_a_baseline_is_not_filed() {
-    let root = mounted_project("baseline-before");
+fn a_unit_compiled_over_a_baseline_is_filed_as_a_build_files_it() {
+    let root = mounted_project("baseline-files");
     built(&root);
     let before = slots(&root);
 
@@ -155,13 +157,20 @@ fn a_unit_after_one_compiled_over_a_baseline_is_not_filed() {
         folded(&root, &Overlay::default()),
         ["recompiling /alpha", "compiling /beta"]
     );
-    assert!(
-        slots(&root) == before,
-        "a question filed over a baseline, or after one"
+    let asked = slots(&root);
+    assert!(asked != before, "a question filed nothing for a saved text");
+    assert_eq!(
+        folded(&root, &Overlay::default()),
+        ["reused /alpha", "reused /beta"],
+        "the next question starts from what the first filed"
     );
 
+    fs::remove_dir_all(root.join(".curios/verdicts")).expect("the slots a question filed");
     assert_eq!(built(&root), ["compiling /alpha", "compiling /beta"]);
-    assert!(slots(&root) != before, "a build files what it compiled");
+    assert!(
+        slots(&root) == asked,
+        "a build filed other bytes than the question did over a baseline"
+    );
 }
 
 /// A unit whose slot disagrees with its files is compiled over that slot's unit rather than from nothing: the slot is a baseline, and every declaration the edit did not reach is reused. A query is what takes it; the disk is untouched either way.
@@ -334,7 +343,7 @@ fn a_unit_kept_in_a_new_scope_replaces_what_its_old_scope_kept() {
     );
 }
 
-/// A session keeps a unit the store restored for it as it keeps one it compiled: with the slots gone, the next check recompiles each unit over the copy in hand, where a question with no session compiles them whole.
+/// A session keeps a unit the store restored for it as it keeps one it compiled: with the slots gone, the next check recompiles each unit over the copy in hand, where a question with no session has only what that check filed.
 ///
 /// What this spares an editor is the second read of a slot: the first edit after a check the store answered misses, asks for a baseline, and is handed the unit already decoded.
 #[test]
@@ -356,8 +365,8 @@ fn a_session_keeps_a_unit_the_store_restored() {
     );
     assert_eq!(
         folded(&root, &edited(&root, "b/lib.crs")),
-        ["compiling /alpha", "compiling /beta"],
-        "and a question with no session has only the store"
+        ["reused /alpha", "compiling /beta"],
+        "and a question with no session has only the store, where the /alpha the disk holds was filed again and the /beta held edited was not"
     );
 }
 

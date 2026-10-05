@@ -929,7 +929,7 @@ pub trait Cache {
     ///
     /// **Offered rather than imposed, and lent rather than handed over.** The cache decides whether the unit is compiled over the offer, so a question takes the archived unit while a build compiles the package whole and files it as any unit — and a cache holding something nearer copies nothing. Whatever tree the package is, the offer is a correct baseline: an item is reused only where its lowered form matches the offered one and nothing it reaches changed, so a tree far from the archive's is simply a larger closure.
     ///
-    /// **A cache that answers is one whose `put` places what came of it without filing.** What is compiled over a baseline is handed to `put` like any other unit, so the units after it stay addressed, and a cache that filed it would file a unit whose judgment rests on the closure having been closed — which the differential gate checks on fixtures and has not earned for a filed unit. The store's own cache keeps the default; the `wonder` engine's cache answers, and files nothing of a fold from there on.
+    /// **What came of a baseline is handed to `put` like any other unit**, and is one: a unit compiled over a baseline is stored as the bytes a whole compile of the same text stores, so a cache that answers may file it where it would file the other. The store's own cache keeps the default; the `wonder` engine's cache answers.
     fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
         let _ = (source, offered);
         None

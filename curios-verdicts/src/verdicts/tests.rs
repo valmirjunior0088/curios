@@ -27,14 +27,14 @@ fn reused_from(root: &Path, shape: &Path) -> bool {
     reused_through(root, shape, &verdicts)
 }
 
-/// The same, for a compilation reading through `overlay` — what the `wonder` engine asks, verified by [`Verdicts::get_overlaid`] and placed without filing.
+/// The same, for a compilation reading through `overlay`, verified by [`Verdicts::get_overlaid`] as the `wonder` engine's is.
 fn reused_overlaid(root: &Path, overlay: &Overlay) -> bool {
     let verdicts = Verdicts::at(root.to_path_buf());
 
     reused_through(root, &root.join("shape"), &Overlaid(&verdicts, overlay))
 }
 
-/// The `wonder` engine's reading of the store: verified through an overlay, placed rather than filed, and taking a disagreeing slot as a baseline.
+/// A question's reading of the store, as far as the store's own pieces go: verified through an overlay, taking a disagreeing slot as a baseline, and placing what it compiled without filing it, as the `wonder` engine does with a unit the disk does not answer for.
 struct Overlaid<'a>(&'a Verdicts, &'a Overlay);
 
 impl Cache for Overlaid<'_> {
@@ -384,9 +384,9 @@ fn an_edited_slot_is_a_baseline_for_a_query_and_a_whole_compile_for_a_build() {
     assert_eq!(folded(&root), ["compiling /shape"]);
 }
 
-/// What a query compiles over a baseline is placed and never filed, so the slot holds what it held; a build files what it compiled.
+/// A unit placed without being filed leaves its slot holding what it held; a build files what it compiled.
 #[test]
-fn a_unit_compiled_over_a_baseline_leaves_the_slot_as_it_was() {
+fn a_unit_placed_without_being_filed_leaves_the_slot_as_it_was() {
     let root = project("baseline-unfiled");
     reused(&root);
     let before = slots(&root);
@@ -397,7 +397,7 @@ fn a_unit_compiled_over_a_baseline_leaves_the_slot_as_it_was() {
         folded_overlaid(&root, &Overlay::default()),
         ["recompiling /shape"]
     );
-    assert_eq!(slots(&root), before, "a query files nothing");
+    assert_eq!(slots(&root), before, "placing a unit moved its slot");
 
     assert_eq!(folded(&root), ["compiling /shape"]);
     assert_ne!(slots(&root), before, "a build files what it compiled");

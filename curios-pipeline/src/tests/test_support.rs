@@ -288,7 +288,7 @@ pub(super) fn assert_modules_agree(whole: &Module, incremental: &Module) {
 /// That `incremental` is stored as `whole` is: the same bytes, and where they are not, which parts.
 ///
 /// A unit is stored with its elaborated module consed up to spelling under no position ([`Unit::stored`]), so what is left to differ is what the two compilations concluded.
-pub(super) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
+pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
     let stored = |unit: &Unit| unit.stored().expect("a unit serializes");
     if stored(whole)[..] == stored(incremental)[..] {
         return;

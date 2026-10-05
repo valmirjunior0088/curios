@@ -81,13 +81,13 @@ Ten commands, and `wonder`'s five queries — eleven where the compiler was buil
 | [`curate`](#curate) | the governing package | — | materialized sources | none |
 | [`pin`](#pin) | the governing package's manifest | `foreign`/`dependency <NAME>`, `--path`, `--url`, `--rev`, `--refresh`, `--check` | one manifest row | files what it delivered |
 | [`new`](#new) | — | `<DIR>` | a package | none |
-| [`lint`](#lint) | anything | — | nothing | reads, files the units it compiled whole from disk |
+| [`lint`](#lint) | anything | — | nothing | reads, files the units it compiled from disk |
 | [`format`](#format) | files, any number | `--check` | the files, rewritten | none |
-| [`wonder diagnostics`](#wonder) | anything | — | nothing | reads, files the units it compiled whole from disk |
-| [`wonder tests`](#wonder) | anything | — | nothing | reads, files the units it compiled whole from disk |
-| [`wonder cost`](#wonder) | a program | — | nothing | reads, files the units it compiled whole from disk |
-| [`wonder stage`](#wonder) | a program | `<STAGE>`, before the target | nothing | reads, files the units it compiled whole from disk |
-| [`wonder server`](#wonder) | — | — | nothing | reads, files the units it compiled whole from disk |
+| [`wonder diagnostics`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
+| [`wonder tests`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
+| [`wonder cost`](#wonder) | a program | — | nothing | reads, files the units it compiled from disk |
+| [`wonder stage`](#wonder) | a program | `<STAGE>`, before the target | nothing | reads, files the units it compiled from disk |
+| [`wonder server`](#wonder) | — | — | nothing | reads, files the units it compiled from disk |
 | [`profile`](#profile) | — | `<PATH>` | nothing | none |
 
 `--manifest` is taken by every command but `new` and `profile`. `--budget` is taken by every command that elaborates, which is every one but `new`, `curate`, `pin`, `format` and `profile`. Both are stated under [Flags](#flags).
@@ -457,7 +457,7 @@ Neither `run` nor `compile` recompiles a declared executable nothing has changed
 
 An edit anywhere the program was built from is a miss, and so is a damaged or half-written store entry; the invocation that misses recompiles and refiles, and the one after it is fast again.
 
-A question — [`wonder`](#wonder), and [`lint`](#lint) with it — reads the store and files the units it compiled whole from the text on disk, the units a build would have filed and no payload, so a build after a question compiles only what the question did not, and the question after it compiles nothing. A unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, reusing every declaration the edit did not reach, which is what keeps a question about one declaration from costing the whole library it sits in; what it compiles that way it does not file, nor any unit after it, and neither does it file a unit compiled from text an editor holds unsaved, so a server asking on every keystroke files nothing.
+A question — [`wonder`](#wonder), and [`lint`](#lint) with it — reads the store and files the units it compiled from the text on disk, the units a build would have filed and no payload, so a build after a question compiles only what the question did not, and the question after it compiles nothing. A unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, reusing every declaration the edit did not reach, which is what keeps a question about one declaration from costing the whole library it sits in; what it compiles that way it files as a build would have, so the question after a saved edit is the last to compile it. It files no unit compiled from text an editor holds unsaved, nor any unit after one, so a server asking on every keystroke files nothing.
 
 A store that cannot be written costs the reuse and never the answer. The command says so once on standard error and goes on — `Skipped storing what this built; …` from a build, `Skipped storing what this compiled; …` from a question — and [`wonder server`](#wonder) says it once a session, in a log message to its client.
 

@@ -4,7 +4,7 @@ use {
     super::{granted, withheld},
     crate::{
         Cache, DEFAULT_STEP_BUDGET, Fold, compile_unit, compile_unit_over, invalidated,
-        tests::test_support::compile_with_units,
+        tests::test_support::{assert_stored_alike, compile_with_units},
     },
     curios_core::{DefinitionKind, Global, Item, Module},
     curios_elab::{Context, Established, Recompile, elaborate_and_zonk_unit_over},
@@ -52,12 +52,9 @@ struct Edit {
     edit: fn(&str) -> String,
 }
 
-/// What a question about the standard library costs after an edit to one declaration: the closure the edit reaches and the time each phase takes, for a leaf and for a hub. A measurement, so it reports rather than asserts, and its timings are the profile it was built under.
-#[test]
-#[ignore = "measurement: lowers the standard library and recompiles it over the archive, reporting closure sizes and per-phase timings"]
-fn std_recompile_closure_census() {
-    let directory = std_directory();
-    let edits = [
+/// The two edits the standard library is measured over: a leaf, whose closure is itself, and a hub, the worst case by construction.
+fn edits() -> [Edit; 2] {
+    [
         Edit {
             label: "a leaf: a declaration added to /std/Nat",
             file: "Nat.crs",
@@ -68,7 +65,14 @@ fn std_recompile_closure_census() {
             file: "Bool.crs",
             edit: |text| text.replacen("xor(b, true)", "xor(true, b)", 1),
         },
-    ];
+    ]
+}
+
+/// What a question about the standard library costs after an edit to one declaration: the closure the edit reaches and the time each phase takes, for a leaf and for a hub. A measurement, so it reports rather than asserts, and its timings are the profile it was built under.
+#[test]
+#[ignore = "measurement: lowers the standard library and recompiles it over the archive, reporting closure sizes and per-phase timings"]
+fn std_recompile_closure_census() {
+    let directory = std_directory();
 
     with_prelude(|prelude| {
         let [sys, std] = prelude else {
@@ -78,7 +82,7 @@ fn std_recompile_closure_census() {
         let predecessors = Predecessors::over(&roots);
 
         println!("\n=== recompiling /std over the archive ===");
-        for Edit { label, file, edit } in edits {
+        for Edit { label, file, edit } in edits() {
             let path = directory.join(file);
             let text = edit(&fs::read_to_string(&path).expect("an authored source"));
             let source = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
@@ -160,6 +164,41 @@ fn std_unit_reproduction() {
             stored!(&first) == stored!(&second),
             "two compilations of the standard library store two units, differing in {differing:?}"
         );
+    });
+}
+
+/// Whether the standard library compiled over a baseline is the unit it is compiled whole: for a leaf edit and for a hub, its edited tree compiled whole and over the archived unit, the two compared as each is stored. A measurement, since each edit compiles the library whole; counted, and it asserts, since a second unit is the fault it is here to name.
+#[test]
+#[ignore = "measurement: for a leaf edit and a hub, compiles the edited standard library whole and over the archive and compares the two stored units byte for byte"]
+fn std_recompile_reproduction() {
+    let directory = std_directory();
+
+    with_prelude(|prelude| {
+        let [sys, std] = prelude else {
+            panic!("the prelude has two roots")
+        };
+        let roots = [*sys];
+        let predecessors = Predecessors::over(&roots);
+
+        println!("\n=== /std compiled whole and over the archive ===");
+        for Edit { label, file, edit } in edits() {
+            let path = directory.join(file);
+            let text = edit(&fs::read_to_string(&path).expect("an authored source"));
+            let source = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
+            let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
+
+            let whole = compile_unit(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit)
+                .expect("the edited library compiles");
+            let over = compile_unit_over(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit, std)
+                .expect("the edited library recompiles");
+
+            println!("{label}");
+            assert_stored_alike(&whole, &over);
+            println!(
+                "  stored      {:>10} bytes either way",
+                whole.stored().expect("a unit serializes").len()
+            );
+        }
     });
 }
 
