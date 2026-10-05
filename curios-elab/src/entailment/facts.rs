@@ -497,7 +497,7 @@ impl<'a> Reader<'a> {
 
     /// The guards live now — the arm's at insertion, the birth's at a retry, since the caller installed those.
     ///
-    /// **A guard's fact is proved at the spelling its key records.** `qed` checks against the guard only where the arm's refinement answers it, and the key both checkers hold is the guard as written, with its heads opened as its resolved spelling opens them — not a reduct of its operands, which is a spelling one of them may miss: a local definition the kernel substitutes and the elaborator names, a call reduced to the intrinsic it unfolds to. So the written spelling is opened by its heads alone ([`opened`]): `i < m` written through `Cmp` to the `Nat/lt` intrinsic over `i` and `m` as written, `Char/is_upper(c)` to the `in_range` call it makes. Where that reaches neither a comparison nor a range check, the guard is reduced with its own refinement withheld, without the arm answering `true` for it: a range check from zero, whose lower bound folds away, in its false arm.
+    /// **A guard's fact is proved at the spelling reduction gives the guard.** `qed` checks against a guard wherever the arm's equation answers the statement it is given, and an equation answers every term conversion holds equal to its key (`reduce`'s `refined_reduct`), so the fact is written over the guard's reduct, taken with the guard's own refinement withheld so that the arm does not answer `true` for it: `i < m` written through `Cmp` is read as the `Nat/lt` comparison it reduces to. A range check in its true arm is the one guard read from its written spelling, opened by its heads alone ([`opened`]) — `Char/is_upper(c)` to the `in_range` call it makes — because its two bounds are `le/of_in_range`'s to give and no reduct of it. In its false arm it is read by its reduct like any other guard: a comparison where the check is from zero, its lower bound folding away.
     ///
     /// A guard written through a concept is recorded as written and as the dispatch resolves, two spellings of one fact, and is read once.
     fn guards(&mut self, context: &mut Context) -> Result<(), Error> {
@@ -524,9 +524,6 @@ impl<'a> Reader<'a> {
                 (Some(Opened::Range(range)), _) if case => {
                     let qed = qed(context);
                     self.range(context, range, qed, origin, &written)?;
-                }
-                (Some(Opened::Comparison(comparison)), _) => {
-                    self.guard(context, &comparison, case, &written, origin)?;
                 }
                 (_, Subterm::Intrinsic(comparison)) => {
                     self.guard(context, comparison, case, &written, origin)?;
