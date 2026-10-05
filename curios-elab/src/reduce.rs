@@ -24,6 +24,7 @@ use {
         probe_spellings, project_erased_universes, reduce_closed, reduce_intrinsic,
     },
     curios_utilities::recurse,
+    std::collections::HashMap,
 };
 
 /// The elaborator's side of the closed-machine seam: the same delta `reduce_var` and `reduce_instance` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
@@ -1076,30 +1077,56 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
 /// Display-only and best-effort: the result is never fed back into the kernel, and an exhausted step budget propagates so callers can fall back to the un-normalized spelling. The binder-heavy stuck forms (`Rec`, `Match`) keep their WHNF shape rather than being reduced under their own binders — they seldom carry the arithmetic this targets, and opening every case arm buys a diagnostic nothing.
 ///
 /// A name whose unfolding stalls at one of those forms keeps its name. `double(n)` over a `rec` unfolds to the folded call's canonical neutral — a `RecProj`-headed application — and a `match`-defined function applied to a variable unfolds to a stuck `Match`; the printer has no name for either, so it spells the whole body, a recursive group twice over, once per reference, and the reader's `n` is renamed against the binders the body brought in. The body says nothing the name does not, so the head stays as written and only the arguments normalize. A name that unfolds to something that *computed* — a literal, a constructor, a type former — still unfolds, which is what the witness-collapse and `2 + 3` fixtures in `curios/src/tests/runtime/diagnostic_tests.rs` and `curios-pipeline/src/tests/diagnostic_tests.rs` hold.
+///
+/// **A term is normalized once per display.** A report shows types elaboration built, and a type is a graph — sixty lines of `let`, each pairing the one before it with itself, state a type of sixty-one nodes — so a walk that normalized every occurrence would rebuild the type's tree, which no budget stops: a remembered reduct is free and a level is charged only where it is a new peak. Every position recurses through `normalize_known`, which keeps what this display has normalized. An answer stays true for the whole display, since the walk changes nothing a normal form reads — no definition, refinement or solution — and every term it is asked about is closed: a binder is opened to a fresh variable before its scope is entered, so two terms that are equal here denote the same thing.
 pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+    normalize_known(context, &mut HashMap::new(), term)
+}
+
+/// [`normalize`] beside the terms this display has already normalized.
+fn normalize_known(
+    context: &mut Context,
+    known: &mut HashMap<Term, Term>,
+    term: Term,
+) -> Result<Term, ReduceError> {
+    // Only a closed term is kept: one with a loose index means what the binder around it makes it mean. None reaches here, a binder being opened before its scope is entered, so this states the rule where it is relied on.
+    let kept = term.closed();
+    if kept && let Some(normal) = known.get(&term) {
+        return Ok(normal.clone());
+    }
+
     // Charged and guarded as `zonk_term` is: a level is a peak of depth the budget prices ([`Cost::FRAME`]), and the walk runs inside [`recurse`] so a deep term buys depth with heap rather than overflowing the native stack. Display-only or not, this walk is a route into unbounded computation — a term ten thousand applications deep, or a solution that reaches itself, would otherwise send it down the main thread's stack until the process aborted with no diagnostic at all, which is the one outcome a *diagnostic* walk must not have. Charged, the declaration's budget refuses the walk and the caller falls back to the un-normalized spelling, as its contract already allows.
     context.enter_level()?;
-    let normalized = recurse(|| normalize_level(context, term));
+    let normalized = recurse(|| normalize_level(context, known, term.clone()));
     context.leave_level();
 
-    normalized
+    let normalized = normalized?;
+    if kept {
+        known.insert(term, normalized.clone());
+    }
+
+    Ok(normalized)
 }
 
 /// The one choke point of the normalization walk, under the level [`normalize`] charged.
-fn normalize_level(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+fn normalize_level(
+    context: &mut Context,
+    known: &mut HashMap<Term, Term>,
+    term: Term,
+) -> Result<Term, ReduceError> {
     let reduced = reduce_forced(context, term.clone())?;
     if stalled_unfolding(&term, &reduced) {
-        return normalize_arguments(context, term);
+        return normalize_arguments(context, known, term);
     }
     let span = reduced.span();
 
     let inner = match Term::unwrap_or_clone(reduced) {
         Subterm::Apply(Apply { head, arguments }) => Subterm::Apply(Apply {
-            head: normalize(context, head)?,
-            arguments: normalize_argument_vec(context, arguments)?,
+            head: normalize_known(context, known, head)?,
+            arguments: normalize_argument_vec(context, known, arguments)?,
         }),
         Subterm::Proj(Proj { head, field }) => Subterm::Proj(Proj {
-            head: normalize(context, head)?,
+            head: normalize_known(context, known, head)?,
             field,
         }),
         Subterm::InductType(InductType {
@@ -1110,8 +1137,8 @@ fn normalize_level(context: &mut Context, term: Term) -> Result<Term, ReduceErro
         }) => Subterm::InductType(InductType {
             name,
             universes,
-            params: normalize_each(context, params)?,
-            indices: normalize_each(context, indices)?,
+            params: normalize_each(context, known, params)?,
+            indices: normalize_each(context, known, indices)?,
         }),
         Subterm::StructType(StructType {
             name,
@@ -1120,7 +1147,7 @@ fn normalize_level(context: &mut Context, term: Term) -> Result<Term, ReduceErro
         }) => Subterm::StructType(StructType {
             name,
             universes,
-            params: normalize_each(context, params)?,
+            params: normalize_each(context, known, params)?,
         }),
         Subterm::Variant(Variant {
             name,
@@ -1131,9 +1158,9 @@ fn normalize_level(context: &mut Context, term: Term) -> Result<Term, ReduceErro
         }) => Subterm::Variant(Variant {
             name,
             universes,
-            params: normalize_each(context, params)?,
+            params: normalize_each(context, known, params)?,
             tag,
-            payload: normalize_each(context, payload)?,
+            payload: normalize_each(context, known, payload)?,
         }),
         Subterm::Struct(Struct {
             name,
@@ -1144,34 +1171,34 @@ fn normalize_level(context: &mut Context, term: Term) -> Result<Term, ReduceErro
         }) => Subterm::Struct(Struct {
             name,
             universes,
-            params: normalize_each(context, params)?,
-            fields: normalize_each(context, fields)?,
+            params: normalize_each(context, known, params)?,
+            fields: normalize_each(context, known, fields)?,
             entries,
         }),
         Subterm::Tuple(Tuple { fields, names }) => Subterm::Tuple(Tuple {
-            fields: normalize_each(context, fields)?,
+            fields: normalize_each(context, known, fields)?,
             names,
         }),
         Subterm::FuncType(func_type) => {
             let plicities = func_type.plicities().to_vec();
             Subterm::FuncType(FuncType::new(
-                normalize_telescope(context, func_type.telescope)?,
+                normalize_telescope(context, known, func_type.telescope)?,
                 plicities,
             ))
         }
         Subterm::Func(func) => {
             let plicities = func.plicities().to_vec();
             Subterm::Func(Func::new(
-                normalize_telescope(context, func.telescope)?,
+                normalize_telescope(context, known, func.telescope)?,
                 plicities,
             ))
         }
         Subterm::TupleType(TupleType { telescope }) => Subterm::TupleType(TupleType {
-            telescope: normalize_tuple_telescope(context, telescope)?,
+            telescope: normalize_tuple_telescope(context, known, telescope)?,
         }),
         Subterm::Metavar(Metavar { id, spine, origin }) => Subterm::Metavar(Metavar {
             id,
-            spine: normalize_each(context, spine.to_vec())?.into(),
+            spine: normalize_each(context, known, spine.to_vec())?.into(),
             origin,
         }),
         // Leaves (`Type`/`Prop`/`Var`/`Intrinsic`, the last already carrying reduced operands) and the binder-heavy stuck forms (`Let`/`Rec`/`Match`) keep their weak-head normal shape. A stuck `Instance` is both at once: its head is a variable or an already-stuck projection, so there is nothing under it to normalize.
@@ -1184,19 +1211,27 @@ fn normalize_level(context: &mut Context, term: Term) -> Result<Term, ReduceErro
     })
 }
 
-fn normalize_each(context: &mut Context, terms: Vec<Term>) -> Result<Vec<Term>, ReduceError> {
-    terms.into_iter().map(|t| normalize(context, t)).collect()
+fn normalize_each(
+    context: &mut Context,
+    known: &mut HashMap<Term, Term>,
+    terms: Vec<Term>,
+) -> Result<Vec<Term>, ReduceError> {
+    terms
+        .into_iter()
+        .map(|t| normalize_known(context, known, t))
+        .collect()
 }
 
 fn normalize_argument_vec(
     context: &mut Context,
+    known: &mut HashMap<Term, Term>,
     arguments: Vec<Argument>,
 ) -> Result<Vec<Argument>, ReduceError> {
     arguments
         .into_iter()
         .map(|argument| {
             Ok(Argument {
-                term: normalize(context, argument.term)?,
+                term: normalize_known(context, known, argument.term)?,
                 plicity: argument.plicity,
             })
         })
@@ -1234,13 +1269,17 @@ pub(crate) fn stalled_unfolding(written: &Term, reduced: &Term) -> bool {
 }
 
 /// [`normalize`] with the head held as written: the arguments are normalized, the name is not unfolded.
-fn normalize_arguments(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+fn normalize_arguments(
+    context: &mut Context,
+    known: &mut HashMap<Term, Term>,
+    term: Term,
+) -> Result<Term, ReduceError> {
     let span = term.span();
 
     let inner = match Term::unwrap_or_clone(term) {
         Subterm::Apply(Apply { head, arguments }) => Subterm::Apply(Apply {
             head,
-            arguments: normalize_argument_vec(context, arguments)?,
+            arguments: normalize_argument_vec(context, known, arguments)?,
         }),
         other => other,
     };
@@ -1254,31 +1293,37 @@ fn normalize_arguments(context: &mut Context, term: Term) -> Result<Term, Reduce
 /// Normalize a function/Π telescope (`Func`/`FuncType`): each parameter type, then the body, every one opened under fresh variables standing for the binders before it and re-closed under their labels — the display-side counterpart of [`convert`](mod@crate::convert)'s `compare_func_type` walk.
 fn normalize_telescope(
     context: &mut Context,
+    known: &mut HashMap<Term, Term>,
     telescope: Telescope<Term>,
 ) -> Result<Telescope<Term>, ReduceError> {
-    let (entries, body) = normalize_entries(context, &telescope)?;
-    Ok(Telescope::build(entries, normalize(context, body)?))
+    let (entries, body) = normalize_entries(context, known, &telescope)?;
+    Ok(Telescope::build(
+        entries,
+        normalize_known(context, known, body)?,
+    ))
 }
 
 /// Normalize a Σ telescope (`TupleType`): its field types, exactly like [`normalize_telescope`]. The `Done` body is `()`, carrying nothing to reduce.
 fn normalize_tuple_telescope(
     context: &mut Context,
+    known: &mut HashMap<Term, Term>,
     telescope: Telescope<()>,
 ) -> Result<Telescope<()>, ReduceError> {
-    let (entries, ()) = normalize_entries(context, &telescope)?;
+    let (entries, ()) = normalize_entries(context, known, &telescope)?;
     Ok(Telescope::build(entries, ()))
 }
 
 /// Each entry normalized under a fresh variable per binder before it, in one walk, with the payload opened at all of them: what the two normalizers rebuild with one pass of `Telescope::build`, rather than recursing into the reopened rest and re-closing every level.
 fn normalize_entries<B: Bound>(
     context: &mut Context,
+    known: &mut HashMap<Term, Term>,
     telescope: &Telescope<B>,
 ) -> Result<(Vec<(Free, Term)>, B), ReduceError> {
     let mut entries = Vec::new();
     let mut cursor = telescope.cursor();
 
     while let Some((_, ty)) = cursor.entry() {
-        let ty = normalize(context, ty)?;
+        let ty = normalize_known(context, known, ty)?;
         entries.push((cursor.advance_fresh(|hint| context.fresh(hint)), ty));
     }
 

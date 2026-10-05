@@ -490,13 +490,15 @@ fn assign(
         .filter(|key| !spellings.contains_key(*key))
         .partition::<Vec<&DisplayKey>, _>(|key| key.name.hint().is_some());
 
+    // Where each hint's search for a free suffix resumes. Every suffix below it was found taken, and a taken spelling stays taken, so a search begun again for each binder would re-ask what is known — for the like-named binders a large type opens, the square of how many there are.
+    let mut resume: HashMap<&str, u32> = HashMap::new();
     for key in hinted.into_iter().chain(hintless) {
         let hint = key.name.hint().unwrap_or("x");
+        let next = resume.entry(hint).or_insert(2);
         let mut candidate = hint.to_string();
-        let mut next = 2;
         while used.contains(&candidate) {
             candidate = format!("{hint}{next}");
-            next += 1;
+            *next += 1;
         }
         used.insert(candidate.clone());
         spellings.insert(*key, candidate);
@@ -575,10 +577,23 @@ pub fn build_shorten_layered(own: &[Global], predecessors: &[Global]) -> HashMap
 /// Where the identities a render mints for the binders it opens begin: above every index a compilation mints, which counts up from zero and would exhaust its binder space long before reaching here.
 const PRINTED: u32 = 1 << 31;
 
+/// The fewest child documents a render may build, whatever its term: a report's worth of reading.
+const RENDER_FLOOR: u64 = 5_000;
+
+/// How many child documents a render may build for each distinct node of its term. A term is a graph and its print is that graph's tree, so a render is allowed its graph this many times over and elides past that: a term that shares little prints whole, and one whose tree outgrows its graph by more — a chain of `let`s each naming the one before it twice — prints its beginning.
+///
+/// Set above the largest ratio of tree to graph a definition of the standard library has (`curios-prelude-archive`'s `printed_tree_measurements`), so nothing a reader was shown before is elided.
+const RENDER_PER_NODE: u64 = 64;
+
+/// What an elided subterm prints as: no token of the language, so no reader takes an elided print for the term.
+const ELIDED: &str = "…";
+
 /// How one render labels the binders it opens. A scope remembers a binder's hint, never its identity, so the render mints one: the `k`th binder it opens is `PRINTED + k` under its hint. A dry run over the same term under the same spelling opens the same binders in the same order, which is how [`build_rename`] spells them before the render that uses the spellings.
 #[derive(Default)]
 struct Minting {
     next: Cell<u32>,
+    /// How many child documents this render may still build — see [`RENDER_PER_NODE`].
+    allowance: Cell<u64>,
     /// What a dry run minted, when this is one.
     recorded: Option<RefCell<Recorded>>,
 }
@@ -594,7 +609,26 @@ impl Minting {
     fn recording() -> Self {
         Self {
             next: Cell::new(0),
+            allowance: Cell::new(0),
             recorded: Some(RefCell::new(Recorded::default())),
+        }
+    }
+
+    /// Allow a render of `term` its child documents: its graph [`RENDER_PER_NODE`] times over, and never fewer than [`RENDER_FLOOR`].
+    fn allow(&self, term: &Term) {
+        let nodes = u64::try_from(term.distinct_nodes()).unwrap_or(u64::MAX);
+        self.allowance
+            .set(RENDER_FLOOR.max(RENDER_PER_NODE.saturating_mul(nodes)));
+    }
+
+    /// Spend one child document on `term`, answering whether it is elided instead: the allowance is spent and `term` has children a document would go on into. A term with no subterm is never elided, since naming it costs what eliding it would; a numeral past zero has one, the base its successors stand on, and is elided with the rest.
+    fn elides(&self, term: &Term) -> bool {
+        match self.allowance.get().checked_sub(1) {
+            Some(left) => {
+                self.allowance.set(left);
+                false
+            }
+            None => term.as_ref().any_child_term(&mut |_| true),
         }
     }
 
@@ -1839,7 +1873,13 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
 /// A child document.
 ///
 /// Every recursive call in this module goes through here, which is what makes this the one place the descent needs guarding: printing a term is a recursive function over a recursive structure, so building the document descends as deep as the term — and a diagnostic that cannot be printed is worse than no diagnostic, since it aborts the compiler while it is trying to *report* something else. [`recurse`] is what makes that depth affordable. Running and freeing the finished document stay iterative in [`Printer`] itself, for the same reason at a different layer.
+///
+/// **And the one place a render is bounded.** A term is a graph and its print is that graph's tree: a type sixty lines of `let` built, each naming the one before it twice, has sixty-one nodes and a print no report survives writing. So a render builds a bounded number of child documents ([`RENDER_PER_NODE`]) and prints what is left as `…`: an elided report is still a report.
 fn sub(term: Term, frame: Frame) -> Printer {
+    if frame.mint.elides(&term) {
+        return pure(ELIDED);
+    }
+
     recurse(|| term_doc(term, frame))
 }
 
@@ -1866,8 +1906,9 @@ pub(crate) fn print_term(term: Term, spelling: &Rc<Spelling>) -> Printer {
     print_minting(term, spelling, &Minting::default())
 }
 
-/// [`print_term`] under `mint`: a fresh one for a render, a recording one for [`build_rename`]'s dry run.
+/// [`print_term`] under `mint`: a fresh one for a render, a recording one for [`build_rename`]'s dry run — which is allowed what the render is, so the two elide at the same subterms and open the same binders in the same order.
 fn print_minting(term: Term, spelling: &Rc<Spelling>, mint: &Minting) -> Printer {
+    mint.allow(&term);
     let frame = Frame {
         spelling,
         mint,

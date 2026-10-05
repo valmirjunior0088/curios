@@ -71,6 +71,17 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
             "the display rendering",
             resolved_for_display(&mut context, &solved).mentions_free(&f),
         ),
+        // And a type that reduces to nothing smaller is normalized position by position, each of its sixty-one nodes once.
+        (
+            "the display rendering of a type",
+            matches!(
+                &*resolved_for_display(
+                    &mut context,
+                    &doubled_record(Term::intrinsic(Intrinsic::NatType)),
+                ),
+                Subterm::TupleType(_),
+            ),
+        ),
         (
             "the sort of a type",
             Sort::of(

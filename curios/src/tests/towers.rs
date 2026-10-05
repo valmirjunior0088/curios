@@ -2,12 +2,13 @@
 //!
 //! A tower is a chain of `let`s in which each line names the line before it twice: `n` lines are a graph of `n` nodes whose tree has `2ⁿ`. A stage that walks the graph pays a line for a line; one that walks it once per path doubles with every line, and at sixty lines does not answer. Every tower here is an ordinary program that reduces nothing, so what it costs is what the stages other than reduction cost — the half of `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md`'s premise a budget cannot hold, and the subject of `documentation/roadmap/05-compilation/01-shared-term-costs.md`.
 //!
-//! A shape that compiles at sixty lines is a fixture here; `tower_measurements` counts what every shape costs each checker at two heights, the shapes still walked per path among them.
+//! A shape that compiles at sixty lines is a fixture here; `tower_measurements` counts what every shape costs each checker at two heights, the shapes still walked per path among them. What a tower's type costs to *show* is held here too: its print is its tree, and both a rung and a report end.
 
 #[cfg(feature = "profile")]
 mod measurement_tests;
 
 use {
+    super::core_elab,
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     std::fmt::Write,
@@ -271,4 +272,26 @@ fn a_sixty_line_tower_compiles() {
     ] {
         assert_eq!(compiles(&tower(shape, 60)), Ok(()));
     }
+}
+
+/// A tower's `core-elab` rung prints. The type each `let` was elaborated at is a graph the rung prints as its tree — sixty lines of pairs are a type of 2⁶⁰ leaves — and a print bounded by its term's graph shows its beginning and elides the rest.
+#[test]
+fn a_towers_elaborated_rung_prints() {
+    let printed = core_elab(&tower(Shape::Pairs(Stands::Function), 60));
+
+    assert!(printed.contains('…'));
+}
+
+/// A mismatch over a tower reports: the type a sixty-line tower of pairs has is shown elided, where its print whole is one no report survives writing.
+#[test]
+fn a_mismatch_over_a_tower_reports() {
+    let mut source = String::from("use /std/{Nat};\n\nlet tower(n: Nat) -> Nat =\n");
+    chain(&mut source, "    ", "x", 60, "(n, n)", |before| {
+        format!("({before}, {before})")
+    });
+    source.push_str("    x60;\n\n/std/print(\"ok\\n\")\n");
+
+    let report = compiles(&source).expect_err("a pair is no `Nat`");
+
+    assert!(report.contains('…'), "{report}");
 }

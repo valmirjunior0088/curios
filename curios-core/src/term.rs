@@ -241,6 +241,21 @@ impl Term {
         .is_break()
     }
 
+    /// How many distinct nodes this term's graph holds, a node two owners share counted once — what a print's allowance is a multiple of.
+    pub(crate) fn distinct_nodes(&self) -> usize {
+        let mut seen: HashSet<*const Node> = HashSet::new();
+        self.walk(
+            &mut seen,
+            |seen, term| match seen.insert(Rc::as_ptr(&term.inner)) {
+                true => Enter::Descend,
+                false => Enter::Skip(()),
+            },
+            |_, _, _| (),
+        );
+
+        seen.len()
+    }
+
     /// Extend the two dependency sets in one explicit walk without rebuilding the term or warming its unrelated scalar caches. Declaration universe closure uses both sets together: direct level metas join the closure, while term metas lead to their result, telescope, and solved body in the context store. A metavariable's children are its spine entries, whose bare `Var`s carry nothing but dedup for free.
     pub fn collect_universe_dependencies(
         &self,

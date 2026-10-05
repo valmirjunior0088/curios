@@ -528,3 +528,82 @@ fn a_render_spells_the_binders_its_dry_run_met() {
 
     assert_eq!(rendered, "(x) => (x2) => x2");
 }
+
+/// `base` paired with itself `depth` times over: a graph of `depth + 1` nodes whose print is a tree of `2^depth` leaves.
+fn paired(base: Term, depth: usize) -> Term {
+    let mut term = base;
+    for _ in 0..depth {
+        term = Term::tuple([term.clone(), term]);
+    }
+    term
+}
+
+/// A print is bounded by its term's graph and not by its tree: sixty levels of a pair naming the level below twice are sixty-one nodes and a print of 2⁶⁰ leaves, which renders its beginning and elides the rest. Both the render and the dry run a rename is built from are bounded, and they elide at the same subterms. A term with no subterm met after the allowance is spent still prints, since naming it costs what eliding it would.
+///
+/// Mutation-checked: with the allowance never spent, neither call returns; with a term that has no subterm elided like any other, the print ends in `…`.
+#[test]
+fn a_print_is_bounded_by_its_terms_graph() {
+    let term = Term::tuple([paired(numeral(7), 60), numeral(0)]);
+
+    let spelling = Spelling::default();
+    let rename = Rc::new(build_rename(&display_names(&term), &spelling));
+    let rendered = term
+        .spelled(&Rc::new(spelling.with_pretty_names(rename)))
+        .to_string();
+
+    assert!(rendered.contains(ELIDED));
+    assert!(
+        rendered.ends_with(", 0)"),
+        "{}",
+        &rendered[rendered.len() - 40..]
+    );
+    assert!(rendered.len() < 400_000, "{} bytes", rendered.len());
+}
+
+/// And a term whose tree is within its allowance prints whole, however large: six thousand pairs that share nothing between them are past the floor three times over, and their tree is hardly more than their graph. Nothing below the floor is elided either, shared or not.
+///
+/// Mutation-checked: with the allowance set to the floor alone, the six thousand are elided.
+#[test]
+fn a_print_within_its_allowance_is_whole() {
+    let wide = Term::tuple((0..6_000).map(|index| Term::tuple([numeral(index), numeral(index)])))
+        .to_string();
+    assert!(!wide.contains(ELIDED));
+    assert!(
+        wide.ends_with("(5999, 5999))"),
+        "{}",
+        &wide[wide.len() - 40..]
+    );
+
+    let shared = paired(numeral(7), 3).to_string();
+    assert!(!shared.contains(ELIDED));
+    assert_eq!(shared.matches('7').count(), 8);
+}
+
+/// Like-named binders are spelled apart by the least suffix that is free, however many there are: the first keeps the name, and each one after takes the next number no global and no binder before it holds.
+#[test]
+fn like_named_binders_take_the_least_free_suffixes() {
+    let taken = Global::Authored(Qualifier::from(["main", "x3"]));
+    let binders = (0..10_000)
+        .map(|index| Free::local(index, None))
+        .collect::<Vec<_>>();
+    let names = DisplayNames {
+        terms: Vec::new(),
+        free: binders
+            .iter()
+            .copied()
+            .chain([Free::Global(taken)])
+            .collect(),
+    };
+    let shorten = build_shorten(std::slice::from_ref(&taken));
+    let rename = build_rename(
+        &names,
+        &Spelling::default().with_short_names(Rc::new(shorten)),
+    );
+    let spelled = |index: usize| rename.get(&binders[index]).map(String::as_str);
+
+    assert_eq!(spelled(0), Some("x"));
+    assert_eq!(spelled(1), Some("x2"));
+    // `x3` is the global's.
+    assert_eq!(spelled(2), Some("x4"));
+    assert_eq!(spelled(9_999), Some("x10001"));
+}
