@@ -36,6 +36,16 @@ pub(crate) struct UniverseStateToken {
     /// A weak equation is a write like any other to whoever asks whether the solver moved: it changes where the declaration's levels settle, so an elaboration that recorded one is not a pure function of its inputs.
     weak_len: usize,
 }
+
+impl UniverseStateToken {
+    /// Whether the solver requires of every level here what it required at `other`: no metavariable minted, no constraint added and no level solved between the two. A weak equation requires nothing, the two instances it came from being one type whatever its levels are, so one recorded between the two is no difference here, though it is a write to whoever asks whether the solver moved at all.
+    pub(crate) fn requires_the_same_as(&self, other: &Self) -> bool {
+        self.next_meta == other.next_meta
+            && self.constraints == other.constraints
+            && self.solution_log_len == other.solution_log_len
+    }
+}
+
 #[derive(Debug, Clone)]
 struct UniverseMeta {
     provenance: Provenance,

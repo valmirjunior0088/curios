@@ -12,7 +12,10 @@ mod settlement_tests;
 pub(crate) mod test_support;
 
 use {
-    super::{Context, Settled, levels_clash_on_a_decided_instance, zonk_solved_term_metas},
+    super::{
+        Context, Settled, levels_clash_on_a_decided_instance, levels_clash_to_conversion,
+        zonk_solved_term_metas,
+    },
     crate::{Error, convert_at, is_prop, reduce_with, same_uncommitted},
     curios_analysis::{Answered, Driver, answers, answers_classed, could_reduce_to},
     curios_core::{
@@ -742,7 +745,7 @@ fn refolded(context: &mut Context, folded: &Term) -> Result<Option<Term>, Reduce
 
 /// What the shared rule says of a stuck reduct against each settled entry it could be a reduct of, innermost first: a term the carriers' readers hold equal to an entry's reduced spelling, or to that spelling negated, is the entry's term (`curios_analysis::answers`). The kernel asks the same function at the same point.
 ///
-/// Read at the unerased spellings, since the readers compare numbers up to universe instances themselves, and declined where the two disagree on an instance both sides have decided, as every hit is.
+/// Read at the unerased spellings, since the readers compare numbers up to universe instances themselves, and declined where the two disagree on an instance both sides have decided and conversion compares ([`levels_clash_to_conversion`]): past a key the kernel answers by asking its conversion, to which a level a nominal family is irrelevant in is no difference.
 fn answered(
     context: &mut Context,
     value: &Term,
@@ -771,7 +774,7 @@ fn answered(
         }
         let frame = entry.0;
         consulted.push(entry);
-        if levels_clash_on_a_decided_instance(context, value, &unerased)? {
+        if levels_clash_to_conversion(context, value, &unerased)? {
             continue;
         }
         // Where the rule hands a question back, the elaborator's conversion answers it — unless reduction is plain, which asks nothing. The kernel's steps, in the kernel's order.

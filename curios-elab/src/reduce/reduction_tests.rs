@@ -809,52 +809,98 @@ fn scrutinee_refinement_does_not_fire_at_another_ground_universe_instance() {
     assert_eq!(reduce(&mut context, probe.clone()), Ok(probe));
 }
 
-/// [`scrutinee_refinement_does_not_fire_at_another_ground_universe_instance`] with the level on a nominal node whose family is irrelevant in it. Conversion calls `Wrap.{0}(Nat)` and `Wrap.{1}(Nat)` one type, and the guard still keeps the two spellings apart: it reads no family's variance, because the kernel's key is the scrutinee compared with every level, and an equation fired here would be one the kernel does not fire.
+/// [`scrutinee_refinement_does_not_fire_at_another_ground_universe_instance`] with the level on a nominal node. Where the node's family is irrelevant in the level, the key still keeps the two spellings apart — its guard reads no family's variance, the kernel's key being the scrutinee compared with every level — and the equation answers all the same at the stuck form reduction leaves, where each checker goes by what its conversion holds one: `Wrap.{0}(Nat)` and `Wrap.{1}(Nat)` are one type with nothing required of the two levels, so a call respelled in another argument as well is the scrutinee to a question that commits nothing. Where the family is invariant the two are two types and the call stays stuck. `curios-cert`'s `kernel::convert::variance_tests` holds the answers under this name.
 ///
-/// Mutation-checked against a guard handed the context's registries, under which the two spellings stop clashing and the arm's value answers the probe.
+/// Mutation-checked three ways: against a key guard handed the context's registries, under which the key itself answers; against a guard past the key that reads no variance; and against a question that reads a weak equation as a commit. Under each of the last two the calls at `Wrap` stay stuck.
 #[test]
-fn scrutinee_refinement_does_not_fire_at_another_instance_of_an_irrelevant_level() {
+fn a_case_equation_answers_at_another_instance_of_an_irrelevant_level() {
     let mut context = context();
-    let classify = context.fresh(Some("classify"));
+    let asked = Asked::over(&mut context);
+    let over = context.fresh(Some("over"));
+    let (kind, count) = (context.fresh(Some("T")), context.fresh(Some("n")));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    context.assume(
+        &over,
+        &Term::func_type(
+            [
+                (kind, Term::type_at(Level::constant(1))),
+                (count, nat_type.clone()),
+            ],
+            nat_type.clone(),
+        ),
+    );
     let carrier = context.fresh(Some("A"));
     let sort = Term::type_at(Level::param(UniverseParam(0)));
-    context
-        .register_induct(
-            &nominal("Wrap"),
-            InductDecl {
-                universe_context: UniverseContext {
-                    parameter_count: 1,
-                    constraints: Vec::new(),
+    for (family, variance) in [("Wrap", Variance::Irrelevant), ("Box", Variance::Invariant)] {
+        context
+            .register_induct(
+                &nominal(family),
+                InductDecl {
+                    universe_context: UniverseContext {
+                        parameter_count: 1,
+                        constraints: Vec::new(),
+                    },
+                    arity: Telescope::build([(carrier, sort.clone())], Telescope::done(())),
+                    constructors: Vec::new(),
+                    result_sort: sort.clone(),
+                    module: Qualifier::empty(),
+                    rep_public: true,
+                    polarities: Vec::new(),
+                    variances: vec![variance],
+                    plicities: Vec::new(),
                 },
-                arity: Telescope::build([(carrier, sort.clone())], Telescope::done(())),
-                constructors: Vec::new(),
-                result_sort: sort,
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: vec![Variance::Irrelevant],
-                plicities: Vec::new(),
-            },
-        )
-        .unwrap();
-    let at = |level: Level| {
+            )
+            .unwrap();
+    }
+    let at = |family: &str, level: u32, left: &Free, right: &Free| {
         Term::apply(
-            Term::free_var(&classify),
-            [Term::induct_type_at(
-                nominal("Wrap"),
-                [level],
-                [Term::intrinsic(Intrinsic::NatType)],
-                Vec::<Term>::new(),
-            )],
+            Term::free_var(&over),
+            [
+                Term::induct_type_at(
+                    nominal(family),
+                    [Level::constant(level)],
+                    [nat_type.clone()],
+                    Vec::<Term>::new(),
+                ),
+                Term::intrinsic(Intrinsic::nat_add(
+                    Term::free_var(left),
+                    Term::free_var(right),
+                )),
+            ],
         )
     };
-    let registered = at(Level::zero());
-    let probe = at(Level::constant(1));
-    let canonical = shallow_scrutinee(&context, &registered);
-    context.refine_scrutinee_spellings(vec![(canonical, registered.clone(), false)], &nat(1));
 
-    assert_eq!(reduce(&mut context, registered), Ok(nat(1)));
-    assert_eq!(reduce(&mut context, probe.clone()), Ok(probe));
+    for (family, answered) in [("Wrap", true), ("Box", false)] {
+        context.with_frame(|context| {
+            let registered = at(family, 0, &asked.a, &asked.b);
+            let key = shallow_scrutinee(context, &registered);
+            context.refine_scrutinee_spellings(
+                vec![(key.clone(), registered.clone(), false)],
+                &nat(1),
+            );
+            assert_eq!(reduce(context, registered), Ok(nat(1)));
+
+            let lifted = at(family, 1, &asked.a, &asked.b);
+            assert_eq!(
+                context.scrutinee_reduct(&key, &lifted),
+                None,
+                "the key reads no variance"
+            );
+            let levels = context.universes().state_token();
+            for probe in [lifted, at(family, 1, &asked.b, &asked.a)] {
+                let expected = match answered {
+                    true => nat(1),
+                    false => probe.clone(),
+                };
+                assert_eq!(reduce(context, probe), Ok(expected), "{family}");
+            }
+            assert_eq!(
+                context.universes().state_token(),
+                levels,
+                "the question committed nothing"
+            );
+        });
+    }
 }
 
 /// [`scrutinee_refinement_does_not_fire_at_another_ground_universe_instance`] over the projection store, which keys the same way and keeps no unerased spelling of its own.

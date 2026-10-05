@@ -96,7 +96,7 @@ pub(crate) fn convert(
     ))
 }
 
-/// Whether `this` and `that` convert at `Type` with no solution and no universe constraint committed: the comparison runs in the bracket a witness probe uses and is rolled back whatever it found, so a pair that would need a metavariable solved is not one, and asking commits nothing. What a classing asks of two atoms (`intrinsic`'s `classes`), and what reduction asks of two stuck forms (`reduce`'s `asked_classes` and `asked_scrutinee`).
+/// Whether `this` and `that` convert at `Type` with no solution and no universe constraint committed: the comparison runs in the bracket a witness probe uses and is rolled back whatever it found, so a pair that would need a metavariable solved is not one, and asking commits nothing. A weak equation the comparison recorded is no commitment: it requires nothing of its two levels, a nominal family being irrelevant in them, and it goes with the bracket. What a classing asks of two atoms (`intrinsic`'s `classes`), and what reduction asks of two stuck forms (`reduce`'s `asked_classes` and `asked_scrutinee`).
 pub(crate) fn same_uncommitted(
     context: &mut Context,
     this: &Term,
@@ -108,7 +108,10 @@ pub(crate) fn same_uncommitted(
     let universes = context.universes().state_token();
     let converts = convert(context, &Term::type_ground(), this, that);
     let committed = context.solutions_committed() != solutions
-        || context.universes().state_token() != universes;
+        || !context
+            .universes()
+            .state_token()
+            .requires_the_same_as(&universes);
     context.rollback_solutions(mark);
     context.end_solutions(mark);
     // How many pairs were asked about, and how many of them a solution or a level constraint stood between: an answer of the second kind can change once the solver moves.

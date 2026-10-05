@@ -58,7 +58,7 @@ pub(super) fn identify_universe_levels(
 ///
 /// `false` for everything that is not a decided disagreement — sides differing in more than levels, a pair under a universe binder, a pair either of whose sides is still undecided. That is deliberate and is what keeps the answer the *refusing* direction only: an undecided level may yet be solved either way, and collapsing those is exactly what the refinement key is for.
 ///
-/// It reads no family's variance. The kernel's key is the scrutinee compared with every level, so an equation this guard let through on an irrelevant one would be an equation the kernel does not fire.
+/// It reads no family's variance: it guards a key, and the kernel's key is the scrutinee compared with every level, so a key this let through on an irrelevant one would answer a term the kernel reduces before it answers. Past a key the guard is [`levels_clash_to_conversion`].
 pub(crate) fn levels_clash_on_a_decided_instance(
     context: &Context,
     this: &Term,
@@ -66,6 +66,18 @@ pub(crate) fn levels_clash_on_a_decided_instance(
 ) -> Result<bool, ReduceError> {
     Ok(matches!(
         align_universe_levels(context, this, that, &())?,
+        Alignment::GroundUnequal
+    ))
+}
+
+/// [`levels_clash_on_a_decided_instance`] as conversion reads the pair: a level a nominal family is irrelevant in is no disagreement, two instances apart in it alone being one type. The guard past a key, where a stuck form is put to an equation's reduced spelling and both checkers answer by what conversion holds one — the kernel by asking its own, so a pair this lets through is one the kernel answers as well.
+pub(crate) fn levels_clash_to_conversion(
+    context: &Context,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, ReduceError> {
+    Ok(matches!(
+        align_universe_levels(context, this, that, context)?,
         Alignment::GroundUnequal
     ))
 }

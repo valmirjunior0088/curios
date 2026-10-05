@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Kernel, convert},
+    crate::{Kernel, convert, whnf},
     curios_core::{
         Free, Intrinsic, Level, Reducer, Term, UniverseContext, UniverseParam, Variance,
     },
@@ -144,4 +144,50 @@ fn a_family_with_no_parameter_converts_by_its_name_at_two_instances() {
             );
         }
     }
+}
+
+// An arm's equation answers at another instance of a level its scrutinee's family is irrelevant in, and at no other instance of one it is invariant in: what reduction asks conversion of a stuck form and an equation's scrutinee is compared by variance, as every pair is. `curios-elab`'s `reduce::reduction_tests` holds this proposition under this name.
+#[test]
+fn a_case_equation_answers_at_another_instance_of_an_irrelevant_level() {
+    let mut kernel = kernel();
+    let wrap = declare_wrap(&mut kernel, vec![Variance::Irrelevant], Former::Projected);
+    let boxed = declare_box(&mut kernel, vec![Variance::Invariant]);
+    let over = binder(90, "over");
+    kernel.assume(
+        &over,
+        &Term::func_type(
+            [(binder(91, "T"), Term::type_at(Level::constant(2)))],
+            nat_type(),
+        ),
+    );
+    let call = |family: Term| Term::apply(Term::free_var(&over), [family]);
+    let wrapped = |level: u32| {
+        call(Term::induct_type_at(
+            wrap,
+            [Level::constant(level)],
+            [nat_type()],
+            Vec::<Term>::new(),
+        ))
+    };
+    let boxing = |level: u32| {
+        call(Term::induct_type_at(
+            boxed,
+            [Level::constant(level)],
+            Vec::<Term>::new(),
+            Vec::<Term>::new(),
+        ))
+    };
+
+    kernel.scoped(|kernel| {
+        kernel
+            .refine(wrapped(0), nat(1))
+            .expect("the equation records");
+        assert_eq!(whnf(kernel, wrapped(1)), Ok(nat(1)));
+    });
+    kernel.scoped(|kernel| {
+        kernel
+            .refine(boxing(0), nat(1))
+            .expect("the equation records");
+        assert_eq!(whnf(kernel, boxing(1)), Ok(boxing(1)));
+    });
 }
