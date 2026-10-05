@@ -142,6 +142,8 @@ pub struct Context {
     island: Option<Qualifier>,
     /// Whether the procedure that proves a bound from the facts in scope is running ([`crate::entail`]). It does not run inside itself: what it elaborates is its own candidate, and a bound one of the candidate's operands carries is not the one it was asked about.
     entailing: bool,
+    /// Whether reduction is plain: it asks the elaborator's conversion nothing ([`Context::plainly`]).
+    plain: bool,
     /// The declaration being elaborated ([`Context::enter_declaration`]); `None` for an entry's final term.
     declaration: Option<Global>,
     /// The written binder each local was opened from, kept while one item elaborates: the declaration it was opened in, and the binder's place among that declaration's written binders. The declaration is read from here rather than from what is current when a proof reads the local, since a group's parked bounds are retried once every member has elaborated. The place is kept here rather than on the local, so a scope rebuilt over the local remembers none: a term that reaches another declaration is credited nothing there.
@@ -221,6 +223,7 @@ impl Context {
             program: Program::new(),
             island: Some(Qualifier::empty()),
             entailing: false,
+            plain: false,
             declaration: None,
             opened: BTreeMap::new(),
             credited: Vec::new(),
@@ -532,7 +535,7 @@ impl Context {
     ///
     /// **A universe metavariable in the term does not exclude it.** Reduction is parametric in levels — no rule reads one, `Type u` being a payload and not a scrutinee, and an instantiation substitutes a parameter with whatever level stands in the instance, a metavariable included — so a reduct is the same function of its term whether the metas in it are solved or not, and the in-place rewrites that do change what a level *spells* (defaulting, finalization, instance closure) clear the cache where they happen. Excluding one would remember nothing of a web of universe-polymorphic definitions inside the declaration that instantiates them, whose occurrences all carry that declaration's level metas, and a reduct shared as a graph would be re-derived once per occurrence — the `2^n` `curios`' `scrutinee_refinement_measurements` guards under `numeric, proved`.
     pub(crate) fn cached_reduced(&self, term: &Term) -> Option<Term> {
-        self.caches.reduction_get(term)
+        self.caches.reduction_get(term, self.plain)
     }
 
     /// Record that `term` reduces to `result` — the write half of the reduction cache, hit wherever a reduction's value lands: the reducer's final return, and its scrutinee stack's frame pop. Memoize only closed terms whose WHNF names no *unsolved* term metavariable — `any_metavar` bails on the first one, never building the id set. A solve is monotonic, so it can only invalidate a reduct that still names the metavariable it solved, and reduction gets stuck on (hence surfaces) an unsolved metavariable it actually depends on. Refusing to cache those is what lets `solve_metavar` skip a cache clear; an entry naming only *solved* metavariables stays valid under forward solves (re-validation's `rollback_solutions`, which *un*-solves, clears separately). A *universe* metavariable excludes nothing, for the reason [`Context::cached_reduced`] gives.
@@ -543,18 +546,45 @@ impl Context {
             term.closed() && !result.any_metavar(&mut |id| self.metavar_solution(id).is_none());
 
         if cacheable {
-            self.caches.reduction_insert(term, result.clone());
+            self.caches
+                .reduction_insert(term, result.clone(), self.plain);
         }
     }
 
     /// The remembered sort of `type_`, where the context stands as it did when it was filed. [`Caches::sorts`] carries how long that is.
     pub(crate) fn cached_sort(&mut self, type_: &Term) -> Option<Sort> {
-        self.caches.sort_get(type_)
+        self.caches.sort_get(type_, self.plain)
     }
 
     /// Remember `type_`'s sort. Stored for nothing, as a reduct is.
     pub(crate) fn record_sort(&mut self, type_: Term, sort: Sort) {
-        self.caches.sort_insert(type_, sort);
+        self.caches.sort_insert(type_, self.plain, sort);
+    }
+
+    /// `term` with its solved metavariables materialized, remembered where none is left unsolved ([`Caches::materialized`]).
+    pub(crate) fn materialized(&self, term: &Term) -> Term {
+        if !term.has_metavar() {
+            return term.clone();
+        }
+        if let Some(known) = self.caches.materialized_get(term) {
+            return known;
+        }
+        let materialized = zonk_solved_term_metas(self, term);
+        if !materialized.any_metavar(&mut |id| self.metavar_solution(id).is_none()) {
+            self.caches
+                .materialized_insert(term.clone(), materialized.clone());
+        }
+        materialized
+    }
+
+    /// Whether the binder `name` is a proof, where that has been asked and remembered ([`Context::remember_proof`]).
+    pub(crate) fn cached_proof(&self, name: &Free) -> Option<bool> {
+        self.caches.proof_get(name)
+    }
+
+    /// Remember whether the binder `name` is a proof, for the declaration.
+    pub(crate) fn remember_proof(&mut self, name: Free, proof: bool) {
+        self.caches.proof_insert(name, proof);
     }
 
     /// The read half of the canonical-key memo. [`Caches::canonical_keys`] carries why the memo exists.
@@ -562,7 +592,7 @@ impl Context {
         if key.has_universe_meta() {
             return None;
         }
-        self.caches.canonical_key_get(key)
+        self.caches.canonical_key_get(key, self.plain)
     }
 
     /// The write half. Not charged: a canonical key is a fact about one declaration's arms, cleared with the declaration, and computed within that declaration's budget under [`Context::within_allowance`]'s ceiling — the same reason [`Context::reduce`] stores a local-bearing reduct for nothing.
@@ -572,14 +602,15 @@ impl Context {
         let cacheable = key.closed() && !key.has_universe_meta();
 
         if cacheable {
-            self.caches.canonical_key_insert(key, canonical.clone());
+            self.caches
+                .canonical_key_insert(key, self.plain, canonical.clone());
         }
     }
 
     /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`: `None` if no probe has asked for it yet, `Some(None)` if reducing it refused. [`Frames::scrutinee_spellings`] carries how long one stands.
     pub(crate) fn settled_key(&self, frame: usize, key: &Term) -> Option<&Option<Settled>> {
         self.frames
-            .settled_spelling(frame, key, self.solutions.solved_len())
+            .settled_spelling(frame, key, self.plain, self.solutions.solved_len())
     }
 
     /// Record a settlement. Every one is recorded, whatever its metavariables — unlike [`Context::record_canonical_key`], whose caller recomputes a miss, the escalation loop settles the innermost entry *not yet asked*, so an unrecorded settlement would be asked for again forever.
@@ -593,7 +624,8 @@ impl Context {
         unsolved: bool,
     ) {
         let solved = unsolved.then(|| self.solutions.solved_len());
-        self.frames.settle_spelling(frame, key, settled, solved);
+        self.frames
+            .settle_spelling(frame, key, self.plain, settled, solved);
     }
 
     /// Run `attempt` with at most `allowance` units of this declaration's budget in reach, answering `None` when it did not finish inside that.
@@ -627,6 +659,8 @@ impl Context {
     ///
     /// The suppression brackets need no insert refusal. Privacy: validity is directional (an entry that passed an island's strict checks is valid under suppression, but not the reverse), so `island.is_some()` is part of the key — a re-validation under the suppression bracket populates and hits its own partition, and `set_island` clears on every item change. Parking: `expect` can only be `Blocked` on unsolved metavariables, which the groundness gate excludes, so suppression is inert for every cacheable run. Refinements: the registrar, frame-exit, and suppression-boundary clears already remove every entry a live refinement could have influenced, on both sides of the flag.
     ///
+    /// Whether reduction is plain is part of the key too ([`Context::plainly`]). A question reduction puts to conversion writes nothing, so a run that rests on one is as pure as one that asked nothing, and plain reduction, which asks nothing, would refuse it.
+    ///
     /// Without this cache, elaboration tree-walks DAG-shaped lowered terms: a string literal's UTF-8 derivation shares every scan-state chain by `Rc`, so re-elaborating the chain at each link would cost O(N²) work and the chain's depth in native stack; with it, each shared node elaborates once, at O(1) additional depth.
     ///
     /// Probe, compute under the stamp snapshot, record — the one way in, used by every `elaborate_subterm` dispatch. The halves are split out as [`Context::probe_elaborated`] and [`Context::record_elaborated`] because this method is exactly the two of them with the `compute` call spliced in; nothing else calls them.
@@ -641,7 +675,11 @@ impl Context {
             // A miss as much as a term the gate refuses: a miss is recorded only when its run wrote nothing, and a run over this declaration's levels writes, so a miss is what the oracle's re-runs were.
             probe if self.oracle_memoizable(term, expected) => {
                 let privacy_checked = self.island.is_some();
-                if let Some(hit) = self.caches.oracle_get(term, expected, privacy_checked) {
+                let plain = self.plain;
+                if let Some(hit) = self
+                    .caches
+                    .oracle_get(term, expected, privacy_checked, plain)
+                {
                     return Ok(hit);
                 }
                 let result = compute(self)?;
@@ -649,7 +687,7 @@ impl Context {
                     self.record_elaborated(term, expected, stamp, &result);
                 }
                 self.caches
-                    .oracle_insert(term, expected, privacy_checked, &result);
+                    .oracle_insert(term, expected, privacy_checked, plain, &result);
                 Ok(result)
             }
             ElabProbe::Uncacheable => compute(self),
@@ -685,7 +723,7 @@ impl Context {
 
         match self
             .caches
-            .elaboration_get(term, expected, self.island.is_some())
+            .elaboration_get(term, expected, self.island.is_some(), self.plain)
         {
             Some(hit) => ElabProbe::Hit(hit),
             None => ElabProbe::Miss(self.caches.stamps()),
@@ -713,8 +751,13 @@ impl Context {
         result: &(Term, Term),
     ) {
         if self.elaboration_cacheable(stamp, expected, result) {
-            self.caches
-                .elaboration_insert(term, expected, self.island.is_some(), result);
+            self.caches.elaboration_insert(
+                term,
+                expected,
+                self.island.is_some(),
+                self.plain,
+                result,
+            );
         }
     }
 
@@ -1278,11 +1321,11 @@ impl Context {
         frame: usize,
         f: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        self.caches.invalidate_settlement_boundary();
+        self.caches.invalidate_settlement_boundary(self.plain);
         let previous = self.frames.withhold_refinements_from(frame);
         let result = f(self);
         self.frames.restore_withheld_refinements(previous);
-        self.caches.invalidate_settlement_boundary();
+        self.caches.invalidate_settlement_boundary(self.plain);
 
         result
     }
@@ -1507,6 +1550,20 @@ impl Context {
         self.entailing = previous;
 
         result
+    }
+
+    /// Whether reduction is plain: it asks the elaborator's conversion nothing ([`Context::plainly`]).
+    pub(crate) fn plain(&self) -> bool {
+        self.plain
+    }
+
+    /// Run `read` with reduction plain: it asks the elaborator's conversion nothing, at a stuck fold or at a missed equation — the kernel's `Kernel::plainly`, for the kernel's two readers. A question reduction puts to conversion is answered by it, which is what ends the regress, and a shared analysis reads a term by it (`Env::force`), since totality may rest on no verdict of conversion's. Each of the two keeps its own answers: the reducts, the sorts read through them, the canonical keys and the settled spellings (`Frames::scrutinee_spellings`) are all filed by which reduction took them.
+    pub(crate) fn plainly<R>(&mut self, read: impl FnOnce(&mut Self) -> R) -> R {
+        let previous = mem::replace(&mut self.plain, true);
+        let answer = read(self);
+        self.plain = previous;
+
+        answer
     }
 
     // === Metavariable store =================================================

@@ -42,10 +42,10 @@ use {
     super::{Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
     curios_analysis::struct_reaches_itself,
     curios_core::{
-        Apply, Bound, Carrier, Cases, Cost, Cursor, Field, Func, FuncType, Global, InductType,
-        Instance, InstanceHead, Level, Lockstep, Many, Match, MatchResult, Probe, Proj, Reducer,
-        Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant,
-        instantiate_universe_levels_scoped,
+        Apply, Bound, Carrier, Cases, Classes, Cost, Cursor, Field, Func, FuncType, Global,
+        InductType, Instance, InstanceHead, Level, Lockstep, Many, Match, MatchResult, Probe, Proj,
+        ReduceError, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple,
+        TupleType, Variant, instantiate_universe_levels_scoped,
     },
     curios_utilities::recurse,
     std::collections::HashSet,
@@ -1577,4 +1577,19 @@ fn ground(
     that: &Term,
 ) -> Result<bool, Error> {
     compare(kernel, history, &Term::type_ground(), this, that)
+}
+
+/// Whether `this` and `that` convert at `Type`, as reduction asks of two terms it holds stuck, under a history of its own. A refusal that is no exhaustion of the budget — a term the kernel cannot compare — is that they are not known to: a question only widens what reduction sees.
+///
+/// **A history of its own is the same key.** A history lives for one conversion, and the equations in force, and whether reduction is plain, are what they were when it began for as long as it stands: a settlement and a span of plain reduction each put back what they change before they return. So the key still needs neither.
+pub(super) fn grounded(kernel: &mut Kernel, this: &Term, that: &Term) -> Result<bool, ReduceError> {
+    Ok(ground(kernel, &mut History::default(), this, that)
+        .probed_refusal()?
+        .unwrap_or(false))
+}
+
+/// Which of `atoms` are one, as reduction asks of the atoms of a stuck fold and of a stuck form beside an equation's scrutinee: each compared with the representative of every class opened before it, by plain reduction ([`Kernel::plainly`]).
+pub(crate) fn asked_classes(kernel: &mut Kernel, atoms: &[Term]) -> Result<Classes, ReduceError> {
+    curios_profile::profile!("convert::asked_classes");
+    kernel.plainly(|kernel| Classes::of(atoms, |this, that| grounded(kernel, this, that)))
 }

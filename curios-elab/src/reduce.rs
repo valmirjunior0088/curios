@@ -13,11 +13,11 @@ pub(crate) mod test_support;
 
 use {
     super::{Context, Settled, levels_clash_on_a_decided_instance, zonk_solved_term_metas},
-    crate::{Error, convert_at, reduce_with},
-    curios_analysis::{Driver, answers, could_reduce_to},
+    crate::{Error, convert_at, is_prop, reduce_with, same_uncommitted},
+    curios_analysis::{Answered, Driver, answers, answers_classed, could_reduce_to},
     curios_core::{
-        Advance, Apply, Argument, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free,
-        FreeMonoid, Func, FuncType, Global, HeadTag, InductDecl, InductType, Instance,
+        Advance, Apply, Argument, Bound, Carrier, Cases, Classes, ClosedHost, Cost, Demand, Field,
+        Free, FreeMonoid, Func, FuncType, Global, HeadTag, InductDecl, InductType, Instance,
         InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Probe, Proj, Rec,
         RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType, Subterm, Telescope, Term,
         Tuple, TupleType, Var, Variant, Visit, accelerable, instantiate_universe_levels_scoped,
@@ -71,8 +71,9 @@ impl Reducer for Context {
 impl curios_analysis::Env for Context {
     type Error = Error;
 
+    /// Plain reduction, as the seam asks: a shared analysis borrows no opinion of the elaborator's conversion through the term it reads.
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {
-        reduce_with(self, term)
+        self.plainly(|context| reduce_with(context, term))
     }
 
     fn assumption(&self, name: &Free) -> Option<&Term> {
@@ -792,6 +793,8 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
     curios_profile::profile!("reduce::refined_reduct");
 
     let probe = reduct_spelling(context, value)?;
+    // The binders the form names that are proofs, which the filter in front of every entry passes over.
+    let proofs = proofs_named(context, &probe)?;
     // The spellings a settled entry can answer, each with whether its literal is negated on the way: the probe itself and its successor spelling are the entry's proposition, the duals its negation.
     let others = match &*probe {
         Subterm::Intrinsic(intrinsic) => probe_spellings(intrinsic)
@@ -808,7 +811,7 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
     let mut consulted = Vec::new();
 
     loop {
-        let unsettled = match scan_settled(context, value, &probe, &spellings)? {
+        let unsettled = match scan_settled(context, value, &probe, &spellings, &proofs)? {
             Scan::Answer(answer) => return Ok(Some(answer)),
             Scan::Settle {
                 frame,
@@ -818,7 +821,7 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
             Scan::Miss => None,
         };
         // The settled spellings once more, by the rule both reducers share, before another settlement is paid for: the kernel's order.
-        if let Some(answer) = answered(context, value, &probe, &mut consulted)? {
+        if let Some(answer) = answered(context, value, &probe, &proofs, &mut consulted)? {
             return Ok(Some(answer));
         }
         let Some((frame, key, original)) = unsettled else {
@@ -826,7 +829,7 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
             #[cfg(feature = "profile")]
             if let asked @ 1.. = context
                 .visible_scrutinee_entries()
-                .filter(|(_, _, entry)| could_reduce_to(&entry.original, &probe))
+                .filter(|(_, _, entry)| could_settle(context, &entry.original, &probe, &proofs))
                 .count()
             {
                 curios_profile::sample!("reduce::missed_lookup", asked);
@@ -862,11 +865,12 @@ fn answered(
     context: &mut Context,
     value: &Term,
     probe: &Term,
+    proofs: &[Free],
     consulted: &mut Vec<(usize, Term)>,
 ) -> Result<Option<Term>, ReduceError> {
     let settled = context
         .visible_scrutinee_entries()
-        .filter(|(_, _, entry)| could_reduce_to(&entry.original, probe))
+        .filter(|(_, _, entry)| could_settle(context, &entry.original, probe, proofs))
         .filter_map(
             |(frame, key, entry)| match context.settled_key(frame, key) {
                 Some(Some(settled)) => Some((
@@ -883,16 +887,101 @@ fn answered(
         if consulted.contains(&entry) {
             continue;
         }
+        let frame = entry.0;
         consulted.push(entry);
         if levels_clash_on_a_decided_instance(context, value, &unerased)? {
             continue;
         }
-        if let Some(answer) = answers(&mut Reading(&mut *context), probe, &unerased, &assumed)? {
-            return Ok(Some(answer));
+        // Where the rule hands a question back, the elaborator's conversion answers it — unless reduction is plain, which asks nothing. The kernel's steps, in the kernel's order.
+        let answer = match answers(&mut Reading(&mut *context), probe, &unerased, &assumed)? {
+            Answered::Value(answer) => Some(answer),
+            Answered::Silent => None,
+            _ if context.plain() => None,
+            Answered::Atoms(atoms) => {
+                let classes = asked_classes(context, &atoms)?;
+                answers_classed(
+                    &mut Reading(&mut *context),
+                    probe,
+                    &unerased,
+                    &assumed,
+                    &classes,
+                )?
+            }
+            Answered::Whole => {
+                asked_scrutinee(context, frame, probe, &unerased)?.then_some(assumed)
+            }
+        };
+        if answer.is_some() {
+            return Ok(answer);
         }
     }
 
     Ok(None)
+}
+
+/// Whether `probe` could be the term the scrutinee recorded as `original` reduces to (`curios_analysis::could_reduce_to`), read on the scrutinee with its solved metavariables materialized. A solved metavariable stands over a spine of every local in scope where it was born — a guard written through a concept holds its witness as one — so left standing it reads as naming them all, and the filter would pass what the kernel's does not, the kernel being handed the witness it resolved to.
+fn could_settle(context: &Context, original: &Term, probe: &Term, proofs: &[Free]) -> bool {
+    could_reduce_to(&context.materialized(original), probe, proofs)
+}
+
+/// The binders `probe` names that are themselves proofs: assumed at a proposition, so conversion reads them nowhere, and a stuck form naming one a scrutinee does not may still be that scrutinee's term. The kernel's `proofs_named`, by the elaborator's own classifier.
+///
+/// Each binder is asked once and remembered for the declaration, by plain reduction, and counted not a proof while it is being asked. One whose type still holds an unsolved metavariable is not known to be a proof and is asked again, since a solution may make it one.
+fn proofs_named(context: &mut Context, probe: &Term) -> Result<Vec<Free>, ReduceError> {
+    let mut proofs = Vec::new();
+    for name in probe.free_vars_shared().iter() {
+        let proof = match context.cached_proof(name) {
+            Some(proof) => proof,
+            None => {
+                let Some(type_) = context.assumption(name).cloned() else {
+                    continue;
+                };
+                if type_.any_metavar(&mut |id| context.metavar_solution(id).is_none()) {
+                    continue;
+                }
+                context.remember_proof(*name, false);
+                let proof = context
+                    .plainly(|context| is_prop(context, &type_))
+                    .probed_refusal()?
+                    .unwrap_or(false);
+                context.remember_proof(*name, proof);
+                proof
+            }
+        };
+        if proof {
+            proofs.push(*name);
+        }
+    }
+    Ok(proofs)
+}
+
+/// Which of `atoms` are one, as reduction asks of the atoms of a stuck fold and of a stuck form beside an equation's scrutinee: each pair put to the elaborator's conversion with nothing committed (`same_uncommitted`), by plain reduction ([`Context::plainly`]). A comparison with no value at the type level is that the two are not known to be one.
+fn asked_classes(context: &mut Context, atoms: &[Term]) -> Result<Classes, ReduceError> {
+    curios_profile::profile!("reduce::asked_classes");
+    context.plainly(|context| {
+        Classes::of(atoms, |this, that| {
+            Ok(same_uncommitted(context, this, that)
+                .probed()?
+                .unwrap_or(false))
+        })
+    })
+}
+
+/// Whether `term` is the scrutinee of the entry registered in `frame`, whose reduced spelling is `key`, as reduction asks conversion of two stuck forms that are no operations of the algebra: compared with that frame's refinements and every frame's inside it withheld, the view the spelling was settled under, since under its own equation the key reduces to the case value.
+fn asked_scrutinee(
+    context: &mut Context,
+    frame: usize,
+    term: &Term,
+    key: &Term,
+) -> Result<bool, ReduceError> {
+    curios_profile::profile!("reduce::asked_scrutinee");
+    context.plainly(|context| {
+        context.with_refinements_withheld_from(frame, |context| {
+            Ok(same_uncommitted(context, term, key)
+                .probed()?
+                .unwrap_or(false))
+        })
+    })
 }
 
 /// The elaborator as the conversion chain's driver where no comparison stands open, which is how a case equation's lookup reads the chain's readers from inside reduction. It substitutes the metavariables already solved, as the comparing driver does, and has no packed-literal view, since that view hands goals to a queue a lookup does not hold.
@@ -954,6 +1043,7 @@ fn scan_settled(
     value: &Term,
     probe: &Term,
     spellings: &[(Term, bool)],
+    proofs: &[Free],
 ) -> Result<Scan, ReduceError> {
     let mut unsettled = None;
 
@@ -981,7 +1071,7 @@ fn scan_settled(
             }
             Some(None) => {}
             None => {
-                if unsettled.is_none() && could_reduce_to(&entry.original, probe) {
+                if unsettled.is_none() && could_settle(context, &entry.original, probe, proofs) {
                     unsettled = Some((frame, key.clone(), entry.original.clone()));
                 }
             }

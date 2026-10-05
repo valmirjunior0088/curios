@@ -20,8 +20,8 @@ mod rules_tests;
 mod test_support;
 
 use {
-    super::Kernel,
-    curios_analysis::{RESOLVED_SPELLING_LAYERS, answers},
+    super::{Kernel, asked_classes},
+    curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS, answers, answers_classed},
     curios_core::{
         Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
         Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe, Proj, Rec,
@@ -234,6 +234,8 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
     }
 
     let canonical = canonical_operands(kernel, value)?;
+    // The binders the form names that are proofs, which the filter in front of every equation passes over.
+    let proofs = kernel.proofs_named(&canonical)?;
     // The other spellings under the reduced spelling too, for the reason the written pass asks them: a guard whose operands the probe presents folded — the dispatch's resolved spelling carries them as written, and a guard `i < List/len(l)` records the call its author wrote while the bound arrives with that call folded to its intrinsic — answers only once its reduct is settled, so every spelling is asked of the settled reducts exactly as the written and resolved spellings were asked of the record. Nothing is recorded under any of them, and the elaborator looks in the same places.
     let spellings = match &*canonical {
         Subterm::Intrinsic(intrinsic) => probe_spellings(intrinsic)
@@ -256,26 +258,26 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
         }) {
             return Ok(Some(answer));
         }
-        // The settled spellings once more, by the rule both reducers share: a term the carriers' readers hold equal to a key, or to a key negated, is the key's term.
-        for (index, reduct, value) in kernel.settled_refinements(&canonical) {
+        // The settled spellings once more, by the rule both reducers share: a term the carriers' readers hold equal to a key, or to a key negated, is the key's term, and so is one the kernel's own conversion says is.
+        for (index, reduct, value) in kernel.settled_refinements(&canonical, &proofs) {
             if consulted.contains(&index) {
                 continue;
             }
             consulted.push(index);
-            if let Some(answer) = answers(kernel, &canonical, &reduct, &value)? {
+            if let Some(answer) = answered(kernel, index, &canonical, &reduct, &value)? {
                 return Ok(Some(answer));
             }
         }
 
-        let unasked = kernel.unasked_refinement(&canonical).or_else(|| {
+        let unasked = kernel.unasked_refinement(&canonical, &proofs).or_else(|| {
             spellings
                 .iter()
-                .find_map(|(spelling, _)| kernel.unasked_refinement(spelling))
+                .find_map(|(spelling, _)| kernel.unasked_refinement(spelling, &proofs))
         });
         let Some((index, key)) = unasked else {
             // What a lookup that asked conversion would have been put to: the equations this stuck form could be a reduct of, each settled and none answering.
             #[cfg(feature = "profile")]
-            if let asked @ 1.. = kernel.reachable_refinements(&canonical) {
+            if let asked @ 1.. = kernel.reachable_refinements(&canonical, &proofs) {
                 curios_profile::sample!("whnf::missed_lookup", asked);
             }
             return Ok(None);
@@ -283,6 +285,30 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
 
         kernel.settle_refinement(index, key)?;
     }
+}
+
+/// What the equation at `index` says of the stuck form `term`, its reduced spelling `key` and its case `value`: the shared rule's answer, and where the rule hands a question back, the kernel's conversion's — unless reduction is plain, which asks nothing.
+///
+/// The elaborator's reducer takes the same steps in the same order, each checker asking its own conversion.
+fn answered(
+    kernel: &mut Kernel,
+    index: usize,
+    term: &Term,
+    key: &Term,
+    value: &Term,
+) -> Result<Option<Term>, ReduceError> {
+    Ok(match answers(kernel, term, key, value)? {
+        Answered::Value(value) => Some(value),
+        Answered::Silent => None,
+        _ if kernel.plain() => None,
+        Answered::Atoms(atoms) => {
+            let classes = asked_classes(kernel, &atoms)?;
+            answers_classed(kernel, term, key, value, &classes)?
+        }
+        Answered::Whole => kernel
+            .asked_scrutinee(index, term, key)?
+            .then(|| value.clone()),
+    })
 }
 
 /// Report, under `profile`, what a stuck operation would put to the kernel's conversion were reduction to class its atoms: how many atoms the readers read in it, where some two of them may be one. Counted before the rule that asks, so what the rule costs over `/std` is known first.

@@ -9,17 +9,17 @@
 use {
     curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
     curios_analysis::{
-        Coverage, Declarations, Invert, Judge, PositivityRefusal, answers, group_totality,
-        invert_indices, positivity_vectors, solve_indices, struct_reaches_itself,
-        test_support::SYNTAX,
+        Answered, Coverage, Declarations, Invert, Judge, PositivityRefusal, answers,
+        answers_classed, group_totality, invert_indices, positivity_vectors, solve_indices,
+        struct_reaches_itself, test_support::SYNTAX,
     },
     curios_cert::Kernel,
     curios_core::{
-        Apply, Argument, Atom, Bang, Carrier, Cases, Exhaustion, Field, Free, Global, InductArm,
-        InductDecl, InductParam, InductType, Infix, Instance, InstanceHead, Intrinsic, Many, Match,
-        MatchResult, Metavar, MetavarId, MetavarOrigin, Nat, Polarity, Proj, Rec, Scope, Struct,
-        StructDecl, StructEntry, StructType, Subterm, Telescope, Term, Three, Totality, Transient,
-        Tuple, Two, UniverseContext, Var, Variant,
+        Apply, Argument, Atom, Bang, Carrier, Cases, Classes, Exhaustion, Field, Free, Global,
+        InductArm, InductDecl, InductParam, InductType, Infix, Instance, InstanceHead, Intrinsic,
+        Many, Match, MatchResult, Metavar, MetavarId, MetavarOrigin, Nat, Polarity, Proj, Rec,
+        Scope, Struct, StructDecl, StructEntry, StructType, Subterm, Telescope, Term, Three,
+        Totality, Transient, Tuple, Two, UniverseContext, Var, Variant,
     },
     curios_num::{Grain, Natural},
     curios_utilities::{InfixOp, Plicity, Qualifier},
@@ -1528,26 +1528,26 @@ fn an_equation_answers_a_term_the_readers_hold_equal_to_its_key() {
 
     assert_eq!(
         answers(&mut kernel, &key, &key, &truth(true)),
-        Ok(Some(truth(true)))
+        Ok(Answered::Value(truth(true)))
     );
     assert_eq!(
         answers(&mut kernel, &commuted, &key, &truth(true)),
-        Ok(Some(truth(true))),
+        Ok(Answered::Value(truth(true))),
         "a sum commuted is the key's comparison"
     );
     assert_eq!(
         answers(&mut kernel, &dual, &key, &truth(true)),
-        Ok(Some(truth(false))),
+        Ok(Answered::Value(truth(false))),
         "the dual of a guard that holds does not"
     );
     assert_eq!(
         answers(&mut kernel, &dual, &key, &truth(false)),
-        Ok(Some(truth(true))),
+        Ok(Answered::Value(truth(true))),
         "and the dual of one that fails holds"
     );
     assert_eq!(
         answers(&mut kernel, &other, &key, &truth(true)),
-        Ok(None),
+        Ok(Answered::Silent),
         "a comparison over another atom is another comparison"
     );
 
@@ -1555,7 +1555,85 @@ fn an_equation_answers_a_term_the_readers_hold_equal_to_its_key() {
     let total = sum(&a, &b);
     assert_eq!(
         answers(&mut kernel, &sum(&b, &a), &total, &nat(0)),
-        Ok(Some(nat(0)))
+        Ok(Answered::Value(nat(0)))
     );
-    assert_eq!(answers(&mut kernel, &commuted, &total, &nat(0)), Ok(None));
+    assert_eq!(
+        answers(&mut kernel, &commuted, &total, &nat(0)),
+        Ok(Answered::Silent)
+    );
+}
+
+/// Past what the readers decide, the rule hands a question back and calls no judgment: the atoms of two operations of one kind, where some two may be one, and the whole pair where the two are no operations of the algebra and their heads say they may be one term. Asked again with the atoms classed, it reads the pair one spelling to a class, for the key and for the key negated. What cannot be one term is answered with silence, so a checker is asked nothing about it.
+///
+/// The judge here stands for a checker's conversion and says every pair it is asked about is one, so what is held is the rule's half: which pairs it asks about, and what it makes of the answer.
+#[test]
+fn an_equation_hands_back_what_its_checker_is_to_ask() {
+    let mut kernel = kernel();
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let [a, b, f, g, x] = [1, 2, 3, 4, 5].map(|index| Free::local(index, None));
+    for binder in [&a, &b] {
+        kernel.assume(binder, &nat_type);
+    }
+    let unary = Term::func_type([(x, nat_type.clone())], nat_type);
+    for binder in [&f, &g] {
+        kernel.assume(binder, &unary);
+    }
+    let nat = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
+    let truth = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+    let call = |head: &Free, left: &Free, right: &Free| {
+        let sum = Intrinsic::nat_add(Term::free_var(left), Term::free_var(right));
+        Term::apply(Term::free_var(head), [Term::intrinsic(sum)])
+    };
+
+    let key = Term::intrinsic(Intrinsic::nat_lt(call(&f, &a, &b), nat(10)));
+    let respelled = Term::intrinsic(Intrinsic::nat_lt(call(&f, &b, &a), nat(10)));
+    let dual = Term::intrinsic(Intrinsic::nat_lte(nat(10), call(&f, &b, &a)));
+    let other = Term::intrinsic(Intrinsic::nat_lt(call(&g, &b, &a), nat(10)));
+
+    let Ok(Answered::Atoms(atoms)) = answers(&mut kernel, &respelled, &key, &truth(true)) else {
+        panic!("two calls of one head may be one, and which is the checker's to say");
+    };
+    assert!(atoms.contains(&call(&f, &b, &a)) && atoms.contains(&call(&f, &a, &b)));
+    assert_eq!(
+        answers(&mut kernel, &other, &key, &truth(true)),
+        Ok(Answered::Silent),
+        "two heads are two atoms to every checker"
+    );
+
+    let Ok(one) = Classes::of(&atoms, |_, _| Ok::<_, std::convert::Infallible>(true));
+    assert_eq!(
+        answers_classed(&mut kernel, &respelled, &key, &truth(true), &one),
+        Ok(Some(truth(true)))
+    );
+    assert_eq!(
+        answers_classed(&mut kernel, &dual, &key, &truth(true), &one),
+        Ok(Some(truth(false))),
+        "the dual over the classed atom is the key negated"
+    );
+    let Ok(apart) = Classes::of(&atoms, |_, _| Ok::<_, std::convert::Infallible>(false));
+    assert_eq!(
+        answers_classed(&mut kernel, &respelled, &key, &truth(true), &apart),
+        Ok(None),
+        "atoms a checker holds apart leave the pair as it was"
+    );
+
+    // No operation of the algebra on either side: the whole pair is the question, or there is none.
+    assert_eq!(
+        answers(&mut kernel, &call(&f, &b, &a), &call(&f, &a, &b), &nat(0)),
+        Ok(Answered::Whole)
+    );
+    assert_eq!(
+        answers(&mut kernel, &call(&g, &b, &a), &call(&f, &a, &b), &nat(0)),
+        Ok(Answered::Silent)
+    );
+    assert_eq!(
+        answers(&mut kernel, &Term::free_var(&a), &call(&f, &a, &b), &nat(0)),
+        Ok(Answered::Silent)
+    );
+    // Nor two formers: a spelling still to be unfolded is put to nothing until it is reduced, or every stuck form beside it would be a question.
+    let projected = Term::proj(Term::free_var(&a), 0);
+    assert_eq!(
+        answers(&mut kernel, &projected, &call(&f, &a, &b), &nat(0)),
+        Ok(Answered::Silent)
+    );
 }

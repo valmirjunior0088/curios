@@ -395,8 +395,9 @@ impl fmt::Display for Displayed<'_> {
 impl Env for Kernel {
     type Error = Error;
 
+    /// Plain reduction, as the seam asks: a shared analysis borrows no opinion of the kernel's conversion through the term it reads.
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {
-        Ok(self.reduce_forced(term.clone())?)
+        Ok(self.plainly(|kernel| kernel.reduce_forced(term.clone()))?)
     }
 
     fn assumption(&self, name: &Free) -> Option<&Term> {
@@ -508,7 +509,7 @@ impl Kernel {
     ///
     /// The one hit that cannot fail, because it spends no steps: the kernel did not perform this computation, and charging it what a memo-free evaluator would have spent would run a budget out on work nobody did. [`Spend::charge_nothing`] and [`Memos`] state the two halves of why that is safe.
     pub(crate) fn whnf_hit(&mut self, term: &Term, forced: bool) -> Option<Term> {
-        let replay = self.memos.whnf(term, forced)?;
+        let replay = self.memos.whnf(term, forced, self.scope.plain())?;
 
         Some(self.spend.charge_nothing(replay))
     }
@@ -554,10 +555,13 @@ impl Kernel {
 
     /// The remembered verdict of comparing `this` with `that` at `type_`, under the lives a typing has. Only a verdict reached with no goal in progress assumed is ever filed, so it is the verdict under whatever goals are in progress now.
     pub(crate) fn convert_hit(&self, type_: &Term, this: &Term, that: &Term) -> Option<bool> {
-        self.standing(
-            self.memos
-                .converted(type_, this, that, self.has_refinements()),
-        )
+        self.standing(self.memos.converted(
+            type_,
+            this,
+            that,
+            self.has_refinements(),
+            self.scope.plain(),
+        ))
     }
 
     /// Remember the verdict of comparing `this` with `that` at `type_`.
@@ -565,14 +569,18 @@ impl Kernel {
         self.memos.store_converted(
             (type_.clone(), this.clone(), that.clone()),
             self.has_refinements(),
+            self.scope.plain(),
             self.scope.prefix(),
             verdict,
         );
     }
 
-    /// The remembered sort of `type_`, with nothing spent and nothing minted, as a remembered type is handed back: a sort's hit replays nothing for [`Kernel::infer_hit`]'s reason. A local-free type's is the declaration's; one read off the scope, for a type naming a local, is taken only while the binders it was read under stand.
+    /// The remembered sort of `type_`, with nothing spent and nothing minted, as a remembered type is handed back: a sort's hit replays nothing for [`Kernel::infer_hit`]'s reason. A local-free type's, read with no case equation in force, is the declaration's; one read off the scope, for a type naming a local or under an equation, is taken only while the binders it was read under stand.
     pub(crate) fn sort_hit(&self, type_: &Term) -> Option<Sort> {
-        self.standing(self.memos.sort(type_))
+        self.standing(
+            self.memos
+                .sort(type_, self.has_refinements(), self.scope.plain()),
+        )
     }
 
     /// A remembered answer, where it is the declaration's or the binders it was read under all still stand.
@@ -586,14 +594,21 @@ impl Kernel {
 
     /// Remember `type_`'s sort, beside the binders in scope now.
     pub(crate) fn sort_store(&mut self, type_: Term, sort: Sort) {
-        self.memos.store_sort(type_, self.scope.prefix(), sort);
+        self.memos.store_sort(
+            type_,
+            self.has_refinements(),
+            self.scope.plain(),
+            self.scope.prefix(),
+            sort,
+        );
     }
 
     /// Remember a `term`'s weak-head reduct and the identities computing it minted.
     ///
     /// **Stored for nothing.** [`Memos::begin_declaration`] clears the table exactly where [`Spend::restore_budget`] fires, and every node it holds was built under that budget, which charges a construction what it builds — so the budget that built an entry is its bound. Charging it besides, against a compilation-wide allowance at the tree footprint of key and reduct, would bill entries that die with the declaration, and bill them by their trees where a reduct is a graph whose tree has `2^n` nodes.
     pub(crate) fn whnf_store(&mut self, term: Term, forced: bool, replay: Replay) {
-        self.memos.store_whnf(term, forced, replay);
+        self.memos
+            .store_whnf(term, forced, self.scope.plain(), replay);
     }
 
     /// The heaviest declaration this kernel has walked — what it spent, and how deep it went.
@@ -885,19 +900,53 @@ impl Kernel {
     }
 
     /// The equations in force whose reduced spelling is settled and that `candidate` could be a reduct of, innermost first, each as its position, that spelling and its value.
-    pub(crate) fn settled_refinements(&self, candidate: &Term) -> Vec<(usize, Term, Term)> {
-        self.scope.settled_refinements(candidate)
+    pub(crate) fn settled_refinements(
+        &self,
+        candidate: &Term,
+        proofs: &[Free],
+    ) -> Vec<(usize, Term, Term)> {
+        self.scope.settled_refinements(candidate, proofs)
+    }
+
+    /// The binders `term` names that are themselves proofs: opened at a proposition, so conversion reads them nowhere, and a stuck form naming one the key of an equation does not may still be that key's term (`curios_analysis::could_reduce_to`).
+    ///
+    /// **Each binder is asked once**, where a stuck form naming it first reaches the equations in force, and remembered with the binder. It is asked by plain reduction, which no question interrupts, and counted not a proof while it is being asked, so a type whose classification comes back to its own binder ends there, toward refusal. A failure that is no exhaustion of the budget is that the binder is not known to be a proof.
+    pub(crate) fn proofs_named(&mut self, term: &Term) -> Result<Vec<Free>, ReduceError> {
+        let mut proofs = Vec::new();
+        for name in term.free_vars_shared().iter() {
+            let proof = match self.scope.classified(name) {
+                Some(proof) => proof,
+                None => {
+                    let Some(type_) = self.scope.local_type(name).cloned() else {
+                        continue;
+                    };
+                    self.scope.classify(name, false);
+                    let sort = self.plainly(|kernel| Sort::of(kernel, &type_));
+                    let proof = sort.probed_refusal()?.is_some_and(|sort| sort.is_prop());
+                    self.scope.classify(name, proof);
+                    proof
+                }
+            };
+            if proof {
+                proofs.push(*name);
+            }
+        }
+        Ok(proofs)
     }
 
     /// The innermost equation in force whose reduced spelling has not been asked for and could be `candidate`, as its position and the term to reduce.
-    pub(crate) fn unasked_refinement(&self, candidate: &Term) -> Option<(usize, Term)> {
-        self.scope.unasked_refinement(candidate)
+    pub(crate) fn unasked_refinement(
+        &self,
+        candidate: &Term,
+        proofs: &[Free],
+    ) -> Option<(usize, Term)> {
+        self.scope.unasked_refinement(candidate, proofs)
     }
 
     /// How many equations in force `candidate` could be a reduct of.
     #[cfg(feature = "profile")]
-    pub(crate) fn reachable_refinements(&self, candidate: &Term) -> usize {
-        self.scope.reachable_refinements(candidate)
+    pub(crate) fn reachable_refinements(&self, candidate: &Term, proofs: &[Free]) -> usize {
+        self.scope.reachable_refinements(candidate, proofs)
     }
 
     /// Settle the reduced spelling of the equation at `index`, reducing `key` with that equation — and every equation inside it — withheld.
@@ -908,11 +957,11 @@ impl Kernel {
     pub(crate) fn settle_refinement(&mut self, index: usize, key: Term) -> Result<(), ReduceError> {
         // Withholding equations is a change to the set in force, and so is restoring them: the local-bearing reducts remembered on either side of the settlement must not answer on the other.
         let outer = self.scope.hide_refinements_from(index);
-        self.memos.begin_equations();
+        self.narrowed();
         // The reduced spelling is held operand-canonical, the form `refined_reduct` brings a probed value to before comparing — see `canonical_operands`.
         let reduct = whnf(self, key).and_then(|reduct| whnf::canonical_operands(self, &reduct));
         self.scope.show_refinements(outer);
-        self.memos.begin_equations();
+        self.narrowed();
 
         match reduct.probed() {
             Ok(settled) => {
@@ -924,6 +973,55 @@ impl Kernel {
                 Err(spent)
             }
         }
+    }
+
+    /// The equations in force were narrowed, or restored, for the reduction running now: what it read off the scope on the other side of that line goes. Only plain reduction runs inside a span of it ([`Kernel::plainly`]), so there what plain reduction remembered goes alone, and what a judgment's reduction remembered stands when the span ends.
+    fn narrowed(&mut self) {
+        match self.scope.plain() {
+            true => self.memos.begin_plain(),
+            false => self.memos.begin_equations(),
+        }
+    }
+
+    /// Whether reduction is plain: it asks the kernel's conversion nothing ([`Kernel::plainly`]).
+    pub(crate) fn plain(&self) -> bool {
+        self.scope.plain()
+    }
+
+    /// Run `read` with reduction plain: it asks the kernel's conversion nothing, at a stuck fold or at a missed equation.
+    ///
+    /// **Two readers need it.** A question reduction puts to conversion is answered by plain reduction: conversion reduces, and left to ask again, a term that reaches itself through an unfolding would be asked about without end, so a question is one conversion the budget bounds, over the reduction that stood before reduction asked anything. And a shared analysis reads a term by it (`Env::force`): conversion's proof irrelevance and its recurrence rule are sound because acceptance waits on totality, which must therefore read terms on no verdict of conversion's.
+    ///
+    /// **Each of the two reductions keeps its own answers.** A local-bearing reduct is remembered by the reduction that took it, and so are a sort and a comparison's verdict, which are read through reducts ([`Memos`]); an equation's reduced spelling is settled once for each ([`Scope::plain`]). So what plain reduction made of a term never answers for a judgment's, nor the other way, and no answer depends on which of the two asked first.
+    ///
+    /// **Nothing is typed under it.** A question is a conversion, which reduces and reads a neutral's sort off its head, and an analysis only reduces. So the types and the checks the kernel remembers, and the erased halves it classifies positions by, are a judgment's alone, and none is filed twice ([`Kernel::record_checked`] holds the line).
+    pub(crate) fn plainly<T>(&mut self, read: impl FnOnce(&mut Self) -> T) -> T {
+        let previous = self.scope.begin_plain();
+        let answer = read(self);
+        self.scope.end_plain(previous);
+
+        answer
+    }
+
+    /// Whether `term` is the scrutinee of the equation at `index`, whose reduced spelling is `key`, as reduction asks conversion of two stuck forms that are no operations of the algebra.
+    ///
+    /// Compared with that equation and every equation inside it withheld, which is the view the spelling was settled under ([`Kernel::settle_refinement`]): under its own equation the key reduces to the case value, and nothing would convert with it.
+    pub(crate) fn asked_scrutinee(
+        &mut self,
+        index: usize,
+        term: &Term,
+        key: &Term,
+    ) -> Result<bool, ReduceError> {
+        curios_profile::profile!("kernel::asked_scrutinee");
+        self.plainly(|kernel| {
+            let outer = kernel.scope.hide_refinements_from(index);
+            kernel.narrowed();
+            let same = convert::grounded(kernel, term, key);
+            kernel.scope.show_refinements(outer);
+            kernel.narrowed();
+
+            same
+        })
     }
 
     /// Whether any arm's case equation is currently assumed — the judgment-side half of the closed machine's gate.
@@ -1019,20 +1117,29 @@ impl Kernel {
     ///
     /// Called from both `check` and `infer`, because a term's type is its type however the judgment reached it. The orchestration lives here rather than on [`Positions`] because the middle of it — `erased_half` — needs the whole kernel; see `Positions::begin` on why that bracket cannot be a closure.
     pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) -> Option<usize> {
+        // Typing is a judgment's: nothing is typed under plain reduction (`Kernel::plainly`), which is why the positions classified here and the types remembered beside them are filed once.
+        debug_assert!(
+            !self.scope.plain(),
+            "a term was typed under plain reduction"
+        );
         if self.positions.suppressed() {
             return None;
         }
 
         // The half is filed under the type by value, as its sort is.
         let type_ = &self.by_value(type_);
-        let erased = match self.standing(self.memos.half(type_)) {
+        let erased = match self.standing(self.memos.half(type_, self.has_refinements())) {
             Some(erased) => erased,
             None => {
                 self.positions.begin();
                 let outcome = erased_half(self, type_);
                 let erased = self.positions.settle(outcome);
-                self.memos
-                    .store_half(type_.clone(), self.scope.prefix(), erased);
+                self.memos.store_half(
+                    type_.clone(),
+                    self.has_refinements(),
+                    self.scope.prefix(),
+                    erased,
+                );
 
                 erased
             }

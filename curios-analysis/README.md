@@ -18,7 +18,7 @@ Discovery, the elaborator's way of finding a group's calls, is the one walk whos
 
 ### What a checker supplies for itself is `Env`
 
-**Decision.** What an analysis reads beyond the terms it is handed arrives through the `Env` trait: reduction (`force`), the local context (`assumption`, `is_local`, and `unfold` through a local's definition), fresh binders, and the registry fallback for declarations outside the analyzed set. `curios-elab` implements it over its elaboration `Context`, `curios-cert` over its `Kernel`.
+**Decision.** What an analysis reads beyond the terms it is handed arrives through the `Env` trait: reduction (`force`), the local context (`assumption`, `is_local`, and `unfold` through a local's definition), fresh binders, and the registry fallback for declarations outside the analyzed set. `curios-elab` implements it over its elaboration `Context`, `curios-cert` over its `Kernel`. `force` is plain reduction on both sides: it asks the checker's conversion nothing, so no analysis borrows a verdict through the term it reads ([Definitional proof irrelevance](../documentation/design/soundness/conversion/definitional-proof-irrelevance.md)).
 
 **Rationale.** These are where the two checkers' inputs differ — one reduces with metavariables and a refinement layer in reach, the other with neither and against a budget it must not exceed, and one keeps a `let` as a local definition where the other has substituted it away. Everything above them is one decision procedure, so no rule here has to know which checker is asking.
 

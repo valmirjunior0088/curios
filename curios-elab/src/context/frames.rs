@@ -172,7 +172,9 @@ pub(crate) struct Frames {
     /// **It lives as long as its entry, and is forgotten by what can change what its key reduces to.** A spelling is settled with its entry's frame and every frame inside it withheld, and read only through the window, so it rests on the refinements of the frames outside its entry — which cannot change while the entry stands: a registration lands in the innermost frame, and a frame leaves after every frame inside it — and on what reduction reads of everything else: the definitions, the solutions and the universe levels. So a registration, the exit of an inner frame and a suppression bracket leave it alone, and it is forgotten with its frame, where its key is registered again, at a redefinition, a rollback and a universe rewrite, and at a declaration's boundary, which nothing a budget paid for outlives. A fresh definition forgets the spellings naming it, as it does the reducts; and one settled while its key or its reduct held an unsolved metavariable is asked for again once a solution has landed.
     ///
     /// An entry is visible under one window floor only, the one in force where it was registered: a suppression bracket and a retry frame hide every frame that stood when they began, and leave after every frame entered inside them. So a spelling is never read under a floor other than the one it was settled under.
-    scrutinee_spellings: Vec<HashMap<Term, Spelling>>,
+    ///
+    /// **Settled once for each of the two reductions**, the key saying which (`Context::plainly`): a probe is compared with the spelling reduced the way the probe was, as the kernel settles an equation's reduct once for each.
+    scrutinee_spellings: Vec<HashMap<(Term, bool), Spelling>>,
     /// How much of the refinement stack is withheld, as the frame depth suppression began at — `None` for none of it.
     ///
     /// A depth rather than a flag, because the refinements a re-validation meets are not all of one kind. The *ambient* ones — the arm the solver is currently inside — are counterfactual with respect to a solution for a metavariable born elsewhere, and withholding them is the whole point (`Convert::solve_at_birth`). Above this depth sit the ones the metavariable was born under, reinstalled by `Context::with_refinements`, and the candidate's own: `check` descending into a match arm of the term being validated re-establishes exactly the equalities that made that arm's body well-typed where it was written. Withholding those rejects correct solutions — a proof discharged by reduction inside an arm, `True/qed()` against `Holds(0 < Bytes/len(b))` in `/std/Str`'s scan fold, fails to re-check and the solution is thrown away — so suppression stops at the depth it started from.
@@ -569,24 +571,28 @@ impl Frames {
     pub(crate) fn refine_scrutinee(&mut self, canonical: Term, entry: ScrutineeEntry) {
         self.refinement_stamp.fresh();
         // A key registered again is another entry, and what the one before it settled to is not its spelling.
-        self.scrutinee_spellings
-            .last_mut()
-            .unwrap()
-            .remove(&canonical);
+        let spellings = self.scrutinee_spellings.last_mut().unwrap();
+        for plain in [false, true] {
+            spellings.remove(&(canonical.clone(), plain));
+        }
         self.refinement_scrutinees
             .last_mut()
             .unwrap()
             .insert(canonical, entry);
     }
 
-    /// The reduced spelling settled for the entry `key` registered in `frame`: `None` where no probe has asked for it — or it held an unsolved metavariable and a solution has landed since, `solved` being how many are committed now — and `Some(None)` where reducing it refused.
+    /// The reduced spelling settled for the entry `key` registered in `frame`, by plain reduction where `plain` and by a judgment's otherwise: `None` where no probe has asked for it — or it held an unsolved metavariable and a solution has landed since, `solved` being how many are committed now — and `Some(None)` where reducing it refused.
     pub(crate) fn settled_spelling(
         &self,
         frame: usize,
         key: &Term,
+        plain: bool,
         solved: usize,
     ) -> Option<&Option<Settled>> {
-        let spelling = self.scrutinee_spellings.get(frame)?.get(key)?;
+        let spelling = self
+            .scrutinee_spellings
+            .get(frame)?
+            .get(&(key.clone(), plain))?;
 
         spelling
             .solved
@@ -594,16 +600,17 @@ impl Frames {
             .then_some(&spelling.settled)
     }
 
-    /// File what the entry `key` registered in `frame` settled to. `solved` is how many solutions were committed, where the key or the spelling held an unsolved metavariable.
+    /// File what the entry `key` registered in `frame` settled to under the reduction `plain` names. `solved` is how many solutions were committed, where the key or the spelling held an unsolved metavariable.
     pub(crate) fn settle_spelling(
         &mut self,
         frame: usize,
         key: Term,
+        plain: bool,
         settled: Option<Settled>,
         solved: Option<usize>,
     ) {
         if let Some(spellings) = self.scrutinee_spellings.get_mut(frame) {
-            spellings.insert(key, Spelling { settled, solved });
+            spellings.insert((key, plain), Spelling { settled, solved });
         }
     }
 

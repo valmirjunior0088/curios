@@ -534,3 +534,77 @@ fn a_withheld_equation_stays_withheld_where_its_refinements_are_installed_again(
         "the arm that closed it does not"
     );
 }
+
+/// An elaboration is remembered by the reduction it ran under, in the cache and in an oracle's table: a run under plain reduction, which asks the elaborator's conversion nothing, is not answered from what a judgment's run remembered, nor a judgment's from plain reduction's. A judgment's run may rest on a fold or an equation its conversion decided, which plain reduction refuses, and asking writes nothing, so the purity gate lets such a run in.
+///
+/// Mutation-checked for each table: with its key read as a judgment's whichever reduction asks, the plain run is answered by the judgment's.
+#[test]
+fn an_elaboration_is_remembered_by_the_reduction_it_ran_under() {
+    let mut context = context();
+    // Two terms, so the oracle's half is not answered from what the cache's half remembered.
+    let kept = Term::intrinsic(Intrinsic::nat_add(nat(), nat()));
+    let written = Term::intrinsic(Intrinsic::NatMul(nat(), nat()));
+    let elaborate_pure = |context: &mut Context, runs: &mut usize| {
+        context
+            .get_or_init_elaborated(&kept, None, |_| {
+                *runs += 1;
+                Ok::<_, ()>((kept.clone(), Term::type_ground()))
+            })
+            .expect("the run succeeds");
+    };
+    let elaborate_writing = |context: &mut Context, runs: &mut usize| {
+        context
+            .get_or_init_elaborated(&written, None, |context| {
+                *runs += 1;
+                let hole = context.mint_metavar();
+                context.birth_metavar(hole, Vec::new(), nat());
+                Ok::<_, ()>((written.clone(), Term::type_ground()))
+            })
+            .expect("the run succeeds");
+    };
+    // A judgment's run, plain reduction's twice, and a judgment's again: one run each where each keeps its own.
+    let across = |context: &mut Context, elaborate: &dyn Fn(&mut Context, &mut usize)| {
+        let (mut judged, mut plain) = (0, 0);
+        elaborate(context, &mut judged);
+        context.plainly(|context| {
+            elaborate(context, &mut plain);
+            elaborate(context, &mut plain);
+        });
+        elaborate(context, &mut judged);
+        (judged, plain)
+    };
+
+    assert_eq!(across(&mut context, &elaborate_pure), (1, 1));
+    let inside = context.with_oracle(&Refinements::default(), |context| {
+        across(context, &elaborate_writing)
+    });
+    assert_eq!(inside, (1, 1));
+}
+
+/// A sort is remembered by the reduction that read it, as an elaboration is: what plain reduction classified is not answered where a judgment asks, nor a judgment's where plain reduction does.
+///
+/// Mutation-checked both ways: with the table read as a judgment's whichever reduction asks, plain reduction finds nothing of what it filed, and with the answer filed there whichever reduction read it, a judgment is handed plain reduction's.
+#[test]
+fn a_sort_is_remembered_by_the_reduction_that_read_it() {
+    let mut context = context();
+    let read = Term::intrinsic(Intrinsic::BoolType);
+    let judged = Term::prop();
+
+    context
+        .plainly(|context| Sort::of(context, &read))
+        .expect("classifies");
+    assert!(context.cached_sort(&read).is_none());
+    assert!(
+        context
+            .plainly(|context| context.cached_sort(&read))
+            .is_some()
+    );
+
+    Sort::of(&mut context, &judged).expect("classifies");
+    assert!(
+        context
+            .plainly(|context| context.cached_sort(&judged))
+            .is_none()
+    );
+    assert!(context.cached_sort(&judged).is_some());
+}

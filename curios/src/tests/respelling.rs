@@ -169,25 +169,32 @@ const GUARDS: &[Guard] = &[
         guard: "f(a + b) < 10",
         respelled: "f(b + a) < 10",
         dual: Some("10 <= f(b + a)"),
-        refused: &[Arm::Qed, Arm::Proved, Arm::Term, Arm::Type, Arm::Dual],
+        refused: &[],
     },
     Guard {
         guard: "w(a, p1) < 5",
         respelled: "w(a, p2) < 5",
         dual: Some("5 <= w(a, p2)"),
-        refused: &[Arm::Qed, Arm::Proved, Arm::Term, Arm::Type, Arm::Dual],
+        refused: &[],
     },
     Guard {
         guard: "u((x) => x + a) < 5",
         respelled: "u((x) => a + x) < 5",
         dual: Some("5 <= u((x) => a + x)"),
-        refused: &[Arm::Qed, Arm::Proved, Arm::Term, Arm::Type, Arm::Dual],
+        refused: &[],
     },
     Guard {
         guard: "Nat/in_range(a + b, 1, 5)",
         respelled: "Nat/in_range(b + a, 1, 5)",
         dual: None,
-        refused: &[Arm::Qed, Arm::Proved, Arm::Term, Arm::Type],
+        refused: &[],
+    },
+    // What the filter in front of an equation still gives up: `c` stands where reduction erases it, and it is no proof.
+    Guard {
+        guard: "f(b) < 10",
+        respelled: "f(b + 0 * c) < 10",
+        dual: Some("10 <= f(b + 0 * c)"),
+        refused: &[Arm::Qed, Arm::Proved, Arm::Term, Arm::Type, Arm::Dual],
     },
 ];
 
@@ -283,39 +290,21 @@ const ATOMS: &[Atoms] = &[
         right: "f(b + a)",
         zero: "0",
         nat: true,
-        refused: &[
-            Fold::Equal,
-            Fold::AtMost,
-            Fold::Difference,
-            Fold::Match,
-            Fold::Switch,
-        ],
+        refused: &[Fold::Equal, Fold::AtMost, Fold::Difference, Fold::Match],
     },
     Atoms {
         left: "w(a, p1)",
         right: "w(a, p2)",
         zero: "0",
         nat: true,
-        refused: &[
-            Fold::Equal,
-            Fold::AtMost,
-            Fold::Difference,
-            Fold::Match,
-            Fold::Switch,
-        ],
+        refused: &[Fold::Equal, Fold::AtMost, Fold::Difference, Fold::Match],
     },
     Atoms {
         left: "u((x) => x + a)",
         right: "u((x) => a + x)",
         zero: "0",
         nat: true,
-        refused: &[
-            Fold::Equal,
-            Fold::AtMost,
-            Fold::Difference,
-            Fold::Match,
-            Fold::Switch,
-        ],
+        refused: &[Fold::Equal, Fold::AtMost, Fold::Difference, Fold::Match],
     },
     Atoms {
         left: "v(i + j)",
@@ -422,7 +411,7 @@ const SUBSTITUTIONS: &[Substitution] = &[
         case: "true",
         other: "false",
         at_case: "g(true) < 5",
-        refused: &[Under::AtCase],
+        refused: &[],
         kernel: &[],
     },
 ];

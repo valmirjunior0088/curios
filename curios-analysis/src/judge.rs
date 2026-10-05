@@ -50,6 +50,8 @@ pub trait Env {
     /// Reduce to weak-head normal form, then force a `rec` head — a position that demands a value rather than a normal form.
     ///
     /// Each side supplies its own strategy: which definitions unfold, what a step costs, whether a refinement is in scope. Only the *result* is shared.
+    ///
+    /// **Plain reduction: it asks its checker's conversion nothing.** Where a judgment reduces, a stuck fold's atoms and a missed case equation are put to the checker's own conversion; here they are not. Nothing this trait answers is a judgment, and that has to stay true of a reduct: totality reads terms through this method, and conversion's proof irrelevance and its recurrence rule are sound because a program is accepted only once totality has passed, an argument that holds only while totality's own reading rests on no verdict of conversion's.
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error>;
 
     /// The type `name` was assumed at, or `None` for a name not in scope.

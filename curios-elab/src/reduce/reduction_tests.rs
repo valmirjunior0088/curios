@@ -1141,3 +1141,309 @@ fn a_guard_answers_a_term_the_readers_hold_equal_to_it() {
         Ok(Some(false))
     );
 }
+
+/// The binders and terms the tests of what reduction asks conversion share, as the kernel's `whnf::equations_tests` has them: `a`, `b`, `c` at `Nat`, `f: (Nat) -> Nat` and `h: (Bool) -> Nat`.
+struct Asked {
+    a: Free,
+    b: Free,
+    c: Free,
+    f: Free,
+    h: Free,
+}
+
+impl Asked {
+    fn over(context: &mut Context) -> Self {
+        let asked = Asked {
+            a: context.fresh(Some("a")),
+            b: context.fresh(Some("b")),
+            c: context.fresh(Some("c")),
+            f: context.fresh(Some("f")),
+            h: context.fresh(Some("h")),
+        };
+        let x = context.fresh(Some("x"));
+        let flag = context.fresh(Some("flag"));
+        let nat_type = Term::intrinsic(Intrinsic::NatType);
+        for binder in [&asked.a, &asked.b, &asked.c] {
+            context.assume(binder, &nat_type);
+        }
+        context.assume(
+            &asked.f,
+            &Term::func_type([(x, nat_type.clone())], nat_type.clone()),
+        );
+        context.assume(
+            &asked.h,
+            &Term::func_type([(flag, Term::intrinsic(Intrinsic::BoolType))], nat_type),
+        );
+        asked
+    }
+
+    /// `h(flag) < 5`.
+    fn over_flag(&self, flag: Term) -> Term {
+        Term::intrinsic(Intrinsic::nat_lt(
+            Term::apply(Term::free_var(&self.h), [flag]),
+            nat(5),
+        ))
+    }
+
+    fn call(&self, left: &Free, right: &Free) -> Term {
+        Term::apply(
+            Term::free_var(&self.f),
+            [Term::intrinsic(Intrinsic::nat_add(
+                Term::free_var(left),
+                Term::free_var(right),
+            ))],
+        )
+    }
+
+    fn guard(&self) -> Term {
+        Term::intrinsic(Intrinsic::nat_lt(self.call(&self.a, &self.b), nat(10)))
+    }
+
+    fn respelled(&self) -> Term {
+        Term::intrinsic(Intrinsic::nat_lt(self.call(&self.b, &self.a), nat(10)))
+    }
+
+    /// Register the guard as holding, for the frame `inside` runs in.
+    fn under<T>(&self, context: &mut Context, inside: impl FnOnce(&mut Context) -> T) -> T {
+        context.with_frame(|context| {
+            let guard = self.guard();
+            let canonical = canonical_scrutinee(context, &guard).unwrap();
+            context.refine_scrutinee_spellings(
+                vec![(canonical, guard, false)],
+                &Term::intrinsic(Intrinsic::Bool(true)),
+            );
+            inside(context)
+        })
+    }
+}
+
+/// A guard answers a term the elaborator's own conversion holds equal to its scrutinee: a call respelled in its argument, the guard's dual over that call, and — where the scrutinee is no operation of the algebra — the call itself. The kernel's `whnf::equations_tests` holds this proposition under this name.
+#[test]
+fn a_guard_answers_a_term_conversion_holds_equal_to_it() {
+    let mut context = context();
+    let asked = Asked::over(&mut context);
+    let decided =
+        |context: &mut Context, term: Term| reduce(context, term).map(|reduct| reduct.as_bool());
+
+    asked.under(&mut context, |context| {
+        assert_eq!(decided(context, asked.respelled()), Ok(Some(true)));
+        let dual = Term::intrinsic(Intrinsic::NatLe(nat(10), asked.call(&asked.b, &asked.a)));
+        assert_eq!(decided(context, dual), Ok(Some(false)));
+        let other = Term::intrinsic(Intrinsic::nat_lt(asked.call(&asked.a, &asked.c), nat(10)));
+        assert_eq!(decided(context, other), Ok(None));
+    });
+
+    context.with_frame(|context| {
+        let scrutinee = asked.call(&asked.a, &asked.b);
+        let canonical = canonical_scrutinee(context, &scrutinee).unwrap();
+        context.refine_scrutinee_spellings(vec![(canonical, scrutinee, false)], &nat(0));
+
+        assert_eq!(reduce(context, asked.call(&asked.b, &asked.a)), Ok(nat(0)));
+        let other = asked.call(&asked.a, &asked.c);
+        assert_eq!(reduce(context, other.clone()), Ok(other));
+    });
+}
+
+/// A shared analysis reads a term by plain reduction, which asks the elaborator's conversion nothing, in either order the two reductions are taken in: under a guard, the respelling a judgment's reduction answers by asking stays stuck through `Env::force`, so totality rests on no verdict of conversion's, and a reduct one of the two filed does not answer the other. The kernel's `whnf::equations_tests` holds the first half under this name.
+///
+/// Mutation-checked: with `Env::force` reducing as a judgment does the respelling is `true` to the analysis, and with the judgment's reduction table read whichever reduction asks, the judgment's `true` answers the analysis in the first order.
+#[test]
+fn a_shared_analysis_reads_a_term_by_reduction_that_asks_nothing() {
+    let mut context = context();
+    let asked = Asked::over(&mut context);
+    let judged =
+        |context: &mut Context| reduce(context, asked.respelled()).map(|reduct| reduct.as_bool());
+    let read = |context: &mut Context| {
+        curios_analysis::Env::force(context, &asked.respelled())
+            .ok()
+            .map(|reduct| reduct.as_bool())
+    };
+
+    asked.under(&mut context, |context| {
+        assert_eq!(judged(context), Ok(Some(true)));
+        assert_eq!(read(context), Some(None));
+    });
+    asked.under(&mut context, |context| {
+        assert_eq!(read(context), Some(None));
+        assert_eq!(judged(context), Ok(Some(true)));
+    });
+}
+
+/// A question reduction puts to conversion is answered by plain reduction, so an answer that needs a question answered inside a question is refused: under the guards `f(a + b) < 10` and `h(f(a + b) < 10) < 5`, the term `h(f(b + a) < 10) < 5` stays stuck, the second guard naming every binder it names. The kernel's `whnf::equations_tests` holds this proposition under this name.
+///
+/// Mutation-checked: with the lookup asking under plain reduction too, the question decides the argument and the term is `true`.
+#[test]
+fn a_question_is_answered_by_reduction_that_asks_nothing() {
+    let mut context = context();
+    let asked = Asked::over(&mut context);
+
+    asked.under(&mut context, |context| {
+        let guard = asked.over_flag(asked.guard());
+        let canonical = canonical_scrutinee(context, &guard).unwrap();
+        context.refine_scrutinee_spellings(
+            vec![(canonical, guard, false)],
+            &Term::intrinsic(Intrinsic::Bool(true)),
+        );
+
+        assert_eq!(
+            reduce(context, asked.respelled()).map(|reduct| reduct.as_bool()),
+            Ok(Some(true)),
+            "one question deep the argument is decided, or the refusal below proves nothing"
+        );
+        let nested = asked.over_flag(asked.respelled());
+        assert_eq!(
+            reduce(context, nested).map(|reduct| reduct.as_bool()),
+            Ok(None)
+        );
+    });
+}
+
+/// The binders the tests of a call under two proofs share, as the kernel's `whnf::equations_tests` has them: `a` at `Nat`, a proposition `bound`, two proofs of it, and `w: (n: Nat, at: bound) -> Nat`.
+struct Proved {
+    a: Free,
+    w: Free,
+    p1: Free,
+    p2: Free,
+}
+
+impl Proved {
+    fn over(context: &mut Context) -> Self {
+        let proved = Proved {
+            a: context.fresh(Some("a")),
+            w: context.fresh(Some("w")),
+            p1: context.fresh(Some("p1")),
+            p2: context.fresh(Some("p2")),
+        };
+        let bound = context.fresh(Some("bound"));
+        let n = context.fresh(Some("n"));
+        let at = context.fresh(Some("at"));
+        let nat_type = Term::intrinsic(Intrinsic::NatType);
+        let proposition = Term::free_var(&bound);
+        context.assume(&proved.a, &nat_type);
+        context.assume(&bound, &Term::prop());
+        context.assume(
+            &proved.w,
+            &Term::func_type([(n, nat_type.clone()), (at, proposition.clone())], nat_type),
+        );
+        context.assume(&proved.p1, &proposition);
+        context.assume(&proved.p2, &proposition);
+        proved
+    }
+
+    fn call(&self, proof: &Free) -> Term {
+        Term::apply(
+            Term::free_var(&self.w),
+            [Term::free_var(&self.a), Term::free_var(proof)],
+        )
+    }
+
+    fn below(&self, proof: &Free) -> Term {
+        Term::intrinsic(Intrinsic::nat_lt(self.call(proof), nat(10)))
+    }
+}
+
+/// Register `scrutinee` as assumed to be `value`, for the frame `inside` runs in.
+fn assumed<T>(
+    context: &mut Context,
+    scrutinee: Term,
+    value: Term,
+    inside: impl FnOnce(&mut Context) -> T,
+) -> T {
+    context.with_frame(|context| {
+        let canonical = canonical_scrutinee(context, &scrutinee).unwrap();
+        context.refine_scrutinee_spellings(vec![(canonical, scrutinee, false)], &value);
+        inside(context)
+    })
+}
+
+/// A guard answers a call under another proof of its bound, and so does a match on the call itself: the form names a proof the scrutinee does not, so it is no reduct of it, and the filter in front of every entry passes over a binder that is itself a proof. The kernel's `whnf::equations_tests` holds this proposition under this name.
+///
+/// Mutation-checked: with a proof counted as any other binder, both forms stay stuck.
+#[test]
+fn a_guard_answers_a_call_under_another_proof_of_its_bound() {
+    let mut context = context();
+    let proved = Proved::over(&mut context);
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
+
+    assumed(&mut context, proved.below(&proved.p1), truth, |context| {
+        assert_eq!(
+            reduce(context, proved.below(&proved.p2)).map(|reduct| reduct.as_bool()),
+            Ok(Some(true))
+        );
+    });
+    assumed(&mut context, proved.call(&proved.p1), nat(0), |context| {
+        assert_eq!(reduce(context, proved.call(&proved.p2)), Ok(nat(0)));
+    });
+}
+
+/// A form naming a binder the scrutinee does not, outside a proof, is put to no entry: `f(b + 0 * c) < 10` converts with the guard `f(b) < 10` and names `c`, which is no proof, so the form stays stuck. The kernel's `whnf::equations_tests` holds this proposition under this name.
+///
+/// Mutation-checked: with the filter passing every binder, the form is asked about and is `true`.
+#[test]
+fn a_form_naming_another_binder_outside_a_proof_is_put_to_no_equation() {
+    let mut context = context();
+    let asked = Asked::over(&mut context);
+    let below = |argument: Term| {
+        let call = Term::apply(Term::free_var(&asked.f), [argument]);
+        Term::intrinsic(Intrinsic::nat_lt(call, nat(10)))
+    };
+    let erased = Intrinsic::NatMul(nat(0), Term::free_var(&asked.c));
+    let guard = below(Term::free_var(&asked.b));
+    let respelled = below(Term::intrinsic(Intrinsic::nat_add(
+        Term::free_var(&asked.b),
+        Term::intrinsic(erased),
+    )));
+    let bool_type = Term::intrinsic(Intrinsic::BoolType);
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
+
+    assert_eq!(
+        convert(&mut context, &bool_type, &guard, &respelled),
+        Ok(true),
+        "the two convert, or the miss below is no limit of the filter"
+    );
+    assumed(&mut context, guard, truth, |context| {
+        assert_eq!(
+            reduce(context, respelled).map(|reduct| reduct.as_bool()),
+            Ok(None)
+        );
+    });
+}
+
+/// An entry's reduced spelling is settled by the reduction that asks for it, once for each. Under the guard `f(a + b) < 10`, the inner guard `f(b + a) < 10 && c < 3`, registered in a frame of its own so the outer guard stands while it is settled, reduces to `c < 3` for a judgment, which asks its conversion about the left operand, and stands as written for plain reduction; so `c < 3` is `true` to a judgment and stuck to an analysis, whichever asked first. The kernel's `whnf::equations_tests` holds this proposition under this name.
+///
+/// Mutation-checked both ways: with the spelling read as a judgment's whichever reduction asks, plain reduction is handed `true` in the first order, and with it filed there whichever reduction settled it, the judgment meets plain reduction's spelling in the second and answers nothing.
+#[test]
+fn a_reduced_spelling_is_settled_by_the_reduction_that_asks_for_it() {
+    let mut context = context();
+    let asked = Asked::over(&mut context);
+    let probe = Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&asked.c), nat(3)));
+    let inner = Term::intrinsic(Intrinsic::BoolAnd(asked.respelled(), probe.clone()));
+    let judged =
+        |context: &mut Context| reduce(context, probe.clone()).map(|reduct| reduct.as_bool());
+    let read = |context: &mut Context| {
+        curios_analysis::Env::force(context, &probe)
+            .ok()
+            .map(|reduct| reduct.as_bool())
+    };
+    let under = |context: &mut Context, inside: &dyn Fn(&mut Context)| {
+        asked.under(context, |context| {
+            context.with_frame(|context| {
+                let canonical = canonical_scrutinee(context, &inner).unwrap();
+                context.refine_scrutinee_spellings(
+                    vec![(canonical, inner.clone(), false)],
+                    &Term::intrinsic(Intrinsic::Bool(true)),
+                );
+                inside(context)
+            })
+        })
+    };
+
+    under(&mut context, &|context| {
+        assert_eq!(judged(context), Ok(Some(true)));
+        assert_eq!(read(context), Some(None));
+    });
+    under(&mut context, &|context| {
+        assert_eq!(read(context), Some(None));
+        assert_eq!(judged(context), Ok(Some(true)));
+    });
+}
