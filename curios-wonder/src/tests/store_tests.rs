@@ -2,7 +2,7 @@
 
 use {
     super::test_support::{mounted, mounted_project, write},
-    crate::{Overlaid, Severity, Subject, diagnostics},
+    crate::{Overlaid, Severity, Subject, diagnosed, diagnostics},
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Fold, Progress},
     curios_text::{Overlay, UnitSource},
     curios_unit::Unit,
@@ -407,6 +407,45 @@ fn a_broken_declaration_over_a_baseline_is_its_own_record() {
         record.report.message.contains("expected a term"),
         "{}",
         record.report.render()
+    );
+}
+
+/// A store that cannot be written is named beside the answer, which is the one it would have been.
+#[test]
+fn a_store_that_cannot_be_written_is_named_beside_the_answer() {
+    let refused = mounted_project("unfiled-named");
+    unwritable(&refused);
+    let taken = mounted_project("unfiled-none");
+    let overlay = Overlay::default();
+    let asked = |root: &Path| {
+        let store = Verdicts::at(root.to_path_buf());
+
+        diagnosed(
+            DEFAULT_STEP_BUDGET,
+            Subject::Unit {
+                units: crate::overlaid(mounted(root), &overlay),
+            },
+            &overlay,
+            Some(&store),
+        )
+    };
+
+    let answer = asked(&refused);
+    assert!(answer.diagnostics.is_empty(), "{:?}", answer.diagnostics);
+    assert!(
+        answer
+            .unfiled
+            .as_deref()
+            .is_some_and(|refusal| refusal.contains("verdicts")),
+        "the refusal names the slot it happened at: {:?}",
+        answer.unfiled
+    );
+
+    let answer = asked(&taken);
+    assert!(answer.diagnostics.is_empty(), "{:?}", answer.diagnostics);
+    assert_eq!(
+        answer.unfiled, None,
+        "a store that took the units says nothing"
     );
 }
 

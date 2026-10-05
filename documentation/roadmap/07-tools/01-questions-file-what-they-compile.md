@@ -7,17 +7,17 @@ Working specification for bringing `lint` and the `wonder` queries under [A comm
 | Rung | States | Lands |
 | --- | --- | --- |
 | A unit is a function of what it was compiled from | the same bytes from any process | landed: [`curios-unit`](../../../curios-unit/README.md#a-unit-is-a-function-of-what-it-was-compiled-from) |
-| One unit, whoever files it | a question's slot is a build's | landed for a unit compiled whole: [`curios-wonder`](../../../curios-wonder/README.md#a-question-files-the-units-it-compiled-from-disk); stages 3 and 4 here |
+| One unit, whoever files it | a question's slot is a build's | landed for a unit compiled whole: [`curios-wonder`](../../../curios-wonder/README.md#a-question-files-the-units-it-compiled-from-disk); stage 4 here |
 | One unit, however it was compiled | whole or over a baseline, so what is compiled over one is filed | stages 5 to 8 here |
 | A successor depends on what it read | an edit stops recompiling every unit after it | [One environment](../05-compilation/02-one-environment.md), [item tasks](../05-compilation/03-item-tasks.md) |
 
-Stages 3 and 4 need no other spec. Stages 5 to 8 need [One environment](../05-compilation/02-one-environment.md) to have made a declaration a function of what it reads: a declaration's identities counting from zero for it, and a recompile's invalidation and [Cached verdicts](../../design/soundness/admission/cached-verdicts.md)' per-item argument restated over recorded reads.
+Stages 4 to 6 need no other spec. Stage 7's gate needs [One environment](../05-compilation/02-one-environment.md) to have made a declaration a function of what it reads: its identities counting from zero for it, without which a proof follows the declarations before it, and a goal answered the same whenever it is asked, without which a recompile settles a universe level a whole compile leaves open. Stage 8 follows its restating of [Cached verdicts](../../design/soundness/admission/cached-verdicts.md)' per-item argument over recorded reads, on top of which it changes who may file.
 
 ## What this builds on
 
 - **The seam.** `Cache` (`curios-pipeline/src/compile.rs`) is `get`, `baseline` and `put(source, unit, followed)`. The fold asks `baseline` on a miss and compiles over what it answers (`compile_unit_over`), or whole where it answers `None`; `put` is handed the unit either way.
 - **The store's cache files.** `Verdicts`' `put` serializes the unit, writes its record and the unit as one file renamed into place (`replace`), and places it in the chain. It answers no baseline.
-- **The engine's cache files what a build would have.** `Overlaid` (`curios-wonder/src/diagnostics.rs`) believes a stored unit on a re-read through the overlay (`Verdicts::get_overlaid`) and answers the nearest baseline — the session's (`Verdicts::kept`), then the slot's whatever its files now hold (`Verdicts::earlier`), then the scope's offer. On `put` it keeps every unit, files it through the store while its fold is the one a build would have run over the disk, and otherwise places it where something follows. A fold leaves a build's path where the cache hands it a baseline, or where the disk does not hold what it has read (`Verdicts::taken_on_disk`).
+- **The engine's cache files what a build would have.** `Overlaid` (`curios-wonder/src/diagnostics.rs`) believes a stored unit on a re-read through the overlay (`Verdicts::get_overlaid`) and answers the nearest baseline — the session's (`Verdicts::kept`), then the slot's whatever its files now hold (`Verdicts::earlier`), then the scope's offer. On `put` it keeps every unit, files it through the store while its fold is the one a build would have run over the disk, and otherwise places it where something follows. A fold leaves a build's path where the cache hands it a baseline, or where the disk does not hold what it has read (`Verdicts::taken_on_disk`). Where the store cannot be written the engine hands its refusal back beside the answer (`Diagnosed::unfiled`), which the command line prints once and the server logs once a session.
 - **A record is what was read, and what came before.** A unit's record lists every file its compilation read with a digest of the text parsed from it, taken at `RootSource::reads`, and a digest of what each predecessor contained; a hit re-reads each file (`unchanged`) and compares each predecessor (`chained`).
 - **A kept unit is guarded by a log.** `Verdicts::keep` adds what a unit read to the fold's log, and `Verdicts::kept` offers a kept unit only while the units before it read what they read when it was kept.
 - **One compile, and one unit from it.** A question's unit comes from the fold a build runs, `compile_unit`: lowered, elaborated, certified by the kernel and erased. Two compilations of one text store the same bytes ([`curios-unit`](../../../curios-unit/README.md#a-unit-is-a-function-of-what-it-was-compiled-from)), which [*a unit's reproduction*](#the-measurements) measures over the standard library.
@@ -27,8 +27,6 @@ Stages 3 and 4 need no other spec. Stages 5 to 8 need [One environment](../05-co
 - **The contract.** Each command's `Contract` (`curios/src/contract.rs`) states how it reaches the store, and a question's access is a build's.
 
 ## The gap
-
-**A store a question cannot write goes unsaid.** `Verdicts::refused` keeps why nothing was filed, and a build prints it (`curios/src/pipeline.rs`); `ask.rs` prints no status line and the server has no channel for one, so over a store nobody can write every question compiles everything again and says nothing.
 
 **What is compiled over a baseline is never filed.** After a saved edit a one-shot question recompiles the closure on every run until a build files the unit, and a question never files the package `std` at all, since the archived unit is always offered: 6.56 s a question where a filed unit answers in 0.57, under [*a hit against a recompile*](#the-measurements).
 
@@ -70,15 +68,14 @@ Filing where a build files is what makes one command's work the next one's. What
 
 ## Stages
 
-Stage 2, the engine filing what a build would have and the contracts saying so, is landed.
+Stages 2 and 3 are landed: the engine files what a build would have and the contracts say so, and a question says what it could not file.
 
-3. **A question says what it could not file.** The engine hands the store's refusal back beside its answer; the command line prints it and the server logs it, once each.
 4. **The server.** Its tests and its measurement: a dependency it compiles is filed when it is compiled, a keystroke files nothing, and a whole compile of a unit from disk text files.
-
-After [One environment](../05-compilation/02-one-environment.md), over what it leaves:
-
 5. **An elaborated item is stored without positions.** One function in `curios-unit` writes a unit's stored bytes: it rebuilds the elaborated module without spans, consed in a table of its own, and serializes the unit with that module in place. `Verdicts::placement` and the prelude's build script both call it, and the script's own consing becomes that call. In memory a module keeps its spans, which erasure reports at; a keystroke's unit is neither filed nor followed, so it is never serialized and pays nothing. An item whose binder was renamed is elaborated again without seeding the closure, since the diff reads terms modulo hints and a reused item would keep the old name. The edited file's text is then held once, and equal structures are one node however the unit was compiled.
-6. **The parts that are not items agree.** A recompile credits its binders in one pass, in reading order as a whole compile does (`credit_reused` into `credit`); the record it joins holds the definitions the unit declares and no other, where `Certification::extended` keeps a removed declaration's; and whatever *whole against over a baseline* still names is made the same, each difference with its cause stated before it is removed.
+6. **The parts that are not items agree.** A recompile credits its binders in one pass, in reading order as a whole compile does (`credit_reused` into `credit`); the record it joins holds the definitions the unit declares and no other, where `Certification::extended` keeps a removed declaration's; and whatever *whole against over a baseline* still names is made the same, each difference with its cause stated before it is removed. What is left after it is the definitions whose proofs follow a counter, and nothing else.
+
+After [One environment](../05-compilation/02-one-environment.md):
+
 7. **The gate.** `curios-pipeline/src/tests/incremental_tests.rs` holds each fixture's unit compiled over a baseline to the stored bytes of the unit compiled whole, where it holds their items to agree today, with fixtures for a declaration moved, a binder renamed and a declaration removed; and *whole against over a baseline* over the standard library, for its leaf and its hub, names no part that differs.
 8. **A question files what it compiled over a baseline.** `Overlaid` keeps no account of having handed out a baseline and files whatever the disk confirms, and a question files the package `std`. [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md), [Cached verdicts](../../design/soundness/admission/cached-verdicts.md) and `curios-verdicts`' `README.md` say what is now filed, and why it may be.
 
@@ -92,10 +89,11 @@ Held since stage 2, in `curios-wonder/src/tests/store_tests.rs` unless said othe
 - A file rewritten while its unit compiles leaves the store as it was.
 - A kept unit is refused once a predecessor the store could not take has changed, and what it would have hidden is reported.
 - [*A unit's reproduction*](#the-measurements): eight builds, one unit.
+- A store that cannot be written costs the reuse and never the answer: the engine names the refusal beside its answer, `lint` prints one line on standard error and reports and exits as it would have (`curios/tests/lint.rs`), and the server logs once and publishes as it would have (`curios/tests/wonder.rs`).
 
 Still to hold:
 
-- A store that cannot be written costs the reuse and never the answer: `lint` prints one line on standard error and exits as it would have, and the server logs once. A loose file and standard input leave the store as they found it.
+- A loose file and standard input leave the store as they found it.
 - The server: a dependency it compiles is filed when it is compiled; keystrokes in an open document file nothing and leave every slot's bytes as they were; a unit compiled whole after a saved manifest edit moved its scope is filed, and one compiled over the session's baseline is not.
 - [`curios-wonder`'s latency protocol](../../../curios-wonder/README.md#measuring-a-questions-latency), retaken cold and warm, naming the stage; the first compile of a session now serializes each unit it files, and the figure says what that costs.
 - Stage 7's gate; and after stage 8, over a text saved since the store was filed, `lint` run twice: the second compiles no unit, and a build after it compiles none either.
@@ -134,4 +132,4 @@ Each is taken with a release build without `profile`, over a copy of `curios-tex
 
 ## Retirement
 
-Done when a question files whatever the disk confirms and says so where it cannot. What stages 3, 4 and 8 change follows the code as it lands: `curios-wonder`'s `ask.rs` on status lines and `server.rs`; `usage.md`'s "Reusing what was already built"; the design decision's rationale and what it rejects; [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md), [Cached verdicts](../../design/soundness/admission/cached-verdicts.md) and `curios-verdicts`' `README.md` on what is compiled over a baseline; and the finding on a reused item's positions, which stage 5 closes. What *Open* still holds becomes roadmap lines of its own, named from the code. Replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.
+Done when a question files whatever the disk confirms and says so where it cannot. What stages 4 and 8 change follows the code as it lands: `curios-wonder`'s `server.rs`; `usage.md`'s "Reusing what was already built"; the design decision's rationale and what it rejects; [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md), [Cached verdicts](../../design/soundness/admission/cached-verdicts.md) and `curios-verdicts`' `README.md` on what is compiled over a baseline; and the finding on a reused item's positions, which stage 5 closes. What *Open* still holds becomes roadmap lines of its own, named from the code. Replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.

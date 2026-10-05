@@ -1,13 +1,13 @@
 //! The one-shot transport: ask about what the command line admitted, and render the answer for a reader.
 //!
-//! **The answer goes to stdout, and nothing else does.** A query executes no program, so stdout is free to be the answer — which is what lets `curios wonder stage wasm app > app.wat` mean what it says. Status lines stay on stderr as everywhere else, and here there are none: a question is not a build.
+//! **The answer goes to stdout, and nothing else does.** A query executes no program, so stdout is free to be the answer — which is what lets `curios wonder stage wasm app > app.wat` mean what it says. Status lines stay on stderr as everywhere else, and a question has one: that the store took nothing of what it compiled, handed to the caller, which has the terminal to say it on.
 //!
 //! **Exit 0 means the question was answered, including when the answer is a list of errors.** Non-zero means it could not be asked: no such target, no such stage, a scope that cannot be assembled. `stage`, `cost` and `tests` are where the two meet — a program that stops before the answer has not answered the question, so what stopped it goes to stderr, stdout stays empty rather than holding text nothing downstream expected, and the exit is a build's: 2 when written goals alone stopped it, and 1 when anything was refused.
 
 use {
     crate::{
         Diagnosed, Diagnosis, Origin, Reached, Refusal, STDIN_LABEL, Severity, Subject, cost,
-        declared_tests, diagnosed, diagnostics, stage,
+        declared_tests, diagnosed, stage,
     },
     curios_cont::Outcome,
     curios_package::{Entry, Library, Program, Selection},
@@ -17,7 +17,7 @@ use {
     std::{collections::BTreeSet, fs, io, path::PathBuf},
 };
 
-/// One thing a question can be about, resolved: the subject, and the store it may read.
+/// One thing a question can be about, resolved: the subject, and the store it reads and files into.
 pub struct Asked {
     pub subject: Subject,
     pub store: Option<Verdicts>,
@@ -85,43 +85,66 @@ impl Asked {
         self
     }
 
-    /// Every diagnostic, goal and lint the subject reports.
-    pub fn diagnostics(self, budget: u64, overlay: &Overlay) -> Vec<Diagnosis> {
-        diagnostics(budget, self.subject, overlay, self.store.as_ref())
-    }
-
-    /// [`Self::diagnostics`], with what the subject reached beside them.
+    /// Every diagnostic, goal and lint the subject reports, with what it reached and why its store took nothing, where it could not.
     pub fn diagnosed(self, budget: u64, overlay: &Overlay) -> Diagnosed {
         diagnosed(budget, self.subject, overlay, self.store.as_ref())
     }
 }
 
-/// `wonder diagnostics [TARGET]`: render every diagnostic of what `selection` selects to stdout, a blank line between each.
-pub fn wonder_diagnostics(budget: u64, selection: Selection) -> Result<(), String> {
+/// `wonder diagnostics [TARGET]`: render every diagnostic of what `selection` selects to stdout, a blank line between each. `unfiled` is told why, where a store took nothing of what the question compiled.
+pub fn wonder_diagnostics(
+    budget: u64,
+    selection: Selection,
+    unfiled: impl FnOnce(String),
+) -> Result<(), String> {
     let overlay = Overlay::default();
 
     let answers = Asked::every(selection)?;
 
-    let reports = rendered(answers, budget, &overlay);
+    let (reports, refusal) = rendered(answers, budget, &overlay);
     if !reports.is_empty() {
         println!("{}", reports.join("\n\n"));
+    }
+    if let Some(refusal) = refusal {
+        unfiled(refusal);
     }
 
     Ok(())
 }
 
-/// `wonder tests [TARGET]`: every test `selection` declares, one path per line, in declaration order — the library's, then each executable's, when it is the governing package entire. Nothing executes, and a package with no tests answers with nothing and exit 0.
-pub fn wonder_tests(budget: u64, selection: Selection) -> Result<(), CompileError> {
+/// `wonder tests [TARGET]`: every test `selection` declares, one path per line, in declaration order — the library's, then each executable's, when it is the governing package entire. Nothing executes, and a package with no tests answers with nothing and exit 0. `unfiled` is told as [`wonder_diagnostics`]' is.
+pub fn wonder_tests(
+    budget: u64,
+    selection: Selection,
+    unfiled: impl FnOnce(String),
+) -> Result<(), CompileError> {
     let overlay = Overlay::default();
 
+    let mut refusal = None;
+    let mut listed = Ok(());
     for asked in Asked::every(selection).map_err(CompileError::failure)? {
-        let records = declared_tests(budget, asked.subject, &overlay, asked.store.as_ref())?;
-        for record in records {
-            println!("{}", record.path);
+        let records = declared_tests(budget, asked.subject, &overlay, asked.store.as_ref());
+        refusal = refusal.or_else(|| refused(asked.store.as_ref()));
+        match records {
+            Ok(records) => records
+                .iter()
+                .for_each(|record| println!("{}", record.path)),
+            Err(error) => {
+                listed = Err(error);
+                break;
+            }
         }
     }
+    if let Some(refusal) = refusal {
+        unfiled(refusal);
+    }
 
-    Ok(())
+    listed
+}
+
+/// Why `store` took nothing of what a question compiled, where it could not be written: asked once the question's fold is over, since that is when the store has been handed anything, and whether or not the question was answered, since a store nobody can write is true either way.
+fn refused(store: Option<&Verdicts>) -> Option<String> {
+    store.and_then(Verdicts::refused)
 }
 
 /// Every answer's diagnostics, rendered, each distinct fact once.
@@ -129,25 +152,44 @@ pub fn wonder_tests(budget: u64, selection: Selection) -> Result<(), CompileErro
 /// **The subjects of a whole package overlap, and one fact is still one fact.** Every executable is compiled against the library, so a diagnostic in the library is reached by the library's own subject and again by each executable's — one unbound variable printed three times in a package declaring two programs, which is what an agent's one-error-at-a-time loop then walks through. Collapsing is safe because a rendering carries the source, the line and the column beneath the message: two that compare equal say the same thing about the same place, and two about different places never compare equal.
 ///
 /// The subjects themselves are still compiled apart, which is what keeps this a report about a package rather than about one compilation of it. What that costs — the library folded once per subject, answered from the store when there is one and recompiled when there is not — is the price of the same independence.
-pub(crate) fn rendered(answers: Vec<Asked>, budget: u64, overlay: &Overlay) -> Vec<String> {
+///
+/// Beside them, the first reason a store gave for taking nothing of what an answer compiled: one store refuses every unit for one reason, and the subjects of a package share it.
+pub(crate) fn rendered(
+    answers: Vec<Asked>,
+    budget: u64,
+    overlay: &Overlay,
+) -> (Vec<String>, Option<String>) {
     let mut seen = BTreeSet::new();
+    let mut unfiled = None;
 
-    answers
+    let reports = answers
         .into_iter()
-        .flat_map(|asked| asked.diagnostics(budget, overlay))
+        .flat_map(|asked| {
+            let Diagnosed {
+                diagnostics,
+                unfiled: refusal,
+                ..
+            } = asked.diagnosed(budget, overlay);
+            unfiled = unfiled.take().or(refusal);
+
+            diagnostics
+        })
         .map(|diagnostic| diagnostic.render())
         .filter(|rendered| seen.insert(rendered.clone()))
-        .collect()
+        .collect();
+
+    (reports, unfiled)
 }
 
 /// `wonder stage STAGE [TARGET]`: `program`'s rung, reprinted, to stdout.
 ///
-/// `finish` renders the one rung the driver cannot: `wasm-optm` is the module after Binaryen, which this crate does not link, so the engine hands the emitted module back and the product that owns Binaryen prints it. Every other rung is printed here, from the driver's own rendering.
+/// `finish` renders the one rung the driver cannot: `wasm-optm` is the module after Binaryen, which this crate does not link, so the engine hands the emitted module back and the product that owns Binaryen prints it. Every other rung is printed here, from the driver's own rendering. `unfiled` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_stage(
     budget: u64,
     name: &str,
     program: Program,
     finish: impl FnOnce(Box<curios_wasm::Module>),
+    unfiled: impl FnOnce(String),
 ) -> Result<(), CompileError> {
     let overlay = Overlay::default();
 
@@ -164,31 +206,44 @@ pub fn wonder_stage(
     };
     let cache = store.as_ref();
 
-    match stage(budget, units, origin, declares, &overlay, cache, name) {
+    let reached = stage(budget, units, origin, declares, &overlay, cache, name);
+    let unstored = refused(cache);
+    let answered = match reached {
         Ok(Reached::Rendered(rendering)) => {
             println!("{}", rendering.text);
             // The rung is the answer and goes to stdout; what stopped the compilation afterwards is context and goes to stderr, so a pipeline reading the rendering is unaffected by it.
             for diagnostic in &rendering.diagnostics {
                 eprintln!("{}", diagnostic.render());
             }
+            Ok(())
         }
-        Ok(Reached::Wasm(module)) => finish(module),
-        Err(Refusal::NoSuchStage { asked }) => {
-            return Err(CompileError::failure(format!(
-                "no stage named {asked:?}; the stages are {}",
-                curios_pipeline::Stage::NAMES.join(", ")
-            )));
+        Ok(Reached::Wasm(module)) => {
+            finish(module);
+            Ok(())
         }
-        Err(Refusal::Diagnostics(diagnostics)) => return Err(stopped(diagnostics)),
+        Err(Refusal::NoSuchStage { asked }) => Err(CompileError::failure(format!(
+            "no stage named {asked:?}; the stages are {}",
+            curios_pipeline::Stage::NAMES.join(", ")
+        ))),
+        Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
+    };
+    if let Some(unstored) = unstored {
+        unfiled(unstored);
     }
 
-    Ok(())
+    answered
 }
 
 /// What the optimizer did to each of `program`'s declarations, one tab-separated row per line.
 ///
 /// Two columns, because the analysis should not need this crate: `awk -F'\t' '$2 == "absorbed"'` is a whole question, and a diff of two runs is a diff of two files. The rows are ordered by name for the same reason — a report that reproduces is what makes a regression something to read rather than something to judge.
-pub fn wonder_cost(budget: u64, program: Program) -> Result<(), CompileError> {
+///
+/// `unfiled` is told as [`wonder_diagnostics`]' is.
+pub fn wonder_cost(
+    budget: u64,
+    program: Program,
+    unfiled: impl FnOnce(String),
+) -> Result<(), CompileError> {
     let overlay = Overlay::default();
 
     let refusal = written_as_a_module(program.entry());
@@ -204,7 +259,9 @@ pub fn wonder_cost(budget: u64, program: Program) -> Result<(), CompileError> {
     };
     let cache = store.as_ref();
 
-    match cost(budget, units, origin, declares, &overlay, cache) {
+    let fates = cost(budget, units, origin, declares, &overlay, cache);
+    let unstored = refused(cache);
+    let answered = match fates {
         Ok(fates) => {
             for fate in fates {
                 // The outcome is one token and its count, so a column stays a column: `specialized 3` reads as one answer and splits as one field.
@@ -216,11 +273,15 @@ pub fn wonder_cost(budget: u64, program: Program) -> Result<(), CompileError> {
 
                 println!("{}\t{outcome}", fate.name);
             }
+            Ok(())
         }
-        Err(diagnostics) => return Err(stopped(diagnostics)),
+        Err(diagnostics) => Err(stopped(diagnostics)),
+    };
+    if let Some(unstored) = unstored {
+        unfiled(unstored);
     }
 
-    Ok(())
+    answered
 }
 
 /// What stopped a question before it could answer, classified as the compile path classifies a build's failure — so goals alone are the incomplete state that exits 2, and anything refused beside them the failure that exits 1. The refusals come first, which is how a mixed failure says which reports are which; it renders as the reports did, a blank line between each.

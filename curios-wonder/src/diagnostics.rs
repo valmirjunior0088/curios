@@ -15,6 +15,8 @@ use {
 pub struct Diagnosed {
     pub diagnostics: Vec<Diagnosis>,
     pub reached: BTreeSet<Qualifier>,
+    /// Why the store took nothing of what this compilation would have filed, where it could not be written: the store's own first refusal, for a transport with somewhere to say it. No part of the answer, which is what it would have been.
+    pub unfiled: Option<String>,
 }
 
 /// What a question is about.
@@ -128,8 +130,8 @@ pub fn diagnosed(
     overlay: &Overlay,
     cache: Option<&Verdicts>,
 ) -> Diagnosed {
-    let reached = cache.map(|cache| Overlaid::over(cache, overlay));
-    let cache = reached.as_ref().map(|cache| cache as &dyn Cache);
+    let store = cache.map(|cache| Overlaid::over(cache, overlay));
+    let through = store.as_ref().map(|store| store as &dyn Cache);
 
     // Taken before the subject is formed, since it is the one fact about the file asked that no compilation of it says.
     let note = subject.note(overlay);
@@ -137,7 +139,7 @@ pub fn diagnosed(
     let mut diagnosed = match subject.formed(overlay) {
         Subject::Unit { units } => {
             let units = overlaid(units, overlay);
-            let found = Fold::new(budget, &units, cache).units(
+            let found = Fold::new(budget, &units, through).units(
                 |_| {},
                 |_, produced| {
                     Ok(produced
@@ -159,7 +161,7 @@ pub fn diagnosed(
         } => match open(origin, declares, overlay) {
             Ok((entrypoint, loader)) => {
                 let units = overlaid(units, overlay);
-                let checked = Fold::new(budget, &units, cache).check(
+                let checked = Fold::new(budget, &units, through).check(
                     &entrypoint,
                     &loader,
                     EntryTail::Authored,
@@ -170,6 +172,7 @@ pub fn diagnosed(
             Err(refusal) => Diagnosed {
                 diagnostics: refusal,
                 reached: BTreeSet::new(),
+                unfiled: None,
             },
         },
     };
@@ -178,6 +181,8 @@ pub fn diagnosed(
     if let Some(note) = note {
         diagnosed.diagnostics.insert(0, note);
     }
+    // Asked once the fold is over, which is when the store has been handed anything, and whatever the answer was: a store nobody can write is true either way.
+    diagnosed.unfiled = cache.and_then(Verdicts::refused);
 
     diagnosed
 }
@@ -200,6 +205,7 @@ impl Diagnosed {
         Self {
             diagnostics,
             reached,
+            unfiled: None,
         }
     }
 
@@ -208,6 +214,7 @@ impl Diagnosed {
         Self {
             diagnostics: of_error(error),
             reached: BTreeSet::new(),
+            unfiled: None,
         }
     }
 }

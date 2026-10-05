@@ -459,6 +459,8 @@ An edit anywhere the program was built from is a miss, and so is a damaged or ha
 
 A question — [`wonder`](#wonder), and [`lint`](#lint) with it — reads the store and files the units it compiled whole from the text on disk, the units a build would have filed and no payload, so a build after a question compiles only what the question did not, and the question after it compiles nothing. A unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, reusing every declaration the edit did not reach, which is what keeps a question about one declaration from costing the whole library it sits in; what it compiles that way it does not file, nor any unit after it, and neither does it file a unit compiled from text an editor holds unsaved, so a server asking on every keystroke files nothing.
 
+A store that cannot be written costs the reuse and never the answer. The command says so once on standard error and goes on — `Skipped storing what this built; …` from a build, `Skipped storing what this compiled; …` from a question — and [`wonder server`](#wonder) says it once a session, in a log message to its client.
+
 A loose `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-loose split as everywhere else. Standard input has none either, so its test program is compiled every time.
 
 Payloads are native code for the machine that built them, so an entry is found only by an engine that can run it; two machines share one only when their engines agree. Nothing has to be cleaned up by hand as sources change: each executable occupies one slot per dependency chain, overwritten in place.

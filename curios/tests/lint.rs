@@ -145,3 +145,45 @@ fn an_unused_dependency_is_reported_for_the_package_entire() {
     assert!(one.status.success(), "{}", stdout(&one));
     assert!(one.stdout.is_empty());
 }
+
+/// A store that cannot be written costs the reuse and never the answer: `lint` reports and exits as it would have, and says once on standard error that nothing was stored, however many subjects the package has.
+#[test]
+fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
+    let package = |name: &str| {
+        let root = temporary(name);
+        write(
+            &root,
+            "curios.toml",
+            "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+        );
+        write(&root, "lib.crs", "pub let word : /std/Str = \"clean\";\n");
+        write(&root, "app.crs", "/std/print(/app/word)\n");
+        root
+    };
+
+    let taken = package("stored");
+    let stored = curios(&taken, &["lint"], "");
+    assert_eq!(stored.status.code(), Some(0), "{}", stdout(&stored));
+    assert!(
+        stored.stderr.is_empty(),
+        "a store that took the units is not narrated"
+    );
+
+    let refused = package("unstored");
+    // A file where the slots would go.
+    write(&refused, ".curios/verdicts", "");
+    let unstored = curios(&refused, &["lint"], "");
+    let narrated = String::from_utf8_lossy(&unstored.stderr);
+
+    assert_eq!(unstored.status.code(), stored.status.code(), "{narrated}");
+    assert_eq!(stdout(&unstored), stdout(&stored), "the report is the same");
+    assert_eq!(
+        narrated.matches("Skipped").count(),
+        1,
+        "once, for a library and a program asked of one store: {narrated}"
+    );
+    assert!(
+        narrated.contains("storing what this compiled"),
+        "{narrated}"
+    );
+}

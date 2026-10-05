@@ -17,7 +17,7 @@
 //! **UTF-16 exists only here.** The engine's coordinates are bytes; a `Position` is derived from the span's own text at the boundary, in both directions, and nothing below this file knows the protocol's unit.
 
 use {
-    crate::{Asked, Diagnosis, Severity},
+    crate::{Asked, Diagnosed, Diagnosis, Severity},
     curios_package::{Selection, Spelling},
     curios_text::{Formatted, Overlay},
     curios_utilities::{Report, Source, Span},
@@ -26,11 +26,11 @@ use {
     lsp_types::{
         Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
         DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentFormattingParams,
-        InitializeParams, OneOf, Position, PublishDiagnosticsParams, Range, ServerCapabilities,
-        TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
+        InitializeParams, LogMessageParams, MessageType, OneOf, Position, PublishDiagnosticsParams,
+        Range, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
         notification::{
             DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, DidSaveTextDocument,
-            Notification, PublishDiagnostics,
+            LogMessage, Notification, PublishDiagnostics,
         },
         request::{Formatting, Request},
     },
@@ -79,6 +79,7 @@ pub fn serve(budget: u64, manifest: Option<&Path>) -> Result<(), String> {
             published: BTreeMap::new(),
             spent: None,
             checked: None,
+            told: false,
             // A closure rather than the channel's own type, so this file names no channel crate: `lsp-server` re-exports none, and what the analyst needs is only a way to send.
             sender: {
                 let sender = connection.sender.clone();
@@ -295,6 +296,8 @@ struct Analyst {
     spent: Option<Duration>,
     /// The overlay the last check read, and the documents already answered from it — what lets a save of text already checked publish nothing. Cleared to a fresh set the moment the overlay moves, since an answer about one text says nothing about another.
     checked: Option<(BTreeMap<PathBuf, String>, BTreeSet<PathBuf>)>,
+    /// Whether this session has told its client that the store takes nothing of what it compiles. Once is the whole of it: one store refuses every unit for one reason, and a line per check would say nothing new.
+    told: bool,
     sender: Box<dyn Fn(Message) -> Result<(), String> + Send>,
 }
 
@@ -390,10 +393,20 @@ impl Analyst {
         };
         let asked = Selection::of(spelling, self.manifest.as_deref(), directory, overlay)
             .and_then(Asked::every);
+        let mut unfiled = None;
         let records = match asked {
             Ok(asked) => asked
                 .into_iter()
-                .flat_map(|asked| asked.reusing(session).diagnostics(self.budget, overlay))
+                .flat_map(|asked| {
+                    let Diagnosed {
+                        diagnostics,
+                        unfiled: refusal,
+                        ..
+                    } = asked.reusing(session).diagnosed(self.budget, overlay);
+                    unfiled = unfiled.take().or(refusal);
+
+                    diagnostics
+                })
                 .collect(),
             // A scope that cannot be assembled is an answer about the document, not a server failure: the manifest is what is wrong, and the document is where the editor is looking.
             Err(message) => vec![Diagnosis {
@@ -402,7 +415,10 @@ impl Analyst {
             }],
         };
 
-        // A warming check is run for what it leaves on this thread, never for what it says: it names a directory, so every record it holds is about a file no editor has opened, and a manifest it cannot find is not a fault to report to anybody.
+        // Before a warming check is dropped: what it could not file is a fact about the store, whichever check met it first.
+        self.tell(unfiled)?;
+
+        // A warming check is run for what it leaves on this thread and in the store, never for what it says: it names a directory, so every record it holds is about a file no editor has opened, and a manifest it cannot find is not a fault to report to anybody.
         if raised == Raised::Warming {
             return Ok(());
         }
@@ -428,6 +444,24 @@ impl Analyst {
         self.published.insert(document.to_path_buf(), placed);
 
         Ok(())
+    }
+
+    /// Tell the client, once a session, that the store took nothing of what a check compiled, and why.
+    ///
+    /// **A log line, since a server has no terminal.** A store nobody can write costs every session the work the last one did, and otherwise reads as a server that is slow to start; the answer it publishes is the one it would have published.
+    fn tell(&mut self, unfiled: Option<String>) -> Result<(), String> {
+        let Some(refusal) = unfiled.filter(|_| !self.told) else {
+            return Ok(());
+        };
+        self.told = true;
+
+        (self.sender)(Message::Notification(lsp_server::Notification::new(
+            LogMessage::METHOD.to_string(),
+            LogMessageParams {
+                typ: MessageType::WARNING,
+                message: format!("Skipped storing what this session compiles; {refusal}"),
+            },
+        )))
     }
 }
 

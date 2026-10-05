@@ -21,8 +21,12 @@ pub enum Linted {
     Findings,
 }
 
-/// `curios lint [TARGET]`: every diagnostic, goal and lint of what `selection` selects rendered to stdout, each distinct fact once, and for the package entire every dependency nothing reached.
-pub fn lint(budget: u64, selection: Selection) -> Result<Linted, String> {
+/// `curios lint [TARGET]`: every diagnostic, goal and lint of what `selection` selects rendered to stdout, each distinct fact once, and for the package entire every dependency nothing reached. `unfiled` is told why, where a store took nothing of what the lint compiled, which changes neither the report nor what is returned.
+pub fn lint(
+    budget: u64,
+    selection: Selection,
+    unfiled: impl FnOnce(String),
+) -> Result<Linted, String> {
     let overlay = Overlay::default();
     // A dependency is a fact of the package, so only the package entire is asked which of its dependencies nothing reached.
     let dependencies = match &selection {
@@ -41,12 +45,16 @@ pub fn lint(budget: u64, selection: Selection) -> Result<Linted, String> {
     let mut seen = Renderings::default();
     let mut reached = BTreeSet::new();
     let mut linted = Linted::Clean;
+    let mut unstored = None;
     for asked in Asked::every(selection)? {
         let Diagnosed {
             diagnostics,
             reached: unit_reached,
+            unfiled: refusal,
         } = asked.diagnosed(budget, &overlay);
         reached.extend(unit_reached);
+        // The first, since every subject of a package asks one store.
+        unstored = unstored.or(refusal);
         for diagnostic in diagnostics {
             linted = linted.max(match diagnostic.severity {
                 Severity::Goal => Linted::Goals,
@@ -69,6 +77,9 @@ pub fn lint(budget: u64, selection: Selection) -> Result<Linted, String> {
 
     if !seen.rendered.is_empty() {
         println!("{}", seen.rendered.join("\n\n"));
+    }
+    if let Some(unstored) = unstored {
+        unfiled(unstored);
     }
 
     Ok(linted)

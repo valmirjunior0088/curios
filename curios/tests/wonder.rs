@@ -767,3 +767,42 @@ fn diagnostics_on_a_broken_file_lists_every_refusal() {
     assert!(text.contains("--> <stdin>:3:21"), "{text}");
     assert!(!text.contains("_b"), "{text}");
 }
+
+/// A server over a store it cannot write says so once, in a log message, and publishes what it would have.
+#[test]
+fn the_server_logs_once_that_the_store_takes_nothing() {
+    let root = project("unstored");
+    // A file where the slots would go.
+    write(&root, ".curios/verdicts", "");
+
+    let uri = format!("file://{}", root.join("util.crs").display());
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = \"placed\";\n"}}}}}}"#
+    ));
+    let logged = editor.receive();
+    assert!(logged.contains("window/logMessage"), "{logged}");
+    assert!(logged.contains("Skipped storing"), "{logged}");
+    let published = editor.receive();
+    assert!(published.contains(r#""diagnostics":[]"#), "{published}");
+
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"pub let word : /std/Str = \"placed again\";\n"}}]}}}}"#
+    ));
+    let again = editor.receive();
+    assert!(
+        again.contains("textDocument/publishDiagnostics"),
+        "the second check says nothing more of the store: {again}"
+    );
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

@@ -28,7 +28,7 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
         store: None,
     };
 
-    let same = rendered(
+    let (same, _) = rendered(
         vec![asked("/std/print(nope)"), asked("/std/print(nope)")],
         DEFAULT_STEP_BUDGET,
         &Overlay::default(),
@@ -38,7 +38,7 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
     };
     assert!(one.contains("unbound variable: nope"), "{one}");
 
-    let different = rendered(
+    let (different, _) = rendered(
         vec![asked("/std/print(nope)"), asked("/std/print(other)")],
         DEFAULT_STEP_BUDGET,
         &Overlay::default(),

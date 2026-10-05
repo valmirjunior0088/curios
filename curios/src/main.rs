@@ -290,6 +290,7 @@ fn dispatch() -> Result<(), Failure> {
         Mode::Lint { elaboration, .. } => match lint(
             elaboration.budget,
             contract.admit_any(target, manifest, &here()?)?,
+            unfiled,
         )? {
             Linted::Clean => {}
             Linted::Goals => process::exit(2),
@@ -537,14 +538,17 @@ fn dispatch() -> Result<(), Failure> {
             Query::Diagnostics { elaboration, .. } => wonder_diagnostics(
                 elaboration.budget,
                 contract.admit_any(target, manifest, &here()?)?,
+                unfiled,
             )?,
             Query::Tests { elaboration, .. } => wonder_tests(
                 elaboration.budget,
                 contract.admit_any(target, manifest, &here()?)?,
+                unfiled,
             )?,
             Query::Cost { elaboration, .. } => wonder_cost(
                 elaboration.budget,
                 contract.admit_program(target, manifest, None, &here()?)?,
+                unfiled,
             )?,
             // The one rung the engine hands back unrendered is Binaryen's, and this is the crate that links it.
             Query::Stage {
@@ -556,6 +560,7 @@ fn dispatch() -> Result<(), Failure> {
                 |module| {
                     optimize(&module, true, |stage| println!("{stage}"));
                 },
+                unfiled,
             )?,
             Query::Server { elaboration } => serve(elaboration.budget, manifest)?,
         },

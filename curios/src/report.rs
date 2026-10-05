@@ -150,6 +150,14 @@ pub(crate) fn fact(heading: Heading, detail: impl fmt::Display) {
     eprintln!("{}{detail}", head("", heading));
 }
 
+/// What a question says where the store took nothing of what it compiled: the fact a build states for the same reason, in a question's words. A store nobody can write otherwise reads as a compiler that is slow.
+pub(crate) fn unfiled(refusal: String) {
+    fact(
+        Heading::Skipped,
+        format!("storing what this compiled; {refusal}"),
+    );
+}
+
 /// One detail of the line above, in the columns a heading would occupy — the keys a `pin` wrote, under the row it wrote them into.
 ///
 /// Headingless because it is not a thing that happened, which is what every heading names; it is part of what the line above already reported.
