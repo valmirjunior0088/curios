@@ -1,87 +1,83 @@
 # Plicity on a telescope's members
 
-Working specification for making a member's plicity — plain, implicit (`@`) or witness (`use`) — one rule over every telescope the surface writes and every application that fills one, rather than a property of function parameters with a different carve-out at each site. The rule holds at every site that declares, binds or fills a telescope but a pattern; what remains is decided and waits on [typed patterns](01-typed-patterns.md), and one extension waits for a consumer.
+Working specification for making a mark mean on data what it means on a function. [Plicity is part of function identity](../../design/theory/plicity-is-part-of-function-identity.md) states the rule a call, a lambda and a concept literal follow: a hidden member — `@` or `use` — takes no position among the members an author writes, and is written only to be named. A function's precondition is therefore stated once: declared in the signature, filled at each call, a fact in the body. An invariant on data is not. A constructor's hidden payload is written at every arm, a structure's field takes no mark and its proofs are written at every literal, a concept value is read with its edges in the count, and Core states a member's mark beside its telescope, in eight places under four encodings.
+
+It is independent of every other spec. [Typed patterns](01-typed-patterns.md) later lifts the one restriction this leaves, on the rows of one constructor.
 
 ## What this builds on
 
-[Plicity is part of function identity](../../design/theory/plicity-is-part-of-function-identity.md) settles plicity for function types, [a call fills one parameter group](../../design/theory/a-call-fills-one-parameter-group.md) settles which list a call fills, and [concepts resolve with global coherence](../../design/surface/concepts-resolve-with-global-coherence.md) settles what a `use` member is filled with. The first of them says what a mark is followed by at each kind of site. None says how written members are matched to slots, and the code answers that differently at each site.
+- **The rule, where it holds.** `align` (`curios-elab/src/elaborate/align.rs`) matches written members to slots: plain members are written, in order, and between two of them the hidden ones are written from the first of their run, the rest left out. A call (`elaborate_apply`) and a concept literal (`elaborate_struct`) call it; a lambda (`elaborate_func_check`) and a spread (`elaborate_struct_spread`) each walk the same rule by hand.
+- **A slot left out is filled by its mark.** `insert_auto_argument` (`curios-elab/src/elaborate/apply.rs`) fills an `@` slot by unification, by reduction to `True`, or by `entail` from the facts in scope, and a `use` slot by resolution.
+- **A hidden member left out is still in scope.** An unnamed `@` binder's proposition is a fact wherever its telescope is opened: in a definition's body, in an arm, whose payload `assume_payload` assumes, and one level down in a structure- or tuple-typed hypothesis (`Reader::hypothesis`, `curios-elab/src/entailment/facts.rs`). A `use` member is in the witness scope.
+- **A constructor's payload declares `@`** (`parse_induct_payload_field`), and construction fills it as any call does, a constructor being a function: `/std/Io/Chunk/chunk(b)` over `chunk(bytes: Bytes, @some: Holds(0 < Bytes/len(bytes)))`.
+- **A structure's fields are a telescope.** `StructDecl::arity` is the parameters ending in the fields, and a concept is a structure whose `use` fields are its superclass edges.
+- **Core's marks.** A sealed vector beside the telescope of a `FuncType`, a `Func` and an `InductParam`, and beside an `InductArm`'s binders; a field of each `Apply` argument; the unsealed `InductDecl::plicities` and `StructDecl::plicities`, read through a default; and `ConceptDecl::supers`, positions beside the field list.
 
-- **Written members meet their slots by three rules.** A call sorts its arguments into three queues, one per mark, each matched independently (`elaborate_apply`), so `join(3, use dict)` and `join(use dict, @Nat, 3)` are one call. A lambda's binder claims the next slot of its own mark and skips slots of another (`elaborate_func_check`). A concept literal pairs its `use` entries with the `use` positions wherever they are written (`elaborate_struct`). A constructor pattern writes every member.
-- **No written form leaves a slot to the elaborator**, so a later hidden slot cannot be supplied alone: against two `use` slots, `use value` fills the first, and `_` is an unbound variable.
-- **Reading a concept value ignores the marks.** A struct pattern over one counts every slot and binds a superclass edge to a plain name, and `.0` reaches an edge by position, where a literal leaves the edges out of its positional sequence.
+## The gap
 
-## The rule
+| | function parameter | constructor payload | structure field | concept edge |
+| --- | --- | --- | --- | --- |
+| declared hidden | yes | `@` | refused | `use` |
+| left out where filled | yes | yes | written at every literal | yes |
+| left out where opened | yes | no | takes a position | no |
+| in scope there unnamed | yes | yes | yes, one level down | only as a `use` member's own |
 
-After a mark comes what the site's plain member would be: a type where the site declares, a binder where it binds, a value where it supplies. A `use` member has no binder anywhere.
+Read from the code and from probes of the compiler at `87189c97d`, the counts over `curios-text/std` at that commit:
 
-| | Signature | Lambda, field sugar | Call, literal head, `satisfy` head, concept-literal entry |
-| --- | --- | --- | --- |
-| Plain | `n: Nat`, or `Nat` | `n`, `n: Nat`, `_` | `value` |
-| `@`, named | `@n: Nat` | `@n`, `@n: Nat` | `@value` |
-| `@`, unnamed | `@Holds(0 < n)`, or `@_: Holds(0 < n)` | `@_`, `@_: Holds(0 < n)` | `@_` |
-| `use` | `use Show(A)` | `use _` | `use value`, or `use _` |
+- **An arm writes every hidden payload.** `elaborate_induct_match` (`curios-elab/src/elaborate/match_.rs`) checks an arm's binder count against the payload's, then each mark, exactly: `| push(head, tail) => …` over `push(@n: Nat, head: T, tail: Sized(T)(n))` reports `constructor 'push' takes 3 argument(s) but the match arm binds 2`. 26 arms write a hidden payload, 18 of them only `@_`.
+- **A structure's field takes no mark** (`FIELD_TAKES_NO_MARK`, `curios-text/src/parse/marks.rs`), so the bound a payload fills by itself is a field written at every literal. `/std/Str/At`'s ten literals write twenty proofs; 10 of `/std`'s 77 structures carry a proof field.
+- **Reading a concept value counts its edges.** Over `concept Over(A: Type) { use Base(A), over(A) -> Str }`, `let Over { over } = dict;` binds `over` to the `Base(A)` edge, and `dict.0` is the edge, where a literal leaves the edges out of its positional sequence. A `use _` written in that pattern reports a missing `}`.
+- **A bound a fact in scope states outright is filled only where it is arithmetic.** `entail` (`curios-elab/src/entailment.rs`) reads `Nat` and `Int` comparisons, so over `opaque(b: Bool, @Holds(b))`, `let same(b: Bool, @Holds(b)) -> Nat = opaque(b);` reports `nothing discharged Holds(b)`. Seven of `/std/Str/At`'s ten `boundary` proofs are a hypothesis, another value's field or a lemma.
+- **Core restates a member's mark.** A declaration's parameter marks stand on its former's function type and again in `plicities`, copied at about a dozen sites, two of which write an empty vector that reads as all plain (`curios-elab/src/into_ersd/lower.rs`). A concept's edge is a position beside its fields whose target lowering reads off the written head (`resolve_concept_head`, `curios-text/src/into_core.rs`): over `let BaseNat: Type = Base(Nat);`, `use BaseNat` is a premise in a `let` telescope and `'/BaseNat' is not a registered concept` as a field. The kernel's conversion compares the marks of an application's arguments and of an arm's binders, which none of its rules checks ([Soundness: findings](../01-soundness/00-findings.md)).
 
-A signature is a function type, a `let` or `satisfy` telescope, a constructor's payload list and a declaration's type parameters.
+## Prior art
 
-- **`_` says nothing and holds a place.** The slot is filled as an omitted one is at that site: an `@` slot is inferred or proved, a `use` slot is resolved, and after a spread either is copied from the base.
-- **A lambda never states a `use` member's type**, so a lambda with no expected function type has no `use` slot; a local `let` with a telescope declares one.
-- **One alignment rule** serves binders, arguments and concept-literal entries. Plain members are always written, in order. Between two plain members, the hidden members are written in order from the first of the run, and the rest of the run may be left out. A written member's slot is its position in its run, never the next slot of its mark: against `(@A: Type, use Show(A), @B: Type, use Show(B), a: A, b: B)`, each of `(a, b)`, `(@A, a, b)` and `(@A, use _, @B, a, b)` is accepted, `(@B, a, b)` binds `A`, and `(use _, a, b)` is refused. `join(@_, use dict, xs)` supplies a dictionary; `join(use dict, xs)` and `join(xs, use dict)` are refused.
-- **The witness scope is exactly the `use` members in scope.** A dictionary a program names is an ordinary value — a `let`, or a plain or `@` parameter of concept type — and reaches a `use` slot through a written `use value`.
-- **Refused, each by the rule it breaks:** `use name`; `use _` in a signature; `use C(args)` or `@T` in a lambda; a plain member in a `satisfy` telescope; a plain member written as its type alone in a `let` telescope, which names what its body uses; a `use` entry in a `satisfy` body, `use _` included; a `use` parameter on a concept, whose superclass is a field and whose witness keys read every parameter.
+- **A mark lives on its binder.** Agda's telescope is `Tele (Dom Type)`, each `Dom` holding its `ArgInfo` ([`Agda.Syntax.Internal`](https://github.com/agda/agda/blob/master/src/full/Agda/Syntax/Internal.hs)); Lean's `lam` and `forallE` each carry a `binderInfo` ([`Lean.Expr`](https://github.com/leanprover/lean4/blob/master/src/Lean/Expr.lean)).
+- **A pattern is the form that builds the value.** Lean's reference has patterns "a subset of the terms" ([Pattern matching](https://lean-lang.org/doc/reference/latest/Terms/Pattern-Matching/)); Rocq's has implicit arguments "omitted in patterns" by default, as in terms ([`match.rst`](https://github.com/rocq-prover/rocq/blob/master/doc/sphinx/language/extensions/match.rst)); Agda's left-hand-side checker inserts a wildcard for each hidden pattern left out, by the `insertImplicit` its application arguments are aligned by ([`Rules.LHS.Implicit`](https://github.com/agda/agda/blob/master/src/full/Agda/TypeChecking/Rules/LHS/Implicit.hs)).
+- **An invariant on data is checked where the value is built and assumed where it is read.** Liquid Haskell turns a refined constructor into a smart constructor ([Refined datatypes](https://ucsd-progsys.github.io/liquidhaskell-tutorial/Tutorial_05_Datatypes.html)); Why3 assumes a type's invariant at function entry and reads a field without restoring it ([Syntax reference](https://www.why3.org/doc/syntaxref.html)).
+- **A dictionary in data is the contested case.** GHC stores one at construction and extracts it on a match, and forbids matching such a constructor in a `let` and deriving over it ([Existential quantification](https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/existential_quantification.html)); Scala 3 has the pattern write `given` ([Pattern-bound givens](https://docs.scala-lang.org/scala3/reference/contextual/more-givens.html)).
 
-## Decided, waiting on typed patterns
+## Decisions
 
-Lowering lays a pattern's columns out before it knows the constructor's signature, and an irrefutable struct pattern is projection sugar lowered before any type is known, so a pattern can neither leave a member out nor be held to a mark until [typed patterns](01-typed-patterns.md) hands elaboration the matrix.
+1. **A hidden member takes no position.** Wherever an author counts — a call's arguments, a lambda's binders, a literal's entries, an arm's binders, a positional pattern field, a written `.N` — the count is of plain members, and a hidden one is written in its run, under its mark, only to be named.
+2. **A mark lives in its telescope's entry.** `Telescope`'s every entry is a type under a mark, compared and hashed with it, so a function type's identity carries its marks and no vector stands beside a telescope. A tuple type and an index telescope are built all-plain. `InductDecl::plicities` and `StructDecl::plicities` go, a declaration's parameter marks being its arity's.
+3. **An application's and an arm's marks are checked where they are typed.** The kernel's application rule holds each argument's mark to its binder's and its match rule each arm's to the payload's, and conversion reads them in neither checker.
+4. **A concept's edge is a `use` field of its telescope.** Its position is the field's mark, and its target is read from the elaborated field type where the concept's fields are elaborated, so an alias of a concept application is an edge where it is already a premise. The superclass graph is checked when the group closes.
+5. **Every site is one of three walks.** A telescope is declared, each domain checked and its member entered by its mark; filled, written members aligned and the rest supplied by mark; or opened, written binders aligned and the rest bound by mark. One function enters a member, and `align` is the one alignment.
+6. **An arm aligns in the elaborator.** `elaborate_induct_match` aligns an arm's written binders to the payload and binds each hidden slot left out, hintless. Lowering groups rows by constructor and holds a group's rows to one shape, a check on the text alone, so rows of one constructor write the same hidden members until [typed patterns](01-typed-patterns.md) aligns each row.
+7. **A written position is resolved as a label is.** A projection's field is a slot in every elaborated term; a written `.N` and a positional pattern field are a position among plain members, which `project` resolves to the slot once. A struct pattern takes no mark: a hidden field is read by its label.
+8. **A structure's field declares `@`**, as `@label: type` or its type alone. A literal leaves it out, and it is filled as a call's omitted `@` argument is; `@label = value`, or `@value` in its run, writes it, and `@_` holds its place. A spread re-infers it and never copies it, and where it cannot be re-inferred the literal is refused, naming the proposition. It takes no part in a derived witness, and `Spell` leaves it out.
+9. **A bound a fact in scope states is filled by the fact.** Before its arithmetic search, `entail` puts to the bound each hypothesis and each proof field one level down whose decision converts with the bound's, first in scope order.
+10. **Waiting for a consumer.** `use` on data, a payload or a field: no type of `/std` or `programs/` holds a dictionary, a type declared under a premise names its dictionary in its type, and a dictionary packed by hand is a plain payload passed on with `use value`. `@` on a concept's field, and any mark on a tuple type's field. Each is refused by its own rule.
 
-- **A pattern follows the alignment rule**, so `cons(head, tail)` and `refl()` leave their hidden payloads out and `cons(@length, head, tail)` binds one.
-- **A constructor's payload takes `use C(args)`.** Construction resolves it, and an arm that matches the constructor has it in its witness scope, written or not: `| pack(value) => Show/show(value)` over `pack(@A: Type, use Show(A), value: A)`.
-- **A pattern over a concept value writes `use _` for an edge**, and a plain binder there is refused; `.0` counts plain members alone.
+## Stages
 
-## Waiting for a consumer — `@` fields on a structure
-
-A structure's field may carry the implicit mark, filled at construction by the routes an omitted `@` argument already uses: the proposition reduces to `True` and is filled with its constructor; it follows from the facts in scope by linear arithmetic; or it is determined by unification from the other fields or the expected type. Written explicitly as `S { x = k, @ok = p }`, and refused with the proposition it could not discharge.
-
-```crs
-pub struct At(s: Str): pub Type {
-    offset: Nat,
-    @within: Holds(offset <= Bytes/len(s.bytes)),
-    @boundary: Holds(starts(Bytes/drop(s.bytes, offset, @within))),
-}
-```
-
-`Str/At` is the case: two proof fields written at every construction site, where the same proposition as a function argument fills itself.
-
-**A spread re-infers every `@` field and never copies one.** An `@` field is a *consequence* of the other fields, so copying preserves a stale proof about changed values. A spread that cannot re-infer a field is refused, naming the proposition. That is the one site where `_` after `@` and `_` after `use` part: a witness is a choice to preserve, a proof a consequence to recompute.
-
-Still to refine:
-
-- **Eta.** Records have eta, so a value must convert with its field-by-field expansion. A `Prop` field is free under irrelevance; an `@T: Type` field needs the field determined, and that case wants a worked example before anything is implemented.
-- **Cost.** Filling a field runs the evaluation a bound does, so a record built in a loop pays per construction, priced by [A reduction step costs what it builds](../../design/soundness/a-reduction-step-costs-what-it-builds.md).
-- **Derived witnesses.** `Spell`, `Eql`, `Hash` and `Ord` are written over a structure's fields; `Spell` must skip an implicit field, since a spelled value reads back and an implicit field is not written.
-- **The smallest honest slice**: `@` fields filled by reduction alone, which covers `Str/At` entirely, needs no prover work, and defers the cost and eta questions with the other two routes.
-
-## One marked telescope
-
-Core pairs a telescope with its marks by hand at three doors — `FuncType::new`, `Func::new`, `InductParam::new` — keeps a declaration's parameter marks in a vector beside its arity that no door seals (`InductDecl::plicities`, `StructDecl::plicities`), and states a concept's superclass edges as positions beside its field list, with a label minted for each. One type pairing a telescope with its marks serves all of them once a field can carry a mark: a concept's edges are then the `use` entries of its field telescope, read from the elaborated field type, so an alias of a concept application is an edge where a `use` parameter already accepts one, and no label is minted.
+1. **The telescope carries its marks.** Decision 2 for the entry and for a declaration's parameters, with no verdict moved; then decision 4, which makes an aliased edge an edge; then decision 3. Check: the `core-elab` reprint of `programs/` and of `/std/Map`, `/std/Str/At`, `/std/Tui/Layout` and `/std/Cli` is unchanged by the first two; a fixture puts two applications differing in a mark alone to both checkers.
+2. **One declare, one fill, one open.** Decision 5: the lambda's walk and the spread's call `align`, and every site enters a member through one function. No verdict moves.
+3. **An arm opens by the rule.** Decision 6. Check: `push(head, tail)`, `refl()`, and `chunk(bytes)` with its bound a fact in the arm; each misalignment by its wording; a group of differing rows refused as today.
+4. **A written position counts plain members.** Decision 7. Check: over a concept value `.0` is the first method and `Over { over }` binds it; a mark in a struct pattern is refused by its rule.
+5. **A structure's field declares `@`.** Decision 8, through the grammar, the printer and the editors. Check: a fixture per form, the spread both ways, a `Spell` round trip, and a hidden field ahead of a plain one read by pattern and by position.
+6. **A bound a fact states is filled by it.** Decision 9. Check: an opaque `Holds(b)` under `@Holds(b)`, a field one level down, and a refusal two levels down.
+7. **`/std` reads by the rule.** The arms that write only `@_` drop it, and a structure's proof field becomes `@` where a literal sheds a written proof by it.
 
 ## Verification
 
 - Every acceptance criterion above is a fixture, the refusals by their wording.
-- `/std`, `programs/` and the test corpus compile at every stage; a program whose verdict changes other than by a refusal this spec lists is a finding, never a fixture update.
-- `curios format` is the identity on every form of the table, and the grammar's corpus holds each.
-
-## Design decisions this overturns or corrects
-
-- [Plicity is part of function identity](../../design/theory/plicity-is-part-of-function-identity.md): alignment "positionally by plicity" becomes position in the run; its rejection of inserting omitted hidden constructor-pattern arguments falls with typed patterns, whose matrix reaches elaboration with the signature known.
-- [`documentation/syntax.md`](../../syntax.md): the three independent queues of a call, and a concept literal's `use` entries written anywhere.
+- `/std`, `programs/` and the test corpus compile at every stage; a program whose verdict changes other than as its stage states is a finding, never a fixture update.
+- `cargo xboard`, and `cargo xtask clippy`, whose prelude build elaborates, erases and certifies all of `/std`.
+- `curios format` is the identity on every new form, and the grammar's corpus holds each.
 
 ## Rejected
 
-- **A `use` field on a structure.** With no label it cannot be projected, a structure's value is not in the witness scope, and resolving through the fields of a local is a second resolution rule. `/std/Map` names its dictionary in its type instead.
-- **Three queues at a call**, and **claiming the next slot of a mark**: which slot a written member fills then depends on the marks written before it, and two rules decide one question.
-- **Resolving a `use` slot only after the later arguments are checked**, so that a type naming a dictionary decides it whatever the order. A numeral resolves eagerly, so a numeral at an associated type would meet a type still stuck on the witness; and a signature whose key type is an implicit is undecided at the slot already.
-- **A block form bringing a value into the witness scope**, which a local `let` with a `use` premise already is, and **a generic `summon`**, which needs `use` at a type variable.
+- **Padding a group's rows in lowering**, so that rows of one constructor may differ now: the padding is discarded the day typed patterns aligns each row where its signature is known.
+- **Leaving arms to typed patterns.** An arm reaches the elaborator with its written marks, and the payload's are there; only a group of differing rows waits.
+- **One sealed pair of a telescope and its marks**, behind one door: the correspondence is asserted where it could be unspellable, and a nested arity still needs two vectors. **A telescope generic in its annotation**: a tuple type could then spell no mark, at the price of a type parameter through every function the two checkers share between a tuple's fields and a structure's. **A mark on the binder's label**: a label is no part of a scope's identity, and a rebuild that re-mints its binders drops one.
+- **Counting plain members in `project` with no written form.** An elaborated term is elaborated again, and a slot would be read as a position.
+- **A struct pattern held to a written mark.** A hidden member takes no position there and a named one is read by its label, so no pattern has a mark to write.
+- **A spread that falls back to the base's `@` field** where re-inference fails: one literal elaborated two ways by whether a search succeeded.
+- **A search over the facts for a bound that is no comparison** — congruence, or a fact's consequences. A fact that states the bound is found by conversion alone, and anything further is a search with no fragment to be complete for.
+- **A `use` field on a structure while a `use` payload is admitted**, or the reverse: a one-constructor family is that structure, so the two are one decision.
 
 ## Completion and retirement
 
-One walk matches written members to slots. Record the alignment in `documentation/syntax.md` and in the plicity decision; what waits on typed patterns moves to that spec's stages, and `@` fields and the marked telescope stay here until they land. Replace the roadmap entry with a checked summary once nothing but those remains, verify that nothing references this filename, and delete it.
+Done when no site restates, ignores or refuses a mark its telescope declares, but for what decision 10 names. A design decision titled by decision 1 records the rule, its rationale and what is rejected here; [Plicity is part of function identity](../../design/theory/plicity-is-part-of-function-identity.md) drops its rejection of pattern insertion and links to it; [Telescope instantiation](../../design/soundness/introduction/telescope-instantiation.md) states what its plicity clause rests on; [A bound that follows from the facts in scope](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md) takes decision 9; and `documentation/syntax.md` takes every surface form. This spec then shrinks to decision 10, and its roadmap entry to a checked summary beside what waits.
