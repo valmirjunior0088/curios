@@ -62,6 +62,25 @@ fn a_removed_item_is_gone_and_the_rest_is_reused() {
     assert!(reuses_body(&baseline, &incremental, "double"));
     assert!(reuses_body(&baseline, &incremental, "twice"));
     assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert!(
+        incremental.certification() == unit_of(&edited).certification(),
+        "the record keeps an entry for a declaration the text no longer holds"
+    );
+}
+
+/// A declaration renamed is one removed and one added: the record a recompile joins holds an entry under the new name and none under the old.
+#[test]
+fn a_renamed_item_leaves_no_entry_under_its_old_name() {
+    let edited = BASE.replace("pub let unrelated: Nat = 7;", "pub let apart: Nat = 7;");
+    let baseline = unit_of(BASE);
+
+    let incremental = recompile_over(&edited, &baseline).unwrap();
+
+    assert!(reuses_body(&baseline, &incremental, "double"));
+    assert!(
+        incremental.certification() == unit_of(&edited).certification(),
+        "the record differs from a whole compile's"
+    );
 }
 
 /// A moved declaration changes the lowering's order and nothing about any item, so everything is reused and only reassembled.
@@ -265,5 +284,37 @@ fn a_binder_a_reused_items_proof_reads_stays_credited_as_in_a_whole_compile() {
     assert_eq!(
         unused_binders(&incremental),
         unused_binders(&unit_of(&edited))
+    );
+}
+
+/// A hypothesis a proof reads in `below`, and one in `above` under it, whose statement reaches `limit`.
+const CREDITED_TWICE: &str = "use /std/{Nat};
+use /std/Bool/{True, Holds};
+
+pub let limit: Nat = 7;
+
+pub let below(i: Nat, n: Nat, p: Holds(i < n)) -> Holds(i <= n) = True/proved();
+
+pub let above(i: Nat, q: Holds(limit < i)) -> Holds(limit <= i) = True/proved();
+";
+
+/// A unit's credited binders are stored alike whichever pass credited them.
+///
+/// A recompile credits the closure's binders and then the ones the baseline's proofs read in what it reused, where a whole compile credits in reading order: `above` is elaborated again and `below`, over it in the text, is reused, so the two passes run in the other order than the text. Mutation-checked: kept as a list, the two units' text parts differ.
+#[test]
+fn credited_binders_are_stored_alike_whichever_pass_credited_them() {
+    let baseline = unit_of(CREDITED_TWICE);
+    let edited = CREDITED_TWICE.replace("= 7", "= 8");
+
+    let incremental = recompile_over(&edited, &baseline).unwrap();
+    let whole = unit_of(&edited);
+
+    assert!(reuses_body(&baseline, &incremental, "below"));
+    assert!(!reuses_body(&baseline, &incremental, "above"));
+    assert!(unused_binders(&incremental).is_empty());
+    assert!(
+        curios_archive::to_bytes(incremental.text()).unwrap()[..]
+            == curios_archive::to_bytes(whole.text()).unwrap()[..],
+        "the text stage's part is stored differently over a baseline"
     );
 }

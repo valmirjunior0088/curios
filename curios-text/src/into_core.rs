@@ -261,8 +261,8 @@ pub struct PreparedText {
     spellings: curios_core::Spellings,
     /// Every lint the lowering found, in reading order, less each `unused-binder` lint elaboration credited — see [`Lint`]. Carried with the unit because a lint depends on exactly what the unit's identity in the store depends on: its own sources and its predecessors' interfaces.
     lints: Vec<Lint>,
-    /// Every written binder a proof the elaborator wrote read — see [`LintedBinder`]. What a unit compiled over this one as its baseline credits in a declaration it does not elaborate again.
-    credited: Vec<LintedBinder>,
+    /// Every written binder a proof the elaborator wrote read — see [`LintedBinder`]. What a unit compiled over this one as its baseline credits in a declaration it does not elaborate again. A set, since membership is all that is asked of it: its order is then the binders' own, by declaration and place, whichever pass credited which, and a unit compiled over a baseline stores the one a whole compile stores.
+    credited: BTreeSet<LintedBinder>,
     /// The prefix of every mount some reference of this unit was *written* under — see `Context::note_spelled`.
     reached: BTreeSet<Qualifier>,
     /// Every item the parser could not read, in reading order — see [`BrokenItem`]. Empty for any unit that compiles.
@@ -295,12 +295,10 @@ impl PreparedText {
         baseline: &PreparedText,
         reused: impl Fn(&curios_core::Global) -> bool,
     ) {
-        let credited = baseline
-            .credited
-            .iter()
-            .filter(|binder| binder.declaration.as_ref().is_some_and(&reused))
-            .collect::<BTreeSet<_>>();
-        self.credit_where(|binder| credited.contains(binder));
+        let credited = &baseline.credited;
+        self.credit_where(|binder| {
+            binder.declaration.as_ref().is_some_and(&reused) && credited.contains(binder)
+        });
     }
 
     /// Drop the `unused-binder` lint of every binder `read` holds of, and record which each was.
@@ -1856,7 +1854,7 @@ fn into_core_unit_within(
                 .chain(dead)
                 .collect(),
         ),
-        credited: Vec::new(),
+        credited: BTreeSet::new(),
         reached: reached.into_inner(),
         documentation,
     };

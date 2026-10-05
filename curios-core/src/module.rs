@@ -114,12 +114,14 @@ impl Certification {
             .map(|(name, certified)| (name, certified.totality))
     }
 
-    /// This record with `other`'s entries beside its own, its own winning where both hold a name — how an item-level recompile's record joins the baseline's entries for the items it reused to its own walk's.
-    pub fn extended(mut self, other: &Certification) -> Self {
-        for (name, certified) in &other.certified {
-            self.certified
-                .entry(*name)
-                .or_insert_with(|| certified.clone());
+    /// This record with `other`'s entry for each definition of `module` it lacks, its own winning where both hold a name — how an item-level recompile's record joins the baseline's entries for the items it reused to its own walk's, and for no declaration the new text dropped.
+    pub fn extended(mut self, other: &Certification, module: &Module) -> Self {
+        for definition in module.items.iter().flat_map(Item::definitions) {
+            if let Some(certified) = other.certified.get(&definition.name) {
+                self.certified
+                    .entry(definition.name)
+                    .or_insert_with(|| certified.clone());
+            }
         }
         self
     }

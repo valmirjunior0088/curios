@@ -39,7 +39,7 @@ pub struct Lint {
 
 /// A written binder, by its declaration and its place among that declaration's written binders: what a local opened from it carries into elaboration, and what a later lowering of the declaration unchanged gives it too — so one key names it to the elaborator's credits and to a recompile over a baseline. Neither half is a counter another compilation shares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[curios_archive::archived]
+#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord))]
 pub struct LintedBinder {
     /// `None` for an entry's final term, which no baseline holds.
     pub declaration: Option<curios_core::Global>,

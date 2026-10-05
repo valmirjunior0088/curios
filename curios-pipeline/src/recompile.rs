@@ -80,8 +80,10 @@ pub fn compile_unit_over(
     if let Some(verdict) = rechecked.verdicts.first() {
         return Err(kernel_refusal(verdict, core.as_module(), &cores, syntax));
     }
-    // The walk classified the closure; the reused items keep the baseline's classifications, which nothing they mention has moved — a reused item is one the invalidation closure did not reach.
-    let certification = rechecked.certification.extended(baseline.certification());
+    // The walk classified the closure; the reused items keep the baseline's classifications, which nothing they mention has moved — a reused item is one the invalidation closure did not reach. Joined for what the new text declares, so a declaration it dropped leaves no entry behind.
+    let certification = rechecked
+        .certification
+        .extended(baseline.certification(), core.as_module());
 
     let ersd = erase_unit(
         &mut Context::new(budget, *syntax),
