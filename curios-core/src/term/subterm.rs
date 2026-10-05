@@ -480,6 +480,36 @@ impl Subterm {
         }
     }
 
+    /// Whether this term, in weak-head normal form, shows its type in its head: a sort, a type former, a lambda, a tuple or struct literal, a constructor's value, a host call, or an intrinsic that produces a sort or a carrier ([`Intrinsic::shows_its_type`]). Every other is a neutral, whose shape says nothing of its type: a variable, an application, a projection, a stuck elimination, a `rec` block, a universe instance, an intrinsic operation at a type its operands state.
+    ///
+    /// Both checkers read it to say which terms a literal's eta is taken against.
+    pub fn shows_its_type(&self, syntax: &SyntaxRegistry) -> bool {
+        match self {
+            Subterm::Type(_)
+            | Subterm::Prop
+            | Subterm::Foreign(..)
+            | Subterm::FuncType(_)
+            | Subterm::Func(_)
+            | Subterm::TupleType(_)
+            | Subterm::Tuple(_)
+            | Subterm::InductType(_)
+            | Subterm::Variant(_)
+            | Subterm::StructType(_)
+            | Subterm::Struct(_) => true,
+            Subterm::Intrinsic(intrinsic) => intrinsic.shows_its_type(syntax),
+            Subterm::Apply(_)
+            | Subterm::Match(_)
+            | Subterm::Proj(_)
+            | Subterm::Rec(_)
+            | Subterm::Instance(_)
+            | Subterm::Var(_) => false,
+            // Reduced away before a head is compared.
+            Subterm::Let(_) => false,
+            // Elaboration's own: the kernel refuses them, and the elaborator solves or parks them before it compares heads.
+            Subterm::Metavar(_) | Subterm::Transient(_) => false,
+        }
+    }
+
     /// Whether any elaboration-transient node occurs in this subterm — the uncached spelling of [`Term::has_transient`], which supplies the per-node memoization.
     pub(crate) fn has_transient(&self) -> bool {
         match self {

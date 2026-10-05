@@ -5,8 +5,8 @@ use {
     crate::{Error, Kernel, convert},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Free, FuncType, Global, InstanceHead, Intrinsic, Level, MetavarId, StructDecl, StructType,
-        Subterm, Telescope, Term, UniverseContext, Var,
+        Cases, Free, FuncType, Global, InstanceHead, Intrinsic, Level, Match, MatchResult,
+        MetavarId, StructDecl, StructType, Subterm, Telescope, Term, UniverseContext, Var,
     },
     curios_num::Grain,
     curios_utilities::{Plicity, Qualifier},
@@ -535,18 +535,100 @@ fn eta_by_a_literal_is_refused_at_a_type_former_that_is_not_its_own() {
     );
 }
 
-/// A literal's shape fires eta against a neutral inhabitant alone. Against a canonical form — which only a caller comparing two terms of different types could hand over — neither rule fires, and the unit literal's empty walk equates it with no literal of another type.
+/// A literal's eta is taken against every neutral inhabitant, a term whose head does not show its type, and against no other. A stuck elimination is one as a variable is: a lambda, a tuple literal and a struct literal each converge with the stuck elimination they expand, where no type directs the rule and at the struct's own type — the lambda past a fold, since one that only forwards reduces to what it forwards — and each near miss beside them — a binder dropped, two components swapped, two fields swapped — is refused. Against a head that shows another type — a number, a lambda, a constructor's value — the rule is not taken, and the unit literal's empty walk equates it with nothing. The elaborator's twin of this proposition shares the name.
+///
+/// Mutation-checked: with the set narrowed to a variable, a projection and an application the four held goals are refused, and with every head counted a neutral the unit literal converges with a number.
 #[test]
 fn eta_by_a_literal_is_taken_against_a_neutral_alone() {
     let mut kernel = kernel();
     let x = binder(0, "x");
     let ground = Term::type_ground();
+    let empty = declare(&mut kernel, "E", Term::type_ground());
+    let c = binder(1, "c");
+    kernel.assume(&c, &empty);
+    let fields = || [(binder(8, "a"), nat_type()), (binder(9, "b"), nat_type())];
+    let record = declare_struct(&mut kernel, "S", Telescope::build(fields(), ()));
+    let built = declare(&mut kernel, "D", Term::type_ground());
+
+    // `match c end` at an ambient goal: an elimination with no arm, stuck on a variable.
+    let stuck = |goal: Term| {
+        Term::from(Subterm::Match(Match {
+            head: Term::free_var(&c),
+            result: MatchResult::Ambient(goal),
+            cases: Cases::Induct {
+                cases: Vec::new(),
+                default: None,
+            },
+        }))
+    };
+    let function = stuck(Term::func_type([(x, nat_type())], nat_type()));
+    let pair = stuck(Term::tuple_type(fields()));
+    let structure = stuck(record.clone());
+    let literal = |first: usize, second: usize| {
+        Term::struct_(
+            Global::Authored(Qualifier::from(["S"])),
+            Vec::<Term>::new(),
+            [
+                Term::proj(structure.clone(), first),
+                Term::proj(structure.clone(), second),
+            ],
+        )
+    };
+    let applied =
+        |argument: Term| Term::func([(x, nat_type())], Term::apply(function.clone(), [argument]));
+    let projected = |first: usize, second: usize| {
+        Term::tuple([
+            Term::proj(pair.clone(), first),
+            Term::proj(pair.clone(), second),
+        ])
+    };
+
     let identity = Term::func([(x, nat_type())], Term::free_var(&x));
     let unit = Term::tuple(Vec::<Term>::new());
+    let constructed = Term::variant(
+        match &*built {
+            Subterm::InductType(family) => family.name,
+            _ => unreachable!("a declared family is an inductive type"),
+        },
+        Vec::<Term>::new(),
+        "mk",
+        Vec::<Term>::new(),
+    );
+    let mut at = |type_: &Term, this: &Term, that: &Term| convert(&mut kernel, type_, this, that);
 
-    assert_eq!(convert(&mut kernel, &ground, &identity, &nat(1)), Ok(false));
-    assert_eq!(convert(&mut kernel, &ground, &unit, &nat(1)), Ok(false));
-    assert_eq!(convert(&mut kernel, &ground, &unit, &identity), Ok(false));
+    assert_eq!(
+        [
+            at(
+                &ground,
+                &applied(Term::intrinsic(Intrinsic::nat_add(
+                    Term::free_var(&x),
+                    nat(0),
+                ))),
+                &function,
+            ),
+            at(&ground, &projected(0, 1), &pair),
+            at(&ground, &literal(0, 1), &structure),
+            at(&record, &literal(0, 1), &structure),
+        ],
+        [Ok(true), Ok(true), Ok(true), Ok(true)]
+    );
+    assert_eq!(
+        [
+            at(&ground, &applied(nat(0)), &function),
+            at(&ground, &projected(1, 0), &pair),
+            at(&ground, &literal(1, 0), &structure),
+        ],
+        [Ok(false), Ok(false), Ok(false)]
+    );
+    assert_eq!(
+        [
+            at(&ground, &identity, &nat(1)),
+            at(&ground, &unit, &nat(1)),
+            at(&ground, &unit, &identity),
+            at(&ground, &literal(0, 1), &constructed),
+        ],
+        [Ok(false), Ok(false), Ok(false), Ok(false)]
+    );
 }
 
 /// A struct literal with fewer fields than its declaration must not convert with a neutral inhabitant.

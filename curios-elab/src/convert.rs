@@ -1130,7 +1130,9 @@ impl Convert {
         type_: Term,
     ) -> Result<bool, ReduceError> {
         let type_ = reduce(context, type_)?;
-        if !matches!(&*type_, Subterm::FuncType(_)) && another_former(context, &type_) {
+        if !neutral(context, &other)
+            || (!matches!(&*type_, Subterm::FuncType(_)) && another_former(context, &type_))
+        {
             return Ok(false);
         }
 
@@ -1147,6 +1149,9 @@ impl Convert {
         type_: Term,
     ) -> Result<bool, ReduceError> {
         let n = tuple.fields.len();
+        if !neutral(context, &other) {
+            return Ok(false);
+        }
 
         let type_ = reduce(context, type_)?;
         let cur = match &*type_ {
@@ -1173,6 +1178,9 @@ impl Convert {
         type_: Term,
     ) -> Result<bool, ReduceError> {
         let n = struct_.fields.len();
+        if !neutral(context, &other) {
+            return Ok(false);
+        }
 
         // Recover the field types from the registry, exactly as `compare_struct` does — a `Struct` value carries no telescope of its own, unlike a `Tuple`'s inline `TupleType`.
         let type_ = reduce(context, type_)?;
@@ -2278,6 +2286,11 @@ impl Convert {
 /// Whether `type_`, a goal's type in weak-head normal form, is a type former. A literal's eta is refused at one that is not the literal's own, which each caller tells apart first: the two sides are not of one type there, and a literal with no field would convert with anything. A sort, an unsolved metavariable and a neutral type say nothing of the literal's type and keep the expansion — a sort is what a child nothing types is compared at. The kernel refuses the same goals by the same classifier.
 fn another_former(context: &Context, type_: &Term) -> bool {
     type_.is_type_former(&context.syntax())
+}
+
+/// Whether `term`, in weak-head normal form, is a neutral inhabitant, which is all a literal's eta is taken against: every term whose head does not show its type ([`Subterm::shows_its_type`], `curios-core`). The kernel takes the rule against the same set, by the same classifier, and says why it is the set.
+fn neutral(context: &Context, term: &Term) -> bool {
+    !term.shows_its_type(&context.syntax())
 }
 
 /// Whether a goal at `type_`, in weak-head normal form, is decided by the type: the empty Σ, where eta leaves nothing to compare, and a nominal struct that has one inhabitant by its shape, between two sides neither of which is its literal. A struct has no eta by its type — a literal opens one, against a neutral and field by field against another — so two neutrals have none to open, and what eta would decide between them is read off the type. A function and a record type with fields are left to eta, which decides the same.

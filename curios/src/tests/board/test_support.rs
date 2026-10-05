@@ -978,6 +978,102 @@ pub(super) const TWO_BINDERS_OF_AN_ARM_AT_A_RELEVANT_TYPE_STAY_APART: &str = r#"
         /std/Io/pure(())
         "#;
 
+pub(super) const A_LITERALS_ETA_IS_TAKEN_AGAINST_A_STUCK_ELIMINATION: &str = r#"
+        use /std/{Eq, Nat, Bool};
+
+        struct Record: pub Type { a: Nat, b: Nat }
+
+        let hold(@A: Type, a: A, count: Nat) -> A =
+            match count: (_) => A | 0 => a | pred + 1 => a end;
+
+        let a_tuple_in_an_arm(b : Bool, c : Bool, p : {Nat, Nat}, q : {Nat, Nat})
+            -> Eq(@({Nat, Nat}))(
+                match b: (_) => {Nat, Nat}
+                | true => ((match c: (_) => {Nat, Nat} | true => p | false => q end).0,
+                           (match c: (_) => {Nat, Nat} | true => p | false => q end).1)
+                | false => p
+                end,
+                match b: (_) => {Nat, Nat}
+                | true => match c: (_) => {Nat, Nat} | true => p | false => q end
+                | false => p
+                end)
+            = Eq/refl();
+
+        let a_tuple_against_a_definition_that_unfolds_to_one(b : Bool, n : Nat, p : {Nat, Nat})
+            -> Eq(@({Nat, Nat}))(
+                match b: (_) => {Nat, Nat} | true => (hold(p, n).0, hold(p, n).1) | false => p end,
+                match b: (_) => {Nat, Nat} | true => hold(p, n) | false => p end)
+            = Eq/refl();
+
+        let a_lambda_in_an_arm(b : Bool, c : Bool, g : (Nat) -> Nat, k : (Nat) -> Nat)
+            -> Eq(@((Nat) -> Nat))(
+                match b: (_) => (Nat) -> Nat
+                | true => (x : Nat) => (match c: (_) => (Nat) -> Nat | true => g | false => k end)(x + 0)
+                | false => g
+                end,
+                match b: (_) => (Nat) -> Nat
+                | true => match c: (_) => (Nat) -> Nat | true => g | false => k end
+                | false => g
+                end)
+            = Eq/refl();
+
+        let a_struct_at_its_own_type(c : Bool, s : Record, r : Record)
+            -> Eq(@(Record))(
+                Record { a = (match c: (_) => Record | true => s | false => r end).a,
+                         b = (match c: (_) => Record | true => s | false => r end).b },
+                match c: (_) => Record | true => s | false => r end)
+            = Eq/refl();
+
+        let a_struct_in_an_arm(b : Bool, c : Bool, s : Record, r : Record)
+            -> Eq(@(Record))(
+                match b: (_) => Record
+                | true => Record { a = (match c: (_) => Record | true => s | false => r end).a,
+                                   b = (match c: (_) => Record | true => s | false => r end).b }
+                | false => s
+                end,
+                match b: (_) => Record
+                | true => match c: (_) => Record | true => s | false => r end
+                | false => s
+                end)
+            = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const A_TUPLE_THAT_SWAPS_A_STUCK_ELIMINATIONS_COMPONENTS_IS_NOT_ITS_ETA: &str = r#"
+        use /std/{Eq, Nat, Bool};
+
+        let apart(b : Bool, c : Bool, p : {Nat, Nat}, q : {Nat, Nat})
+            -> Eq(@({Nat, Nat}))(
+                match b: (_) => {Nat, Nat}
+                | true => ((match c: (_) => {Nat, Nat} | true => p | false => q end).1,
+                           (match c: (_) => {Nat, Nat} | true => p | false => q end).0)
+                | false => p
+                end,
+                match b: (_) => {Nat, Nat}
+                | true => match c: (_) => {Nat, Nat} | true => p | false => q end
+                | false => p
+                end)
+            = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const A_STRUCT_THAT_SWAPS_A_STUCK_ELIMINATIONS_FIELDS_IS_NOT_ITS_ETA: &str = r#"
+        use /std/{Eq, Nat, Bool};
+
+        struct Record: pub Type { a: Nat, b: Nat }
+
+        let apart(c : Bool, s : Record, r : Record)
+            -> Eq(@(Record))(
+                Record { a = (match c: (_) => Record | true => s | false => r end).b,
+                         b = (match c: (_) => Record | true => s | false => r end).a },
+                match c: (_) => Record | true => s | false => r end)
+            = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
 pub(super) const A_FUNCTION_INTO_A_PROPOSITION_IS_DISCHARGED_BEFORE_ETA: &str = r#"
         use /std/{Eq, Nat};
 

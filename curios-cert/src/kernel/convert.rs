@@ -539,47 +539,39 @@ fn structural(
 
         // A lambda or a tuple literal against a neutral at a type former: `compare` fires eta by a function and a record type before it comes here, so the former is not the literal's, the two sides are not of one type, and the literal's eta is refused.
         (Subterm::Func(_) | Subterm::Tuple(_), _)
-            if neutral(that) && another_former(kernel, at) =>
+            if neutral(kernel, that) && another_former(kernel, at) =>
         {
             Ok(false)
         }
         (_, Subterm::Func(_) | Subterm::Tuple(_))
-            if neutral(this) && another_former(kernel, at) =>
+            if neutral(kernel, this) && another_former(kernel, at) =>
         {
             Ok(false)
         }
 
-        // Eta at a function and at a record, by the literal against a neutral inhabitant, where the goal's type did not direct it — see `function_eta` and `tuple_eta` for the rule, and `struct_eta` for the restriction. A stuck application may still unfold where a variable and a projection have nothing left to, so a refusal against one falls through to the unfolding retry, as a struct literal's does below.
-        (Subterm::Func(function), _) if neutral(that) => {
+        // Eta at a function and at a record, by the literal against a neutral inhabitant, where the goal's type did not direct it — see `function_eta` and `tuple_eta` for the rule, and `neutral` for the set. A neutral may still have a folded spelling to open, so a refusal falls through to the unfolding retry, which refuses where neither side has one.
+        (Subterm::Func(function), _) if neutral(kernel, that) => {
             match function_eta(kernel, history, function, that)? {
-                false if matches!(&**that, Subterm::Apply(_)) => {
-                    unfolded_retry(kernel, history, this, that)
-                }
-                verdict => Ok(verdict),
+                true => Ok(true),
+                false => unfolded_retry(kernel, history, this, that),
             }
         }
-        (_, Subterm::Func(function)) if neutral(this) => {
+        (_, Subterm::Func(function)) if neutral(kernel, this) => {
             match function_eta(kernel, history, function, this)? {
-                false if matches!(&**this, Subterm::Apply(_)) => {
-                    unfolded_retry(kernel, history, this, that)
-                }
-                verdict => Ok(verdict),
+                true => Ok(true),
+                false => unfolded_retry(kernel, history, this, that),
             }
         }
-        (Subterm::Tuple(literal), _) if neutral(that) => {
+        (Subterm::Tuple(literal), _) if neutral(kernel, that) => {
             match tuple_eta(kernel, history, literal, that)? {
-                false if matches!(&**that, Subterm::Apply(_)) => {
-                    unfolded_retry(kernel, history, this, that)
-                }
-                verdict => Ok(verdict),
+                true => Ok(true),
+                false => unfolded_retry(kernel, history, this, that),
             }
         }
-        (_, Subterm::Tuple(literal)) if neutral(this) => {
+        (_, Subterm::Tuple(literal)) if neutral(kernel, this) => {
             match tuple_eta(kernel, history, literal, this)? {
-                false if matches!(&**this, Subterm::Apply(_)) => {
-                    unfolded_retry(kernel, history, this, that)
-                }
-                verdict => Ok(verdict),
+                true => Ok(true),
+                false => unfolded_retry(kernel, history, this, that),
             }
         }
 
@@ -705,33 +697,29 @@ fn structural(
         }
 
         // A struct literal against a neutral at a type former that is not the literal's own struct: refused, as a lambda's and a tuple's is above.
-        (Subterm::Struct(literal), _) if neutral(that) && another_struct(kernel, at, literal) => {
+        (Subterm::Struct(literal), _)
+            if neutral(kernel, that) && another_struct(kernel, at, literal) =>
+        {
             Ok(false)
         }
-        (_, Subterm::Struct(literal)) if neutral(this) && another_struct(kernel, at, literal) => {
+        (_, Subterm::Struct(literal))
+            if neutral(kernel, this) && another_struct(kernel, at, literal) =>
+        {
             Ok(false)
         }
 
-        // Eta at a nominal struct, against a neutral inhabitant only — see `struct_eta` for the rule and the restriction.
-        // A *stuck application* is a neutral inhabitant as much as a variable or a projection is — it survived `reduce_forced`, so its head is stuck — and it is the shape a standard-library law meets: `State`'s left identity sets `State/bind`'s literal against the neutral `f(a)`. It reaches `struct_eta` through the same door, with one difference that is not optional: where a variable and a projection have nothing left to unfold, an application may, so a refusal here falls through to the unfolding retry rather than standing as the verdict.
-        (Subterm::Struct(literal), _) if matches!(&**that, Subterm::Apply(_)) => {
+        // Eta at a nominal struct, against a neutral inhabitant — see `struct_eta` for the rule and `neutral` for the set. A stuck application is the shape a standard-library law meets: `State`'s left identity sets `State/bind`'s literal against the neutral `f(a)`. A neutral may still have a folded spelling to open, so a refusal falls through to the unfolding retry.
+        (Subterm::Struct(literal), _) if neutral(kernel, that) => {
             match struct_eta(kernel, history, literal, that)? {
                 true => Ok(true),
                 false => unfolded_retry(kernel, history, this, that),
             }
         }
-        (_, Subterm::Struct(literal)) if matches!(&**this, Subterm::Apply(_)) => {
+        (_, Subterm::Struct(literal)) if neutral(kernel, this) => {
             match struct_eta(kernel, history, literal, this)? {
                 true => Ok(true),
                 false => unfolded_retry(kernel, history, this, that),
             }
-        }
-
-        (Subterm::Struct(literal), _) if matches!(&**that, Subterm::Var(_) | Subterm::Proj(_)) => {
-            struct_eta(kernel, history, literal, that)
-        }
-        (_, Subterm::Struct(literal)) if matches!(&**this, Subterm::Var(_) | Subterm::Proj(_)) => {
-            struct_eta(kernel, history, literal, this)
         }
 
         (
@@ -899,12 +887,11 @@ fn induct_type_args(
     Ok(true)
 }
 
-/// Whether `term` is a neutral inhabitant: a variable, a projection or a stuck application, which is all an eta fired by a literal's shape is taken against. [`struct_eta`] says what the restriction is for.
-fn neutral(term: &Term) -> bool {
-    matches!(
-        &**term,
-        Subterm::Var(_) | Subterm::Proj(_) | Subterm::Apply(_)
-    )
+/// Whether `term`, in weak-head normal form, is a neutral inhabitant, which is all an eta fired by a literal's shape is taken against: every term whose head does not show its type — a variable, a projection, a stuck application or elimination, a `rec` block, a universe instance, an intrinsic operation at a type its operands state ([`Subterm::shows_its_type`], `curios-core`, which the elaborator reads too).
+///
+/// Neutrality is no part of eta, which holds for every inhabitant of the type. It is a proxy for the invariant the rule stands on where nothing checks it, that the two sides have one type ([`struct_eta`]): a head that shows its type and is not the literal's former is a term of another type, and every other head says nothing either way. So the set is every head that says nothing; a narrower one refuses equations that hold and guards nothing the wider one admits.
+fn neutral(kernel: &Kernel, term: &Term) -> bool {
+    !term.shows_its_type(&kernel.syntax())
 }
 
 /// Whether `at`, a goal's type in weak-head normal form, is a type former a literal met in [`structural`] cannot inhabit. Conversion is asked about two terms of one type, and a literal's eta stands on it: where the goal states a type that is not the literal's, the invariant is broken at this goal and the rule is refused, where the neutral restriction alone would let a literal with no field convert with any neutral.
@@ -966,7 +953,7 @@ fn tuple_eta(
     Ok(true)
 }
 
-/// Eta at a nominal struct: a literal against a *neutral* inhabitant — a variable, a projection or a stuck application — projected field-wise and compared at the type the declaration gives each field. A `Prop`-sorted field converts by irrelevance without being compared at all, which the same telescope decides.
+/// Eta at a nominal struct: a literal against a *neutral* inhabitant ([`neutral`]), projected field-wise and compared at the type the declaration gives each field. A `Prop`-sorted field converts by irrelevance without being compared at all, which the same telescope decides.
 ///
 /// **What licenses the projection is an invariant about the callers, not the shape of `other`.** Conversion is only ever asked whether two terms *of one type* are equal: the entry point carries the type, every typed recursion passes the one its position assigns — a field's from this telescope, an argument's from its head's, an index's from the family's — and [`ground`] discards the kernel's *knowledge* of that type without changing the fact. So `other` inhabits the struct type the literal is a value of, and eta for a single-constructor record — every inhabitant `x` equals `S { x.0, …, x.(n-1) }` — is what decides the pair.
 ///

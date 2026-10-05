@@ -2,7 +2,7 @@
 
 Working specification for holding conversion to its laws at every rule it has, with each checker asked by itself. A conversion verdict is a function of the two terms and their type: it follows neither the checker that asked, nor the path that checker took to the question, nor the position the pair sits in. The two checkers never ask the same goals of one program, so what makes a program that elaborates certify is that the relation each decides is closed under its laws, and that it is the same relation. The audit states the laws as rows, derives each row's verdict from the equation it was built from, and reads each checker's answer apart from the other's.
 
-It is independent of every other spec; [Checked evidence and trusted reasoning](03-checked-evidence.md) names it in its verification. The audit stands, and what remains is what it found: the terms a literal's eta is taken against, and the record of the decision.
+It is independent of every other spec; [Checked evidence and trusted reasoning](03-checked-evidence.md) names it in its verification. The audit stands and every row it found parted is closed; what remains is the record of the decision.
 
 ## What this builds on
 
@@ -24,7 +24,7 @@ It is independent of every other spec; [Checked evidence and trusted reasoning](
 | Transitivity | A step through an annotation against the first type compared with the last | The truth table's cap in both, by design ([What conversion still decides by spelling or by cap](../04-arithmetic/01-decided-by-spelling-or-cap.md)) |
 | Congruence | A part compared where it is written against the whole compared where it sits | — |
 | Stability under respelling | A term compared before a definition is unfolded against after | A case equation's key, which [What conversion still decides by spelling or by cap](../04-arithmetic/01-decided-by-spelling-or-cap.md) holds |
-| One set of rules | — | Eta by a literal, which the elaborator takes against any term and the kernel against three shapes of neutral ([the findings](00-findings.md)) |
+| One set of rules | — | — |
 
 **Congruence holds where a child is compared with no type.** A lambda's body, a tuple's component, a stuck elimination's scrutinee and arms and a projection's head are compared at `Type`, and there each checker reads what a type directs off the type a lookup gives both sides, under binders opened at the types their position gives them. The reading has one bound, a struct that reaches itself, which answers no where it is met again. And where a type does reach the pair each checker reads it forced, so the typed rule and the looked-up rule read one type.
 
@@ -75,8 +75,7 @@ Each with its reason, so a stage meets none of them as a fork. The audit is buil
 
 Each fix empties its rows of the table of parted rows and deletes its finding. Its check is its own tests in the crate it changes, mutation-checked; the programs it accepts as tests in `curios/src/tests/board/`; `cargo xboard`; and `/std` certifying.
 
-1. **One set of terms a literal's eta is taken against**, decision 17. Check: `let t(c: Bool, s: Record, r: Record) -> Eq(@(Record))(Record { a = m.a, b = m.b }, m) = Eq/refl();`, with `m` the stuck `match c: (_) => Record | true => s | false => r end`, compiles, and so do a tuple literal, a lambda and a struct literal against a stuck elimination in a stuck elimination's arm, and a tuple literal there against a definition that unfolds to one, each refused by the kernel alone before ([the finding](00-findings.md)); each near miss is refused; a literal against an introduction form of another shape is refused at a sort in both checkers, under one test name; seeds whose neutral is a stuck elimination keep their side under every context; the kernel's widening is mutation-checked both ways.
-2. **Landing.** The decision record, the entries and the roadmap.
+1. **Landing.** The decision record, the entries and the roadmap.
 
 ## Verification
 

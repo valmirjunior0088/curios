@@ -51,6 +51,33 @@ fn an_expansion_that_swaps_its_components_is_not_eta_in_an_arm() {
     );
 }
 
+// **A literal's eta is taken against every neutral, one set in both checkers.** The kernel took it against a variable, a projection and a stuck application, and the elaborator against any term, so a literal against a stuck elimination elaborated and was refused by the kernel alone: a tuple literal and a lambda in a stuck elimination's arm, where no type directs the rule, a tuple literal there against a definition that unfolds to one, and a struct literal at the struct's own type. A neutral is every term whose head does not show its type, which is what a shape can tell where the goal states no type.
+//
+// The two refusals beside it are the near misses: the rule compares what the literal holds.
+#[test]
+fn a_literals_eta_is_taken_against_a_stuck_elimination() {
+    assert_eq!(
+        run(A_LITERALS_ETA_IS_TAKEN_AGAINST_A_STUCK_ELIMINATION),
+        b"1"
+    );
+}
+
+#[test]
+fn a_tuple_that_swaps_a_stuck_eliminations_components_is_not_its_eta() {
+    rejected_by(
+        A_TUPLE_THAT_SWAPS_A_STUCK_ELIMINATIONS_COMPONENTS_IS_NOT_ITS_ETA,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn a_struct_that_swaps_a_stuck_eliminations_fields_is_not_its_eta() {
+    rejected_by(
+        A_STRUCT_THAT_SWAPS_A_STUCK_ELIMINATIONS_FIELDS_IS_NOT_ITS_ETA,
+        "type mismatch",
+    );
+}
+
 // **Unit eta is the type's, in both checkers.** A type with no field — the empty Σ, a nominal struct that declares none — has one inhabitant, so any two terms convert at it, and each checker decides the goal by its type ahead of every structural rule. The elaborator reached the rule only between two sides no structural rule claimed and the kernel had it against a literal alone, so two variables elaborated and were refused by the kernel, and two applications or two stuck matches were refused by the elaborator, which held each equal to a variable. The first two programs are the ones that reached the kernel's refusal; the rest are the shapes, and the two eta rules that carry a goal to a unit.
 //
 // The refusal beside it is what keeps the acceptance from reading as "any two records convert": one relevant field keeps two neutrals apart.

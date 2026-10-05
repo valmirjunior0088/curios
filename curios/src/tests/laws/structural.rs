@@ -177,6 +177,58 @@ pub(super) const SEEDS: &[Seeds] = &[
             ),
         ],
     },
+    // A literal's eta against a neutral that is a stuck elimination, which says no more of its type than a variable does.
+    Seeds {
+        type_: "{Nat, Nat}",
+        binders: "which: Bool, p: {Nat, Nat}, q: {Nat, Nat}",
+        compound: None,
+        seeds: &[
+            held(
+                "record eta against a stuck elimination",
+                "((match which: (_) => {Nat, Nat} | true => p | false => q end).0, (match which: (_) => {Nat, Nat} | true => p | false => q end).1)",
+                "match which: (_) => {Nat, Nat} | true => p | false => q end",
+            ),
+            miss(
+                "record eta against a stuck elimination, its components swapped",
+                "((match which: (_) => {Nat, Nat} | true => p | false => q end).1, (match which: (_) => {Nat, Nat} | true => p | false => q end).0)",
+                "match which: (_) => {Nat, Nat} | true => p | false => q end",
+            ),
+        ],
+    },
+    Seeds {
+        type_: "(Nat) -> Nat",
+        binders: "which: Bool, g: (Nat) -> Nat, k: (Nat) -> Nat",
+        compound: None,
+        seeds: &[
+            held(
+                "function eta against a stuck elimination",
+                "(x: Nat) => (match which: (_) => (Nat) -> Nat | true => g | false => k end)(x)",
+                "match which: (_) => (Nat) -> Nat | true => g | false => k end",
+            ),
+            miss(
+                "function eta against a stuck elimination, its binder dropped",
+                "(x: Nat) => (match which: (_) => (Nat) -> Nat | true => g | false => k end)(0)",
+                "match which: (_) => (Nat) -> Nat | true => g | false => k end",
+            ),
+        ],
+    },
+    Seeds {
+        type_: "Record",
+        binders: "which: Bool, s: Record, r: Record",
+        compound: None,
+        seeds: &[
+            held(
+                "struct eta against a stuck elimination",
+                "Record { a = (match which: (_) => Record | true => s | false => r end).a, b = (match which: (_) => Record | true => s | false => r end).b }",
+                "match which: (_) => Record | true => s | false => r end",
+            ),
+            miss(
+                "struct eta against a stuck elimination, its fields swapped",
+                "Record { a = (match which: (_) => Record | true => s | false => r end).b, b = (match which: (_) => Record | true => s | false => r end).a }",
+                "match which: (_) => Record | true => s | false => r end",
+            ),
+        ],
+    },
     Seeds {
         type_: "{}",
         binders: "u: {}, v: {}, f: (Nat) -> {}, e: (Nat) -> {}, n: Nat",

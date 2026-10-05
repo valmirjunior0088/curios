@@ -70,6 +70,18 @@ impl Intrinsic {
         }
     }
 
+    /// Whether what this intrinsic produces shows in its head: a sort, which makes it a type former or an operation over types, or an intrinsic carrier, which a literal value and an operation into one both inhabit. An operation at a type its operands state — a list's element, a fold's result — is a neutral of that type.
+    pub fn shows_its_type(&self, syntax: &SyntaxRegistry) -> bool {
+        match self.signature(syntax).produced {
+            Produced::Sort => true,
+            Produced::Fixed(produced) => match &*produced {
+                Subterm::Type(_) | Subterm::Prop => true,
+                Subterm::Intrinsic(carrier) => carrier.is_type_former(syntax),
+                _ => false,
+            },
+        }
+    }
+
     /// The operand types and result of this operation, with operands in [`traverse`](Intrinsic::traverse) order.
     ///
     /// Order is the contract: a walker zips this against the operands `traverse` yields, so the two are written to be read together and a mismatch in length is a bug this crate can assert on rather than a silent misalignment downstream.
