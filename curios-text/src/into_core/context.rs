@@ -266,7 +266,7 @@ pub(super) struct Context<'a> {
     public: &'a Scoped<'a, PublicInterface>,
     qualifiers: HashMap<String, Qualifier>,
     bindings: HashMap<String, Qualifier>,
-    // Shared, unit-wide metavariable-id counter. Holes in different module bodies (each its own `Context` via `nested`) are one unit's, so they draw from the same monotonic source. Shared by reference (like `table`/`public`) and `Cell`-backed so it survives `Lowerer`'s immutable `&Context` borrow.
+    // The metavariable-id counter of the source declaration being lowered, shared with every nested `Context` and reset where a declaration begins ([`Context::begin_declaration`]). Shared by reference (like `table`/`public`) and `Cell`-backed so it survives `Lowerer`'s immutable `&Context` borrow.
     metavars: &'a Entropy,
     universes: &'a Entropy,
     universe_role: &'a Cell<curios_core::UniverseRole>,
@@ -274,6 +274,8 @@ pub(super) struct Context<'a> {
     universe_allocations: &'a RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
     // Shared counter for every binder identity a lowered term closes over. Threaded (not a process-global atomic) for determinism: two runs over the same source must mint the same identities, or terms that should be equal would differ.
     binders: &'a Entropy,
+    // What each source declaration lowered so far minted, with the names it lowered to — see `curios_core::Minted`. The unit's, shared across nested contexts like the counters it is read off.
+    minted: &'a RefCell<curios_core::Minted>,
     // One ordinal counter per declaring module. A `satisfy` declaration is anonymous, so its identity is minted rather than written — and it is scoped to the module that declares it, because an ordinal alone would mean something only in the compilation that handed it out.
     witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
     // Every bare name that resolved to nothing, keyed by the binder identity it lowered to, with the public bindings in scope of that name. Shared across nested contexts like the counters, because the table is the unit's: `curios-elab` reports the unbound binder, and this is what lets its report say what the reader probably meant.
@@ -305,6 +307,7 @@ impl<'a> Context<'a> {
         universe_seeds: &'a RefCell<Vec<curios_core::UniverseSeed>>,
         universe_allocations: &'a RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
         binders: &'a Entropy,
+        minted: &'a RefCell<curios_core::Minted>,
         witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
         unbound: &'a RefCell<BTreeMap<curios_core::Free, Vec<Qualifier>>>,
         imports: &'a RefCell<curios_core::Imports>,
@@ -326,6 +329,7 @@ impl<'a> Context<'a> {
             universe_seeds,
             universe_allocations,
             binders,
+            minted,
             witnesses,
             unbound,
             imports,
@@ -354,6 +358,7 @@ impl<'a> Context<'a> {
             universe_seeds: self.universe_seeds,
             universe_allocations: self.universe_allocations,
             binders: self.binders,
+            minted: self.minted,
             witnesses: self.witnesses,
             unbound: self.unbound,
             imports: self.imports,
@@ -405,7 +410,36 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Mint a metavariable id for a surface hole, unique within the unit.
+    /// Begin lowering a source declaration: every identity it mints counts from zero, and a written type is one level across the items the declaration lowers to and no further. What a declaration's lowered form holds then depends on nothing written before it.
+    pub(super) fn begin_declaration(&self) {
+        self.metavars.reset();
+        self.universes.reset();
+        self.binders.reset();
+        self.universe_seeds.borrow_mut().clear();
+        self.universe_allocations.borrow_mut().clear();
+    }
+
+    /// What has been minted since [`Context::begin_declaration`].
+    pub(super) fn mints(&self) -> curios_core::Mints {
+        curios_core::Mints {
+            binders: self.binders.count(),
+            metavariables: self.metavars.count(),
+            universes: self.universe_seeds.borrow().clone(),
+        }
+    }
+
+    /// End the declaration begun last, which lowered to the items declaring `names`: record what it minted, for every one of them.
+    pub(super) fn end_declaration(&self, names: impl IntoIterator<Item = curios_core::Global>) {
+        let mints = self.mints();
+        let mut minted = self.minted.borrow_mut();
+        let declaration = minted.declarations.len();
+        minted.declarations.push(mints);
+        minted
+            .from
+            .extend(names.into_iter().map(|name| (name, declaration)));
+    }
+
+    /// Mint a metavariable id for a surface hole, unique within its declaration.
     pub(super) fn fresh_metavar(&self) -> usize {
         self.metavars.fresh()
     }
@@ -478,7 +512,7 @@ impl<'a> Context<'a> {
 
     /// Mint a binder identity, rendering as `hint`.
     ///
-    /// Every binder a lowered term closes over comes from here, including the continuation binders `!` desugaring introduces. `curios-elab` mints more while elaborating and starts its counter above this unit's count ([`curios_core::Minted::binders`]), so the two sources share one identity space per unit without colliding.
+    /// Every binder a lowered term closes over comes from here, including the continuation binders `!` desugaring introduces. `curios-elab` mints more while elaborating and starts its counter above this declaration's count ([`curios_core::Mints::binders`]), so the two sources share one identity space per declaration without colliding.
     pub(super) fn fresh_binder(&self, hint: Option<&str>) -> curios_core::Free {
         curios_core::Free::local(
             u32::try_from(self.binders.fresh()).expect("binder space exhausted"),

@@ -22,18 +22,59 @@ fn written_types_get_distinct_levels_and_lexical_roles() {
     )
     .unwrap();
 
+    // The declaration's written type and the entry's are each the first level of a space of their own.
+    let written = minted
+        .declarations
+        .iter()
+        .chain([&minted.entry])
+        .flat_map(|mints| &mints.universes)
+        .collect::<Vec<_>>();
     assert_eq!(
-        minted
-            .universes
-            .iter()
-            .map(|seed| seed.role)
-            .collect::<Vec<_>>(),
+        written.iter().map(|seed| seed.role).collect::<Vec<_>>(),
         vec![
             curios_core::UniverseRole::Generalizable,
             curios_core::UniverseRole::Flexible,
         ],
     );
-    assert!(minted.universes.iter().all(|seed| seed.origin.is_some()));
+    assert!(written.iter().all(|seed| seed.origin.is_some()));
+    assert_eq!(minted.declarations.len(), 1);
+}
+
+/// A declaration's identities count from zero for it, so what it lowers to and how much its lowering minted are the same whatever is written before it.
+#[test]
+fn a_declaration_lowers_the_same_whatever_is_written_before_it() {
+    let lowered = |source: &str| {
+        let (program, minted, _) = super::into_core(
+            &source.parse::<Entrypoint>().unwrap(),
+            &RootSource::none(),
+            syntax(),
+        )
+        .unwrap();
+        let name = curios_core::Global::Authored(Qualifier::from(["id"]));
+        let item = program
+            .module
+            .items
+            .iter()
+            .find(|item| item.declared_names().contains(&&name))
+            .cloned()
+            .expect("the declaration lowers");
+        let mints = minted.of(&name);
+        let roles = mints
+            .universes
+            .iter()
+            .map(|seed| seed.role)
+            .collect::<Vec<_>>();
+
+        (item, mints.binders, mints.metavariables, roles)
+    };
+    let id = "let id(@A : Type, x : A) -> A = x;";
+
+    let alone = lowered(&format!("{id} Type"));
+    let after = lowered(&format!(
+        "let first(@A : Type, @B : Type, x : A, y : B) -> A = x; {id} Type"
+    ));
+
+    assert_eq!(alone, after);
 }
 
 #[test]

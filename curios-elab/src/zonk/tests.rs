@@ -2,8 +2,9 @@ use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, MetavarId, Module, Nat,
-        Subterm, Term, Totality, Tuple, UniverseContext, UniverseMetaId, UniverseParam,
+        Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, MetavarId, Minted,
+        Module, Nat, Subterm, Term, Totality, Tuple, UniverseContext, UniverseMetaId,
+        UniverseParam,
     },
     curios_utilities::{Qualifier, Source, Span},
     std::sync::Arc,
@@ -47,7 +48,7 @@ fn lowered_module_validation_rejects_a_truncated_universe_seed_table() {
     let module = lowered_module(Term::type_at(Level::meta(UniverseMetaId(0))));
 
     assert!(matches!(
-        validate_lowered_universe_seeds(&module, &[]),
+        validate_lowered_universe_seeds(&module, &Minted::default()),
         Err(Error::UniverseInvariant(message)) if message.contains("?u0")
     ));
 }
@@ -235,7 +236,7 @@ fn materializes_a_shared_graph_once_per_node() {
     assert!(std::ptr::eq::<Subterm>(&**left, &**right));
 }
 
-/// A module's goals are gathered once per node of its graph, not once per path: one written goal at the base of sixty levels that each sum the one below with itself is one report.
+/// A module's goals are gathered once per node of its graph, not once per path: one written goal at the base of sixty levels that each sum the one below with itself is met once.
 #[test]
 fn goals_are_gathered_once_per_node() {
     let mut context = context();
@@ -245,9 +246,9 @@ fn goals_are_gathered_once_per_node() {
     for _ in 0..60 {
         body = Term::intrinsic(Intrinsic::nat_add(body.clone(), body));
     }
-    let reports = collect_goal_reports(&mut context, &lowered_module(body), None);
+    let sites = goal_sites(&context, &lowered_module(body), None);
 
-    assert_eq!(reports.len(), 1);
+    assert_eq!(sites.len(), 1);
 }
 
 /// A value's universes are validated once per node of its graph, not once per path: a level at the base of sixty levels that each sum the one below with itself is checked in the graph's size.

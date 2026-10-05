@@ -600,6 +600,12 @@ fn process_items(
     }
 
     for top_item in top_items {
+        // A source declaration mints in a space of its own, shared by every item it lowers to; a nested module's declarations each take theirs.
+        let declares = !matches!(top_item, TopItem::Mod(_));
+        let lowered_from = flat_items.len();
+        if declares {
+            context.begin_declaration();
+        }
         match top_item {
             // Nothing lowers: the item is carried as its report, under the name it declared, for the compile boundary to refuse the unit by and the elaborator to withhold dependents of.
             TopItem::Broken(b) => broken.push(BrokenItem {
@@ -1421,6 +1427,9 @@ fn process_items(
                 });
             }
         }
+        if declares && flat_items.len() > lowered_from {
+            context.end_declaration(flat_items[lowered_from..].iter().flat_map(FlatItem::names));
+        }
     }
 
     Ok(())
@@ -1645,10 +1654,11 @@ fn into_core_unit_within(
         Scoped::over(&predecessor_public),
     )?;
 
-    // Every counter starts at zero. No term in scope carries a local, a metavariable or a universe metavariable — a stored unit is refused one — so nothing minted here can alias an identity already there, and what this unit mints depends on nothing compiled before it.
+    // Every counter starts at zero for each source declaration ([`Context::begin_declaration`]). No term in scope carries a local, a metavariable or a universe metavariable — a stored unit is refused one — so nothing minted here can alias an identity already there, and what a declaration mints depends on nothing compiled or written before it.
     let metavars = Entropy::<usize>::new();
     let universes = Entropy::<usize>::new();
     let binders = Entropy::<usize>::new();
+    let minted = RefCell::new(curios_core::Minted::default());
     // No floor: a witness's ordinal is scoped to its declaring module, which lies within this unit's mounts, and those are disjoint from every predecessor's, so nothing it mints can collide with anything already stored.
     let witness_ids = RefCell::new(BTreeMap::new());
     let unbound = RefCell::new(BTreeMap::new());
@@ -1658,7 +1668,7 @@ fn into_core_unit_within(
     let lints = RefCell::new(Vec::new());
 
     let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
-    // This unit's own seed table, from index zero, in step with `universes`.
+    // The seed table of the declaration being lowered, from index zero, in step with `universes`.
     let universe_seeds = RefCell::new(Vec::new());
     let universe_allocations = RefCell::new(HashMap::new());
 
@@ -1672,6 +1682,7 @@ fn into_core_unit_within(
         &universe_seeds,
         &universe_allocations,
         &binders,
+        &minted,
         &witness_ids,
         &unbound,
         &imports,
@@ -1736,6 +1747,8 @@ fn into_core_unit_within(
 
     // The entrypoint, for the one unit that has one. Its tail closes the root body, so the imports in scope there are the last the root saw.
     context.record_import_scope(None);
+    // The entry mints in a space of its own, as a declaration does.
+    context.begin_declaration();
     let entry = {
         // Scoped so the lowerer drops, and reports its lints, before the tables the context borrows are moved into the result below.
         let lower = Lowerer::new(&context, None);
@@ -1748,6 +1761,7 @@ fn into_core_unit_within(
             None => None,
         }
     };
+    let entry_mints = context.mints();
 
     audit_public_exposures(
         &public,
@@ -1816,9 +1830,8 @@ fn into_core_unit_within(
             tests,
         },
         minted: curios_core::Minted {
-            binders: binders.count(),
-            metavariables: metavars.count(),
-            universes: universe_seeds.into_inner(),
+            entry: entry_mints,
+            ..minted.into_inner()
         },
         unbound: unbound.into_inner(),
         spellings: curios_core::Spellings {

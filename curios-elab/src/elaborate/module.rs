@@ -10,12 +10,13 @@ mod tests;
 use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
-        Declared, Established, ScheduledTest, Spelled, Written, Zonked, check_concept_registry,
-        check_is_sort, check_positivity, check_proof_totality, check_rec_item_totality,
-        check_type_totality, check_variance, check_written_type_totality, collect_goal_reports,
-        is_prop, record_definition_totality, record_superclasses, record_totality,
-        record_variances, reduce_with, register_witness, sort_term, superclass_targets,
-        test_program_tail, zonk, zonk_arity, zonk_entry, zonk_module, zonk_solved_term_metas,
+        Declared, Established, GoalReport, GoalSite, ScheduledTest, Spelled, Written, Zonked,
+        check_concept_registry, check_is_sort, check_positivity, check_proof_totality,
+        check_rec_item_totality, check_type_totality, check_variance, check_written_type_totality,
+        goal_sites, is_prop, record_definition_totality, record_superclasses, record_totality,
+        record_variances, reduce_with, register_witness, report_goals, sort_term,
+        superclass_targets, test_program_tail, zonk, zonk_arity, zonk_entry, zonk_module,
+        zonk_published, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_core::{
@@ -1180,7 +1181,11 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
 /// Elaborate one persistent module item and perform every item-boundary obligation. Both module drivers use this path so universe transactions, parked work, witnesses, privacy islands, and error attribution cannot drift.
 ///
 /// One attempt: what it returns stands only where the attempt read nothing unfinished, which [`Demand`] asks the context after it.
-fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Error> {
+///
+/// **An item is published as it finishes.** What it elaborated to is zonked, strictly, and the context is made to hold that — the bindings of its names, its registry entries, the terms it recorded — so nothing of the state it elaborated in is left for another declaration to read, the next one elaborating in a state of its own ([`Context::attempt`]). A hole it left unsolved is its own refusal, raised where it stands.
+///
+/// **An item that wrote a goal is held.** Its goals are found here and reported once every declaration of the unit has finished, in the state it elaborated in, which is the only one that knows them ([`Holding`]). It is published by its types alone ([`Context::publish_held`]), so the declarations that read it elaborate and report their own.
+fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborated, Error> {
     curios_profile::profile!("elaborate_module_item");
     let item_module = match item {
         Item::Let(definition) => definition.island,
@@ -1196,6 +1201,7 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     // The step budget is per declaration, so it is restored here rather than drained across the module: whether this item typechecks must not depend on how much the items before it happened to spend.
     context.restore_budget();
     context.enter_item(owner.copied());
+    let recorded = context.checked_mark();
 
     let elaborated = match item {
         Item::Let(definition) => elaborate_module_let(context, definition),
@@ -1207,7 +1213,74 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     context.drain_parked()?;
     context.finish_universe_transaction();
 
-    Ok(elaborated)
+    if context.holds_goals() {
+        let sites = goal_sites(context, &alone(context, &elaborated), None);
+        if !sites.is_empty() {
+            // No obligation is read off a term that holds a goal: the unit is refused for the goal.
+            context.truncate_checked(recorded);
+            // A type former, a concept and a witness are read by more than their types — a registry entry, a table entry — so one that holds a goal is taken out, and what reads it is withheld.
+            let plain = item.declared_names().into_iter().all(|name| {
+                context.induct_decl(name).is_none()
+                    && context.struct_decl(name).is_none()
+                    && context.concept(name).is_none()
+                    && !context.is_witness_declaration(name)
+            });
+            let published = plain && context.publish_held(&elaborated).is_ok();
+
+            return Ok(Elaborated::Held {
+                item: elaborated,
+                sites,
+                published,
+            });
+        }
+    }
+
+    let published = zonk_published(context, &elaborated)
+        .map_err(|error| error.in_declaration(&item_names, owner))?;
+    context.publish(&published);
+    context
+        .settle_checked(recorded)
+        .map_err(|error| error.in_declaration(&item_names, owner))?;
+
+    Ok(Elaborated::Published(published.item))
+}
+
+/// What one attempt at an item came to.
+enum Elaborated {
+    /// The item, zonked, as the context now holds it.
+    Published(Item),
+    /// The item as it elaborated, where it holds each goal it wrote, and whether it was published by its types alone or has to be taken out.
+    Held {
+        item: Item,
+        sites: Vec<GoalSite>,
+        published: bool,
+    },
+}
+
+/// `item` as a module of its own, with the registry entries its names declare as the context holds them: what its goals are found in.
+fn alone(context: &Context, item: &Item) -> Module {
+    let mut module = Module {
+        items: vec![item.clone()],
+        mounts: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    };
+    for name in item.declared_names() {
+        if let Some(declaration) = context.induct_decl(name) {
+            module.induct_decls.insert(*name, declaration.clone());
+        }
+        if let Some(declaration) = context.struct_decl(name) {
+            module.struct_decls.insert(*name, declaration.clone());
+        }
+        if let Some(concept) = context.concept(name) {
+            module.concepts.insert(*name, concept.clone());
+        }
+    }
+
+    module
 }
 
 /// Each witness `module` declares, as its signature spells it ([`Spelled`]), at the place `order` gives its name. A name of the unit is read by its lowered form in `lowered`, which holds every item of the unit, the ones a recompile reuses among them, so a whole compile and a recompile read one key; any other name is read by what the context holds of it.
@@ -1294,7 +1367,9 @@ struct ElaboratedSuffix {
     entry: Option<Entrypoint>,
     /// Every item's refusal in item order, the entry's after them, then the whole-module passes'. Non-empty means the module is not the program that was written, and the caller raises these rather than finalizing it as one.
     refusals: Vec<Error>,
-    /// Every name an item this run produced no item for: withheld before it elaborated, or refused. Empty is the run that kept everything it was handed; non-empty is *not* the same fact as a non-empty `refusals`, since a withheld item reports nothing — see `recovery`.
+    /// The declarations that wrote goals, each with the state it elaborated in: reported with the entry's once every item has finished.
+    held: Vec<Holding>,
+    /// Every name an item this run produced no item for: withheld before it elaborated, refused, or held for a goal. Empty is the run that kept everything it was handed; non-empty is *not* the same fact as a non-empty `refusals`, since a withheld item reports nothing — see `recovery`.
     dropped: BTreeSet<Global>,
 }
 
@@ -1341,9 +1416,7 @@ fn elaborate_module_suffix(
     established.replay_definitions(context)?;
 
     // Elaboration goes on minting in the spaces the unit's lowering minted in, so each counter starts above the lowering's count: a lowered hole and an inserted implicit are distinct metavariables, and an unbound name — a free local the lowering minted — is never an elaborated binder, which would find it bound instead of reporting it. The scope's terms carry neither, so nothing a predecessor minted can meet these.
-    context.seed_metavars(minted.metavariables);
-    context.seed_binders(minted.binders);
-    context.seed_universes(&minted.universes);
+    context.seed(minted);
 
     // Where each name of the unit is written — every item's, the ones a recompile reuses among them — and which of them this elaboration's own items declare: what an item reads of a declaration that has not elaborated is then a need, never an absence. Every witness among them goes in under the key its signature is spelled at, which is what a question about its concept is answered by until it elaborates.
     let order = lowered
@@ -1486,7 +1559,12 @@ fn elaborate_module_suffix(
         .filter(|name| names.contains(*name))
         .cloned()
         .collect();
-    let (items, refusals, dropped) = survivors.into_parts();
+    let Survived {
+        items,
+        refusals,
+        held,
+        dropped,
+    } = survivors.into_parts();
 
     let module = Module {
         items,
@@ -1502,6 +1580,7 @@ fn elaborate_module_suffix(
         module,
         entry,
         refusals,
+        held,
         dropped,
     })
 }
@@ -1564,6 +1643,7 @@ fn finalize_and_check(
     context: &mut Context,
     module: Module,
     entry: Option<Entrypoint>,
+    held: Vec<Holding>,
     inherited: &BTreeMap<Global, Totality>,
 ) -> Result<Finalized, Error> {
     curios_profile::profile!("finalize_and_check");
@@ -1582,10 +1662,16 @@ fn finalize_and_check(
             .map(|_| entry_terms.next().expect("entry type was finalized")),
     });
 
-    // Written goals report as one complete batch before zonking: collection meets exactly the set strict zonk would (committed solutions included), so a goal-bearing program fails with every goal located rather than with the first (`collect_goal_reports`).
-    let goal_reports = collect_goal_reports(context, &module, entry.as_ref());
-    if !goal_reports.is_empty() {
-        return Err(Error::goals(goal_reports));
+    // Written goals report as one complete batch before zonking: the items', each found as its item finished (`held`), then the entry's, whose collection meets exactly the set strict zonk would (committed solutions included), so a goal-bearing program fails with every goal located rather than with the first (`goal_sites`).
+    let sites = goal_sites(context, &module, entry.as_ref());
+    if !(held.is_empty() && sites.is_empty()) {
+        return Err(Error::goals(report_written_goals(
+            context,
+            &module,
+            entry.as_ref(),
+            held,
+            &sites,
+        )));
     }
 
     let mut module = zonk_module(context, &module)?;
@@ -1615,6 +1701,51 @@ fn finalize_and_check(
         entry,
         obligations,
     })
+}
+
+/// Report every goal a unit wrote, the items' in item order and the entry's (`sites`) after them, each with what fits it drawn from the unit as it was written.
+///
+/// A declaration that wrote a goal is not among `module`'s items, which are the ones that finished. It is put back among them here, once every declaration of the unit has finished, so a goal is offered the definitions written beside its own whichever of them elaborated first. Each declaration's goals are reported in the state it elaborated in ([`Context::within`]), and the entry's in the context's own.
+fn report_written_goals(
+    context: &mut Context,
+    module: &Module,
+    entry: Option<&Entrypoint>,
+    held: Vec<Holding>,
+    sites: &[GoalSite],
+) -> Vec<GoalReport> {
+    /// Where `item` sits in the unit's lowered order.
+    fn place(context: &Context, item: &Item) -> Option<usize> {
+        item.declared_names()
+            .first()
+            .and_then(|name| context.written_at(name))
+    }
+
+    let mut written = module.items.clone();
+    written.extend(
+        held.iter()
+            .flat_map(|holding| holding.items.iter().map(|(item, _)| item.clone())),
+    );
+    written.sort_by_key(|item| place(context, item));
+
+    let mut reports = Vec::new();
+    for Holding { state, items } in held {
+        context.within(state, |context| {
+            for (item, sites) in &items {
+                reports.push((
+                    place(context, item),
+                    report_goals(context, sites, &written, entry),
+                ));
+            }
+        });
+    }
+    reports.sort_by_key(|(place, _)| *place);
+    let mut reports = reports
+        .into_iter()
+        .flat_map(|(_, reports)| reports)
+        .collect::<Vec<_>>();
+    reports.extend(report_goals(context, sites, &written, entry));
+
+    reports
 }
 
 /// The erasure-obligation verdicts, as one error — how every caller but the path that reports them beside the kernel's verdicts consumes [`finalize_and_check`]'s report. Both obligations are reported when both fail: they are decided independently, and a reader fixing one is owed the other.
@@ -1658,7 +1789,8 @@ pub fn elaborate_and_zonk_module(
             None,
         )?;
         // Nothing is inherited: `module` is the whole unit, so every name it mentions it also defines.
-        let finalized = finalize_and_check(context, suffix.module, None, &BTreeMap::new());
+        let finalized =
+            finalize_and_check(context, suffix.module, None, suffix.held, &BTreeMap::new());
         if !suffix.refusals.is_empty() {
             return Err(refused(suffix.refusals, finalized));
         }
@@ -1749,8 +1881,13 @@ fn elaborate_and_zonk(
             elaborate_module_suffix(context, established, module, module, minted, tail)?;
         // The scope's own stamps come out of their units already closed, so inheriting them is what lets a user proof see that `/std/Async/bind` is partial without walking `/std` again.
         let inherited = established.recorded_totality();
-        let finalized =
-            finalize_and_check(context, elaborated.module, elaborated.entry, &inherited);
+        let finalized = finalize_and_check(
+            context,
+            elaborated.module,
+            elaborated.entry,
+            elaborated.held,
+            &inherited,
+        );
         if !elaborated.refusals.is_empty() {
             return Err(refused(elaborated.refusals, finalized));
         }
@@ -1812,7 +1949,13 @@ fn elaborate_and_zonk_unit_over_within(
         None,
     )?;
     let inherited = extended.recorded_totality();
-    let finalized = finalize_and_check(context, elaborated.module, None, &inherited);
+    let finalized = finalize_and_check(
+        context,
+        elaborated.module,
+        None,
+        elaborated.held,
+        &inherited,
+    );
     if !elaborated.refusals.is_empty() {
         return Err(refused(elaborated.refusals, finalized));
     }

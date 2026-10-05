@@ -10,9 +10,9 @@ use {
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind,
         Entrypoint, Free, Func, FuncType, Global, InductDecl, InductParam, InductType, Instance,
         InstanceHead, Intrinsic, Item, Let, LetBinding, Level, LevelHead, Match, Metavar,
-        MetavarId, MetavarOrigin, Module, NodeMemo, Proj, Rec, RecGroup, RecItem, RecMemberScopes,
-        Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
-        UniverseContext, UniverseError, UniverseMetaId, UniverseSeed, Var, Variant, Visit,
+        MetavarId, MetavarOrigin, Minted, Module, NodeMemo, Proj, Rec, RecGroup, RecItem,
+        RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
+        TupleType, UniverseContext, UniverseError, UniverseMetaId, Var, Variant, Visit,
         project_erased_universes, rewrite_universe_levels_scoped_shared, shift_universe_params,
         universe_metas,
     },
@@ -201,52 +201,14 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
     let induct_decls = module
         .induct_decls
         .iter()
-        .map(|(name, induct_decl)| {
-            Ok((
-                *name,
-                InductDecl {
-                    universe_context: induct_decl.universe_context.clone(),
-                    arity: zonk_arity_within(context, &induct_decl.arity)?,
-                    constructors: induct_decl
-                        .constructors
-                        .iter()
-                        .map(|(tag, param)| {
-                            Ok((
-                                tag.clone(),
-                                InductParam {
-                                    telescope: zonk_signature(context, &param.telescope)?,
-                                },
-                            ))
-                        })
-                        .collect::<Result<_, Error>>()?,
-                    result_sort: zonk_term(context, &induct_decl.result_sort)?,
-                    module: induct_decl.module,
-                    rep_public: induct_decl.rep_public,
-                    polarities: induct_decl.polarities.clone(),
-                    variances: induct_decl.variances.clone(),
-                },
-            ))
-        })
+        .map(|(name, induct_decl)| Ok((*name, zonk_induct_decl(context, induct_decl)?)))
         .collect::<Result<_, Error>>()?;
 
     // Struct field telescopes flow into `erase` the same way — zonk them too.
     let struct_decls = module
         .struct_decls
         .iter()
-        .map(|(name, struct_decl)| {
-            Ok((
-                *name,
-                StructDecl {
-                    universe_context: struct_decl.universe_context.clone(),
-                    arity: zonk_arity_within(context, &struct_decl.arity)?,
-                    result_sort: zonk_term(context, &struct_decl.result_sort)?,
-                    module: struct_decl.module,
-                    rep_public: struct_decl.rep_public,
-                    polarities: struct_decl.polarities.clone(),
-                    variances: struct_decl.variances.clone(),
-                },
-            ))
-        })
+        .map(|(name, struct_decl)| Ok((*name, zonk_struct_decl(context, struct_decl)?)))
         .collect::<Result<_, Error>>()?;
 
     let module = Module {
@@ -258,23 +220,93 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
         concepts: module
             .concepts
             .iter()
-            .map(|(name, concept)| {
-                Ok((
-                    *name,
-                    ConceptDecl {
-                        universe_context: concept.universe_context.clone(),
-                        params: zonk_field_telescope(context, &concept.params)?,
-                        fields: concept.fields.clone(),
-                        supers: concept.supers.clone(),
-                    },
-                ))
-            })
+            .map(|(name, concept)| Ok((*name, zonk_concept_decl(context, concept)?)))
             .collect::<Result<_, Error>>()?,
         witnesses: module.witnesses.clone(),
         tests: module.tests.clone(),
     };
     validate_universes(&module)?;
     Ok(module)
+}
+
+fn zonk_induct_decl(context: &Zonk, induct_decl: &InductDecl) -> Result<InductDecl, Error> {
+    Ok(InductDecl {
+        universe_context: induct_decl.universe_context.clone(),
+        arity: zonk_arity_within(context, &induct_decl.arity)?,
+        constructors: induct_decl
+            .constructors
+            .iter()
+            .map(|(tag, param)| {
+                Ok((
+                    tag.clone(),
+                    InductParam {
+                        telescope: zonk_signature(context, &param.telescope)?,
+                    },
+                ))
+            })
+            .collect::<Result<_, Error>>()?,
+        result_sort: zonk_term(context, &induct_decl.result_sort)?,
+        module: induct_decl.module,
+        rep_public: induct_decl.rep_public,
+        polarities: induct_decl.polarities.clone(),
+        variances: induct_decl.variances.clone(),
+    })
+}
+
+fn zonk_struct_decl(context: &Zonk, struct_decl: &StructDecl) -> Result<StructDecl, Error> {
+    Ok(StructDecl {
+        universe_context: struct_decl.universe_context.clone(),
+        arity: zonk_arity_within(context, &struct_decl.arity)?,
+        result_sort: zonk_term(context, &struct_decl.result_sort)?,
+        module: struct_decl.module,
+        rep_public: struct_decl.rep_public,
+        polarities: struct_decl.polarities.clone(),
+        variances: struct_decl.variances.clone(),
+    })
+}
+
+fn zonk_concept_decl(context: &Zonk, concept: &ConceptDecl) -> Result<ConceptDecl, Error> {
+    Ok(ConceptDecl {
+        universe_context: concept.universe_context.clone(),
+        params: zonk_field_telescope(context, &concept.params)?,
+        fields: concept.fields.clone(),
+        supers: concept.supers.clone(),
+    })
+}
+
+/// What one finished item leaves for every other declaration to read, meta-free: the item, and the registry entries its names declare.
+pub(crate) struct Published {
+    pub(crate) item: Item,
+    pub(crate) induct_decls: Vec<(Global, InductDecl)>,
+    pub(crate) struct_decls: Vec<(Global, StructDecl)>,
+    pub(crate) concepts: Vec<(Global, ConceptDecl)>,
+}
+
+/// Zonk one finished item and the registry entries it declares, as [`zonk_module`] zonks a module's: strictly, so what is published holds no metavariable of the declaration that wrote it, and a hole the declaration left unsolved is refused where it stands rather than once every item has elaborated.
+pub(crate) fn zonk_published(context: &Context, item: &Item) -> Result<Published, Error> {
+    let zonk = &Zonk::new(context);
+    let published = zonk_item(zonk, item)?;
+    let mut induct_decls = Vec::new();
+    let mut struct_decls = Vec::new();
+    let mut concepts = Vec::new();
+    for name in item.declared_names() {
+        if let Some(declaration) = context.induct_decl(name) {
+            induct_decls.push((*name, zonk_induct_decl(zonk, declaration)?));
+        }
+        if let Some(declaration) = context.struct_decl(name) {
+            struct_decls.push((*name, zonk_struct_decl(zonk, declaration)?));
+        }
+        if let Some(concept) = context.concept(name) {
+            concepts.push((*name, zonk_concept_decl(zonk, concept)?));
+        }
+    }
+
+    Ok(Published {
+        item: published,
+        induct_decls,
+        struct_decls,
+        concepts,
+    })
 }
 
 /// Zonk a program's entry — its body and the type it was judged at — and validate its universes against the schemes `module`, the program's zonked module, declares.
@@ -722,49 +754,51 @@ pub fn validate_entry_universes(module: &Module, entry: &Entrypoint) -> Result<(
     Ok(())
 }
 
-/// Validate the lowering-time universe allocator contract before replaying a prepared Text module. Every meta reachable from lowered Core must have a seed among `seeds`, the unit's own, which the lowering fills from index zero.
-pub fn validate_lowered_universe_seeds(
-    module: &Module,
-    seeds: &[UniverseSeed],
-) -> Result<(), Error> {
-    let seeded = seeds.len();
-
-    let mut metas = BTreeSet::new();
+/// Validate the lowering-time universe allocator contract before replaying a prepared Text module. Every meta reachable from a lowered definition or registry entry must have a seed among those of the declaration it was lowered from, which the lowering fills from index zero for each.
+pub fn validate_lowered_universe_seeds(module: &Module, minted: &Minted) -> Result<(), Error> {
+    let mut metas: BTreeMap<Global, BTreeSet<UniverseMetaId>> = BTreeMap::new();
     macro_rules! collect {
-        ($value:expr) => {
-            metas.extend(universe_metas($value))
+        ($name:expr, $value:expr) => {
+            metas
+                .entry($name)
+                .or_default()
+                .extend(universe_metas($value))
         };
     }
 
     for item in &module.items {
         for definition in item.definitions() {
-            collect!(&definition.type_);
-            collect!(&definition.body);
+            collect!(definition.name, &definition.type_);
+            collect!(definition.name, &definition.body);
             for constraint in &definition.universe_context.constraints {
+                let metas = metas.entry(definition.name).or_default();
                 metas.extend(constraint.lower.metas());
                 metas.extend(constraint.upper.metas());
             }
         }
     }
-    for declaration in module.induct_decls.values() {
-        collect!(&declaration.arity);
-        collect!(&declaration.result_sort);
+    for (name, declaration) in &module.induct_decls {
+        collect!(*name, &declaration.arity);
+        collect!(*name, &declaration.result_sort);
         for constructor in declaration.signatures() {
-            collect!(&constructor.telescope);
+            collect!(*name, &constructor.telescope);
         }
     }
-    for declaration in module.struct_decls.values() {
-        collect!(&declaration.arity);
-        collect!(&declaration.result_sort);
+    for (name, declaration) in &module.struct_decls {
+        collect!(*name, &declaration.arity);
+        collect!(*name, &declaration.result_sort);
     }
-    for concept in module.concepts.values() {
-        collect!(&concept.params);
+    for (name, concept) in &module.concepts {
+        collect!(*name, &concept.params);
     }
 
-    if let Some(meta) = metas.into_iter().find(|meta| meta.0 >= seeded) {
-        return Err(Error::UniverseInvariant(format!(
-            "lowered universe meta {meta} has no seed among the table's {seeded}"
-        )));
+    for (name, metas) in metas {
+        let seeded = minted.of(&name).universes.len();
+        if let Some(meta) = metas.into_iter().find(|meta| meta.0 >= seeded) {
+            return Err(Error::UniverseInvariant(format!(
+                "{name}: lowered universe meta {meta} has no seed among its declaration's {seeded}"
+            )));
+        }
     }
     Ok(())
 }
@@ -795,18 +829,19 @@ fn zonk_definition(context: &Zonk, def: &Definition) -> Result<Definition, Error
     })
 }
 
-/// Collect every written goal one successful elaboration reached — the same set strict zonking would meet — as display-ready reports.
+/// Where a written goal was met: its id, its first occurrence's span, and its owning definition when it sits inside one (the suggestion pools exclude the owner).
+pub(crate) type GoalSite = (MetavarId, Option<Span>, Option<Global>);
+
+/// Find every written goal one successful elaboration reached — the same set strict zonking would meet — in discovery order.
 ///
 /// The walk mirrors [`zonk_module`]'s coverage in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once with its first occurrence's span. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
-///
-/// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms; universe instances are then erased ([`project_erased_universes`]) and operator witness projections folded back to infix, so every reported term is spelled the way the source could write it. An unsolved goal additionally carries sandboxed candidate suggestions ([`suggest_candidates`]), displayed through the same pipeline.
-pub(crate) fn collect_goal_reports(
-    context: &mut Context,
+pub(crate) fn goal_sites(
+    context: &Context,
     module: &Module,
     entry: Option<&Entrypoint>,
-) -> Vec<GoalReport> {
-    /// Collected goal sites in discovery order: each goal's id, its first occurrence's span, and its owning definition when it sits inside one (the suggestion pools exclude the owner), shared into the scan closures.
-    type GoalSites = Rc<RefCell<Vec<(MetavarId, Option<Span>, Option<Global>)>>>;
+) -> Vec<GoalSite> {
+    /// The sites collected so far, shared into the scan closures.
+    type GoalSites = Rc<RefCell<Vec<GoalSite>>>;
 
     let goals: GoalSites = Rc::new(RefCell::new(Vec::new()));
     let seen_goals = Rc::new(RefCell::new(BTreeSet::new()));
@@ -912,11 +947,22 @@ pub(crate) fn collect_goal_reports(
         }
     }
 
+    goals.take()
+}
+
+/// Report the goals met at `sites` ([`goal_sites`]) as display-ready reports, in the state they were written in — the only one that knows them — each with the candidates that fit it, drawn from `written`, the unit's items as they elaborated, and a program's entry.
+///
+/// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms; universe instances are then erased ([`project_erased_universes`]) and operator witness projections folded back to infix, so every reported term is spelled the way the source could write it. An unsolved goal additionally carries sandboxed candidate suggestions ([`suggest_candidates`]), displayed through the same pipeline.
+pub(crate) fn report_goals(
+    context: &mut Context,
+    sites: &[GoalSite],
+    written: &[Item],
+    entry: Option<&Entrypoint>,
+) -> Vec<GoalReport> {
     // Suggestions run first, on the mutable context — each attempt sandboxed and rolled back — before the display phase borrows it immutably. Solved goals get none: a suggestion beside a `? =` answer is noise. `restore_budget` puts the attempts on the same footing as the finalization passes.
-    let goal_sites: Vec<(MetavarId, Option<Span>, Option<Global>)> = goals.borrow().clone();
     context.restore_budget();
-    let mut all_candidates: Vec<Suggestions> = Vec::with_capacity(goal_sites.len());
-    for (id, _, owner) in &goal_sites {
+    let mut all_candidates: Vec<Suggestions> = Vec::with_capacity(sites.len());
+    for (id, _, owner) in sites {
         if context.metavar_solution(*id).is_some() {
             all_candidates.push(Suggestions {
                 candidates: Vec::new(),
@@ -939,7 +985,7 @@ pub(crate) fn collect_goal_reports(
             &telescope,
             &refinements,
             &result,
-            module,
+            written,
             entry,
             owner.as_ref(),
         ));
@@ -953,7 +999,7 @@ pub(crate) fn collect_goal_reports(
             &project_erased_universes(&zonk_solved_term_metas(context, term)),
         )
     };
-    goal_sites
+    sites
         .iter()
         .zip(all_candidates)
         .map(|((id, span, owner), suggestions)| {

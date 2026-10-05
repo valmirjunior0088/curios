@@ -120,6 +120,66 @@ fn an_application_fit_mentioning_a_scope_binder_is_suggested() {
 }
 
 #[test]
+fn a_module_function_written_below_the_goal_is_suggested() {
+    // A goal is reported once every declaration of the unit has elaborated, so what fits it is drawn from the unit as it is written, wherever the goal stands in it: `claim` elaborates before `mk`, which nothing above it reads.
+    let source = r#"
+        use /std/{Nat, Eq};
+        let claim : Eq()(3, 3) = ?;
+        let mk(n : Nat) -> Eq()(n, n) = Eq/refl();
+        /std/Io/pure(())
+    "#;
+
+    let error = compile(source).unwrap_err();
+
+    assert!(error.contains("mk(3)"), "unexpected error: {error}");
+}
+
+#[test]
+fn two_goals_are_each_offered_the_others_definition() {
+    // A definition that holds a goal is read by its type alone, so it fits another goal as any definition does, and neither report waits on the other goal being filled.
+    let source = r#"
+        use /std/{Nat, Eq};
+        let left(k : Nat) -> Eq()(k, k) = ?;
+        let right(k : Nat) -> Eq()(k, k) = ?;
+        /std/Io/pure(())
+    "#;
+
+    let error = compile(source).unwrap_err();
+    let reports: Vec<&str> = error.split("goal `?`").collect();
+    let left = reports
+        .iter()
+        .find(|report| report.contains("let left("))
+        .expect("the first goal reports");
+    let right = reports
+        .iter()
+        .find(|report| report.contains("let right("))
+        .expect("the second goal reports");
+
+    assert!(left.contains("right(k)"), "unexpected error: {error}");
+    assert!(right.contains("left(k)"), "unexpected error: {error}");
+}
+
+#[test]
+fn a_goal_in_a_witness_is_offered_a_module_function() {
+    // A witness that holds a goal is taken out of the unit, since it is read by more than its type, and its goal is still reported over the unit: `render` is a definition the method's body never mentions.
+    let source = r#"
+        use /std/{Nat, Str};
+        pub concept Show(A : Type) : pub Type {
+            show(A) -> Str
+        }
+        let render(n : Nat) -> Str = Nat/to_str(n);
+        satisfy Show(Nat) {
+            show(n) = ?
+        }
+        /std/Io/pure(())
+    "#;
+
+    let error = compile(source).unwrap_err();
+
+    assert!(error.contains("render(n)"), "unexpected error: {error}");
+}
+
+#[test]
 fn an_imported_lemma_is_suggested_with_its_proof_slot_filled_from_the_scope() {
     // Pool 5 and the scope fill together. `Eq/sym` is never mentioned by the program — it arrives through `use /std/{Eq}` — and its explicit slot is a proof the goal cannot pin; the output pins `x := k, y := 7`, and `h : Eq()(k, 7)` is the one binder whose type then fits the slot. The complete fit leads; `Eq/cong(?, h)` follows as the refinement whose function is open. Spelled `Eq/sym`, the path the import resolves under, not the `/std/Eq/sym` Core holds.
     let source = r#"

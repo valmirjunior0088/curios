@@ -4,7 +4,7 @@
 //!
 //! The rule holds because the *capability* is absent, not because every site remembers it. A spelling carrying structured facts is an undocumented wire format between stages, each fact recovered by a hand-rolled parser whose correctness rests on an invariant stated nowhere near the parse; `README.md` records what that cost. The types below unmerge the facts: [`Free`] discriminates global from local, [`Global`] discriminates an authored path from an anonymous witness, and [`Mint`] separates a binder's identity from its display hint. No path leads from a `Free` to a `&str` except through the printer, so reintroducing behavior-from-spelling means adding a method to a name type — which cannot happen by accident and appears in review as what it is. That is the property to preserve when extending this vocabulary.
 //!
-//! **A minted identity is private to the unit that minted it.** A local's index and a metavariable's id are positions in counters that start at zero for each unit ([`Minted`]); a witness's ordinal counts within the module that declares it ([`WitnessId`]). So none may outlive the compilation that assigned it: a scope remembers a binder's hint and never its identity (`Label`), a stored term carries no local and no metavariable (`validate_stored_identities`), and the kernel refuses a module mentioning a local it was not handed (`free_locals_outside`). What crosses from one compilation to another is a [`Global`], whose meaning is its path.
+//! **A minted identity is private to the declaration that minted it.** A local's index and a metavariable's id are positions in counters that start at zero for each source declaration ([`Minted`]); a witness's ordinal counts within the module that declares it ([`WitnessId`]). So none may outlive the compilation that assigned it: a scope remembers a binder's hint and never its identity (`Label`), a stored term carries no local and no metavariable (`validate_stored_identities`), and the kernel refuses a module mentioning a local it was not handed (`free_locals_outside`). What crosses from one compilation to another is a [`Global`], whose meaning is its path.
 
 #[cfg(test)]
 mod tests;
@@ -171,20 +171,47 @@ pub enum CalleeId {
     Structure(Global),
 }
 
-/// What one unit's lowering minted in each space elaboration goes on minting in — the whole of what the lowering hands elaboration beside the module: counts within the unit, which the elaborator's counters start above so nothing it mints is an identity a lowered term already holds, and a seed per universe level, which the solver starts from.
-///
-/// **Within the unit, never across units.** No stored term carries a local, a metavariable or a universe metavariable (`validate_stored_identities`, `validate_universes`), so nothing a predecessor minted can meet this unit's walk, and every unit's counters start at zero. That is what keeps a unit's stored bytes independent of what was compiled before it.
-///
-/// **Beside the module, never on it.** A seed is read once, where elaboration seeds its solver, and means nothing to any stage after it; carried on the [`Module`](crate::Module) every stage shares, it would be a field each later one had to prove empty, and one the certifier could reach.
+/// What the lowering of one source declaration minted in each space elaboration goes on minting in: counts within the declaration, which the elaborator's counters start above so nothing it mints is an identity a lowered term already holds, and a seed per universe level, which the solver starts from.
 #[derive(Debug, Clone, Default, PartialEq)]
 #[curios_archive::archived]
-pub struct Minted {
+pub struct Mints {
     /// Binder identities. A lowered scope is closed before the elaborator sees it, so the ones that survive into a lowered term are the unbound names — each lowered to a free local that elaboration must report rather than find bound.
     pub binders: usize,
     /// Term metavariables, one per hole the lowering left for elaboration to solve.
     pub metavariables: usize,
     /// One seed per universe level the lowering minted, by its id: the role the solver reads the level's provenance off, and where it was written. Every copy of one written `Type` shares a level, so there are as many seeds as written types, not as occurrences.
     pub universes: Vec<UniverseSeed>,
+}
+
+/// What one unit's lowering minted, declaration by declaration — the whole of what the lowering hands elaboration beside the module.
+///
+/// **Within the declaration, never across declarations.** Every counter starts at zero for each source declaration, and the items one declaration lowers to — a type former with its constructors, a concept with its method wrappers — share its identities, a written type copied into several of them being one level. So what a declaration's lowered form holds depends on nothing written before it, and neither does what its elaboration mints above it: an edit to one declaration renumbers no other. No stored term carries a local, a metavariable or a universe metavariable (`validate_stored_identities`, `validate_universes`), so nothing another declaration or a predecessor minted can meet a declaration's walk.
+///
+/// **Beside the module, never on it.** A seed is read once, where elaboration seeds its solver, and means nothing to any stage after it; carried on the [`Module`](crate::Module) every stage shares, it would be a field each later one had to prove empty, and one the certifier could reach.
+#[derive(Debug, Clone, Default, PartialEq)]
+#[curios_archive::archived]
+pub struct Minted {
+    /// What each source declaration minted, in the order the lowering met them.
+    pub declarations: Vec<Mints>,
+    /// The declaration each top-level name was lowered from: an entry of `declarations` by its place.
+    pub from: BTreeMap<Global, usize>,
+    /// What the entry minted, the term a program closes with.
+    pub entry: Mints,
+}
+
+impl Minted {
+    /// What the declaration `name` was lowered from minted. A name no lowering recorded — a module built by hand — minted nothing.
+    pub fn of(&self, name: &Global) -> &Mints {
+        static NOTHING: Mints = Mints {
+            binders: 0,
+            metavariables: 0,
+            universes: Vec::new(),
+        };
+
+        self.from
+            .get(name)
+            .map_or(&NOTHING, |declaration| &self.declarations[*declaration])
+    }
 }
 
 /// A free variable's identity: a top-level definition, or a binder some scope opened.
@@ -200,7 +227,7 @@ pub enum Free {
 impl Free {
     /// A local binder with identity `index`, rendering as `hint`.
     ///
-    /// An index means something within the unit that minted it and nowhere else: the lowering and the elaborator share one space per unit, the elaborator's counter starting above the lowering's count ([`Minted::binders`]), and no stored term carries one.
+    /// An index means something within the declaration that minted it and nowhere else: the lowering and the elaborator share one space per declaration, the elaborator's counter starting above the lowering's count ([`Mints::binders`]), and no stored term carries one.
     pub fn local(index: u32, hint: Option<&str>) -> Self {
         Free::Local(Mint::new(index, hint))
     }

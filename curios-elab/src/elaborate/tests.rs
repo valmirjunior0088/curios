@@ -3,8 +3,8 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Cases, Exhaustion, Free, Global, InductArm, InductDecl, InductParam, Intrinsic, Many,
-        Match, MatchResult, MetavarId, MetavarOrigin, Nat, Scope, Struct, StructDecl, StructEntry,
-        StructType, Subterm, Telescope, Term, UniverseContext,
+        Match, MatchResult, MetavarId, MetavarOrigin, Minted, Mints, Nat, Scope, Struct,
+        StructDecl, StructEntry, StructType, Subterm, Telescope, Term, UniverseContext,
     },
     curios_num::{Floating, Natural},
     curios_utilities::{Plicity, Qualifier, Sign},
@@ -314,7 +314,14 @@ fn infer_on_an_unborn_hole_cannot_infer() {
 fn infer_on_an_unborn_goal_births_it_with_a_meta_type() {
     let mut context = context();
     // Mirror `elaborate_module_suffix`: written ids live below the lowering's count, so the stand-in type metavariable minted here cannot collide with the goal's.
-    context.seed_metavars(1);
+    context.seed(&Minted {
+        entry: Mints {
+            metavariables: 1,
+            ..Mints::default()
+        },
+        ..Minted::default()
+    });
+    context.attempt(&[]);
 
     // A written goal in synthesis position does not die with `CannotInfer`: a fresh unmarked metavariable stands in as its type, and the goal is birthed under it so zonk can report it.
     let (term, type_) = elaborate(&mut context, &Term::goal(0), Mode::Infer).unwrap();

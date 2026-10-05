@@ -413,6 +413,8 @@ compose
 
 A goal is never accepted in a successfully compiled program.
 
+A definition that holds a goal is read by every other declaration as a name of its type, bound to nothing: the others are still elaborated, so each reports its own goals and refusals in the same run, and a term that would unfold the definition stays stuck on its name. A goal in the definition's own type, or in a type, a concept or a witness, leaves no type to read it by, so what reads that declaration is withheld until the goal is filled.
+
 ### Whole-term forms and operand positions
 
 `let`, lambdas, and function types are whole-term forms: a body or tail extends to the end of the enclosing term. There is no expression-level `term: type` ascription; a `:` annotation appears only in binder, signature, and motive positions.

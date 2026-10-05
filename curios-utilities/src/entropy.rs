@@ -33,6 +33,11 @@ impl<T> Entropy<T> {
         self.counter.set(self.counter.get().max(floor));
     }
 
+    /// Start over from zero. Every value handed out from here on repeats one handed out before, which is the caller's to make meaningless: a counter kept per declaration is reset where one ends and the next begins.
+    pub fn reset(&self) {
+        self.counter.set(0);
+    }
+
     /// The next raw counter value — i.e. how many ticks have been minted.
     pub fn count(&self) -> usize {
         self.counter.get()

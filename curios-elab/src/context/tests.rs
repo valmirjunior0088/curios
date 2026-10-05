@@ -2,8 +2,9 @@ use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Free, Global, Intrinsic, Level, MetavarId, Nat, Term, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseRole,
+        Free, Global, Intrinsic, Level, MetavarId, Minted, Mints, Nat, Term,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
+        UniverseRole,
     },
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
@@ -288,6 +289,60 @@ fn a_withdrawn_witness_poisons_the_key_it_is_spelled_at() {
 
     assert!(!context.is_poisoned_witness(&show, &key));
     assert!(!context.witness_declared(&show, &key));
+}
+
+/// A declaration's state starts above what its own lowering minted, so the identities it mints are the ones it would mint elaborated alone, whatever was elaborated before it.
+#[test]
+fn an_attempt_mints_above_what_its_own_declaration_lowered() {
+    let mut context = context();
+    let [a, b] = unit_of_two(&mut context);
+    let lowered = |binders| Mints {
+        binders,
+        ..Mints::default()
+    };
+    context.seed(&Minted {
+        declarations: vec![lowered(2), lowered(5)],
+        from: BTreeMap::from([(a, 0), (b, 1)]),
+        entry: lowered(9),
+    });
+    let minted = |context: &mut Context, names: &[&Global]| {
+        context.attempt(names);
+        [context.fresh(None), context.fresh(None)]
+    };
+
+    let alone = minted(&mut context, &[&b]);
+    let [in_a, _] = minted(&mut context, &[&a]);
+    let [in_entry, _] = minted(&mut context, &[]);
+
+    assert_eq!(alone, [Free::local(5, None), Free::local(6, None)]);
+    assert_eq!(in_a, Free::local(2, None));
+    assert_eq!(in_entry, Free::local(9, None));
+    assert_eq!(minted(&mut context, &[&b]), alone);
+}
+
+/// A state set aside takes what its attempt solved with it, and holds it wherever it is put back: the next attempt mints the same identity and reads nothing of it.
+#[test]
+fn a_state_set_aside_keeps_what_its_attempt_solved() {
+    let mut context = context();
+    context.attempt(&[]);
+    context.birth_metavar(
+        MetavarId(0),
+        Vec::new(),
+        Term::intrinsic(Intrinsic::NatType),
+    );
+    context.solve_metavar(
+        MetavarId(0),
+        Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+    );
+
+    let state = context.set_aside();
+    context.attempt(&[]);
+
+    assert!(context.metavar_solution(MetavarId(0)).is_none());
+    assert!(context.within(state, |context| {
+        context.metavar_solution(MetavarId(0)).is_some()
+    }));
+    assert!(context.metavar_solution(MetavarId(0)).is_none());
 }
 
 /// A name no declaration of the unit writes is another unit's, and is applied wherever it is in scope.

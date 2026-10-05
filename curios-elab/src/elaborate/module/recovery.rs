@@ -9,7 +9,7 @@
 //! **What a run reports is not what it dropped.** A refused item reports; a withheld one reports nothing, by the decision above. So the refusals a run collects answer whether anything was said, never whether the module still mirrors the lowering it was handed — an item can leave with nothing recorded against it. [`Survivors`] keeps both answers: the refusals, for the reader, and every name no item came out for, for a caller that reassembles the lowered order and must tell an item this run deliberately dropped from one it lost.
 
 use {
-    crate::{Context, Error},
+    crate::{Attempted, Context, Error, GoalSite},
     curios_core::{Entrypoint, Free, Global, Item, Module},
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -19,6 +19,7 @@ use {
 pub(super) struct ItemStamp(pub(super) usize);
 
 /// The names whose declarations are refused or withheld: what another item must not reach.
+#[derive(Clone)]
 pub(super) struct Poison {
     names: BTreeSet<Global>,
 }
@@ -149,11 +150,26 @@ impl ItemMark {
     }
 }
 
+/// A declaration that wrote goals: the state it elaborated in, which alone knows them, and each of its items that holds one, as it elaborated, with where.
+pub(super) struct Holding {
+    pub(super) state: Attempted,
+    pub(super) items: Vec<(Item, Vec<GoalSite>)>,
+}
+
+/// What a unit's walk came to, in item order ([`Survivors::into_parts`]).
+pub(super) struct Survived {
+    pub(super) items: Vec<Item>,
+    pub(super) refusals: Vec<Error>,
+    pub(super) held: Vec<Holding>,
+    pub(super) dropped: BTreeSet<Global>,
+}
+
 /// The items elaborated so far, with the refusals recorded against their positions and the names of the items that did not survive.
 #[derive(Default)]
 pub(super) struct Survivors {
     kept: Vec<(ItemStamp, Item)>,
     refusals: Vec<(ItemStamp, Error)>,
+    held: Vec<Holding>,
     dropped: BTreeSet<Global>,
 }
 
@@ -168,6 +184,11 @@ impl Survivors {
     pub(super) fn drop_item(&mut self, item: &Item) {
         self.dropped
             .extend(item.declared_names().into_iter().cloned());
+    }
+
+    /// Keep a declaration that wrote goals for their report. No item is produced for one that holds a goal: a unit that holds a goal is refused for the goal, whatever else it holds.
+    pub(super) fn hold(&mut self, holding: Holding) {
+        self.held.push(holding);
     }
 
     /// Record `error` as `stamp`'s refusal — unless it says the item met a poisoned witness key, which is a dependent's silence rather than a report.
@@ -186,15 +207,16 @@ impl Survivors {
             .collect()
     }
 
-    /// The kept items and the refusals, each in item order — the entry's refusal after every item's, and a whole-module pass's after the entry's — and every name an item that did not survive declared. Items elaborate when they are asked for, so the order they were kept in is not the module's.
-    pub(super) fn into_parts(mut self) -> (Vec<Item>, Vec<Error>, BTreeSet<Global>) {
+    /// The kept items and the refusals, each in item order — the entry's refusal after every item's, and a whole-module pass's after the entry's — with the declarations that wrote goals, whose reports are ordered where they are made, and every name an item that did not survive declared. Items elaborate when they are asked for, so the order they were kept in is not the module's.
+    pub(super) fn into_parts(mut self) -> Survived {
         self.kept.sort_by_key(|(stamp, _)| *stamp);
         self.refusals.sort_by_key(|(stamp, _)| *stamp);
 
-        (
-            self.kept.into_iter().map(|(_, item)| item).collect(),
-            self.refusals.into_iter().map(|(_, error)| error).collect(),
-            self.dropped,
-        )
+        Survived {
+            items: self.kept.into_iter().map(|(_, item)| item).collect(),
+            refusals: self.refusals.into_iter().map(|(_, error)| error).collect(),
+            held: self.held,
+            dropped: self.dropped,
+        }
     }
 }

@@ -19,21 +19,21 @@ use {
         WitnessKey, zonk_universe_levels_scoped,
     },
     crate::{
-        Refusal, Sort, levels_clash_on_a_decided_instance, shallow_scrutinee,
+        Published, Refusal, Sort, levels_clash_on_a_decided_instance, shallow_scrutinee, zonk,
         zonk_solved_term_metas,
     },
     curios_analysis::{Unfolding, records_case_equation},
     curios_core::{
         Advance, Bound, ConceptDecl, Consumption, Cost, DefinitionKind, Free, Global, HeadTag,
-        ImplicitOrigin, Imports, InductDecl, Level, Metavar, MetavarId, MetavarOrigin, Probe,
-        RecGroup, ReduceError, StructDecl, Subterm, Term, Totality, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
-        UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped,
+        ImplicitOrigin, Imports, InductDecl, Item, Level, Metavar, MetavarId, MetavarOrigin,
+        Minted, Mints, Probe, RecGroup, ReduceError, StructDecl, Subterm, Term, Totality,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
+        UniverseMetaId, UniverseRole, WitnessOrigin, instantiate_universe_levels_scoped,
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, Span, SyntaxRegistry},
     std::{
         cell::{Cell, RefCell},
-        collections::{BTreeMap, BTreeSet},
+        collections::{BTreeMap, BTreeSet, HashMap},
         mem,
         ops::{Deref, DerefMut},
         rc::Rc,
@@ -168,6 +168,8 @@ pub struct Context {
     attempting: BTreeSet<Global>,
     /// The declarations the attempt under way read before they finished, each by a name it declares ([`Context::need`]). A `RefCell` because a lookup records through a shared borrow.
     needs: RefCell<BTreeSet<Global>>,
+    /// What the unit's lowering minted, declaration by declaration: what each declaration's state starts above ([`Context::begin_state`]).
+    minted: Rc<Minted>,
     /// Whether the declaration being elaborated can still settle a universe level: from [`Context::enter_item`] until its levels are finalized. A witness resolved while this holds leaves the levels its scheme minted to that finalization; one resolved after has none left, and closes them where it resolves.
     scheme_open: bool,
     /// The names whose declarations the parser could not read, handed in before elaboration so their dependents are withheld from the start. Empty until a lowering reports them.
@@ -205,6 +207,40 @@ pub(crate) struct GoalObligation {
     pub goals: BTreeSet<MetavarId>,
     pub this: Term,
     pub that: Term,
+}
+
+/// What one attempt at a declaration mints and solves: its binder identities, its metavariables and their solutions, its universe levels with the solver that settles them, and what it noted of the goals it wrote. The context elaborates in one at a time ([`Context::exchange`]), each declaration's its own; the one a declaration wrote goals in is kept past it, since the goals are known in it alone.
+#[derive(Debug)]
+pub(crate) struct Attempted {
+    fresh_names: Entropy,
+    solutions: Solutions,
+    universe_solver: UniverseSolver,
+    goal_obligations: Vec<GoalObligation>,
+    goal_spans: BTreeMap<MetavarId, Span>,
+    rec_slot_names: BTreeMap<MetavarId, Free>,
+    solve_blockers: BTreeMap<MetavarId, Vec<(MetavarId, MetavarOrigin, Option<Span>)>>,
+}
+
+impl Attempted {
+    /// A state that has minted nothing, each of its counters above what `mints` says a lowering minted.
+    fn above(mints: &Mints) -> Self {
+        let fresh_names = Entropy::<usize>::new();
+        fresh_names.seed(mints.binders);
+        let mut solutions = Solutions::new();
+        solutions.seed_floor(mints.metavariables);
+        let mut universe_solver = UniverseSolver::new(0);
+        universe_solver.seed(&mints.universes);
+
+        Self {
+            fresh_names,
+            solutions,
+            universe_solver,
+            goal_obligations: Vec::new(),
+            goal_spans: BTreeMap::new(),
+            rec_slot_names: BTreeMap::new(),
+            solve_blockers: BTreeMap::new(),
+        }
+    }
 }
 
 impl Context {
@@ -245,6 +281,7 @@ impl Context {
             unfinished: BTreeSet::new(),
             attempting: BTreeSet::new(),
             needs: RefCell::new(BTreeSet::new()),
+            minted: Rc::default(),
             scheme_open: false,
             broken: BTreeSet::new(),
             syntax,
@@ -376,10 +413,173 @@ impl Context {
         self.unfinished = declared;
     }
 
-    /// Begin an attempt at the declaration declaring `names`, with nothing needed yet.
+    /// Begin an attempt at the declaration declaring `names`, with nothing needed yet and in a state of its own ([`Context::begin_state`]).
     pub(crate) fn attempt(&mut self, names: &[&Global]) {
         self.attempting = names.iter().map(|name| **name).collect();
         self.needs.get_mut().clear();
+        self.begin_state();
+    }
+
+    /// Replace what one declaration's elaboration mints and solves with a state no other declaration wrote: its binder identities, its metavariables and their solutions, and its universe levels with the solver that settles them, each counting from what the declaration's own lowering minted ([`Minted`]). What a declaration elaborates to then follows nothing of the declarations elaborated before it — neither how many there were nor what they left solved — and the identities it mints are the ones it would mint elaborated alone. Every other declaration is read as it was published ([`Context::publish`]), which holds none of these.
+    fn begin_state(&mut self) {
+        let minted = Rc::clone(&self.minted);
+        // The items of one declaration were lowered in one space, so any name the attempt declares says which; an attempt that declares none is the entry's.
+        let mints = match self.attempting.iter().next() {
+            Some(name) => minted.of(name),
+            None => &minted.entry,
+        };
+        self.exchange(Attempted::above(mints));
+    }
+
+    /// Elaborate in `state` from here on, and hand back the state the context elaborated in until now.
+    pub(crate) fn exchange(&mut self, state: Attempted) -> Attempted {
+        let replaced = Attempted {
+            fresh_names: mem::replace(&mut self.fresh_names, state.fresh_names),
+            solutions: mem::replace(&mut self.solutions, state.solutions),
+            universe_solver: mem::replace(&mut self.universe_solver, state.universe_solver),
+            goal_obligations: mem::replace(&mut self.goal_obligations, state.goal_obligations),
+            goal_spans: mem::replace(&mut self.goal_spans, state.goal_spans),
+            rec_slot_names: mem::replace(&mut self.rec_slot_names, state.rec_slot_names),
+            solve_blockers: mem::replace(&mut self.solve_blockers, state.solve_blockers),
+        };
+        // Nothing memoized under the state replaced answers for this one.
+        self.caches.begin_declaration();
+        self.caches.note_write();
+        self.caches.note_universe_write();
+
+        replaced
+    }
+
+    /// Take the state the attempt that just stood elaborated in, leaving one that has minted nothing: a declaration that wrote goals keeps its own until they are reported.
+    pub(crate) fn set_aside(&mut self) -> Attempted {
+        self.exchange(Attempted::above(&Mints::default()))
+    }
+
+    /// Run `run` in `state`, the one a finished declaration elaborated in, then put the context's own back.
+    pub(crate) fn within<T>(&mut self, state: Attempted, run: impl FnOnce(&mut Self) -> T) -> T {
+        let own = self.exchange(state);
+        let ran = run(self);
+        self.exchange(own);
+
+        ran
+    }
+
+    /// Where `name` sits in the unit's lowered order, where a declaration of the unit declares it.
+    pub(crate) fn written_at(&self, name: &Global) -> Option<usize> {
+        self.order.get(name).copied()
+    }
+
+    /// Whether the declaration being elaborated wrote a goal.
+    pub(crate) fn holds_goals(&self) -> bool {
+        !self.goal_spans.is_empty()
+    }
+
+    /// Publish an item that holds a written goal by its types alone: each name stays assumed at its type, zonked, and is bound to nothing. What the item elaborated to holds the metavariables of the state its declaration elaborated in, which no other declaration reads, so what reads this one reads a constant of its type and what would unfold it stays stuck where the goal did. Refused where a type holds a goal itself.
+    pub(crate) fn publish_held(&mut self, item: &Item) -> Result<(), Error> {
+        let types = match item {
+            Item::Let(definition) => vec![(
+                definition.name,
+                zonk(self, &definition.type_)?,
+                definition.universe_context.clone(),
+            )],
+            Item::Rec(rec) => rec
+                .definitions
+                .iter()
+                .enumerate()
+                .map(|(index, definition)| {
+                    Ok((
+                        definition.name,
+                        zonk(self, &rec.group.member_type(index))?,
+                        rec.group.universe_context().clone(),
+                    ))
+                })
+                .collect::<Result<_, Error>>()?,
+        };
+        for (name, type_, universe_context) in types {
+            let name = Free::from(&name);
+            self.forget(&name);
+            self.assume(&name, &type_);
+            self.set_assumption_universe_context(&name, universe_context);
+        }
+
+        Ok(())
+    }
+
+    /// Whether the attempt under way has read nothing unfinished so far.
+    pub(crate) fn needs_nothing(&self) -> bool {
+        self.needs.borrow().is_empty()
+    }
+
+    /// Publish a finished item: bind each of its names to what it elaborated to and file the registry entries it declares, each zonked ([`zonk_published`](crate::zonk_published)), as a unit in scope is replayed ([`Established::replay_definitions`](crate::Established)). What another declaration reads of this one then holds no metavariable of the state it was elaborated in, which the next declaration replaces, and is what a recompile that reuses the item reads.
+    pub(crate) fn publish(&mut self, published: &Published) {
+        for (name, declaration) in &published.induct_decls {
+            self.update_induct(name, declaration.clone());
+        }
+        for (name, declaration) in &published.struct_decls {
+            self.update_struct(name, declaration.clone());
+        }
+        for (name, concept) in &published.concepts {
+            self.update_concept(name, concept.clone());
+        }
+        match &published.item {
+            Item::Let(definition) => {
+                let name = Free::from(&definition.name);
+                self.reassume(&name, &definition.type_);
+                self.define(&name, &definition.body, Some(&definition.kind));
+                self.set_assumption_universe_context(&name, definition.universe_context.clone());
+                if self.is_witness_declaration(&definition.name) {
+                    self.update_witness_scheme(
+                        &definition.name,
+                        definition.universe_context.clone(),
+                        definition.type_.clone(),
+                    );
+                }
+            }
+            Item::Rec(rec) => {
+                for (index, definition) in rec.definitions.iter().enumerate() {
+                    let name = Free::from(&definition.name);
+                    let type_ = rec.group.member_type(index);
+                    self.reassume(&name, &type_);
+                    self.set_assumption_universe_context(
+                        &name,
+                        rec.group.universe_context().clone(),
+                    );
+                    self.define(
+                        &name,
+                        &Term::rec_proj(rec.group.clone(), index),
+                        Some(&definition.kind),
+                    );
+                    if self.is_witness_declaration(&definition.name) {
+                        self.update_witness_scheme(
+                            &definition.name,
+                            rec.group.universe_context().clone(),
+                            type_,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Zonk every term recorded since `mark`, the finished item's, so the erasure obligations read them once the state they were recorded in is gone.
+    pub(crate) fn settle_checked(&mut self, mark: usize) -> Result<(), Error> {
+        let mut zonked = HashMap::<Term, Term>::new();
+        let mut settled = Vec::with_capacity(self.checked.len() - mark);
+        for (term, type_, site) in &self.checked[mark..] {
+            let mut settle = |term: &Term| match zonked.get(term) {
+                Some(done) => Ok(done.clone()),
+                None => {
+                    let done = zonk(self, term)?;
+                    zonked.insert(term.clone(), done.clone());
+                    Ok::<_, Error>(done)
+                }
+            };
+            settled.push((settle(term)?, settle(type_)?, Rc::clone(site)));
+        }
+        self.checked.truncate(mark);
+        self.checked.extend(settled);
+
+        Ok(())
     }
 
     /// The declaration declaring `names` has finished — kept, refused or withheld — and nothing waits on it any more: a witness among them is the table's to answer for, or no one's.
@@ -457,7 +657,7 @@ impl Context {
 
     /// Mint a binder nothing else can name, rendering as `hint`.
     ///
-    /// The counter starts above every index the unit's lowering minted ([`Context::seed_binders`]), so a lowered binder and an elaborated one can never be the same identity.
+    /// The counter starts above every index the declaration's lowering minted ([`Context::seed`]), so a lowered binder and an elaborated one can never be the same identity.
     pub(crate) fn fresh(&mut self, hint: Option<&str>) -> Free {
         self.fresh_for(hint, None)
     }
@@ -500,11 +700,11 @@ impl Context {
         self.credited.iter().copied().collect()
     }
 
-    /// Start the binder counter above the `minted` binders the unit's lowering handed out.
+    /// Take what a unit's lowering minted, declaration by declaration. Each attempt at a declaration begins its state above what that declaration's lowering minted, and the entry's above the entry's ([`Context::begin_state`]), so no identity either mints is one the other already holds.
     ///
-    /// `into_core` mints the binders of every lowered scope, and elaboration mints more while opening them; both draw from one identity space per unit, so the second source starts above the first. Nothing from another unit is in that space: no term the scope replays carries a local.
-    pub(crate) fn seed_binders(&mut self, minted: usize) {
-        self.fresh_names.seed(minted);
+    /// `into_core` mints the binders of every lowered scope, a metavariable for every hole and a level for every written type, and elaboration mints more of each; both draw from one identity space per declaration, so the second source starts above the first. Nothing from another declaration or another unit is in that space: no term the scope replays or the context publishes carries a local or a metavariable.
+    pub(crate) fn seed(&mut self, minted: &Minted) {
+        self.minted = Rc::new(minted.clone());
     }
 
     /// Charge `cost` against the current declaration's budget, failing when it cannot be afforded.
@@ -1795,11 +1995,6 @@ impl Context {
         self.frames.identity_snapshot()
     }
 
-    /// Start the metavariable counter above the `minted` ids the unit's lowering handed out: every id `fresh_metavar` hands out will be `>= minted`. Called by `elaborate_module_suffix` before any item is elaborated.
-    pub(crate) fn seed_metavars(&mut self, minted: usize) {
-        self.solutions.seed_floor(minted);
-    }
-
     /// Mint a metavariable for an omitted implicit argument and birth it immediately — frozen local Γ, the binder's instantiated type as `result` — so the id always has a birth record. Returns its id beside the metavariable term carrying the *call site's* span and the insertion provenance (which rides on the node; see [`Metavar::origin`]). `proposition` is whether `result` is one, decided by the caller, which has the sort in hand; it is kept on the birth record for the unsolved report, which cannot ask.
     pub(crate) fn fresh_metavar(
         &mut self,
@@ -2226,11 +2421,6 @@ impl Context {
             )),
         );
         Term::type_at(level)
-    }
-
-    pub(crate) fn seed_universes(&mut self, seeds: &[UniverseSeed]) {
-        self.universe_solver.seed(seeds);
-        self.caches.note_universe_write();
     }
 
     pub(crate) fn default_universes(&mut self, terms: &[&Term]) -> Result<Vec<Term>, Error> {

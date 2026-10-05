@@ -380,10 +380,11 @@ fn glob_imports_all_public_bindings() {
             &global("/Foo/x"),
             written_type(0),
             written_type(1),
+            // A declaration's levels count from zero, whatever is written before it.
             curios_core::Term::let_(
                 &global("/Foo/y"),
-                written_type(2),
-                written_type(3),
+                written_type(0),
+                written_type(1),
                 curios_core::Term::var(curios_core::Var::free(global("/Foo/x")))
             )
         ),

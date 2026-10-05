@@ -19,8 +19,8 @@ use {
     },
     curios_analysis::{Invert, case_target_indices, invert_indices},
     curios_core::{
-        Apply, Entrypoint, Free, Global, InductType, Item, Module, StructEntry, StructType,
-        Subterm, Term, Var,
+        Apply, Entrypoint, Free, Global, InductType, Item, StructEntry, StructType, Subterm, Term,
+        Var,
     },
     curios_utilities::Plicity,
     std::collections::{BTreeMap, BTreeSet},
@@ -45,7 +45,7 @@ struct Candidate {
     pool: usize,
 }
 
-/// Suggest candidates for one unsolved goal, from its birth record (the frozen `telescope`, the `refinements` of the arms it was written in, and the expected `goal_type`), the module and a program's entry (the application-fit pools), and the goal's owning definition (excluded from those pools: suggesting the definition a goal sits inside would be circular for a plain `let`). Deterministic and never failing; an attempt that errors contributes nothing.
+/// Suggest candidates for one unsolved goal, from its birth record (the frozen `telescope`, the `refinements` of the arms it was written in, and the expected `goal_type`), the unit's items as they elaborated and a program's entry (the application-fit pools), and the goal's owning definition (excluded from those pools: suggesting the definition a goal sits inside would be circular for a plain `let`). Deterministic and never failing; an attempt that errors contributes nothing.
 ///
 /// The refinements are reinstalled beside the telescope, so a fit that holds only under the arm's guard — `Eq/refl()` at `Eq()(b, true)` in the `true` arm of `match b` — is found and verified as a paste at the goal would be checked.
 pub(crate) fn suggest_candidates(
@@ -53,7 +53,7 @@ pub(crate) fn suggest_candidates(
     telescope: &[(Free, Term)],
     refinements: &Refinements,
     goal_type: &Term,
-    module: &Module,
+    written: &[Item],
     entry: Option<&Entrypoint>,
     owner: Option<&Global>,
 ) -> Suggestions {
@@ -62,7 +62,7 @@ pub(crate) fn suggest_candidates(
             context.assume(name, type_);
         }
         context.install_refinements(refinements);
-        suggest_in_scope(context, telescope, goal_type, module, entry, owner)
+        suggest_in_scope(context, telescope, goal_type, written, entry, owner)
     })
 }
 
@@ -71,7 +71,7 @@ fn suggest_in_scope(
     context: &mut Context,
     telescope: &[(Free, Term)],
     goal_type: &Term,
-    module: &Module,
+    written: &[Item],
     entry: Option<&Entrypoint>,
     owner: Option<&Global>,
 ) -> Suggestions {
@@ -141,7 +141,7 @@ fn suggest_in_scope(
             });
         }
     }
-    for (pool, (name, type_)) in module_pool(context, module, entry, owner) {
+    for (pool, (name, type_)) in module_pool(context, written, entry, owner) {
         if attempts >= ATTEMPTS {
             break;
         }
@@ -175,10 +175,12 @@ fn suggest_in_scope(
     }
 }
 
-/// Pools 3 to 5: the entry module's own definitions, then every other global its items reference, then every binding in scope of the owning definition through a `use` that neither earlier pool holds, each with its recorded type. The goal's owning definition is excluded.
+/// Pools 3 to 5: the unit's own definitions, then every other global its items reference, then every binding in scope of the owning definition through a `use` that neither earlier pool holds, each at the type the context holds it at. The goal's owning definition is excluded.
+///
+/// `written` is read for the names it declares and the names its terms mention, never for a type: an item that wrote a goal is among them as it elaborated, in a state of its own, and its type is the context's to give, as every other item's is ([`Context::publish_held`]).
 fn module_pool(
     context: &Context,
-    module: &Module,
+    written: &[Item],
     entry: Option<&Entrypoint>,
     owner: Option<&Global>,
 ) -> Vec<(usize, (Global, Term))> {
@@ -187,11 +189,13 @@ fn module_pool(
 
     let mut definitions = |definition: &curios_core::Definition| {
         own.insert(definition.name);
-        if Some(&definition.name) != owner {
-            pool.push((3, (definition.name, definition.type_.clone())));
+        if Some(&definition.name) != owner
+            && let Some(type_) = context.assumption(&Free::Global(definition.name))
+        {
+            pool.push((3, (definition.name, type_.clone())));
         }
     };
-    for item in &module.items {
+    for item in written {
         match item {
             Item::Let(definition) => definitions(definition),
             Item::Rec(rec) => rec.definitions().iter().for_each(&mut definitions),
@@ -206,7 +210,7 @@ fn module_pool(
             }
         }
     };
-    for item in &module.items {
+    for item in written {
         match item {
             Item::Let(definition) => {
                 collect(&definition.type_);

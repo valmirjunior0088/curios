@@ -10,6 +10,7 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 - **The `Cache` seam and the stored-unit format** (`curios-pipeline/src/compile.rs`, `curios-unit`): a product-supplied policy the fold consults, and a serialized unit that already crosses processes.
 - **The certifier's record and reads.** Each unit carries `curios_core::Certification`: per definition, its totality and what judging it read (`curios_core::Reads`) — the types, universe schemes and registry entries it consulted and the bodies it asked for — a group's members sharing the group's reads and a declaration's entry filed with its type former. Positivity, one judgment over the whole declaration set, is attributed to no item. `curios-pipeline`'s `the_prelude_reads_along_the_graph_its_definitions_reach` holds the reads inside the elaborated graph.
 - **A unit's items elaborate on demand, and an answer does not depend on when it is asked** ([A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md)). An item elaborates after what it reads, an attempt that read a declaration not yet elaborated is void and made again, declarations that need one another are refused by name, and a witness is known before it elaborates by the key its signature spells (`curios-elab/src/elaborate/module/demand.rs`, `curios-elab/src/concept/spelled.rs`).
+- **A declaration's identities and its state are its own** (the same decision). `curios_core::Minted` holds what each source declaration's lowering minted, a declaration being an item with the items generated from it; `Context::attempt` replaces the elaboration state where an attempt begins; and a finished item is published into the context zonked, as a unit in scope is replayed.
 - **An item can be undone, and elaborated apart from its unit.** `ItemMark::undo` and `ItemMark::void` (`curios-elab/src/elaborate/module/recovery.rs`) take a refused item and a void attempt out of every store another item reads, and `elaborate_and_zonk_unit_over` elaborates a set of items against the rest of their unit replayed as a predecessor.
 - **A top-level definition writes its type** ([Top-level definitions](../../syntax.md#top-level-definitions)), so its universe levels are all a signature leaves open.
 
@@ -19,9 +20,7 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 
 **One read is still answered by the lowering's order.** `Context::proof_may_apply` (`curios-elab/src/context.rs`) lets a proof the elaborator writes apply a lemma of its own unit only from a declaration lowered after it. The lowered order is source order bent by dependencies: an item delayed behind one of its dependencies gains the lemmas written between the two, so an edit to something neither names can move a proof.
 
-**A cell is written more than once.** Polarity vectors and totality stamps are written onto finished declarations by the passes that run after every item (`check_positivity`, `record_totality`).
-
-**More than reads flows in.** One binder, metavariable and universe counter serves a unit, in the lowering and in elaboration, so a local's identity counts the declarations before it; an atom's rank is its structural hash (`curios-core/src/atoms.rs`), a product's factors are ordered by rank, which `curios-algebra/src/product.rs` states as "a monomial's factor order is a hash, and a hash is not a value", and a product rebuilt from its normal form is spelled in that order. The passes after the items spend one budget between them.
+**A cell is written more than once, on a budget the unit shares.** Polarity vectors and totality stamps are written onto finished declarations by the passes that run after every item (`check_positivity`, `record_totality`), which spend one budget between them with the erasure obligations, so whether a declaration's verdict fits follows what the others cost.
 
 **The fold is a line.** `Predecessors` are every unit before this one rather than what this one depends on, and `curios-package` has the dependency graph and flattens it into that line.
 
@@ -63,9 +62,7 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 | Component | Treatment | Stage |
 | --- | --- | --- |
 | The bound prover | A lemma of the unit is applied by the declarations written after it in source order, unless it reaches the declaration (decision 12), and is demanded where it has not elaborated | The recorded graph |
-| Whole-module passes | A declaration is zonked, its goal reports collected, and its polarity and variance vectors, its totality stamp and its erasure obligations decided when it finishes, each pass on a budget restored for it. What is about the whole set stays after the items: the entry, and the concept registry's check | Isolation |
-| Identities | The lowering's counters start at zero for each source declaration, and `Minted` and the table of unbound names are per declaration | Isolation |
-| Elaboration context | An environment — published definitions, registries, the witness index, totality, mounts, and what the unit accumulates for its lints, obligations and goal reports — and a per-declaration state — frames, solutions, universe solver, caches, fresh names, budget — replaced whole at each declaration | Isolation |
+| Whole-module passes | A declaration's polarity and variance vectors, its totality stamp and its erasure obligations are decided when it finishes, each pass on a budget restored for it. What is about the whole set stays after the items: the entry, and the concept registry's check | The recorded graph |
 | Reads | Recorded where the environment is asked, per cell and per key | The recorded graph |
 | Kernel | `certify` per published declaration, its verdict filed in the declaration's cell with the polarity vector it computed, a predecessor's read there (decision 13); `dependency_order` is deleted | The recorded graph |
 | Invalidation | By recorded reads, revalidated in the order they were made, stopping where a re-elaborated cell comes out equal | The recorded graph |
@@ -75,23 +72,21 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 
 Each lands alone, on its own check, and says what it expects to move; a move outside that is a finding.
 
-1. **Isolation.** Decisions 6 and 7, in three landings: the passes that write a cell run when its declaration finishes; the lowering mints per declaration; the elaboration context is an environment and a per-declaration state. Expected to move: the bodies of the `/std` items whose spelling or proof followed the unit-wide counter, once, and no scheme.
-2. **The recorded graph.** Decisions 10 to 13 within a unit. The elaborator records its reads; the lowering's sort, `dependency_order` and `invalidated` are replaced by the recorded graph; a proof the elaborator writes reads where its lemmas are written; the kernel judges each declaration as it is published, filing its polarity vector; a recompile over a baseline revalidates in read order; and [cached verdicts](../../design/soundness/admission/cached-verdicts.md)' per-item argument is restated over recorded reads in the same change. Expected to move: the proofs of the `/std` items that gained a lemma by being delayed past it, which lose it. The critical path is retaken over the elaborator's reads.
-3. **Across units.** `Established`, `Globals`, `Resumed` and `Predecessors` become views of it, so a unit's prologue costs what the unit reads.
+1. **The recorded graph.** Decisions 6 and 10 to 13 within a unit. The elaborator records its reads; the passes that write a cell run when its declaration finishes; the lowering's sort, `dependency_order` and `invalidated` are replaced by the recorded graph; a proof the elaborator writes reads where its lemmas are written; the kernel judges each declaration as it is published, filing its polarity vector; a recompile over a baseline revalidates in read order; and [cached verdicts](../../design/soundness/admission/cached-verdicts.md)' per-item argument is restated over recorded reads in the same change. Expected to move: the proofs of the `/std` items that gained a lemma by being delayed past it, which lose it. The critical path is retaken over the elaborator's reads.
+2. **Across units.** `Established`, `Globals`, `Resumed` and `Predecessors` become views of it, so a unit's prologue costs what the unit reads.
 
 ## Verification
 
 - **The replay.** `curios-pipeline`'s `std_replay_census`, an ignored measurement beside `std_recompile_closure_census`. For each declaration of `/std`, an item with the items generated from it, `elaborate_and_zonk_unit_over` with its closure that declaration as the unit's sources lower it and its reused items the archived unit less it, and each definition's universe context, type, body and totality compared with the archived unit's; then again with unrelated authored definitions lowered before it added to the closure, which elaborate first. A former or a concept is replayed with the witnesses that reach it, which register only against the declaration they are elaborated with. Counted.
 - **The differential.** Before and after each stage: every prelude item's universe context, type and body digested, `curios-prelude-archive`'s `universe_parameter_census`, and the module each program of `programs/` compiles to. A difference outside what the stage expects is a finding, never a fixture update.
-- **Isolation.** `curios-pipeline/src/tests/incremental_tests.rs` asserts over its fixtures what the replay measures over `/std`, with and without unrelated declarations first, and the replay reports nothing under any number of them.
 - **The recorded graph.** A recompile over a baseline redoes exactly the declarations whose recorded reads changed, held by fixtures over a signature change, a body change, and a witness added, and `std_recompile_closure_census` is retaken for its hub.
 - **Across units.** The compile of `programs/hello_world.crs` is retaken as *The gap* states it.
 - **The graph's figures.** The nodes are the restored prelude's items and an edge is a name `Module::reaches`; an edge is the interface's where a definition's type or a registry entry reaches the name, and the body's otherwise; body readers are the items whose `Certification::reads` hold the name among their bodies. A declaration's weight is the allocations its `declaration` span made in `curios-prelude-archive`'s build under `profile`. Throughput on n workers is the summed weight over the finishing time of a list schedule that hands the lowest-positioned ready item to a free worker; with the signature first, an item is two tasks, its signature waiting on the signatures its interface reaches and its body on those and on the bodies it reads.
 
 ## Design decisions this overturns or corrects
 
-- [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md): agreement short of equality, at isolation; invalidation by recorded reads, at the recorded graph.
-- [`curios-unit`'s README](../../../curios-unit/README.md): every counter starting at zero for a unit, at isolation; *Predecessors are borrowed, per stage*, with `Predecessors`' own documentation, across units.
+- [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md): invalidation by recorded reads. The recorded graph.
+- [`curios-unit`'s README](../../../curios-unit/README.md): *Predecessors are borrowed, per stage*, with `Predecessors`' own documentation. Across units.
 - [Cached verdicts](../../design/soundness/admission/cached-verdicts.md): the per-item argument restated over recorded reads, and a filed polarity vector given a cached verdict's standing. The recorded graph.
 - [A module is a compilation unit, and the prelude is an environment](../../design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md): a compilation stops being units folded over one dependency order. Across units.
 
@@ -104,8 +99,6 @@ Each lands alone, on its own check, and says what it expects to move; a move out
 - **Keeping the lowering's order as what a proof's lemmas are read by**, with the sort computed for that alone: nothing moves, and an edit elsewhere still decides which lemmas an item has.
 - **Giving a proof no lemma of the unit being compiled**: order-free, and `/std`'s own bounds past its `Nat` lemmas would need written proofs, or the lemmas a unit of their own.
 - **Recomputing the polarity vectors a declaration reaches**, believing no filed one: the trusted base is unchanged, each verdict records more reads, and variance and positivity keep two answers to one question.
-- **Clearing a shared context between declarations**, field by field: a field added later flows from one declaration to the next unless its author remembers the list, where a state replaced whole cannot carry one.
-- **Renumbering a declaration's identities as its elaboration begins**, in place of minting them per declaration: every table keyed by a lowered identity — unbound names, a level's origin — would follow the renaming.
 
 ## Completion and retirement
 

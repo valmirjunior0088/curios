@@ -73,9 +73,9 @@ fn lower(
 ) -> PreparedText {
     let prepared = prepare_prelude(modules, predecessors, &SYNTAX)
         .unwrap_or_else(|error| panic!("/{root} failed to lower: {}", error.format()));
-    validate_lowered_universe_seeds(prepared.core(), &prepared.minted().universes).unwrap_or_else(
-        |error| panic!("lowered Text universe seeds of /{root} are invalid: {error}"),
-    );
+    validate_lowered_universe_seeds(prepared.core(), prepared.minted()).unwrap_or_else(|error| {
+        panic!("lowered Text universe seeds of /{root} are invalid: {error}")
+    });
 
     prepared
 }
