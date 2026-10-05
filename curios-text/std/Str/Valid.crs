@@ -232,7 +232,7 @@ let finish(
                         p);
                 Char {
                     code = partial * 0x40 + (Byte/to_nat(c) - 0x80),
-                    valid = concluded(lo, hi, partial, Byte/to_nat(c), last, True/qed()),
+                    @valid = concluded(lo, hi, partial, Byte/to_nat(c), last, True/qed()),
                 }
             | false =>
                 finish(
@@ -250,7 +250,7 @@ let finish(
 --- The first character of bytes valid from the first byte.
 pub let decode_head(c: Byte, @t: Bytes, w: from(Scan/lead(), x[c, ..t])) -> Char =
     match classify(c)
-    | ascii() => Char { code = Byte/to_nat(c), valid = True/qed() }
+    | ascii() => Char { code = Byte/to_nat(c) }
     | lead(rem, lo, hi, partial) => finish(rem, lo, hi, partial, @t, begins_scalars_of(c), w)
     | bad() => match from_bad(@t, w) end
     end;

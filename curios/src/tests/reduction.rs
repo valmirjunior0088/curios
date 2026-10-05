@@ -339,7 +339,7 @@ fn kernel_memo_charge_measurements() {
 
 /// A `Str` literal of `n` identical ASCII characters, bound and used `uses` times.
 ///
-/// The literal lowers to `Str { bytes = <Bytes>, valid = True/qed() }`, and checking that proof makes conversion decide `True ≡ Valid(b)` — `Valid`'s unfolding once, then a `rec` unfold, a `Bytes` peel, a `Byte/to_nat`, `classify`'s ladder and an inductive match, per byte. Nothing else in the program costs anything, so what a floor over this reports is the check.
+/// The literal lowers to `Str { bytes = <Bytes>, @valid = True/qed() }`, and checking that proof makes conversion decide `True ≡ Valid(b)` — `Valid`'s unfolding once, then a `rec` unfold, a `Bytes` peel, a `Byte/to_nat`, `classify`'s ladder and an inductive match, per byte. Nothing else in the program costs anything, so what a floor over this reports is the check.
 fn str_literal(n: usize, uses: usize) -> String {
     let literal = "0123456789".repeat(n.div_ceil(10))[..n].to_string();
     let used = (0..uses)

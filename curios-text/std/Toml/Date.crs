@@ -31,12 +31,12 @@ pub struct Date: pub Type {
     year: Nat,
     month: Nat,
     day: Nat,
-    ok: Valid(year, month, day),
+    @ok: Valid(year, month, day),
 }
 
 --- The date, under the evidence that the three spell one.
 pub let of(year: Nat, month: Nat, day: Nat, @ok: Valid(year, month, day)) -> Date =
-    Date { year = year, month = month, day = day, ok = ok };
+    Date { year = year, month = month, day = day };
 
 let try_valid(year: Nat, month: Nat, day: Nat) -> Option(Valid(year, month, day)) =
     match sound(year, month, day): (r) => Option(Holds(r))

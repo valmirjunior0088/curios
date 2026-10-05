@@ -13,22 +13,18 @@ pub struct At(s: Str): pub Type {
     --- The byte offset.
     offset: Nat,
     --- Why it lies within `s`.
-    within: Holds(offset <= Bytes/len(s.bytes)),
+    @within: Holds(offset <= Bytes/len(s.bytes)),
     --- Why a character may begin there.
-    boundary: Holds(starts(Bytes/drop(s.bytes, offset, @within))),
+    @boundary: Holds(starts(Bytes/drop(s.bytes, offset, @within))),
 }
 
 --- The start of `s`.
 pub let start(s: Str) -> At(s) =
-    At { offset = 0, within = True/qed(), boundary = Str/Valid/begins(s.valid) };
+    At { offset = 0, @_, @boundary = Str/Valid/begins(s.valid) };
 
 --- The end of `s`, past its last character.
 pub let finish(s: Str) -> At(s) =
-    At {
-        offset = Bytes/len(s.bytes),
-        within = Nat/le/refl(Bytes/len(s.bytes)),
-        boundary = True/qed(),
-    };
+    At { offset = Bytes/len(s.bytes) };
 
 --- The position `k` bytes into `s`, where `k` is known to lie within it and a character to begin there. Both discharge by reduction at a literal.
 pub let of_offset(
@@ -37,7 +33,7 @@ pub let of_offset(
     @within: Holds(k <= Bytes/len(s.bytes)),
     @boundary: Holds(starts(Bytes/drop(s.bytes, k, @within))),
 ) -> At(s) =
-    At { offset = k, within = within, boundary = boundary };
+    At { offset = k };
 
 --- The position `k` bytes into `s`, or `none` when `k` is past the end or inside a character. Decided by the one byte at `k`.
 pub let try_of_offset(s: Str, k: Nat) -> Option(At(s)) =
@@ -45,7 +41,7 @@ pub let try_of_offset(s: Str, k: Nat) -> Option(At(s)) =
     | none() => Option/none()
     | some(within) =>
         match starts(Bytes/drop(s.bytes, k, @within))
-        | true => Option/some(At { offset = k, within = within, boundary = True/qed() })
+        | true => Option/some(At { offset = k })
         | false => Option/none()
         end
     end;
@@ -56,7 +52,7 @@ pub let to_offset(@s: Str, at: At(s)) -> Nat =
 
 --- A position in the text after `at` as the position in `s` it is.
 pub let of_after(s: Str, at: At(s), p: At(Str/after(s, at))) -> At(s) =
-    At { offset = at.offset + p.offset, within = True/proved(), boundary = p.boundary };
+    At { offset = at.offset + p.offset };
 
 --- A position at or after `at` as the position in the text after `at` it is: [`of_after`] read backwards.
 ---
@@ -70,8 +66,8 @@ pub let to_after(
     let back = Eq/sym(Nat/le/add_sub_cancel(at.offset, p.offset, ordered));
     At {
         offset = p.offset - at.offset,
-        within = True/proved(),
-        boundary =
+        @_,
+        @boundary =
             Eq/subst(
                 (n: Nat) =>
                     (within: Holds(n <= Bytes/len(s.bytes))) -> Holds(
@@ -136,13 +132,7 @@ pub let skip(
 ) -> {past: At(s), progress: Holds(at.offset < past.offset)} =
     let rest = Str/after(s, at);
     let hopped = hop(@rest.bytes, True/proved());
-    (
-        past =
-            of_after(
-                s,
-                at,
-                At { offset = hopped.width, within = hopped.within, boundary = hopped.boundary }),
-        progress = hopped.positive);
+    (past = of_after(s, at, At { offset = hopped.width }), progress = hopped.positive);
 
 --- The character at `at`, the position past it, and the proof that it lies past.
 pub let next(
@@ -174,10 +164,7 @@ let floor(
     | 0 => (at = start(s), below = True/qed())
     | j + 1 =>
         match starts(Bytes/drop(s.bytes, j + 1, @within))
-        | true =>
-            (
-                at = At { offset = j + 1, within = within, boundary = True/qed() },
-                below = Nat/le/refl(j + 1))
+        | true => (at = At { offset = j + 1 }, below = Nat/le/refl(j + 1))
         | false =>
             let back = floor(s, j, True/proved());
             (at = back.at, below = True/proved())
@@ -251,8 +238,8 @@ let starts_before(
 pub let of_left(s: Str, t: Str, at: At(s)) -> At(Str/concat(s, t)) =
     At {
         offset = at.offset,
-        within = True/proved(),
-        boundary =
+        @_,
+        @boundary =
             starts_before(
                 @s.bytes,
                 t.bytes,
@@ -264,7 +251,7 @@ pub let of_left(s: Str, t: Str, at: At(s)) -> At(Str/concat(s, t)) =
 
 --- A position in `t` as the position it is in `s` followed by `t`.
 pub let of_right(s: Str, t: Str, at: At(t)) -> At(Str/concat(s, t)) =
-    At { offset = Bytes/len(s.bytes) + at.offset, within = True/proved(), boundary = at.boundary };
+    At { offset = Bytes/len(s.bytes) + at.offset };
 
 --- Two positions are equal when their offsets are.
 satisfy (@s: Str) => Eql(At(s)) {

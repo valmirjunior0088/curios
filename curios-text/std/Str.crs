@@ -315,7 +315,7 @@ pub struct Str: pub Type {
     --- The bytes themselves.
     bytes: Bytes,
     --- Why they are well-formed UTF-8.
-    valid: Valid(bytes),
+    @valid: Valid(bytes),
 }
 
 --- The UTF-8 bytes.
@@ -325,37 +325,37 @@ pub let to_bytes(s: Str) -> Bytes =
 --- The text the bytes encode, or `none` unless they are UTF-8.
 pub let of_bytes(b: Bytes) -> Option(Str) =
     match Valid/try(Scan/lead(), b)
-    | some(v) => Option/some(Str { bytes = b, valid = v })
+    | some(v) => Option/some(Str { bytes = b })
     | none() => Option/none()
     end;
 
 --- The one-character string.
 pub let of_char(c: Char) -> Str =
-    Str { bytes = Char/to_utf8(c), valid = Valid/encoded(c) };
+    Str { bytes = Char/to_utf8(c), @valid = Valid/encoded(c) };
 
 --- Equal bytes are equal strings.
 pub let eq_of_bytes(a: Str, b: Str, p: Eq()(a.bytes, b.bytes)) -> Eq()(a, b) =
     Eq/subst(
-        (bytes: Bytes) => (valid: Valid(bytes)) -> Eq()(a, Str { bytes = bytes, valid = valid }),
+        (bytes: Bytes) => (valid: Valid(bytes)) -> Eq()(a, Str { bytes = bytes }),
         p,
         (_: Valid(a.bytes)) => Eq/refl())(b.valid);
 
 --- `a` then `b`.
 pub let concat(a: Str, b: Str) -> Str =
-    Str { bytes = x[..a.bytes, ..b.bytes], valid = Valid/concat(a.valid, b.valid) };
+    Str { bytes = x[..a.bytes, ..b.bytes], @valid = Valid/concat(a.valid, b.valid) };
 
 --- The text before `at`, cut in O(1).
 pub let before(s: Str, at: At(s)) -> Str =
     Str {
         bytes = Bytes/slice(s.bytes, 0, at.offset, @at.within),
-        valid = Valid/before(s.valid, at.offset, at.within, at.boundary),
+        @valid = Valid/before(s.valid, at.offset, at.within, at.boundary),
     };
 
 --- The text from `at` on, cut in O(1).
 pub let after(s: Str, at: At(s)) -> Str =
     Str {
         bytes = Bytes/drop(s.bytes, at.offset, @at.within),
-        valid = Valid/after(s.valid, at.offset, at.within, at.boundary),
+        @valid = Valid/after(s.valid, at.offset, at.within, at.boundary),
     };
 
 --- The text from `from` to `to`, cut in O(1): what lies before `to` in the text after `from`.
@@ -407,12 +407,7 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
             | lead() =>
                 match classify(h)
                 | ascii() =>
-                    go(
-                        Scan/lead(),
-                        t,
-                        v,
-                        (f(Char { code = Byte/to_nat(h), valid = True/qed() }, acc.0), 0),
-                        True/qed())
+                    go(Scan/lead(), t, v, (f(Char { code = Byte/to_nat(h) }, acc.0), 0), True/qed())
                 | lead(rem, lo, hi, partial) =>
                     go(Scan/cont(rem, lo, hi), t, v, (acc.0, partial), begins_scalars_of(h))
                 | bad() => match Valid/from_bad(@t, v) end
@@ -437,7 +432,7 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                                 f(
                                     Char {
                                         code = partial,
-                                        valid =
+                                        @valid =
                                             concluded(
                                                 lo,
                                                 hi,

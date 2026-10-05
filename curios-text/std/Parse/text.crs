@@ -4,9 +4,9 @@ use /std/Parse/{Of, At, Pos, Input, Error};
 
 --- What a text parser's positions know: that the input is valid text and that a character may begin at the position — a `Str/At`'s own facts, so a text primitive reads its string and its position back out of one.
 pub struct Boundary(input: Bytes, offset: Nat): Prop {
-    valid: Str/Valid(input),
-    within: Holds(offset <= Bytes/len(input)),
-    boundary: Holds(Str/At/starts(Bytes/drop(input, offset, @within))),
+    @valid: Str/Valid(input),
+    @within: Holds(offset <= Bytes/len(input)),
+    @boundary: Holds(Str/At/starts(Bytes/drop(input, offset, @within))),
 }
 
 --- A text parser walks its string's bytes, and its positions are the string's own.
@@ -15,23 +15,20 @@ satisfy Input(Str) {
     bytes(s) = s.bytes,
     start(s) =
         let first = Str/At/start(s);
-        Boundary { valid = s.valid, within = first.within, boundary = first.boundary },
+        Boundary {},
 }
 
 --- The string a text parser's input is, read back out of a position in it.
 let text(@input: Bytes, at: Pos(Str, input)) -> Str =
-    Str { bytes = input, valid = at.holds.valid };
+    Str { bytes = input, @valid = at.holds.valid };
 
 --- Where a text parser stands, as a position of that string.
 let position(@input: Bytes, at: Pos(Str, input)) -> Str/At(text(at)) =
-    Str/At { offset = at.offset, within = at.holds.within, boundary = at.holds.boundary };
+    Str/At { offset = at.offset, @within = at.holds.within, @boundary = at.holds.boundary };
 
 --- A position of the string, as one a text parser may stand at.
 let back(@input: Bytes, at: Pos(Str, input), p: Str/At(text(at))) -> Pos(Str, input) =
-    At {
-        offset = p.offset,
-        holds = Boundary { valid = at.holds.valid, within = p.within, boundary = p.boundary },
-    };
+    At { offset = p.offset, holds = Boundary { @valid = at.holds.valid } };
 
 --- The next character; declines at the end of the input.
 pub let char: Parse(Str, Char) =

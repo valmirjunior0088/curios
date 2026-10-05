@@ -15,7 +15,7 @@ pub struct Char: pub Type {
     --- Its code point.
     code: Nat,
     --- Why that code point is a scalar value rather than a surrogate.
-    valid: Valid(code),
+    @valid: Valid(code),
 }
 
 --- The code point.
@@ -25,14 +25,14 @@ pub let to_nat(c: Char) -> Nat =
 --- The character with code point `code`, or `none` for a surrogate or a value past `U+10FFFF`.
 pub let of_nat(code: Nat) -> Option(Char) =
     match Valid/try(code)
-    | some(valid) => Option/some(Char { code = code, valid = valid })
+    | some(valid) => Option/some(Char { code = code })
     | none() => Option/none()
     end;
 
 --- Equal code points are equal characters.
 pub let eq_of_code(a: Char, b: Char, proof: Eq()(a.code, b.code)) -> Eq()(a, b) =
     Eq/subst(
-        (code: Nat) => (valid: Valid(code)) -> Eq()(a, Char { code = code, valid = valid }),
+        (code: Nat) => (valid: Valid(code)) -> Eq()(a, Char { code = code }),
         proof,
         (_: Valid(a.code)) => Eq/refl())(b.valid);
 
@@ -98,7 +98,7 @@ pub let is_alphanumeric(c: Char) -> Bool =
 pub let to_ascii_lower(c: Char) -> Char =
     match is_upper(c)
     | true =>
-        Char { code = c.code + 0x20, valid = Valid/below_surrogates(c.code + 0x20, True/proved()) }
+        Char { code = c.code + 0x20, @valid = Valid/below_surrogates(c.code + 0x20, True/proved()) }
     | false => c
     end;
 
@@ -106,15 +106,15 @@ pub let to_ascii_lower(c: Char) -> Char =
 pub let to_ascii_upper(c: Char) -> Char =
     match is_lower(c)
     | true =>
-        Char { code = c.code - 0x20, valid = Valid/below_surrogates(c.code - 0x20, True/proved()) }
+        Char { code = c.code - 0x20, @valid = Valid/below_surrogates(c.code - 0x20, True/proved()) }
     | false => c
     end;
 
 --- The lowercase hexadecimal digit for `nibble` modulo sixteen. Both codes are scalar values by reduction, since a remainder sits below its divisor.
 pub let hex_digit(nibble: Nat) -> Char =
     match nibble % 0x10 < 10
-    | true => Char { code = nibble % 0x10 + 0x30, valid = True/qed() }
-    | false => Char { code = nibble % 0x10 - 10 + 0x61, valid = True/qed() }
+    | true => Char { code = nibble % 0x10 + 0x30 }
+    | false => Char { code = nibble % 0x10 - 10 + 0x61 }
     end;
 
 --- The value of a hexadecimal digit in either case, or `none`.

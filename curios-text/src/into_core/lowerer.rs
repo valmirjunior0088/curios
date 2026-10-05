@@ -317,7 +317,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    // The meta-emitter: a string literal becomes a proof-carrying `/std/Str/Str` value `Str { bytes = <Bytes>, valid = True/qed() }`. `valid` is erased, so at runtime `Str` collapses to its `Bytes` field — a literal costs exactly what a `Bytes` literal does.
+    // The meta-emitter: a string literal becomes a proof-carrying `/std/Str/Str` value `Str { bytes = <Bytes>, @valid = True/qed() }`. `valid` is erased, so at runtime `Str` collapses to its `Bytes` field — a literal costs exactly what a `Bytes` literal does.
     //
     // # Why the proof is one constant
     //

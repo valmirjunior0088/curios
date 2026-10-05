@@ -14,7 +14,7 @@ pub struct Time: pub Type {
     minute: Nat,
     second: Nat,
     nanosecond: Nat,
-    ok: Valid(hour, minute, second, nanosecond),
+    @ok: Valid(hour, minute, second, nanosecond),
 }
 
 --- The time, under the evidence that the four spell one.
@@ -25,7 +25,7 @@ pub let of(
     nanosecond: Nat,
     @ok: Valid(hour, minute, second, nanosecond),
 ) -> Time =
-    Time { hour = hour, minute = minute, second = second, nanosecond = nanosecond, ok = ok };
+    Time { hour = hour, minute = minute, second = second, nanosecond = nanosecond };
 
 let try_valid(
     hour: Nat,
