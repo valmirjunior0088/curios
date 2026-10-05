@@ -4,6 +4,9 @@
 
 use std::{hash::Hash, sync::Arc};
 
+#[cfg(feature = "archive")]
+use crate::BufferBytes;
+
 /// The closed logical grain of a packed binary sequence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
@@ -35,6 +38,7 @@ impl Grain {
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct Binary {
+    #[archived_with(BufferBytes)]
     bytes: Arc<[u8]>,
     bit_offset: usize,
     bit_length: usize,
