@@ -14,6 +14,7 @@ use {
     curios_utilities::Entropy,
     std::{
         collections::{BTreeMap, HashMap},
+        hash::Hash,
         rc::Rc,
     },
 };
@@ -112,7 +113,7 @@ impl Refinements {
                 .all(|entry| other.scrutinees.contains(entry))
     }
 
-    /// Whether the two hold the same refinements. Compared as sets: a frame's store is a hash map, so the same refinements flatten in different orders from two frames.
+    /// Whether the two hold the same refinements. Compared as sets: two frames may have recorded the same refinements in different orders.
     pub(crate) fn same_as(&self, other: &Refinements) -> bool {
         self.within(other) && other.within(self)
     }
@@ -159,6 +160,55 @@ impl FrozenFrame {
     }
 }
 
+/// One frame's refinements of one kind, read back in the order they were recorded.
+///
+/// A hash map's own order differs from one process to the next, and a frame's refinements are read in order: the guards a proof the elaborator writes is built from are admitted as they are met, so a frame holding two would yield two proofs of one bound, by the run.
+#[derive(Debug)]
+struct Recorded<K, V> {
+    places: HashMap<K, usize>,
+    entries: Vec<(K, V)>,
+}
+
+impl<K: Eq + Hash + Clone, V> Recorded<K, V> {
+    fn new() -> Self {
+        Self {
+            places: HashMap::new(),
+            entries: Vec::new(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    fn get(&self, key: &K) -> Option<&V> {
+        self.places.get(key).map(|&place| &self.entries[place].1)
+    }
+
+    fn contains_key(&self, key: &K) -> bool {
+        self.places.contains_key(key)
+    }
+
+    /// Record `value` under `key`, in the place the key already holds where it was recorded before.
+    fn insert(&mut self, key: K, value: V) {
+        match self.places.get(&key) {
+            Some(&place) => self.entries[place].1 = value,
+            None => {
+                self.places.insert(key.clone(), self.entries.len());
+                self.entries.push((key, value));
+            }
+        }
+    }
+
+    fn iter(&self) -> impl DoubleEndedIterator<Item = (&K, &V)> {
+        self.entries.iter().map(|(key, value)| (key, value))
+    }
+
+    fn keys(&self) -> impl Iterator<Item = &K> {
+        self.entries.iter().map(|(key, _)| key)
+    }
+}
+
 /// The frame-scoped lexical stores. `Context` holds exactly one of these; see the module documentation for the cache-coordination contract.
 #[derive(Debug)]
 pub(crate) struct Frames {
@@ -166,10 +216,10 @@ pub(crate) struct Frames {
     assumption_universes: Vec<HashMap<Free, UniverseContext>>,
     definitions: Vec<HashMap<Free, DefEntry>>,
     /// Counterfactual match-arm refinements (`refine_head`), kept parallel to `definitions` but suppressible: re-validation of a metavariable solution must keep stable definitions yet ignore these.
-    refinements: Vec<HashMap<Free, Term>>,
-    refinement_projections: Vec<HashMap<(Term, usize), ProjectionEntry>>,
+    refinements: Vec<Recorded<Free, Term>>,
+    refinement_projections: Vec<Recorded<(Term, usize), ProjectionEntry>>,
     /// Counterfactual refinements keyed by a *stuck application* scrutinee — a non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head` could not record. Keyed by the scrutinee as written, its metavariables and universes normalized (`reduce`'s `shallow_scrutinee`); an occurrence that surfaces spelled differently is met at the entry's reduced spelling (`Frames::scrutinee_spellings`). The term-keyed analogue of the two stores above, suppressed by the same flag.
-    refinement_scrutinees: Vec<HashMap<Term, ScrutineeEntry>>,
+    refinement_scrutinees: Vec<Recorded<Term, ScrutineeEntry>>,
     /// Each scrutinee entry's *reduced* spelling once a probe has asked for it, beside the entry: in the frame the entry was registered in, under its key — `reduce::refined_reduct`'s memo, the elaborator's copy of the kernel's per-entry reduct.
     ///
     /// **It lives as long as its entry, and is forgotten by what can change what its key reduces to.** A spelling is settled with its entry's frame and every frame inside it withheld, and read only through the window, so it rests on the refinements of the frames outside its entry — which cannot change while the entry stands: a registration lands in the innermost frame, and a frame leaves after every frame inside it — and on what reduction reads of everything else: the definitions, the solutions and the universe levels. So a registration, the exit of an inner frame and a suppression bracket leave it alone, and it is forgotten with its frame, where its key is registered again, at a redefinition, a rollback and a universe rewrite, and at a declaration's boundary, which nothing a budget paid for outlives. A fresh definition forgets the spellings naming it, as it does the reducts; and one settled while its key or its reduct held an unsolved metavariable is asked for again once a solution has landed.
@@ -210,9 +260,9 @@ impl Frames {
             assumptions: vec![HashMap::new()],
             assumption_universes: vec![HashMap::new()],
             definitions: vec![HashMap::new()],
-            refinements: vec![HashMap::new()],
-            refinement_projections: vec![HashMap::new()],
-            refinement_scrutinees: vec![HashMap::new()],
+            refinements: vec![Recorded::new()],
+            refinement_projections: vec![Recorded::new()],
+            refinement_scrutinees: vec![Recorded::new()],
             scrutinee_spellings: vec![HashMap::new()],
             suppress_refinements_below: None,
             withhold_refinements_from: None,
@@ -232,9 +282,9 @@ impl Frames {
         self.assumptions.push(HashMap::new());
         self.assumption_universes.push(HashMap::new());
         self.definitions.push(HashMap::new());
-        self.refinements.push(HashMap::new());
-        self.refinement_projections.push(HashMap::new());
-        self.refinement_scrutinees.push(HashMap::new());
+        self.refinements.push(Recorded::new());
+        self.refinement_projections.push(Recorded::new());
+        self.refinement_scrutinees.push(Recorded::new());
         self.scrutinee_spellings.push(HashMap::new());
         self.local_marks.push(self.local.len());
         self.witness_marks.push(self.witness_scope.len());
@@ -717,7 +767,13 @@ impl Frames {
         self.refinement_scrutinees[self.refinement_window()]
             .iter()
             .rev()
-            .flat_map(|frame| frame.values().filter(|entry| entry.withheld).cloned())
+            .flat_map(|frame| {
+                frame
+                    .iter()
+                    .map(|(_, entry)| entry)
+                    .filter(|entry| entry.withheld)
+                    .cloned()
+            })
             .collect()
     }
 
@@ -756,7 +812,7 @@ impl Frames {
     pub(crate) fn refined_variables(&self) -> Vec<(Free, Term)> {
         let mut variables = BTreeMap::new();
         for frame in self.visible_refinements() {
-            for (name, value) in frame {
+            for (name, value) in frame.iter() {
                 variables.insert(*name, value.clone());
             }
         }
@@ -789,7 +845,7 @@ impl Frames {
     }
 
     /// The name-keyed refinement frames the window leaves visible, outermost first.
-    fn visible_refinements(&self) -> std::slice::Iter<'_, HashMap<Free, Term>> {
+    fn visible_refinements(&self) -> std::slice::Iter<'_, Recorded<Free, Term>> {
         self.refinements[self.refinement_window()].iter()
     }
 
@@ -830,9 +886,9 @@ impl Frames {
 
         let window = self.refinement_window();
         let refinements = Rc::new(Refinements {
-            variables: flatten_frames(&self.refinements[window.clone()]),
-            projections: flatten_frames(&self.refinement_projections[window.clone()]),
-            scrutinees: flatten_frames(&self.refinement_scrutinees[window]),
+            variables: flatten_recorded(&self.refinements[window.clone()]),
+            projections: flatten_recorded(&self.refinement_projections[window.clone()]),
+            scrutinees: flatten_recorded(&self.refinement_scrutinees[window]),
         });
         self.refinement_cache = Some((self.refinement_stamp.count(), Rc::clone(&refinements)));
         refinements
@@ -916,9 +972,9 @@ impl Frames {
             assumptions: self.local[self.visible_local_start()..].to_vec(),
             definitions: flatten_frames(&self.definitions[1..]),
             refinements: Refinements {
-                variables: flatten_frames(&self.refinements[from..]),
-                projections: flatten_frames(&self.refinement_projections[from..]),
-                scrutinees: flatten_frames(&self.refinement_scrutinees[from..]),
+                variables: flatten_recorded(&self.refinements[from..]),
+                projections: flatten_recorded(&self.refinement_projections[from..]),
+                scrutinees: flatten_recorded(&self.refinement_scrutinees[from..]),
             },
             witness_binders: self.witness_scope[self.visible_witness_start()..].to_vec(),
         }
@@ -927,6 +983,14 @@ impl Frames {
 
 /// Every entry of `frames`, outermost frame first.
 fn flatten_frames<K: Clone, V: Clone>(frames: &[HashMap<K, V>]) -> Vec<(K, V)> {
+    frames
+        .iter()
+        .flat_map(|frame| frame.iter().map(|(k, v)| (k.clone(), v.clone())))
+        .collect()
+}
+
+/// Every refinement of `frames`, outermost frame first, each frame's in the order it recorded them.
+fn flatten_recorded<K: Eq + Hash + Clone, V: Clone>(frames: &[Recorded<K, V>]) -> Vec<(K, V)> {
     frames
         .iter()
         .flat_map(|frame| frame.iter().map(|(k, v)| (k.clone(), v.clone())))

@@ -460,6 +460,30 @@ Io/pure(())";
 }
 
 #[test]
+fn a_row_filled_on_a_retry_files_the_same_proof_every_time() {
+    // `True/proved()` learns its proposition from the parameter it is passed to, so the bound is filled on a retry, where the two guards it follows from are restored together into one frame. They are read back in the order they were met, whatever the run, which `curios-elab`'s `a_frames_guards_are_read_back_in_the_order_they_were_recorded` holds at the store; this holds the proof it gives.
+    let pinned = "use /std/{Nat, Io};
+use /std/Bool/{True, Holds};
+let above(n: Nat, p: Holds(128 <= n)) -> Nat = n;
+let within(n: Nat, lo: Nat, hi: Nat) -> Nat =
+    match Nat/in_range(n, lo, hi)
+    | false => 0
+    | true =>
+        match 128 <= lo
+        | false => 0
+        | true => above(n, True/proved())
+        end
+    end;
+Io/pure(())";
+    let first = core_elab(pinned);
+    assert_eq!(core_elab(pinned), first);
+    assert!(
+        first.contains("of_in_range"),
+        "the bound follows from the range guard and the comparison:\n{first}"
+    );
+}
+
+#[test]
 fn a_certificate_corrupted_by_one_multiplier_is_refused_by_both_checkers() {
     // The byte row's proof in the shape the procedure writes it, `16 · (a + 1) <= 16 · 16` summed with `b + 1 <= 16`, then with the multiplier moved off 16 and the two facts swapped: a wrong certificate is a term that does not check.
     let proof = |k: u32, first: &str, second: &str| {

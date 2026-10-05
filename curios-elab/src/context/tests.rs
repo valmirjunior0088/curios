@@ -224,6 +224,39 @@ fn a_retry_does_not_see_a_refinement_of_the_context_it_runs_in() {
     });
 }
 
+/// A frame's guards are read back in the order they were recorded, and a frozen frame restores them in it. A proof the elaborator writes admits its guards as it meets them, so their order is the proof's; a hash map's own order differs from one run to the next, and eight keys agreeing with it by chance is one run in forty thousand. Mutation-checked: reading the store back in its map's order fails it.
+#[test]
+fn a_frames_guards_are_read_back_in_the_order_they_were_recorded() {
+    let mut context = context();
+    let f = context.fresh(Some("f"));
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
+    let guards = (0..8_usize)
+        .map(|n| {
+            Term::apply(
+                Term::free_var(&f),
+                [Term::intrinsic(Intrinsic::Nat(Nat::new(n)))],
+            )
+        })
+        .collect::<Vec<_>>();
+    let recorded = |context: &Context| {
+        context
+            .visible_scrutinee_entries()
+            .map(|(_, guard, _)| guard.clone())
+            .collect::<Vec<_>>()
+    };
+
+    context.with_frame(|context| {
+        for guard in &guards {
+            context.refine_scrutinee_spellings(vec![(guard.clone(), guard.clone(), false)], &truth);
+        }
+        assert_eq!(recorded(context), guards);
+
+        let frozen = context.freeze_frame();
+        let restored = context.with_retry_frame(&frozen, |context| recorded(context));
+        assert_eq!(restored, guards);
+    });
+}
+
 /// A metavariable born in a retry is born in the problem's context: its telescope holds the locals the problem froze, and none of the live context's, which its spine would otherwise carry into a term that never bound them.
 #[test]
 fn a_metavariable_born_in_a_retry_has_exactly_the_frozen_locals() {
