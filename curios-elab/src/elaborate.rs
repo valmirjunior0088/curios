@@ -113,7 +113,7 @@ pub(crate) fn elaborate_func_settle(
     term: &Term,
 ) -> Result<(Term, Term), Error> {
     let (rebuilt, type_) =
-        elaborate_func_infer(context, &func.telescope, func.plicities(), Some(term))
+        elaborate_func_infer(context, &func.telescope, &func.plicities(), Some(term))
             .map_err(|error| error.at_opt(term.span()).in_scope(context.witness_scope()))?;
     let rebuilt = match term.span() {
         Some(span) => rebuilt.with_span(span),

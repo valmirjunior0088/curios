@@ -142,11 +142,10 @@ pub(super) fn insert_implicits_on_check(
     let mut binders: Vec<(Free, Term)> = Vec::new();
     let output = context.with_frame(|context| -> Result<Term, Error> {
         let mut cursor = ift.telescope.cursor();
-        let mut plicities = ift.plicities().iter();
         let mut positions = SlotPositions::default();
         while let Some((hint, domain)) = cursor.entry() {
-            match plicities.next() {
-                Some(&plicity @ (Plicity::Implicit | Plicity::Witness)) => {
+            match cursor.mark() {
+                Some(plicity @ (Plicity::Implicit | Plicity::Witness)) => {
                     let position = positions.next(plicity);
                     let arg = insert_auto_argument(
                         context,

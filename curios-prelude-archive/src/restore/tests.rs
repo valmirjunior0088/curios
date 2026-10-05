@@ -449,9 +449,9 @@ fn stored_prelude_measurements() {
     });
 }
 
-/// Every mark vector in the restored standard library sits beside a telescope of the same length. The pairing is a construction invariant — `FuncType::new`, `Func::new`, `InductArm::new` and `InductParam::new` assert it — and the archive restores exactly the constructor-built value its build wrote, so this is not a defense the compiler runs but the one place the claim is checked against the real image, once per test run. `curios-cert`'s `sort.rs` slices marks with no guard of its own on the strength of it.
+/// Every arm of the restored standard library states one mark per payload binder. A function's, a function type's and a constructor signature's marks are their telescope's entries' own, so they have nothing to drift from; an arm's are the one vector left beside its binders. The pairing is a construction invariant — `InductArm::new` asserts it — and the archive restores exactly the constructor-built value its build wrote, so this is not a defense the compiler runs but the one place the claim is checked against the real image, once per test run.
 #[test]
-fn the_restored_prelude_pairs_every_mark_with_its_binder() {
+fn the_restored_prelude_pairs_every_arm_mark_with_its_binder() {
     with_prelude(|prelude| {
         let drifted = Rc::new(RefCell::new(Vec::new()));
         let inspected = Rc::new(Cell::new(0usize));
@@ -459,24 +459,16 @@ fn the_restored_prelude_pairs_every_mark_with_its_binder() {
         let mut visit = Visit::rewriting(
             |_, _| None,
             Box::new(move |_, term: &Term| {
-                let paired = match &**term {
-                    Subterm::Func(func) => Some(func.plicities().len() == func.telescope.len()),
-                    Subterm::FuncType(func_type) => {
-                        Some(func_type.plicities().len() == func_type.telescope.len())
-                    }
-                    Subterm::Match(Match {
-                        cases: Cases::Induct { cases, .. },
-                        ..
-                    }) => Some(
-                        cases
-                            .iter()
-                            .all(|(_, arm)| arm.plicities().len() == arm.arity()),
-                    ),
-                    _ => None,
-                };
-                if let Some(paired) = paired {
+                if let Subterm::Match(Match {
+                    cases: Cases::Induct { cases, .. },
+                    ..
+                }) = &**term
+                {
                     counter.set(counter.get() + 1);
-                    if !paired {
+                    if !cases
+                        .iter()
+                        .all(|(_, arm)| arm.plicities().len() == arm.arity())
+                    {
                         sink.borrow_mut().push(term.clone());
                     }
                 }
@@ -488,20 +480,8 @@ fn the_restored_prelude_pairs_every_mark_with_its_binder() {
             definition.type_.traverse(&mut visit);
             definition.body.traverse(&mut visit);
         }
-        for declaration in prelude
-            .iter()
-            .flat_map(|root| root.core().induct_decls.values())
-        {
-            for (tag, constructor) in &declaration.constructors {
-                assert_eq!(
-                    constructor.plicities().len(),
-                    constructor.telescope.len(),
-                    "constructor {tag} carries a drifted mark vector"
-                );
-            }
-        }
 
-        assert!(inspected.get() > 0, "the walk reached no function nodes");
+        assert!(inspected.get() > 0, "the walk reached no match");
         assert!(
             drifted.borrow().is_empty(),
             "drifted mark vectors survived into the archive: {:?}",

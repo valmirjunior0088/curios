@@ -624,9 +624,9 @@ fn instantiate(
             let mut bounds: Vec<(MetavarId, Term, ImplicitOrigin)> = Vec::new();
             let mut positions = SlotPositions::default();
             let mut cursor = ft.telescope.cursor();
-            for plicity in ft.plicities() {
-                let (hint, ty) = cursor.entry().expect("plicities parallel the telescope");
-                let position = positions.next(*plicity);
+            while let Some(plicity) = cursor.mark() {
+                let (hint, ty) = cursor.entry().expect("a mark stands at an entry");
+                let position = positions.next(plicity);
                 let binder = hint.unwrap_or("_").to_string();
                 let arg = match plicity {
                     Plicity::Implicit => {
@@ -666,9 +666,9 @@ fn instantiate(
                     }
                 };
                 cursor.advance(arg.clone());
-                args.push((*plicity, arg));
+                args.push((plicity, arg));
             }
-            let terminal = cursor.body().expect("plicities parallel the telescope");
+            let terminal = cursor.body().expect("a cursor past every entry");
             (args, premises, bounds, terminal)
         }
         _ => (Vec::new(), Vec::new(), Vec::new(), signature),
@@ -955,15 +955,15 @@ pub(crate) fn read_witness_signature(
     let terminal = match &*reduced {
         Subterm::FuncType(ft) => {
             let mut cursor = ft.telescope.cursor();
-            for plicity in ft.plicities() {
-                let (_, ty) = cursor.entry().expect("plicities parallel the telescope");
+            while let Some(plicity) = cursor.mark() {
+                let (_, ty) = cursor.entry().expect("a mark stands at an entry");
                 if matches!(plicity, Plicity::Explicit) {
                     return Err(Error::ExplicitWitnessParam);
                 }
                 let binder = cursor.advance_fresh(|hint| context.fresh(hint));
-                binders.push((*plicity, binder, ty));
+                binders.push((plicity, binder, ty));
             }
-            cursor.body().expect("plicities parallel the telescope")
+            cursor.body().expect("a cursor past every entry")
         }
         _ => reduced.clone(),
     };

@@ -91,7 +91,7 @@ fn is_identity(reducer: &mut impl Reducer, function: &Term) -> Result<bool, Redu
     let Subterm::Func(Func { telescope, .. }) = &**function else {
         return Ok(false);
     };
-    let Telescope::Cons(_, rest) = telescope else {
+    let Telescope::Cons(_, _, rest) = telescope else {
         return Ok(false);
     };
     let Telescope::Done(body) = rest.body() else {

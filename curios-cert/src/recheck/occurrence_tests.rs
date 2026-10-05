@@ -151,7 +151,7 @@ fn a_nominal_value_types_its_parameters() {
 ///
 /// **Reduction.** `step_apply` opens a lambda's telescope at the application's arguments. `Telescope::open` asserts, so an application that does not saturate its lambda would **abort the walk**; it is stuck instead, which is the conservative direction twice over: reduction that declines to fire can never admit anything, and the term is left for the typing rules to refuse with a diagnostic rather than killing every other verdict. `recheck_module_verdicts` is documented as walking to the end with each verdict independent of the others, and an abort is what makes that false.
 ///
-/// **Synthesis needs no leg.** `synth_neutral`'s partial-application arm slices a spine's head-type `plicities` at the argument count, and the pairing of marks with a telescope is a construction invariant — `FuncType::new` is the one door that builds a mark vector beside its telescope, the archived prelude restores exactly the constructor-built value its build wrote, and `curios-prelude-archive`'s `the_restored_prelude_pairs_every_mark_with_its_binder` checks that once per test run — so a drifted vector is unrepresentable, and this fixture keeps the lambda case alone.
+/// **Synthesis needs no leg.** `synth_neutral`'s partial-application arm opens the head type's telescope at the arguments supplied, and each entry that remains is still under its own mark, so there is no vector beside the telescope to drift and this fixture keeps the lambda case alone.
 ///
 /// It is not reachable from a surface program — `curios-elab` emits saturated applications — and what is at stake is a program's fault aborting the kernel where an `Error` belongs.
 ///

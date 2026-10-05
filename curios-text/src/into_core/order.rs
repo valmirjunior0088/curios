@@ -72,7 +72,7 @@ fn witness_concept(let_: &FlatLet) -> Option<curios_core::Global> {
                 loop {
                     match telescope {
                         curios_core::Telescope::Done(body) => return head_of(body),
-                        curios_core::Telescope::Cons(_, scope) => telescope = scope.body(),
+                        curios_core::Telescope::Cons(_, _, scope) => telescope = scope.body(),
                     }
                 }
             }

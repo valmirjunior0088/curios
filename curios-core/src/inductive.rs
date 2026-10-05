@@ -12,24 +12,21 @@ use {
 #[derive(Debug, Clone, PartialEq)]
 #[curios_archive::archived]
 pub struct InductParam {
+    /// Each binder under its mark — the value constructor's calling convention: every leading declaration parameter is hidden, `Implicit` where it is plain or `@` at the type constructor (a value constructor infers them) and `Witness` where it is a `use` premise, and each payload keeps its declared mark.
     pub telescope: Telescope<Vec<Term>>,
-    /// One plicity mark per telescope binder — the value constructor's calling convention: every leading declaration parameter is hidden, `Implicit` where it is plain or `@` at the type constructor (a value constructor infers them) and `Witness` where it is a `use` premise, and each payload keeps its declared mark. Parallels `telescope`, and is sealed behind [`InductParam::new`] so the correspondence is asserted at the one door rather than at every use.
-    plicities: Vec<Plicity>,
 }
 
 impl InductParam {
-    /// The one construction door: one mark per telescope binder, asserted here.
+    /// A signature over `telescope` with its binders under `plicities`, one per binder: for a caller that holds the marks apart from the entries it built.
     pub fn new(telescope: Telescope<Vec<Term>>, plicities: Vec<Plicity>) -> Self {
-        assert_eq!(plicities.len(), telescope.len());
         Self {
-            telescope,
-            plicities,
+            telescope: telescope.with_marks(&plicities),
         }
     }
 
-    /// The marks, one per telescope binder by construction.
-    pub fn plicities(&self) -> &[Plicity] {
-        &self.plicities
+    /// The marks, one per binder, as the telescope states them.
+    pub fn plicities(&self) -> Vec<Plicity> {
+        self.telescope.marks()
     }
 }
 
@@ -78,7 +75,7 @@ impl InductDecl {
         let mut telescope = &self.arity;
         loop {
             match telescope {
-                Telescope::Cons(_, rest) => telescope = rest.body(),
+                Telescope::Cons(_, _, rest) => telescope = rest.body(),
                 Telescope::Done(indices) => return indices.len(),
             }
         }
@@ -117,10 +114,9 @@ impl InductDecl {
                 .map(|(tag, constructor)| {
                     (
                         tag.clone(),
-                        InductParam::new(
-                            sharing.share(&constructor.telescope),
-                            constructor.plicities.clone(),
-                        ),
+                        InductParam {
+                            telescope: sharing.share(&constructor.telescope),
+                        },
                     )
                 })
                 .collect(),
@@ -157,10 +153,10 @@ impl InductDecl {
     }
 
     /// The canonical plicities of `tag`'s *payload* binders — the constructor signature plicities past the leading `params.len()` declaration parameters, paralleling the telescope [`Self::instantiate`] peels. `None` if `tag` is not a constructor of this inductive.
-    pub fn payload_plicities(&self, tag: &Atom) -> Option<&[Plicity]> {
+    pub fn payload_plicities(&self, tag: &Atom) -> Option<Vec<Plicity>> {
         let param_count = self.param_count();
         self.constructor(tag)
-            .map(|param| &param.plicities[param_count..])
+            .map(|param| param.plicities().split_off(param_count))
     }
 
     /// Constructor tags in runtime dispatch order — which is declaration order: position `i` here is the tag `erase` assigns as runtime index `i` (`erase_variant`) and the arm order it builds a `Match` in (`erase_match`). Both sites must derive that correspondence from this one method, not from their own walk over `constructors`, so the two can never disagree about what "index `i`" means.

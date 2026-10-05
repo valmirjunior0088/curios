@@ -918,7 +918,7 @@ fn check_rules(
     if let Subterm::Func(func) = &**term {
         let reduced = kernel.reduce_forced(expected.clone())?;
         if let Subterm::FuncType(expected_func) = &*reduced
-            && func.plicities() == expected_func.plicities()
+            && func.telescope.same_marks(&expected_func.telescope)
             && func.telescope.len() == expected_func.telescope.len()
         {
             let lambda = func.telescope.clone();
@@ -1052,7 +1052,7 @@ fn subsumes(kernel: &mut Kernel, inferred: &Term, expected: &Term) -> Result<boo
         (Subterm::Prop, Subterm::Type(_)) => return Ok(true),
         // Plicity is part of a function type's identity, exactly as in `convert`: `(A) -> A` and `(@A) -> A` have different calling conventions, so a difference there is a mismatch and not a codomain question.
         (Subterm::FuncType(lower), Subterm::FuncType(upper))
-            if lower.plicities() == upper.plicities() =>
+            if lower.telescope.same_marks(&upper.telescope) =>
         {
             let (lower, upper) = (lower.telescope.clone(), upper.telescope.clone());
 
@@ -1112,7 +1112,7 @@ fn check_along<B: Bound>(
 fn infer_lambda(kernel: &mut Kernel, func: &Func, arguments: &[Term]) -> Result<Term, Error> {
     let telescope = infer_telescope(kernel, func.telescope.clone(), arguments)?;
 
-    Ok(Subterm::FuncType(FuncType::new(telescope, func.plicities().to_vec())).into())
+    Ok(Subterm::FuncType(FuncType { telescope }).into())
 }
 
 /// Check that every domain of a λ's telescope is a type, then its body under those binders, rebuilding the telescope as the Π the λ inhabits.
@@ -1130,18 +1130,20 @@ fn infer_telescope(
         let mut cursor = telescope.cursor();
 
         while let Some((_, domain)) = cursor.entry() {
+            let mark = cursor.mark().expect("a mark stands at an entry");
             infer_type(kernel, &domain)?;
 
             let binder = kernel.advance_assumed(&mut cursor, &domain);
             if let Some(argument) = arguments.get(entries.len()) {
                 kernel.refine_size(&binder, argument)?;
             }
-            entries.push((binder, domain));
+            entries.push((mark, binder, domain));
         }
 
         let body = cursor.body().expect("a cursor past every entry");
         let type_ = infer(kernel, &body)?;
 
-        Ok(Telescope::build(entries, type_))
+        // The Π keeps each binder's mark, which is part of its identity.
+        Ok(Telescope::build_marked(entries, type_))
     })
 }

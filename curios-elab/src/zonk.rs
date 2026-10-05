@@ -213,10 +213,9 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                         .map(|(tag, param)| {
                             Ok((
                                 tag.clone(),
-                                InductParam::new(
-                                    zonk_signature(context, &param.telescope)?,
-                                    param.plicities().to_vec(),
-                                ),
+                                InductParam {
+                                    telescope: zonk_signature(context, &param.telescope)?,
+                                },
                             ))
                         })
                         .collect::<Result<_, Error>>()?,
@@ -1192,15 +1191,13 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
 
         Subterm::Intrinsic(intrinsic) => Subterm::Intrinsic(zonk_intrinsic(context, intrinsic)?),
 
-        Subterm::Func(func) => Subterm::Func(Func::new(
-            zonk_telescope(context, &func.telescope)?,
-            func.plicities().to_vec(),
-        )),
+        Subterm::Func(func) => Subterm::Func(Func {
+            telescope: zonk_telescope(context, &func.telescope)?,
+        }),
 
-        Subterm::FuncType(func_type) => Subterm::FuncType(FuncType::new(
-            zonk_telescope(context, &func_type.telescope)?,
-            func_type.plicities().to_vec(),
-        )),
+        Subterm::FuncType(func_type) => Subterm::FuncType(FuncType {
+            telescope: zonk_telescope(context, &func_type.telescope)?,
+        }),
 
         Subterm::Apply(Apply { head, arguments }) => Subterm::Apply(Apply {
             head: zonk_term(context, head)?,
@@ -1412,7 +1409,8 @@ fn zonk_signature(
                 .map(|target| zonk_term(context, target))
                 .collect::<Result<_, Error>>()?,
         ))),
-        Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
+        Telescope::Cons(mark, ty, rest) => Ok(Telescope::Cons(
+            *mark,
             zonk_term(context, ty)?,
             rest.try_map_body(|inner| zonk_signature(context, inner))?,
         )),
@@ -1425,7 +1423,8 @@ fn zonk_signature(
 fn zonk_telescope(context: &Zonk, telescope: &Telescope<Term>) -> Result<Telescope<Term>, Error> {
     match telescope {
         Telescope::Done(body) => Ok(Telescope::Done(zonk_term(context, body)?.into())),
-        Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
+        Telescope::Cons(mark, ty, rest) => Ok(Telescope::Cons(
+            *mark,
             zonk_term(context, ty)?,
             rest.try_map_body(|inner| zonk_telescope(context, inner))?,
         )),
@@ -1448,7 +1447,8 @@ fn zonk_arity_within(
         Telescope::Done(indices) => Ok(Telescope::Done(Box::new(zonk_field_telescope(
             context, indices,
         )?))),
-        Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
+        Telescope::Cons(mark, ty, rest) => Ok(Telescope::Cons(
+            *mark,
             zonk_term(context, ty)?,
             rest.try_map_body(|inner| zonk_arity_within(context, inner))?,
         )),
@@ -1459,7 +1459,8 @@ fn zonk_arity_within(
 fn zonk_field_telescope(context: &Zonk, telescope: &Telescope<()>) -> Result<Telescope<()>, Error> {
     match telescope {
         Telescope::Done(_) => Ok(Telescope::Done(Box::new(()))),
-        Telescope::Cons(ty, rest) => Ok(Telescope::Cons(
+        Telescope::Cons(mark, ty, rest) => Ok(Telescope::Cons(
+            *mark,
             zonk_term(context, ty)?,
             rest.try_map_body(|inner| zonk_field_telescope(context, inner))?,
         )),

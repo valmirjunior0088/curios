@@ -258,25 +258,26 @@ fn reach_telescope_absorbs_arity() {
     // body references bound index 2 (reach 3); each telescope binder absorbs one. `Scope::constant` places the body without capturing, so the bound index is preserved exactly (unlike `Telescope::build`, which captures by label).
     let f1 = Term::from(Subterm::Func(Func {
         telescope: Telescope::Cons(
+            Plicity::Explicit,
             Term::type_ground(),
             Scope::constant(One, Telescope::done(Term::var(Var::bound(2)))),
         ),
-        plicities: vec![Plicity::Explicit],
     }));
     assert_eq!(f1.reach(), 2); // one binder: (2 + 1) - 1
 
     let f2 = Term::from(Subterm::Func(Func {
         telescope: Telescope::Cons(
+            Plicity::Explicit,
             Term::type_ground(),
             Scope::constant(
                 One,
                 Telescope::Cons(
+                    Plicity::Explicit,
                     Term::type_ground(),
                     Scope::constant(One, Telescope::done(Term::var(Var::bound(2)))),
                 ),
             ),
         ),
-        plicities: vec![Plicity::Explicit, Plicity::Explicit],
     }));
     assert_eq!(f2.reach(), 1); // two binders: (2 + 1) - 2
 }

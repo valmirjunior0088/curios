@@ -280,11 +280,8 @@ pub(crate) fn synth_neutral(
                 }
                 // A partially applied spine still has a type: the residual function type, with the supplied arguments substituted into the entries that remain.
                 Subterm::FuncType(func_type) if func_type.telescope.len() > params.len() => {
-                    let residual_plicities = func_type.plicities()[params.len()..].to_vec();
-                    let residual = func_type.telescope.open_params(&params);
-                    Ok(Some(
-                        Subterm::FuncType(FuncType::new(residual, residual_plicities)).into(),
-                    ))
+                    let telescope = func_type.telescope.open_params(&params);
+                    Ok(Some(Subterm::FuncType(FuncType { telescope }).into()))
                 }
                 _ => Ok(None),
             }

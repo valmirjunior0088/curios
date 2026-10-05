@@ -182,9 +182,9 @@ pub(super) fn elaborate_func(
 
     match mode {
         Mode::Check(expected) => {
-            elaborate_func_check(context, telescope, plicities, term, expected)
+            elaborate_func_check(context, telescope, &plicities, term, expected)
         }
-        Mode::Infer => elaborate_func_infer(context, telescope, plicities, None),
+        Mode::Infer => elaborate_func_infer(context, telescope, &plicities, None),
     }
 }
 
@@ -377,10 +377,8 @@ struct InfixMethod {
     provenance: WitnessOrigin,
     /// The method's position among the concept's fields — the projection index.
     index: usize,
-    /// The method's type at `?T`, as a telescope: the two operand domains, any binder the declaration carries past them, and the codomain that is the operator's result type.
+    /// The method's type at `?T`, as a telescope: the two operand domains, any binder the declaration carries past them, each under its mark — so an inserted argument is filled by the convention its slot declares — and the codomain that is the operator's result type.
     signature: Telescope<Term>,
-    /// One mark per binder of `signature`, so an inserted argument is filled by the convention its slot declares.
-    plicities: Vec<Plicity>,
 }
 
 impl InfixMethod {
@@ -405,23 +403,20 @@ impl InfixMethod {
         origin: &Term,
     ) -> Result<(Vec<(Plicity, Term)>, Term), Error> {
         let mut cursor = self.signature.cursor();
-        let mut marks = self.plicities.iter().copied();
         let mut positions = SlotPositions::default();
         let mut arguments = Vec::new();
 
         for operand in [left, right] {
-            assert!(
-                cursor.entry().is_some(),
-                "an operator concept declares its method over both operands"
-            );
-            let plicity = marks.next().unwrap_or(Plicity::Explicit);
+            let plicity = cursor
+                .mark()
+                .expect("an operator concept declares its method over both operands");
             positions.next(plicity);
             arguments.push((plicity, operand.clone()));
             cursor.advance(operand.clone());
         }
 
         while let Some((_, domain)) = cursor.entry() {
-            let plicity = marks.next().unwrap_or(Plicity::Explicit);
+            let plicity = cursor.mark().expect("a mark stands at an entry");
             let filled = insert_auto_argument(
                 context,
                 plicity,
@@ -490,17 +485,13 @@ fn infix_method(
     let Subterm::FuncType(method_func_type) = &*method_type else {
         panic!("an operator concept declares its method as an arrow");
     };
-    let telescope = &method_func_type.telescope;
-    let plicities = method_func_type.plicities();
-
     Ok(Some(InfixMethod {
         slot,
         goal,
         witness,
         provenance,
         index,
-        signature: telescope.clone(),
-        plicities: plicities.to_vec(),
+        signature: method_func_type.telescope.clone(),
     }))
 }
 

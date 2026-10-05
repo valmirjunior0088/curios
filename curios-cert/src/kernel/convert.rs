@@ -512,23 +512,26 @@ fn structural(
         (Subterm::Metavar(_), _) | (_, Subterm::Metavar(_)) => Err(Error::NotCore(this.clone())),
 
         // Plicity is part of a function type's identity: `(A) -> A` and `(@A) -> A` have different calling conventions, and conflating them would let a value be applied through the wrong one.
-        (Subterm::FuncType(left), Subterm::FuncType(right)) => Ok(left.plicities()
-            == right.plicities()
-            && compare_telescope(
-                kernel,
-                history,
-                left.telescope.clone(),
-                right.telescope.clone(),
-            )?),
+        (Subterm::FuncType(left), Subterm::FuncType(right)) => {
+            Ok(left.telescope.same_marks(&right.telescope)
+                && compare_telescope(
+                    kernel,
+                    history,
+                    left.telescope.clone(),
+                    right.telescope.clone(),
+                )?)
+        }
 
         // Two lambdas with no expected type to eta against: compare their bodies under one shared set of binders.
-        (Subterm::Func(left), Subterm::Func(right)) => Ok(left.plicities() == right.plicities()
-            && compare_telescope(
-                kernel,
-                history,
-                left.telescope.clone(),
-                right.telescope.clone(),
-            )?),
+        (Subterm::Func(left), Subterm::Func(right)) => {
+            Ok(left.telescope.same_marks(&right.telescope)
+                && compare_telescope(
+                    kernel,
+                    history,
+                    left.telescope.clone(),
+                    right.telescope.clone(),
+                )?)
+        }
 
         (Subterm::TupleType(left), Subterm::TupleType(right)) => compare_field_telescope(
             kernel,

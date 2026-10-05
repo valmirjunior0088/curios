@@ -1340,14 +1340,15 @@ fn process_items(
                         let (type_, body) = match &*field_type {
                             curios_core::Subterm::FuncType(function) => {
                                 let mut cursor = function.telescope.cursor();
-                                let mut own = Vec::with_capacity(function.plicities().len());
+                                let mut own = Vec::with_capacity(function.telescope.len());
                                 while let Some((hint, domain)) = cursor.entry() {
+                                    let mark = cursor.mark().expect("a mark stands at an entry");
                                     let binder = lower
                                         .mint([hint.unwrap_or_default().to_string()])
                                         .remove(0)
                                         .1;
                                     cursor.advance(curios_core::Term::free_var(&binder));
-                                    own.push((function.plicities()[own.len()], binder, domain));
+                                    own.push((mark, binder, domain));
                                 }
                                 let output = cursor.body().expect("a cursor past every entry");
                                 let arguments = own

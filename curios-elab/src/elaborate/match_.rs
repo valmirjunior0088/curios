@@ -989,7 +989,7 @@ fn elaborate_induct_match(
             .payload_plicities(tag)
             .expect("constructor payload plicities parallel its telescope");
         for (position, (written, canonical)) in
-            scope.plicities().iter().zip(payload_plicities).enumerate()
+            scope.plicities().iter().zip(&payload_plicities).enumerate()
         {
             if written != canonical {
                 return Err(Error::BinderPlicityMismatch {

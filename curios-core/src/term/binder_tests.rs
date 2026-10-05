@@ -87,8 +87,8 @@ fn implicit_marks_print_and_default_to_explicit() {
     // The unmarked builders default every slot to `Explicit`.
     let plain = Term::func_type([(binder_0, Term::type_ground())], Term::type_ground());
     match &*plain {
-        Subterm::FuncType(FuncType { plicities, .. }) => {
-            assert_eq!(plicities, &[Plicity::Explicit]);
+        Subterm::FuncType(function) => {
+            assert_eq!(function.plicities(), [Plicity::Explicit]);
         }
         _ => unreachable!(),
     }
@@ -313,13 +313,16 @@ fn a_telescope_builds_as_closing_each_entry_over_the_rest_would() {
         .map(|(type_, _)| type_)
         .collect::<Vec<_>>();
 
-    let folded = binders
-        .iter()
-        .zip(&types)
-        .rev()
-        .fold(Telescope::done(body.clone()), |rest, (binder, type_)| {
-            Telescope::Cons(type_.clone(), Scope::close(One, &[binder], rest))
-        });
+    let folded = binders.iter().zip(&types).rev().fold(
+        Telescope::done(body.clone()),
+        |rest, (binder, type_)| {
+            Telescope::Cons(
+                Plicity::Explicit,
+                type_.clone(),
+                Scope::close(One, &[binder], rest),
+            )
+        },
+    );
     let built = Telescope::build(binders.iter().cloned().zip(types), body);
 
     assert_eq!(built, folded);
@@ -348,7 +351,7 @@ fn a_telescope_opens_each_entry_as_opening_one_binder_at_a_time_would() {
     let expected_body = loop {
         match current {
             Telescope::Done(body) => break *body,
-            Telescope::Cons(type_, rest) => {
+            Telescope::Cons(_, type_, rest) => {
                 expected_types.push(type_);
                 current = rest.open(&[&args[expected_types.len() - 1]]);
                 residuals.push(current.clone());
@@ -383,4 +386,54 @@ fn a_telescope_opens_each_entry_as_opening_one_binder_at_a_time_would() {
             residuals[index]
         );
     }
+}
+
+/// A member's mark is its entry's: two telescopes over the same types under different marks are two telescopes, and stating the marks over a plain one, relabelling it and opening its leading binders each leave every mark where it stands.
+#[test]
+fn a_telescope_keeps_each_members_mark() {
+    let (a, x) = (Free::local(0, Some("A")), Free::local(1, Some("x")));
+    let marked = Telescope::build_marked(
+        [
+            (Plicity::Implicit, a, Term::type_ground()),
+            (Plicity::Witness, x, Term::free_var(&a)),
+        ],
+        Term::free_var(&a),
+    );
+    let plain = Telescope::build(
+        [(a, Term::type_ground()), (x, Term::free_var(&a))],
+        Term::free_var(&a),
+    );
+
+    assert_eq!(marked.marks(), [Plicity::Implicit, Plicity::Witness]);
+    assert_eq!(plain.marks(), [Plicity::Explicit, Plicity::Explicit]);
+    assert_ne!(marked, plain);
+    assert!(!marked.same_marks(&plain));
+    assert_eq!(plain.with_marks(&marked.marks()), marked);
+
+    assert_eq!(marked.clone().relabel(&["B", "y"]).marks(), marked.marks());
+    assert_eq!(
+        marked.clone().open_params(&[Term::type_ground()]).marks(),
+        [Plicity::Witness]
+    );
+
+    let mut cursor = marked.cursor();
+    assert_eq!(cursor.mark(), Some(Plicity::Implicit));
+    cursor.advance(Term::type_ground());
+    assert_eq!(cursor.mark(), Some(Plicity::Witness));
+    cursor.advance(Term::type_ground());
+    assert_eq!(cursor.mark(), None);
+}
+
+/// A function type's identity is its telescope's, marks included: the same domains under another mark are another type, and another hash.
+#[test]
+fn function_types_differing_in_a_mark_alone_are_two() {
+    let a = Free::local(0, Some("A"));
+    let of = |mark| Term::func_type_marked([(mark, a, Term::type_ground())], Term::type_ground());
+    let (plain, hidden) = (of(Plicity::Explicit), of(Plicity::Implicit));
+
+    assert_ne!(plain, hidden);
+    assert_eq!(hidden, of(Plicity::Implicit));
+
+    let hasher = RandomState::new();
+    assert_ne!(hasher.hash_one(&plain), hasher.hash_one(&hidden));
 }

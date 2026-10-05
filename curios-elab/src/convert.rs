@@ -436,7 +436,7 @@ impl Convert {
         that: FuncType,
     ) -> Result<bool, ReduceError> {
         // Plicity is part of a function type's identity and calling convention: an explicit slot and an implicit/witness slot are *not* convertible even when their domains and results are, so that a convertible annotation or alias can never reinterpret which binders elaboration inserts. Compare the whole plicity vector (arity included) up front — the telescope walk below then compares the dependent domains.
-        if this.plicities() != that.plicities() {
+        if !this.telescope.same_marks(&that.telescope) {
             return Ok(false);
         }
         // Both telescopes opened at one shared variable per binder, each entry once, so the dependent domains speak of the same binder without either side's tail being rewritten per binder.
@@ -482,7 +482,7 @@ impl Convert {
         type_: Term,
     ) -> Result<bool, ReduceError> {
         // Plicity is part of a function's canonical identity. Well-typed functions compared at the same function type necessarily agree, but the explicit check preserves the Core invariant and rejects malformed or pre-elaboration terms that reach conversion unexpectedly.
-        if this.plicities() != that.plicities() {
+        if !this.telescope.same_marks(&that.telescope) {
             return Ok(false);
         }
         let (ys, this_body, output_type) = self.func_eta_args(context, &this.telescope, type_)?;

@@ -110,53 +110,47 @@ impl Transient {
     }
 }
 
-/// `plicities` parallels the telescope, one mark per binder — sealed at the crate boundary so the correspondence is enforced by [`FuncType::new`], the one door an outside constructor has. `Telescope` itself is unchanged. Erasure is sort-driven (a proof or a type erases), so a function type carries no runtime-multiplicity marks of its own.
+/// A function type is its telescope: each parameter a type under its mark, the payload the result. The marks are the telescope's own ([`Telescope`]), so they are part of the type's identity with nothing beside it to keep in step. Erasure is sort-driven (a proof or a type erases), so a function type carries no runtime-multiplicity marks of its own.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct FuncType {
     pub telescope: Telescope<Term>,
-    pub(crate) plicities: Vec<Plicity>,
 }
 
 impl FuncType {
-    /// The one construction door outside this crate: one mark per telescope binder, asserted here rather than at every use.
+    /// A function type over `telescope` with its members under `plicities`, one per binder: for a caller that holds the marks apart from the entries it built.
     pub fn new(telescope: Telescope<Term>, plicities: Vec<Plicity>) -> Self {
-        assert_eq!(plicities.len(), telescope.len());
         Self {
-            telescope,
-            plicities,
+            telescope: telescope.with_marks(&plicities),
         }
     }
 
-    /// The marks, one per telescope binder by construction.
-    pub fn plicities(&self) -> &[Plicity] {
-        &self.plicities
+    /// The marks, one per parameter, as the telescope states them.
+    pub fn plicities(&self) -> Vec<Plicity> {
+        self.telescope.marks()
     }
 }
 
-/// A function literal: the parameter annotations and the body as one [`Telescope`] (each entry a parameter type, the `Done` payload the body), with `plicities` paralleling the telescope one mark per binder — the builder asserts the lengths agree. Plicity is part of a function's identity and calling convention: a lambda carries the marks its binders were written with (before elaboration) and the complete canonical marks of its checked type (after elaboration, once omitted hidden binders are inserted). Derived `Eq`/`Hash` include `plicities` so that two lambdas differing only in a written mark never share an elaboration-cache entry.
+/// A function literal: the parameter annotations and the body as one [`Telescope`] (each entry a parameter type under its mark, the `Done` payload the body). Plicity is part of a function's identity and calling convention: a lambda carries the marks its binders were written with (before elaboration) and the complete canonical marks of its checked type (after elaboration, once omitted hidden binders are inserted). The marks are the telescope's own, so `Eq`/`Hash` read them and two lambdas differing only in a written mark never share an elaboration-cache entry.
 ///
-/// Erasure ignores `plicities`; its keep/drop decisions come from the checked function type and sort information.
+/// Erasure ignores the marks; its keep/drop decisions come from the checked function type and sort information.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Func {
     pub telescope: Telescope<Term>,
-    pub(crate) plicities: Vec<Plicity>,
 }
 
 impl Func {
-    /// The one construction door outside this crate: one mark per telescope binder, asserted here rather than at every use.
+    /// A function literal over `telescope` with its binders under `plicities`, one per binder: for a caller that holds the marks apart from the entries it built.
     pub fn new(telescope: Telescope<Term>, plicities: Vec<Plicity>) -> Self {
-        assert_eq!(plicities.len(), telescope.len());
         Self {
-            telescope,
-            plicities,
+            telescope: telescope.with_marks(&plicities),
         }
     }
 
-    /// The marks, one per telescope binder by construction.
-    pub fn plicities(&self) -> &[Plicity] {
-        &self.plicities
+    /// The marks, one per binder, as the telescope states them.
+    pub fn plicities(&self) -> Vec<Plicity> {
+        self.telescope.marks()
     }
 }
 

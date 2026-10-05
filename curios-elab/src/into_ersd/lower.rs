@@ -111,10 +111,9 @@ fn project_module(module: &Module) -> Module {
                             .map(|(tag, constructor)| {
                                 (
                                     tag.clone(),
-                                    InductParam::new(
-                                        project_erased_universes(&constructor.telescope),
-                                        constructor.plicities().to_vec(),
-                                    ),
+                                    InductParam {
+                                        telescope: project_erased_universes(&constructor.telescope),
+                                    },
                                 )
                             })
                             .collect(),

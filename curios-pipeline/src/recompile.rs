@@ -302,7 +302,6 @@ fn induct_unchanged(this: &InductDecl, that: &InductDecl) -> bool {
         && this.constructors.iter().zip(&that.constructors).all(
             |((this_tag, this_payload), (that_tag, that_payload))| {
                 this_tag == that_tag
-                    && this_payload.plicities() == that_payload.plicities()
                     && telescope_unchanged(
                         &this_payload.telescope,
                         &that_payload.telescope,
@@ -365,7 +364,7 @@ fn arity_unchanged(
     )
 }
 
-/// Whether two telescopes agree entry by entry modulo `renaming`, ending in payloads `done` agrees on.
+/// Whether two telescopes agree entry by entry — each under the same mark, its type equal modulo `renaming` — ending in payloads `done` agrees on. A mark is part of what an entry declares: a parameter's decides how a call writes it, and a field's what a literal leaves out and what a position counts.
 fn telescope_unchanged<B: Bound>(
     before: &Telescope<B>,
     after: &Telescope<B>,
@@ -375,8 +374,12 @@ fn telescope_unchanged<B: Bound>(
     let (mut before, mut after) = (before, after);
     loop {
         match (before, after) {
-            (Telescope::Cons(this, this_rest), Telescope::Cons(that, that_rest)) => {
-                if this_rest.arity() != that_rest.arity()
+            (
+                Telescope::Cons(this_mark, this, this_rest),
+                Telescope::Cons(that_mark, that, that_rest),
+            ) => {
+                if this_mark != that_mark
+                    || this_rest.arity() != that_rest.arity()
                     || !this.equal_modulo_metas(that, renaming)
                 {
                     return false;

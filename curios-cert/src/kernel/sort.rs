@@ -349,17 +349,11 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
                     let refs = apply.params().collect::<Vec<_>>();
                     Ok(Some(telescope.open(&refs)))
                 }
-                // A partially applied spine still has a type: the residual function type, with the supplied arguments substituted into the entries that remain. The head type's marks are sliced at the same count, which is safe by construction: `FuncType::new` is the one door that pairs a mark vector with its telescope, so a vector shorter than the telescope is unrepresentable and needs no guard of its own.
+                // A partially applied spine still has a type: the residual function type, with the supplied arguments substituted into the entries that remain, each still under its own mark.
                 Subterm::FuncType(func_type) if func_type.telescope.len() > supplied => {
                     let params = apply.params().cloned().collect::<Vec<_>>();
-                    let residual_plicities = func_type.plicities()[supplied..].to_vec();
-                    Ok(Some(
-                        Subterm::FuncType(FuncType::new(
-                            func_type.telescope.open_params(&params),
-                            residual_plicities,
-                        ))
-                        .into(),
-                    ))
+                    let telescope = func_type.telescope.open_params(&params);
+                    Ok(Some(Subterm::FuncType(FuncType { telescope }).into()))
                 }
                 _ => Ok(None),
             }

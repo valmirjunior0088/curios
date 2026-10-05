@@ -40,7 +40,7 @@ impl StructDecl {
         let mut telescope = &self.arity;
         loop {
             match telescope {
-                Telescope::Cons(_, rest) => telescope = rest.body(),
+                Telescope::Cons(_, _, rest) => telescope = rest.body(),
                 Telescope::Done(fields) => return fields,
             }
         }

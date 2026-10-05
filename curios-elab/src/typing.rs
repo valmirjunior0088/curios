@@ -234,7 +234,7 @@ fn subsume(
 
     // Both sides rigid function types of one calling convention. A side still stuck on an unsolved metavariable has no shape to decompose — conversion parks it instead, which is what lets a later solution decide it.
     if let (Subterm::FuncType(lower), Subterm::FuncType(upper)) = (&*lower_type, &*upper_type)
-        && lower.plicities() == upper.plicities()
+        && lower.telescope.same_marks(&upper.telescope)
         && !stuck_on_metavar(context, &lower_type)
         && !stuck_on_metavar(context, &upper_type)
     {

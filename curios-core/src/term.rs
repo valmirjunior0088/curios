@@ -454,26 +454,15 @@ impl Term {
         )
     }
 
-    /// Build a function literal from `(plicity, label, annotation)` binders, keeping one plicity mark per telescope entry (asserted to line up — the [`Func`] invariant). The all-explicit shorthand is [`Term::func`].
+    /// Build a function literal from `(plicity, label, annotation)` binders, each entry of its telescope under its mark. The all-explicit shorthand is [`Term::func`].
     pub fn func_marked<I, T, B>(params: I, body: B) -> Self
     where
         I: IntoIterator<Item = (Plicity, Free, T)>,
         T: Into<Term>,
         B: Into<Term>,
     {
-        let mut plicities = Vec::new();
-        let telescope = Telescope::build(
-            params.into_iter().map(|(plicity, label, type_)| {
-                plicities.push(plicity);
-                (label, type_)
-            }),
-            body.into(),
-        );
-        assert_eq!(plicities.len(), telescope.len());
-
         Self::from(Subterm::Func(Func {
-            telescope,
-            plicities,
+            telescope: Telescope::build_marked(params, body.into()),
         }))
     }
 
@@ -788,26 +777,15 @@ impl Term {
         )
     }
 
-    /// Build a Π-type from `(plicity, label, type)` binders, keeping one plicity mark per telescope entry (asserted to line up — the [`FuncType`] invariant). The all-explicit shorthand is the crate-internal `func_type`.
+    /// Build a Π-type from `(plicity, label, type)` binders, each entry of its telescope under its mark. The all-explicit shorthand is the crate-internal `func_type`.
     pub fn func_type_marked<I, T, O>(params: I, output: O) -> Self
     where
         I: IntoIterator<Item = (Plicity, Free, T)>,
         T: Into<Term>,
         O: Into<Term>,
     {
-        let mut plicities = Vec::new();
-        let telescope = Telescope::build(
-            params.into_iter().map(|(plicity, label, type_)| {
-                plicities.push(plicity);
-                (label, type_)
-            }),
-            output.into(),
-        );
-        assert_eq!(plicities.len(), telescope.len());
-
         Self::from(Subterm::FuncType(FuncType {
-            telescope,
-            plicities,
+            telescope: Telescope::build_marked(params, output.into()),
         }))
     }
 

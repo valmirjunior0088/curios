@@ -147,7 +147,7 @@ fn mark(term: &Term, seeds: &mut BTreeSet<Global>) {
 /// Take every entry of a telescope.
 fn entries<B: Bound>(telescope: &Telescope<B>, site: &Rc<str>, positions: &mut Vec<Position>) {
     let mut telescope = telescope;
-    while let Telescope::Cons(entry, rest) = telescope {
+    while let Telescope::Cons(_, entry, rest) = telescope {
         push(positions, site, entry);
         telescope = rest.body();
     }
@@ -164,7 +164,7 @@ fn ends_in_sort(type_: &Term) -> bool {
                 loop {
                     match telescope {
                         Telescope::Done(inner) => break (**inner).clone(),
-                        Telescope::Cons(_, rest) => telescope = rest.body(),
+                        Telescope::Cons(_, _, rest) => telescope = rest.body(),
                     }
                 }
             }

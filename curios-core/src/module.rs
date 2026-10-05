@@ -480,12 +480,8 @@ impl Module {
             // A type former's result is a sort, so the walk ends at the first node that is not a function type.
             let mut collected = Vec::new();
             let mut type_ = &def.type_;
-            while let Subterm::FuncType(FuncType {
-                telescope,
-                plicities,
-            }) = &**type_
-            {
-                collected.extend_from_slice(plicities);
+            while let Subterm::FuncType(FuncType { telescope }) = &**type_ {
+                collected.extend(telescope.marks());
                 type_ = telescope.terminal();
             }
             if !collected.is_empty() {
@@ -833,7 +829,7 @@ fn entries<B: Bound>(telescope: &Telescope<B>) -> (Vec<&Term>, &B) {
     let mut rest = telescope;
     loop {
         match rest {
-            Telescope::Cons(type_, scope) => {
+            Telescope::Cons(_, type_, scope) => {
                 types.push(type_);
                 rest = scope.body();
             }

@@ -37,10 +37,9 @@ pub(crate) fn record_variances(context: &mut Context, names: &[Global]) {
                     .map(|(tag, constructor)| {
                         (
                             tag.clone(),
-                            InductParam::new(
-                                zonk_solved_term_metas(context, &constructor.telescope),
-                                constructor.plicities().to_vec(),
-                            ),
+                            InductParam {
+                                telescope: zonk_solved_term_metas(context, &constructor.telescope),
+                            },
                         )
                     })
                     .collect(),

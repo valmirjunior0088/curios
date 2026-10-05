@@ -1955,10 +1955,8 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             };
             print_named_call(name, vec![], args, frame)
         }
-        Subterm::FuncType(FuncType {
-            telescope,
-            plicities,
-        }) => {
+        Subterm::FuncType(FuncType { telescope }) => {
+            let plicities = telescope.marks();
             let mut printers = Vec::with_capacity(telescope.len());
             let output = parameter_types(telescope.cursor(), &plicities, frame, &mut printers);
             flat([
@@ -1967,10 +1965,8 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 output,
             ])
         }
-        Subterm::Func(Func {
-            telescope,
-            plicities,
-        }) => {
+        Subterm::Func(Func { telescope }) => {
+            let plicities = telescope.marks();
             // A type-former lambda `(x) => T(…, x)`, or one over exactly an indexed family's indices — the shapes witness keying and goal displays materialize for a higher-kinded parameter — prints as the former itself: bare `T` when the binders took every argument, the application to what they left otherwise (`Accessible(@A, R)`). Recognition demands the exact eta shape (the binders are the final arguments and occur nowhere else), so the display never renames anything, it only hides the lambda the reader would mentally contract anyway.
             if let Some(former) = former_eta(&telescope, &plicities) {
                 return former_doc(former, frame);

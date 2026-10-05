@@ -1264,20 +1264,12 @@ fn normalize_level(
             fields: normalize_each(context, known, fields)?,
             names,
         }),
-        Subterm::FuncType(func_type) => {
-            let plicities = func_type.plicities().to_vec();
-            Subterm::FuncType(FuncType::new(
-                normalize_telescope(context, known, func_type.telescope)?,
-                plicities,
-            ))
-        }
-        Subterm::Func(func) => {
-            let plicities = func.plicities().to_vec();
-            Subterm::Func(Func::new(
-                normalize_telescope(context, known, func.telescope)?,
-                plicities,
-            ))
-        }
+        Subterm::FuncType(func_type) => Subterm::FuncType(FuncType {
+            telescope: normalize_telescope(context, known, func_type.telescope)?,
+        }),
+        Subterm::Func(func) => Subterm::Func(Func {
+            telescope: normalize_telescope(context, known, func.telescope)?,
+        }),
         Subterm::TupleType(TupleType { telescope }) => Subterm::TupleType(TupleType {
             telescope: normalize_tuple_telescope(context, known, telescope)?,
         }),
@@ -1381,11 +1373,7 @@ fn normalize_telescope(
     known: &mut HashMap<Term, Term>,
     telescope: Telescope<Term>,
 ) -> Result<Telescope<Term>, ReduceError> {
-    let (entries, body) = normalize_entries(context, known, &telescope)?;
-    Ok(Telescope::build(
-        entries,
-        normalize_known(context, known, body)?,
-    ))
+    normalize_members(context, known, &telescope, normalize_known)
 }
 
 /// Normalize a Σ telescope (`TupleType`): its field types, exactly like [`normalize_telescope`]. The `Done` body is `()`, carrying nothing to reduce.
@@ -1394,23 +1382,28 @@ fn normalize_tuple_telescope(
     known: &mut HashMap<Term, Term>,
     telescope: Telescope<()>,
 ) -> Result<Telescope<()>, ReduceError> {
-    let (entries, ()) = normalize_entries(context, known, &telescope)?;
-    Ok(Telescope::build(entries, ()))
+    normalize_members(context, known, &telescope, |_, _, ()| Ok(()))
 }
 
-/// Each entry normalized under a fresh variable per binder before it, in one walk, with the payload opened at all of them: what the two normalizers rebuild with one pass of `Telescope::build`, rather than recursing into the reopened rest and re-closing every level.
-fn normalize_entries<B: Bound>(
+/// Each entry normalized under a fresh variable per binder before it, in one walk, each under the mark it had, and the payload opened at all of them and handed to `payload`: what the two normalizers rebuild with one pass of `Telescope::build_marked`, rather than recursing into the reopened rest and re-closing every level.
+fn normalize_members<B: Bound>(
     context: &mut Context,
     known: &mut HashMap<Term, Term>,
     telescope: &Telescope<B>,
-) -> Result<(Vec<(Free, Term)>, B), ReduceError> {
+    payload: impl FnOnce(&mut Context, &mut HashMap<Term, Term>, B) -> Result<B, ReduceError>,
+) -> Result<Telescope<B>, ReduceError> {
     let mut entries = Vec::new();
     let mut cursor = telescope.cursor();
 
     while let Some((_, ty)) = cursor.entry() {
+        let mark = cursor.mark().expect("a mark stands at an entry");
         let ty = normalize_known(context, known, ty)?;
-        entries.push((cursor.advance_fresh(|hint| context.fresh(hint)), ty));
+        entries.push((mark, cursor.advance_fresh(|hint| context.fresh(hint)), ty));
     }
 
-    Ok((entries, cursor.body().expect("a cursor past every entry")))
+    let body = cursor.body().expect("a cursor past every entry");
+    Ok(Telescope::build_marked(
+        entries,
+        payload(context, known, body)?,
+    ))
 }

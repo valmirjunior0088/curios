@@ -283,7 +283,7 @@ fn apply_fit(
     let output = cursor.body().expect("a cursor past every entry");
 
     let fit = apply_fit_within(
-        context, telescope, head, &args, plicities, &output, goal_type, hole,
+        context, telescope, head, &args, &plicities, &output, goal_type, hole,
     );
     context.rollback_solutions(mark);
     context.end_solutions(mark);

@@ -19,38 +19,39 @@ pub(super) fn elaborate_func_type(
     ft: &FuncType,
 ) -> Result<(Term, Term), Error> {
     // One walk, each domain opened once at the binders before it, rather than a recursion reopening the rest per binder.
-    let mut domains = Vec::new();
+    let mut domains: Vec<(Plicity, Free, Term)> = Vec::new();
     let output = context.with_frame(|context| {
         let mut cursor = ft.telescope.cursor();
         while let Some((_, ty)) = cursor.entry() {
+            let mark = cursor.mark().expect("a mark stands at an entry");
             let domain = check_is_sort(context, &ty)?.0;
             // A definition sugar's parameter is one written binder in its type and in its lambda, so a proof written under it here credits it as one written in the body does.
             let written = cursor.written();
             let name = cursor.advance_fresh(|hint| context.fresh_for(hint, written));
             // Assume the *rebuilt* domain: insertion saturates applications during elaboration, and a lowered (under-applied) type leaking into later reduction would open a telescope at the wrong arity. A `use` binder additionally joins the witness scope: the rest of the type may itself need resolution through it.
-            match ft.plicities().get(domains.len()) {
-                Some(Plicity::Witness) => {
+            match mark {
+                Plicity::Witness => {
                     check_witness_domain(context, &domain)?;
                     context.assume_witness(&name, &domain);
                 }
                 _ => context.assume(&name, &domain),
             }
-            domains.push((name, domain));
+            domains.push((mark, name, domain));
         }
 
         let output = cursor.body().expect("a cursor past every entry");
         let output = check_is_sort(context, &output).map(|(term, _)| term)?;
 
         // An `@` member is filled by unification, which needs a later type to mention it, and resolution answers only `use` slots. One at a concept's type that nothing later mentions could only ever be written out, so every call leaving it out would fail far from here, as an implicit that was not inferred: refused where it is declared, beside the dual [`check_witness_domain`] refuses. One a later type does mention — `@from: Key(K)` beside `map: Map(K, use from, V)` — is determined, and stays.
-        for (index, (name, domain)) in domains.iter().enumerate() {
+        for (index, (mark, name, domain)) in domains.iter().enumerate() {
             let mentioned = || {
                 domains[index + 1..]
                     .iter()
-                    .map(|(_, later)| later)
+                    .map(|(_, _, later)| later)
                     .chain([&output])
                     .any(|later| later.free_vars().contains(name))
             };
-            if ft.plicities().get(index) != Some(&Plicity::Implicit) || mentioned() {
+            if *mark != Plicity::Implicit || mentioned() {
                 continue;
             }
             let reduced = reduce_with(context, domain)?;
@@ -64,13 +65,7 @@ pub(super) fn elaborate_func_type(
         Ok::<_, Error>(output)
     })?;
 
-    let rebuilt = Term::func_type_marked(
-        ft.plicities()
-            .iter()
-            .zip(domains)
-            .map(|(&plicity, (label, domain))| (plicity, label, domain)),
-        output,
-    );
+    let rebuilt = Term::func_type_marked(domains, output);
 
     let sort = sort_term(context, &rebuilt)?;
     Ok((rebuilt, sort))
@@ -360,7 +355,8 @@ pub(super) fn elaborate_apply(
         .iter()
         .map(|argument| argument.plicity)
         .collect::<Vec<_>>();
-    let fills = align(ft.plicities(), &written).map_err(|misaligned| match misaligned {
+    let marks = ft.plicities();
+    let fills = align(&marks, &written).map_err(|misaligned| match misaligned {
         Misaligned::Plain => {
             let explicit = |marks: &[Plicity]| {
                 marks
@@ -368,11 +364,11 @@ pub(super) fn elaborate_apply(
                     .filter(|mark| matches!(mark, Plicity::Explicit))
                     .count()
             };
-            Error::wrong_number_of_arguments(explicit(ft.plicities()), explicit(&written))
+            Error::wrong_number_of_arguments(explicit(&marks), explicit(&written))
         }
         Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
             written[member],
-            ft.plicities()[slot],
+            marks[slot],
             ft.telescope.labels()[slot],
         )
         .at_opt(arguments[member].term.span()),
@@ -392,12 +388,12 @@ pub(super) fn elaborate_apply(
 
     // The single walk. Every slot settles in telescope order, and the dependent substitution only ever receives elaborated terms or compiler-born metavariables — the invariant is the code path, not a guard. A written argument is checked at its domain, opened through the elaborated prefix; a checked-only intro form whose structure is still blocked (see `blocked_on_metavar`) becomes a parked checking problem whose placeholder stands in the telescope, retried by the wake machinery the moment a solution lands, so a sibling's turnaround retries the parked check before any later slot opens through it. The park is minted in both modes: an inferred apply has no turnaround, but the force tier below settles what the walk leaves blocked, and a park `check` made on its own would sit in the store beyond that tier's reach. A missing hidden slot is inserted at that same true domain. Under suppressed parking the blocked case checks eagerly instead: re-validation re-elaborates rebuilt nodes whose types are already solved, so the branch is dead over the corpus and merely safe.
     let original = ft.telescope.clone();
-    let mut elaborated: Vec<Term> = Vec::with_capacity(ft.plicities().len());
+    let mut elaborated: Vec<Term> = Vec::with_capacity(marks.len());
     // The pendings this apply minted: (slot, placeholder, written term), consulted by the fallback pin below.
     let mut pendings: Vec<(usize, MetavarId, Term)> = Vec::new();
     let mut cursor = original.cursor();
-    for (index, plicity) in ft.plicities().iter().enumerate() {
-        let (hint, ty) = cursor.entry().expect("plicities parallel the telescope");
+    for (index, plicity) in marks.iter().enumerate() {
+        let (hint, ty) = cursor.entry().expect("a mark stands at an entry");
         let position = positions.next(*plicity);
         // A hidden argument written `_` holds its slot's place and says nothing, so the slot is filled as one left out is.
         let written = fills[index]
@@ -442,7 +438,7 @@ pub(super) fn elaborate_apply(
                             *plicity,
                             position,
                             &opened_link(&cursor),
-                            &ft.plicities()[index + 1..],
+                            &marks[index + 1..],
                         ))
                     })?
                 }
@@ -454,7 +450,7 @@ pub(super) fn elaborate_apply(
         cursor.advance(arg.clone());
         elaborated.push(arg);
     }
-    let output = cursor.body().expect("plicities parallel the telescope");
+    let output = cursor.body().expect("a cursor past every entry");
 
     if let Mode::Check(expected) = &mode {
         // The output carries any pending's placeholder, which *blocks* rather than manufacturing a raw substitution's false mismatches — so this turnaround runs unbracketed, a mismatch propagates as genuine, and its pins wake parked checks through the ordinary retry machinery with every discharged obligation's solutions kept.
@@ -489,7 +485,7 @@ pub(super) fn elaborate_apply(
 
     // The rebuilt application is fully saturated; each argument's mark is its binder's plicity (inserted metavariables recorded like any other argument), so re-elaborating the rebuilt node is stable: every slot is then written, in telescope order, and nothing is minted twice.
     Ok((
-        Term::apply_marked(head, ft.plicities().iter().copied().zip(elaborated)),
+        Term::apply_marked(head, marks.iter().copied().zip(elaborated)),
         output,
     ))
 }
@@ -502,7 +498,7 @@ pub(super) fn is_placeholder(context: &Context, term: &Term) -> bool {
 /// The link at the cursor's entry, opened at every argument before it: what [`argument_site`] and `result_metavars_from` read, since a later domain's shape can depend on an earlier argument. It costs the remainder's size, so only the paths that read it — a failed check, a literal that might park — ask for it.
 fn opened_link(cursor: &Cursor<'_, Term>) -> Scope<One, Telescope<Term>> {
     match cursor.rest() {
-        Telescope::Cons(_, link) => link,
+        Telescope::Cons(_, _, link) => link,
         Telescope::Done(_) => unreachable!("an entry stands at the cursor"),
     }
 }
@@ -522,7 +518,7 @@ fn argument_site(
         let mut cursor = rest.body();
         let mut explicit = position + 1;
         for later in later_plicities {
-            let Telescope::Cons(ty, next) = cursor else {
+            let Telescope::Cons(_, ty, next) = cursor else {
                 break;
             };
             if *later == Plicity::Explicit {

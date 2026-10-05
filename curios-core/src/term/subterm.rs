@@ -645,19 +645,11 @@ impl Bound for Subterm {
                 Arc::clone(function),
                 args.iter().map(|arg| visit.visit_subterm(arg)).collect(),
             ),
-            Subterm::FuncType(FuncType {
-                telescope,
-                plicities,
-            }) => Subterm::FuncType(FuncType {
+            Subterm::FuncType(FuncType { telescope }) => Subterm::FuncType(FuncType {
                 telescope: telescope.traverse(visit),
-                plicities: plicities.clone(),
             }),
-            Subterm::Func(Func {
-                telescope,
-                plicities,
-            }) => Subterm::Func(Func {
+            Subterm::Func(Func { telescope }) => Subterm::Func(Func {
                 telescope: telescope.traverse(visit),
-                plicities: plicities.clone(),
             }),
             Subterm::Transient(transient) => {
                 Subterm::Transient(transient.map_subterms(&mut |child| visit.visit_subterm(child)))

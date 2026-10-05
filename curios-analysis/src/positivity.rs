@@ -196,12 +196,12 @@ pub fn struct_reaches_itself<E: Env>(env: &E, name: &Global) -> bool {
 
         let mut named = BTreeSet::new();
         let mut params = &declaration.arity;
-        while let Telescope::Cons(type_, rest) = params {
+        while let Telescope::Cons(_, type_, rest) = params {
             globals_named(type_, &mut named);
             params = rest.body();
         }
         let mut fields = declaration.fields();
-        while let Telescope::Cons(type_, rest) = fields {
+        while let Telescope::Cons(_, type_, rest) = fields {
             globals_named(type_, &mut named);
             fields = rest.body();
         }

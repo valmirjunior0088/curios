@@ -234,7 +234,7 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
         let mut walk = &induct_decl.arity;
         loop {
             match walk {
-                Telescope::Cons(_, rest) => walk = rest.body(),
+                Telescope::Cons(_, _, rest) => walk = rest.body(),
                 Telescope::Done(indices) => break owned(indices.labels()),
             }
         }
@@ -359,7 +359,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
     let mut written = &struct_decl.arity;
     let fields = loop {
         match written {
-            Telescope::Cons(entry, rest) => {
+            Telescope::Cons(_, entry, rest) => {
                 check_written_type_totality(context, entry, &format!("a field of '{name}'"))?;
                 written = rest.body();
             }
@@ -367,7 +367,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
         }
     };
     let mut written = fields;
-    while let Telescope::Cons(entry, rest) = written {
+    while let Telescope::Cons(_, entry, rest) = written {
         check_written_type_totality(context, entry, &format!("a field of '{name}'"))?;
         written = rest.body();
     }
@@ -473,7 +473,7 @@ fn result_sort_only_metas(context: &Context, type_: &Term) -> BTreeSet<UniverseM
                 let mut current = telescope;
                 loop {
                     match current {
-                        Telescope::Cons(domain, rest) => {
+                        Telescope::Cons(_, domain, rest) => {
                             domains.push(domain);
                             current = rest.body();
                         }
@@ -937,10 +937,9 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                     .map(|(tag, constructor)| {
                         (
                             tag,
-                            InductParam::new(
-                                zonk_solved_term_metas(context, &constructor.telescope),
-                                constructor.plicities().to_vec(),
-                            ),
+                            InductParam {
+                                telescope: zonk_solved_term_metas(context, &constructor.telescope),
+                            },
                         )
                     })
                     .collect(),
@@ -1064,16 +1063,15 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 Ok((
                     tag,
                     // A registry telescope is stored outside the group and instantiated per use site, so its self-references are free and must carry the instance themselves.
-                    InductParam::new(
-                        stamp(
+                    InductParam {
+                        telescope: stamp(
                             context,
                             &constructor.telescope,
                             &owned,
                             SelfReference::Free,
                             &instance,
                         )?,
-                        constructor.plicities().to_vec(),
-                    ),
+                    },
                 ))
             })
             .collect::<Result<_, Error>>()?;
