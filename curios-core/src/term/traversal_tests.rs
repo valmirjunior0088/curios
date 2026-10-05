@@ -380,3 +380,28 @@ fn equality_up_to_a_wildcard_ignores_only_the_wildcard_positions() {
         "with no wildcards the comparison stopped being structural equality",
     );
 }
+
+/// A term holds a group where a `Rec` node stands in it or a universe instance is taken of a member, at any depth, and nowhere else: a member's instance carries its group as its head, with no `Rec` node among its children.
+#[test]
+fn a_term_holds_a_group_where_a_rec_or_a_members_instance_stands() {
+    let f = Free::local(0, Some("f"));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let rec = Term::rec(
+        vec![(f, nat.clone(), Term::free_var(&f))],
+        Term::free_var(&f),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+        panic!("the fixture changed shape");
+    };
+    let instance: Term = Subterm::Instance(Instance {
+        head: InstanceHead::RecProj(group.clone(), 0),
+        levels: Vec::new(),
+    })
+    .into();
+
+    assert!(rec.has_group());
+    assert!(instance.has_group());
+    assert!(Term::tuple([nat.clone(), Term::apply(instance, [nat.clone()])]).has_group());
+    assert!(!Term::tuple([nat.clone(), Term::free_var(&f)]).has_group());
+    assert!(!nat.has_group());
+}

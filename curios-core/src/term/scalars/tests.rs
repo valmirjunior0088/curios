@@ -18,6 +18,7 @@ fn round_trips_every_field() {
         has_transient: true,
         has_universe_meta: true,
         has_universe_data: false,
+        has_group: false,
         hash: u64::MAX,
     });
 
@@ -29,6 +30,7 @@ fn round_trips_every_field() {
     assert!(read.has_transient);
     assert!(read.has_universe_meta);
     assert!(!read.has_universe_data);
+    assert!(!read.has_group);
     assert_eq!(read.hash, u64::MAX);
 }
 
@@ -43,6 +45,7 @@ fn zero_values_read_back_as_filled() {
         has_transient: false,
         has_universe_meta: false,
         has_universe_data: true,
+        has_group: true,
         hash: 0,
     });
 
@@ -54,6 +57,7 @@ fn zero_values_read_back_as_filled() {
     assert!(!read.has_transient);
     assert!(!read.has_universe_meta);
     assert!(read.has_universe_data);
+    assert!(read.has_group);
     assert_eq!(read.hash, 0);
 }
 
@@ -69,6 +73,7 @@ fn the_widest_reach_reads_back_beside_every_flag() {
         has_transient: true,
         has_universe_meta: true,
         has_universe_data: true,
+        has_group: true,
         hash: 7,
     });
 

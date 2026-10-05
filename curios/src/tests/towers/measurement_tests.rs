@@ -77,7 +77,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 ///
 /// # What it last printed
 ///
-/// Over the checkers of `84eff3c90`, every row accepted by both.
+/// Over the checkers of `5c023f783`, every row accepted by both.
 ///
 /// | tower | lines | elaborator units | elaborator looks | kernel units | kernel looks |
 /// | --- | --- | --- | --- | --- | --- |
@@ -85,8 +85,8 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 /// | chain | 16 | 27 292 | 56 323 | 29 254 | 141 265 |
 /// | chain, in a member | 12 | 27 292 | 85 313 | 29 254 | 142 092 |
 /// | chain, in a member | 16 | 27 292 | 61 270 | 29 254 | 142 336 |
-/// | calls | 12 | 27 292 | 56 169 | 29 254 | 141 259 |
-/// | calls | 16 | 27 292 | 58 049 | 29 254 | 141 487 |
+/// | calls | 12 | 27 292 | 56 169 | 29 254 | 141 251 |
+/// | calls | 16 | 27 292 | 58 049 | 29 254 | 141 495 |
 /// | calls, in a member | 12 | 27 292 | 174 250 | 29 254 | 142 100 |
 /// | calls, in a member | 16 | 27 292 | 1 896 982 | 29 254 | 142 404 |
 /// | pairs | 12 | 27 292 | 54 854 | 29 254 | 141 471 |
@@ -96,11 +96,11 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 /// | lists | 12 | 27 292 | 79 234 | 29 254 | 148 523 |
 /// | lists | 16 | 27 292 | 97 066 | 29 254 | 154 039 |
 /// | lists, in a member | 12 | 27 292 | 76 047 | 29 254 | 147 714 |
-/// | lists, in a member | 16 | 27 292 | 88 765 | 29 254 | 152 062 |
-/// | arms | 12 | 27 292 | 68 050 | 50 230 | 674 849 |
-/// | arms | 16 | 27 292 | 78 578 | 787 502 | 8 663 561 |
-/// | arms, in a member | 12 | 27 292 | 360 653 | 50 364 | 873 120 |
-/// | arms, in a member | 16 | 133 835 | 4 673 581 | 787 652 | 11 811 532 |
+/// | lists, in a member | 16 | 27 292 | 88 765 | 29 254 | 152 054 |
+/// | arms | 12 | 27 292 | 68 050 | 29 254 | 146 175 |
+/// | arms | 16 | 27 292 | 78 578 | 29 254 | 149 467 |
+/// | arms, in a member | 12 | 27 292 | 360 653 | 29 254 | 155 571 |
+/// | arms, in a member | 16 | 133 835 | 4 673 581 | 29 254 | 165 987 |
 /// | aliases | 12 | 27 292 | 55 843 | 29 254 | 141 956 |
 /// | aliases | 16 | 27 292 | 57 921 | 29 254 | 142 412 |
 /// | arrows | 12 | 27 292 | 56 242 | 29 254 | 142 072 |
@@ -108,7 +108,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 /// | two towers | 12 | 27 292 | 69 942 | 29 254 | 144 299 |
 /// | two towers | 16 | 27 292 | 77 802 | 29 254 | 145 591 |
 /// | apart | 12 | 27 292 | 71 337 | 29 254 | 147 848 |
-/// | apart | 16 | 27 292 | 77 937 | 29 254 | 150 444 |
+/// | apart | 16 | 27 292 | 77 941 | 29 254 | 150 444 |
 ///
 /// **The chain is flat, and a tower a checker walks per path multiplies.** Its looks grow by ten to sixteen times across four lines, and where the checker types a term per path its units do too, which is what refuses a tower at twenty lines; a tower walked in its size reads as the chain does. A row's units are its heaviest declaration's, which for the chain is not the tower, so the same 26 791 and 29 048 stand under every row until a tower's own declaration outgrows them.
 #[test]

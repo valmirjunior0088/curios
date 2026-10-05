@@ -257,15 +257,18 @@ fn a_sixty_line_chain_compiles() {
     }
 }
 
-/// The towers both checkers walk in their size, at sixty lines: calls, pairs and arms in a function's body, lists there and in a recursive member's, both aliases, the two towers claimed equal, and the two chains of calls built apart.
+/// The towers both checkers walk in their size, at sixty lines: calls, pairs, lists and arms in a function's body and in a recursive member's, both aliases, the two towers claimed equal, and the two chains of calls built apart.
 #[test]
 fn a_sixty_line_tower_compiles() {
     for shape in [
         Shape::Calls(Stands::Function),
+        Shape::Calls(Stands::Member),
         Shape::Pairs(Stands::Function),
+        Shape::Pairs(Stands::Member),
         Shape::Lists(Stands::Function),
         Shape::Lists(Stands::Member),
         Shape::Arms(Stands::Function),
+        Shape::Arms(Stands::Member),
         Shape::Aliases,
         Shape::Arrows,
         Shape::TwoTowers,

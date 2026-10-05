@@ -42,6 +42,7 @@ use {
     },
     curios_num::Natural,
     curios_utilities::recurse,
+    std::collections::{HashMap, hash_map::Entry},
 };
 
 /// Whether every recursive call path in `group` descends, discovering the calls by walking its member bodies.
@@ -65,6 +66,7 @@ pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Result<Totality,
             params: &member.params,
             context: SizeContext::default(),
             entered: Vec::new(),
+            walked: HashMap::new(),
             calls: Vec::new(),
         };
         walk.walk(&member.body)?;
@@ -136,6 +138,8 @@ struct Walk<'a, E: Env> {
     context: SizeContext,
     /// The nested groups whose bodies the walk is currently inside, entered and left with them. A group reached from within itself would regenerate its own bodies without end, since every member reference materializes as a projection carrying the whole group.
     entered: Vec<RecGroup>,
+    /// The `let` values the walk is in the tail of, each walked where its `let` binds it, and how many `let`s bind each. The walk reads a tail with each binder standing for its value, so the tail holds a copy at every use; a copy is the value's calls again, with the same arguments, and what held where the `let` binds it still holds wherever the tail puts one. So the matrix graded at the binding describes every copy, and a copy is passed over. Scoped to the tail: past it the same term is another position, read under what holds there.
+    walked: HashMap<Term, usize>,
     calls: Vec<Call>,
 }
 
@@ -408,6 +412,11 @@ impl<E: Env> Walk<'_, E> {
     }
 
     fn step(&mut self, term: &Term) -> Result<(), E::Error> {
+        // A call is a member reference, so a term that holds no group holds no call, and what an arm inside it establishes is scoped to that arm: there is nothing in it for the walk to find or to carry out. Asked of the node's own cache, so a value a `let` puts at every use costs one question each. And a `let`'s value walked where it is bound is passed over in the tail — see `walked`.
+        if !term.has_group() || self.walked.contains_key(term) {
+            return Ok(());
+        }
+
         match &**term {
             // Nothing here can contain a call.
             Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) | Subterm::Metavar(_) => Ok(()),
@@ -501,7 +510,24 @@ impl<E: Env> Walk<'_, E> {
                     values.push(binding.value().release(&refs));
                 }
                 let refs = values.iter().collect::<Vec<_>>();
-                self.walk_term(&tail.open(&refs))
+                let tail = tail.open(&refs);
+
+                // Only a value that holds a group is worth remembering: the rest are passed over as they stand. Counted, since two `let`s may bind one term and the inner one leaves first.
+                values.retain(Term::has_group);
+                for value in &values {
+                    *self.walked.entry(value.clone()).or_default() += 1;
+                }
+                let walked = self.walk_term(&tail);
+                for value in &values {
+                    if let Entry::Occupied(mut standing) = self.walked.entry(value.clone()) {
+                        *standing.get_mut() -= 1;
+                        if *standing.get() == 0 {
+                            standing.remove();
+                        }
+                    }
+                }
+
+                walked
             }
 
             // An inner group is classified on its own, but its bodies may still call *this* group, and such a call is a real edge of this group's call graph.

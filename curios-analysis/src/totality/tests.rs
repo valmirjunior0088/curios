@@ -4,7 +4,9 @@
 
 use {
     super::*,
-    curios_core::{Atom, Free, Global, InductDecl, Intrinsic, Rec, StructDecl, Subterm, Term},
+    curios_core::{
+        Atom, Free, Global, InductDecl, InstanceHead, Intrinsic, Rec, StructDecl, Subterm, Term,
+    },
     curios_num::{Binary, Grain},
 };
 
@@ -359,6 +361,7 @@ fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
         params: &params,
         context: SizeContext::default(),
         entered: Vec::new(),
+        walked: HashMap::new(),
         calls: Vec::new(),
     };
     walk.walk(&body);
@@ -403,4 +406,138 @@ fn an_application_of_a_constructor_payload_grades_below_the_constructor() {
     };
     let Ok(shape) = grader.shape_of(&applied);
     assert_eq!(shape.against(&parameter), Size::Unknown);
+}
+
+/// A member `f : Nat` whose body is itself, for the probes below to call: the group, and a call of its one member at `argument`.
+fn member(argument: Term) -> (RecGroup, Term) {
+    let f = Free::local(1, Some("f"));
+    let rec = Term::rec(
+        vec![(f, Term::intrinsic(Intrinsic::NatType), Term::free_var(&f))],
+        Term::free_var(&f),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+        panic!("the fixture changed shape");
+    };
+
+    (
+        group.clone(),
+        Term::apply(Term::rec_proj(group.clone(), 0), [argument]),
+    )
+}
+
+/// The calls a walk of `body` records for the one member of `group`, whose parameter is `n`.
+fn calls_in(group: &RecGroup, n: Free, body: &Term) -> usize {
+    let mut kernel = Probe::default();
+    let params = [n];
+    let arities = vec![1];
+    let mut walk = Walk {
+        env: &mut kernel,
+        group,
+        arities: &arities,
+        caller: 0,
+        params: &params,
+        context: SizeContext::default(),
+        entered: Vec::new(),
+        walked: HashMap::new(),
+        calls: Vec::new(),
+    };
+    walk.walk(body);
+
+    walk.calls.len()
+}
+
+/// Sixty `let`s over `first`, each binding `line` of the one before, closed by `tail` of the last.
+fn tower(first: Term, line: impl Fn(Term) -> Term, tail: impl FnOnce(Term) -> Term) -> Term {
+    let names = (0..=60)
+        .map(|index| Free::local(100 + index, Some("x")))
+        .collect::<Vec<_>>();
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let mut items = vec![(names[0], nat.clone(), first)];
+    for index in 1..=60 {
+        items.push((
+            names[index],
+            nat.clone(),
+            line(Term::free_var(&names[index - 1])),
+        ));
+    }
+
+    Term::let_block(items, tail(Term::free_var(&names[60])))
+}
+
+/// A tower that holds no call is passed over. The walk reads a `let`'s tail with each binder standing for its value, so sixty lines each pairing the one before with itself hand it a tail of 2⁶⁰ leaves; a term that holds no group holds no call, and the one call beside the tower is all the walk finds.
+///
+/// Mutation-checked: with every term entered whether or not it holds a group, the walk does not return.
+#[test]
+fn a_tower_that_holds_no_call_is_passed_over() {
+    let n = Free::local(2, Some("n"));
+    let (group, call) = member(Term::free_var(&n));
+    let body = tower(
+        Term::free_var(&n),
+        |before| Term::tuple([before.clone(), before]),
+        |last| Term::tuple([last, call]),
+    );
+
+    assert_eq!(calls_in(&group, n, &body), 1);
+}
+
+/// A tower whose every line calls the member is walked once per line: a value is walked where its `let` binds it, and a copy of it the tail holds is passed over, its calls being the ones already recorded graded under a context that only grew.
+///
+/// Mutation-checked: with a walked value entered again wherever the tail holds it, the walk does not return.
+#[test]
+fn a_value_walked_where_it_is_bound_is_passed_over_in_the_tail() {
+    let n = Free::local(2, Some("n"));
+    let (group, call) = member(Term::free_var(&n));
+    let Subterm::Apply(apply) = &*call else {
+        panic!("the fixture changed shape");
+    };
+    let head = apply.head.clone();
+    let body = tower(
+        call.clone(),
+        |before| Term::apply(head.clone(), [Term::tuple([before.clone(), before])]),
+        |last| last,
+    );
+
+    assert_eq!(calls_in(&group, n, &body), 61);
+}
+
+/// A walked value is passed over in its own `let`'s tail and nowhere else: a sibling position holds the same call under another context, which the value's walk did not grade it under.
+///
+/// Mutation-checked: with a value kept past the tail it was walked for, a call after it is lost.
+#[test]
+fn a_walked_value_is_forgotten_past_its_tail() {
+    let n = Free::local(2, Some("n"));
+    let b = Free::local(3, Some("b"));
+    let x = Free::local(4, Some("x"));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let (group, call) = member(Term::free_var(&n));
+    // The call three times: bound by a `let` in one arm, alone in the other, and again after the match — the last so that the fixture does not rest on which arm is walked first.
+    let body = Term::tuple([
+        Term::bool_match(
+            Term::free_var(&b),
+            None,
+            nat.clone(),
+            call.clone(),
+            Term::let_(&x, nat, call.clone(), Term::free_var(&x)),
+        ),
+        call,
+    ]);
+
+    assert_eq!(calls_in(&group, n, &body), 3);
+}
+
+/// A member called at a universe instance is a call like any other: the instance's head is the member, with no `Rec` node standing in the term, and a walk that passed it over would miss the call.
+///
+/// Mutation-checked: with a term read as holding a group only where a `Rec` node stands, the call is passed over.
+#[test]
+fn a_call_at_a_universe_instance_is_found() {
+    let n = Free::local(2, Some("n"));
+    let (group, _) = member(Term::free_var(&n));
+    let instance: Term = Subterm::Instance(Instance {
+        head: InstanceHead::RecProj(group.clone(), 0),
+        levels: Vec::new(),
+    })
+    .into();
+    let body = Term::tuple([Term::apply(instance, [Term::free_var(&n)])]);
+
+    assert_eq!(calls_in(&group, n, &body), 1);
 }

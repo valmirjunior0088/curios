@@ -446,6 +446,18 @@ impl Subterm {
         }
     }
 
+    /// Whether a recursive group occurs in this subterm, as a `Rec` node or as the member a universe instance is taken of — the uncached spelling of [`Term::has_group`], which supplies the per-node memoization.
+    pub(crate) fn has_group(&self) -> bool {
+        match self {
+            Subterm::Rec(_)
+            | Subterm::Instance(Instance {
+                head: InstanceHead::RecProj(..),
+                ..
+            }) => true,
+            _ => self.any_child_term(&mut |t| t.has_group()),
+        }
+    }
+
     /// Whether any `Metavar` node occurs in this subterm — the uncached spelling of [`Term::has_metavar`], which supplies the per-node memoization.
     pub(crate) fn has_metavar(&self) -> bool {
         match self {

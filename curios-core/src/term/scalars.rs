@@ -14,7 +14,7 @@ use {
     },
 };
 
-/// One node's span-independent derivations: the structural hash, the loose-index `reach`, and the five containment flags. Computed from the node's subterm with every child's own cache already filled, so [`Scalars::of`] costs O(children).
+/// One node's span-independent derivations: the structural hash, the loose-index `reach`, and the six containment flags. Computed from the node's subterm with every child's own cache already filled, so [`Scalars::of`] costs O(children).
 #[derive(Clone, Copy)]
 pub(crate) struct Scalars {
     pub(crate) reach: usize,
@@ -23,6 +23,7 @@ pub(crate) struct Scalars {
     pub(crate) has_transient: bool,
     pub(crate) has_universe_meta: bool,
     pub(crate) has_universe_data: bool,
+    pub(crate) has_group: bool,
     pub(crate) hash: u64,
 }
 
@@ -39,6 +40,7 @@ impl Scalars {
             has_transient: subterm.has_transient(),
             has_universe_meta: subterm.has_universe_meta(),
             has_universe_data: subterm.has_universe_data(),
+            has_group: subterm.has_group(),
             hash: hasher.finish(),
         }
     }
@@ -50,7 +52,8 @@ const HAS_METAVAR: u64 = 1 << 1;
 const HAS_UNIVERSE_META: u64 = 1 << 2;
 const HAS_UNIVERSE_DATA: u64 = 1 << 3;
 const HAS_TRANSIENT: u64 = 1 << 4;
-const REACH_SHIFT: u32 = 5;
+const HAS_GROUP: u64 = 1 << 5;
+const REACH_SHIFT: u32 = 6;
 const REACH_BITS: u32 = 28;
 
 /// A node's memoized [`Scalars`], packed into two `Cell<u64>` words: the flags, `reach` and a filled bit in `packed`, and the full hash in `hash`, whose validity the shared filled bit governs — a hash of any value (zero included) is legitimate once filled. `Default` is the unfilled state, which is also what an archived node restores to (the field is `rkyv`-skipped).
@@ -74,6 +77,7 @@ impl ScalarCache {
             has_transient: packed & HAS_TRANSIENT != 0,
             has_universe_meta: packed & HAS_UNIVERSE_META != 0,
             has_universe_data: packed & HAS_UNIVERSE_DATA != 0,
+            has_group: packed & HAS_GROUP != 0,
             hash: self.hash.get(),
         })
     }
@@ -101,6 +105,9 @@ impl ScalarCache {
         }
         if scalars.has_universe_data {
             packed |= HAS_UNIVERSE_DATA;
+        }
+        if scalars.has_group {
+            packed |= HAS_GROUP;
         }
 
         self.hash.set(scalars.hash);
