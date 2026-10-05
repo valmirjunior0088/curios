@@ -859,3 +859,80 @@ fn a_packed_fold_costs_linearly_in_its_length() {
         long.units()
     );
 }
+
+/// What each claim of the type-level benchmark set costs each checker: an equality a type states and `Eq/refl()` proves, so that checking the program is reducing the claim's left side to its right. Six take a `Str` apart, one reads a `Flt`, one searches a `Str` and maps the position found.
+///
+/// ```sh
+/// cargo test --package curios --all-features -- --ignored --nocapture type_level_claim_measurements
+/// ```
+///
+/// Counted, so a reading transports between machines. A change to how a `Str` or a `Flt` is read at the type level retakes it and accounts for each row that moved. Each checker reports its heaviest declaration, so a claim cheaper than a program that only prints — about 27 000 units — reads as that floor and measures nothing.
+///
+/// # What it last printed
+///
+/// At `99960c4e2`:
+///
+/// ```text
+///   claim                        units   depth      other       units   depth      other  kernel/elab
+///   Str/split                   172050       3     168978      173715       3     170643     1.0x
+///   Str/split_once              140566       3     137494      103019       3      99947     0.7x
+///   Str/lines                   106237       3     103165      109875       3     106803     1.0x
+///   Str/replace                  66824       3      63752       98686       3      95614     1.5x
+///   Str/trim                    131826       3     128754       98572       3      95500     0.7x
+///   Str/strip_suffix             67509       5      62389       62301       5      57181     0.9x
+///   Flt/of_str                   27292       2      25244       29254       6      23110     1.1x
+///   Str/index_of                 92563       3      89491       98881       3      95809     1.1x
+/// ```
+///
+/// **`Flt/of_str` reads the floor**: reading `"-Infinity"` costs less than a program that only prints, so its row is that program's on both checkers and moves only if the claim comes to cost more.
+#[test]
+#[ignore = "measurement, counted: reports what each type-level claim costs rather than asserting"]
+fn type_level_claim_measurements() {
+    let claims = [
+        (
+            "Str/split",
+            r#"Str/split("a€€b€c", "€")"#,
+            r#"["a", "", "b", "c"]"#,
+        ),
+        (
+            "Str/split_once",
+            r#"Str/split_once("key=value=x", "=")"#,
+            r#"Option/some(("key", "value=x"))"#,
+        ),
+        ("Str/lines", r#"Str/lines("a\r\nb\n")"#, r#"["a", "b"]"#),
+        (
+            "Str/replace",
+            r#"Str/replace("a€b€", "€", "-")"#,
+            r#""a-b-""#,
+        ),
+        ("Str/trim", r#"Str/trim(" \té \n")"#, r#""é""#),
+        (
+            "Str/strip_suffix",
+            r#"Str/strip_suffix("héllo", "llo")"#,
+            r#"Option/some("hé")"#,
+        ),
+        (
+            "Flt/of_str",
+            r#"Flt/of_str("-Infinity")"#,
+            "Option/some(-inf.0)",
+        ),
+        (
+            "Str/index_of",
+            r#"Option/map(Str/index_of("abcdefgh", 'h'), Str/At/to_offset)"#,
+            "Option/some(7)",
+        ),
+    ];
+
+    println!(
+        "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>10}  {:>6}  {:>9}  {:>7}",
+        "claim", "units", "depth", "other", "units", "depth", "other", "kernel/elab",
+    );
+    for (label, left, right) in claims {
+        cost_row(
+            label,
+            &format!(
+                "use /std/{{Str, Option, Eq, Nat, Flt, List}};\n\nlet _claim: Eq()({left}, {right}) = Eq/refl();\n\n/std/print(\"ok\")\n"
+            ),
+        );
+    }
+}

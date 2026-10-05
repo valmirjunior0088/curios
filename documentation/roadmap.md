@@ -79,7 +79,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Compilation
 
-- [ ] [A shared term costs its size](roadmap/05-compilation/01-shared-term-costs.md) — every chain of `let`s each naming the one before it twice compiles in its size; left are the benchmark set, not retaken since `8bf70ba8b`, a survey of erasure's walk over a shared term, and the rule recorded as a decision
+- [x] [Every stage but reduction costs the graph it is handed](design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md): a read visits a node once, a rebuild keeps the graph, a judgment is remembered while what it read stands, a print is bounded, and the kernel binds a `let`, so a chain of `let`s each naming the one before it twice compiles in its size
 - [ ] [One environment, and every read recorded](roadmap/05-compilation/02-one-environment.md) — the item graph is computed three times, the elaborator threads state from item to item, and every compile re-seeds all its predecessors
 - [ ] [A compilation is a graph of item tasks](roadmap/05-compilation/03-item-tasks.md) — nothing the compiler holds can cross a thread, so a compilation occupies one core
 - [ ] [Size cliffs](roadmap/05-compilation/04-size-cliffs.md) — not refined yet; elaboration is not linear in `let` depth, the parser buys its depth with stack, and every binding gets a fresh local

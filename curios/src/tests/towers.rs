@@ -1,6 +1,6 @@
 //! What a tower costs to compile.
 //!
-//! A tower is a chain of `let`s in which each line names the line before it twice: `n` lines are a graph of `n` nodes whose tree has `2ⁿ`. A stage that walks the graph pays a line for a line; one that walks it once per path doubles with every line, and at sixty lines does not answer. Every tower here is an ordinary program that reduces nothing, so what it costs is what the stages other than reduction cost — the half of `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md`'s premise a budget cannot hold, and the subject of `documentation/roadmap/05-compilation/01-shared-term-costs.md`.
+//! A tower is a chain of `let`s in which each line names the line before it twice: `n` lines are a graph of `n` nodes whose tree has `2ⁿ`. A stage that walks the graph pays a line for a line; one that walks it once per path doubles with every line, and at sixty lines does not answer. Every tower here is an ordinary program that reduces nothing, so what it costs is what the stages other than reduction cost — the half of `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md`'s premise a budget cannot hold, and the subject of `documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md`.
 //!
 //! A shape that compiles at sixty lines is a fixture here; `tower_measurements` counts what every shape costs each checker at two heights. What a tower's type costs to *show* is held here too: its print is its tree, and both a rung and a report end.
 
