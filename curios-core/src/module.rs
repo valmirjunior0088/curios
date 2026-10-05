@@ -403,11 +403,11 @@ pub struct Module {
 }
 
 impl Module {
-    /// This module with every term hash-consed against `sharing` — one shared allocation per distinct structure.
+    /// This module with every term hash-consed against `sharing` — one shared allocation for each structure as it is spelled, under no position.
     ///
-    /// Built for the archived prelude. Elaboration constructs the same types, telescopes, and proof spines independently in definition after definition, and nothing deduplicates them, because `Rc` sharing only ever arises from *cloning* a value: two definitions that build the same type build it twice. Unshared, the prelude's nodes outnumber its distinct structures many times over (the prelude build reports each root's distinct count), and the archive would store that expansion in full and every restored traversal walk it in full.
+    /// Built for an elaborated module about to be archived. Elaboration constructs the same types, telescopes, and proof spines independently in definition after definition, and nothing deduplicates them, because `Rc` sharing only ever arises from *cloning* a value: two definitions that build the same type build it twice. Unshared, the prelude's nodes outnumber its distinct structures several times over (the prelude build reports each root's distinct count), and the archive would store that expansion in full and every restored traversal walk it in full.
     ///
-    /// Pass the same [`Sharing`] to every snapshot archived together so equal structures collapse across them as well as within each.
+    /// Not for a lowered module, which a lint and a report are located in: a consed term says nothing of where it was written.
     pub fn shared(&self, sharing: &Sharing) -> Module {
         let definition = |definition: &Definition| Definition {
             name: definition.name,

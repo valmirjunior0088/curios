@@ -342,16 +342,6 @@ impl PreparedText {
         &self.foreigns
     }
 
-    /// This prepared prelude with its lowered module hash-consed against `sharing`. Pass the same table used for the elaborated module so equal structures collapse across the two snapshots, not merely within each.
-    ///
-    /// The rest of a `PreparedText` is resolution metadata and what the lowering minted — no terms — so the lowered module is the whole of what there is to share.
-    pub fn shared(self, sharing: &curios_core::Sharing) -> Self {
-        Self {
-            core: self.core.shared(sharing),
-            ..self
-        }
-    }
-
     /// What this unit's lowering minted — see the field.
     pub fn minted(&self) -> &curios_core::Minted {
         &self.minted

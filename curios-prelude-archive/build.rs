@@ -149,13 +149,14 @@ fn archive(
     // Erasure tombstones as it goes, and the image is restored and walked by every compilation that follows — so the dead slots are compacted out here rather than serialized and stepped over forever after.
     ersd.compact();
 
-    // Hash-cons every archived Core snapshot against one table, so structurally equal subterms collapse onto a single allocation across the lowered and elaborated views as well as within each. Elaboration builds the same types, telescopes, and proof spines independently in definition after definition and nothing deduplicates them, because `Rc` sharing only ever arises from cloning: two definitions that build the same type build it twice. rkyv shares by pointer address, so collapsing them here is also what lets the archive store each distinct structure once.
+    // Hash-cons the elaborated module, so each structure it spells is one allocation. Elaboration builds the same types, telescopes, and proof spines independently in definition after definition and nothing deduplicates them, because `Rc` sharing only ever arises from cloning: two definitions that build the same type build it twice. rkyv shares by pointer address, so collapsing them here is also what lets the archive store each distinct structure once.
+    //
+    // The lowered module is left as it was built: a consed node sits under no position and a lint or a report is located in the lowered module, so there is nothing of it a table could share and keep.
     //
     // One table per image, not one across both: rkyv shares by pointer address *within* a single image, so a structure collapsed across the two would still be written into each of them — a shared table would buy nothing and would report a distinct-structure count no image actually has.
     //
     // `ersd` is deliberately not included: it is a flat, index-addressed arena with no shared pointers to collapse, and it already interns its constants by value.
     let sharing = Sharing::new();
-    let prepared = prepared.shared(&sharing);
     let core = core.shared(&sharing);
     // Plain stdout, not `cargo:warning=`: this is a metric nobody acts on during a build, and a line that shouts on every build of every consumer teaches readers to skim `warning:` — which is the habit that loses a real one later. Cargo captures it to `target/<profile>/build/<pkg>-<hash>/output`, where `-vv` or a reader who went looking will find it.
     println!(

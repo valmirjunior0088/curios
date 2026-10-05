@@ -9,7 +9,7 @@ use {
     curios_utilities::{Span, Symbol},
     std::{
         cell::RefCell,
-        collections::{BTreeSet, HashMap},
+        collections::{BTreeSet, HashMap, HashSet},
         convert::Infallible,
         fmt,
         hash::Hash,
@@ -446,7 +446,7 @@ pub fn stamp_declaration_instance<B: Bound>(
 /// What a scope remembers of one binder it closed over: a global's name, which means the same in every compilation, or a local's display hint.
 ///
 /// **Never a local's identity.** That is minted by the compilation that closed the scope, and a stored scope keeping it would carry a position into every compilation that restored it. A printer reopening the scope identifies the binder by where the render meets it and by this hint. A written binder's place among its declaration's written binders is kept beside the hint — a function of that declaration's own text, not a counter any compilation shares — so a local opened here can be traced to the binder a lint names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub(crate) enum Label {
     /// A global a `rec` group's binder closes over, rendered as its path as a free occurrence of it would be.
@@ -690,10 +690,21 @@ impl<A: Arity + Hash, B: Bound> Hash for Scope<A, B> {
 
 // === Visit ===================================================================
 
+/// What tells a node from another of its structure: the names its scopes bind under, in the order a traversal crosses them, and the very nodes it holds.
+///
+/// A term's equality is α-equivalence and reads no label, so two nodes equal as terms may be two spellings; and it reads through a child to its structure, so two nodes equal as terms may hold two allocations of one child. Neither pair is one stored node.
+#[derive(Debug, Default, PartialEq, Eq, Hash)]
+struct Spelling {
+    labels: Vec<Option<Vec<Label>>>,
+    children: Vec<usize>,
+}
+
 /// A hash-consing table, shared rather than owned so one canonicalization spans a whole module: two definitions that build the same type collapse onto one node only if they consult the same table.
+///
+/// **One node for each structure as it is spelled, and no position on any.** A node is adopted unless the table holds one of its structure, under the same binder names, over the very same children; children are canonical before their parent is asked for, so the test is one node deep. Up to α it would hand `pow(base: Nat, exp: Nat)` the node of `min(a: Nat, b: Nat)`, and every report of `pow`'s type would name `a` and `b`. A canonical node sits under no span and holds its children under none: a position is an occurrence's, a canonical node is every occurrence's, and what is consed says what it means and not where it was written.
 #[derive(Debug, Clone, Default)]
 pub struct Sharing {
-    table: Rc<RefCell<HashMap<Term, Term>>>,
+    table: Rc<RefCell<HashSet<(Spelling, Term)>>>,
 }
 
 impl Sharing {
@@ -701,30 +712,30 @@ impl Sharing {
         Self::default()
     }
 
-    /// `value` with every node replaced by the canonical node of its structure.
+    /// `value` with every term in it replaced by the canonical node of its spelling, under no span.
     ///
-    /// One `Sharing` must span every snapshot being canonicalized together: the duplication worth collapsing is overwhelmingly *between* definitions, and between the lowered and elaborated views of the same prelude, so a table per term or per module would collapse almost none of it.
+    /// One `Sharing` must span every term canonicalized together: the duplication worth collapsing is overwhelmingly *between* definitions, so a table per term would collapse almost none of it.
     pub fn share<B: Bound>(&self, value: &B) -> B {
         value.traverse(&mut Visit::sharing(|_, _| None, self.clone()))
     }
 
-    /// Distinct structures adopted so far — the census this pass is justified by.
+    /// Distinct nodes adopted so far — the census this pass is justified by.
     pub fn structures(&self) -> usize {
         self.table.borrow().len()
     }
-}
 
-impl Sharing {
-    /// The canonical node for `rebuilt`, adopting it if this structure is new.
-    fn canonical(&self, rebuilt: &Term) -> Option<Term> {
+    /// The canonical node for `fresh`, a node just built over canonical children: the one adopted under its spelling, or itself.
+    fn adopt(&self, spelling: Spelling, fresh: Term) -> Term {
         let mut table = self.table.borrow_mut();
-        Some(match table.get(rebuilt) {
-            Some(canonical) => canonical.clone(),
+        let key = (spelling, fresh);
+        match table.get(&key) {
+            Some((_, canonical)) => canonical.clone(),
             None => {
-                table.insert(rebuilt.clone(), rebuilt.clone());
-                rebuilt.clone()
+                let canonical = key.1.clone();
+                table.insert(key);
+                canonical
             }
-        })
+        }
     }
 }
 
@@ -838,8 +849,11 @@ enum Mode {
     },
     /// Replace every level with the ground representative, visiting only nodes that carry universe data.
     ErasingUniverses,
-    /// Hash-consing: replace each rebuilt node with the canonical node of its structure. Pairs with [`Memo::ByNode`], which is what keeps the input's sharing as well as the output's.
-    Sharing(Sharing),
+    /// Hash-consing: every term comes back as the canonical node of its spelling. `crossed` holds, for each node being rebuilt, the labels of the scopes crossed so far beneath it and above its children. Pairs with [`Memo::ByNode`], which is what keeps the input's sharing as well as the output's.
+    Sharing {
+        table: Sharing,
+        crossed: Vec<Vec<Option<Vec<Label>>>>,
+    },
     /// Stand every child term down to `placeholder`, keeping the ones removed in `children`. Because a substituted node is never descended into, the rebuilt node carries this level's own payload and nothing below it — which is what lets [`Term`]'s equality compare one node at a time instead of recursing to the bottom of the term.
     ///
     /// The removed children and the node they came out of are produced by the same pass, so the two can never disagree about what a child is.
@@ -991,15 +1005,18 @@ where
         }
     }
 
-    /// A hash-consing traversal: structure-preserving, but replacing every rebuilt node with the canonical node of its shape.
+    /// A hash-consing traversal: structure-preserving, every term coming back as the canonical node of its spelling.
     ///
-    /// The rebuild is already post-order — a node is constructed only after its children are traversed — so consulting the table on the rebuilt node canonicalizes bottom-up with no extra pass. Spans survive: they sit on the `Term` wrapper, outside the shared node, so each occurrence keeps its own while the structure underneath is shared.
+    /// The rebuild is post-order — a node is built only after its children are traversed — so asking the table for the node just built canonicalizes bottom-up with no extra pass ([`Term::traverse`] takes a path of its own under this visit).
     pub(crate) fn sharing(visit: F, table: Sharing) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
             visit,
-            mode: Mode::Sharing(table),
+            mode: Mode::Sharing {
+                table,
+                crossed: Vec::new(),
+            },
             memo: Memo::ByNode(HashMap::new()),
         }
     }
@@ -1074,7 +1091,7 @@ where
             | Mode::Capturing
             | Mode::RewritingLevels(_)
             | Mode::ErasingUniverses
-            | Mode::Sharing(_) => None,
+            | Mode::Sharing { .. } => None,
         }
     }
 
@@ -1169,10 +1186,41 @@ where
         )
     }
 
-    /// The canonical node for a rebuilt term, or `None` when not hash-consing.
-    pub(crate) fn share_structure(&self, rebuilt: &Term) -> Option<Term> {
-        match &self.mode {
-            Mode::Sharing(sharing) => sharing.canonical(rebuilt),
+    /// Whether this visit hash-conses: a term it meets comes back as the canonical node of its spelling.
+    pub(crate) fn conses(&self) -> bool {
+        matches!(self.mode, Mode::Sharing { .. })
+    }
+
+    /// Begin a node a consing visit is about to rebuild.
+    pub(crate) fn begin_node(&mut self) {
+        if let Mode::Sharing { crossed, .. } = &mut self.mode {
+            crossed.push(Vec::new());
+        }
+    }
+
+    /// The canonical node for `fresh`, the node begun last, built over the canonical `children` it holds.
+    pub(crate) fn adopt(&mut self, fresh: Term, children: Vec<usize>) -> Term {
+        let Mode::Sharing { table, crossed } = &mut self.mode else {
+            return fresh;
+        };
+        let labels = crossed.pop().unwrap_or_default();
+
+        table.adopt(Spelling { labels, children }, fresh)
+    }
+
+    /// A scope is being crossed: its labels are part of the spelling of the node a consing visit is rebuilding.
+    pub(crate) fn cross(&mut self, labels: &Option<Vec<Label>>) {
+        if let Mode::Sharing { crossed, .. } = &mut self.mode
+            && let Some(node) = crossed.last_mut()
+        {
+            node.push(labels.clone());
+        }
+    }
+
+    /// The remembered rebuild of the input node at `key` exactly as it was stored. What a consing visit hands every occurrence: its nodes sit under no span, so there is none to make an occurrence's own, and [`Visit::memo_get`] would hand a node first met with no span the span of whoever asks next.
+    pub(crate) fn memo_get_as_stored(&self, key: usize) -> Option<Term> {
+        match &self.memo {
+            Memo::ByNode(memo) => memo.get(&key).map(|remembered| remembered.rebuilt.clone()),
             _ => None,
         }
     }
@@ -1182,6 +1230,7 @@ where
     }
 
     pub(crate) fn visit_scope<A: Arity, B: Bound>(&mut self, scope: &Scope<A, B>) -> Scope<A, B> {
+        self.cross(&scope.labels);
         self.term_depth += scope.arity.arity();
         let body = scope.body.traverse(self).into();
         self.term_depth -= scope.arity.arity();

@@ -646,6 +646,7 @@ impl<B: Bound> Bound for Telescope<B> {
                         rest.labels.clone(),
                         rest.arity(),
                     ));
+                    visit.cross(&rest.labels);
                     visit.enter_scope(rest.arity());
                     current = rest.body();
                 }

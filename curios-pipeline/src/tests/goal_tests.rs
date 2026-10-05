@@ -37,6 +37,19 @@ fn solved_goal_reports_its_solution() {
     );
 }
 
+/// A prelude signature is reported under the names it was written with: `pow(base: Nat, exp: Nat)` is one type with `min(a: Nat, b: Nat)`, ten lines over it in `curios-text/std/Nat.crs`, and is stored as its own spelling of it.
+///
+/// Mutation-checked: with the image's table keyed on the term alone, whose equality reads no binder name, `pow` is stored as the node `min` was, and reported as `(a: /std/Nat, b: /std/Nat) -> /std/Nat`.
+#[test]
+fn a_prelude_signature_is_reported_under_the_names_it_was_written_with() {
+    let error = compile("let y : ? = /std/Nat/pow; /std/Io/pure(())").unwrap_err();
+
+    assert!(
+        error.contains("? = (base: /std/Nat, exp: /std/Nat) -> /std/Nat"),
+        "unexpected report: {error}"
+    );
+}
+
 #[test]
 fn pinned_through_the_expected_type_reports_the_pin() {
     // `id ? true` checked against `/std/Bool`: the turnaround pins the type argument `?` to `Bool` through the expected type (a type-level pin), and the goal report names that solution.

@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod binder_tests;
 #[cfg(test)]
+mod consing_tests;
+#[cfg(test)]
 mod equality_tests;
 #[cfg(test)]
 mod sharing_tests;
@@ -1954,17 +1956,20 @@ impl Bound for Term {
         }
 
         recurse(|| {
+            if visit.conses() {
+                return self.consed(visit);
+            }
             if visit.remembers(Rc::strong_count(&self.inner)) {
                 let key = Rc::as_ptr(&self.inner) as usize;
                 if let Some(hit) = visit.memo_get(key, self) {
                     return hit;
                 }
-                let rebuilt = self.traverse_unmemoized(visit).canonicalized(visit);
+                let rebuilt = self.traverse_unmemoized(visit);
                 visit.memo_put(key, self, rebuilt.clone());
                 return rebuilt;
             }
 
-            self.traverse_unmemoized(visit).canonicalized(visit)
+            self.traverse_unmemoized(visit)
         })
     }
 
@@ -1987,20 +1992,29 @@ impl Bound for Term {
 }
 
 impl Term {
-    /// This term over the canonical node of its structure, when the traversal is hash-consing; itself otherwise.
+    /// This term as the canonical node of its spelling in a consing visit's table, under no span.
     ///
-    /// The span is this occurrence's own. It lives on the `Term` wrapper rather than on the shared node, so canonicalizing never moves a span from one occurrence to another — which is what makes sharing by structure safe here at all.
-    fn canonicalized<F>(self, visit: &Visit<F>) -> Self
+    /// **Built over its canonical children, never handed back as it was.** [`Term::rebuilt`] answers a payload equal to the node's own with the node, which holds the children it had — and under a consing visit every payload is equal to the node's own, since consing changes no structure. Taken through it, the first node met of a structure is adopted with every duplicate beneath it kept, and what the pass shares is whole terms that repeat.
+    fn consed<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
-        match visit.share_structure(&self) {
-            Some(canonical) => Term {
-                span: self.span,
-                inner: canonical.inner,
-            },
-            None => self,
+        let key = Rc::as_ptr(&self.inner) as usize;
+        if let Some(canonical) = visit.memo_get_as_stored(key) {
+            return canonical;
         }
+
+        visit.begin_node();
+        let fresh = Term::from((**self).traverse(visit));
+        let mut children = Vec::new();
+        fresh.as_ref().any_child_term(&mut |child| {
+            children.push(Rc::as_ptr(&child.inner) as usize);
+            false
+        });
+        let canonical = visit.adopt(fresh, children);
+        visit.memo_put(key, self, canonical.clone());
+
+        canonical
     }
 
     fn traverse_unmemoized<F>(&self, visit: &mut Visit<F>) -> Self
@@ -2035,7 +2049,7 @@ impl Term {
     ///
     /// The alternative is a fresh `Rc` whose caches start empty, discarding every `hash`, `frees` and `scalars` fill the original had earned. That is affordable when a rewrite rewrites something and pure waste when it does not — and *does not* is the common case: `project_erased_universes` hands back an equal term on nearly every call over a web of definitions each naming the one before it twice.
     ///
-    /// No caller can tell the difference, because three of them already receive the original node: [`Visit::universes_only`] and [`Visit::passes_over`] both short-circuit to `self.clone()`, and `Mode::Sharing` substitutes a canonical node outright. A span lives on this wrapper rather than on the node, so sharing one node across occurrences is representable.
+    /// No caller can tell the difference, because two of them already receive the original node: [`Visit::universes_only`] and [`Visit::passes_over`] both short-circuit to `self.clone()`. A span lives on this wrapper rather than on the node, so sharing one node across occurrences is representable. A consing visit is the one that can tell, and does not come here ([`Term::consed`]): the node handed back holds the children it had, where consing is the replacing of them.
     fn rebuilt(&self, subterm: Subterm) -> Self {
         if subterm == **self {
             return self.clone();
