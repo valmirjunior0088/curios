@@ -375,7 +375,7 @@ impl Machine {
                     self.push(host, Frame::ProjK { index, demand })?;
                     Ok(Step::Eval(head, Demand::Forced))
                 }
-                // A label that survived to reduction has no positional meaning yet and stays stuck, exactly as it does in both hosts.
+                // A label or a written position that survived to reduction names no slot yet and stays stuck, exactly as it does in both hosts.
                 field => Ok(Step::Value(Term::from(Subterm::Proj(Proj { head, field })))),
             },
 

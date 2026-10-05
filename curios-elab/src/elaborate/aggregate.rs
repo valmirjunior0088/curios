@@ -8,6 +8,7 @@ use {
         Bound, Field, InductType, Proj, SelfReference, StructType, Subterm, Telescope, Term, Tuple,
         TupleType, Variant, instantiate_universe_levels_scoped, stamp_declaration_instance,
     },
+    curios_utilities::Plicity,
     std::collections::BTreeSet,
 };
 
@@ -232,7 +233,7 @@ fn project(
                     .is_some_and(|island| !island.is_within(&struct_decl.module))
             {
                 let field = match field {
-                    Field::Index(index) => index.to_string(),
+                    Field::Index(index) | Field::Position(index) => index.to_string(),
                     Field::Label(label) => label.clone(),
                 };
                 return Err(Error::private_field(name.symbol(), field));
@@ -243,9 +244,28 @@ fn project(
         other => return Err(Error::not_a_tuple(other.clone())),
     };
 
-    // A label projection resolves to its position here and is rebuilt positionally — nothing below elaboration ever sees a label. Lookup is unambiguous because duplicate labels are rejected when the tuple type itself elaborates.
+    // A label and a written position each resolve to their slot here, and the projection is rebuilt as the slot — nothing below elaboration ever sees either, and an elaborated projection elaborated again reads its slot as one. A label's lookup is unambiguous because duplicate labels are rejected when the tuple type itself elaborates. A position counts the plain fields: a hidden one takes none, and is reached by its label or not at all.
     let index = match field {
         Field::Index(index) => *index,
+        Field::Position(position) => {
+            let marks = telescope.marks();
+            let mut plain = marks
+                .iter()
+                .enumerate()
+                .filter(|(_, mark)| **mark == Plicity::Explicit)
+                .map(|(slot, _)| slot);
+            match plain.nth(*position) {
+                Some(slot) => slot,
+                // Out of the plain fields, which are the ones a reader counts.
+                None => {
+                    let plain = marks
+                        .iter()
+                        .filter(|mark| **mark == Plicity::Explicit)
+                        .count();
+                    return Err(Error::tuple_index_out_of_bounds(*position, plain));
+                }
+            }
+        }
         Field::Label(label) => {
             let labels = telescope.labels();
             match labels.iter().position(|l| l == label) {

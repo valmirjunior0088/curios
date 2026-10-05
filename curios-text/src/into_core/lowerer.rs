@@ -444,7 +444,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Proj(proj) => {
                 let head = self.term(&proj.head)?;
                 match &proj.field {
-                    Field::Index(index) => curios_core::Term::proj(head, *index),
+                    Field::Index(index) => curios_core::Term::proj_position(head, *index),
                     Field::Label(label) => curios_core::Term::proj_label(head, label.clone()),
                 }
             }
@@ -751,7 +751,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Proj(proj) => {
                 let head = self.collect(&proj.head, binds)?;
                 match &proj.field {
-                    Field::Index(index) => curios_core::Term::proj(head, *index),
+                    Field::Index(index) => curios_core::Term::proj_position(head, *index),
                     Field::Label(label) => curios_core::Term::proj_label(head, label.clone()),
                 }
             }
@@ -1023,7 +1023,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             let scrutinee = curios_core::Term::var(curios_core::Var::free(*scrutinee_name));
             let proj = match &field.label {
                 Some(label) => curios_core::Term::proj_label(scrutinee, label.clone()),
-                None => curios_core::Term::proj(scrutinee, index),
+                None => curios_core::Term::proj_position(scrutinee, index),
             };
             let proj = match pattern_span(&field.value) {
                 Some(span) => proj.with_span(span),

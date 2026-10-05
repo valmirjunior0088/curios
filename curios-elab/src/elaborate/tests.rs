@@ -3,8 +3,8 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Cases, Exhaustion, Free, Global, InductArm, InductDecl, InductParam, Intrinsic, Many,
-        Match, MatchResult, MetavarId, MetavarOrigin, Nat, Scope, StructType, Subterm, Telescope,
-        Term, UniverseContext,
+        Match, MatchResult, MetavarId, MetavarOrigin, Nat, Scope, StructDecl, StructType, Subterm,
+        Telescope, Term, UniverseContext,
     },
     curios_num::{Floating, Natural},
     curios_utilities::{Plicity, Qualifier, Sign},
@@ -518,6 +518,64 @@ fn an_arm_that_misaligns_is_refused_as_a_lambda_is() {
         Error::HiddenMemberWithoutSlot {
             written: Plicity::Implicit
         }
+    ));
+}
+
+// A structure of the fields `{ @n : Nat, x : Nat }` — a hidden field ahead of a plain one, the least telescope a written position is counted over. A concept's edge ahead of its first method is the same shape.
+fn register_marked(context: &mut Context) -> Term {
+    let hidden = context.fresh(Some("n"));
+    let plain = context.fresh(Some("x"));
+    context
+        .register_struct(
+            &nominal("Marked"),
+            StructDecl {
+                universe_context: UniverseContext::empty(),
+                arity: Telescope::done(Telescope::build_marked(
+                    [
+                        (Plicity::Implicit, hidden, nat()),
+                        (Plicity::Explicit, plain, nat()),
+                    ],
+                    (),
+                )),
+                result_sort: Term::type_ground(),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .unwrap();
+
+    Term::from(Subterm::StructType(StructType {
+        name: nominal("Marked"),
+        universes: Vec::new(),
+        params: Vec::new(),
+    }))
+}
+
+// A written position counts the plain fields, so `v.0` is the first of them and the hidden field ahead of it is reached by its label. The projection is rebuilt as the slot, which is what it reads as when elaborated again.
+#[test]
+fn a_written_position_counts_the_plain_fields() {
+    let mut context = context();
+    let marked = register_marked(&mut context);
+    let value = context.fresh(Some("v"));
+    context.assume(&value, &marked);
+    let written = |position| Term::proj_position(Term::free_var(&value), position);
+    let slot = |index| Term::proj(Term::free_var(&value), index);
+
+    let (elaborated, type_) = elaborate(&mut context, &written(0), Mode::Infer).unwrap();
+    assert_eq!((&elaborated, &type_), (&slot(1), &nat()));
+    let (again, _) = elaborate(&mut context, &elaborated, Mode::Infer).unwrap();
+    assert_eq!(again, slot(1));
+
+    let labelled = Term::proj_label(Term::free_var(&value), "n");
+    let (elaborated, _) = elaborate(&mut context, &labelled, Mode::Infer).unwrap();
+    assert_eq!(elaborated, slot(0));
+
+    // Past the plain fields, counted as a reader counts them.
+    assert!(matches!(
+        elaborate(&mut context, &written(1), Mode::Infer),
+        Err(Error::TupleIndexOutOfBounds { index: 1, arity: 1 })
     ));
 }
 

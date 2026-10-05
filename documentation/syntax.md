@@ -324,6 +324,8 @@ pair.fst
 configuration.network.port
 ```
 
+A position counts the plain fields. A hidden one — a concept's superclass field — takes none, so over a concept value `.0` is its first method.
+
 Calls, projections, and postfix [`!`](#postfix-) may be chained.
 
 ### Lambdas
@@ -395,7 +397,7 @@ let Point { loc = (x, y), color } = point;
 body
 ```
 
-These patterns are projection sugar, not runtime matches. The struct head is documentary and is not resolved or checked. An unlabeled field is matched positionally; a `label = pattern` field projects that label. Field punning such as `Point { x, y }` is the positional form, whose sub-patterns happen to be binders named after the fields. Parentheses group a pattern without changing it, so `((x, y))` is `(x, y)`.
+These patterns are projection sugar, not runtime matches. The struct head is documentary and is not resolved or checked. An unlabeled field is matched positionally, among the plain fields; a `label = pattern` field projects that label. A hidden field — a concept's superclass field — takes no position and a pattern's field takes no mark, so a pattern over a concept value writes its methods alone. Field punning such as `Point { x, y }` is the positional form, whose sub-patterns happen to be binders named after the fields. Parentheses group a pattern without changing it, so `((x, y))` is `(x, y)`.
 
 Refutable patterns belong only to `match`.
 
@@ -1096,7 +1098,7 @@ A tuple shape is owned by no root, as an intrinsic type former is, so a tuple-ke
 
 ### Superclass fields in literals
 
-A concept's superclass fields remain positional slots in a concept value, and a literal's entries follow the declaration as a call's arguments follow a function's parameters: the fields are written in order, and before each the `use value` entries fill the superclass slots that precede it, from the first. A slot left out is filled by witness resolution, and `use _` holds a slot's place to the same effect, so `Both { use _, use second, both = … }` supplies the second of two edges alone.
+A concept's superclass fields are hidden members of a concept value. They take no position where it is read — a projection `.N` and a pattern's positional field count the methods alone — and a literal's entries follow the declaration as a call's arguments follow a function's parameters: the fields are written in order, and before each the `use value` entries fill the superclass slots that precede it, from the first. A slot left out is filled by witness resolution, and `use _` holds a slot's place to the same effect, so `Both { use _, use second, both = … }` supplies the second of two edges alone.
 
 ```crs
 Ord { use custom_eql, ord(a, b) = reversed(a, b) }

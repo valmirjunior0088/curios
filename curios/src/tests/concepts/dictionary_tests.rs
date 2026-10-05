@@ -237,6 +237,49 @@ fn a_concept_group_may_name_one_anothers_dictionaries() {
     assert_eq!(run(source), b"18");
 }
 
+// A hidden member takes no position where a value is read. Over a concept value `.0` is the first method and a positional pattern field binds it, in a `let`, an arm and a parameter alike: the edge ahead of it is no part of the count, as it is none of a literal's.
+#[test]
+fn a_concept_value_is_read_past_its_edges() {
+    let source = r#"
+        use /std/{Nat, Str, print};
+        concept Base(A : Type) : pub Type { base(A) -> Str }
+        concept Over(A : Type) : pub Type { use Base(A), over(A) -> Str }
+        satisfy Base(Nat) { base(n) = "base" }
+        let by_position(dict : Over(Nat), n : Nat) -> Str = dict.0(n);
+        let by_pattern(dict : Over(Nat), n : Nat) -> Str =
+            let Over { over } = dict;
+            over(n);
+        let by_match(dict : Over(Nat), n : Nat) -> Str = match dict | Over { over } => over(n) end;
+        let by_lambda : (Over(Nat), Nat) -> Str = (Over { over }, n) => over(n);
+        let by_label(dict : Over(Nat), n : Nat) -> Str = dict.over(n);
+        let dict : Over(Nat) = Over { over(n) = "over" };
+        print(Str/concat(
+            Str/concat(by_position(dict, 1), by_pattern(dict, 1)),
+            Str/concat(by_match(dict, 1), Str/concat(by_lambda(dict, 1), by_label(dict, 1)))))
+        "#;
+
+    assert_eq!(run(source), b"overoveroveroverover");
+}
+
+// The count a refusal names is the reader's: a concept value of one method has one position, whatever edges stand ahead of it.
+#[test]
+fn a_position_past_a_concept_values_methods_is_out_of_bounds() {
+    let source = r#"
+        use /std/{Nat, Str, print};
+        concept Base(A : Type) : pub Type { base(A) -> Str }
+        concept Over(A : Type) : pub Type { use Base(A), over(A) -> Str }
+        satisfy Base(Nat) { base(n) = "base" }
+        let second(dict : Over(Nat), n : Nat) -> Str = dict.1(n);
+        print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("tuple index 1 out of bounds (arity 1)"),
+        "{report}"
+    );
+}
+
 // A superclass edge is read off its field's elaborated type, so an alias of a concept application is an edge, as it is a premise, and what the alias names is reached through it.
 #[test]
 fn an_alias_of_a_concept_application_is_a_superclass_edge() {

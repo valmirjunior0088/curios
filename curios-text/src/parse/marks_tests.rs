@@ -176,6 +176,15 @@ fn a_refused_form_names_its_rule() {
         ),
         ("P { @a = 1 }", "no field is implicit"),
         (
+            "let Over { use _, over } = d; u",
+            "a struct pattern takes no mark",
+        ),
+        ("let At { n, @ok } = a; u", "a struct pattern takes no mark"),
+        (
+            "match a | At { n, @ok } => n end",
+            "a struct pattern takes no mark",
+        ),
+        (
             "match t | two(use n, m) => m end",
             "a pattern takes no `use` member",
         ),

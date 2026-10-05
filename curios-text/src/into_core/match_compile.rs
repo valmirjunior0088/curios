@@ -866,7 +866,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         ))
     }
 
-    /// Explodes a `Tuple`/`Struct` column into one new leftmost column per field, via [`curios_core::Term::proj`]/[`curios_core::Term::proj_label`] on the current (always already-bound) scrutinee variable — this is the same code path whether the exploded column is the outer head or several levels deep, and it never needs a core `Match` node at all: a tuple/struct value has exactly one shape, so "matching" one is just sequential projection, exactly like a hand-written `p.0`/`p.label`. Struct privacy is inherited automatically and unmodified, since `proj_label` is the same function `elaborate_proj` already checks it against. Every row's field list was already validated (by [`Self::compile`]) to share this column's arity/head; here they're further checked to agree, position by position, on whether each field is labeled — an irrefutable `Pattern` never needed this, since a `let`/lambda site only ever destructures a value once.
+    /// Explodes a `Tuple`/`Struct` column into one new leftmost column per field, via [`curios_core::Term::proj_position`]/[`curios_core::Term::proj_label`] on the current (always already-bound) scrutinee variable — this is the same code path whether the exploded column is the outer head or several levels deep, and it never needs a core `Match` node at all: a tuple/struct value has exactly one shape, so "matching" one is just sequential projection, exactly like a hand-written `p.0`/`p.label`. Struct privacy is inherited automatically and unmodified, since `proj_label` is the same function `elaborate_proj` already checks it against. Every row's field list was already validated (by [`Self::compile`]) to share this column's arity/head; here they're further checked to agree, position by position, on whether each field is labeled — an irrefutable `Pattern` never needed this, since a `let`/lambda site only ever destructures a value once.
     fn compile_fields(
         &self,
         mut columns: Vec<curios_core::Term>,
@@ -908,7 +908,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             .enumerate()
             .map(|(index, label)| match label {
                 Some(label) => curios_core::Term::proj_label(scrutinee.clone(), label.to_string()),
-                None => curios_core::Term::proj(scrutinee.clone(), index),
+                None => curios_core::Term::proj_position(scrutinee.clone(), index),
             })
             .collect::<Vec<_>>();
         new_columns.extend(rest);
@@ -946,7 +946,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }
     }
 
-    /// Bind a compound hypothesis pattern's written leaves to their projection chains off `ih`, positional fields by index and labeled fields by label — mirroring `lower_pattern_fields`' projection choice for irrefutable `let` patterns.
+    /// Bind a compound hypothesis pattern's written leaves to their projection chains off `ih`, positional fields by position and labeled fields by label — mirroring `lower_pattern_fields`' projection choice for irrefutable `let` patterns.
     fn push_ih_pattern_binds(
         &self,
         row: &mut MatrixRow<'_>,
@@ -971,7 +971,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         for (index, field) in fields.iter().enumerate() {
             let proj = match &field.label {
                 Some(label) => curios_core::Term::proj_label(base.clone(), label.clone()),
-                None => curios_core::Term::proj(base.clone(), index),
+                None => curios_core::Term::proj_position(base.clone(), index),
             };
             match &field.value {
                 Pattern::Binder(name) => row.binds.push((self.pattern_binder(name), proj)),

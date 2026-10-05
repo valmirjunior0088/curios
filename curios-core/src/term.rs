@@ -865,11 +865,19 @@ impl Term {
         }))
     }
 
-    /// A positional projection `head.index` — the normal form every post-elaboration projection takes (cf. [`Field`]).
+    /// A projection of the slot `index` — the normal form every post-elaboration projection takes, and the form the compiler's own projections are built in (cf. [`Field`]).
     pub fn proj<H: Into<Term>>(head: H, index: usize) -> Self {
         Self::from(Subterm::Proj(Proj {
             head: head.into(),
             field: Field::Index(index),
+        }))
+    }
+
+    /// A written projection `head.position` — a pre-elaboration form, counted over the plain fields of the head's type; elaboration resolves it to that field's slot and rebuilds it as [`Term::proj`].
+    pub fn proj_position<H: Into<Term>>(head: H, position: usize) -> Self {
+        Self::from(Subterm::Proj(Proj {
+            head: head.into(),
+            field: Field::Position(position),
         }))
     }
 

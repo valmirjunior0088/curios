@@ -1,9 +1,9 @@
 use {
     super::{
         BINDER_FOLLOWS_IMPLICIT, MEMO_MATCH_PATTERN, MEMO_PATTERN, PATTERN_TAKES_NO_USE, Read,
-        member_ends, members, parse_char_value, parse_cons_ih, parse_identifier, parse_keyword,
-        parse_label, parse_literal, parse_mark, parse_name, parse_nat_digits, parse_place,
-        parse_premise, parse_qualified_name, refused, require_space,
+        STRUCT_PATTERN_TAKES_NO_MARK, member_ends, members, parse_char_value, parse_cons_ih,
+        parse_identifier, parse_keyword, parse_label, parse_literal, parse_mark, parse_name,
+        parse_nat_digits, parse_place, parse_premise, parse_qualified_name, refused, require_space,
     },
     crate::{
         BinPattern, FuncParam, FuncType, FuncTypeParam, Label, ListPattern, MatchPattern,
@@ -125,9 +125,29 @@ pub(super) fn parse_struct_pattern<'a>() -> Parser<'a, Pattern> {
 const UNCLOSED_STRUCT_PATTERN: &str =
     "a struct pattern closes with `}`; a `let` reads `Name { … }` as its binder";
 
+// A struct pattern's field: [`parse_pattern_field`], under no mark. A hidden field takes no position in a pattern, so a mark there has nothing to claim, and is refused by that rule where `committed` says the text is a struct pattern's alone.
+fn parse_struct_pattern_field<'a>(committed: bool) -> Parser<'a, PatternField> {
+    mark()
+        .and(parse_mark())
+        .flat_map(move |(start, plicity)| match (plicity, committed) {
+            (Plicity::Explicit, _) => parse_pattern_field(),
+            (Plicity::Implicit | Plicity::Witness, true) => {
+                commit(fail_from(&start, STRUCT_PATTERN_TAKES_NO_MARK))
+            }
+            (Plicity::Implicit | Plicity::Witness, false) => {
+                fail_from(&start, STRUCT_PATTERN_TAKES_NO_MARK)
+            }
+        })
+}
+
 // [`parse_struct_pattern`], committed past `Name {` where `committed` says the brace discriminates it. Uncommitted it keeps the token's own refusal, since it is then one guess among the alternatives a sibling may improve on.
 fn struct_pattern<'a>(committed: bool) -> Parser<'a, Pattern> {
-    let fields = || sep_by0_trailing(parse_pattern_field, || parse_literal(","));
+    let fields = move || {
+        sep_by0_trailing(
+            move || parse_struct_pattern_field(committed),
+            || parse_literal(","),
+        )
+    };
     let rest = match committed {
         true => commit(fields().and_drop(parse_literal("}").map_err(UNCLOSED_STRUCT_PATTERN))),
         false => fields().and_drop(parse_literal("}")),
@@ -196,11 +216,21 @@ pub(super) fn parse_tuple_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 
 // A struct match pattern `Name { p1, p2, … }` / `Name { label = p, … }` — the `MatchPattern` counterpart of `parse_struct_pattern`, mirroring struct literals rather than the positional constructor-call shape (structs have field labels; inductive constructors don't — see `MatchPattern`).
 pub(super) fn parse_struct_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    // Nothing but a pattern is read in an arm, so a marked field is refused by its rule where it stands, as a constructor pattern's `use` is.
+    let field = || {
+        mark()
+            .and(parse_mark())
+            .flat_map(|(start, plicity)| match plicity {
+                Plicity::Explicit => parse_match_pattern_field(),
+                Plicity::Implicit | Plicity::Witness => {
+                    commit(fail_from(&start, STRUCT_PATTERN_TAKES_NO_MARK))
+                }
+            })
+    };
+
     parse_name()
         .and_drop(parse_literal("{"))
-        .and(sep_by0_trailing(parse_match_pattern_field, || {
-            parse_literal(",")
-        }))
+        .and(sep_by0_trailing(field, || parse_literal(",")))
         .and_drop(parse_literal("}"))
         .map(|(head, fields)| MatchPattern::Struct {
             head: head.join(),

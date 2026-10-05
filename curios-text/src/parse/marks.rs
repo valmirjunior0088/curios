@@ -47,6 +47,9 @@ pub(super) const FIELD_TAKES_NO_MARK: &str = "a field takes no mark: a structure
 /// What refuses an `@` entry in a structure literal.
 pub(super) const ENTRY_TAKES_NO_IMPLICIT: &str = "a literal's entry is a field, a `use` fill of a concept's superclass, or a `..base` spread: no field is implicit";
 
+/// What refuses a mark on a field of a struct pattern.
+pub(super) const STRUCT_PATTERN_TAKES_NO_MARK: &str = "a struct pattern takes no mark: a hidden field takes no position, and one that has a label is read by it — `label = binder`";
+
 /// What refuses a `use` member in a constructor pattern.
 pub(super) const PATTERN_TAKES_NO_USE: &str =
     "a pattern takes no `use` member: a constructor's payload is plain or `@`";

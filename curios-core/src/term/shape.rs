@@ -211,12 +211,13 @@ pub struct Tuple {
     pub names: Vec<Option<String>>,
 }
 
-/// A projection's field is positional in every post-elaboration term; the `Label` form exists only between `into_core` and `elaborate`, which resolves it against the head's tuple type and rebuilds it as `Index`.
+/// A projection's field is a slot of the head's field telescope in every post-elaboration term. The other two forms are what an author writes, and exist only between `into_core` and `elaborate`, which resolves each against the head's type and rebuilds it as `Index`: a `Label` names its field, and a `Position` — a written `.N`, or a positional field of a pattern — counts the plain fields, a hidden one taking no position.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum Field {
     Index(usize),
     Label(String),
+    Position(usize),
 }
 
 /// A projection out of a tuple. See [`Field`] for why the field is positional in every post-elaboration term.

@@ -2053,7 +2053,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 return method;
             }
             let field = match field {
-                Field::Index(index) => format!(").{index}"),
+                Field::Index(index) | Field::Position(index) => format!(").{index}"),
                 Field::Label(label) => format!(").{label}"),
             };
             flat([pure("("), sub(head, frame), pure(field)])
