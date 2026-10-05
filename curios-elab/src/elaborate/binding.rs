@@ -1013,7 +1013,7 @@ pub(super) fn elaborate_func_check(
     let reduced_expected = reduce_with(context, &expected)?;
     let ft = match Term::unwrap_or_clone(reduced_expected) {
         Subterm::FuncType(ft) => ft,
-        Subterm::Metavar(_) if !context.parking_suppressed() => {
+        Subterm::Metavar(_) if context.may_park() => {
             return park_checking(context, term, &expected);
         }
         _ => return Err(Error::not_a_function_type(expected.clone())),

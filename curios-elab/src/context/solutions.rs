@@ -118,8 +118,8 @@ pub(crate) struct Solutions {
     newly_solved: Vec<MetavarId>,
     /// Journal of every committed solution id, in commit order — never consumed, only marked and rolled back. The watermark/rollback pair lets re-validation unwind solutions that landed while validating a candidate it then rejected.
     solved_log: Vec<MetavarId>,
-    /// While set, `expect` may not park: conversion is being used as a yes/no oracle (re-validation) and provisional success would leak into it.
-    suppress_parking: bool,
+    /// `Some` inside an oracle, where work may not park: elaboration is being asked a question (re-validation, a candidate's fit) and provisional success would leak into the answer. The flag is whether a site inside it wanted to park and was refused, which makes that oracle's refusal no verdict on the term it was asked about.
+    oracle: Option<bool>,
     /// Witness goals whose key is rigid but has no table entry *yet*: a later item may register the missing witness (the table is program-wide while items elaborate in order), so these defer — retried after each item, reported as errors only when the whole module has been elaborated. Each carries the item that raised it, which is what a report that surfaces items later is attributed to.
     deferred_witnesses: Vec<(ItemStamp, ParkedProblem)>,
 }
@@ -132,7 +132,7 @@ impl Solutions {
             parked: Vec::new(),
             newly_solved: Vec::new(),
             solved_log: Vec::new(),
-            suppress_parking: false,
+            oracle: None,
             deferred_witnesses: Vec::new(),
         }
     }
@@ -403,12 +403,33 @@ impl Solutions {
     }
 
     pub(crate) fn parking_suppressed(&self) -> bool {
-        self.suppress_parking
+        self.oracle.is_some()
     }
 
-    /// Flip the parking-suppression flag, returning the previous state — `Context::with_suppressed_parking`'s bracket intrinsic.
-    pub(crate) fn set_parking_suppressed(&mut self, suppressed: bool) -> bool {
-        mem::replace(&mut self.suppress_parking, suppressed)
+    /// A site wants to park. Answers whether it may, and inside an oracle, where it may not, records that it wanted to.
+    pub(crate) fn may_park(&mut self) -> bool {
+        match &mut self.oracle {
+            Some(declined) => {
+                *declined = true;
+                false
+            }
+            None => true,
+        }
+    }
+
+    /// Whether a site inside the oracle in progress wanted to park.
+    pub(crate) fn declined_to_park(&self) -> bool {
+        self.oracle == Some(true)
+    }
+
+    /// Enter an oracle with nothing declined yet, returning the enclosing state for [`Solutions::leave_oracle`] — `Context::with_suppressed_parking`'s bracket intrinsic.
+    pub(crate) fn enter_oracle(&mut self) -> Option<bool> {
+        self.oracle.replace(false)
+    }
+
+    /// Leave an oracle for the state it was entered from. What the inner one declined is its own reader's to act on, and is not the enclosing oracle's record.
+    pub(crate) fn leave_oracle(&mut self, enclosing: Option<bool>) {
+        self.oracle = enclosing;
     }
 
     /// Defer a witness goal whose key is rigid but has no table entry yet, under the item that raised it. The façade stamps the write.

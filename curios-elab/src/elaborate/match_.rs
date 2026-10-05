@@ -522,7 +522,7 @@ pub(crate) fn elaborate_match(
     };
 
     // No carrier *yet*: a scrutinee type stuck on an unsolved metavariable has decided nothing, and what decides it — tuple arms of an unannotated match the drain settles, a projection waiting on them — may still be coming. The match waits for it rather than refusing its scrutinee one step early.
-    if !context.parking_suppressed() && stuck_on_metavar(context, &scrutinee.type_) {
+    if stuck_on_metavar(context, &scrutinee.type_) && context.may_park() {
         return Ok(park_match(context, term, mode, scrutinee));
     }
 

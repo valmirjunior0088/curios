@@ -50,10 +50,20 @@ use {
 enum Solved {
     /// Committed `m := t`.
     Done,
-    /// Not yet solvable (embedded unsolved metavariable): the problem is parked on the `blocked` queue and retried after later progress.
+    /// Not yet solvable (an embedded unsolved metavariable, or a candidate re-validation could not judge yet): the problem is parked on the `blocked` queue and retried after later progress.
     Postponed,
     /// Unsolvable: occurs-check, scope-check, or re-validation failure.
     Failed,
+}
+
+/// What re-validation made of a candidate against its metavariable's frozen type.
+enum Revalidated {
+    /// It checks.
+    Fits,
+    /// The check failed where it wanted to park: a type it met still waits on a metavariable, and nothing has been judged.
+    Undecided,
+    /// It does not check.
+    Refused,
 }
 
 fn instantiate_bound_at<B: Bound>(
@@ -1327,11 +1337,11 @@ impl Convert {
                 context.assume(name, ty);
             }
 
-            // A meta-free, well-scoped candidate that fails to check against the frozen type is not validly typed here — reject the solution. (Under the oracle's suppressed parking an undecided check surfaces as an error too, and likewise rejects.) The check is a [`Probe`]: a candidate it could not afford is no rejected candidate, and the budget's refusal propagates instead.
+            // The check has three answers. A candidate that checks fits. One that fails where the check wanted to park has not been judged: a type it met — the frozen type itself, while the metavariable's own type is unsolved, or one inside it — still waits on a metavariable, and outside the oracle the same check would have waited for it. Read as a rejection, that would make the verdict follow the order parked work is retried in, a candidate refused one retry short of the solution that types it. Any other failure is a meta-free, well-scoped candidate that is not validly typed here. The check is a [`Probe`]: a candidate it could not afford is no rejected candidate, and the budget's refusal propagates instead.
             context.with_oracle(&refinements, |context| {
-                check(context, &inverted, result.clone())
+                let checked = check(context, &inverted, result.clone())
                     .inspect_err(|error| {
-                        // The oracle's verdict is a boolean, so this error is otherwise discarded — and it is exactly what explains a rejected candidate that looks correct at the use site.
+                        // The error is otherwise discarded — and it is exactly what explains a rejected candidate that looks correct at the use site.
                         if !error.is_exhausted() {
                             curios_profile::note!(
                                 target: "curios_elab::solve",
@@ -1341,8 +1351,13 @@ impl Convert {
                             );
                         }
                     })
-                    .probed_refusal()
-                    .map(|checked| checked.is_some())
+                    .probed_refusal()?;
+
+                Ok(match checked {
+                    Some(_) => Revalidated::Fits,
+                    None if context.declined_to_park() => Revalidated::Undecided,
+                    None => Revalidated::Refused,
+                })
             })
         });
         let revalidated = match revalidated {
@@ -1354,22 +1369,35 @@ impl Convert {
             }
         };
 
-        if !revalidated {
-            curios_profile::note!(
-                target: "curios_elab::solve",
-                meta = id.0,
-                against = %result,
-                "failed: re-validation",
-            );
-            context.rollback_solutions(mark);
-            context.end_solutions(mark);
-            return Ok(Solved::Failed);
-        }
-
+        let solved = match revalidated {
+            Revalidated::Fits => {
+                context.end_solutions(mark);
+                context.solve_metavar(id, inverted);
+                self.progress = true;
+                return Ok(Solved::Done);
+            }
+            Revalidated::Undecided => {
+                curios_profile::note!(
+                    target: "curios_elab::solve",
+                    meta = id.0,
+                    against = %result,
+                    "postponed: re-validation could not judge the candidate yet",
+                );
+                Solved::Postponed
+            }
+            Revalidated::Refused => {
+                curios_profile::note!(
+                    target: "curios_elab::solve",
+                    meta = id.0,
+                    against = %result,
+                    "failed: re-validation",
+                );
+                Solved::Failed
+            }
+        };
+        context.rollback_solutions(mark);
         context.end_solutions(mark);
-        context.solve_metavar(id, inverted);
-        self.progress = true;
-        Ok(Solved::Done)
+        Ok(solved)
     }
 
     /// Park a problem from inside a structural arm: remove it from `history` (so a retry after fresh progress is not skipped as already-handled) and push it to `blocked`. Returns `Ok(true)` — a blocked problem is undecided, never a mismatch.

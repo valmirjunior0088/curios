@@ -83,7 +83,7 @@ pub(super) fn elaborate_tuple(
             return Ok((rebuilt, inferred));
         }
         // Not a tuple type *yet*. An expectation stuck on an unsolved metavariable has decided nothing — `Count(?L)`, a description-indexed payload waiting on its index — so refusing here would refuse one step before the turnaround that solves it.
-        _ if !context.parking_suppressed() && stuck_on_metavar(context, &reduced) => {
+        _ if stuck_on_metavar(context, &reduced) && context.may_park() => {
             return park_checking(context, term, &expected);
         }
         _ => {
@@ -130,7 +130,7 @@ pub(super) fn elaborate_proj(
     let head_type = reduce_with(context, &head_type)?;
 
     // Not a tuple or a struct *yet*: a head type stuck on an unsolved metavariable has decided nothing, and what decides it — tuple arms parked against an unannotated match's type, which the drain settles — may still be coming. The projection waits for it rather than refusing one step early.
-    if !context.parking_suppressed() && stuck_on_metavar(context, &head_type) {
+    if stuck_on_metavar(context, &head_type) && context.may_park() {
         return Ok(park_projection(
             context,
             head,

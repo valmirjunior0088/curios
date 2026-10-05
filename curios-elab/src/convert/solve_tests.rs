@@ -131,6 +131,53 @@ fn revalidation_rejects_ill_typed_candidate_through_checking() {
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }
 
+/// A candidate re-validation cannot judge yet is postponed, not refused. `?1 : ?0` against a lambda has no function type to be checked at while `?0` is unsolved — the check would park, and inside the oracle may not — and the candidate is committed once `?0` is solved. The same holds one level down: the lambda inside a pair at `{?0, Nat}`, where the frozen type is a record and only its field waits. The control is a candidate at a type that contradicts it, which nothing leaves undecided and which is refused outright.
+///
+/// Mutation-checked: with a declined park not recorded the two waiting goals are mismatches, and with every failed check read as undecided the control is blocked.
+#[test]
+fn a_candidate_waits_for_the_type_it_is_checked_at() {
+    let mut context = context();
+    let (x, a, b) = (
+        context.fresh(Some("x")),
+        context.fresh(Some("a")),
+        context.fresh(Some("b")),
+    );
+    let lambda = Term::func([(x, nat_type())], Term::free_var(&x));
+    let pair = Term::tuple([lambda.clone(), nat(1)]);
+    let pair_type = Term::tuple_type([(a, Term::hole(0)), (b, nat_type())]);
+
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
+    context.birth_metavar(MetavarId(1), Vec::new(), Term::hole(0));
+    context.birth_metavar(MetavarId(2), Vec::new(), pair_type.clone());
+    context.birth_metavar(MetavarId(3), Vec::new(), nat_type());
+
+    let goals = |context: &mut Context| {
+        [
+            (Term::hole(0), Term::hole(1), lambda.clone()),
+            (pair_type.clone(), Term::hole(2), pair.clone()),
+            (nat_type(), Term::hole(3), lambda.clone()),
+        ]
+        .map(|(type_, slot, candidate)| {
+            match convert_outcome(context, &type_, &slot, &candidate) {
+                Ok(Outcome::Converts) => "converts",
+                Ok(Outcome::Blocked(_)) => "blocked",
+                Ok(Outcome::Mismatch(_)) => "mismatch",
+                Err(_) => "exhausted",
+            }
+        })
+    };
+
+    assert_eq!(goals(&mut context), ["blocked", "blocked", "mismatch"]);
+    assert_eq!(context.metavar_solution(MetavarId(1)), None);
+    assert_eq!(context.metavar_solution(MetavarId(2)), None);
+
+    context.solve_metavar(MetavarId(0), Term::func_type([(x, nat_type())], nat_type()));
+
+    assert_eq!(goals(&mut context), ["converts", "converts", "mismatch"]);
+    assert_eq!(context.metavar_solution(MetavarId(1)), Some(&lambda));
+    assert_eq!(context.metavar_solution(MetavarId(2)), Some(&pair));
+}
+
 #[test]
 fn flex_flex_equal_id_short_circuits() {
     let mut context = context();

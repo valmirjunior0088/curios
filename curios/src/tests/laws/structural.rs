@@ -272,7 +272,7 @@ impl Seeds {
     }
 }
 
-/// The claim that `left` and `right` are equal at `type_`. It states the type, where a carrier's row leaves it to inference, because `Eq/refl()`'s implicit is not solved against a lambda while its own type is unsolved: a row that left the type out would ask the elaborator for a solution, and what a seed asks for is a comparison.
+/// The claim that `left` and `right` are equal at `type_`. It states the type, where a carrier's row leaves it to inference: a row that left the type out would ask the elaborator for a solution as well, `Eq/refl()`'s implicit against a lambda whose type the item's drain settles, and what a seed asks for is a comparison.
 pub(super) fn claim(type_: &str, left: &str, right: &str) -> String {
     format!("Eq(@({type_}))({left}, {right})")
 }

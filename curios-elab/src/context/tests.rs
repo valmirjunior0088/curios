@@ -322,6 +322,29 @@ fn an_oracle_elaborates_a_term_that_writes_once() {
     assert_eq!(inside, 1);
 }
 
+/// What an oracle declined is that oracle's record. A site that wants to park inside one is refused and the oracle records it; an oracle inside it starts with nothing declined and leaves the enclosing record as it found it; and outside every oracle a site may park and nothing is recorded.
+#[test]
+fn a_declined_park_is_recorded_by_the_oracle_it_was_declined_in() {
+    let mut context = context();
+    assert!(context.may_park());
+    assert!(!context.declined_to_park());
+
+    let recorded = context.with_oracle(&Refinements::default(), |context| {
+        let before = context.declined_to_park();
+        let inner = context.with_oracle(&Refinements::default(), |context| {
+            (context.may_park(), context.declined_to_park())
+        });
+        let after = context.declined_to_park();
+        let may = context.may_park();
+
+        (before, inner, after, may, context.declined_to_park())
+    });
+
+    assert_eq!(recorded, (false, (false, true), false, false, true));
+    assert!(!context.declined_to_park());
+    assert!(context.may_park());
+}
+
 /// A rollback invalidates what can rest on what it undid. One that unwound nothing keeps the cached reducts — a witness probe rolls back after every trial, and a clear at each would throw away the reducts the next node needs — while one that unwound a solution clears them, since a reduct cached since may have read it.
 #[test]
 fn a_rollback_keeps_the_reducts_unless_it_unwound_a_solution() {

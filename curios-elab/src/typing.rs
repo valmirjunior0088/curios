@@ -309,9 +309,9 @@ pub(crate) fn expect(
         Outcome::Mismatch(declined) => {
             Err(display_mismatch(context, term, inferred, expected).declined(declined))
         }
-        // Undecided: blocked on unsolved metavariables. Park the goals to be retried when a watched metavariable is solved and succeed provisionally — unless conversion is currently a yes/no oracle, in which case undecided must stay a mismatch.
+        // Undecided: blocked on unsolved metavariables. Park the goals to be retried when a watched metavariable is solved and succeed provisionally — unless this is inside an oracle, where provisional success may not leak into the answer: the turnaround fails there, and the oracle records that it would have parked.
         Outcome::Blocked(goals) => {
-            if context.parking_suppressed() {
+            if !context.may_park() {
                 return Err(display_mismatch(context, term, inferred, expected));
             }
 

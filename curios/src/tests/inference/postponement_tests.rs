@@ -323,3 +323,29 @@ fn a_match_nothing_types_is_refused_as_its_eliminator_refuses() {
         "the report should name the carrier the match expected:\n{report}"
     );
 }
+
+// A candidate re-validation cannot judge yet waits, so what compiles does not follow the order parked work woke in. The claim's two lambdas park against the claim's type, and `Eq/refl()`'s own implicit `z : ?A` meets the first of them at the item's drain while `?A` is still unsolved, one retry short of the equation that solves it. Checking the lambda against a type that is not known yet judges nothing: the solution waits, the drain's next sweep solves `?A`, and the lambda checks.
+//
+// The refusal beside it is what says the wait is no acceptance: the same claim over two lambdas that differ is a type mismatch, as it was.
+#[test]
+fn reflexivity_at_a_lambda_waits_for_the_type_the_drain_settles() {
+    let source = r#"
+        use /std/{Eq, Nat};
+        let same(g : (Nat) -> Nat) -> Eq()((x : Nat) => g(0), (x : Nat) => g(0)) = Eq/refl();
+        /std/print(Nat/to_str(1))
+        "#;
+
+    assert_eq!(run(source), b"1");
+}
+
+#[test]
+fn reflexivity_at_two_lambdas_that_differ_is_a_mismatch() {
+    let report = error(
+        r#"
+        use /std/{Eq, Nat};
+        let differ(g : (Nat) -> Nat) -> Eq()((x : Nat) => g(0), (x : Nat) => g(1)) = Eq/refl();
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(report.contains("type mismatch"), "{report}");
+}

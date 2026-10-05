@@ -185,7 +185,7 @@ pub(super) fn insert_auto_argument(
             if let Some(refusal) = refusal {
                 context.note_refusal(slot, refusal);
             }
-            if waiting && !context.parking_suppressed() {
+            if waiting && context.may_park() {
                 context.park(
                     ParkedWork::Discharge {
                         slot,

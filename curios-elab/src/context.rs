@@ -2126,7 +2126,17 @@ impl Context {
         self.solutions.parking_suppressed()
     }
 
-    /// Run `f` as a yes/no *oracle* around full elaboration — a solution's re-validation, a goal candidate's fit — under the refinements `birth` holds and no others: the ones the checked term's metavariable was born under ([`Context::with_refinements`]). Parking is suppressed — `expect` treats `Blocked` as a mismatch and `retry_parked` is a no-op, so provisional success can neither leak into the verdict nor consume a parked obligation whose error the oracle would swallow — and so are the representation-privacy checks: an oracle candidate is a unification artifact that can embed machinery-built projections (eta-expansions, witness splices) whose privacy elaboration already adjudicated, and a swallowed privacy error would silently flip the verdict. The suppressions are a package: an oracle that set only some would be subtly unsound, which is why the parking half has no public setter. The bracket also keeps an elaboration table of its own, for what only a verdict may reuse — see [`Context::oracle_memoizable`].
+    /// Whether work that cannot be judged yet may park. Inside an oracle it may not, and the oracle records that a site wanted to ([`Context::declined_to_park`]): the refusal that site goes on to raise says its term could not be judged, not that it is wrong. A site asks this last, once everything else says it would park, so the record is made only where a park was wanted.
+    pub(crate) fn may_park(&mut self) -> bool {
+        self.solutions.may_park()
+    }
+
+    /// Whether a site inside the oracle in progress wanted to park and was refused. Read inside the oracle, by a reader with three answers: where the question failed and this holds, the failure is undecided rather than a refusal. It errs one way only — a check that recovered from a declined park and then failed on something rigid reads as undecided, and the rigid failure is reported when the work is retried.
+    pub(crate) fn declined_to_park(&self) -> bool {
+        self.solutions.declined_to_park()
+    }
+
+    /// Run `f` as a yes/no *oracle* around full elaboration — a solution's re-validation, a goal candidate's fit — under the refinements `birth` holds and no others: the ones the checked term's metavariable was born under ([`Context::with_refinements`]). Parking is suppressed — `expect` treats `Blocked` as a mismatch and `retry_parked` is a no-op, so provisional success can neither leak into the verdict nor consume a parked obligation whose error the oracle would swallow — and so are the representation-privacy checks: an oracle candidate is a unification artifact that can embed machinery-built projections (eta-expansions, witness splices) whose privacy elaboration already adjudicated, and a swallowed privacy error would silently flip the verdict. The suppressions are a package: an oracle that set only some would be subtly unsound, which is why the parking half has no public setter. What the parking half suppressed is recorded for the oracle's own reader ([`Context::may_park`]): a goal candidate's fit and an entailment read a failure as no, and re-validation, which has a third answer, reads a failure where a park was declined as not judged yet. The bracket also keeps an elaboration table of its own, for what only a verdict may reuse — see [`Context::oracle_memoizable`].
     pub(crate) fn with_oracle<R>(
         &mut self,
         birth: &Refinements,
@@ -2142,9 +2152,9 @@ impl Context {
     }
 
     fn with_suppressed_parking<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let previous = self.solutions.set_parking_suppressed(true);
+        let enclosing = self.solutions.enter_oracle();
         let result = f(self);
-        self.solutions.set_parking_suppressed(previous);
+        self.solutions.leave_oracle(enclosing);
 
         result
     }
