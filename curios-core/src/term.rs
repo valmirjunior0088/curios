@@ -1774,14 +1774,18 @@ impl MetaRenaming {
 }
 
 impl Term {
-    /// Structural equality with a metavariable, and a universe metavariable, identified by position rather than by id, under `renaming`.
+    /// Structural equality with a metavariable, and a universe metavariable, identified by position rather than by id, under `renaming` — and with every binder under the name it was written with.
     ///
-    /// [`PartialEq`]'s masking walk with two cases decided ahead of the mask: two `Type`s are equal when their levels are under the renaming, and two metavariables when their origins agree, their ids bind, and their spines are pairwise equal. Every other payload compares exactly, spans and binder names excepted as in `PartialEq`. No pointer or hash shortcut: one allocation on both sides still carries ids the renaming has to see.
+    /// [`PartialEq`]'s masking walk with two cases decided ahead of the mask, and one read beside it. Two `Type`s are equal when their levels are under the renaming, and two metavariables when their origins agree, their ids bind, and their spines are pairwise equal. The read is each node's binder names, which `PartialEq` leaves out since a name moves no judgment: it moves what is stored, a term elaborated from this one carrying its binders' names and so does a dependent handed its signature. Every other payload compares exactly, spans excepted as in `PartialEq`. No pointer or hash shortcut: one allocation on both sides still carries ids the renaming has to see.
     pub fn equal_modulo_metas(&self, other: &Term, renaming: &mut MetaRenaming) -> bool {
-        let mut visit = Visit::masking(|_, _| None, Term::from(Subterm::Prop));
+        let mut visit = Visit::masking_labels(|_, _| None, Term::from(Subterm::Prop));
         let mut mask = |subterm: &Subterm| {
             let masked = subterm.traverse(&mut visit);
-            (masked, visit.take_masked_children())
+            (
+                masked,
+                visit.take_masked_children(),
+                visit.take_masked_labels(),
+            )
         };
 
         let mut work = vec![(self.clone(), other.clone())];
@@ -1821,9 +1825,12 @@ impl Term {
                 _ => {}
             }
 
-            let (this_masked, this_children) = mask(this.look());
-            let (that_masked, that_children) = mask(that.look());
-            if this_masked != that_masked || this_children.len() != that_children.len() {
+            let (this_masked, this_children, this_labels) = mask(this.look());
+            let (that_masked, that_children, that_labels) = mask(that.look());
+            if this_masked != that_masked
+                || this_labels != that_labels
+                || this_children.len() != that_children.len()
+            {
                 return false;
             }
 

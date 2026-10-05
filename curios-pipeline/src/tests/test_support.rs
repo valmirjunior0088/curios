@@ -4,7 +4,7 @@
 
 use {
     crate::*,
-    curios_core::{Item, Module, Variance},
+    curios_core::{Item, Module, Sharing, Variance},
     curios_elab::{Context, Resumed, erase_program},
     curios_prelude::with_prelude,
     curios_text::{Entrypoint, LintKind, RootSource, SYNTAX, UnitSource},
@@ -283,6 +283,47 @@ pub(super) fn assert_modules_agree(whole: &Module, incremental: &Module) {
     assert_eq!(whole.concepts, incremental.concepts);
     assert_eq!(whole.witnesses, incremental.witnesses);
     assert_eq!(whole.tests, incremental.tests);
+}
+
+/// That `incremental` is stored as `whole` is: the same bytes, and where they are not, which parts.
+///
+/// A unit is stored with its elaborated module consed up to spelling under no position ([`Unit::stored`]), so what is left to differ is what the two compilations concluded.
+pub(super) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
+    let stored = |unit: &Unit| unit.stored().expect("a unit serializes");
+    if stored(whole)[..] == stored(incremental)[..] {
+        return;
+    }
+
+    let consed = |unit: &Unit| {
+        curios_archive::to_bytes(&unit.core().shared(&Sharing::new())).expect("a module serializes")
+    };
+    let parts = [
+        (
+            "the text stage's part",
+            curios_archive::to_bytes(whole.text()).unwrap()[..]
+                == curios_archive::to_bytes(incremental.text()).unwrap()[..],
+        ),
+        (
+            "the elaborated module",
+            consed(whole)[..] == consed(incremental)[..],
+        ),
+        (
+            "the erased arena",
+            curios_archive::to_bytes(&whole.arena()).unwrap()[..]
+                == curios_archive::to_bytes(&incremental.arena()).unwrap()[..],
+        ),
+        (
+            "the certifier's record",
+            whole.certification() == incremental.certification(),
+        ),
+    ];
+    let differing = parts
+        .iter()
+        .filter(|(_, alike)| !alike)
+        .map(|(part, _)| *part)
+        .collect::<Vec<_>>();
+
+    panic!("a unit compiled over a baseline is stored differently, in {differing:?}");
 }
 
 /// Whether `unit` holds the very allocation `baseline` holds for the body of the `let` named `name` — which nothing but reuse can produce, since every elaboration builds its own terms.

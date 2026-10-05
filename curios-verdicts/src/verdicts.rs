@@ -309,7 +309,7 @@ impl Verdicts {
             return None;
         }
 
-        let bytes = curios_archive::to_bytes(unit).ok()?;
+        let bytes = unit.stored().ok()?;
 
         Some((
             Placed {

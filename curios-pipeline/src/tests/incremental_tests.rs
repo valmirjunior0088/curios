@@ -4,8 +4,8 @@
 
 use {
     super::test_support::{
-        assert_modules_agree, carried_variances, compile_modules, recompile_modules,
-        recompile_over, reuses_body, unit_of, unused_binders, written,
+        assert_modules_agree, assert_stored_alike, carried_variances, compile_modules,
+        recompile_modules, recompile_over, reuses_body, unit_of, unused_binders, written,
     },
     curios_core::Variance,
 };
@@ -33,6 +33,7 @@ fn an_unchanged_text_reuses_every_item() {
         );
     }
     assert_modules_agree(baseline.core(), again.core());
+    assert_stored_alike(&baseline, &again);
 }
 
 #[test]
@@ -49,6 +50,52 @@ fn an_edited_body_recompiles_the_item_and_its_dependents_and_agrees_with_the_who
     );
     assert!(reuses_body(&baseline, &incremental, "unrelated"));
     assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert_stored_alike(&unit_of(&edited), &incremental);
+}
+
+/// A renamed parameter is a change, to its item and to every item that reaches it: a binder's name is in what is stored, the item's own and a dependent's that was handed its signature.
+///
+/// Mutation-checked: with the diff reading terms up to their binders' names, nothing is elaborated again and the unit is stored under the old ones.
+#[test]
+fn a_renamed_parameter_is_elaborated_again_with_its_dependents() {
+    let edited = BASE.replace(
+        "double(n: Nat) -> Nat = n + n",
+        "double(m: Nat) -> Nat = m + m",
+    );
+    let baseline = unit_of(BASE);
+
+    let incremental = recompile_over(&edited, &baseline).unwrap();
+
+    assert!(!reuses_body(&baseline, &incremental, "double"));
+    assert!(
+        !reuses_body(&baseline, &incremental, "twice"),
+        "a dependent of a renamed item is re-elaborated"
+    );
+    assert!(reuses_body(&baseline, &incremental, "unrelated"));
+    assert_stored_alike(&unit_of(&edited), &incremental);
+}
+
+/// A signature handed to a dependent carries its binders' names into the dependent's own term — `same(f)` is elaborated to `same(@(base: Nat, exp: Nat) -> Nat, f)` — so the dependent is stored anew when they are renamed.
+#[test]
+fn a_renamed_parameter_reaches_the_dependent_that_was_handed_its_signature() {
+    let base = "use /std/{Nat};
+
+pub let f(base: Nat, exp: Nat) -> Nat = base;
+
+pub let same(@A: Type, x: A) -> A = x;
+
+pub let g(n: Nat) -> Nat = same(f)(n, n);
+";
+    let edited = base.replace(
+        "f(base: Nat, exp: Nat) -> Nat = base",
+        "f(b: Nat, e: Nat) -> Nat = b",
+    );
+    let baseline = unit_of(base);
+
+    let incremental = recompile_over(&edited, &baseline).unwrap();
+
+    assert!(!reuses_body(&baseline, &incremental, "g"));
+    assert_stored_alike(&unit_of(&edited), &incremental);
 }
 
 #[test]
@@ -62,6 +109,7 @@ fn a_removed_item_is_gone_and_the_rest_is_reused() {
     assert!(reuses_body(&baseline, &incremental, "double"));
     assert!(reuses_body(&baseline, &incremental, "twice"));
     assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert_stored_alike(&unit_of(&edited), &incremental);
     assert!(
         incremental.certification() == unit_of(&edited).certification(),
         "the record keeps an entry for a declaration the text no longer holds"
@@ -105,6 +153,7 @@ pub let twice: Nat = double(2);
         );
     }
     assert_modules_agree(unit_of(moved).core(), incremental.core());
+    assert_stored_alike(&unit_of(moved), &incremental);
 }
 
 /// A lowering numbers its universe metavariables and holes in lowering order, so an item inserted ahead renumbers every polymorphic item after it; the diff identifies them by position and leaves those items reused.
@@ -230,6 +279,7 @@ fn an_all_changed_closure_equals_the_whole_compile() {
 
     assert_eq!(incremental.core().items.len(), 3);
     assert_modules_agree(unit_of(BASE).core(), incremental.core());
+    assert_stored_alike(&unit_of(BASE), &incremental);
 }
 
 /// An item the parser could not read withholds its dependents, which report nothing and leave no refusal behind them — so a recompile reassembling the lowered order has items in it that the closure's elaboration never produced. It leaves them out, exactly as a whole compile of the same text does, and answers with the parse error either way.

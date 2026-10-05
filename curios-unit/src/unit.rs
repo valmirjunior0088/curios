@@ -8,6 +8,9 @@ use {
     curios_utilities::Mount,
 };
 
+#[cfg(feature = "archive")]
+use curios_core::Sharing;
+
 /// A unit as its compilation produced it, before the kernel has judged it: everything a [`Unit`] holds except the certifier's record.
 ///
 /// Composed of one opaque artifact per stage rather than flattened into their fields. `curios-text`'s resolution tables and `curios-elab`'s erased arena are that crate's business, and widening them to `pub` so this struct could hold them directly would export a resolver's internals for no consumer. What this type adds is the pairing: the three artifacts describe *one* unit, and nothing else says so.
@@ -63,6 +66,16 @@ impl Uncertified {
     pub fn foreigns(&self) -> &ForeignStore {
         self.text.foreigns()
     }
+
+    /// This unit with its elaborated module hash-consed in a table of its own — what [`Unit::stored`] serializes. The lowered module is left as it was built, since a lint and a report are located in it.
+    #[cfg(feature = "archive")]
+    fn consed(&self) -> Self {
+        Self {
+            text: self.text.clone(),
+            core: self.core.shared(&Sharing::new()),
+            arena: self.arena.clone(),
+        }
+    }
 }
 
 /// One compiled and certified unit: everything a later unit needs in order to be compiled against it.
@@ -107,5 +120,18 @@ impl Unit {
     /// See [`Uncertified::foreigns`].
     pub fn foreigns(&self) -> &ForeignStore {
         self.unit.foreigns()
+    }
+
+    /// The bytes this unit is stored as: itself, its elaborated module hash-consed in a table of its own ([`Module::shared`]).
+    ///
+    /// **A stored unit says what its items mean, not where they were written or how they were come by.** A consed module is one node for each structure as it is spelled, under no position, so an item elaborated now and the same item reused from a baseline are the same nodes, and one moved by an edit above it is stored as it was. The fixed prelude's images are consed by the same pass, where they are built.
+    ///
+    /// Run here and not where a unit is assembled: the pass builds a node for every node of the module, and a unit that is neither filed nor followed — a keystroke's — is never serialized.
+    #[cfg(feature = "archive")]
+    pub fn stored(&self) -> Result<curios_archive::Serialized, String> {
+        curios_archive::to_bytes(&Unit {
+            unit: self.unit.consed(),
+            certification: self.certification.clone(),
+        })
     }
 }

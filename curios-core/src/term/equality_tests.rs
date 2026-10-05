@@ -17,6 +17,24 @@ fn arrow(domain: Term, codomain: Term) -> Term {
     Term::func_type([(Free::local(0, Some("x")), domain)], codomain)
 }
 
+/// A renamed binder is another text: equal as a term, since a name moves no judgment, and not modulo metas, since it moves what is stored.
+#[test]
+fn a_renamed_binder_is_another_text_modulo_metas() {
+    let over = |hint: &str| {
+        Term::func_type(
+            [(
+                Free::local(0, Some(hint)),
+                Term::intrinsic(Intrinsic::NatType),
+            )],
+            Term::intrinsic(Intrinsic::NatType),
+        )
+    };
+
+    assert_eq!(over("n"), over("m"));
+    assert!(over("n").equal_modulo_metas(&over("n"), &mut MetaRenaming::default()));
+    assert!(!over("n").equal_modulo_metas(&over("m"), &mut MetaRenaming::default()));
+}
+
 #[test]
 fn two_holes_of_different_ids_are_equal_under_a_fresh_renaming() {
     assert_ne!(hole(1), hole(7), "by id they differ");

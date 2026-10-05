@@ -2,7 +2,7 @@
 //!
 //! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. What a reused item rests on is the verdict recorded when the baseline was judged, exactly as a whole unit taken from a store does, and the argument is [Cached verdicts](../../documentation/design/soundness/admission/cached-verdicts.md) applied per item: the key is the item's lowered form together with everything its reach closure covers. That is why the closure is transitive — conversion unfolds bodies, so a dependent's judgment reaches through what it names, and a closure that stopped one edge short would be a key omitting an input.
 //!
-//! **The diff is over lowered items, modulo what a lowering mints.** A lowering numbers every written `Type` and every elided annotation from zero for each declaration, so a declaration its text leaves alone carries the ids it carried whatever was written around it, and an edit inside one renumbers that one alone; [`Term::equal_modulo_metas`] pairs the ids by position, which is how an edited declaration whose edit only shifted them is still found unchanged. Everything else compares exactly — spans and binder names excepted, as always — so a moved declaration is not a change and a renamed parameter is not one either.
+//! **The diff is over lowered items, modulo what a lowering mints.** A lowering numbers every written `Type` and every elided annotation from zero for each declaration, so a declaration its text leaves alone carries the ids it carried whatever was written around it, and an edit inside one renumbers that one alone; [`Term::equal_modulo_metas`] pairs the ids by position, which is how an edited declaration whose edit only shifted them is still found unchanged. Everything else compares exactly, spans excepted, so a moved declaration is not a change — and a renamed parameter is one: a binder's name is in what is stored, the item's own and every dependent's that was handed its signature, so an item reused under the old name would be another unit than a whole compile's.
 
 use {
     crate::{CompileError, globals, kernel_refusal, with_broken},
@@ -366,7 +366,7 @@ fn arity_unchanged(
     )
 }
 
-/// Whether two telescopes agree entry by entry — each under the same mark, its type equal modulo `renaming` — ending in payloads `done` agrees on. A mark is part of what an entry declares: a parameter's decides how a call writes it, and a field's what a literal leaves out and what a position counts.
+/// Whether two telescopes agree entry by entry — each under the same mark and the same name, its type equal modulo `renaming` — ending in payloads `done` agrees on. A mark is part of what an entry declares: a parameter's decides how a call writes it, and a field's what a literal leaves out and what a position counts.
 fn telescope_unchanged<B: Bound>(
     before: &Telescope<B>,
     after: &Telescope<B>,
@@ -382,6 +382,7 @@ fn telescope_unchanged<B: Bound>(
             ) => {
                 if this_mark != that_mark
                     || this_rest.arity() != that_rest.arity()
+                    || !this_rest.spelled_as(that_rest)
                     || !this.equal_modulo_metas(that, renaming)
                 {
                     return false;

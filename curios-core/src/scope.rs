@@ -581,6 +581,11 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         })
     }
 
+    /// Whether this scope binds under the names `other` binds under: what tells two texts apart where the two scopes are one as terms, since a scope's equality reads no label.
+    pub fn spelled_as<C: Bound>(&self, other: &Scope<A, C>) -> bool {
+        self.labels == other.labels
+    }
+
     /// What this scope remembers of the binder at position `index` (0 = first/outermost), for a printer reopening it.
     pub(crate) fn label(&self, index: usize) -> Option<&Label> {
         self.labels.as_deref()?.get(index)
@@ -860,6 +865,8 @@ enum Mode {
     Masking {
         placeholder: Term,
         children: Vec<Term>,
+        /// The labels of the scopes the node itself binds through, for a comparison that reads them ([`Visit::masking_labels`]); `None` for one that does not, a term's own equality among them, which is what keeps a label's clone off its path.
+        labels: Option<Vec<Option<Vec<Label>>>>,
     },
 }
 
@@ -924,8 +931,24 @@ where
             mode: Mode::Masking {
                 placeholder,
                 children: Vec::new(),
+                labels: None,
             },
             // Masking never descends past one level, so there is nothing to revisit.
+            memo: Memo::None,
+        }
+    }
+
+    /// [`Visit::masking`], also keeping the labels of the scopes each node binds through for [`Visit::take_masked_labels`]: what a comparison of two texts reads, where a comparison of two terms does not.
+    pub(crate) fn masking_labels(visit: F, placeholder: Term) -> Self {
+        Self {
+            term_depth: 0,
+            universe_depth: 0,
+            visit,
+            mode: Mode::Masking {
+                placeholder,
+                children: Vec::new(),
+                labels: Some(Vec::new()),
+            },
             memo: Memo::None,
         }
     }
@@ -1074,6 +1097,7 @@ where
             Mode::Masking {
                 placeholder,
                 children,
+                ..
             } => {
                 children.push(term.clone());
                 Some(placeholder.clone())
@@ -1099,6 +1123,17 @@ where
     pub fn take_masked_children(&mut self) -> Vec<Term> {
         match &mut self.mode {
             Mode::Masking { children, .. } => mem::take(children),
+            _ => Vec::new(),
+        }
+    }
+
+    /// The labels of the scopes crossed while masking, in traversal order, leaving the visit ready to mask another node; empty for a visit that keeps none.
+    pub(crate) fn take_masked_labels(&mut self) -> Vec<Option<Vec<Label>>> {
+        match &mut self.mode {
+            Mode::Masking {
+                labels: Some(labels),
+                ..
+            } => mem::take(labels),
             _ => Vec::new(),
         }
     }
@@ -1208,12 +1243,18 @@ where
         table.adopt(Spelling { labels, children }, fresh)
     }
 
-    /// A scope is being crossed: its labels are part of the spelling of the node a consing visit is rebuilding.
+    /// A scope is being crossed: its labels are part of the spelling of the node a consing visit is rebuilding, and of the node a visit that reads labels is masking.
     pub(crate) fn cross(&mut self, labels: &Option<Vec<Label>>) {
-        if let Mode::Sharing { crossed, .. } = &mut self.mode
-            && let Some(node) = crossed.last_mut()
-        {
-            node.push(labels.clone());
+        match &mut self.mode {
+            Mode::Sharing { crossed, .. } => {
+                if let Some(node) = crossed.last_mut() {
+                    node.push(labels.clone());
+                }
+            }
+            Mode::Masking {
+                labels: Some(read), ..
+            } => read.push(labels.clone()),
+            _ => {}
         }
     }
 

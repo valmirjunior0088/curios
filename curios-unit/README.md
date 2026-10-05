@@ -48,6 +48,14 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 **Rejected.** Ordering a map where it is archived and nowhere else, which `curios-text`'s `OrderedMap` does: it orders the map's own entries, and not a list built by walking the map. Comparing units up to what moved, which leaves a record nothing can compare by its digest.
 
+### A stored unit says what its items mean, not where they were written or how they were come by
+
+**Decision.** A unit is serialized for a slot by one function, `Unit::stored`, which hash-conses its elaborated module in a table of its own first: one node for each structure as it is spelled, built over its canonical children, under no position (`curios_core::Sharing`). The prelude's images are consed by the same pass where they are built. The lowered module is stored as it was built. In memory a unit keeps what elaboration gave it.
+
+**Rationale.** A unit compiled over a baseline reuses items elaborated from an earlier text, so a stored item that kept its positions would be stored at lines it no longer has, with the old text beside the new; and an item reused by pointer shares nothing with the items elaborated around it, where a whole compile's share by construction. Consed and without positions, an item elaborated now and the same item reused are the same nodes, which is what lets a recompiled unit be held to the bytes of a whole one. It is also what a restored unit costs: every compilation restores the prelude whole, and a node written once is read once. The pass runs where a unit is serialized because it builds a node for every node of the module, and a unit that is neither filed nor followed, a keystroke's, is never serialized. A binder's name is kept because it is part of the text: a report spells a signature by it, and the diff an item-level recompile makes reads it.
+
+**Rejected.** Consing up to α, which hands a structure the node of the first one equal to it up to its binders' names, and a signature the parameter names of another declaration. Handing a rebuilt node back when its payload is unchanged, as every other traversal does: under a consing visit the payload is always unchanged, so the first node met of a structure would keep every duplicate beneath it. A table shared with the lowered module, which keeps its positions and so shares no node with a module that keeps none. Consing where a unit is assembled, which every keystroke would pay for a unit it never stores. A field adapter on the unit's module in place of a function, which runs the pass once to serialize and once to resolve.
+
 ### The erased arena is the fold's, not the unit's
 
 **Decision.** The arena a `Unit` carries is cumulative from the first unit forward — each unit's erasure resumes over the previous one's — never an independent arena numbered from zero.
