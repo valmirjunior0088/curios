@@ -29,13 +29,10 @@ pub(super) fn elaborate_func_type(
             let written = cursor.written();
             let name = cursor.advance_fresh(|hint| context.fresh_for(hint, written));
             // Assume the *rebuilt* domain: insertion saturates applications during elaboration, and a lowered (under-applied) type leaking into later reduction would open a telescope at the wrong arity. A `use` binder additionally joins the witness scope: the rest of the type may itself need resolution through it.
-            match mark {
-                Plicity::Witness => {
-                    check_witness_domain(context, &domain)?;
-                    context.assume_witness(&name, &domain);
-                }
-                _ => context.assume(&name, &domain),
+            if mark == Plicity::Witness {
+                check_witness_domain(context, &domain)?;
             }
+            context.enter(&name, &domain, mark);
             domains.push((mark, name, domain));
         }
 
@@ -357,7 +354,7 @@ pub(super) fn elaborate_apply(
         .collect::<Vec<_>>();
     let marks = ft.plicities();
     let fills = align(&marks, &written).map_err(|misaligned| match misaligned {
-        Misaligned::Plain => {
+        Misaligned::Missing | Misaligned::Extra { .. } => {
             let explicit = |marks: &[Plicity]| {
                 marks
                     .iter()

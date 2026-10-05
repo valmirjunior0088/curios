@@ -1071,7 +1071,7 @@ fn elaborate_induct_match(
     Ok((rebuilt, result_type))
 }
 
-/// Open a case's instantiated telescope under `labels`, each assumed at its declared (dependent) type, and answer the index targets the signature terminates in, stated over those binders. The caller holds the frame the assumptions live in.
+/// Open a case's instantiated telescope under `labels`, each entered at its declared (dependent) type under its payload's mark, and answer the index targets the signature terminates in, stated over those binders. The caller holds the frame the assumptions live in.
 ///
 /// A written arm and an omitted one open their case the same way, so inversion is put the same question about both — which is also the question the kernel puts, its callers reaching the unifier through a payload open that assumes every binder.
 fn assume_payload(
@@ -1084,7 +1084,10 @@ fn assume_payload(
         let (_, type_) = cursor
             .entry()
             .expect("a case's binders parallel its telescope");
-        context.assume(label, &type_);
+        let mark = cursor
+            .mark()
+            .expect("a case's binders parallel its telescope");
+        context.enter(label, &type_, mark);
         cursor.advance(Term::free_var(label));
     }
 

@@ -30,7 +30,7 @@ use {
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
         UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped,
     },
-    curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
+    curios_utilities::{Entropy, Mount, Plicity, Qualifier, Span, SyntaxRegistry},
     std::{
         cell::Cell,
         collections::{BTreeMap, BTreeSet},
@@ -815,6 +815,16 @@ impl Context {
     pub(crate) fn assume_witness(&mut self, name: &Free, type_: &Term) {
         self.assume(name, type_);
         self.frames.push_witness_binder(name, type_);
+    }
+
+    /// Enter a telescope's member into scope under its mark: assumed at its type, and, where the mark is `use`, in the witness scope as well, so resolution in what follows finds it.
+    ///
+    /// **The one way a walk enters a member it opens**, whatever the telescope — a function type's, a lambda's, a declaration's parameters, a constructor's payload in a signature or in an arm, a structure's fields — so what a mark means where a telescope is opened is said here and at no site.
+    pub(crate) fn enter(&mut self, name: &Free, type_: &Term, mark: Plicity) {
+        match mark {
+            Plicity::Witness => self.assume_witness(name, type_),
+            Plicity::Explicit | Plicity::Implicit => self.assume(name, type_),
+        }
     }
 
     pub(crate) fn witness_scope(&self) -> &[(Free, Term)] {

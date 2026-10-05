@@ -322,7 +322,7 @@ pub(super) fn elaborate_struct(
         Misaligned::Surplus { member } => {
             Error::hidden_member_without_slot(Plicity::Witness).at_opt(written[member].2.span())
         }
-        Misaligned::Plain | Misaligned::Mark { .. } => {
+        Misaligned::Missing | Misaligned::Extra { .. } | Misaligned::Mark { .. } => {
             unreachable!(
                 "a literal's plain fields are counted, and its hidden entries are all `use`"
             )
@@ -498,22 +498,19 @@ pub(super) fn elaborate_struct_spread(
                 .collect::<Vec<_>>()
         };
 
-        // The entries after the spread, in written order, over one cursor: the first position an entry may still claim. A labeled override claims its field, found ahead of the cursor, so the written overrides are an order-preserving subsequence of the fields; positional values would be ambiguous across the spread's gaps, so every plain override is labeled. A `use` entry claims the next superclass edge at or after the cursor — the alignment rule ([`align`]) with the labeled overrides for the plain members written, so between two of them the edges are written from the first. An edge written `use _` is claimed and left as the spread leaves it.
-        let mut overrides: Vec<Option<&Term>> = vec![None; field_telescope.len()];
-        let mut cursor = 0;
-        for (entry, field) in entries[1..].iter().zip(&fields[1..]) {
+        // The entries after the spread, in written order. A labeled override names its field, and the overrides are an order-preserving subsequence of the fields: positional values would be ambiguous across the spread's gaps, so every plain override is labeled.
+        let mut claimed: Vec<usize> = Vec::new();
+        for entry in &entries[1..] {
             match entry {
                 StructEntry::Field(Some(written)) => {
                     let named = |position: &usize| {
                         !is_edge(*position) && labels[*position] == written.as_str()
                     };
-                    match (cursor..labels.len()).find(named) {
-                        Some(position) => {
-                            overrides[position] = Some(field);
-                            cursor = position + 1;
-                        }
-                        // Found only behind the cursor: repeated, out of order, or written after a `use` entry whose edge follows it.
-                        None if (0..cursor).any(|position| named(&position)) => {
+                    let from = claimed.last().map_or(0, |last| last + 1);
+                    match (from..labels.len()).find(named) {
+                        Some(position) => claimed.push(position),
+                        // Found only among the fields already passed: repeated, or out of order.
+                        None if (0..from).any(|position| named(&position)) => {
                             return Err(Error::spread_override_out_of_order(
                                 name.symbol(),
                                 written.to_string(),
@@ -532,18 +529,43 @@ pub(super) fn elaborate_struct_spread(
                 StructEntry::Field(None) => {
                     return Err(Error::unlabeled_spread_override(name.symbol()));
                 }
-                StructEntry::Use => {
-                    let Some(position) = (cursor..labels.len()).find(|position| is_edge(*position))
-                    else {
-                        return Err(Error::hidden_member_without_slot(Plicity::Witness)
-                            .at_opt(field.span()));
-                    };
-                    if !is_placeholder(context, field) {
-                        overrides[position] = Some(field);
-                    }
-                    cursor = position + 1;
-                }
+                StructEntry::Use => {}
                 StructEntry::Spread => unreachable!("spread multiplicity was validated"),
+            }
+        }
+
+        // The fields the overrides name are the plain members written, and the `use` entries meet the edges as hidden members meet their slots anywhere ([`align`]): between two overrides the edges are written from the first. So the slots an entry may claim are every edge and each field an override names, and a field the spread copies is no slot at all.
+        let claimable = (0..labels.len())
+            .filter(|position| is_edge(*position) || claimed.contains(position))
+            .collect::<Vec<_>>();
+        let claimable_marks = claimable
+            .iter()
+            .map(|position| slots[*position])
+            .collect::<Vec<_>>();
+        let marks = entries[1..]
+            .iter()
+            .map(|entry| match entry {
+                StructEntry::Use => Plicity::Witness,
+                StructEntry::Field(_) | StructEntry::Spread => Plicity::Explicit,
+            })
+            .collect::<Vec<_>>();
+        let fills = align(&claimable_marks, &marks).map_err(|misaligned| match misaligned {
+            Misaligned::Surplus { member } => Error::hidden_member_without_slot(Plicity::Witness)
+                .at_opt(fields[1 + member].span()),
+            Misaligned::Missing | Misaligned::Extra { .. } | Misaligned::Mark { .. } => {
+                unreachable!(
+                    "the plain slots are the overrides written, and a spread's hidden entries are all `use`"
+                )
+            }
+        })?;
+
+        let mut overrides: Vec<Option<&Term>> = vec![None; field_telescope.len()];
+        for (position, fill) in claimable.iter().zip(fills) {
+            let Some(member) = fill else { continue };
+            let field = &fields[1 + member];
+            // An edge written `use _` is claimed and left as the spread leaves it.
+            if slots[*position] == Plicity::Explicit || !is_placeholder(context, field) {
+                overrides[*position] = Some(field);
             }
         }
 

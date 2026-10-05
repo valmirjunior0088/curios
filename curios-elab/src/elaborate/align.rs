@@ -1,6 +1,6 @@
 //! How the members written at a site are matched to the slots of the telescope they fill.
 //!
-//! One rule serves a call's arguments, a lambda's binders and a concept literal's entries. Plain members are always written, in order. Between two plain members the hidden ones — `@` and `use` — are written in order from the first of their run, and the rest of the run may be left out. A written member's slot is therefore its position in its run, never the next slot of its mark: over `(@A: Type, use Show(A), @B: Type, use Show(B), a: A, b: B)`, `(@B, a, b)` fills `A`'s slot, and `(use dict, a, b)` is refused, since the run opens with `@`.
+//! One rule serves a call's arguments, a lambda's binders, a concept literal's entries and the entries after a spread. Plain members are always written, in order. Between two plain members the hidden ones — `@` and `use` — are written in order from the first of their run, and the rest of the run may be left out. A written member's slot is therefore its position in its run, never the next slot of its mark: over `(@A: Type, use Show(A), @B: Type, use Show(B), a: A, b: B)`, `(@B, a, b)` fills `A`'s slot, and `(use dict, a, b)` is refused, since the run opens with `@`.
 //!
 //! **One cursor, moving forward, is the whole rule.** At a hidden slot the next written member either carries the slot's mark and fills it, or is plain — or absent — and the slot is left to the elaborator; a hidden member of the other mark is out of order. Since the cursor never moves back, the written members of a run are a prefix of it with nothing kept to say so. Which slot a member fills depends on nothing written before it but how many there were, where three queues — one per mark — made `f(x, use d)` and `f(use d, @A, x)` the same call.
 //!
@@ -14,8 +14,10 @@ mod tests;
 /// How written members failed to meet their slots. Positions are 0-based: `member` among the written members, `slot` among the telescope's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Misaligned {
-    /// The plain members written are not the plain slots, in number.
-    Plain,
+    /// A plain slot with no plain member written for it.
+    Missing,
+    /// A plain member written with no plain slot left for it.
+    Extra { member: usize },
     /// A hidden member written where a hidden slot of the other mark stands.
     Mark { member: usize, slot: usize },
     /// A hidden member with no slot left in its run: written after the run's last slot, or after the plain member the run precedes.
@@ -37,7 +39,7 @@ pub(crate) fn align(
                 cursor += 1;
             }
             (Plicity::Explicit, Some(_)) => return Err(Misaligned::Surplus { member: cursor }),
-            (Plicity::Explicit, None) => return Err(Misaligned::Plain),
+            (Plicity::Explicit, None) => return Err(Misaligned::Missing),
             (_, Some(Plicity::Explicit) | None) => fills.push(None),
             (mark, Some(member)) if mark == member => {
                 fills.push(Some(cursor));
@@ -54,7 +56,7 @@ pub(crate) fn align(
 
     match written.get(cursor) {
         None => Ok(fills),
-        Some(Plicity::Explicit) => Err(Misaligned::Plain),
+        Some(Plicity::Explicit) => Err(Misaligned::Extra { member: cursor }),
         Some(_) => Err(Misaligned::Surplus { member: cursor }),
     }
 }

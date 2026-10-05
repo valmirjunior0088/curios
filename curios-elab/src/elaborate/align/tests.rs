@@ -81,6 +81,6 @@ fn a_trailing_run_is_written_from_its_first_slot() {
 
 #[test]
 fn plain_members_are_exactly_the_plain_slots() {
-    assert_eq!(align(&JOIN, &[]), Err(Misaligned::Plain));
-    assert_eq!(align(&JOIN, &[P, P]), Err(Misaligned::Plain));
+    assert_eq!(align(&JOIN, &[]), Err(Misaligned::Missing));
+    assert_eq!(align(&JOIN, &[P, P]), Err(Misaligned::Extra { member: 1 }));
 }

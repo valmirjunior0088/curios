@@ -108,7 +108,7 @@ type Members = Vec<(Plicity, Free, Term)>;
 
 /// Walk a (params-first) telescope, checking each binder's type against `Type` under the earlier binders (fresh-gensym, assume), and return the rebuilt `(mark, label, type)` entries alongside the telescope's terminal — opened under those binders. Runs in the caller's frame; the same gensym-then-relabel discipline as `elaborate_tuple_type`.
 ///
-/// **Each member is entered under the mark its entry states.** A `use` entry joins the witness scope as well as the ordinary one, so resolution in the *later* entries' types finds it — which is what a function telescope does for a `use` premise ([`super::binding`]'s `assume_slot`), and what a concept's superclass edge needs to be visible to the field types below it.
+/// **Each member is entered under the mark its entry states.** A `use` entry joins the witness scope as well as the ordinary one, so resolution in the *later* entries' types finds it — which is what a function telescope does for a `use` premise, and what a concept's superclass edge needs to be visible to the field types below it ([`Context::enter`]).
 fn check_telescope_entries<B: Bound>(
     context: &mut Context,
     telescope: Telescope<B>,
@@ -119,18 +119,10 @@ fn check_telescope_entries<B: Bound>(
         let mark = cursor.mark().expect("a mark stands at an entry");
         let rebuilt = check_is_sort(context, &ty)?.0;
         let label = cursor.advance_fresh(|hint| context.fresh(hint));
-        assume_entry(context, &label, &rebuilt, mark);
+        context.enter(&label, &rebuilt, mark);
         entries.push((mark, label, rebuilt));
     }
     Ok((entries, cursor.body().expect("a cursor past every entry")))
-}
-
-/// Assume one telescope entry, joining the witness scope when the entry is a `use` binder. The declaration-side twin of `super::binding`'s `assume_slot`.
-fn assume_entry(context: &mut Context, label: &Free, type_: &Term, plicity: Plicity) {
-    match plicity {
-        Plicity::Witness => context.assume_witness(label, type_),
-        _ => context.assume(label, type_),
-    }
 }
 
 /// Open an already-elaborated telescope: assume one fresh binder per entry and hand the entries back, without checking them again.
@@ -145,7 +137,7 @@ fn assume_telescope_entries<B: Bound>(
     while let Some((_, ty)) = cursor.entry() {
         let mark = cursor.mark().expect("a mark stands at an entry");
         let label = cursor.advance_fresh(|hint| context.fresh(hint));
-        assume_entry(context, &label, &ty, mark);
+        context.enter(&label, &ty, mark);
         entries.push((mark, label, ty));
     }
     (entries, cursor.body().expect("a cursor past every entry"))

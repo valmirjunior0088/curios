@@ -6,7 +6,7 @@ It is independent of every other spec. [Typed patterns](01-typed-patterns.md) la
 
 ## What this builds on
 
-- **The rule, where it holds.** `align` (`curios-elab/src/elaborate/align.rs`) matches written members to slots: plain members are written, in order, and between two of them the hidden ones are written from the first of their run, the rest left out. A call (`elaborate_apply`) and a concept literal (`elaborate_struct`) call it; a lambda (`elaborate_func_check`) and a spread (`elaborate_struct_spread`) each walk the same rule by hand.
+- **The rule, where it holds.** `align` (`curios-elab/src/elaborate/align.rs`) matches written members to slots: plain members are written, in order, and between two of them the hidden ones are written from the first of their run, the rest left out. A call (`elaborate_apply`), a lambda (`elaborate_func_check`), a concept literal (`elaborate_struct`) and the entries after a spread (`elaborate_struct_spread`) each call it, and a member a walk opens is entered under its mark by one function (`Context::enter`).
 - **A slot left out is filled by its mark.** `insert_auto_argument` (`curios-elab/src/elaborate/apply.rs`) fills an `@` slot by unification, by reduction to `True`, or by `entail` from the facts in scope, and a `use` slot by resolution.
 - **A hidden member left out is still in scope.** An unnamed `@` binder's proposition is a fact wherever its telescope is opened: in a definition's body, in an arm, whose payload `assume_payload` assumes, and one level down in a structure- or tuple-typed hypothesis (`Reader::hypothesis`, `curios-elab/src/entailment/facts.rs`). A `use` member is in the witness scope.
 - **A constructor's payload declares `@`** (`parse_induct_payload_field`), and construction fills it as any call does, a constructor being a function: `/std/Io/Chunk/chunk(b)` over `chunk(bytes: Bytes, @some: Holds(0 < Bytes/len(bytes)))`.
@@ -51,12 +51,11 @@ Read from the code and from probes of the compiler at `87189c97d`, the counts ov
 
 ## Stages
 
-1. **One declare, one fill, one open.** Decision 5: the lambda's walk and the spread's call `align`, and every site enters a member through one function. No verdict moves.
-2. **An arm opens by the rule.** Decision 6. Check: `push(head, tail)`, `refl()`, and `chunk(bytes)` with its bound a fact in the arm; each misalignment by its wording; a group of differing rows refused as today.
-3. **A written position counts plain members.** Decision 7. Check: over a concept value `.0` is the first method and `Over { over }` binds it; a mark in a struct pattern is refused by its rule.
-4. **A structure's field declares `@`.** Decision 8, through the grammar, the printer and the editors. Check: a fixture per form, the spread both ways, a `Spell` round trip, and a hidden field ahead of a plain one read by pattern and by position.
-5. **A bound a fact states is filled by it.** Decision 9. Check: an opaque `Holds(b)` under `@Holds(b)`, a field one level down, and a refusal two levels down.
-6. **`/std` reads by the rule.** The arms that write only `@_` drop it, and a structure's proof field becomes `@` where a literal sheds a written proof by it.
+1. **An arm opens by the rule.** Decision 6. Check: `push(head, tail)`, `refl()`, and `chunk(bytes)` with its bound a fact in the arm; each misalignment by its wording; a group of differing rows refused as today.
+2. **A written position counts plain members.** Decision 7. Check: over a concept value `.0` is the first method and `Over { over }` binds it; a mark in a struct pattern is refused by its rule.
+3. **A structure's field declares `@`.** Decision 8, through the grammar, the printer and the editors. Check: a fixture per form, the spread both ways, a `Spell` round trip, and a hidden field ahead of a plain one read by pattern and by position.
+4. **A bound a fact states is filled by it.** Decision 9. Check: an opaque `Holds(b)` under `@Holds(b)`, a field one level down, and a refusal two levels down.
+5. **`/std` reads by the rule.** The arms that write only `@_` drop it, and a structure's proof field becomes `@` where a literal sheds a written proof by it.
 
 ## Verification
 

@@ -1,5 +1,5 @@
 use {
-    super::{check_witness_domain, insert_auto_argument},
+    super::{Misaligned, align, check_witness_domain, insert_auto_argument},
     crate::{
         BinderSite, Context, DomainScope, EmbeddingSite, Error, HeadKey, Mode, ParkedWork,
         SlotPositions, WitnessKey, attempt_witness_goal, check, check_is_sort, check_rec_totality,
@@ -985,15 +985,13 @@ pub(super) fn elaborate_infix(
     Ok((rebuilt, result_type))
 }
 
-/// Check a lambda against an expected function type, aligning the lambda's own binders with the expected telescope *by plicity* and inserting every omitted hidden (implicit/witness) expected binder — the lambda-side counterpart of application-side hidden-argument insertion.
+/// Check a lambda against an expected function type, matching the lambda's own binders to the expected telescope's slots by the alignment rule ([`align()`]) and inserting every hidden — implicit or witness — slot no binder was written for: the lambda-side counterpart of hidden-argument insertion at a call.
 ///
-/// Two queues advance together: the lambda's written telescope (whose `Done` is the body) with its written plicities, and the expected type's telescope (whose `Done` is the output) with its canonical plicities. At each step:
+/// The marks decide the whole match before a domain is read: the plain binders are the explicit slots, in order, and between two of them the hidden binders written are the first of their run. The walk then visits the expected slots in order. A slot a binder was written for consumes it — the written domain (a hole when the annotation was omitted, or the annotation itself) is unified against the expected domain via `expect` — and a hidden slot with none is bound to a fresh variable at the expected domain.
 ///
-/// 1. matching plicities consume both — the written domain (a hole when the annotation was omitted, or the annotation itself) is unified against the expected domain via `expect`; 2. a mismatch at a hidden expected slot inserts that binder — a real fresh bound variable checked at the expected domain — and keeps the written binder for the following expected slot; 3. a mismatch at an *explicit* expected slot is a plicity error: an explicit slot is never skipped, and a marked binder can never claim one.
+/// A refusal is the misalignment's: an explicit slot with no binder is a missing-parameter arity error counting the explicit slots, a binder with no slot left is surplus, a hidden binder at a hidden slot of the other mark is out of order, and a marked binder standing at an explicit slot claims what no mark may.
 ///
-/// Once the written binders run out, every remaining hidden expected slot is synthesized; a leftover explicit slot is a missing-parameter arity error, and a leftover written binder is a too-many-parameters arity error. Alignment is positional by plicity, not by binder label.
-///
-/// The rebuilt lambda carries the *complete canonical* telescope — inserted binders included — and the expected type's full plicity vector, so it re-checks against the same type consuming every binder directly and inserting nothing (idempotence, required for caching, parked-work replay, zonk, and archive restoration). Each rebuilt domain is the *expected* domain rather than the written hole, so re-closing it captures any free names it mentions — keeping nested lambda domains de-Bruijn-correct for `zonk`/`erase`.
+/// The rebuilt lambda carries the *complete canonical* telescope — inserted binders included, each under its slot's mark — so it re-checks against the same type consuming every binder directly and inserting nothing (idempotence, required for caching, parked-work replay, zonk, and archive restoration). Each rebuilt domain is the *expected* domain rather than the written hole, so re-closing it captures any free names it mentions — keeping nested lambda domains de-Bruijn-correct for `zonk`/`erase`.
 pub(super) fn elaborate_func_check(
     context: &mut Context,
     telescope: &Telescope<Term>,
@@ -1018,93 +1016,91 @@ pub(super) fn elaborate_func_check(
             .count()
     }
 
-    // Assume an inserted or consumed binder into the ordinary scope, joining the witness scope when the *expected* slot is a `use` binder so resolution in later domains and the body finds it there.
-    fn assume_slot(context: &mut Context, name: &Free, plicity: Plicity, type_: &Term) {
-        match plicity {
-            Plicity::Witness => context.assume_witness(name, type_),
-            _ => context.assume(name, type_),
+    // Where the binder at `member` was written, when the lowering located it: its annotation's place, read off the unopened telescope.
+    fn written_at(telescope: &Telescope<Term>, member: usize) -> Option<Span> {
+        let mut link = telescope;
+        for _ in 0..member {
+            match link {
+                Telescope::Cons(_, _, rest) => link = rest.body(),
+                Telescope::Done(_) => return None,
+            }
+        }
+        match link {
+            Telescope::Cons(_, domain, _) => domain.span(),
+            Telescope::Done(_) => None,
         }
     }
 
-    let mut domains: Vec<(Plicity, Free, Term)> = Vec::new();
-    let body = context.with_frame(|context| {
-        let e_plicities = ft.plicities().to_vec();
-        let expected_telescope = ft.telescope;
-        let mut written = telescope.cursor();
-        let mut expecting = expected_telescope.cursor();
-
-        loop {
-            let (w_idx, e_idx) = (written.args().len(), expecting.args().len());
-
-            match (written.entry(), expecting.entry()) {
-                (None, None) => {
-                    let body = written.body().expect("a cursor past every entry");
-                    let output = expecting.body().expect("a cursor past every entry");
-                    break check(context, &body, output);
-                }
-                // Written binders are exhausted: synthesize every remaining expected slot, which must be hidden — an explicit slot is never inserted (a missing-parameter arity error instead).
-                (None, Some((_, domain))) => {
-                    let plicity = e_plicities[e_idx];
-                    if plicity == Plicity::Explicit {
-                        // Explicit slots against explicit binders, not the totals: the hidden slots are inserted rather than written, so a total names a count the author may not write — and did, pointing at the very spelling the surplus arm below refuses.
-                        break Err(Error::wrong_number_of_arguments(
-                            explicit(&e_plicities),
-                            explicit(written_plicities),
-                        ));
-                    }
-                    let name = context.fresh(None);
-                    let x = Term::free_var(&name);
-                    assume_slot(context, &name, plicity, &domain);
-                    domains.push((plicity, name, domain));
-                    expecting.advance(x);
-                }
-                // Written binders remain but the expected telescope ended: every parameter is claimed and these claim nothing. No count pair says that — `(x, @A) => …` against `(x: Nat) -> Nat` agrees on totals *and* on explicit counts — so the surplus itself is the diagnosis.
-                (Some(_), None) => {
-                    break Err(Error::surplus_func_binders(
-                        telescope.len() - w_idx,
-                        e_plicities.len(),
-                    ));
-                }
-                (Some((w_hint, w_domain)), Some((e_hint, e_domain))) => {
-                    let w_plicity = written_plicities[w_idx];
-                    let e_plicity = e_plicities[e_idx];
-                    if w_plicity == e_plicity {
-                        // Consume both. Unify the *rebuilt* written annotation against the expected domain (`expect` reduces both sides; an omitted annotation is a hole `check` births and `expect` solves to the expected domain).
-                        let w_domain = check_is_sort(context, &w_domain)?.0;
-                        expect(context, term, &w_domain, &e_domain)?;
-                        let name = context.fresh_for(w_hint, written.written());
-                        let x = Term::free_var(&name);
-                        assume_slot(context, &name, e_plicity, &e_domain);
-                        domains.push((e_plicity, name, e_domain));
-                        written.advance(x.clone());
-                        expecting.advance(x);
-                    } else if e_plicity != Plicity::Explicit && w_plicity != Plicity::Explicit {
-                        // A hidden binder written where a hidden slot of the other mark stands. Hidden binders are written in order from the first of their run ([`align`]'s rule, met here one slot at a time), so this one skipped a slot it may leave out only together with everything after it.
-                        break Err(Error::hidden_member_out_of_order(
-                            w_plicity,
-                            e_plicity,
-                            e_hint.unwrap_or_default(),
-                        ));
-                    } else if e_plicity != Plicity::Explicit {
-                        // Insert this hidden expected slot; the written plain binder waits for the explicit slot it binds.
-                        let name = context.fresh(None);
-                        let x = Term::free_var(&name);
-                        assume_slot(context, &name, e_plicity, &e_domain);
-                        domains.push((e_plicity, name, e_domain));
-                        expecting.advance(x);
-                    } else {
-                        // A marked written binder reached an explicit slot.
-                        break Err(Error::BinderPlicityMismatch {
-                            site: BinderSite::Parameter,
-                            position: e_idx + 1,
-                            binder: e_hint.unwrap_or_default().to_string(),
-                            expected: e_plicity,
-                            written: w_plicity,
-                        });
-                    }
-                }
+    let slots = ft.plicities();
+    let fills = align(&slots, written_plicities).map_err(|misaligned| match misaligned {
+        // Explicit slots against explicit binders, not the totals: the hidden slots are inserted rather than written, so a total names a count the author may not write — and did, pointing at the very spelling the surplus arm below refuses.
+        Misaligned::Missing => {
+            Error::wrong_number_of_arguments(explicit(&slots), explicit(written_plicities))
+        }
+        // Written binders remain but every slot is claimed, and these claim nothing. No count pair says that — `(x, @A) => …` against `(x: Nat) -> Nat` agrees on totals *and* on explicit counts — so the surplus itself is the diagnosis.
+        Misaligned::Extra { member } => {
+            Error::surplus_func_binders(written_plicities.len() - member, slots.len())
+        }
+        // A hidden binder written where a hidden slot of the other mark stands: it skipped a slot it may leave out only together with everything after it.
+        Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
+            written_plicities[member],
+            slots[slot],
+            ft.telescope.labels()[slot],
+        )
+        .at_opt(written_at(telescope, member)),
+        // A marked binder with no hidden slot left in its run. It stands at the explicit slot the plain binders before it have reached, which a mark can never claim, or past the last slot, where it claims nothing.
+        Misaligned::Surplus { member } => {
+            let plain_before = explicit(&written_plicities[..member]);
+            let reached = slots
+                .iter()
+                .enumerate()
+                .filter(|(_, slot)| **slot == Plicity::Explicit)
+                .map(|(index, _)| index)
+                .nth(plain_before);
+            match reached {
+                Some(slot) => Error::BinderPlicityMismatch {
+                    site: BinderSite::Parameter,
+                    position: slot + 1,
+                    binder: ft.telescope.labels()[slot].to_string(),
+                    expected: slots[slot],
+                    written: written_plicities[member],
+                },
+                None => Error::surplus_func_binders(written_plicities.len() - member, slots.len()),
             }
         }
+    })?;
+
+    let mut domains: Vec<(Plicity, Free, Term)> = Vec::new();
+    let body = context.with_frame(|context| {
+        let mut written = telescope.cursor();
+        let mut expecting = ft.telescope.cursor();
+
+        for (slot, fill) in slots.iter().zip(&fills) {
+            let (_, e_domain) = expecting.entry().expect("a mark stands at an entry");
+            let name = match fill {
+                // A binder was written for this slot. Unify the *rebuilt* written annotation against the expected domain (`expect` reduces both sides; an omitted annotation is a hole `check` births and `expect` solves to the expected domain).
+                Some(_) => {
+                    let (w_hint, w_domain) = written
+                        .entry()
+                        .expect("the alignment matched a written binder to this slot");
+                    let w_domain = check_is_sort(context, &w_domain)?.0;
+                    expect(context, term, &w_domain, &e_domain)?;
+                    let name = context.fresh_for(w_hint, written.written());
+                    written.advance(Term::free_var(&name));
+                    name
+                }
+                // A hidden slot no binder was written for: a real fresh bound variable, checked at the expected domain.
+                None => context.fresh(None),
+            };
+            // Under the *expected* slot's mark, so a `use` slot joins the witness scope and resolution in later domains and the body finds it there.
+            context.enter(&name, &e_domain, *slot);
+            expecting.advance(Term::free_var(&name));
+            domains.push((*slot, name, e_domain));
+        }
+
+        let body = written.body().expect("a cursor past every entry");
+        let output = expecting.body().expect("a cursor past every entry");
+        check(context, &body, output)
     })?;
 
     Ok((Term::func_marked(domains, body), expected))
@@ -1166,13 +1162,10 @@ pub(super) fn elaborate_func_infer(
             let plicity = plicities[domains.len()];
             let written = cursor.written();
             let name = cursor.advance_fresh(|hint| context.fresh_for(hint, written));
-            match plicity {
-                Plicity::Witness => {
-                    check_witness_domain(context, &domain)?;
-                    context.assume_witness(&name, &domain);
-                }
-                _ => context.assume(&name, &domain),
+            if plicity == Plicity::Witness {
+                check_witness_domain(context, &domain)?;
             }
+            context.enter(&name, &domain, plicity);
             domains.push((plicity, name, domain));
         }
 
