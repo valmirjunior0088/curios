@@ -6,7 +6,7 @@ _Mild opinions about your **rhetoric**. Strong feelings about your **arithmetic*
 
 Curios is a dependently typed programming language that compiles to WebAssembly. Types can depend on values, proofs live beside ordinary code, and the compiler is happy to double-check your math homework.
 
-[Playground](https://valmirjunior0088.github.io/curios/playground) · [Rust docs](https://valmirjunior0088.github.io/curios/docs/rust/curios/index.html) · [`/std` docs](https://valmirjunior0088.github.io/curios/docs/std/index.html) · [Language reference](documentation/syntax.md) · [Usage](documentation/usage.md) · [Releases](https://github.com/valmirjunior0088/curios/releases) · [Roadmap](documentation/roadmap.md)
+[Playground](https://valmirjunior0088.github.io/curios/playground) · [Rust docs](https://valmirjunior0088.github.io/curios/docs/rust/curios/index.html) · [`/std` docs](https://valmirjunior0088.github.io/curios/docs/std/index.html) · [Language reference](documentation/syntax.md) · [Usage reference](documentation/usage.md) · [Releases](https://github.com/valmirjunior0088/curios/releases) · [Roadmap](documentation/roadmap.md)
 
 [![Build](https://github.com/valmirjunior0088/curios/actions/workflows/check.yml/badge.svg)](https://github.com/valmirjunior0088/curios/actions/workflows/check.yml)
 [![Release](https://img.shields.io/github/v/release/valmirjunior0088/curios)](https://github.com/valmirjunior0088/curios/releases)
@@ -128,7 +128,7 @@ curios compile -o hello
 ./hello
 ```
 
-Dependencies, umbrellas, extra executables, and the rest of the command line live in [Usage](documentation/usage.md).
+Dependencies, umbrellas, extra executables, and the rest of the command line live in the [Usage reference](documentation/usage.md).
 
 ## Build from source
 
@@ -147,7 +147,7 @@ Running the tests, `cargo xtask test`, also needs [cargo-nextest](https://nexte.
 ## Go deeper
 
 - [Language reference](documentation/syntax.md) — the complete surface language, when you want to know what something means or how to spell it
-- [Usage](documentation/usage.md) — every subcommand, flag, and package concept the command line offers
+- [Usage reference](documentation/usage.md) — every subcommand, flag, and package concept the command line offers
 - [Design decisions](documentation/design) — one file per decision, in a directory per subject, when you want to know _why_ Curios is the way it is; a decision scoped to one crate lives in that crate's `README.md`
 - [Soundness board](xboard) — a ticket for every proof of `False` found in the checkers, filed by part of the judgment and run by `cargo xboard`; [the claim it stands for](documentation/design/soundness/the-soundness-board.md), with the argument for each rule in a directory beside it
 - [Development roadmap](documentation/roadmap.md) — what exists, what is pending, and the specifications for the pending half
