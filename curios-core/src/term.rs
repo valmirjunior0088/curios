@@ -1768,8 +1768,13 @@ impl Bound for Term {
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
         // **Guarded per level, so a descent can chain stack segments.** Every child re-enters here, which makes this the one place a check per level lives — the intent [`recurse`] states. Without it a walk that starts inside a segment runs to that segment's end with no chance to map another: a `NatAdd` chain of a few thousand links, five debug frames per link, would exhaust the 32 MiB `grown` reserve under the kernel's conversion history, which `capture`s a whole normal form to key a goal, and die as a bare `SIGBUS` with nothing on stderr. The iterative spine path below is no substitute — it is gated on the rewriting modes, and `capture` runs in `Plain`.
+        // Answered before the level is guarded or a table asked: a term the visit leaves as it is costs one comparison.
+        if visit.passes_over(self) {
+            return self.clone();
+        }
+
         recurse(|| {
-            if visit.memoizes() {
+            if visit.remembers(Rc::strong_count(&self.inner)) {
                 let key = Rc::as_ptr(&self.inner) as usize;
                 if let Some(hit) = visit.memo_get(key, self) {
                     return hit;
@@ -1828,9 +1833,6 @@ impl Term {
         if visit.universes_only() && !self.has_universe_data() {
             return self.clone();
         }
-        if visit.prune() && self.reach() <= visit.term_depth() {
-            return self.clone();
-        }
         if (visit.universes_only() || visit.rewrites_terms())
             && matches!(&**self, Subterm::Apply(_) | Subterm::Variant(_))
         {
@@ -1853,7 +1855,7 @@ impl Term {
     ///
     /// The alternative is a fresh `Rc` whose caches start empty, discarding every `hash`, `frees` and `scalars` fill the original had earned. That is affordable when a rewrite rewrites something and pure waste when it does not — and *does not* is the common case: `project_erased_universes` hands back an equal term on nearly every call over a web of definitions each naming the one before it twice.
     ///
-    /// No caller can tell the difference, because three of them already receive the original node: [`Visit::universes_only`] and [`Visit::prune`] both short-circuit to `self.clone()`, and `Mode::Sharing` substitutes a canonical node outright. A span lives on this wrapper rather than on the node, so sharing one node across occurrences is representable.
+    /// No caller can tell the difference, because three of them already receive the original node: [`Visit::universes_only`] and [`Visit::passes_over`] both short-circuit to `self.clone()`, and `Mode::Sharing` substitutes a canonical node outright. A span lives on this wrapper rather than on the node, so sharing one node across occurrences is representable.
     fn rebuilt(&self, subterm: Subterm) -> Self {
         if subterm == **self {
             return self.clone();

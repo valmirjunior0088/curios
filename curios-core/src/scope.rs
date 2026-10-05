@@ -174,7 +174,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
         self.reach() == 0
     }
 
-    /// De Bruijn weakening: add `amount` to every loose bound index (`>= depth`), making room for that many new enclosing binders when a term is moved under them. Index-monotonic, so the traversal prunes by `reach`.
+    /// De Bruijn weakening: add `amount` to every loose bound index (`>= depth`), making room for that many new enclosing binders when a term is moved under them. Index-monotonic, so the traversal prunes by `reach`, and a node more than one owner holds is shifted once per depth.
     fn shift(&self, amount: usize) -> Self {
         self.traverse(&mut Visit::pruning(|depth, var| {
             var.as_bound()
@@ -185,9 +185,10 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
 
     /// The closing half of the locally-nameless discipline: turn free occurrences of `binders` into bound indices (position in `binders`, offset by the current depth) while shifting already-loose indices past the new binders. `Scope::close` is this plus the name bookkeeping. Rewrites *free* names, so it can never be pruned by `reach`.
     ///
-    /// Memoized on node identity and depth, so a DAG-shaped input — the weak-head form of a web of definitions each naming the one before it twice, whose tree is `2^n` — is captured in its own size: the kernel's conversion history captures every goal it enters, and would capture that web's tree at every one.
+    /// Memoized on node identity and depth, so a DAG-shaped input — the weak-head form of a web of definitions each naming the one before it twice, whose tree is `2^n` — is captured in its own size: the kernel's conversion history captures every goal it enters, and would capture that web's tree at every one. And where every binder is a local, a subterm with no local free and no loose index to shift is handed back unwalked, since nothing in it is a binder's occurrence: a goal's closed operands are most of it.
     fn capture(&self, binders: &[&Free]) -> Self {
-        self.traverse(&mut Visit::shared_at_depth(|depth, var| {
+        let local = binders.iter().all(|binder| binder.is_local());
+        self.traverse(&mut Visit::capturing(local, |depth, var| {
             var.as_free()
                 .and_then(|name| {
                     binders
@@ -203,7 +204,7 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
         }))
     }
 
-    /// The opening half of the locally-nameless discipline: substitute the outermost `terms.len()` loose bound indices with `terms` (each shifted by the depth it lands under) and re-tighten the loose indices beyond them. `Scope::open` is this plus the arity check; effects depend only on indices `>= depth`, so the traversal prunes by `reach`.
+    /// The opening half of the locally-nameless discipline: substitute the outermost `terms.len()` loose bound indices with `terms` (each shifted by the depth it lands under) and re-tighten the loose indices beyond them. `Scope::open` is this plus the arity check; effects depend only on indices `>= depth`, so the traversal prunes by `reach`, and a node more than one owner holds is released once per depth.
     fn release(&self, terms: &[&Term]) -> Self {
         self.traverse(&mut Visit::pruning(|depth, var| {
             var.as_bound().and_then(|index| {
@@ -598,9 +599,11 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     }
 
     /// Whether the binder at position `index` (0 = first/outermost label) is referenced anywhere in the body. A bound var refers to this binder iff its de Bruijn index equals `index` plus the number of binders entered since — which `Visit` tracks as `depth`. Used by erasure to spot an eliminator whose induction hypothesis is dead: that arm is a case-split, not a fold.
+    ///
+    /// A read riding on a pruning visit: a subterm whose `reach` is within the depth it stands at holds no index that could be this binder's, the closed type a `let` states among them, and a node more than one owner holds is read once per depth. Rebuilding every occurrence to read it cost a shared body its tree.
     pub fn uses(&self, index: usize) -> bool {
         let mut used = false;
-        self.body.traverse(&mut Visit::new(|depth, var: &Var| {
+        self.body.traverse(&mut Visit::pruning(|depth, var: &Var| {
             if var.as_bound() == Some(index + depth) {
                 used = true;
             }
@@ -742,6 +745,8 @@ enum Memo {
     None,
     /// Keyed on input node identity. Addresses are stable for the traversal because the caller's value holds every node alive.
     ByNode(HashMap<usize, Remembered>),
+    /// [`Memo::ByNodeAndDepth`] for the nodes more than one owner holds, and nothing for the rest: `shift` and `release` run at every β step over terms a few nodes large, where a table entry per node would cost more than the walk, and a node is met twice only where two owners hold it. Lean's kernel keeps the same rule in the `replace` its substitution and lifting go through — a cache of the shared subterms, by offset.
+    SharedByNodeAndDepth(HashMap<(usize, usize, usize), Remembered>),
     /// Keyed on input node identity *and* both binder depths, for a visit whose effect depends on the depth it runs at — `capture` is the case, where a depth-blind memo would hand a second occurrence the wrong indices. The universe binder depth is in the key beside the term's because a level rewrite reads it: a node under a `rec` group's universe context sits one universe binder deeper at the same term depth.
     ByNodeAndDepth(HashMap<(usize, usize, usize), Remembered>),
 }
@@ -798,6 +803,8 @@ enum Mode {
     Plain,
     /// Skip subtrees whose `reach` proves no loose index can be touched.
     Pruning,
+    /// [`Mode::Plain`] for a capture of local binders: skip subtrees with no local free and no loose index the capture would shift.
+    Capturing,
     /// A term-level pre-hook substitutes whole nodes before descending. A substituted node is not descended into.
     Rewriting(Rewrite),
     /// [`Mode::Rewriting`], visiting only nodes that carry universe data.
@@ -837,13 +844,16 @@ where
         }
     }
 
-    /// Like `new`, memoized on node identity and binder depth together — for a visit whose effect depends on the depth, which a depth-blind memo would answer wrongly. `capture` is the case. See [`Memo`] for when this is legal.
-    fn shared_at_depth(visit: F) -> Self {
+    /// `capture`'s visit: memoized on node identity and binder depth together, since its effect depends on the depth and a depth-blind memo would hand a second occurrence the wrong indices — see [`Memo`] for when that is legal. `local` says every binder being captured is a local, which is what lets it pass over a subterm that has none free.
+    fn capturing(local: bool, visit: F) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
             visit,
-            mode: Mode::Plain,
+            mode: match local {
+                true => Mode::Capturing,
+                false => Mode::Plain,
+            },
             memo: Memo::ByNodeAndDepth(HashMap::new()),
         }
     }
@@ -855,8 +865,8 @@ where
             universe_depth: 0,
             visit,
             mode: Mode::Pruning,
-            // **Inert, and there is a reason it must be.** `shift` and `release` are pure in the node and the depth, so [`Memo::ByNodeAndDepth`] would be *legal* here — it is not taken because it cannot help. A tree that expands exponentially is a reduction result, and a reduct substituted here is closed, so `reach` is zero and pruning already answers it in O(1) before a memo could; installed, it leaves every row of `curios`'s `str_literal_cost_measurements` byte-for-byte unchanged. Reopening it wants a workload where a substituted term is *open* and shared, which nothing in the corpus produces.
-            memo: Memo::None,
+            // `shift` and `release` are pure in the node and the depth, and the read `Scope::uses` rides on them latches, so a depth-keyed memo is legal. A closed subterm never reaches it — `reach` answers that one first — so it is asked only over an *open* shared term: a body under its binders that holds one node twice, which each walked once per path without it.
+            memo: Memo::SharedByNodeAndDepth(HashMap::new()),
         }
     }
 
@@ -980,14 +990,6 @@ impl<F> Visit<F>
 where
     F: FnMut(usize, &Var) -> Option<Subterm>,
 {
-    pub(crate) fn term_depth(&self) -> usize {
-        self.term_depth
-    }
-
-    pub(crate) fn prune(&self) -> bool {
-        matches!(self.mode, Mode::Pruning)
-    }
-
     /// Enter `amount` binders without visiting a whole scope body in one call — the peeled-chain counterpart of `visit_scope`, for a `Bound::traverse` impl that walks a `Let`/`Rec` spine one link at a time in a loop instead of recursing once per binding. Pair with `leave_scope` in the reverse order links were entered.
     pub(crate) fn enter_scope(&mut self, amount: usize) {
         self.term_depth += amount;
@@ -1050,6 +1052,7 @@ where
             }
             Mode::Plain
             | Mode::Pruning
+            | Mode::Capturing
             | Mode::RewritingLevels(_)
             | Mode::ErasingUniverses
             | Mode::Sharing(_) => None,
@@ -1092,12 +1095,32 @@ where
         !matches!(self.memo, Memo::None)
     }
 
+    /// Whether this visit remembers the rebuild of a node `owners` hold: every node for a table keyed on all of them, and only one more than a single owner holds for [`Memo::SharedByNodeAndDepth`].
+    pub(crate) fn remembers(&self, owners: usize) -> bool {
+        match self.memo {
+            Memo::None => false,
+            Memo::SharedByNodeAndDepth(_) => owners > 1,
+            Memo::ByNode(_) | Memo::ByNodeAndDepth(_) => true,
+        }
+    }
+
+    /// Whether this visit leaves `term` exactly as it is, which it may then hand back without a look inside: a pruning visit touches nothing below a term whose `reach` is within the depth it stands at, and a capture of local binders nothing in a term that has no local free besides.
+    pub(crate) fn passes_over(&self, term: &Term) -> bool {
+        match self.mode {
+            Mode::Pruning => term.reach() <= self.term_depth,
+            Mode::Capturing => !term.has_local_free() && term.reach() <= self.term_depth,
+            _ => false,
+        }
+    }
+
     /// The memoized rebuild of the input node at `key`, at the depths this visit currently stands at for the modes whose memo is depth-keyed, as the occurrence `at` would have it rebuilt — see [`Memo`] for its span.
     pub(crate) fn memo_get(&self, key: usize, at: &Term) -> Option<Term> {
         let remembered = match &self.memo {
             Memo::None => None,
             Memo::ByNode(memo) => memo.get(&key),
-            Memo::ByNodeAndDepth(memo) => memo.get(&(key, self.term_depth, self.universe_depth)),
+            Memo::SharedByNodeAndDepth(memo) | Memo::ByNodeAndDepth(memo) => {
+                memo.get(&(key, self.term_depth, self.universe_depth))
+            }
         }?;
 
         Some(remembered.for_occurrence(at))
@@ -1114,7 +1137,7 @@ where
             Memo::ByNode(memo) => {
                 memo.insert(key, remembered);
             }
-            Memo::ByNodeAndDepth(memo) => {
+            Memo::SharedByNodeAndDepth(memo) | Memo::ByNodeAndDepth(memo) => {
                 memo.insert((key, self.term_depth, self.universe_depth), remembered);
             }
         }

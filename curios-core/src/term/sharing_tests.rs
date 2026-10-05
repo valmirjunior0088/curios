@@ -233,7 +233,7 @@ fn the_per_occurrence_level_walk_asks_every_occurrence() {
     assert_eq!(asked.get(), 8);
 }
 
-/// Every walk this crate owns, over one doubling term — sixty levels, a tree no walk per path finishes and a graph of sixty-one nodes — answers in the graph's size, and each walk that rebuilds hands back a graph. A walk the crate adds joins this table, so one a change makes per-path again stalls its row here rather than waiting for a profile to find it; the fixtures above hold each walk's own contract beside it. `shift` and `release` are not rows: they prune by `reach` and remember nothing, so over an open shared term they walk every path.
+/// Every walk this crate owns, over one doubling term — sixty levels, a tree no walk per path finishes and a graph of sixty-one nodes — answers in the graph's size, and each walk that rebuilds hands back a graph. A walk the crate adds joins this table, so one a change makes per-path again stalls its row here rather than waiting for a profile to find it; the fixtures above hold each walk's own contract beside it. `shift`, `release` and the read of a binder's use run over the same sixty levels with a loose index at their base: `reach` prunes nothing of an open term, so only the node each remembers keeps them in the graph.
 #[test]
 fn every_walk_answers_a_doubling_term_in_its_own_size() {
     let x = Free::local(0, Some("x"));
@@ -241,6 +241,10 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
     let meta = UniverseMetaId(0);
     let base = Term::apply(Term::free_var(&x), [Term::type_at(Level::meta(meta))]);
     let term = doubled(base.clone(), 60);
+    let open = doubled(
+        Term::apply(Term::free_var(&x), [Term::var(Var::bound(0))]),
+        60,
+    );
 
     let rows: Vec<(&str, bool)> = vec![
         ("equality", term == doubled(base.clone(), 60)),
@@ -260,6 +264,16 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
             root_operands_shared(&project_erased_universes(&term)),
         ),
         ("capture", root_operands_shared(&term.capture(&[&x]))),
+        ("shift", root_operands_shared(&open.shift(1))),
+        (
+            "release",
+            root_operands_shared(&open.release(&[&Term::free_var(&y)])),
+        ),
+        (
+            "a binder's use read",
+            Scope::close(Two, &[&x, &y], term.clone()).uses(0)
+                && !Scope::close(Two, &[&x, &y], term.clone()).uses(1),
+        ),
         (
             "level differences",
             term.level_differences(
@@ -288,4 +302,44 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
     for (walk, answered) in rows {
         assert!(answered, "{walk} over a doubling term lost its graph");
     }
+}
+
+/// A capture of local binders hands back a subterm with no local free unwalked: nothing in it is a binder's occurrence, and nothing in it is a loose index to shift. Counted in looks, since a memoized walk of the same subterm would hand back the same node.
+///
+/// Mutation-checked: with the capture walking what it cannot change, the looks are those of the closed subterm's sixty levels.
+#[cfg(feature = "profile")]
+#[test]
+fn a_capture_of_local_binders_passes_over_a_closed_subterm() {
+    let x = Free::local(0, Some("x"));
+    let closed = doubled(Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))), 60);
+    let term = Term::tuple([closed, Term::free_var(&x)]);
+    // Warmed, so the count below is the capture's alone: `reach` and the flags are filled once per node.
+    let _ = term.reach();
+
+    take_looks();
+    let captured = term.capture(&[&x]);
+    let looks = take_looks();
+
+    assert!(!captured.mentions_free(&x));
+    assert!(looks < 20, "the capture looked at {looks} nodes");
+}
+
+/// A scope is read for a binder's use in its size, and a closed subterm of its body is not read at all: the closed type a `let` states is where a tower's tree was.
+///
+/// Mutation-checked: with the read rebuilding what `reach` proves it cannot find the binder in, the looks are those of the closed subterm's sixty levels.
+#[cfg(feature = "profile")]
+#[test]
+fn a_binders_use_is_read_without_entering_a_closed_subterm() {
+    let x = Free::local(0, Some("x"));
+    let y = Free::local(1, Some("y"));
+    let closed = doubled(Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))), 60);
+    let scope = Scope::close(Two, &[&x, &y], Term::tuple([closed, Term::free_var(&x)]));
+    let _ = scope.body().reach();
+
+    take_looks();
+    let used = (scope.uses(0), scope.uses(1));
+    let looks = take_looks();
+
+    assert_eq!(used, (true, false));
+    assert!(looks < 20, "the read looked at {looks} nodes");
 }

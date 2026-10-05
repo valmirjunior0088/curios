@@ -77,7 +77,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 ///
 /// # What it last printed
 ///
-/// Over the checkers of `e0cb8dccb`, every row accepted by both.
+/// Over the checkers of `aa026bb2e`, every row accepted by both.
 ///
 /// | tower | lines | elaborator units | elaborator looks | kernel units | kernel looks |
 /// | --- | --- | --- | --- | --- | --- |
@@ -86,7 +86,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 /// | chain, in a member | 12 | 27 292 | 85 613 | 29 254 | 142 950 |
 /// | chain, in a member | 16 | 27 292 | 61 648 | 29 254 | 143 226 |
 /// | calls | 12 | 27 292 | 56 113 | 29 254 | 141 977 |
-/// | calls | 16 | 27 292 | 57 901 | 29 254 | 142 221 |
+/// | calls | 16 | 27 292 | 57 901 | 29 254 | 142 213 |
 /// | calls, in a member | 12 | 27 292 | 174 522 | 29 254 | 142 984 |
 /// | calls, in a member | 16 | 27 292 | 1 897 258 | 29 254 | 143 328 |
 /// | pairs | 12 | 27 292 | 57 496 | 29 254 | 145 805 |
