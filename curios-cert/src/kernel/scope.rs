@@ -117,7 +117,7 @@ impl Scope {
         self.in_force() != 0
     }
 
-    /// Assume an arm's case equation: within the arm, `scrutinee` is `value`, definitionally.
+    /// Assume an arm's case equation: within the arm, `scrutinee` is `value`, definitionally. Answers whether one was recorded — a scrutinee naming no local records none, and then nothing in force has changed.
     ///
     /// **Keyed on the scrutinee as written.** Keying on its weak-head normal form would reduce it once per arm, and a scrutinee mentioning a local can be memoized by nothing, so a web of combinator definitions each naming the one before it twice would unfold exponentially to produce a key a literal arm body never probes. The written spelling costs nothing to record; the reduced one is computed only when a probe misses, at most once per equation, by [`Scope::unasked_refinement`] and its caller.
     ///
@@ -126,8 +126,9 @@ impl Scope {
     /// An equation is a claim about *one* term, so the only sound key is one that identifies terms already definitionally equal, and structural equality is the under-approximation of that which costs nothing to justify. Both spellings satisfy it — the written one *is* the scrutinee, and the reduced one is what the kernel's own reduction says it computes to.
     ///
     /// Keying through `project_erased_universes` would rest on the premise that a universe argument cannot affect computation, and the premise is false: Core has no eliminator over levels, but `Type u` embeds one *in a term*, so a definition carrying its parameter into a constructor payload reduces to genuinely different values at two instances — and that projection rebuilds every `Type` payload at one ground level, because it is written for the Core-to-Ersd hand-off where levels really are irrelevant. Read as a quotient by definitional equality it identifies `Type 0` with `Type 1`, which is the universe hierarchy's whole content. See `crate::recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance`.
-    pub(super) fn refine(&mut self, scrutinee: Term, resolved: Option<Term>, value: Term) {
-        if records_case_equation(&scrutinee) {
+    pub(super) fn refine(&mut self, scrutinee: Term, resolved: Option<Term>, value: Term) -> bool {
+        let recorded = records_case_equation(&scrutinee);
+        if recorded {
             self.refinements.push(Refinement {
                 key: scrutinee,
                 resolved: resolved.filter(records_case_equation),
@@ -135,6 +136,8 @@ impl Scope {
                 reduct: Reduct::Unasked,
             });
         }
+
+        recorded
     }
 
     /// The case value the term `term` is refined to under the *written* spelling or its resolved one, innermost arm first.

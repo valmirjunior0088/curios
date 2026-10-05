@@ -680,3 +680,27 @@ fn an_operand_with_no_value_is_compared_as_written() {
 
     assert_eq!(super::canonical_operands(&mut kernel, &probe), Ok(probe));
 }
+
+/// An arm that records no equation changes nothing a remembered answer read. A scrutinee naming no local records none — and an arm on a variable substitutes its case through its body, so every match beneath it on that variable scrutinizes a literal — so what was reduced before such an arm answers inside it and after it, for nothing.
+///
+/// Mutation-checked: with the scoped tables cleared at every arm whether or not it recorded an equation, the reduction inside the arm is paid for again.
+#[test]
+fn an_arm_that_records_no_equation_leaves_what_was_remembered() {
+    let mut kernel = kernel();
+    let n = binder(1, "n");
+    kernel.assume(&n, &nat_type());
+    let open = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
+
+    let before = spent(&mut kernel, open.clone());
+    let inside = kernel.scoped(|kernel| {
+        kernel
+            .refine(nat(0), nat(0))
+            .expect("a literal scrutinee resolves nothing");
+        spent(kernel, open.clone())
+    });
+    let after = spent(&mut kernel, open);
+
+    assert!(before > 0, "the first reduction is the one that pays");
+    assert_eq!(inside, 0);
+    assert_eq!(after, 0);
+}

@@ -773,8 +773,10 @@ impl Kernel {
                 .flatten(),
             false => None,
         };
-        self.scope.refine(scrutinee, resolved, value);
-        self.memos.begin_equations();
+        // What was read off the scope goes where the equations in force change, and an arm that records none — its scrutinee names no local, a literal an outer arm substituted there among them — leaves them as they were.
+        if self.scope.refine(scrutinee, resolved, value) {
+            self.memos.begin_equations();
+        }
 
         Ok(())
     }
