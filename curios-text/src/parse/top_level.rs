@@ -1,9 +1,10 @@
 use {
     super::{
-        FIELD_TAKES_NO_MARK, INDEX_TAKES_NO_MARK, PAYLOAD_TAKES_NO_USE, members,
-        parse_apply_argument, parse_binding, parse_func_sugar_param, parse_func_type_param,
-        parse_identifier, parse_keyword, parse_literal, parse_mark, parse_name, parse_premise,
-        parse_prop, parse_tuple_field_prefix, parse_tuple_type_field, parse_type, raised,
+        CONCEPT_FIELD_TAKES_NO_IMPLICIT, INDEX_TAKES_NO_MARK, PAYLOAD_TAKES_NO_USE,
+        STRUCT_FIELD_TAKES_NO_USE, members, parse_apply_argument, parse_binding,
+        parse_field_member, parse_func_sugar_param, parse_func_type_param, parse_identifier,
+        parse_keyword, parse_literal, parse_mark, parse_name, parse_premise, parse_prop,
+        parse_tuple_field_prefix, parse_type, raised,
     },
     crate::{
         CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem, Label,
@@ -533,12 +534,22 @@ pub(super) fn parse_sort<'a>() -> Parser<'a, Term> {
     parse_prop().or(parse_type())
 }
 
-// One field of a `struct`: its documentation comment, then the Σ-type field grammar. A documentation comment before the closing brace documents nothing and says so.
+// One field of a `struct`: its documentation comment, then its mark and the Σ-type field grammar, which is what follows `@` as it is what a plain field is. A structure's field list is no other grammar's, so a `use` member is refused where it stands. A documentation comment before the closing brace documents nothing and says so.
 fn parse_struct_field<'a>() -> Parser<'a, StructField> {
     parse_doc().flat_map(|doc| {
         documented(&doc, not_ahead("}"))
-            .and_keep(parse_tuple_type_field())
-            .map(move |param| StructField { doc, param })
+            .and_keep(mark().and(parse_mark()))
+            .flat_map(|(start, plicity)| match plicity {
+                Plicity::Witness => commit(fail_from(&start, STRUCT_FIELD_TAKES_NO_USE)),
+                Plicity::Explicit | Plicity::Implicit => {
+                    parse_field_member().map(move |param| (plicity, param))
+                }
+            })
+            .map(move |(plicity, param)| StructField {
+                doc,
+                plicity,
+                param,
+            })
     })
 }
 
@@ -621,7 +632,7 @@ pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
                 func_params: None,
                 type_,
             }),
-            Plicity::Implicit => commit(fail_from(&start, FIELD_TAKES_NO_MARK)),
+            Plicity::Implicit => commit(fail_from(&start, CONCEPT_FIELD_TAKES_NO_IMPLICIT)),
             Plicity::Explicit => method,
         });
 

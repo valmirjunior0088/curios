@@ -257,10 +257,11 @@ pub struct Proj {
     pub field: Field,
 }
 
-/// One struct-literal entry: a plain field (the tuple-literal field grammar — `fst = a` or positional), a `use <term>` fill for a concept's next `use`-marked field position (mirroring call-site witness arguments; only meaningful when the head is a concept, enforced at core elaboration), or a `..base` spread copying every unwritten field from `base` (legal only first and at most once, also enforced at core elaboration).
+/// One struct-literal entry: a plain field (the tuple-literal field grammar — `fst = a` or positional), an `@` field written under its mark in the same grammar (`@ok = proof`, `@proof`, or `@_` to hold its place), a `use <term>` fill for a concept's next `use`-marked field position (mirroring call-site witness arguments; only meaningful when the head is a concept, enforced at core elaboration), or a `..base` spread copying every unwritten plain field from `base` (legal only first and at most once, also enforced at core elaboration).
 #[derive(Debug, Clone, PartialEq)]
 pub enum StructLitEntry {
     Field(TupleField),
+    Implicit(TupleField),
     Use(Term),
     Spread(Term),
 }

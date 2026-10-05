@@ -191,7 +191,8 @@ module.exports = grammar({
         optional("pub"),
         $.sort,
         "{",
-        commaList($.field_declaration),
+        // A structure's field is plain or hidden under `@`; a tuple type's takes no mark.
+        commaList(seq(optional("@"), $.field_declaration)),
         "}",
       ),
 
@@ -458,8 +459,13 @@ module.exports = grammar({
         "}",
       ),
 
+    // A `..base` spread, a `use` fill of a concept's superclass, or a field — plain, or a hidden one under `@`.
     struct_entry: ($) =>
-      choice($.spread, seq("use", $._term), $.field_definition, $._term),
+      choice(
+        $.spread,
+        seq("use", $._term),
+        seq(optional("@"), choice($.field_definition, $._term)),
+      ),
 
     spread: ($) => seq("..", $._term),
 

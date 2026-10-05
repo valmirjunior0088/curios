@@ -391,10 +391,11 @@ fn print_tuple_field(field: TupleField) -> Printer {
     }
 }
 
-/// A struct-literal entry: a `..base` spread, a `use <term>` fill, or a plain field.
+/// A struct-literal entry: a `..base` spread, a `use <term>` fill, or a field, plain or under `@`.
 fn print_struct_entry(entry: StructLitEntry) -> Printer {
     match entry {
         StructLitEntry::Field(field) => print_tuple_field(field),
+        StructLitEntry::Implicit(field) => flat([pure("@"), print_tuple_field(field)]),
         StructLitEntry::Use(term) => flat([pure("use "), print_term(term)]),
         StructLitEntry::Spread(term) => flat([pure(".."), print_term(term)]),
     }
@@ -1934,7 +1935,11 @@ fn print_struct_field(field: StructField) -> (Option<usize>, Printer) {
     let start = doc_start(&field.doc).or_else(|| field.param.type_.span().map(|span| span.start));
     (
         start,
-        flat([print_doc(field.doc), print_field(field.param)]),
+        flat([
+            print_doc(field.doc),
+            print_plicity(field.plicity),
+            print_field(field.param),
+        ]),
     )
 }
 
@@ -2288,7 +2293,10 @@ pub(crate) fn print_struct_head(item: &TopStruct) -> Printer {
 
 /// One struct field as a page lists it.
 pub(crate) fn print_struct_field_head(field: &StructField) -> Printer {
-    print_field(field.param.clone())
+    flat([
+        print_plicity(field.plicity),
+        print_field(field.param.clone()),
+    ])
 }
 
 /// The head of a `concept` member: its visibility, name, parameters and sort, without the fields.

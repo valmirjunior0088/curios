@@ -76,6 +76,7 @@ pub(crate) fn callee(context: &Context, func: &CalleeId) -> Callee {
             tag: tag.clone(),
         },
         CalleeId::Function(name) => Callee::Function(*name),
+        CalleeId::Structure(name) => Callee::Structure(*name),
         CalleeId::Anonymous => Callee::Anonymous,
     }
 }

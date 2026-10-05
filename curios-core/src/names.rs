@@ -167,6 +167,8 @@ pub enum CalleeId {
     Operator(InfixOp),
     /// A head with no name to report: a projection out of a recursive group, or a computed function. Reported as `<function>`.
     Anonymous,
+    /// A structure, where a literal of it left a hidden field to be filled: the slot is a field and is written in braces, which a report must say where a function's would say an argument.
+    Structure(Global),
 }
 
 /// What one unit's lowering minted in each space elaboration goes on minting in — the whole of what the lowering hands elaboration beside the module: counts within the unit, which the elaborator's counters start above so nothing it mints is an identity a lowered term already holds, and a seed per universe level, which the solver starts from.

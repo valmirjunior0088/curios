@@ -41,11 +41,15 @@ pub(super) const PAYLOAD_TAKES_NO_USE: &str =
 pub(super) const INDEX_TAKES_NO_MARK: &str =
     "an index takes no mark: a family's indices are always written";
 
-/// What refuses a mark on a field of a structure, a concept or a tuple type.
-pub(super) const FIELD_TAKES_NO_MARK: &str = "a field takes no mark: a structure's premise is a `use` parameter — `struct S(K: Type, use C(K))` — and its fields are written at every construction";
+/// What refuses a `use` member among a structure's fields.
+pub(super) const STRUCT_FIELD_TAKES_NO_USE: &str = "a structure's field takes no `use` member: its premise is a `use` parameter — `struct S(K: Type, use C(K))` — and a field is plain or `@`";
 
-/// What refuses an `@` entry in a structure literal.
-pub(super) const ENTRY_TAKES_NO_IMPLICIT: &str = "a literal's entry is a field, a `use` fill of a concept's superclass, or a `..base` spread: no field is implicit";
+/// What refuses an `@` member among a concept's fields.
+pub(super) const CONCEPT_FIELD_TAKES_NO_IMPLICIT: &str =
+    "a concept's field takes no `@`: it is a method, or a superclass written `use Concept(args)`";
+
+/// What refuses a mark on a field of a tuple type.
+pub(super) const TUPLE_FIELD_TAKES_NO_MARK: &str = "a tuple type's field takes no mark: a hidden field is a structure's — `struct S: Type { n: Nat, @Holds(0 < n) }`";
 
 /// What refuses a mark on a field of a struct pattern.
 pub(super) const STRUCT_PATTERN_TAKES_NO_MARK: &str = "a struct pattern takes no mark: a hidden field takes no position, and one that has a label is read by it — `label = binder`";

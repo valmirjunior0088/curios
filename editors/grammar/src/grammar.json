@@ -1169,8 +1169,25 @@
                   "type": "SEQ",
                   "members": [
                     {
-                      "type": "SYMBOL",
-                      "name": "field_declaration"
+                      "type": "SEQ",
+                      "members": [
+                        {
+                          "type": "CHOICE",
+                          "members": [
+                            {
+                              "type": "STRING",
+                              "value": "@"
+                            },
+                            {
+                              "type": "BLANK"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "field_declaration"
+                        }
+                      ]
                     },
                     {
                       "type": "REPEAT",
@@ -1182,8 +1199,25 @@
                             "value": ","
                           },
                           {
-                            "type": "SYMBOL",
-                            "name": "field_declaration"
+                            "type": "SEQ",
+                            "members": [
+                              {
+                                "type": "CHOICE",
+                                "members": [
+                                  {
+                                    "type": "STRING",
+                                    "value": "@"
+                                  },
+                                  {
+                                    "type": "BLANK"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "SYMBOL",
+                                "name": "field_declaration"
+                              }
+                            ]
                           }
                         ]
                       }
@@ -3403,12 +3437,34 @@
           ]
         },
         {
-          "type": "SYMBOL",
-          "name": "field_definition"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "_term"
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "@"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "field_definition"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_term"
+                }
+              ]
+            }
+          ]
         }
       ]
     },

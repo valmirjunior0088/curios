@@ -409,7 +409,7 @@ fn dictionary<const N: usize>(site: &Site<'_>, methods: [Term; N]) -> Term {
     )
 }
 
-/// The fields of a struct at `params`, each classified with its type read through the projections off `value` before it.
+/// The plain fields of a struct at `params`, each classified with its type read through the projections off `value` before it. A hidden field takes no part in a derivation, as a hidden payload takes none: it is no member a literal writes, so `Spell` leaves it out and the re-parsed text infers it.
 fn struct_parts(
     context: &mut Context,
     site: &Site<'_>,
@@ -428,12 +428,17 @@ fn struct_parts(
         .map(|index| Term::proj(Term::free_var(value), index))
         .collect::<Vec<_>>();
 
+    let marks = fields.marks();
     let mut opened = vec![(*value, site.key.clone())];
     let mut parts = Vec::new();
+    let mut ordinal = 0;
     fields.walk(&projections, |index, _, type_| {
-        let label = labels[index].as_str();
-        let payload = Payload::new(name, None, label, index + 1);
-        parts.push(classify(context, site, &mut opened, index, payload, type_)?);
+        if marks[index] == Plicity::Explicit {
+            ordinal += 1;
+            let label = labels[index].as_str();
+            let payload = Payload::new(name, None, label, ordinal);
+            parts.push(classify(context, site, &mut opened, index, payload, type_)?);
+        }
         Ok::<(), Error>(())
     })?;
     Ok(parts)

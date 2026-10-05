@@ -11,6 +11,7 @@ fn a_signature_member_is_a_type_under_its_mark() {
         "satisfy (@A : Type, @Holds(0 < 1), use Show(A)) => Show(List(A)) { show = f } u",
         "induct Pos : Type | at(n : Nat, Nat, @m : Nat, @Holds(0 < n)) end u",
         "struct Slot(K : Type, @V : Type, use Key(K)) : Type { key : K } u",
+        "struct At : Type { n : Nat, @ok : Holds(0 < n), @Holds(0 < n) } u",
         "concept Fm(A : Type) : Type { use Show(A), fm(@B : Type, use Show(B), A, B) -> Str } u",
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
@@ -89,6 +90,53 @@ fn a_list_two_grammars_share_is_refused_by_neither_before_its_arrow() {
     }
 }
 
+/// A structure's field is declared under `@` as a plain one is written, named or as its type alone, and a literal writes it the same way: named, alone in its run, or its place held.
+#[test]
+fn a_structures_field_and_its_entry_are_written_under_their_mark() {
+    let TopItem::Struct(members) =
+        &"struct At : Type { n : Nat, @ok : Holds(0 < n), @Holds(0 < n) } u"
+            .parse::<Entrypoint>()
+            .unwrap()
+            .module
+            .items[0]
+    else {
+        panic!("expected a struct");
+    };
+    let fields = &members[0].fields;
+    assert_eq!(
+        fields.iter().map(|field| field.plicity).collect::<Vec<_>>(),
+        [Plicity::Explicit, Plicity::Implicit, Plicity::Implicit]
+    );
+    assert!(fields[1].param.label.is_some());
+    assert!(fields[2].param.label.is_none());
+
+    for source in [
+        "At { n = 1, @ok = p }",
+        "At { 1, @p }",
+        "At { @_, n = 1 }",
+        "At { ..base, n = 2, @ok = p }",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(
+            term.to_string().parse::<Term>().unwrap(),
+            term,
+            "round-trip failed for {source:?}"
+        );
+    }
+
+    let term = "At { 1, @ok = p, @_ }".parse::<Term>().unwrap();
+    let Subterm::StructLit(literal) = term.as_subterm() else {
+        panic!("expected a literal");
+    };
+    assert!(matches!(&literal.entries[0], StructLitEntry::Field(field) if field.label.is_none()));
+    assert!(
+        matches!(&literal.entries[1], StructLitEntry::Implicit(field) if field.label.as_deref() == Some("ok"))
+    );
+    assert!(
+        matches!(&literal.entries[2], StructLitEntry::Implicit(field) if field.label.is_none())
+    );
+}
+
 /// Each form a site refuses is reported by the rule it breaks, never by the token a later alternative expected.
 #[test]
 fn a_refused_form_names_its_rule() {
@@ -162,19 +210,15 @@ fn a_refused_form_names_its_rule() {
             "an index takes no mark",
         ),
         (
-            "struct At : Type { n : Nat, @ok : Holds(0 < n) } u",
-            "a field takes no mark",
-        ),
-        (
             "struct Has(A : Type) : Type { use Show(A), value : A } u",
-            "a field takes no mark",
+            "a structure's field takes no `use` member",
         ),
-        ("{use Show(Nat), Nat}", "a field takes no mark"),
+        ("{use Show(Nat), Nat}", "a tuple type's field takes no mark"),
+        ("{@n : Nat, Nat}", "a tuple type's field takes no mark"),
         (
             "concept C(A : Type) : Type { @c : Nat } u",
-            "a field takes no mark",
+            "a concept's field takes no `@`",
         ),
-        ("P { @a = 1 }", "no field is implicit"),
         (
             "let Over { use _, over } = d; u",
             "a struct pattern takes no mark",

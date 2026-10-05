@@ -1,6 +1,6 @@
 # Plicity on a telescope's members
 
-Working specification for making a mark mean on data what it means on a function. [Plicity is part of function identity](../../design/theory/plicity-is-part-of-function-identity.md) states the rule a call, a lambda and a concept literal follow: a hidden member — `@` or `use` — takes no position among the members an author writes, and is written only to be named. A function's precondition is therefore stated once: declared in the signature, filled at each call, a fact in the body. An invariant on data is not: a structure's field takes no mark, and its proofs are written at every literal.
+Working specification for making a mark mean on data what it means on a function. [Plicity is part of function identity](../../design/theory/plicity-is-part-of-function-identity.md) states the rule a call, a lambda and a concept literal follow: a hidden member — `@` or `use` — takes no position among the members an author writes, and is written only to be named. A function's precondition is therefore stated once: declared in the signature, filled at each call, a fact in the body. An invariant on data is stated once the same way, on the constructor or the structure that declares it. What is left is a bound a fact in scope states outright, which is filled only where it is arithmetic, and `/std`, which still writes what it may leave out.
 
 It is independent of every other spec. [Typed patterns](01-typed-patterns.md) later lifts the one restriction this leaves, on the rows of one constructor.
 
@@ -12,6 +12,7 @@ It is independent of every other spec. [Typed patterns](01-typed-patterns.md) la
 - **A constructor's payload declares `@`** (`parse_induct_payload_field`), and construction fills it as any call does, a constructor being a function: `/std/Io/Chunk/chunk(b)` over `chunk(bytes: Bytes, @some: Holds(0 < Bytes/len(bytes)))`. An arm leaves it out as the call does, `| chunk(bytes) => …`, and binds it hintless, so its bound is a fact there; the elaborated arm binds every payload under the constructor's marks. Lowering holds the rows of one constructor to one written shape (`MatrixInconsistentShape`, `curios-text/src/into_core/match_compile.rs`).
 - **A structure's fields are a telescope.** `StructDecl::arity` is the parameters ending in the fields, and a concept is a structure whose `use` fields are its superclass edges.
 - **A structure value is elaborated again unchanged.** A literal as written carries an entry per field (`StructEntry`, `curios-core/src/term/shape.rs`), and a value with fields and no entries is the normal form: every slot in order, a hidden one included, which is what `elaborate_struct` rebuilds and what the compiler builds whole. Elaborated, it reads as the literal written in full, each field under its slot's mark, so a concept value holding an edge is a metavariable's solution as any value is.
+- **A structure's field declares `@`** (`parse_struct_field`, `curios-text/src/parse/top_level.rs`), as `@label: type` or its type alone, and stands under its mark in the field telescope. A literal leaves it out and `elaborate_struct` fills it by `insert_auto_argument`, as a call's omitted `@` argument is filled, reporting one nothing fills as a field of its structure; it writes one as `@label = value`, the value alone in its run, or `@_` (`StructEntry::Implicit`). A spread copies the plain fields and the edges and infers a hidden field anew. A derivation reads the plain fields (`struct_parts`, `curios-elab/src/derive.rs`), so `Spell` leaves a hidden one out, and a suggested literal holds a hole per plain field. A structure's field takes no `use`, a concept's no `@` and a tuple type's no mark, each refused by its own rule (`curios-text/src/parse/marks.rs`).
 - **A written position counts plain members.** A projection's field is a slot in every elaborated term, and what an author writes — `.N`, or a positional field of a pattern — is a position (`Field::Position`, `curios-core/src/term/shape.rs`), which `project` (`curios-elab/src/elaborate/aggregate.rs`) resolves to the slot of the N-th plain field as it resolves a label. Over `concept Over(A: Type) { use Base(A), over(A) -> Str }`, `dict.0` is therefore `over` and `let Over { over } = dict;` binds it, the edge left out as a literal leaves it out. A struct pattern's field takes no mark (`STRUCT_PATTERN_TAKES_NO_MARK`, `curios-text/src/parse/marks.rs`), refused by that rule in a `let` and in an arm.
 - **Core's marks.** A telescope's every entry is a type under a mark (`curios-core/src/scope/telescope.rs`): a `FuncType`, a `Func` and an `InductParam` are their telescopes and nothing beside, and a declaration's parameters and a concept's `use` fields stand under their marks in its arity. What a concept's edge reaches is read off its field's elaborated type where the concept's fields are elaborated (`superclass_targets`, `curios-elab/src/resolve.rs`), so an alias of a concept application is an edge. The marks an author wrote ride on what was written: a field of each `Apply` argument, and a sealed vector beside an `InductArm`'s binders. The kernel holds each to its slot's where it types the application and the arm, and conversion reads none in either checker.
 
@@ -19,15 +20,14 @@ It is independent of every other spec. [Typed patterns](01-typed-patterns.md) la
 
 | | function parameter | constructor payload | structure field | concept edge |
 | --- | --- | --- | --- | --- |
-| declared hidden | yes | `@` | refused | `use` |
-| left out where filled | yes | yes | written at every literal | yes |
-| left out where opened | yes | yes | takes a position | yes |
+| declared hidden | yes | `@` | `@` | `use` |
+| left out where filled | yes | yes | yes | yes |
+| left out where opened | yes | yes | yes | yes |
 | in scope there unnamed | yes | yes | yes, one level down | only as a `use` member's own |
 
 Read from the code and from probes of the compiler at `87189c97d`, the counts over `curios-text/std` at that commit:
 
-- **`/std` still writes the hidden payloads its arms never name.** 26 arms write a hidden payload, 18 of them only `@_`.
-- **A structure's field takes no mark** (`FIELD_TAKES_NO_MARK`, `curios-text/src/parse/marks.rs`), so the bound a payload fills by itself is a field written at every literal. `/std/Str/At`'s ten literals write twenty proofs; 10 of `/std`'s 77 structures carry a proof field.
+- **`/std` still writes what it may leave out.** 26 arms write a hidden payload, 18 of them only `@_`. No structure declares a hidden field: `/std/Str/At`'s ten literals write twenty proofs, and 10 of `/std`'s 77 structures carry a proof field.
 - **A bound a fact in scope states outright is filled only where it is arithmetic.** `entail` (`curios-elab/src/entailment.rs`) reads `Nat` and `Int` comparisons, so over `opaque(b: Bool, @Holds(b))`, `let same(b: Bool, @Holds(b)) -> Nat = opaque(b);` reports `nothing discharged Holds(b)`. Seven of `/std/Str/At`'s ten `boundary` proofs are a hypothesis, another value's field or a lemma.
 
 ## Prior art
@@ -52,9 +52,8 @@ Read from the code and from probes of the compiler at `87189c97d`, the counts ov
 
 ## Stages
 
-1. **A structure's field declares `@`.** Decision 8, through the grammar, the printer and the editors. Check: a fixture per form, the spread both ways, a `Spell` round trip, and a hidden field ahead of a plain one read by pattern and by position.
-2. **A bound a fact states is filled by it.** Decision 9. Check: an opaque `Holds(b)` under `@Holds(b)`, a field one level down, and a refusal two levels down.
-3. **`/std` reads by the rule.** The arms that write only `@_` drop it, and a structure's proof field becomes `@` where a literal sheds a written proof by it.
+1. **A bound a fact states is filled by it.** Decision 9. Check: an opaque `Holds(b)` under `@Holds(b)`, a field one level down, and a refusal two levels down.
+2. **`/std` reads by the rule.** The arms that write only `@_` drop it, and a structure's proof field becomes `@` where a literal sheds a written proof by it.
 
 ## Verification
 

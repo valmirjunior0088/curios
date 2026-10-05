@@ -126,6 +126,8 @@ pub enum Callee {
     Witness { concept: Global, key: WitnessKey },
     /// A head the program gave no name to report.
     Anonymous,
+    /// A structure whose literal left a hidden field to be filled.
+    Structure(Global),
 }
 
 /// What conversion left uncompared on the way to a mismatch. The two sides a mismatch shows are then two it did not decide between, which is another thing to tell an author than that they differ.

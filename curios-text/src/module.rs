@@ -142,10 +142,12 @@ pub struct TopInduct {
     pub cases: Vec<TopCase>,
 }
 
-/// One field of a `struct` declaration: the Σ-type field it is written as, and the documentation comment above it. Wrapped rather than a field on [`TupleTypeParam`], because a tuple type's fields are never documented and a slot that only one of a type's two grammars can fill is a slot every reader has to know is empty.
+/// One field of a `struct` declaration: its mark, the Σ-type field it is written as, and the documentation comment above it. Wrapped rather than fields on [`TupleTypeParam`], because a tuple type's fields are never documented and take no mark, and a slot that only one of a type's two grammars can fill is a slot every reader of the other must ignore.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructField {
     pub doc: Option<Doc>,
+    /// Plain or `@`: a hidden field is left out of a literal and filled as a call's omitted `@` argument is. Never `use` — a structure's premise is a parameter.
+    pub plicity: Plicity,
     pub param: TupleTypeParam,
 }
 

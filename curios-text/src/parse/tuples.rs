@@ -1,10 +1,10 @@
 use {
     super::{
-        ENTRY_TAKES_NO_IMPLICIT, FIELD_TAKES_NO_MARK, members, parse_apply_argument,
-        parse_bin_literal, parse_block_string_literal, parse_bool_intrinsic, parse_char_lit,
-        parse_flt_value, parse_func_param, parse_func_type_param, parse_identifier, parse_label,
-        parse_list_literal, parse_literal, parse_mark, parse_name, parse_num_lit,
-        parse_string_literal, refuse_dangling_dot,
+        TUPLE_FIELD_TAKES_NO_MARK, members, parse_apply_argument, parse_bin_literal,
+        parse_block_string_literal, parse_bool_intrinsic, parse_char_lit, parse_flt_value,
+        parse_func_param, parse_func_type_param, parse_identifier, parse_label, parse_list_literal,
+        parse_literal, parse_mark, parse_name, parse_num_lit, parse_string_literal,
+        refuse_dangling_dot,
     },
     crate::{
         FuncTypeParam, Label, StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField,
@@ -39,8 +39,13 @@ pub(super) fn parse_parens<'a>() -> Parser<'a, Term> {
         .and_drop(parse_literal(")"))
 }
 
-// A Σ-type / struct-declaration field: an optional label and the field type, or the signature sugar `label(params) -> type` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar. Shared by tuple types and `struct` decls. The sugared catch spans through `->`, so a positional field that merely starts with an application (`f(x)`) backtracks cleanly.
+// A tuple type's field: [`parse_field_member`], and a mark refused where none of its forms read the field.
 pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
+    parse_field_member().or(refuse_field_mark())
+}
+
+// A Σ-type / struct-declaration field, past whatever mark its site takes: an optional label and the field type, or the signature sugar `label(params) -> type` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar. Shared by tuple types and `struct` decls. The sugared catch spans through `->`, so a positional field that merely starts with an application (`f(x)`) backtracks cleanly.
+pub(super) fn parse_field_member<'a>() -> Parser<'a, TupleTypeParam> {
     parse_label()
         .and(
             parse_literal("(")
@@ -75,16 +80,17 @@ pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
             type_,
         }))
         .or(refuse_keyword_field_label())
-        .or(refuse_field_mark())
 }
 
-// A mark written where a field is declared. Tried last, as the keyword refusal above is and for its reason: no field form begins with `@` or with `use`, so reaching this means none read the field, and neither can begin a term, so the refusal commits.
+// A mark written where a tuple type's field is declared. Tried last, as the keyword refusal is and for its reason: no field form begins with `@` or with `use`, so reaching this means none read the field, and neither can begin a term, so the refusal commits.
 fn refuse_field_mark<'a>() -> Parser<'a, TupleTypeParam> {
     mark()
         .and(parse_mark())
         .flat_map(|(start, plicity)| match plicity {
             Plicity::Explicit => fail("not a mark written on a field"),
-            Plicity::Implicit | Plicity::Witness => commit(fail_from(&start, FIELD_TAKES_NO_MARK)),
+            Plicity::Implicit | Plicity::Witness => {
+                commit(fail_from(&start, TUPLE_FIELD_TAKES_NO_MARK))
+            }
         })
 }
 
@@ -184,18 +190,16 @@ pub(super) fn parse_tuple<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// A struct-literal entry: a `..base` spread (no term begins with `..` — a leading-dot float has a single dot — so the prefix commits), a `use <term>` fill for a concept's `use`-marked field (the call-site argument form — a mark can never begin a field label or value), or a plain field. No field is implicit, so `@` is refused where it stands. Spread position and multiplicity are core elaboration's job.
+// A struct-literal entry: a `..base` spread (no term begins with `..` — a leading-dot float has a single dot — so the prefix commits), a `use <term>` fill for a concept's `use`-marked field (the call-site argument form — a mark can never begin a field label or value), or a field, plain or under `@`: after the mark comes the field as a plain one is written, `label = value` or the value alone, and `@_` holds a hidden field's place. Spread position and multiplicity are core elaboration's job.
 pub(super) fn parse_struct_entry<'a>() -> Parser<'a, StructLitEntry> {
     parse_literal("..")
         .and_keep(lazy(parse_term))
         .map(StructLitEntry::Spread)
-        .or(mark()
-            .and(parse_mark())
-            .flat_map(|(start, plicity)| match plicity {
-                Plicity::Witness => lazy(parse_term).map(StructLitEntry::Use),
-                Plicity::Implicit => commit(fail_from(&start, ENTRY_TAKES_NO_IMPLICIT)),
-                Plicity::Explicit => parse_tuple_field().map(StructLitEntry::Field),
-            }))
+        .or(parse_mark().flat_map(|plicity| match plicity {
+            Plicity::Witness => lazy(parse_term).map(StructLitEntry::Use),
+            Plicity::Implicit => parse_tuple_field().map(StructLitEntry::Implicit),
+            Plicity::Explicit => parse_tuple_field().map(StructLitEntry::Field),
+        }))
 }
 
 // A struct literal: `Name { … }` or `Name(args) { … }`. The trailing `{` is the commit point — it distinguishes the literal from a bare name / name-application (no brace) and from a Σ-type `{ x : A }` (no head name), so there is no grammar conflict. Plain entries reuse the tuple-value grammar (`= value` or positional) and `use <term>` fills a concept's `use`-marked field; the head's arguments are a call's, marks included, since an applied head is an application of the type former.

@@ -3,7 +3,7 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Cases, Exhaustion, Free, Global, InductArm, InductDecl, InductParam, Intrinsic, Many,
-        Match, MatchResult, MetavarId, MetavarOrigin, Nat, Scope, StructDecl, StructEntry,
+        Match, MatchResult, MetavarId, MetavarOrigin, Nat, Scope, Struct, StructDecl, StructEntry,
         StructType, Subterm, Telescope, Term, UniverseContext,
     },
     curios_num::{Floating, Natural},
@@ -610,6 +610,117 @@ fn a_structure_value_in_normal_form_is_elaborated_again_unchanged() {
             got: 2,
             ..
         })
+    ));
+}
+
+// `Marked { <entries> }`, as lowering hands a written literal over.
+fn marked_literal<const N: usize>(entries: [(StructEntry, Term); N]) -> Term {
+    Term::struct_entries(nominal("Marked"), Vec::<Term>::new(), entries)
+}
+
+// A literal writes a hidden field under `@`, named or alone in its run, and the value it builds is the normal form, every slot in order.
+#[test]
+fn a_literal_writes_a_hidden_field_under_its_mark() {
+    let mut context = context();
+    register_marked(&mut context);
+    let whole = Term::struct_(
+        nominal("Marked"),
+        Vec::<Term>::new(),
+        [nat_lit(3), nat_lit(5)],
+    );
+
+    for hidden in [
+        StructEntry::Implicit(None),
+        StructEntry::Implicit(Some("n".to_string())),
+    ] {
+        let literal =
+            marked_literal([(hidden, nat_lit(3)), (StructEntry::Field(None), nat_lit(5))]);
+        let (elaborated, _) = elaborate(&mut context, &literal, Mode::Infer).unwrap();
+        assert_eq!(elaborated, whole);
+    }
+}
+
+// A hidden field left out is no entry the literal lacks: its slot is filled as a call's omitted `@` argument is — here by a metavariable, nothing having determined it — and the plain field is counted against the plain fields alone.
+#[test]
+fn a_literal_leaves_a_hidden_field_out() {
+    let mut context = context();
+    register_marked(&mut context);
+    let literal = marked_literal([(StructEntry::Field(None), nat_lit(5))]);
+
+    let (elaborated, _) = elaborate(&mut context, &literal, Mode::Infer).unwrap();
+    let Subterm::Struct(Struct {
+        fields, entries, ..
+    }) = &*elaborated
+    else {
+        panic!("expected a structure value, got {elaborated:?}");
+    };
+    assert!(entries.is_empty());
+    assert!(matches!(&*fields[0], Subterm::Metavar(_)));
+    assert_eq!(fields[1], nat_lit(5));
+}
+
+// A hidden entry is held to its run and to the name of the field it fills, and `use` is a concept's mark alone.
+#[test]
+fn a_hidden_entry_that_misaligns_is_refused() {
+    let mut context = context();
+    register_marked(&mut context);
+    let mut refusal = |entries: [(StructEntry, Term); 2]| {
+        elaborate(&mut context, &marked_literal(entries), Mode::Infer).unwrap_err()
+    };
+
+    assert!(matches!(
+        refusal([
+            (StructEntry::Field(None), nat_lit(5)),
+            (StructEntry::Implicit(None), nat_lit(3)),
+        ]),
+        Error::HiddenMemberWithoutSlot {
+            written: Plicity::Implicit
+        }
+    ));
+    assert!(matches!(
+        refusal([
+            (StructEntry::Implicit(Some("m".to_string())), nat_lit(3)),
+            (StructEntry::Field(None), nat_lit(5)),
+        ]),
+        Error::UnknownStructField { label, .. } if label == "@m"
+    ));
+    assert!(matches!(
+        refusal([
+            (StructEntry::Use, nat_lit(3)),
+            (StructEntry::Field(None), nat_lit(5)),
+        ]),
+        Error::UseEntryOutsideConcept { .. }
+    ));
+}
+
+// A spread copies the plain fields and never a hidden one: left out it is inferred anew, and written it is held to its field as in any literal.
+#[test]
+fn a_spread_never_copies_a_hidden_field() {
+    let mut context = context();
+    let marked = register_marked(&mut context);
+    let value = context.fresh(Some("v"));
+    context.assume(&value, &marked);
+    let base = || (StructEntry::Spread, Term::free_var(&value));
+
+    for literal in [
+        marked_literal([base()]),
+        marked_literal([base(), (StructEntry::Implicit(None), nat_lit(7))]),
+        marked_literal([
+            base(),
+            (StructEntry::Implicit(Some("n".to_string())), nat_lit(7)),
+        ]),
+    ] {
+        let (_, type_) = elaborate(&mut context, &literal, Mode::Infer).unwrap();
+        assert_eq!(type_, marked);
+    }
+
+    let misnamed = marked_literal([
+        base(),
+        (StructEntry::Implicit(Some("m".to_string())), nat_lit(7)),
+    ]);
+    assert!(matches!(
+        elaborate(&mut context, &misnamed, Mode::Infer),
+        Err(Error::UnknownStructField { label, .. }) if label == "@m"
     ));
 }
 

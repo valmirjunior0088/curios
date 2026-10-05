@@ -831,3 +831,46 @@ let two: Slot(Nat, use other, Str) = Slot(Nat, use other, Str) { key = 2 };
           (field_definition
             (identifier)
             (number)))))))
+
+================================================================================
+A structure's hidden field, named and as its type alone
+================================================================================
+
+struct Positive: pub Type {
+    n: Nat,
+    @ok: Holds(0 < n),
+    @Holds(n < 10),
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (struct_member
+      (identifier)
+      (sort)
+      (field_declaration
+        (identifier)
+        (path
+          (identifier)))
+      (field_declaration
+        (identifier)
+        (call
+          (path
+            (identifier))
+          (arguments
+            (argument
+              (binary
+                (number)
+                (path
+                  (identifier)))))))
+      (field_declaration
+        (call
+          (path
+            (identifier))
+          (arguments
+            (argument
+              (binary
+                (path
+                  (identifier))
+                (number)))))))))

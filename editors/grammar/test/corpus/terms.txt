@@ -488,3 +488,56 @@ f
           (identifier))))
     (path
       (identifier))))
+
+================================================================================
+A literal writes a hidden field under its mark
+================================================================================
+
+let _ = Positive { n = 4, @ok = proof };
+let _ = Sized { @2, items };
+Sized { ..base, @_, items = other }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (identifier)
+      (struct_literal
+        (path
+          (identifier))
+        (struct_entry
+          (field_definition
+            (identifier)
+            (number)))
+        (struct_entry
+          (field_definition
+            (identifier)
+            (path
+              (identifier))))))
+    (let_term
+      (let_binding
+        (identifier)
+        (struct_literal
+          (path
+            (identifier))
+          (struct_entry
+            (number))
+          (struct_entry
+            (path
+              (identifier)))))
+      (struct_literal
+        (path
+          (identifier))
+        (struct_entry
+          (spread
+            (path
+              (identifier))))
+        (struct_entry
+          (path
+            (identifier)))
+        (struct_entry
+          (field_definition
+            (identifier)
+            (path
+              (identifier))))))))

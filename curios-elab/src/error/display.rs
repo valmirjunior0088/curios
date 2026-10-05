@@ -208,7 +208,7 @@ fn spelled_callee(callee: &CalleeId, spelling: &Spelling) -> String {
     match callee {
         CalleeId::Function(name) => spelled_free(name, spelling),
         CalleeId::Constructor { owner, tag } => format!("{}/{tag}", spelling.symbol(owner)),
-        CalleeId::Witness(global) => spelling.symbol(global),
+        CalleeId::Witness(global) | CalleeId::Structure(global) => spelling.symbol(global),
         CalleeId::Operator(op) => op.symbol().to_string(),
         CalleeId::Anonymous => "<function>".to_string(),
     }
@@ -223,6 +223,7 @@ impl Callee {
                 format!("'{}/{tag}'", spelling.symbol(owner))
             }
             Callee::Anonymous => "'<function>'".to_string(),
+            Callee::Structure(name) => format!("'{}'", spelling.symbol(name)),
             Callee::Operator { op, .. } => format!("the '{}' operator", op.symbol()),
             Callee::Witness { concept, key } => format!(
                 "the witness of '{}' for {} '{}'",
@@ -240,6 +241,7 @@ impl Callee {
             Callee::Function(_)
             | Callee::Constructor { .. }
             | Callee::Witness { .. }
+            | Callee::Structure(_)
             | Callee::Anonymous => {
                 format!("the {noun} '{binder}' of {}", self.phrase(spelling))
             }
@@ -878,10 +880,27 @@ impl fmt::Display for Displayed<'_> {
                         }
                     }
                     false => {
-                        format!("no argument or expected type determined it (its type is {bound})")
+                        // A literal has fields where a call has arguments.
+                        let given = match callee {
+                            Callee::Structure(_) => "field",
+                            _ => "argument",
+                        };
+                        format!("no {given} or expected type determined it (its type is {bound})")
                     }
                 };
                 match callee {
+                    // A literal's slot is a field, written in braces under `@`. One declared as its type alone has no name to quote.
+                    Callee::Structure(name) => {
+                        let name = spelling.symbol(name);
+                        let field = match binder.as_str() {
+                            "_" => "a hidden field".to_string(),
+                            binder => format!("hidden field '{binder}'"),
+                        };
+                        write!(
+                            f,
+                            "{field} of '{name}' was not filled\n  {why}\n  write it explicitly: {name} {{ @... }}"
+                        )
+                    }
                     Callee::Function(func) => {
                         let func = spelled_free(func, spelling);
                         write!(

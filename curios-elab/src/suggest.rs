@@ -19,7 +19,8 @@ use {
     },
     curios_analysis::{Invert, case_target_indices, invert_indices},
     curios_core::{
-        Apply, Entrypoint, Free, Global, InductType, Item, Module, StructType, Subterm, Term, Var,
+        Apply, Entrypoint, Free, Global, InductType, Item, Module, StructEntry, StructType,
+        Subterm, Term, Var,
     },
     curios_utilities::Plicity,
     std::collections::{BTreeMap, BTreeSet},
@@ -498,14 +499,20 @@ fn constructor_fits(
                 }
             }
         }
-        // A struct-typed goal suggests its literal shape, one hole per field.
+        // A struct-typed goal suggests its literal shape, one hole per plain field.
         Subterm::StructType(StructType { name, params, .. }) => {
             if let Some(struct_decl) = context.struct_decl(name) {
-                let field_count = struct_decl.fields_at(params).len();
-                let fields: Vec<Term> = (0..field_count).map(|_| hole.clone()).collect();
+                // As its author writes it: a hole per plain field, every hidden one left to the elaborator.
+                let plain = struct_decl
+                    .fields_at(params)
+                    .marks()
+                    .into_iter()
+                    .filter(|mark| *mark == Plicity::Explicit)
+                    .count();
+                let fields = (0..plain).map(|_| (StructEntry::Field(None), hole.clone()));
                 candidates.push(Candidate {
-                    term: Term::struct_(*name, params.iter().cloned(), fields),
-                    holes: field_count,
+                    term: Term::struct_entries(*name, params.iter().cloned(), fields),
+                    holes: plain,
                     pool: 1,
                 });
             }

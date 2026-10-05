@@ -1,5 +1,8 @@
 use {
-    super::{Misaligned, align, binder_name, check_args_against, is_placeholder, premise_label},
+    super::{
+        Misaligned, align, binder_name, check_args_against, insert_auto_argument, is_placeholder,
+        premise_label,
+    },
     crate::{
         Context, Error, Mode, attempt_witness_goal, check, elaborate, expect, is_prop, reduce_with,
     },
@@ -109,9 +112,14 @@ pub(super) fn elaborate_struct_type(
     ))
 }
 
-/// Where one field position's value comes from: a written term to check, or — for a concept's `use`-marked field with no written fill — a witness goal to mint at the position's instantiated type.
+/// Where one field position's value comes from: a written term to check, or — for a hidden field with no written fill — what a call's omitted argument of that mark is filled with, at the position's instantiated type: a witness goal for a concept's `use`-marked field, an inferred value or a discharged bound for an `@` field.
 pub(super) enum FieldSource<'a> {
     Written(&'a Term),
+    /// An unfilled `@` position, filled as a call's omitted `@` argument is ([`insert_auto_argument`]): by unification, by reduction to truth, or from the facts in scope, and reported as that argument is where nothing fills it. `label` is the field's, empty where it has none.
+    Infer {
+        func: CalleeId,
+        label: String,
+    },
     /// An unfilled `use` position: a superclass edge the literal left to resolution. `edge` names the concept edged to rather than a field label, because the field is anonymous — there is no label to carry, and the edge is what a reader needs.
     Resolve {
         func: CalleeId,
@@ -131,6 +139,15 @@ pub(super) fn check_dependent_fields(
     // One walk, each field type opened once at every field before it: reopening the rest after each field would rewrite every later type, whose metavariable spines name every earlier field, and make a long literal cubic.
     let (fields, ()) = tele.walk_producing(|index, _, ty| match &sources[index] {
         FieldSource::Written(field) => check(context, field, ty),
+        FieldSource::Infer { func, label } => insert_auto_argument(
+            context,
+            Plicity::Implicit,
+            &ty,
+            (!label.is_empty()).then_some(label.as_str()),
+            func,
+            origin,
+            0,
+        ),
         FieldSource::Resolve { func, edge } => {
             let provenance = WitnessOrigin {
                 func: func.clone(),
@@ -211,7 +228,7 @@ pub(super) fn elaborate_struct(
     // Instantiate the field telescope at the resolved parameters.
     let field_telescope = struct_decl.fields_at(&resolved);
 
-    // A concept's `use`-marked (superclass) fields are the hidden slots of its field telescope, and the entries meet them as a call's arguments meet a function's ([`align`]): the plain entries are the fields, in order, and before each the `use` entries written are the first of the edges that precede it, in order. An edge left out, or written `use _`, becomes a witness-resolution goal. The check order is telescope order.
+    // A structure's `@` fields and a concept's `use`-marked (superclass) fields are the hidden slots of the field telescope, and the entries meet them as a call's arguments meet a function's ([`align`]): the plain entries are the plain fields, in order, and before each the hidden entries written are the first of the hidden fields that precede it, in order. A hidden field left out, or written `@_` or `use _`, is filled as a call's omitted argument of its mark is: an edge by witness resolution, an `@` field by inference. The check order is telescope order.
     let slots = field_telescope.marks();
     // The concept each `use` position edges to is kept beside it rather than dropped: an unfilled position becomes a resolution goal, and that goal's provenance is the one place the superclass can be named as itself.
     let use_positions: Vec<(usize, Global)> = match context.concept(name) {
@@ -241,6 +258,7 @@ pub(super) fn elaborate_struct(
             .zip(fields)
             .map(|(entry, field)| match entry {
                 StructEntry::Field(label) => (Plicity::Explicit, label.as_deref(), field),
+                StructEntry::Implicit(label) => (Plicity::Implicit, label.as_deref(), field),
                 StructEntry::Use => (Plicity::Witness, None, field),
                 StructEntry::Spread => unreachable!("a spread literal takes the spread path"),
             })
@@ -328,29 +346,50 @@ pub(super) fn elaborate_struct(
         }
     }
 
-    // One source per declared position, by the alignment walk. The plain fields were counted against the telescope above, with the labels that report can name, and a literal's only hidden mark is `use`, so the one refusal left is a `use` entry with no edge in its run: written after the field the edges precede, or past the last of them.
+    // One source per declared position, by the alignment walk. The plain fields were counted against the telescope above, with the labels that report can name, so the refusals left are a hidden entry's: one of the other mark than the field it meets, or one with no hidden field left in its run — written after the plain field the run precedes, or past the last of it.
     let marks = written.iter().map(|(mark, ..)| *mark).collect::<Vec<_>>();
     let fills = align(&slots, &marks).map_err(|misaligned| match misaligned {
         Misaligned::Surplus { member } => {
-            Error::hidden_member_without_slot(Plicity::Witness).at_opt(written[member].2.span())
+            Error::hidden_member_without_slot(marks[member]).at_opt(written[member].2.span())
         }
-        Misaligned::Missing | Misaligned::Extra { .. } | Misaligned::Mark { .. } => {
-            unreachable!(
-                "a literal's plain fields are counted, and its hidden entries are all `use`"
-            )
+        Misaligned::Mark { member, slot } => {
+            Error::hidden_member_out_of_order(marks[member], slots[slot], labels[slot])
+                .at_opt(written[member].2.span())
+        }
+        Misaligned::Missing | Misaligned::Extra { .. } => {
+            unreachable!("a literal's plain fields are counted before its entries are aligned")
         }
     })?;
+
+    // A hidden entry's written name is held to the field it fills, as a plain one's is: it says which field the author meant and selects nothing.
+    for (position, fill) in fills.iter().enumerate() {
+        let Some((mark, Some(label), field)) = fill.map(|member| written[member]) else {
+            continue;
+        };
+        if mark != Plicity::Explicit && labels[position] != label {
+            return Err(Error::unknown_struct_field(
+                name.symbol(),
+                format!("@{label}"),
+                written_fields(&labels, &slots),
+            )
+            .at_opt(field.span()));
+        }
+    }
     let sources = fills
         .iter()
         .zip(&slots)
         .enumerate()
         .map(|(position, (fill, slot))| {
-            // An edge written `use _` holds its place and says nothing, so it is resolved as one left out is.
+            // A hidden field written `@_` or `use _` holds its place and says nothing, so it is filled as one left out is.
             let field = fill
                 .map(|member| written[member].2)
                 .filter(|field| *slot == Plicity::Explicit || !is_placeholder(context, field));
             match field {
                 Some(field) => FieldSource::Written(field),
+                None if *slot == Plicity::Implicit => FieldSource::Infer {
+                    func: CalleeId::Structure(*name),
+                    label: labels[position].to_string(),
+                },
                 // A `use` position is an anonymous superclass field, so the provenance names the concept it *edges to* rather than reaching for a label, which it does not have. The short name, since the goal's own line already carries the application it is wanted at.
                 None => FieldSource::Resolve {
                     func: CalleeId::Function(Free::Global(*name)),
@@ -372,6 +411,20 @@ pub(super) fn elaborate_struct(
         Term::struct_at(*name, universes.clone(), resolved.clone(), elaborated),
         Term::struct_type_at(*name, universes, resolved),
     ))
+}
+
+/// The labelled fields in order as a literal writes them, a hidden one under its mark: what a refusal of a misnamed hidden entry lists.
+fn written_fields(labels: &[&str], slots: &[Plicity]) -> Vec<String> {
+    labels
+        .iter()
+        .zip(slots)
+        .filter(|(label, _)| !label.is_empty())
+        .map(|(label, slot)| match slot {
+            Plicity::Explicit => label.to_string(),
+            Plicity::Implicit => format!("@{label}"),
+            Plicity::Witness => format!("use {label}"),
+        })
+        .collect()
 }
 
 /// Resolve a struct literal's head parameters, threading the (dependent) parameter telescope so each minted metavariable is born at its binder's instantiated type: written arguments are checked, omitted ones minted fresh.
@@ -446,7 +499,7 @@ pub(super) fn seed_struct_expectation(
     Ok(())
 }
 
-/// The `..base` spread path of a struct literal: the base is elaborated once and let-bound in a fresh frame, written overrides claim their declared positions by label — an order-preserving subsequence of the field telescope, so written order stays check order — a `use <term>` entry claims the next superclass edge after the entries before it, and every remaining position, plain and `use` alike, copies from the base by positional projection (a superclass field is *copied*, not re-resolved, and `use _` says so in writing).
+/// The `..base` spread path of a struct literal: the base is elaborated once and let-bound in a fresh frame, written overrides claim their declared positions by label — an order-preserving subsequence of the field telescope, so written order stays check order — a hidden entry claims the next hidden field after the entries before it, and every remaining plain field and superclass edge copies from the base by positional projection (a superclass field is *copied*, not re-resolved, and `use _` says so in writing). An `@` field left out is never copied: what it states is stated of the fields the new value has, so it is inferred anew as it is in any literal, and the author who means the base's writes `@label = base.label`.
 ///
 /// The parameters are minted *inside* the frame: an omitted parameter's metavariable may need to solve to a projection of the bound base (e.g. `?A := b.A`), which is only in scope there. The result type is reduced before the frame closes — the `elaborate_let` discipline — so occurrences of the binder unfold to the base before escaping the rebuilt `let b = base; Name { … }`, which downstream stages see as existing nodes.
 pub(super) fn elaborate_struct_spread(
@@ -488,7 +541,7 @@ pub(super) fn elaborate_struct_spread(
 
         let field_telescope = struct_decl.fields_at(&resolved);
 
-        // The edges are the telescope's `use` fields; what one reaches is unused here, because a spread *copies* a superclass field from the base rather than re-resolving it.
+        // The hidden slots are the telescope's `@` and `use` fields; what an edge reaches is unused here, because a spread *copies* a superclass field from the base rather than re-resolving it.
         let slots = field_telescope.marks();
 
         if entries[1..]
@@ -500,12 +553,12 @@ pub(super) fn elaborate_struct_spread(
         }
 
         let labels = field_telescope.labels();
-        let is_edge = |position: usize| slots[position] == Plicity::Witness;
+        let is_hidden = |position: usize| slots[position] != Plicity::Explicit;
         let listed = || {
             labels
                 .iter()
                 .enumerate()
-                .filter(|(position, label)| !is_edge(*position) && !label.is_empty())
+                .filter(|(position, label)| !is_hidden(*position) && !label.is_empty())
                 .map(|(_, label)| label.to_string())
                 .collect::<Vec<_>>()
         };
@@ -516,7 +569,7 @@ pub(super) fn elaborate_struct_spread(
             match entry {
                 StructEntry::Field(Some(written)) => {
                     let named = |position: &usize| {
-                        !is_edge(*position) && labels[*position] == written.as_str()
+                        !is_hidden(*position) && labels[*position] == written.as_str()
                     };
                     let from = claimed.last().map_or(0, |last| last + 1);
                     match (from..labels.len()).find(named) {
@@ -541,14 +594,14 @@ pub(super) fn elaborate_struct_spread(
                 StructEntry::Field(None) => {
                     return Err(Error::unlabeled_spread_override(name.symbol()));
                 }
-                StructEntry::Use => {}
+                StructEntry::Use | StructEntry::Implicit(_) => {}
                 StructEntry::Spread => unreachable!("spread multiplicity was validated"),
             }
         }
 
-        // The fields the overrides name are the plain members written, and the `use` entries meet the edges as hidden members meet their slots anywhere ([`align`]): between two overrides the edges are written from the first. So the slots an entry may claim are every edge and each field an override names, and a field the spread copies is no slot at all.
+        // The fields the overrides name are the plain members written, and the hidden entries meet the hidden fields as hidden members meet their slots anywhere ([`align`]): between two overrides they are written from the first. So the slots an entry may claim are every hidden field and each plain field an override names, and a field the spread copies is no slot at all.
         let claimable = (0..labels.len())
-            .filter(|position| is_edge(*position) || claimed.contains(position))
+            .filter(|position| is_hidden(*position) || claimed.contains(position))
             .collect::<Vec<_>>();
         let claimable_marks = claimable
             .iter()
@@ -558,16 +611,22 @@ pub(super) fn elaborate_struct_spread(
             .iter()
             .map(|entry| match entry {
                 StructEntry::Use => Plicity::Witness,
+                StructEntry::Implicit(_) => Plicity::Implicit,
                 StructEntry::Field(_) | StructEntry::Spread => Plicity::Explicit,
             })
             .collect::<Vec<_>>();
         let fills = align(&claimable_marks, &marks).map_err(|misaligned| match misaligned {
-            Misaligned::Surplus { member } => Error::hidden_member_without_slot(Plicity::Witness)
-                .at_opt(fields[1 + member].span()),
-            Misaligned::Missing | Misaligned::Extra { .. } | Misaligned::Mark { .. } => {
-                unreachable!(
-                    "the plain slots are the overrides written, and a spread's hidden entries are all `use`"
-                )
+            Misaligned::Surplus { member } => {
+                Error::hidden_member_without_slot(marks[member]).at_opt(fields[1 + member].span())
+            }
+            Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
+                marks[member],
+                claimable_marks[slot],
+                labels[claimable[slot]],
+            )
+            .at_opt(fields[1 + member].span()),
+            Misaligned::Missing | Misaligned::Extra { .. } => {
+                unreachable!("the plain slots are the overrides written")
             }
         })?;
 
@@ -575,23 +634,39 @@ pub(super) fn elaborate_struct_spread(
         for (position, fill) in claimable.iter().zip(fills) {
             let Some(member) = fill else { continue };
             let field = &fields[1 + member];
-            // An edge written `use _` is claimed and left as the spread leaves it.
+            // A hidden entry's written name is held to the field it fills, as in a literal with no spread.
+            if let StructEntry::Implicit(Some(written)) = &entries[1 + member]
+                && labels[*position] != written.as_str()
+            {
+                return Err(Error::unknown_struct_field(
+                    name.symbol(),
+                    format!("@{written}"),
+                    written_fields(&labels, &slots),
+                )
+                .at_opt(field.span()));
+            }
+            // A hidden field written `@_` or `use _` is claimed and left as the spread leaves it.
             if slots[*position] == Plicity::Explicit || !is_placeholder(context, field) {
                 overrides[*position] = Some(field);
             }
         }
 
-        // One value per declared position: the override where written, a positional projection of the bound base everywhere else.
-        let values: Vec<Term> = overrides
+        // One source per declared position: the override where written; elsewhere a plain field and an edge are the bound base's, by positional projection, and an `@` field is inferred anew.
+        let copies: Vec<Term> = (0..overrides.len())
+            .map(|position| Term::proj(Term::free_var(&label), position))
+            .collect();
+        let sources: Vec<FieldSource> = overrides
             .iter()
             .enumerate()
             .map(|(position, override_)| match override_ {
-                Some(field) => (*field).clone(),
-                None => Term::proj(Term::free_var(&label), position),
+                Some(field) => FieldSource::Written(field),
+                None if slots[position] == Plicity::Implicit => FieldSource::Infer {
+                    func: CalleeId::Structure(*name),
+                    label: labels[position].to_string(),
+                },
+                None => FieldSource::Written(&copies[position]),
             })
             .collect();
-
-        let sources: Vec<FieldSource> = values.iter().map(FieldSource::Written).collect();
         let mut elaborated = Vec::with_capacity(sources.len());
         check_dependent_fields(context, field_telescope, &sources, term, &mut elaborated)?;
 

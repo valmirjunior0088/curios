@@ -1080,7 +1080,7 @@ fn process_items(
                                 lower.input_type(&field.param.desugared_type())
                             })?;
                             field_scope.push(field_binders[i].clone());
-                            Ok((field_binders[i].1, ty))
+                            Ok((field.plicity, field_binders[i].1, ty))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
 
@@ -1093,7 +1093,7 @@ fn process_items(
                             universe_context: curios_core::UniverseContext::empty(),
                             arity: curios_core::Telescope::build_marked(
                                 param_tys.clone(),
-                                curios_core::Telescope::build(field_tys, ()),
+                                curios_core::Telescope::build_marked(field_tys, ()),
                             ),
                             result_sort: result_sort.clone(),
                             module,

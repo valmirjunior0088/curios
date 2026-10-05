@@ -916,6 +916,15 @@ The outer `pub` exports the type name; the inner exports construction and projec
 
 Parameters are written as an inductive's are: plain, `@`, or a `use Concept(args)` premise ([A type declared under a premise](#a-type-declared-under-a-premise)).
 
+A field is plain or hidden. A hidden field is written under `@`, as `@label: type` or its type alone, and takes no position among the fields an author writes: a literal leaves it out, a projection `.N` and a pattern's positional field count the plain fields alone, and it is read by its label. A bound declared this way is stated once, on the data it constrains: it is discharged where the value is built, and is a fact wherever the value is in scope.
+
+```crs
+pub struct Positive: pub Type { n: Nat, @Holds(0 < n) }
+pub struct Sized: pub Type { @len: Nat, items: Vec(Nat)(len) }
+```
+
+A field takes no `use` member, a structure's premise being a `use` parameter, and a tuple type's field takes no mark.
+
 Structures whose fields name one another are declared as one group with `and`; a lone structure may name itself in its fields with nothing said. See [Recursive groups](#recursive-groups).
 
 ```crs
@@ -936,6 +945,14 @@ Api { base = 3, bump(x) = x + 1 }
 
 Fields are checked in declaration order. Function-definition sugar is equivalent to assigning a lambda.
 
+A hidden field is left out, and filled as a call's omitted `@` argument is: a value by the fields whose types mention it, a bound by reduction or from the facts in scope. Nothing filling it is reported at the literal, by the proposition it states. It may be written under its mark, ahead of the plain field it precedes, as a call's hidden arguments are written from the first of their run: `@label = value`, the value alone, or `@_` to hold its place.
+
+```crs
+Positive { n = 4 }
+Sized { @len = 2, items = two }
+Sized { @_, items = two }
+```
+
 ### Structure update
 
 A leading `..base` copies a value of the same nominal structure. Labeled entries following it replace fields.
@@ -944,6 +961,8 @@ A leading `..base` copies a value of the same nominal structure. Labeled entries
 Pair { ..pair, snd = false }
 Pair(Str, Nat) { ..pair, fst = "new" }
 ```
+
+A spread copies the plain fields. A hidden field is never copied, since what it states is stated of the fields the new value has: left out, it is filled anew as in any literal, so a bound an override breaks is refused, and the base's own is written where it is meant — `Positive { ..p, @ok = p.ok }`.
 
 The spread must be first and may occur only once. Every override must be labeled and overrides must follow declaration order. The head may choose different parameters, but every copied and replaced field is checked at that new instantiation; dependent fields must therefore remain consistent.
 
@@ -1075,7 +1094,7 @@ and (@A: Type, use Eql(A)) => Eql(Tree(A));
 and (@A: Type, use Eql(A), use Ord(A)) => Ord(Tree(A));
 ```
 
-The key must be a declared `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — fully applied, representation-transparent where the witness is declared, and not a proposition. An implicit payload is inferred by the re-parsed text and takes no part, and a payload that is itself a type is refused; every other goes through its own witness, resolved in the witness's scope — a telescope premise, the witness's own entry, or a member of the same `and` group. A missing one is reported against the constructor and payload, naming the `use` premise to add when the payload's type is a telescope variable.
+The key must be a declared `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — fully applied, representation-transparent where the witness is declared, and not a proposition. An implicit payload or a hidden field is inferred by the re-parsed text and takes no part, and a payload that is itself a type is refused; every other goes through its own witness, resolved in the witness's scope — a telescope premise, the witness's own entry, or a member of the same `and` group. A missing one is reported against the constructor and payload, naming the `use` premise to add when the payload's type is a telescope variable.
 
 | Concept | The body the compiler writes | A proof payload |
 | --- | --- | --- |
@@ -1225,7 +1244,7 @@ A bound the facts do not imply is refused. The report names the facts considered
 | `-- ` | Line comment |
 | `--- ` | Documentation comment, attached to the declaration below it |
 | `{}` / `()` | Unit type / unit value |
-| `@A: Type` / `@T` / `@value` | Implicit parameter, named or as its type alone / explicitly supplied implicit argument |
+| `@A: Type` / `@T` / `@value` | Implicit parameter or hidden structure field, named or as its type alone / explicitly supplied implicit argument or hidden field |
 | `use C(A)` / `use _` / `use value` | Witness parameter of a signature / its place in a lambda / explicitly supplied witness argument, or superclass field of a concept literal |
 | `?` | Written goal — reports scope, type and fits, then fails compilation |
 | `term!` | Monadic bind through `Monad`, lifting a cross-monad action through `Lift` |

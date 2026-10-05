@@ -461,6 +461,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                                 curios_core::StructEntry::Field(field.label.clone()),
                                 self.term(&field.desugared_value())?,
                             )),
+                            StructLitEntry::Implicit(field) => {
+                                let value = field.desugared_value();
+                                Ok((
+                                    curios_core::StructEntry::Implicit(field.label.clone()),
+                                    match self.placeholder(Plicity::Implicit, &value) {
+                                        Some(hole) => hole,
+                                        None => self.term(&value)?,
+                                    },
+                                ))
+                            }
                             StructLitEntry::Use(term) => Ok((
                                 curios_core::StructEntry::Use,
                                 match self.placeholder(Plicity::Witness, term) {
@@ -769,6 +779,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                                 Ok((
                                     curios_core::StructEntry::Field(field.label.clone()),
                                     self.collect(&value, binds)?,
+                                ))
+                            }
+                            StructLitEntry::Implicit(field) => {
+                                let value = field.desugared_value();
+                                Ok((
+                                    curios_core::StructEntry::Implicit(field.label.clone()),
+                                    match self.placeholder(Plicity::Implicit, &value) {
+                                        Some(hole) => hole,
+                                        None => self.collect(&value, binds)?,
+                                    },
                                 ))
                             }
                             StructLitEntry::Use(term) => Ok((
