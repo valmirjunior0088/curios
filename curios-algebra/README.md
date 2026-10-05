@@ -22,7 +22,7 @@ The carriers' algebra over abstract atoms: what conversion decides about the car
 
 **Decision.** Two handles are two atoms. What makes two terms one atom — up to universe instances for `Nat` and `Int` — is the caller's, stated once in `curios-core`'s `atoms` module.
 
-**Rationale.** Identity is a fact about a carrier's terms, and the carriers disagree on it: numeric atoms project universe instances, while a Boolean leaf and a word chunk are compared as written. Keeping it out lets one algorithm serve both, and makes a hash collision in the caller's keys cost a probe rather than a false equation. A comparison here is transitive over handles, and over a caller's terms only where the caller hands one handle to every two terms that convert: `curios-analysis`'s chain has each checker class a pair's atoms by its own conversion before the pair is read ([An atom is one where conversion says so](../documentation/design/arithmetic/an-atom-is-one-where-conversion-says-so.md)).
+**Rationale.** Identity is a fact about a carrier's terms, and the carriers disagree on it: numeric atoms project universe instances, while a Boolean leaf and a word chunk are compared as written. Keeping it out lets one algorithm serve both, and makes a hash collision in the caller's keys cost a probe rather than a false equation. A comparison here is transitive over handles, and over a caller's terms only where the caller hands one handle to every two terms that convert: `curios-analysis`'s chain has each checker class a pair's atoms by its own conversion before the pair is read ([A term is one where conversion says so](../documentation/design/arithmetic/a-term-is-one-where-conversion-says-so.md)).
 
 ### An operation's meaning is stated once, and its mapping is Core's
 

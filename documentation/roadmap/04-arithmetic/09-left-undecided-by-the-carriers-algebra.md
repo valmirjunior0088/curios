@@ -1,6 +1,6 @@
 # What the carriers' algebra leaves undecided
 
-**Not refined yet.** This specification preserves what the carriers' algebra does not decide and no consumer has asked for, with the approaches already discussed, and the rows the law grid still refuses, as [the relational layer](08-relational-layer.md) reserves its own. Each opens when a consumer needs what it decides, and refinement establishes its fragment, algorithm contract and acceptance criteria before any implementation. It is not an implementation plan. What a verdict owes to how a term is spelled is not here: [A term is one where conversion says so](01-a-term-is-one-where-conversion-says-so.md) owns it.
+**Not refined yet.** This specification preserves what the carriers' algebra does not decide and no consumer has asked for, with the approaches already discussed, and the rows the law grid still refuses, as [the relational layer](08-relational-layer.md) reserves its own. Each opens when a consumer needs what it decides, and refinement establishes its fragment, algorithm contract and acceptance criteria before any implementation. It is not an implementation plan. What a verdict owes to how a term is spelled is decided, in [A term is one where conversion says so](../../design/arithmetic/a-term-is-one-where-conversion-says-so.md); the positions that decision leaves unanswered are the last section here.
 
 ## Boolean and bitwise normal forms
 
@@ -41,3 +41,13 @@ The cap is also a place conversion is not transitive, by design: with `A` the co
 ## Retirement
 
 Each section leaves for a working specification of its own when its consumer arrives; this file is deleted with its roadmap entry once none is left.
+
+## What an arm's equation leaves unanswered
+
+An arm's equation answers the terms conversion holds equal to its scrutinee ([A term is one where conversion says so](../../design/arithmetic/a-term-is-one-where-conversion-says-so.md)). Three positions stop short of that, each in the refusing direction, and each waits for a program that needs it.
+
+**A question inside a question.** A question a judgment's reduction puts to conversion is answered by plain reduction, which asks nothing. Under `match f(a + b) < 10` and, in its `true` arm, `match h(f(a + b) < 10) < 5`, the term `h(f(b + a) < 10) < 5` is not `true`: it is the inner guard's scrutinee only to a conversion that asks the outer guard about the respelled argument. A fold is the same: `h(f(a + b) == f(b + a)) == h(true)` does not reduce, which both checkers' `a_fold_inside_a_question_is_not_taken_again` hold. The decision rejects a third reduction until a program needs one.
+
+**A form naming a binder the scrutinee does not.** Which equations a stuck form is put to is a cost filter, `curios-analysis`'s `could_reduce_to`: it keeps a scrutinee's reduced spelling from being settled for every stuck form in its arm. It passes over a binder that is itself a proof and counts every other, one that stands where reduction would erase it included. Under `match f(b) < 10`, `f(b + 0 * c) < 10` converts with the guard outside the arm and is not `true` inside it, the row `curios`'s `tests::respelling` states refused; so is a form whose other binder stands inside a proof term that is no variable.
+
+**An index read by plain reduction.** Index inversion forces an index through `Env::force`, which is plain reduction, so an index that is its arm's scrutinee only up to conversion is not inverted. No cell of the grid reaches it.
