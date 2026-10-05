@@ -397,7 +397,7 @@ let Point { loc = (x, y), color } = point;
 body
 ```
 
-These patterns are projection sugar, not runtime matches. The struct head is documentary and is not resolved or checked. An unlabeled field is matched positionally, among the plain fields; a `label = pattern` field projects that label. A hidden field — a concept's superclass field — takes no position and a pattern's field takes no mark, so a pattern over a concept value writes its methods alone. Field punning such as `Point { x, y }` is the positional form, whose sub-patterns happen to be binders named after the fields. Parentheses group a pattern without changing it, so `((x, y))` is `(x, y)`.
+These patterns are projection sugar, not runtime matches. The struct head is documentary and is not resolved or checked. An unlabeled field is matched positionally: its place among the pattern's fields is its place among the plain fields, whose order is part of the type. A `label = pattern` field projects that label and holds the place it is written at, as a labelled entry of a literal does. A hidden field — a structure's `@` field, a concept's superclass field — takes no position and a pattern's field takes no mark, so it is read by its label, written after the fields read by position: over `struct Sized: Type { @len: Nat, items: Vec(Nat)(len) }`, `Sized { items, len = n }` binds both. A pattern over a concept value writes its methods alone. Field punning such as `Point { x, y }` is the positional form, whose sub-patterns happen to be binders named after the fields. Parentheses group a pattern without changing it, so `((x, y))` is `(x, y)`.
 
 Refutable patterns belong only to `match`.
 
