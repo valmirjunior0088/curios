@@ -1,6 +1,12 @@
 //! Witness registry entries and the keys resolution looks them up by.
 //!
-//! The [`ConceptDecl`](curios_core::ConceptDecl) entry itself is representation and lives in `curios-core` beside the other registry entries; what stays here is the instance-argument machinery: a [`Witness`] keys an ordinary top-level definition in the program-wide table under `(concept name, tuple of parameter heads)` — the [`WitnessKey`] of [`HeadKey`]s — and resolution searches that table.
+//! The [`ConceptDecl`](curios_core::ConceptDecl) entry itself is representation and lives in `curios-core` beside the other registry entries; what stays here is the instance-argument machinery: a [`Witness`] keys an ordinary top-level definition in the program-wide table under `(concept name, tuple of parameter heads)` — the [`WitnessKey`] of [`HeadKey`]s — and resolution searches that table. A witness a unit declares is known by that key before it elaborates, read off how its signature is spelled ([`Spelled`]).
+
+mod spelled;
+pub(crate) use spelled::*;
+
+#[cfg(test)]
+mod spelled_tests;
 
 #[cfg(test)]
 mod tests;

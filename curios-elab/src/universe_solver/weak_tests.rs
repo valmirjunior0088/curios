@@ -21,7 +21,7 @@ fn a_weak_equation_joins_two_open_levels_where_the_declaration_closes() {
             solver.add_weak_eq(Level::meta(u), Level::meta(v));
         }
 
-        let context = solver.finalize([u, v], [], []).unwrap();
+        let context = solver.finalize([u, v], []).unwrap();
         assert_eq!(context.parameter_count, parameters);
         assert!(context.constraints.is_empty());
     }
@@ -41,7 +41,7 @@ fn a_weak_equation_the_store_refuses_is_dropped() {
     let mut solver = UniverseSolver::new(0);
     let u = bounded(&mut solver);
     solver.add_weak_eq(Level::meta(u), Level::zero());
-    let context = solver.finalize([u], [], []).unwrap();
+    let context = solver.finalize([u], []).unwrap();
     assert_eq!(context.parameter_count, 1);
     assert_eq!(
         context
@@ -57,7 +57,7 @@ fn a_weak_equation_the_store_refuses_is_dropped() {
     solver
         .add_eq(Level::meta(u), Level::zero(), conversion())
         .unwrap();
-    assert!(solver.finalize([u], [], []).is_err());
+    assert!(solver.finalize([u], []).is_err());
 }
 
 // The batch is refused by one pair, and the others are still joined: retaken one at a time, `v = w` holds beside the dropped `u = 0`.
@@ -73,7 +73,7 @@ fn a_refused_weak_equation_does_not_take_the_others_with_it() {
     solver.add_weak_eq(Level::meta(u), Level::zero());
     solver.add_weak_eq(Level::meta(v), Level::meta(w));
 
-    let context = solver.finalize([u, v, w], [], []).unwrap();
+    let context = solver.finalize([u, v, w], []).unwrap();
     assert_eq!(context.parameter_count, 2);
     assert_eq!(
         solver.zonk(&Level::meta(v)).unwrap(),
@@ -99,7 +99,7 @@ fn of_two_weak_equations_that_cannot_both_hold_the_first_met_is_kept() {
         solver.add_weak_eq(Level::meta(u), Level::meta(first));
         solver.add_weak_eq(Level::meta(u), Level::meta(second));
 
-        let context = solver.finalize([u, a, b], [], []).unwrap();
+        let context = solver.finalize([u, a, b], []).unwrap();
         assert_eq!(context.parameter_count, 2);
         let level = |meta| solver.zonk(&Level::meta(meta)).unwrap();
         assert_eq!(level(u), level(first));
@@ -118,7 +118,7 @@ fn a_weak_equation_is_withdrawn_with_the_scope_that_met_it() {
     solver.rollback(mark);
     solver.release(mark);
 
-    let context = solver.finalize([u, v], [], []).unwrap();
+    let context = solver.finalize([u, v], []).unwrap();
     assert_eq!(context.parameter_count, 2);
 }
 
@@ -130,7 +130,7 @@ fn a_pair_with_no_open_level_is_dropped_unread() {
     solver.add_weak_eq(Level::zero(), Level::constant(1));
     solver.add_weak_eq(Level::param(UniverseParam(0)), Level::zero());
 
-    let context = solver.finalize([u], [], []).unwrap();
+    let context = solver.finalize([u], []).unwrap();
     assert_eq!(context.parameter_count, 1);
     assert!(context.constraints.is_empty());
     assert_eq!(solver.constraint_count(), 0);

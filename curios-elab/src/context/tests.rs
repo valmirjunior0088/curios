@@ -2,11 +2,11 @@ use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        CalleeId, Free, Global, Intrinsic, Level, MetavarId, Nat, Term, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseRole, WitnessOrigin,
+        Free, Global, Intrinsic, Level, MetavarId, Nat, Term, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseRole,
     },
     curios_utilities::Qualifier,
-    std::collections::BTreeSet,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 fn context() -> Context {
@@ -68,54 +68,6 @@ fn universe_dependencies_of_an_unsolved_meta_keep_its_birth_context() {
     );
 }
 
-/// A witness goal deferred for want of a table entry, as resolution defers one.
-fn deferred(context: &mut Context, slot: usize) -> ParkedProblem {
-    ParkedProblem {
-        work: ParkedWork::Witness {
-            slot: MetavarId(slot),
-            goal: Term::type_ground(),
-            // The callee is irrelevant here -- these fixtures exercise parked-problem bookkeeping, not how a report names one.
-            provenance: WitnessOrigin {
-                func: CalleeId::Anonymous,
-                binder: "w".to_string(),
-            },
-        },
-        origin: Term::type_ground(),
-        frame: context.freeze_frame(),
-        watching: BTreeSet::new(),
-    }
-}
-
-fn stamps(deferred: Vec<(ItemStamp, ParkedProblem)>) -> Vec<ItemStamp> {
-    deferred.into_iter().map(|(item, _)| item).collect()
-}
-
-#[test]
-fn a_deferred_witness_goal_keeps_the_stamp_of_the_item_that_raised_it() {
-    let mut context = context();
-    context.begin_item(ItemStamp(3));
-    let parked = deferred(&mut context, 0);
-    context.defer_witness(parked);
-    context.begin_item(ItemStamp(4));
-
-    assert_eq!(stamps(context.take_deferred_witnesses()), [ItemStamp(3)]);
-}
-
-#[test]
-fn dropping_one_items_deferred_goals_leaves_the_others() {
-    let mut context = context();
-    context.begin_item(ItemStamp(1));
-    let parked = deferred(&mut context, 0);
-    context.defer_witness(parked);
-    context.begin_item(ItemStamp(2));
-    let parked = deferred(&mut context, 1);
-    context.defer_witness(parked);
-
-    context.drop_deferred_of(ItemStamp(1));
-
-    assert_eq!(stamps(context.take_deferred_witnesses()), [ItemStamp(2)]);
-}
-
 #[test]
 fn removing_a_witness_hands_back_every_key_it_held() {
     let mut context = context();
@@ -152,6 +104,209 @@ fn removing_a_witness_hands_back_every_key_it_held() {
     assert!(context.witness(&concept, &nat).is_none());
     assert!(context.witness(&concept, &bool_).is_none());
     assert!(context.remove_witness(&name).is_empty());
+}
+
+fn named(path: &str) -> Global {
+    Global::Authored(Qualifier::from([path]))
+}
+
+/// A unit that writes `a` and then `b`, neither elaborated.
+fn unit_of_two(context: &mut Context) -> [Global; 2] {
+    let [a, b] = [named("a"), named("b")];
+    context.begin_unit(BTreeMap::from([(a, 0), (b, 1)]), BTreeSet::from([a, b]));
+
+    [a, b]
+}
+
+#[test]
+fn a_read_of_a_declaration_that_has_not_elaborated_is_a_need() {
+    let mut context = context();
+    let [a, b] = unit_of_two(&mut context);
+    context.attempt(&[&b]);
+
+    assert!(context.assumption(&Free::from(&a)).is_none());
+
+    assert_eq!(context.take_needs(), BTreeSet::from([a]));
+}
+
+/// A declaration's own name is bound by the group it becomes, so missing it is no read of another.
+#[test]
+fn a_declaration_reads_its_own_name_without_a_need() {
+    let mut context = context();
+    let [_, b] = unit_of_two(&mut context);
+    context.attempt(&[&b]);
+
+    assert!(context.assumption(&Free::from(&b)).is_none());
+
+    assert!(context.take_needs().is_empty());
+}
+
+#[test]
+fn a_finished_declaration_is_no_need_whatever_became_of_it() {
+    let mut context = context();
+    let [a, b] = unit_of_two(&mut context);
+    context.finish(&[&a]);
+    context.attempt(&[&b]);
+
+    assert!(context.assumption(&Free::from(&a)).is_none());
+
+    assert!(context.take_needs().is_empty());
+}
+
+/// An attempt begins with nothing needed, so what a void attempt read does not void the next.
+#[test]
+fn an_attempt_begins_with_nothing_needed() {
+    let mut context = context();
+    let [a, b] = unit_of_two(&mut context);
+    context.attempt(&[&b]);
+    context.need(a);
+
+    context.attempt(&[&b]);
+
+    assert!(context.take_needs().is_empty());
+}
+
+/// A proof the elaborator writes applies a name of its own unit only from a declaration written after it, wherever the two elaborate.
+#[test]
+fn a_proof_applies_a_name_of_its_unit_only_from_a_declaration_written_after_it() {
+    let mut context = context();
+    let [a, b] = unit_of_two(&mut context);
+    for name in [&a, &b] {
+        context.define_assuming(
+            &Free::from(name),
+            &Term::type_ground(),
+            &Term::type_ground(),
+            None,
+        );
+    }
+    context.finish(&[&a, &b]);
+
+    context.enter_item(Some(b));
+    assert!(context.proof_may_apply(&a));
+    context.enter_item(Some(a));
+    assert!(!context.proof_may_apply(&b));
+    assert!(!context.proof_may_apply(&a));
+}
+
+/// A name written before the declaration and not elaborated yet is one the proof may apply, so the attempt needs it.
+#[test]
+fn a_proof_needs_a_name_written_before_it_that_has_not_elaborated() {
+    let mut context = context();
+    let [a, b] = unit_of_two(&mut context);
+    context.attempt(&[&b]);
+    context.enter_item(Some(b));
+
+    assert!(!context.proof_may_apply(&a));
+
+    assert_eq!(context.take_needs(), BTreeSet::from([a]));
+}
+
+/// A witness the unit declares and has not elaborated, spelled at `Show(Nat)` at the place `position`.
+fn declare(context: &mut Context, path: &str, position: usize) -> Global {
+    let name = named(path);
+    context.declare_witness(
+        name,
+        Declared {
+            spelled: Some((named("Show"), WitnessKey(vec![HeadKey::Nat]))),
+            module: Qualifier::empty(),
+            position,
+        },
+    );
+
+    name
+}
+
+/// Whether a witness stands at a key is asked of every witness the unit declares, so the answer is one whichever of them has elaborated.
+#[test]
+fn a_declared_witness_stands_at_the_key_it_is_spelled_at_before_it_elaborates() {
+    let mut context = context();
+    let show = named("Show");
+    declare(&mut context, "w", 0);
+
+    assert!(context.witness_declared(&show, &WitnessKey(vec![HeadKey::Nat])));
+    assert!(!context.witness_declared(&show, &WitnessKey(vec![HeadKey::Bool])));
+    assert_eq!(
+        context.witness_keys(&show),
+        [(WitnessKey(vec![HeadKey::Nat]), Qualifier::empty())]
+    );
+    assert!(context.take_needs().is_empty());
+}
+
+#[test]
+fn a_goal_at_the_key_of_a_witness_that_has_not_elaborated_needs_it() {
+    let mut context = context();
+    let show = named("Show");
+    let key = WitnessKey(vec![HeadKey::Nat]);
+    let witness = declare(&mut context, "w", 0);
+    context.attempt(&[&named("user")]);
+
+    assert!(context.witness_unfinished(&show, &key));
+    assert_eq!(context.take_needs(), BTreeSet::from([witness]));
+    assert!(!context.witness_unfinished(&show, &WitnessKey(vec![HeadKey::Bool])));
+    assert!(context.take_needs().is_empty());
+}
+
+/// A witness registers on its signature, so a miss on its own key is its signature asking for itself: no witness, and nothing to wait for.
+#[test]
+fn a_witness_does_not_need_itself() {
+    let mut context = context();
+    let witness = declare(&mut context, "w", 0);
+    context.attempt(&[&witness]);
+
+    assert!(!context.witness_unfinished(&named("Show"), &WitnessKey(vec![HeadKey::Nat])));
+    assert!(context.take_needs().is_empty());
+}
+
+/// The second of two witnesses spelled alike is the duplicate, whichever of them a goal reaches first.
+#[test]
+fn of_two_witnesses_spelled_alike_a_goal_needs_the_first_as_written() {
+    let mut context = context();
+    declare(&mut context, "a", 7);
+    let first = declare(&mut context, "b", 2);
+    context.attempt(&[&named("user")]);
+
+    assert!(context.witness_unfinished(&named("Show"), &WitnessKey(vec![HeadKey::Nat])));
+    assert_eq!(context.take_needs(), BTreeSet::from([first]));
+}
+
+/// A refused or withheld witness leaves its key poisoned whether or not it had registered, and a finished one leaves it to the table.
+#[test]
+fn a_withdrawn_witness_poisons_the_key_it_is_spelled_at() {
+    let mut context = context();
+    let show = named("Show");
+    let key = WitnessKey(vec![HeadKey::Nat]);
+    let refused = declare(&mut context, "w", 0);
+
+    context.withdraw_declared_witness(&refused);
+
+    assert!(context.is_poisoned_witness(&show, &key));
+    assert!(!context.witness_declared(&show, &key));
+
+    let mut context = self::context();
+    let kept = declare(&mut context, "w", 0);
+    context.finish(&[&kept]);
+
+    assert!(!context.is_poisoned_witness(&show, &key));
+    assert!(!context.witness_declared(&show, &key));
+}
+
+/// A name no declaration of the unit writes is another unit's, and is applied wherever it is in scope.
+#[test]
+fn a_proof_applies_another_units_name_wherever_it_is_in_scope() {
+    let mut context = context();
+    let [_, b] = unit_of_two(&mut context);
+    let lemma = named("lemma");
+    context.enter_item(Some(b));
+
+    assert!(!context.proof_may_apply(&lemma));
+    context.define_assuming(
+        &Free::from(&lemma),
+        &Term::type_ground(),
+        &Term::type_ground(),
+        None,
+    );
+    assert!(context.proof_may_apply(&lemma));
+    assert!(context.take_needs().is_empty());
 }
 
 #[test]

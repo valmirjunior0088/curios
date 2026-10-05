@@ -60,7 +60,7 @@ fn a_witness_naming_a_later_witness_is_ordered_not_refused() {
     assert_eq!(run(source), b"4");
 }
 
-// Two witnesses resolving each other have no order that satisfies both, so one would be emitted naming the other before it exists. Refused by name, at a span, with the way out — where the kernel would have said `unbound name /witness@1` about an id the reader cannot find in their own program.
+// Two witnesses resolving each other have no order to elaborate in: each needs the other before it can finish. Refused once, at the first of them as written, naming both and the way out — where the kernel would have said `unbound name /witness@1` about an id the reader cannot find in their own program.
 #[test]
 fn two_witnesses_resolving_each_other_are_refused_with_the_way_out() {
     let source = r#"
@@ -73,13 +73,52 @@ fn two_witnesses_resolving_each_other_are_refused_with_the_way_out() {
 
     let report = error(source);
     assert!(
-        report.contains("witnesses for Show(A) and Show(B) resolve each other"),
+        report.contains("the witness of Show(A) and the witness of Show(B) need one another"),
         "expected the cycle named by its two concept applications:\n{report}"
     );
     assert!(
         report.contains("satisfy C(A) { ... } and D(B) { ... }"),
         "expected the report to name the way out:\n{report}"
     );
+    assert_eq!(
+        report.matches("need one another").count(),
+        1,
+        "expected one report for the cycle, at its first member:\n{report}"
+    );
+}
+
+// A definition and the witness it resolves to, each needing the other, are a cycle like two witnesses': `describe`'s goal resolves to `Show(Box)`, whose `show` calls `describe`. Refused by name in either order they are written in — where the elaborator once accepted both and the kernel refused `/describe` for ``unbound name `/witness@0` ``.
+#[test]
+fn a_definition_and_the_witness_it_resolves_to_are_refused_as_a_cycle_in_either_order() {
+    let describe = "let describe(b: Box) -> Str = Show/show(b);";
+    let witness = r#"satisfy Show(Box) { show(b) = match b.value | 0 => "empty" | _ => describe(Box { value = 0 }) end }"#;
+    let program = |first: &str, second: &str| {
+        format!(
+            r#"
+            use /std/{{Nat, Show, Str}};
+            pub struct Box: pub Type {{ value: Nat }}
+            {first}
+            {second}
+            /std/print(describe(Box {{ value = 3 }}))
+            "#
+        )
+    };
+
+    for source in [program(describe, witness), program(witness, describe)] {
+        let report = error(&source);
+        assert!(
+            report.contains("need one another"),
+            "expected a cycle, by name:\n{report}"
+        );
+        assert!(
+            report.contains("'describe'") && report.contains("the witness of Show(Box)"),
+            "expected both members named:\n{report}"
+        );
+        assert!(
+            !report.contains("unbound name"),
+            "the kernel was left to refuse the cycle:\n{report}"
+        );
+    }
 }
 
 // The way out, run: the recursion lives in one top-level group and each witness delegates to it. This is the form every witness in `/std` already takes, and it must stay the answer the refusal above points at.

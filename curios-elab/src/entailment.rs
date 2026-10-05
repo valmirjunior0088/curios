@@ -288,13 +288,11 @@ fn check(context: &mut Context, candidate: &Term, bound: &Term) -> Result<Option
     verdict
 }
 
-/// Whether every name in `names` is assumed in the context: a proof form writes only names in scope, which is how an item of `/std` compiled before its vocabulary behaves as it would with no procedure. It is the lookup a reference itself makes.
+/// Whether a proof form may apply every name in `names` ([`Context::proof_may_apply`]): a proof form writes only names in scope, which is how an item of `/std` written before its vocabulary behaves as it would with no procedure.
 fn in_scope(context: &Context, names: &[SyntaxName]) -> bool {
-    names.iter().all(|name| {
-        context
-            .assumption(&Free::global(name.qualifier()))
-            .is_some()
-    })
+    names
+        .iter()
+        .all(|name| context.proof_may_apply(&Global::Authored(name.qualifier())))
 }
 
 /// A reference to the global `name` spells.

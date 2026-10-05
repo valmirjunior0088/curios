@@ -7,14 +7,22 @@ mod tests;
 use {
     super::{Erased, Refusal, WitnessKey},
     curios_core::{
-        Atom, CalleeId, DisplayNames, Exhaustion, Free, Global, Item, Level, Module, Polarity,
-        ReaderNames, ReaderPosition, ReduceError, Rename, Spelling, Spellings, Subterm, Term,
-        UniverseConstraintOrigin, UniverseError, build_rename, build_shorten_layered,
+        Atom, CalleeId, DefinitionKind, DisplayNames, Exhaustion, Free, Global, Item, Level,
+        Module, Polarity, ReaderNames, ReaderPosition, ReduceError, Rename, Spelling, Spellings,
+        Subterm, Term, UniverseConstraintOrigin, UniverseError, build_rename,
+        build_shorten_layered,
     },
     curios_num::{Grain, Integer, Natural},
     curios_utilities::{InfixOp, Plicity, Qualifier, Report, Span, SyntaxRegistry},
     std::{collections::BTreeMap, fmt, rc::Rc},
 };
+
+/// One member of an [`Error::DeclarationCycle`]: a declaration by its name, or a witness, which has none, by the type it is declared at.
+#[derive(Debug)]
+pub enum CycleMember {
+    Named(Global),
+    Witness(Box<Term>),
+}
 
 /// One written goal's entry in an [`Error::Goals`] batch: its occurrence span, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`], an unnameable binder's line spelling `_` the way source does; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
 #[derive(Debug)]
@@ -437,8 +445,6 @@ pub enum Error {
         watching: Vec<String>,
         /// Whether the goal's frozen frame carried live match-arm refinements — a solution holding only under them is deliberately never committed, one way a goal stays undecided.
         under_refinements: bool,
-        /// The watched witness goals whose registration never arrived in time, pre-rendered: their table entries were still missing when this item's drain ran, so the conversion could not unfold through them. Items order by the names they reference and a witness is anonymous, which is why the report suggests naming the operation.
-        deferred_witnesses: Vec<String>,
     },
     /// A postfix `!` whose region's monad can never be determined: an inference-position region, or one whose expected type stayed an unsolved metavariable through every retry. Strict postponement reads the monad from the region's type and never infers it from the action, so a region that never names one cannot sequence.
     BangRegionUndetermined,
@@ -491,10 +497,9 @@ pub enum Error {
         /// Present when the goal keys on a labeled tuple shape whose bare twin is registered: the shape-specific half of the report. Boxed because two [`WitnessKey`]s inline push this variant — already the roster's largest — past what `result_large_err` admits.
         shape: Option<Box<ShapeDiagnosis>>,
     },
-    /// Two witnesses that resolve each other. A witness may recurse through its *own* table entry — its declaration registers before its body elaborates for exactly that reason — but a cycle between two of them has no binding order: whichever is emitted first names one that does not exist yet, and the kernel refuses it as an unbound name. Caught here so the refusal is stated in the language's own terms, at a span, with the way out named.
-    WitnessCycle {
-        this: Box<Term>,
-        that: Box<Term>,
+    /// Declarations that need one another: each reads another of them before it can finish — by a name it writes, or by the witness a goal of its resolves to. A definition may name itself and a witness may recurse through its *own* table entry, each bound by the group it becomes, but a cycle through two has no order to elaborate them in. Refused at its first member in source order, naming every member, so the refusal is stated in the language's own terms with the way out named.
+    DeclarationCycle {
+        members: Vec<CycleMember>,
     },
     /// A written goal `?` reaching zonk — reported unconditionally, solved or not: writing `?` asks what elaboration determined there, so the report *is* the outcome and the program never compiles. Carries the display frozen at the goal's birth: the local scope in binding order, the goal's type, and the solution unification committed (if any). Each scope binder is a free `Var` term (not a raw string) so it runs through the same pretty-rename map as the types and solution, and the report spells every name consistently — except an unnameable binder, whose line spells `_` the way source does.
     ///
@@ -540,6 +545,12 @@ pub enum Error {
     InvalidWitnessHead {
         position: usize,
         head: Box<Term>,
+    },
+    /// A witness whose signature registers under a key its spelling does not say. A witness of the unit answers questions under the key its lowered signature spells before it elaborates ([`Spelled`](crate::Spelled)), so the two are one key or the witness is refused: `spelled` is the key the spelling gives, where it gives one.
+    WitnessKeyNotSpelled {
+        concept: Global,
+        key: WitnessKey,
+        spelled: Option<WitnessKey>,
     },
     /// A witness for a parameterless concept: with no parameter heads there is nothing to key the global table entry on, so such a concept is supplied through a local `use` binder instead.
     ParameterlessWitnessConcept {
@@ -593,6 +604,8 @@ pub enum Error {
     },
     /// A witness goal keyed where a refused declaration's witness stood. Never reported: the item that met it is withheld as any dependent of a refusal is, so the one report the reader sees is the refusal's own, and this exists only to carry that verdict out of resolution.
     Poisoned,
+    /// A read of a declaration that has not elaborated. Never reported: the attempt that met it is void and is made again once the declaration has, and this exists only to cut the attempt short — what voids it is the need the read recorded ([`Context::need`](crate::Context::need)), whatever becomes of this.
+    Unfinished,
     Located {
         span: Span,
         error: Box<Error>,
@@ -730,14 +743,12 @@ impl Error {
         that: U,
         watching: Vec<String>,
         under_refinements: bool,
-        deferred_witnesses: Vec<String>,
     ) -> Self {
         Self::PostponedConversion {
             this: Box::new(this.into()),
             that: Box::new(that.into()),
             watching,
             under_refinements,
-            deferred_witnesses,
         }
     }
 
@@ -1120,10 +1131,17 @@ impl Error {
         }
     }
 
-    pub(crate) fn witness_cycle<U: Into<Term>, V: Into<Term>>(this: U, that: V) -> Self {
-        Self::WitnessCycle {
-            this: Box::new(this.into()),
-            that: Box::new(that.into()),
+    /// The cycle through the declarations `members`, in source order: each definition of each by its name, and a witness, which has none, by the type it is declared at.
+    pub(crate) fn declaration_cycle(members: &[&Item]) -> Self {
+        Self::DeclarationCycle {
+            members: members
+                .iter()
+                .flat_map(|item| item.definitions())
+                .map(|definition| match definition.kind {
+                    DefinitionKind::Witness => CycleMember::Witness(Box::new(definition.type_)),
+                    _ => CycleMember::Named(definition.name),
+                })
+                .collect(),
         }
     }
 
@@ -1231,6 +1249,18 @@ impl Error {
         Self::InvalidWitnessHead {
             position,
             head: Box::new(head.into()),
+        }
+    }
+
+    pub(crate) fn witness_key_not_spelled(
+        concept: Global,
+        key: WitnessKey,
+        spelled: Option<WitnessKey>,
+    ) -> Self {
+        Self::WitnessKeyNotSpelled {
+            concept,
+            key,
+            spelled,
         }
     }
 
@@ -1758,6 +1788,12 @@ impl Error {
                 out.push(second);
             }
             Self::InvalidWitnessHead { head, .. } => out.push(head),
+            Self::DeclarationCycle { members } => {
+                out.extend(members.iter().filter_map(|member| match member {
+                    CycleMember::Witness(type_) => Some(&**type_),
+                    CycleMember::Named(_) => None,
+                }));
+            }
             Self::WitnessNotAConcept { found, .. }
             | Self::UseParameterNotAConcept { found, .. }
             | Self::ImplicitConceptMemberUnfillable { found } => out.push(found),

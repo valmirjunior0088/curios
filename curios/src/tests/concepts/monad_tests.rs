@@ -20,6 +20,31 @@ fn prelude_monad_arr_binds() {
     assert_eq!(run(source), b"4");
 }
 
+// Whether an action is embedded is asked of every witness the unit declares: `run` answers a `Box` action where `Io` is expected, which is an embedding where both heads are monads and a mismatch where one is not. The answer is the same with `Monad(Box)` and `Lift(Box, Io)` written after `run` as before it — where it once followed which of them had elaborated, and the first order was refused, `Box(Nat)` against `Io(Nat)`.
+#[test]
+fn an_action_is_embedded_wherever_its_monads_witnesses_are_written() {
+    let run_ = "let run(n: Nat) -> Io(Nat) = boxed(n);";
+    let witnesses = r#"satisfy Monad(Box) { pure(@_, a) = Box { value = a }, bind(@_, @_, m, f) = f(m.value) }
+        satisfy Lift(Box, Io) { lift(@_, m) = Io/pure(m.value) }"#;
+    let program = |first: &str, second: &str| {
+        format!(
+            r#"
+            use /std/{{Nat, Io, Monad}};
+            use /std/Monad/{{Lift}};
+            pub struct Box(A: Type): pub Type {{ value: A }}
+            let boxed(n: Nat) -> Box(Nat) = Box {{ value = n }};
+            {first}
+            {second}
+            let main: Io({{}}) = let n = run(3)!; /std/print(Nat/to_str(n));
+            main
+            "#
+        )
+    };
+
+    assert_eq!(run(&program(run_, witnesses)), b"3");
+    assert_eq!(run(&program(witnesses, run_)), b"3");
+}
+
 // The monadic sugar: each `e!` desugars to `/std/Monad/bind(e, cont)`, whose `use` binder resolves the `Monad` witness from the action's type — no header, no imports needed for the dispatch itself.
 #[test]
 fn monadic_sugar_binds_through_the_concept() {

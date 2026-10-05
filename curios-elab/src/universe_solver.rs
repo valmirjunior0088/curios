@@ -1552,21 +1552,19 @@ impl UniverseSolver {
 
     /// Settle the levels no caller can choose and bind every surviving one as a deterministic declaration parameter.
     ///
-    /// `interface` is the declaration's externally visible universe surface — its type and the registry signatures a use site instantiates. `internal` levels occur only in the body, so no occurrence could ever choose them; they are minimized instead of becoming parameters a caller cannot supply. An internal level with no principal solution is still generalized, because the residual context must stay closed. `pending` names the levels a still-deferred witness goal mentions.
+    /// `interface` is the declaration's externally visible universe surface — its type and the registry signatures a use site instantiates. `internal` levels occur only in the body, so no occurrence could ever choose them; they are minimized instead of becoming parameters a caller cannot supply. An internal level with no principal solution is still generalized, because the residual context must stay closed.
     ///
-    /// Three kinds of level are settled rather than generalized, by `Self::settle`: a level the constraints reach that neither the type nor the body mentions; a level a still-deferred goal names, and every level settling it lands on, until the goal is ground; and an interface level whose representative is an occurrence's. The last is Rocq's minimization — at an application, "a `j ≤ i` constraint will be generated. It is however often the case that an equation `j = i` would be more appropriate, when `f`'s universes are fresh" — and Agda's under `--cumulativity`, which instantiates a level bounded only from below to the join of its bounds. It is what keeps a written type where its reduct is: both checkers size a tuple type or a Π from its parts' reducts, where an occurrence's instance is gone, so an occurrence left at a parameter above its argument's level is a written type above the level its enclosing type was sized for.
+    /// Two kinds of level are settled rather than generalized, by `Self::settle`: a level the constraints reach that neither the type nor the body mentions, and an interface level whose representative is an occurrence's. The last is Rocq's minimization — at an application, "a `j ≤ i` constraint will be generated. It is however often the case that an equation `j = i` would be more appropriate, when `f`'s universes are fresh" — and Agda's under `--cumulativity`, which instantiates a level bounded only from below to the join of its bounds. It is what keeps a written type where its reduct is: both checkers size a tuple type or a Π from its parts' reducts, where an occurrence's instance is gone, so an occurrence left at a parameter above its argument's level is a written type above the level its enclosing type was sized for.
     pub fn finalize(
         &mut self,
         interface: impl IntoIterator<Item = UniverseMetaId>,
         internal: impl IntoIterator<Item = UniverseMetaId>,
-        pending: impl IntoIterator<Item = UniverseMetaId>,
     ) -> Result<UniverseContext, UniverseError> {
         curios_profile::profile!("universe::finalize");
         // First, while every level elaboration left open is still open: a weak equation joins two of them, and what follows settles the classes that leaves.
         self.join_weak_equations();
         // Follow each interface level to the metas that actually carry it. Conversion aliases one meta onto another whenever two spellings of a level are forced equal — keeping the member of greater provenance, but not by the signature's choice — so the set the caller computed from the declaration's type can name metas that were solved away, several links back from the ones still standing. Those representatives are then reached by `universe_metas_in(&body)` instead and land on the internal side, where `minimize` takes least solutions for them; the declaration comes back at a ground level rather than generalized over a level its own signature mentions, and every polymorphic caller is refused by the kernel for supplying a parameter where it demands a constant.
         let interface = self.representatives(interface);
-        let pending = self.representatives(pending);
         let internal = internal
             .into_iter()
             .filter(|meta| !interface.contains(meta))
@@ -1581,23 +1579,6 @@ impl UniverseSolver {
         self.minimize(&internal, &relevant)?;
         // Minimizing solves body-only levels after the determined ones were merged, and a solution can determine another: `a ≤ b` with `b ≤ max(a, c)` becomes mutual once `c` is zero. So the merge is asked once more of what minimizing left.
         self.merge_forced_equalities(&relevant)?;
-        // A still-deferred witness goal is made ground, whatever bounds its levels and whoever chose them: the goal resolves after this scheme closes, and the witness it finds can only be pinned to a level the goal already fixes (`close_instance`), while a constraint it brings then reaches no scheme at all. So a level the goal names settles, and so does every level a settlement lands on, until the goal names none. Generalized, `/std/Io`'s `Read(Async, Input)` witness would name the unapplied `Async` at a parameter while the `Read(Async, Handle)` witness its body resolves later sits at zero; settled one step only, `/std/tcp/Listener`'s `close_raising` would leave the `Io` of its `Try(Io, Io/Error, A)` at `A`'s level, offered at every level, while its `!` lifts `Handle/close`'s `Io` at zero through `Lift(Io, Io)`, whose two sides are one level, so the witness would answer at zero alone.
-        let mut pending = pending
-            .into_iter()
-            .filter(|meta| relevant.contains(meta))
-            .collect::<BTreeSet<_>>();
-        loop {
-            self.settle(&pending, &pending)?;
-            let reached = self
-                .representatives(pending.iter().copied())
-                .into_iter()
-                .filter(|meta| relevant.contains(meta) && !pending.contains(meta))
-                .collect::<BTreeSet<_>>();
-            if reached.is_empty() {
-                break;
-            }
-            pending.extend(reached);
-        }
         // An occurrence's level in the signature settles at its recorded floor: `List(Nat)` in a domain sits at `Type 0` where its reduct does, rather than at a parameter no caller needs. As in Rocq, a level settles only at a lower bound something recorded, so one nothing bounded from below stays — and a chosen level identified with an occurrence stays with it, being the class's representative.
         let occurrences = interface
             .iter()
@@ -1707,7 +1688,7 @@ impl UniverseSolver {
     ///
     /// A witness inhabits its goal and no other, so the levels its scheme introduces at a use site that the goal's application names carry no freedom — the goal fixes them. Conversion alone does not say so: it equates two applications' levels (`compare_levels`), but an equation it cannot turn into an alias — against a level already generalized, or a maximum — stays two constraints, and a level held only by constraints is left for declaration finalization.
     ///
-    /// These must therefore be *solutions*, not constraints. A goal that deferred resolves after its consuming declaration finalized, so no finalization remains to turn a bound into a value, and the enclosing item's `clear_constraints` would discard a constraint unsolved.
+    /// These must therefore be *solutions*, not constraints. A goal a parked constraint wakes after its consuming declaration finalized has no finalization left to turn a bound into a value, and the enclosing item's `clear_constraints` would discard a constraint unsolved.
     ///
     /// Positions whose instance level is already solved, or whose determining level is itself still open, are left alone: this pins what is knowable and never invents a solution.
     pub fn pin_instance(

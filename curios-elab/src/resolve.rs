@@ -5,17 +5,17 @@
 //! 3. **Global table** — pure lookup by `(concept, tuple of the rigid heads of every parameter)`; a hit instantiates the witness's telescope (fresh metavariables for `@` binders, recursive goals for `use` premises) and unifies its result type against the goal. No projections here.
 //! 4. **Flex head** — any parameter still headed by a metavariable parks the goal, woken when a watched metavariable solves.
 //!
-//! A rigid, keyable head with no table entry *defers* rather than failing: items elaborate in order, and a later item may register the witness. The deferred store is retried after every item and drained — erroring — once the whole module has elaborated.
+//! A rigid, keyable head with no table entry is asked of the witnesses the unit declares, each known before it elaborates by the key its signature is spelled at ([`Spelled`](crate::Spelled)): where one is spelled there and has not elaborated, the attempt needs it and is void ([`Context::need`]); where none is, the goal has no witness, and says so where it stands.
 //!
-//! **A goal is attempted only while its slot is open.** The slot is a metavariable like any other, so unification may solve it first — against an expected type or an argument's type that names a dictionary, as a type declared under a `use` premise does — and that solution is the answer: a value built under one dictionary is read under the same one. Resolving the goal anyway would write the table's entry over it, which the elaborator would accept and the kernel refuse, the argument's type no longer converting with the parameter's. Every door that commits a resolution asks first: the first attempt, a parked or deferred retry, and the end-of-module sweep.
+//! **A goal is attempted only while its slot is open.** The slot is a metavariable like any other, so unification may solve it first — against an expected type or an argument's type that names a dictionary, as a type declared under a `use` premise does — and that solution is the answer: a value built under one dictionary is read under the same one. Resolving the goal anyway would write the table's entry over it, which the elaborator would accept and the kernel refuse, the argument's type no longer converting with the parameter's. Every door that commits a resolution asks first: the first attempt and a parked retry.
 //!
 //! **Rule 1 beating rule 3 is why a concept cannot state a law about the *registered* witness.** A field whose own telescope takes `use C(A)` states its law over an arbitrary `C` rather than the one the program registered, so no witness can discharge it — which rules out checking a copy of a resolved witness from inside the concept that copies it. Removing the copy is the move that remains: a superclass edge, whose slot resolution fills.
 
 use {
     super::{
-        Callee, Context, EmbeddingDiagnosis, Error, FrozenFrame, HeadKey, ItemStamp, Outcome,
-        ParkedProblem, ParkedWork, ShapeDiagnosis, Witness, WitnessKey, attempt_discharge,
-        convert_outcome, reduce_with, resolved_for_display,
+        Callee, Context, EmbeddingDiagnosis, Error, FrozenFrame, HeadKey, Outcome, ParkedWork,
+        ShapeDiagnosis, Witness, WitnessKey, attempt_discharge, convert_outcome, reduce_with,
+        resolved_for_display,
     },
     crate::{SlotPositions, is_prop, premise_label},
     curios_core::{
@@ -33,18 +33,10 @@ enum Resolution {
     Solved(Term),
     /// The goal's key is still flexible — park, watching its metavariables.
     Flex,
-    /// The key is rigid and keyable but the table has no entry (yet) — defer.
-    Missing,
     /// The key is one a refused declaration's witness stood under: the goal is that refusal's dependent, and the caller withholds rather than reports.
     Poisoned,
     /// Definitely unresolvable: rigid non-keyable head, or a table hit whose remaining parameters do not unify. The caller reports `NoWitness`.
     NoMatch,
-}
-
-/// A deferred witness goal that will never resolve, attributed to the item that raised it.
-pub(crate) struct DeferredRefusal {
-    pub item: ItemStamp,
-    pub error: Error,
 }
 
 /// Best-effort display form of a goal for diagnostics — the renderer every mismatch report uses (`resolved_for_display`), so a goal is spelled as the rest of the reports spell a type. A bare strict zonk would render a nominal type through its recursive-group projection — `no witness of Spell(rec #0: Type = Opaque; #0) found` — because a zonked solution spells a stuck recursive call as the `Rec` node itself until the refold gives it back its name.
@@ -123,7 +115,9 @@ pub(crate) fn diagnose_shape(context: &mut Context, goal: &Term) -> Option<Box<S
     }
 
     let bare = WitnessKey(bare);
-    context.witness(&concept_name, &bare)?;
+    context
+        .witness_declared(&concept_name, &bare)
+        .then_some(())?;
 
     Some(Box::new(ShapeDiagnosis {
         wanted: WitnessKey(wanted),
@@ -156,9 +150,7 @@ pub(crate) fn diagnose_embedding(
     // Monad-hood of the source: any registered Monad witness under its head. The concept's name derives from the registry's bind wrapper — its namespace is the concept.
     let monad_concept = Global::Authored(context.syntax().monad.bind.qualifier().without_last());
     let source_is_monad = match &source_key {
-        Some(key) => context
-            .witness(&monad_concept, &WitnessKey(vec![key.clone()]))
-            .is_some(),
+        Some(key) => context.witness_declared(&monad_concept, &WitnessKey(vec![key.clone()])),
         None => false,
     };
 
@@ -251,7 +243,7 @@ fn declared_result(context: &mut Context, action: &Term) -> Option<Term> {
         .then_some(result)
 }
 
-/// A shortest chain of declared `Lift` edges from `from` to `to`, each hop rendered as its key and declaring module — breadth-first over the witness table's keys, so the result is minimal and deterministic.
+/// A shortest chain of declared `Lift` edges from `from` to `to`, each hop rendered as its key and declaring module — breadth-first over the keys the concept's witnesses stand under, elaborated or not, so the result is minimal and the same whenever it is asked.
 fn lift_chain(
     context: &Context,
     lift: &Global,
@@ -259,14 +251,11 @@ fn lift_chain(
     to: &HeadKey,
 ) -> Vec<(String, Qualifier)> {
     let mut edges: Vec<(HeadKey, HeadKey, String, Qualifier)> = Vec::new();
-    for (concept, key, witness) in context.witness_keyed_entries() {
-        if concept != lift {
-            continue;
-        }
+    for (key, module) in context.witness_keys(lift) {
         let [m, n] = key.0.as_slice() else {
             continue;
         };
-        edges.push((m.clone(), n.clone(), key.to_string(), witness.module));
+        edges.push((m.clone(), n.clone(), key.to_string(), module));
     }
 
     let mut parents: BTreeMap<HeadKey, usize> = BTreeMap::new();
@@ -512,10 +501,14 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
     let key = WitnessKey(heads);
 
     let Some(witness) = context.witness(&concept_name, &key).cloned() else {
-        return Ok(match context.is_poisoned_witness(&concept_name, &key) {
-            true => Resolution::Poisoned,
-            false => Resolution::Missing,
-        });
+        if context.is_poisoned_witness(&concept_name, &key) {
+            return Ok(Resolution::Poisoned);
+        }
+        // No entry is no answer while a witness the unit declares is spelled at the key: the attempt needs it, and what it would conclude without it is void.
+        return match context.witness_unfinished(&concept_name, &key) {
+            true => Err(Error::Unfinished),
+            false => Ok(Resolution::NoMatch),
+        };
     };
 
     instantiate(context, &witness, &goal_whnf, origin)
@@ -694,7 +687,7 @@ fn instantiate(
         }
     }
 
-    // The witness inhabits *this* goal and no other, so the levels its scheme introduced here that the goal's application names are determined by the goal's — they are not free. Conversion alone does not say so: it equates the two applications' levels, but an equation it cannot turn into an alias — against a level already generalized, or a maximum — stays two constraints. So the instantiation is pinned to what the goal already fixes, *before* the premises: a premise goal is stated in terms of these levels, so pinning first is what makes the same argument hold recursively for every witness the premises pull in. What the goal leaves open belongs to the declaration that raised it, whose finalization settles it with everything else the declaration said — an action read after this witness resolved may still bound a method's level. A goal that *defers* — the normal case for a declaration whose witness is registered later in the same unit — resolves long after its consumer finalized, and the level it mints then has nothing left to close it, so it is closed here (`Context::close_universe_instance` tells the two apart).
+    // The witness inhabits *this* goal and no other, so the levels its scheme introduced here that the goal's application names are determined by the goal's — they are not free. Conversion alone does not say so: it equates the two applications' levels, but an equation it cannot turn into an alias — against a level already generalized, or a maximum — stays two constraints. So the instantiation is pinned to what the goal already fixes, *before* the premises: a premise goal is stated in terms of these levels, so pinning first is what makes the same argument hold recursively for every witness the premises pull in. What the goal leaves open belongs to the declaration that raised it, whose finalization settles it with everything else the declaration said — an action read after this witness resolved may still bound a method's level. A goal a parked constraint wakes after its consumer finalized has no finalization left to close the level it mints, so it is closed here (`Context::close_universe_instance` tells the two apart).
     if !minted.is_empty() {
         let terminal = reduce_with(context, &terminal)?;
         // A terminal that is not a concept application pins nothing, but once its consumer has finalized its levels still have to be closed, so the call is made either way.
@@ -737,7 +730,7 @@ fn instantiate(
     Ok(Resolution::Solved(term))
 }
 
-/// Attempt a freshly minted witness goal: solve it now, park it on a flex key, or defer it on a missing table entry. A definite failure is an error at `origin`'s span. A slot unification has already solved is left as it stands.
+/// Attempt a freshly minted witness goal: solve it now, or park it on a flex key. A definite failure is an error at `origin`'s span, and a key a witness that has not elaborated is spelled at is [`Error::Unfinished`], which voids the attempt. A slot unification has already solved is left as it stands.
 pub(crate) fn attempt_witness_goal(
     context: &mut Context,
     slot: MetavarId,
@@ -765,20 +758,6 @@ pub(crate) fn attempt_witness_goal(
             );
             Ok(())
         }
-        Resolution::Missing => {
-            let frame = context.freeze_frame();
-            context.defer_witness(ParkedProblem {
-                work: ParkedWork::Witness {
-                    slot,
-                    goal: goal.clone(),
-                    provenance,
-                },
-                origin: origin.clone(),
-                frame,
-                watching: BTreeSet::new(),
-            });
-            Ok(())
-        }
         Resolution::Poisoned => Err(Error::Poisoned),
         Resolution::NoMatch => {
             Err(
@@ -789,7 +768,7 @@ pub(crate) fn attempt_witness_goal(
     }
 }
 
-/// Retry a parked or deferred witness goal under its frozen frame. Called by `retry_parked`'s wake path and the deferred-goal sweeps. A goal whose slot was solved while it waited — the metavariable it was parked on and the slot solved by one unification — is dropped, as [`attempt_witness_goal`] drops it.
+/// Retry a parked witness goal under its frozen frame, from `retry_parked`'s wake path. A goal whose slot was solved while it waited — the metavariable it was parked on and the slot solved by one unification — is dropped, as [`attempt_witness_goal`] drops it.
 pub(crate) fn retry_witness(
     context: &mut Context,
     slot: MetavarId,
@@ -822,19 +801,6 @@ pub(crate) fn retry_witness(
             );
             Ok(())
         }
-        Resolution::Missing => {
-            context.defer_witness(ParkedProblem {
-                work: ParkedWork::Witness {
-                    slot,
-                    goal,
-                    provenance,
-                },
-                origin,
-                frame,
-                watching: BTreeSet::new(),
-            });
-            Ok(())
-        }
         Resolution::Poisoned => Err(Error::Poisoned),
         Resolution::NoMatch => {
             Err(
@@ -843,97 +809,6 @@ pub(crate) fn retry_witness(
             )
         }
     }
-}
-
-/// Retry every deferred witness goal — after an item, when new witnesses may have registered. Goals that stay unresolvable re-defer; solutions that land wake parked constraints. A goal that fails is handed back attributed to the item that raised it rather than raised here, and the goals after it are still retried: that item has finalized, so its failure is its own and stops nothing else's retry. The error raised is the current item's — a parked constraint of its own that a landed solution woke and refused.
-pub(crate) fn retry_deferred_witnesses(
-    context: &mut Context,
-) -> Result<Vec<DeferredRefusal>, Error> {
-    let deferred = context.take_deferred_witnesses();
-    if deferred.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let mut refusals = Vec::new();
-    for (item, parked) in deferred {
-        let ParkedProblem {
-            work:
-                ParkedWork::Witness {
-                    slot,
-                    goal,
-                    provenance,
-                },
-            origin,
-            frame,
-            ..
-        } = parked
-        else {
-            unreachable!("only witness goals defer");
-        };
-        // As the item that raised it, so a re-deferral keeps that attribution.
-        let retried = context.with_item(item, |context| {
-            retry_witness(context, slot, goal, provenance, origin, frame)
-        });
-        if let Err(error) = retried {
-            refusals.push(DeferredRefusal { item, error });
-            continue;
-        }
-
-        // The deferred store is retried only *between* items, so the declaration that raised this goal has already finalized: its universe scheme is fixed, and no later pass will generalize or minimize a level introduced now. `instantiate` pins the witness's instance against the goal for exactly that reason. Check it held. Without this, a level that slips through is reported by `zonk` at the end of the module as an anonymous `?uN` escaping, naming neither the goal that introduced it nor the witness it came from.
-        if let Some(solution) = context.metavar_solution(slot).cloned()
-            && solution.any_universe_meta(|meta| {
-                context
-                    .universes()
-                    .zonk(&Level::meta(meta))
-                    .is_ok_and(|level| !level.metas().collect::<Vec<_>>().is_empty())
-            })
-        {
-            refusals.push(DeferredRefusal {
-                item,
-                error: Error::UniverseInvariant(format!(
-                    "a deferred witness left an unsolved universe level in {solution}"
-                )),
-            });
-        }
-    }
-
-    context.retry_parked()?;
-
-    Ok(refusals)
-}
-
-/// The end-of-module sweep: retry once more, then hand back every survivor as its item's refusal — the whole program has elaborated, so a still-missing table entry will never register.
-pub(crate) fn finish_deferred_witnesses(
-    context: &mut Context,
-) -> Result<Vec<DeferredRefusal>, Error> {
-    let mut refusals = retry_deferred_witnesses(context)?;
-
-    for (item, parked) in context.take_deferred_witnesses() {
-        let ParkedProblem {
-            work:
-                ParkedWork::Witness {
-                    slot,
-                    goal,
-                    provenance,
-                },
-            origin,
-            ..
-        } = parked
-        else {
-            unreachable!("only witness goals defer");
-        };
-        // The retry above woke the parked constraints, and one of them may have solved this slot after its goal was deferred again.
-        if context.metavar_solution(slot).is_some() {
-            continue;
-        }
-        refusals.push(DeferredRefusal {
-            item,
-            error: no_witness_error(context, &goal, &provenance, origin.span().as_ref())
-                .at_opt(origin.span()),
-        });
-    }
-
-    Ok(refusals)
 }
 
 /// What a witness declaration's type says: its telescope with every binder opened, the concept it witnesses with that application's parameters, and the key it registers under — the tuple of rigid heads of those parameters.
@@ -1021,6 +896,20 @@ pub(crate) fn register_witness(
         params,
         key,
     } = read_witness_signature(context, signature)?;
+
+    // A witness the unit declares answers questions under the key its signature is spelled at before it elaborates, so the key it registers under is that one or it is refused: a goal resolved against the spelling would otherwise wait on a witness that registers somewhere else.
+    let spelled = context
+        .spelled_witness(name)
+        .map(|spelled| spelled.cloned());
+    if let Some(spelled) = spelled
+        && spelled.as_ref() != Some(&(concept_name, key.clone()))
+    {
+        return Err(Error::witness_key_not_spelled(
+            concept_name,
+            key,
+            spelled.map(|(_, spelled)| spelled),
+        ));
+    }
 
     // Termination (Paterson's conditions): every `use` premise is strictly smaller than the concept application it serves — its variables are this witness's own binders, none of them occurs more often than in the head, and it has fewer nodes in all — so resolution through it is structurally decreasing, with no fuel or tabling. A premise may name a constant beside a binder, `Lift(Io, M)` under a head `Lift(Io, (A) => Try(M, E, A))`, which a variables-only rule would refuse for nothing: the constant weighs one node and decreases like any other.
     let binder_names: BTreeSet<&Free> = binders.iter().map(|(_, n, _)| n).collect();

@@ -32,7 +32,7 @@ use {
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, Span, SyntaxRegistry},
     std::{
-        cell::Cell,
+        cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet},
         mem,
         ops::{Deref, DerefMut},
@@ -119,10 +119,6 @@ pub(crate) struct SolutionMark {
     questions: u64,
 }
 
-/// Which top-level item raised a deferred witness goal: the item's position in its module's order, with the entry after the last item. What attributes a refusal that surfaces only once later items have elaborated — a witness that never registered — to the declaration that raised it rather than to the item the sweep happened to run after.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct ItemStamp(pub(crate) usize);
-
 /// The elaborator's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure. Two lifetimes coexist: the *frame-scoped* lexical state (`Frames`), pushed and popped as binders and match arms are entered, and the *flat monotonic facts* about the program (`Solutions`, `Program`), which frames never touch. The `Caches` police both with their write stamps, and this façade is where the two halves coordinate: any method that writes a store *and* must stamp or clear a cache lives here, naming both sub-stores explicitly. Reduction is bounded by a step budget restored at every declaration boundary — see [`Context::new`].
 #[derive(Debug)]
 pub struct Context {
@@ -140,7 +136,7 @@ pub struct Context {
     caches: Caches,
     // The frame-scoped lexical stores — assumptions, local definitions, refinements, the witness scope; see [`Frames`].
     frames: Frames,
-    // The unification state — metavariable records, the solve journal, and parked/deferred work; flat and frame-independent. See [`Solutions`].
+    // The unification state — metavariable records, the solve journal, and parked work; flat and frame-independent. See [`Solutions`].
     solutions: Solutions,
     universe_solver: UniverseSolver,
     // The program-wide declaration registries, witness table, and totality verdicts — flat stores of monotonic facts about the program, not lexically-scoped bindings; `enter_frame`/`leave_frame` never touch them. See [`Program`].
@@ -162,12 +158,16 @@ pub struct Context {
     credited: Vec<(Option<Global>, u32)>,
     // Every term elaboration settled, with the type it settled at — the seed of obligation (V). Recorded here rather than reconstructed afterwards because "what type was this checked against" is a fact elaboration computes for every term and a later walk can only re-derive, incompletely (see `crate::totality`). The site travels as an `Rc<str>` so recording is three pointer bumps.
     checked: Vec<(Term, Term, Rc<str>)>,
-    /// The item that recorded each entry of `checked`, in parallel, so a retracted item's terms can be taken out from among the others'.
-    checked_by: Vec<ItemStamp>,
     // The definition whose body is currently elaborating, for those sites.
     checked_site: Rc<str>,
-    /// The item being elaborated, stamped onto every witness goal it defers.
-    item: ItemStamp,
+    /// Where each name the unit declares sits in its lowered order — every item's, the ones a recompile reuses among them. What a proof the elaborator writes may apply is read off it ([`Context::proof_may_apply`]).
+    order: BTreeMap<Global, usize>,
+    /// The names of the unit's declarations that have not finished elaborating.
+    unfinished: BTreeSet<Global>,
+    /// The names the attempt under way declares, which it reads as its own.
+    attempting: BTreeSet<Global>,
+    /// The declarations the attempt under way read before they finished, each by a name it declares ([`Context::need`]). A `RefCell` because a lookup records through a shared borrow.
+    needs: RefCell<BTreeSet<Global>>,
     /// Whether the declaration being elaborated can still settle a universe level: from [`Context::enter_item`] until its levels are finalized. A witness resolved while this holds leaves the levels its scheme minted to that finalization; one resolved after has none left, and closes them where it resolves.
     scheme_open: bool,
     /// The names whose declarations the parser could not read, handed in before elaboration so their dependents are withheld from the start. Empty until a lowering reports them.
@@ -240,9 +240,11 @@ impl Context {
             opened: BTreeMap::new(),
             credited: Vec::new(),
             checked: Vec::new(),
-            checked_by: Vec::new(),
             checked_site: Rc::from("the entrypoint"),
-            item: ItemStamp(0),
+            order: BTreeMap::new(),
+            unfinished: BTreeSet::new(),
+            attempting: BTreeSet::new(),
+            needs: RefCell::new(BTreeSet::new()),
             scheme_open: false,
             broken: BTreeSet::new(),
             syntax,
@@ -332,7 +334,6 @@ impl Context {
     pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) {
         self.checked
             .push((term.clone(), type_.clone(), Rc::clone(&self.checked_site)));
-        self.checked_by.push(self.item);
     }
 
     /// Name the definition whose body is elaborating, for (V)'s diagnostics. Returns the previous site so the caller can restore it.
@@ -363,30 +364,69 @@ impl Context {
     /// Forget every term recorded since `mark`: a refused item's, which no obligation may read.
     pub(crate) fn truncate_checked(&mut self, mark: usize) {
         self.checked.truncate(mark);
-        self.checked_by.truncate(mark);
     }
 
-    /// Forget every term `item` recorded, wherever it sits among the others': a retracted item's, refused after later items recorded theirs.
-    pub(crate) fn retract_checked(&mut self, item: ItemStamp) {
-        let mut recorded_by = self.checked_by.iter();
-        self.checked
-            .retain(|_| *recorded_by.next().expect("one recorder per entry") != item);
-        self.checked_by.retain(|recorder| *recorder != item);
+    /// Begin a unit's items: where each of its names sits in the lowered order, and the names its own items declare, none finished yet.
+    pub(crate) fn begin_unit(
+        &mut self,
+        order: BTreeMap<Global, usize>,
+        declared: BTreeSet<Global>,
+    ) {
+        self.order = order;
+        self.unfinished = declared;
     }
 
-    /// Enter the item stamped onto the witness goals deferred from here on.
-    pub(crate) fn begin_item(&mut self, item: ItemStamp) {
-        self.item = item;
+    /// Begin an attempt at the declaration declaring `names`, with nothing needed yet.
+    pub(crate) fn attempt(&mut self, names: &[&Global]) {
+        self.attempting = names.iter().map(|name| **name).collect();
+        self.needs.get_mut().clear();
     }
 
-    /// Run `f` as `item`, restoring the current item after: a deferred goal retried later still belongs to the item that raised it, and a re-deferral must keep saying so. That item has finalized, so `f` runs with its scheme closed.
-    pub(crate) fn with_item<R>(&mut self, item: ItemStamp, f: impl FnOnce(&mut Self) -> R) -> R {
-        let outer = mem::replace(&mut self.item, item);
-        let open = mem::replace(&mut self.scheme_open, false);
-        let result = f(self);
-        self.item = outer;
-        self.scheme_open = open;
-        result
+    /// The declaration declaring `names` has finished — kept, refused or withheld — and nothing waits on it any more: a witness among them is the table's to answer for, or no one's.
+    pub(crate) fn finish(&mut self, names: &[&Global]) {
+        for name in names {
+            self.unfinished.remove(name);
+            self.program.settle_witness(name);
+        }
+        self.attempting.clear();
+    }
+
+    /// Record that the attempt under way read the declaration declaring `name` before it finished. The attempt is void whatever it goes on to conclude, and is made again once that declaration has elaborated: the record is what voids it, so no site that turns an error into a decision can make a void attempt count.
+    pub(crate) fn need(&self, name: Global) {
+        self.needs.borrow_mut().insert(name);
+    }
+
+    /// What the attempt under way needed, taken: empty for an attempt that read nothing unfinished, the one whose outcome stands.
+    pub(crate) fn take_needs(&mut self) -> BTreeSet<Global> {
+        mem::take(self.needs.get_mut())
+    }
+
+    /// Record a need where `name` is declared by a declaration of the unit that has not finished, other than the one being attempted. Asked where a lookup of a global comes back empty: the answer is then not that the name means nothing, only that its declaration has not elaborated.
+    fn missed(&self, name: &Free) {
+        if let Free::Global(global) = name
+            && self.unfinished.contains(global)
+            && !self.attempting.contains(global)
+        {
+            self.need(*global);
+        }
+    }
+
+    /// Whether a proof the elaborator writes for the declaration being elaborated may apply `name`. A name another unit declares is applied wherever it is in scope. A name this unit declares is applied by the declarations lowered after it and by no other, so what a declaration's proof is built from follows where the two are written, never which of them happened to elaborate first; where such a name has not elaborated, the attempt needs it.
+    pub(crate) fn proof_may_apply(&self, name: &Global) -> bool {
+        let applied = Free::Global(*name);
+        let assumed = self.frames.assumption(&applied).is_some();
+        let Some(written) = self.order.get(name) else {
+            return assumed;
+        };
+        let earlier = self
+            .declaration
+            .and_then(|declaration| self.order.get(&declaration))
+            .is_none_or(|here| written < here);
+        if earlier && !assumed {
+            self.missed(&applied);
+        }
+
+        earlier && assumed
     }
 
     /// Name the declarations a lowering could not read. Their dependents are withheld from elaboration before the first item is checked, so a parse failure in one declaration reports as that declaration's and nothing else's.
@@ -412,7 +452,6 @@ impl Context {
 
     /// Drain the recorded terms. The gate takes them once per module.
     pub(crate) fn take_checked(&mut self) -> Vec<(Term, Term, Rc<str>)> {
-        self.checked_by.clear();
         mem::take(&mut self.checked)
     }
 
@@ -839,8 +878,14 @@ impl Context {
         self.frames.reassume(name, type_);
     }
 
+    /// The type `name` is assumed at. A miss on a name whose declaration has not finished is recorded as what the attempt needs ([`Context::need`]).
     pub(crate) fn assumption(&self, name: &Free) -> Option<&Term> {
-        self.frames.assumption(name)
+        let assumed = self.frames.assumption(name);
+        if assumed.is_none() {
+            self.missed(name);
+        }
+
+        assumed
     }
 
     /// [`Frames::rec_definitions`]: every top-level `rec` group defined so far, with its members' names.
@@ -1514,6 +1559,56 @@ impl Context {
         self.program.witness(concept, key)
     }
 
+    /// [`Program::declare_witness`].
+    pub(crate) fn declare_witness(&mut self, name: Global, declared: Declared) {
+        self.program.declare_witness(name, declared);
+    }
+
+    /// [`Program::spelled_witness`].
+    pub(crate) fn spelled_witness(&self, name: &Global) -> Option<Option<&(Global, WitnessKey)>> {
+        self.program.spelled_witness(name)
+    }
+
+    /// Take the declared witness `name` out of what a question is answered by, poisoning the key it was spelled at: it was refused or withheld, and a goal keyed there is its dependent whether or not it had registered.
+    pub(crate) fn withdraw_declared_witness(&mut self, name: &Global) {
+        if let Some((concept, key)) = self.program.settle_witness(name) {
+            self.program.poison_witness_key(concept, key);
+        }
+    }
+
+    /// Whether a witness stands under `(concept, key)`: one registered, or one the unit declares there and has not elaborated. A question of membership, answered the same whichever witnesses have elaborated.
+    pub(crate) fn witness_declared(&self, concept: &Global, key: &WitnessKey) -> bool {
+        self.program.witness(concept, key).is_some()
+            || self.program.declared_witness(concept, key).is_some()
+    }
+
+    /// Whether the table's miss at `(concept, key)` is a witness the unit declares there and has not elaborated: the attempt needs it, and is void. `false` is a miss no other declaration answers — the one being attempted registers on its signature, so a miss on its own key is its signature asking for itself.
+    pub(crate) fn witness_unfinished(&self, concept: &Global, key: &WitnessKey) -> bool {
+        match self.program.declared_witness(concept, key) {
+            Some(name) if !self.attempting.contains(&name) => {
+                self.need(name);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Every key a witness of `concept` stands under, with the module declaring it: the registered ones, then the ones the unit declares and has not elaborated — the raw material for reachability questions over one concept's edges (the missing-embedding chain report), the same whichever witnesses have elaborated.
+    pub(crate) fn witness_keys(&self, concept: &Global) -> Vec<(WitnessKey, Qualifier)> {
+        let registered = self
+            .program
+            .witness_keyed_entries()
+            .filter(|(registered, _, _)| *registered == concept)
+            .map(|(_, key, witness)| (key.clone(), witness.module));
+        let declared = self
+            .program
+            .declared_keys(concept)
+            .filter(|(key, _)| self.program.witness(concept, key).is_none())
+            .map(|(key, module)| (key.clone(), *module));
+
+        registered.chain(declared).collect()
+    }
+
     /// [`Program::insert_witness`], stamping the write on an actual insert — a new witness can change which pure elaborations succeed.
     pub(crate) fn insert_witness(
         &mut self,
@@ -1556,27 +1651,6 @@ impl Context {
         self.program
             .update_witness_scheme(name, universe_context, signature);
         self.caches.note_write();
-    }
-
-    /// Defer a witness goal ([`Solutions::defer_witness`]) under the current item, stamping the write.
-    pub(crate) fn defer_witness(&mut self, parked: ParkedProblem) {
-        self.caches.note_write();
-        self.solutions.defer_witness(self.item, parked);
-    }
-
-    /// Every deferred witness goal with the item that raised it, for a retry sweep.
-    pub(crate) fn take_deferred_witnesses(&mut self) -> Vec<(ItemStamp, ParkedProblem)> {
-        self.solutions.take_deferred_witnesses()
-    }
-
-    /// Drop the deferred goals one item raised — a refused item's, which would otherwise be retried and reported for a declaration already reported.
-    pub(crate) fn drop_deferred_of(&mut self, item: ItemStamp) {
-        self.solutions.drop_deferred_of(item);
-    }
-
-    /// The deferred witness goals' slots and goal types ([`Solutions::deferred_witness_goals`]).
-    pub(crate) fn deferred_witness_goals(&self) -> impl Iterator<Item = (MetavarId, &Term)> {
-        self.solutions.deferred_witness_goals()
     }
 
     /// The module whose item is currently being elaborated (the qualifier prefix of its name; empty for the root), or `None` when no surface item is being elaborated — which suppresses the representation-privacy checks (see the field's invariant).
@@ -2176,20 +2250,16 @@ impl Context {
         Ok(terms)
     }
 
-    /// Finalize a declaration's levels — see `UniverseSolver::finalize`. The levels a still-deferred witness goal mentions are read here, since the goals are this context's.
+    /// Finalize a declaration's levels — see `UniverseSolver::finalize`.
     pub(crate) fn finalize_universe_metas(
         &mut self,
         interface: BTreeSet<UniverseMetaId>,
         internal: BTreeSet<UniverseMetaId>,
     ) -> Result<UniverseContext, Error> {
         curios_profile::profile!("ctx::finalize_universe_metas");
-        let pending = self
-            .deferred_witness_goals()
-            .flat_map(|(_, goal)| self.universe_metas_in(goal))
-            .collect::<BTreeSet<_>>();
         let universe_context = self
             .universes_mut()
-            .finalize(interface, internal, pending)
+            .finalize(interface, internal)
             .map_err(Error::from)?;
         self.scheme_open = false;
         self.caches.invalidate_for_universe_rewrite();

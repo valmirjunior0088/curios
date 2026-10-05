@@ -1,3 +1,6 @@
+mod demand;
+use demand::*;
+
 mod recovery;
 use recovery::*;
 
@@ -7,13 +10,12 @@ mod tests;
 use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
-        DeferredRefusal, Established, ItemStamp, ScheduledTest, Zonked, check_concept_registry,
+        Declared, Established, ScheduledTest, Spelled, Written, Zonked, check_concept_registry,
         check_is_sort, check_positivity, check_proof_totality, check_rec_item_totality,
         check_type_totality, check_variance, check_written_type_totality, collect_goal_reports,
-        finish_deferred_witnesses, is_prop, record_definition_totality, record_superclasses,
-        record_totality, record_variances, reduce_with, register_witness, retry_deferred_witnesses,
-        sort_term, superclass_targets, test_program_tail, zonk, zonk_arity, zonk_entry,
-        zonk_module, zonk_solved_term_metas,
+        is_prop, record_definition_totality, record_superclasses, record_totality,
+        record_variances, reduce_with, register_witness, sort_term, superclass_targets,
+        test_program_tail, zonk, zonk_arity, zonk_entry, zonk_module, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_core::{
@@ -1177,11 +1179,8 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
 
 /// Elaborate one persistent module item and perform every item-boundary obligation. Both module drivers use this path so universe transactions, parked work, witnesses, privacy islands, and error attribution cannot drift.
 ///
-/// The error is this item's own. The deferred witness goals swept after it may refuse an *earlier* item — one whose goal never found its witness — and those come back beside the item, for the loop to retract the items they name.
-fn elaborate_module_item(
-    context: &mut Context,
-    item: &Item,
-) -> Result<(Item, Vec<DeferredRefusal>), Error> {
+/// One attempt: what it returns stands only where the attempt read nothing unfinished, which [`Demand`] asks the context after it.
+fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Error> {
     curios_profile::profile!("elaborate_module_item");
     let item_module = match item {
         Item::Let(definition) => definition.island,
@@ -1205,50 +1204,86 @@ fn elaborate_module_item(
     // Attribute *every* failure to the item that caused it, not only universe invariants. A whole-module diagnostic with no declaration name — an exhausted budget or an effect reduced at the type level — costs a full prelude rebuild to localize, which is the expensive way to learn one string.
     .map_err(|error| error.in_declaration(&item_names, owner))?;
 
-    let late = retry_deferred_witnesses(context)?;
     context.drain_parked()?;
     context.finish_universe_transaction();
 
-    Ok((elaborated, late))
+    Ok(elaborated)
 }
 
-/// Refuse two witnesses that resolve each other, naming the cycle rather than leaving it to the kernel.
-///
-/// A witness may recurse through its own entry — `elaborate_module_let` registers the declaration before the body for that purpose, and such a witness becomes a group of one. A cycle between *two* has no such binding: the lowerer orders a witness before the uses that dispatch through it (`curios-text/src/into_core/order.rs`), and when two witnesses each want the other first that preference deadlocks and is dropped, so one is emitted naming a witness that does not exist yet. The kernel then refuses it as `unbound name /witness@N`, which names an anonymous id and says nothing a reader can act on.
-///
-/// Checked over the *emitted* order, which is the order the kernel will walk. Both directions are required before the report claims a cycle: a witness merely referencing a later one is ordinary and already works, because the ordering pass puts the referent first.
-fn check_witness_cycles(context: &mut Context, items: &[&Item]) -> Result<(), Error> {
-    // Each witness definition with the item that holds it, and its zonked body: a witness reached through the deferred store arrives as a *solved metavariable*, so an unzonked body does not mention the name yet — the module's own zonk runs later, in `finalize_and_check`. A reference inside a group is bound by that group rather than pointing outward, which is why the item position travels along.
-    let mut declared: Vec<(Free, usize, Definition, Term)> = Vec::new();
-    for (position, item) in items.iter().enumerate() {
-        let definitions = match item {
-            Item::Let(definition) => vec![definition.clone()],
-            Item::Rec(rec) => rec.definitions(),
+/// Each witness `module` declares, as its signature spells it ([`Spelled`]), at the place `order` gives its name. A name of the unit is read by its lowered form in `lowered`, which holds every item of the unit, the ones a recompile reuses among them, so a whole compile and a recompile read one key; any other name is read by what the context holds of it.
+fn spelled_witnesses(
+    context: &Context,
+    module: &Module,
+    lowered: &Module,
+    order: &BTreeMap<Global, usize>,
+) -> Vec<(Global, Declared)> {
+    if module.witnesses.is_empty() {
+        return Vec::new();
+    }
+
+    let mut unit = BTreeMap::<Global, (&DefinitionKind, Option<&Term>)>::new();
+    for item in &lowered.items {
+        match item {
+            Item::Let(definition) => {
+                unit.insert(definition.name, (&definition.kind, Some(&definition.body)));
+            }
+            Item::Rec(rec) => {
+                for definition in &rec.definitions {
+                    unit.insert(definition.name, (&definition.kind, None));
+                }
+            }
+        }
+    }
+    let written = |name: &Global| {
+        let (kind, body) = match unit.get(name) {
+            Some((kind, body)) => (Some(*kind), *body),
+            None => {
+                let name = Free::from(name);
+                (
+                    context.definition_kind(&name),
+                    context.definition_body(&name),
+                )
+            }
         };
-        for definition in definitions {
-            if context.is_witness_declaration(&definition.name) {
-                let body = zonk_solved_term_metas(context, &definition.body);
-                declared.push((Free::from(&definition.name), position, definition, body));
-            }
+        match (kind, body) {
+            (
+                Some(
+                    DefinitionKind::InductiveType
+                    | DefinitionKind::StructType
+                    | DefinitionKind::ConceptType,
+                ),
+                _,
+            ) => Written::Former,
+            (Some(DefinitionKind::Authored), Some(body)) => Written::Defined(body),
+            _ => Written::Opaque,
         }
-    }
+    };
+    // A concept's parameters are its record entry's, whose arity states the mark each is declared under.
+    let marks = |name: &Global| {
+        context.concept(name)?;
 
-    for (this_name, this_at, this, this_body) in &declared {
-        for (that_name, that_at, that, that_body) in &declared {
-            // One report per cycle, raised from the earlier member, and never for two members of one group.
-            if this_at >= that_at
-                || !this_body.free_vars().contains(that_name)
-                || !that_body.free_vars().contains(this_name)
-            {
-                continue;
-            }
+        Some(context.struct_decl(name)?.arity.marks())
+    };
+    let spelled = Spelled {
+        written: &written,
+        marks: &marks,
+    };
 
-            return Err(Error::witness_cycle(this.type_.clone(), that.type_.clone())
-                .at_opt(this.type_.span()));
-        }
-    }
+    module
+        .items
+        .iter()
+        .flat_map(Item::definitions)
+        .filter(|definition| module.witnesses.contains(&definition.name))
+        .map(|definition| {
+            let declared = Declared {
+                spelled: spelled.key(&definition.type_),
+                module: definition.island,
+                position: order[&definition.name],
+            };
 
-    Ok(())
+            (definition.name, declared)
+        })
+        .collect()
 }
 
 /// What one unit's elaboration produced, before anything is finalized: the module itself and the refusals it recovered from.
@@ -1259,7 +1294,7 @@ struct ElaboratedSuffix {
     entry: Option<Entrypoint>,
     /// Every item's refusal in item order, the entry's after them, then the whole-module passes'. Non-empty means the module is not the program that was written, and the caller raises these rather than finalizing it as one.
     refusals: Vec<Error>,
-    /// Every name an item this run produced no item for: withheld before it elaborated, refused, or retracted after the fact. Empty is the run that kept everything it was handed; non-empty is *not* the same fact as a non-empty `refusals`, since a withheld item reports nothing — see `recovery`.
+    /// Every name an item this run produced no item for: withheld before it elaborated, or refused. Empty is the run that kept everything it was handed; non-empty is *not* the same fact as a non-empty `refusals`, since a withheld item reports nothing — see `recovery`.
     dropped: BTreeSet<Global>,
 }
 
@@ -1274,6 +1309,7 @@ fn elaborate_module_suffix(
     context: &mut Context,
     established: Established<'_>,
     module: &Module,
+    lowered: &Module,
     minted: &Minted,
     tail: Option<Tail<'_>>,
 ) -> Result<ElaboratedSuffix, Error> {
@@ -1309,39 +1345,45 @@ fn elaborate_module_suffix(
     context.seed_binders(minted.binders);
     context.seed_universes(&minted.universes);
 
-    // Every item, because `module` carries only its own: the prefix arrived as scope through the replay above rather than as a run of leading items to skip.
+    // Where each name of the unit is written — every item's, the ones a recompile reuses among them — and which of them this elaboration's own items declare: what an item reads of a declaration that has not elaborated is then a need, never an absence. Every witness among them goes in under the key its signature is spelled at, which is what a question about its concept is answered by until it elaborates.
+    let order = lowered
+        .items
+        .iter()
+        .enumerate()
+        .flat_map(|(position, item)| {
+            item.declared_names()
+                .into_iter()
+                .map(move |name| (*name, position))
+        })
+        .collect::<BTreeMap<_, _>>();
+    for (name, declared) in spelled_witnesses(context, module, lowered, &order) {
+        context.declare_witness(name, declared);
+    }
+    context.begin_unit(
+        order,
+        module
+            .items
+            .iter()
+            .flat_map(Item::declared_names)
+            .copied()
+            .collect(),
+    );
+
+    // Every item, because `module` carries only its own: the prefix arrived as scope through the replay above rather than as a run of leading items to skip. Each elaborates when it is asked for, after what it reads, which is `demand`'s.
     //
-    // A refused item is reported, undone and poisoned, and the items after it are elaborated as if it had never been written; an item that reaches a poisoned name is withheld and reports nothing of its own. What is undone, what is left and why a dependent is silent is `recovery`'s. The deferred witness goals swept after an item may refuse an earlier item — one whose goal never found its witness — and those come back beside the item, to retract the items they name.
+    // A refused item is reported, undone and poisoned, and the other items are elaborated as if it had never been written; an item that reaches a poisoned name is withheld and reports nothing of its own. What is undone, what is left and why a dependent is silent is `recovery`'s.
     let entry_stamp = ItemStamp(module.items.len());
-    let mut poison = Poison::seeded(context.take_broken());
-    let mut survivors = Survivors::new(entry_stamp);
-    for (position, item) in module.items.iter().enumerate() {
-        if poison.reaches(module, item) {
-            withhold(context, ItemStamp(position), item);
-            poison.declare(item);
-            survivors.drop_item(item);
-            continue;
-        }
-
-        let mark = ItemMark::begin(context, ItemStamp(position));
-        match elaborate_module_item(context, item) {
-            Ok((elaborated, late)) => {
-                survivors.keep(ItemStamp(position), elaborated);
-                survivors.retract(context, &mut poison, late);
-            }
-            Err(error) => {
-                mark.undo(context, &item.declared_names());
-                poison.declare(item);
-                survivors.drop_item(item);
-                survivors.refuse(ItemStamp(position), error);
-            }
-        }
-    }
-
-    // After every item, because a cycle is only visible once both halves have resolved: the second witness's goal against the first is deferred and lands between items. A whole-module verdict, recorded after every item's own.
-    if let Err(error) = check_witness_cycles(context, &survivors.items()) {
-        survivors.refuse(entry_stamp, error);
-    }
+    let mut demand = Demand::new(
+        module,
+        Poison::seeded(context.take_broken()),
+        Survivors::default(),
+    );
+    demand.all(context);
+    let Demand {
+        poison,
+        mut survivors,
+        ..
+    } = demand;
 
     context.set_island(Qualifier::empty());
     // The entrypoint expression is not an item, so it gets its own budget on the same footing as one.
@@ -1370,7 +1412,8 @@ fn elaborate_module_suffix(
 
     // The entry is checked as an item is — under its own stamp, undone when refused, withheld when it reaches a poisoned name — except that nothing depends on it, so its refusal poisons nothing. The type it states is part of it: an annotation naming a refused declaration makes the entry that declaration's dependent.
     let withheld = entry.is_some_and(|entry| poison.reaches_entry(entry));
-    let mark = ItemMark::begin(context, entry_stamp);
+    let mark = ItemMark::begin(context);
+    context.attempt(&[]);
     let mut entry = match withheld {
         true => None,
         false => match elaborate_entry(context, entry) {
@@ -1382,22 +1425,15 @@ fn elaborate_module_suffix(
             }
         },
     };
-    // The whole program has elaborated: a witness goal still deferred will never find a table entry — report it now, as the refusal of the item that raised it. What is raised rather than handed back is the entry's own: a parked constraint of its that a landed solution woke and refused.
-    match finish_deferred_witnesses(context) {
-        Ok(late) => {
-            if survivors.retract(context, &mut poison, late) {
-                entry = None;
-            }
-        }
-        Err(error) => {
-            survivors.refuse(entry_stamp, error);
-            entry = None;
-        }
-    }
     if let Err(error) = context.drain_parked() {
         survivors.refuse(entry_stamp, error);
         entry = None;
     }
+    // Every item has finished, so nothing the entry read was unfinished: its one attempt stands.
+    assert!(
+        context.take_needs().is_empty(),
+        "the entry read a declaration no item finished"
+    );
     // The type the entry states from here on is its judged type reduced through the unit's definitions, the spelling every later stage reads it in.
     let entry = match entry
         .map(|Entrypoint { body, type_ }| {
@@ -1417,7 +1453,7 @@ fn elaborate_module_suffix(
         }
     };
 
-    // The output carries the *rebuilt* registry entries (pulled back from the context, where the per-group rebuild re-registered them), so `zonk_module` and `erase` see elaborated telescopes. An entry the context no longer holds was a refused, withheld or retracted item's, taken out with it: the module carries the survivors' entries and no other, since an entry whose declaring item is absent would reach zonk and erasure in its lowered form, and `zonk_module` refuses an unsolved universe meta wherever it finds one.
+    // The output carries the *rebuilt* registry entries (pulled back from the context, where the per-group rebuild re-registered them), so `zonk_module` and `erase` see elaborated telescopes. An entry the context no longer holds was a refused or withheld item's, taken out with it: the module carries the survivors' entries and no other, since an entry whose declaring item is absent would reach zonk and erasure in its lowered form, and `zonk_module` refuses an unsolved universe meta wherever it finds one.
     let names = survivors.names();
     let induct_decls = induct_keys
         .into_iter()
@@ -1613,8 +1649,14 @@ pub fn elaborate_and_zonk_module(
 ) -> Result<Module, Error> {
     curios_profile::profile!("elaborate_and_zonk_module");
     grown(|| {
-        let suffix =
-            elaborate_module_suffix(context, Established::nothing(), module, minted, None)?;
+        let suffix = elaborate_module_suffix(
+            context,
+            Established::nothing(),
+            module,
+            module,
+            minted,
+            None,
+        )?;
         // Nothing is inherited: `module` is the whole unit, so every name it mentions it also defines.
         let finalized = finalize_and_check(context, suffix.module, None, &BTreeMap::new());
         if !suffix.refusals.is_empty() {
@@ -1703,7 +1745,8 @@ fn elaborate_and_zonk(
 ) -> Result<Finalized, Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
     grown(|| {
-        let elaborated = elaborate_module_suffix(context, established, module, minted, tail)?;
+        let elaborated =
+            elaborate_module_suffix(context, established, module, module, minted, tail)?;
         // The scope's own stamps come out of their units already closed, so inheriting them is what lets a user proof see that `/std/Async/bind` is partial without walking `/std` again.
         let inherited = established.recorded_totality();
         let finalized =
@@ -1737,7 +1780,7 @@ pub struct Recompile<'a> {
 
 /// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the closure alone is elaborated, against the scope with the reused items replayed as one more predecessor, and the result is reassembled with them into one module in the new lowering's order.
 ///
-/// Zonk and the two erasure obligations narrow to the closure by construction, since `finalize_and_check` runs over the closure module and a reused item is zonked and stamped already. Positivity and totality classification then run over the reassembled whole, because a new declaration can reach an old one. The witness-cycle check stays the closure's: a cycle through a reused witness would need that witness to reach a closure item, which contradicts the closure being closed, and a cycle among reused witnesses was refused when the baseline compiled.
+/// Zonk and the two erasure obligations narrow to the closure by construction, since `finalize_and_check` runs over the closure module and a reused item is zonked and stamped already. Positivity and totality classification then run over the reassembled whole, because a new declaration can reach an old one. A cycle is met among the closure's items as they are asked for: one through a reused witness would need that witness to reach a closure item, which contradicts the closure being closed, and a cycle among reused witnesses was refused when the baseline compiled.
 ///
 /// **A run that refused nothing may still have kept fewer items than it was handed**, so the reassembly is told what was dropped rather than left to read it off an absence. An item withheld for reaching a broken name records no refusal — that is `recovery`'s decision and the whole-unit path's behaviour — and the early return below therefore does not catch it. Such a run never becomes a unit: poison exists only where something was refused or the lowering reported an item broken, and `with_broken` turns the second into a failure before anything is judged, erased or filed.
 pub fn elaborate_and_zonk_unit_over(
@@ -1760,7 +1803,14 @@ fn elaborate_and_zonk_unit_over_within(
     modules.push(recompile.reused);
     let extended = Established::over(&modules);
 
-    let elaborated = elaborate_module_suffix(context, extended, recompile.closure, minted, None)?;
+    let elaborated = elaborate_module_suffix(
+        context,
+        extended,
+        recompile.closure,
+        recompile.lowered,
+        minted,
+        None,
+    )?;
     let inherited = extended.recorded_totality();
     let finalized = finalize_and_check(context, elaborated.module, None, &inherited);
     if !elaborated.refusals.is_empty() {

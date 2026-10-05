@@ -42,7 +42,7 @@ fn a_labeled_goal_does_not_reach_the_positional_witness() {
     ));
 }
 
-// A keyed goal with no entry defers to the end-of-module sweep instead of failing at the call, so a witness declared later in the module serves an earlier use — the standing a nominal goal has.
+// A keyed goal is asked of every witness the unit declares, so a witness declared later in the module serves an earlier use — the standing a nominal goal has: the shape is read off the witness's signature as it is written, before it elaborates.
 #[test]
 fn a_later_declared_tuple_witness_serves_an_earlier_use() {
     let source = r#"

@@ -164,7 +164,7 @@ fn eql_and_cmp_resolve_across_intrinsics() {
     assert_eq!(run(source), b"true");
 }
 
-// A witness declared *after* a value that uses it still resolves: the use-site goal defers on the missing table entry, the later `satisfy` registers it, and the end-of-module sweep discharges the deferred goal. This ordering freedom is what lets a `/std` witness live beside its type — a type module's own value functions may call an operator before the module's trailing witness block, the way `/std/Nat`'s `min`/`cmp` use `<`/`==` ahead of `Cmp(Nat)`.
+// A witness declared *after* a value that uses it still resolves: the unit's witnesses are known by key before any of them elaborates, so the use-site goal finds the later `satisfy`, and the value is elaborated once the witness has been. This ordering freedom is what lets a `/std` witness live beside its type — a type module's own value functions may call an operator before the module's trailing witness block, the way `/std/Nat`'s `min`/`cmp` use `<`/`==` ahead of `Cmp(Nat)`.
 #[test]
 fn forward_declared_witness_resolves() {
     let source = r#"
@@ -180,6 +180,44 @@ fn forward_declared_witness_resolves() {
         "#;
 
     assert_eq!(run(source), b"true");
+}
+
+// A witness spelled through a name for its type registers where the type's own would: `Alias` is `Box`, so the witness is known under `Show(Box)` before it elaborates, and a goal written before it finds it.
+#[test]
+fn a_witness_spelled_through_a_name_for_its_type_is_keyed_at_the_type() {
+    let source = r#"
+        use /std/{Nat, Show, Str};
+        pub struct Box: pub Type { value: Nat }
+        let Alias: Type = Box;
+        let shown: Str = Show/show(Box { value = 1 });
+        satisfy Show(Alias) { show(b) = "boxed" }
+        /std/print(shown)
+        "#;
+
+    assert_eq!(run(source), b"boxed");
+}
+
+// A witness is known by its key before anything elaborates, so its signature spells it: a head that only computation reaches is refused where the witness is declared, with the key it would have registered under and what to write.
+#[test]
+fn a_witness_whose_head_is_computed_is_refused_at_its_declaration() {
+    let source = r#"
+        use /std/{Nat, Bool, Show, Str};
+        let Chosen(flag: Bool) -> Type = match flag | true => Nat | false => Bool end;
+        satisfy Show(Chosen(true)) { show(n) = "chosen" }
+        /std/print("no")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains(
+            "this witness of 'Show' is for head 'Nat', which its signature does not spell"
+        ),
+        "expected the refusal to name the key the signature computes:\n{report}"
+    );
+    assert!(
+        report.contains("write 'Nat' where the signature computes it"),
+        "expected the way out:\n{report}"
+    );
 }
 
 // A premise may name a constant beside a binder, `Lift(Io, M)` under a head `Lift(Io, (A) => Try(M, E, A))`: it is strictly smaller than the head, so resolution through it still decreases. The transformer's `Io` edge is then written once for every base, and here it resolves at base `Async` through the prelude's `Lift(Io, Async)`.

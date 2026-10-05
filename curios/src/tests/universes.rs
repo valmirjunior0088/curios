@@ -241,37 +241,50 @@ fn an_occurrence_level_settles_at_its_argument_rather_than_generalizing() {
     );
 }
 
-// **A goal deferred past its declaration settles at its least levels.** `rewrap`'s `!` asks for `Monad(Box)` before the unit has registered one, so the goal defers and is retried only after `rewrap`'s scheme has closed, where the witness it finds can be pinned to a level the goal already fixes and a constraint the witness brings reaches no scheme at all. `UniverseSolver::finalize` therefore makes a deferred goal ground — the levels it names settle, and so does every level a settlement lands on, `A`'s included — so a witness declared after its use leaves `rewrap` at `Type 0`. Left at `A`'s level instead, `/std/tcp/Socket/close_raising` would offer its `A` at every level while the `Lift(Io, Io)` its `!` resolves later exists at one, and the kernel would refuse it. The control declares the witness first: the goal resolves while `rewrap`'s levels are open, and `A` stays the caller's. Ordering an item after the witnesses its `!` dispatches through would make the two agree.
+// **A declaration's levels do not follow where its witnesses are written.** `rewrap`'s `!` asks for `Monad(Box)`, and `same` reaches `Eql(Box(A))` and `Spell(Box(A))` through the `use` premises of a function another unit declares. A goal whose witness the unit declares and has not elaborated voids its item's attempt, which is made again once the witness has: so each goal resolves while its declaration's levels are open, `A` stays the caller's, and a use at `Type` is accepted with the witness written before the declaration or after it. Settled at its least levels instead, a declaration written before its witness would offer `A` at one level, and `big` would be refused.
 #[test]
-fn a_goal_deferred_past_its_declaration_settles_at_its_least_levels() {
-    let rewrap = "let rewrap(@A: Type, b: Box(A)) -> Box(A) = let a = b!; Box { value = a };";
-    let witness =
-        "satisfy Monad(Box) { pure(@_, a) = Box { value = a }, bind(@_, @_, m, f) = f(m.value) }";
-    let program = |first: &str, second: &str| {
+fn a_declarations_levels_do_not_follow_where_its_witnesses_are_written() {
+    let through_bang = (
+        "let rewrap(@A: Type, b: Box(A)) -> Box(A) = let a = b!; Box { value = a };",
+        "satisfy Monad(Box) { pure(@_, a) = Box { value = a }, bind(@_, @_, m, f) = f(m.value) }",
+        "let big: Box(Type) = rewrap(Box { value = Nat });",
+        "/rewrap",
+    );
+    let through_a_premise = (
+        "let same(@A: Type, b: Box(A)) -> Test = Test/equal(b, b);",
+        r#"satisfy (@A: Type) => Eql(Box(A)) { eql(_, _) = true, neq(_, _) = false, }
+           satisfy (@A: Type) => Spell(Box(A)) { spell(_) = "box", }"#,
+        "let big: Test = same(Box { value = Nat });",
+        "/same",
+    );
+    let program = |first: &str, second: &str, use_: &str| {
         format!(
             r#"
-            use /std/{{Monad}};
+            use /std/{{Monad, Nat, Spell, Test}};
+            use /std/ops/{{Eql}};
             pub struct Box(A: Type): pub Type {{ value: A }}
             {first}
             {second}
+            {use_}
             /std/print("settled")
             "#
         )
     };
 
-    let deferred = universe_parameters(&program(rewrap, witness));
-    let resolved = universe_parameters(&program(witness, rewrap));
+    for (declaration, witnesses, use_, name) in [through_bang, through_a_premise] {
+        let before = universe_parameters(&program(declaration, witnesses, use_));
+        let after = universe_parameters(&program(witnesses, declaration, use_));
 
-    assert_eq!(
-        deferred.get("/rewrap"),
-        Some(&0),
-        "a goal deferred past its declaration kept a level its later witness can constrain: {deferred:?}",
-    );
-    assert_eq!(
-        resolved.get("/rewrap"),
-        Some(&1),
-        "a goal resolved in time no longer leaves the caller's level free, so the control no longer separates the two: {resolved:?}",
-    );
+        assert_eq!(
+            before.get(name),
+            Some(&1),
+            "a declaration written before its witness lost the level its caller chooses: {before:?}",
+        );
+        assert_eq!(
+            before, after,
+            "where a witness is written decided a declaration's levels"
+        );
+    }
 }
 
 /// A type that quantifies over a type and answers a double powerset of it — the carrier Hurkens' form of Girard's paradox is stated over — with `tau`, the half of the paradox that stratifies. Both of `U`'s levels are carried by its body alone, so they are minimized as `a_body_carried_level_is_minimized_rather_than_generalized` pins: `X` ranges over level 0 and `U` sits at level 1.
@@ -587,37 +600,43 @@ fn a_level_bounded_through_a_witnesses_side_condition_settles_at_zero() {
     );
 }
 
-// **A family whose payload waits on a later witness is invariant in every level.** `Holder`'s level only types its parameter. Where its witness cannot be ordered ahead of it, `Sized/Carrier(@Nat)` is still unsolved when `Holder`'s group finalizes and may yet mention any level, so the vector read there calls the level invariant, and the unit carries that reading since its later items were compared under it. The control's witness depends on nothing of `Holder`, the lowering orders it first, and the level is irrelevant.
+// **A family's payload is read once the witness it resolves through has elaborated, so its vector is its final telescopes'.** `Holder`'s level only types its parameter, and `Sized/Carrier(@Nat)` resolves through a witness written after the family: the family is elaborated after the witness, its payload is solved when its group finalizes, and the level reads irrelevant. A witness whose carrier is built from the family has no such order, and the three are refused together by name, an `induct` and a `struct` alike — where an `induct` once kept the payload unsolved, read every level invariant, and was accepted, and a `struct` in its place was refused for a witness that was written right there.
 #[test]
-fn a_family_whose_payload_waits_on_a_later_witness_is_invariant_in_every_level() {
-    let program = |carrier: &str| {
+fn a_family_whose_payload_resolves_through_a_later_witness_reads_its_final_telescopes() {
+    let program = |family: &str, carrier: &str| {
         format!(
             r#"
             use /std/{{Nat, Str}};
             pub concept Sized(T: Type): pub Type {{ Carrier: Type }}
-            pub induct Holder(A: Type): pub Type
-            | hold(a: A, held: Sized/Carrier(@Nat))
-            end
+            {family}
             pub struct Later: pub Type {{ inner: Holder(Str) }}
             satisfy Sized(Nat) {{ Carrier = {carrier} }}
             /std/print("settled")
             "#
         )
     };
+    let induct = "pub induct Holder(A: Type): pub Type | hold(a: A, held: Sized/Carrier(@Nat)) end";
+    let struct_ = "pub struct Holder(A: Type): pub Type { a: A, held: Sized/Carrier(@Nat) }";
 
-    let waiting = family_variances(&program("Later"));
-    let ordered = family_variances(&program("Str"));
-
-    assert_eq!(
-        waiting.get("/Holder").map(String::as_str),
-        Some("="),
-        "a family read while its payload was unsolved was carried at its final telescopes' reading: {waiting:?}",
-    );
+    let ordered = family_variances(&program(induct, "Str"));
     assert_eq!(
         ordered.get("/Holder").map(String::as_str),
         Some("*"),
-        "a level that only types a parameter stopped reading irrelevant, so the control no longer separates the two: {ordered:?}",
+        "a level that only types a parameter stopped reading irrelevant: {ordered:?}",
     );
+    // The struct is accepted as the inductive is; only an inductive family's vector is listed.
+    family_variances(&program(struct_, "Str"));
+
+    for family in [induct, struct_] {
+        let report = error(&program(family, "Later"));
+        assert!(
+            report.contains("need one another")
+                && report.contains("'Holder'")
+                && report.contains("'Later'")
+                && report.contains("the witness of Sized(Nat)"),
+            "expected the family, its payload's type and the witness refused as one cycle:\n{report}"
+        );
+    }
 }
 
 // **A bare former passed as a family is held at one instance.** `through(Io, …)` checks both arguments against `Io` at the instance it was passed at, and the refusal reads as that instance being committed before `Io` unfolds to a former that carries no level. Eta-expanded, `F(Nat)` is a redex and both sides are reduced, so the same program is accepted. `/sys/List` and an alias of `Io` are refused alike.

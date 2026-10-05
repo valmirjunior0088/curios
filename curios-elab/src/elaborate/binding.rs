@@ -715,12 +715,10 @@ pub(crate) fn embeds(region: &MonadShape, action: &MonadShape) -> bool {
             .any(|pair| matches!(pair, (Some(here), Some(there)) if here != there))
 }
 
-/// Whether a `Monad` witness is registered under `key` — the concept's name derives from the registry's bind wrapper, whose namespace is the concept.
+/// Whether a `Monad` witness is declared under `key`, elaborated or not — the concept's name derives from the registry's bind wrapper, whose namespace is the concept. Asked of every witness the unit declares, so where the witness is written does not decide whether an action is embedded.
 pub(crate) fn is_monad(context: &Context, key: &HeadKey) -> bool {
     let monad = Global::Authored(context.syntax().monad.bind.qualifier().without_last());
-    context
-        .witness(&monad, &WitnessKey(vec![key.clone()]))
-        .is_some()
+    context.witness_declared(&monad, &WitnessKey(vec![key.clone()]))
 }
 
 /// Whether the region's weak-head form is still headed by an unsolved metavariable — including a stuck application of one, the higher-kinded case.

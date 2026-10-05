@@ -183,8 +183,48 @@ fn a_withheld_declaring_item_takes_its_registry_entry_out_of_the_module() {
     assert!(context.induct_decl(&nominal("T")).is_none());
 }
 
+/// An item elaborates after what it reads, wherever each was written: the module keeps the order it was handed.
 #[test]
-fn a_refused_item_leaves_no_binding_parked_work_deferred_goal_or_constraint_behind() {
+fn an_item_written_before_what_it_reads_elaborates_after_it() {
+    let module = module(vec![
+        let_item("b", nat(), mention("a")),
+        let_item("a", nat(), nat_lit(1)),
+    ]);
+
+    let elaborated = elaborate_and_zonk_module(&mut context(), &module, &Minted::default())
+        .expect("nothing was refused");
+
+    assert_eq!(
+        elaborated
+            .items
+            .iter()
+            .map(Item::describe)
+            .collect::<Vec<_>>(),
+        ["/b", "/a"]
+    );
+}
+
+/// Two items that read each other have no order to elaborate in: one report, at the first of them as written, naming both, and nothing from what reaches either.
+#[test]
+fn two_items_that_read_each_other_are_refused_as_one_cycle() {
+    let module = module(vec![
+        let_item("a", nat(), mention("b")),
+        let_item("b", nat(), mention("a")),
+        let_item("c", nat(), mention("a")),
+        let_item("d", nat(), nat_lit(1)),
+    ]);
+
+    let reports = refusals(&mut context(), &module);
+
+    assert_eq!(reports.len(), 1, "{reports:?}");
+    assert!(
+        reports[0].starts_with("while elaborating /a:\n'/a' and '/b' need one another"),
+        "{reports:?}"
+    );
+}
+
+#[test]
+fn a_refused_item_leaves_no_binding_parked_work_need_or_constraint_behind() {
     let mut context = context();
     let module = module(vec![let_item("a", nat(), boolean(true))]);
 
@@ -192,6 +232,6 @@ fn a_refused_item_leaves_no_binding_parked_work_deferred_goal_or_constraint_behi
 
     assert!(context.assumption(&Free::from(&nominal("a"))).is_none());
     assert_eq!(context.parked_len(), 0);
-    assert!(context.take_deferred_witnesses().is_empty());
+    assert!(context.take_needs().is_empty());
     assert_eq!(context.universes().constraint_count(), 0);
 }

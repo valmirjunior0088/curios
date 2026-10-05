@@ -293,7 +293,7 @@ fn an_imitated_family_takes_an_instance_of_its_own() {
         assert_eq!(conv(&mut context, &flex, &rigid), Ok(true), "{variance:?}");
         assert!(context.metavar_solution(MetavarId(0)).is_some());
         assert_eq!(
-            context.universes_mut().finalize([], [], []).is_err(),
+            context.universes_mut().finalize([], []).is_err(),
             refused,
             "{variance:?}"
         );

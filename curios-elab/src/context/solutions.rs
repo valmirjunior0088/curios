@@ -3,7 +3,7 @@
 //! Everything here is frame-independent — a metavariable's record freezes the Γ it was born under, and parked work freezes the frame it blocked in, so neither is touched by `enter_frame`/`leave_frame`. Writes that must reach the cache stamps are stamped by the `Context` façade; the transactional watermark (`SolutionMark`) also stays there, because it spans this store and the universe solver together.
 
 use {
-    super::{FrozenFrame, ItemStamp, SharedRefinements, SharedTelescope},
+    super::{FrozenFrame, SharedRefinements, SharedTelescope},
     crate::{Mode, Problem, Refusal},
     curios_core::{
         Bound, Field, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, Subterm, Term,
@@ -120,8 +120,6 @@ pub(crate) struct Solutions {
     solved_log: Vec<MetavarId>,
     /// `Some` inside an oracle, where work may not park: elaboration is being asked a question (re-validation, a candidate's fit) and provisional success would leak into the answer. The flag is whether a site inside it wanted to park and was refused, which makes that oracle's refusal no verdict on the term it was asked about.
     oracle: Option<bool>,
-    /// Witness goals whose key is rigid but has no table entry *yet*: a later item may register the missing witness (the table is program-wide while items elaborate in order), so these defer — retried after each item, reported as errors only when the whole module has been elaborated. Each carries the item that raised it, which is what a report that surfaces items later is attributed to.
-    deferred_witnesses: Vec<(ItemStamp, ParkedProblem)>,
 }
 
 impl Solutions {
@@ -133,7 +131,6 @@ impl Solutions {
             newly_solved: Vec::new(),
             solved_log: Vec::new(),
             oracle: None,
-            deferred_witnesses: Vec::new(),
         }
     }
 
@@ -430,31 +427,5 @@ impl Solutions {
     /// Leave an oracle for the state it was entered from. What the inner one declined is its own reader's to act on, and is not the enclosing oracle's record.
     pub(crate) fn leave_oracle(&mut self, enclosing: Option<bool>) {
         self.oracle = enclosing;
-    }
-
-    /// Defer a witness goal whose key is rigid but has no table entry yet, under the item that raised it. The façade stamps the write.
-    pub(crate) fn defer_witness(&mut self, item: ItemStamp, parked: ParkedProblem) {
-        self.deferred_witnesses.push((item, parked));
-    }
-
-    /// Take every deferred witness goal, with its item, for a retry sweep.
-    pub(crate) fn take_deferred_witnesses(&mut self) -> Vec<(ItemStamp, ParkedProblem)> {
-        mem::take(&mut self.deferred_witnesses)
-    }
-
-    /// Drop the deferred goals `item` raised, keeping every other item's.
-    pub(crate) fn drop_deferred_of(&mut self, item: ItemStamp) {
-        self.deferred_witnesses
-            .retain(|(raised_by, _)| *raised_by != item);
-    }
-
-    /// The deferred witness goals' slots and goal types, read-only — the item drain's diagnosis of a conversion stuck on a witness whose registration never arrived in time.
-    pub(crate) fn deferred_witness_goals(&self) -> impl Iterator<Item = (MetavarId, &Term)> {
-        self.deferred_witnesses
-            .iter()
-            .filter_map(|(_, parked)| match &parked.work {
-                ParkedWork::Witness { slot, goal, .. } => Some((*slot, goal)),
-                _ => None,
-            })
     }
 }

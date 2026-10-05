@@ -7,8 +7,8 @@ mod tests;
 
 use {
     super::{
-        BinderSite, Callee, Declined, Erased, Error, GoalReport, ShapeDiagnosis, Underivable,
-        WitnessKey,
+        BinderSite, Callee, CycleMember, Declined, Erased, Error, GoalReport, ShapeDiagnosis,
+        Underivable, WitnessKey,
     },
     crate::{Conclusion, Origin, Refusal, ordinal},
     curios_algebra::BOOL_ATOM_CAP,
@@ -807,7 +807,6 @@ impl fmt::Display for Displayed<'_> {
                 that,
                 watching,
                 under_refinements,
-                deferred_witnesses,
             } => {
                 let this = this.spelled(spelling).to_string();
                 let that = that.spelled(spelling).to_string();
@@ -827,12 +826,6 @@ impl fmt::Display for Displayed<'_> {
                     write!(
                         f,
                         "\n  the goal sits under match-arm refinements; a solution holding only under them is never committed"
-                    )?;
-                }
-                for goal in deferred_witnesses {
-                    write!(
-                        f,
-                        "\n  a witness for '{goal}' is not declared by this point in elaboration order, and this conversion must unfold through it within its own declaration\n  name the operation the witness supplies directly, or declare the witness where this declaration's dependencies can order it first"
                     )?;
                 }
                 Ok(())
@@ -979,13 +972,28 @@ impl fmt::Display for Displayed<'_> {
                     "this `{written}` member has no slot\n  hidden members are written before the plain member they precede, and every hidden slot there is already written or left out"
                 )
             }
-            Error::WitnessCycle { this, that } => {
-                let this = this.spelled(spelling);
-                let that = that.spelled(spelling);
-                write!(
-                    f,
-                    "witnesses for {this} and {that} resolve each other\n  a witness may recurse through its own entry, but a cycle between two has no order to declare them in — whichever comes first names the other before it exists\n  declare them as one group, 'satisfy C(A) {{ ... }} and D(B) {{ ... }}', whose members resolve through one another"
-                )
+            Error::DeclarationCycle { members } => {
+                let named = members
+                    .iter()
+                    .map(|member| match member {
+                        CycleMember::Named(name) => format!("'{}'", spelling.symbol(name)),
+                        CycleMember::Witness(type_) => {
+                            format!("the witness of {}", type_.spelled(spelling))
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                match named.split_last() {
+                    Some((last, rest)) if !rest.is_empty() => write!(
+                        f,
+                        "{} and {last} need one another\n  a declaration elaborates after what it reads, and each of these reads another before it can finish — by a name it writes, or by the witness a goal of its resolves to\n  a definition may call itself and a witness may resolve through its own entry, but a cycle through two has no order to elaborate them in\n  declare definitions that call one another as one group, 'let ... and ...', and witnesses that resolve through one another as 'satisfy C(A) {{ ... }} and D(B) {{ ... }}'",
+                        rest.join(", ")
+                    ),
+                    _ => write!(
+                        f,
+                        "{} needs itself before it can be read\n  what its signature reads leads back to it",
+                        named.join(", ")
+                    ),
+                }
             }
             Error::NoWitness {
                 goal,
@@ -1155,6 +1163,26 @@ impl fmt::Display for Displayed<'_> {
                     n = position + 1
                 )
             }
+            Error::WitnessKeyNotSpelled {
+                concept,
+                key,
+                spelled,
+            } => {
+                let concept = spelling.symbol(concept);
+                let noun = key_noun(key);
+                let key = key.spelled(spelling);
+                let spelled = match spelled {
+                    Some(spelled) => format!(
+                        "\n  as it is written, it would be keyed at '{}'",
+                        spelled.spelled(spelling)
+                    ),
+                    None => String::new(),
+                };
+                write!(
+                    f,
+                    "this witness of '{concept}' is for {noun} '{key}', which its signature does not spell\n  a witness is known by its key before anything is elaborated, so each parameter of its concept is written as the type it is: a declared type, applied or not, a name for one, a tuple type, or a function to an applied type{spelled}\n  write '{key}' where the signature computes it"
+                )
+            }
             Error::ParameterlessWitnessConcept { concept } => {
                 write!(
                     f,
@@ -1322,6 +1350,9 @@ impl fmt::Display for Displayed<'_> {
             }
             Error::Poisoned => {
                 write!(f, "a witness a refused declaration held was needed")
+            }
+            Error::Unfinished => {
+                write!(f, "a declaration that has not elaborated was read")
             }
             // `render_body` intercepts both wrappers before a real spelling ever reaches this match, but these arms must not rely on that: interpolating `{error}` would route through `Display for Error`, silently resetting a nested term's spelling to core's default. Recurse with the spelling in hand instead.
             Error::InDeclaration { name, error, .. } => {
