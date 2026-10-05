@@ -149,6 +149,12 @@ const ROWS: &[Row] = &[
         "{}",
         "let n = m + 0; match Nat/in_range(n, 0xF0, 0xF4) | true => let _: Holds(0xF0 <= m) = True/proved(); () | false => () end",
     ),
+    // A guard respelled: the goal commutes the guard's sum, and the guard's own equation answers it.
+    body(
+        "a: Nat, b: Nat",
+        "{}",
+        "match a + b < 10 | true => let _: Holds(b + a < 10) = True/proved(); () | false => () end",
+    ),
     // An `==` guard's true arm, as the equation it gives.
     body(
         "x: Nat, y: Nat, p: Holds(y < 5)",

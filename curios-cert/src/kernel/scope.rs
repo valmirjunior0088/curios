@@ -315,6 +315,22 @@ impl Scope {
             .map(|entry| entry.value.clone())
     }
 
+    /// The equations in force whose reduced spelling is settled and that `candidate` could be a reduct of, innermost first: each as its position, that spelling and the value it assumes. What [`answers`](curios_analysis::answers) is asked of.
+    pub(super) fn settled_refinements(&self, candidate: &Term) -> Vec<(usize, Term, Term)> {
+        self.refinements[..self.in_force()]
+            .iter()
+            .enumerate()
+            .rev()
+            .filter(|(_, entry)| {
+                entry.restated_at.is_none() && could_reduce_to(&entry.key, candidate)
+            })
+            .filter_map(|(index, entry)| match &entry.reduct {
+                Reduct::Known(Some(reduct)) => Some((index, reduct.clone(), entry.value.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// The innermost equation in force whose reduced spelling has not been asked for and *could* be `candidate`, as its position and the term to reduce.
     ///
     /// The position is always inside the current limit, which is what lets [`Scope::hide_refinements_from`] take it as the new limit rather than the smaller of the two: a settlement can only ever reach further out than the one it is nested in.

@@ -9,8 +9,9 @@
 use {
     curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
     curios_analysis::{
-        Coverage, Declarations, Invert, Judge, PositivityRefusal, group_totality, invert_indices,
-        positivity_vectors, solve_indices, struct_reaches_itself, test_support::SYNTAX,
+        Coverage, Declarations, Invert, Judge, PositivityRefusal, answers, group_totality,
+        invert_indices, positivity_vectors, solve_indices, struct_reaches_itself,
+        test_support::SYNTAX,
     },
     curios_cert::Kernel,
     curios_core::{
@@ -1498,4 +1499,63 @@ fn atoms_equal_up_to_their_arguments_convert_in_whichever_order_their_sum_holds_
             "h at {h_index}, e at {e_index}"
         );
     }
+}
+
+/// One rule says which terms an arm's equation answers, and both reducers ask it: the key itself, a term the carriers' readers hold equal to the key, and — where the equation assumes a `Bool` — a term they hold equal to the key negated, the value negated on the way.
+///
+/// The controls are what the rule must not answer: a comparison over another atom, and a term of another kind than the key's.
+#[test]
+fn an_equation_answers_a_term_the_readers_hold_equal_to_its_key() {
+    let mut kernel = kernel();
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let [a, b, c] = [1, 2, 3].map(|index| Free::local(index, None));
+    for binder in [&a, &b, &c] {
+        kernel.assume(binder, &nat_type);
+    }
+    let nat = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
+    let sum = |left: &Free, right: &Free| {
+        Term::intrinsic(Intrinsic::nat_add(
+            Term::free_var(left),
+            Term::free_var(right),
+        ))
+    };
+    let truth = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+
+    let key = Term::intrinsic(Intrinsic::nat_lt(sum(&a, &b), nat(10)));
+    let commuted = Term::intrinsic(Intrinsic::nat_lt(sum(&b, &a), nat(10)));
+    let dual = Term::intrinsic(Intrinsic::nat_lte(nat(10), sum(&b, &a)));
+    let other = Term::intrinsic(Intrinsic::nat_lt(sum(&a, &c), nat(10)));
+
+    assert_eq!(
+        answers(&mut kernel, &key, &key, &truth(true)),
+        Ok(Some(truth(true)))
+    );
+    assert_eq!(
+        answers(&mut kernel, &commuted, &key, &truth(true)),
+        Ok(Some(truth(true))),
+        "a sum commuted is the key's comparison"
+    );
+    assert_eq!(
+        answers(&mut kernel, &dual, &key, &truth(true)),
+        Ok(Some(truth(false))),
+        "the dual of a guard that holds does not"
+    );
+    assert_eq!(
+        answers(&mut kernel, &dual, &key, &truth(false)),
+        Ok(Some(truth(true))),
+        "and the dual of one that fails holds"
+    );
+    assert_eq!(
+        answers(&mut kernel, &other, &key, &truth(true)),
+        Ok(None),
+        "a comparison over another atom is another comparison"
+    );
+
+    // A key that is a number answers a number the readers hold equal to it, and nothing of another kind.
+    let total = sum(&a, &b);
+    assert_eq!(
+        answers(&mut kernel, &sum(&b, &a), &total, &nat(0)),
+        Ok(Some(nat(0)))
+    );
+    assert_eq!(answers(&mut kernel, &commuted, &total, &nat(0)), Ok(None));
 }

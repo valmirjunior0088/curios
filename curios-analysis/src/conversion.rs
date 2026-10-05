@@ -110,33 +110,10 @@ fn chain(
     that: Intrinsic,
     classes: Option<&Classes>,
 ) -> Result<Pass, ReduceError> {
-    let this = driver.prepare(this);
-    let that = driver.prepare(that);
-
-    // **A pair of `Nat`s decides how much of itself to build.** Both sides arrived head-forced, not merged. A literal against a sum with nothing left to force clashes from the head — a stuck symbolic summand is not definitionally a literal — where distributing first can build over a million monomials, over a ten-definition web, to reach the same answer. Anything else is forced to its linear combination first, and the peels read the pair that produced.
-    // **Two symbolic `Nat`s are distributed before they are peeled.** The fold leaves a product of two symbolic sums as a stuck node, so `(a + b) · (c + d)` and its expansion arrive as two shapes the peel cannot cancel against each other; normalizing both sides is the one demand that relates them. `Int` draws the same line at its own product, and each normalizer leaves the other carrier's terms untouched. A literal on either side needs nothing: sums and differences are already merged and cancelled by the fold, so a side with a symbolic summand is never a literal, and distributing it would build the polynomial to answer what the first summand settles.
-    let (this, that) = match !(literal(&this) || literal(&that)) && (stuck(&this) || stuck(&that)) {
-        false => (this, that),
-        true => {
-            // Both normalizers are demands where the fold's comparison asks them and probes here, where the chain can compare a side as it arrived: one with no value at the type level is left undistributed.
-            let this = Term::intrinsic(this);
-            let that = Term::intrinsic(that);
-            let this = Nat::normalize(driver, this.clone())
-                .probed()?
-                .unwrap_or(this);
-            let that = Nat::normalize(driver, that.clone())
-                .probed()?
-                .unwrap_or(that);
-            let this = int_normalize(driver, this.clone())
-                .probed()?
-                .unwrap_or(this);
-            let that = int_normalize(driver, that.clone())
-                .probed()?
-                .unwrap_or(that);
-            match (as_intrinsic(&this), as_intrinsic(&that)) {
-                (Some(this), Some(that)) => (this, that),
-                _ => return Ok(Pass::Settled(Outcome::Residual(this, that))),
-            }
+    let (this, that) = match prepared(driver, this, that)? {
+        Prepared::Pair(pair) => *pair,
+        Prepared::Residual(this, that) => {
+            return Ok(Pass::Settled(Outcome::Residual(this, that)));
         }
     };
 
@@ -217,6 +194,68 @@ fn chain(
         that_levels: that.result_universes().to_vec(),
         operands,
     })))
+}
+
+/// A pair as steps 1 and 2 leave it.
+enum Prepared {
+    /// Each side as its driver reads it, a stuck product distributed where neither side is a literal.
+    Pair(Box<(Intrinsic, Intrinsic)>),
+    /// A distribution took a side out of intrinsic form: the two terms, to compare at `Type`.
+    Residual(Term, Term),
+}
+
+/// Steps 1 and 2 over one pair: the driver's preparation of each side, and a stuck product distributed.
+fn prepared(
+    driver: &mut impl Driver,
+    this: Intrinsic,
+    that: Intrinsic,
+) -> Result<Prepared, ReduceError> {
+    let this = driver.prepare(this);
+    let that = driver.prepare(that);
+
+    // **A pair of `Nat`s decides how much of itself to build.** Both sides arrived head-forced, not merged. A literal against a sum with nothing left to force clashes from the head — a stuck symbolic summand is not definitionally a literal — where distributing first can build over a million monomials, over a ten-definition web, to reach the same answer. Anything else is forced to its linear combination first, and the peels read the pair that produced.
+    // **Two symbolic `Nat`s are distributed before they are peeled.** The fold leaves a product of two symbolic sums as a stuck node, so `(a + b) · (c + d)` and its expansion arrive as two shapes the peel cannot cancel against each other; normalizing both sides is the one demand that relates them. `Int` draws the same line at its own product, and each normalizer leaves the other carrier's terms untouched. A literal on either side needs nothing: sums and differences are already merged and cancelled by the fold, so a side with a symbolic summand is never a literal, and distributing it would build the polynomial to answer what the first summand settles.
+    if literal(&this) || literal(&that) || !(stuck(&this) || stuck(&that)) {
+        return Ok(Prepared::Pair(Box::new((this, that))));
+    }
+
+    // Both normalizers are demands where the fold's comparison asks them and probes here, where the chain can compare a side as it arrived: one with no value at the type level is left undistributed.
+    let this = Term::intrinsic(this);
+    let that = Term::intrinsic(that);
+    let this = Nat::normalize(driver, this.clone())
+        .probed()?
+        .unwrap_or(this);
+    let that = Nat::normalize(driver, that.clone())
+        .probed()?
+        .unwrap_or(that);
+    let this = int_normalize(driver, this.clone())
+        .probed()?
+        .unwrap_or(this);
+    let that = int_normalize(driver, that.clone())
+        .probed()?
+        .unwrap_or(that);
+    Ok(match (as_intrinsic(&this), as_intrinsic(&that)) {
+        (Some(this), Some(that)) => Prepared::Pair(Box::new((this, that))),
+        _ => Prepared::Residual(this, that),
+    })
+}
+
+/// Whether the carriers' readers hold two intrinsics equal outright: steps 1 to 6 of the chain deciding the pair equal, with nothing left for a checker to discharge. A residual, a congruence and a clash are each `false` here — a comparison still to make, or a verdict nothing asked for — so `false` says nothing of the pair.
+///
+/// What a case equation's lookup asks ([`answers`](crate::answers)): it runs inside reduction, where no judgment may be called, and the readers call none.
+pub fn intrinsics_agree(
+    driver: &mut impl Driver,
+    this: Intrinsic,
+    that: Intrinsic,
+) -> Result<bool, ReduceError> {
+    let Prepared::Pair(pair) = prepared(driver, this, that)? else {
+        return Ok(false);
+    };
+    let (this, that) = *pair;
+    Ok(matches!(
+        read(driver, this, that)?,
+        Read::Decided(Outcome::Equal)
+    ))
 }
 
 /// What reading a pair through the carriers' algebra came to.

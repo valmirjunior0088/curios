@@ -884,6 +884,11 @@ impl Kernel {
         self.scope.refinement_of_reduct(term)
     }
 
+    /// The equations in force whose reduced spelling is settled and that `candidate` could be a reduct of, innermost first, each as its position, that spelling and its value.
+    pub(crate) fn settled_refinements(&self, candidate: &Term) -> Vec<(usize, Term, Term)> {
+        self.scope.settled_refinements(candidate)
+    }
+
     /// The innermost equation in force whose reduced spelling has not been asked for and could be `candidate`, as its position and the term to reduce.
     pub(crate) fn unasked_refinement(&self, candidate: &Term) -> Option<(usize, Term)> {
         self.scope.unasked_refinement(candidate)

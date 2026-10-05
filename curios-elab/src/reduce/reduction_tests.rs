@@ -1103,3 +1103,41 @@ fn a_self_entry_served_across_spellings_keeps_the_asking_binder_names() {
         "the asking spelling's binder, not the stored one's: {answer}"
     );
 }
+
+/// A guard answers a term the carriers' readers hold equal to it: its sum commuted, and its dual with the sum commuted, neither a spelling the key is held under. The kernel's `whnf::equations_tests` holds this proposition under this name, and `curios_analysis::answers` is the one rule both ask.
+#[test]
+fn a_guard_answers_a_term_the_readers_hold_equal_to_it() {
+    let mut context = context();
+    let a = context.fresh(Some("a"));
+    let b = context.fresh(Some("b"));
+    let sum = |left: &Free, right: &Free| {
+        Term::intrinsic(Intrinsic::nat_add(
+            Term::free_var(left),
+            Term::free_var(right),
+        ))
+    };
+    let guard = Term::intrinsic(Intrinsic::nat_lt(sum(&a, &b), nat(10)));
+    let commuted = Term::intrinsic(Intrinsic::nat_lt(sum(&b, &a), nat(10)));
+    let dual = Term::intrinsic(Intrinsic::NatLe(nat(10), sum(&b, &a)));
+
+    assert_eq!(
+        reduce(&mut context, commuted.clone()).map(|reduct| reduct.as_bool()),
+        Ok(None),
+        "with no guard the respelling is the stuck comparison it is"
+    );
+
+    let canonical = canonical_scrutinee(&mut context, &guard).unwrap();
+    context.refine_scrutinee_spellings(
+        vec![(canonical, guard, false)],
+        &Term::intrinsic(Intrinsic::Bool(true)),
+    );
+
+    assert_eq!(
+        reduce(&mut context, commuted).map(|reduct| reduct.as_bool()),
+        Ok(Some(true))
+    );
+    assert_eq!(
+        reduce(&mut context, dual).map(|reduct| reduct.as_bool()),
+        Ok(Some(false))
+    );
+}

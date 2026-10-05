@@ -14,7 +14,7 @@ pub(crate) mod test_support;
 use {
     super::{Context, Settled, levels_clash_on_a_decided_instance, zonk_solved_term_metas},
     crate::{Error, convert_at, reduce_with},
-    curios_analysis::could_reduce_to,
+    curios_analysis::{Driver, answers, could_reduce_to},
     curios_core::{
         Advance, Apply, Argument, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free,
         FreeMonoid, Func, FuncType, Global, HeadTag, InductDecl, InductType, Instance,
@@ -23,7 +23,7 @@ use {
         Tuple, TupleType, Var, Variant, Visit, accelerable, instantiate_universe_levels_scoped,
         probe_spellings, project_erased_universes, reduce_closed, reduce_intrinsic,
     },
-    curios_utilities::recurse,
+    curios_utilities::{SyntaxRegistry, recurse},
     std::collections::HashMap,
 };
 
@@ -804,27 +804,36 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
         .map(|(spelling, negated)| (project_erased_universes(&spelling), negated))
         .collect::<Vec<_>>();
 
+    // The entries already put to the shared rule, so each is asked once however many settlements the loop makes.
+    let mut consulted = Vec::new();
+
     loop {
-        match scan_settled(context, value, &probe, &spellings)? {
+        let unsettled = match scan_settled(context, value, &probe, &spellings)? {
             Scan::Answer(answer) => return Ok(Some(answer)),
             Scan::Settle {
                 frame,
                 key,
                 original,
-            } => settle(context, frame, key, &original)?,
-            Scan::Miss => {
-                // What a lookup that asked conversion would have been put to: the entries this stuck form could be a reduct of, each settled and none answering.
-                #[cfg(feature = "profile")]
-                if let asked @ 1.. = context
-                    .visible_scrutinee_entries()
-                    .filter(|(_, _, entry)| could_reduce_to(&entry.original, &probe))
-                    .count()
-                {
-                    curios_profile::sample!("reduce::missed_lookup", asked);
-                }
-                return Ok(None);
-            }
+            } => Some((frame, key, original)),
+            Scan::Miss => None,
+        };
+        // The settled spellings once more, by the rule both reducers share, before another settlement is paid for: the kernel's order.
+        if let Some(answer) = answered(context, value, &probe, &mut consulted)? {
+            return Ok(Some(answer));
         }
+        let Some((frame, key, original)) = unsettled else {
+            // What a lookup that asked conversion would have been put to: the entries this stuck form could be a reduct of, each settled and none answering.
+            #[cfg(feature = "profile")]
+            if let asked @ 1.. = context
+                .visible_scrutinee_entries()
+                .filter(|(_, _, entry)| could_reduce_to(&entry.original, &probe))
+                .count()
+            {
+                curios_profile::sample!("reduce::missed_lookup", asked);
+            }
+            return Ok(None);
+        };
+        settle(context, frame, key, &original)?;
     }
 }
 
@@ -844,6 +853,85 @@ fn sample_classable(context: &mut Context, folded: &Term) -> Result<(), ReduceEr
 #[cfg(not(feature = "profile"))]
 fn sample_classable(_context: &mut Context, _folded: &Term) -> Result<(), ReduceError> {
     Ok(())
+}
+
+/// What the shared rule says of a stuck reduct against each settled entry it could be a reduct of, innermost first: a term the carriers' readers hold equal to an entry's reduced spelling, or to that spelling negated, is the entry's term (`curios_analysis::answers`). The kernel asks the same function at the same point.
+///
+/// Read at the unerased spellings, since the readers compare numbers up to universe instances themselves, and declined where the two disagree on an instance both sides have decided, as every hit is.
+fn answered(
+    context: &mut Context,
+    value: &Term,
+    probe: &Term,
+    consulted: &mut Vec<(usize, Term)>,
+) -> Result<Option<Term>, ReduceError> {
+    let settled = context
+        .visible_scrutinee_entries()
+        .filter(|(_, _, entry)| could_reduce_to(&entry.original, probe))
+        .filter_map(
+            |(frame, key, entry)| match context.settled_key(frame, key) {
+                Some(Some(settled)) => Some((
+                    (frame, key.clone()),
+                    settled.unerased.clone(),
+                    entry.value.clone(),
+                )),
+                _ => None,
+            },
+        )
+        .collect::<Vec<_>>();
+
+    for (entry, unerased, assumed) in settled {
+        if consulted.contains(&entry) {
+            continue;
+        }
+        consulted.push(entry);
+        if levels_clash_on_a_decided_instance(context, value, &unerased)? {
+            continue;
+        }
+        if let Some(answer) = answers(&mut Reading(&mut *context), probe, &unerased, &assumed)? {
+            return Ok(Some(answer));
+        }
+    }
+
+    Ok(None)
+}
+
+/// The elaborator as the conversion chain's driver where no comparison stands open, which is how a case equation's lookup reads the chain's readers from inside reduction. It substitutes the metavariables already solved, as the comparing driver does, and has no packed-literal view, since that view hands goals to a queue a lookup does not hold.
+struct Reading<'a>(&'a mut Context);
+
+impl Reducer for Reading<'_> {
+    fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Reducer::reduce(self.0, term)
+    }
+
+    fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Reducer::reduce_forced(self.0, term)
+    }
+
+    fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
+        Reducer::spend(self.0, cost)
+    }
+
+    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
+        Reducer::fresh_binder(self.0, hint)
+    }
+}
+
+impl Driver for Reading<'_> {
+    fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
+        let solved = zonk_solved_term_metas(self.0, &Term::intrinsic(intrinsic.clone()));
+        match &*solved {
+            Subterm::Intrinsic(solved) => solved.clone(),
+            _ => intrinsic,
+        }
+    }
+
+    fn packed_view(&mut self, _: &Intrinsic, _: &Intrinsic) -> Option<bool> {
+        None
+    }
+
+    fn syntax(&self) -> SyntaxRegistry {
+        self.0.syntax()
+    }
 }
 
 /// What one pass over the visible entries found for a stuck reduct.

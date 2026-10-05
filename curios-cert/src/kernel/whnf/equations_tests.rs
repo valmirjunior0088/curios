@@ -804,3 +804,48 @@ fn a_restated_equation_naming_no_local_is_not_recorded() {
         });
     });
 }
+
+/// A guard answers a term the carriers' readers hold equal to it: its sum commuted, and its dual with the sum commuted, neither a spelling the key is held under.
+///
+/// Conversion holds `a + b < 10` and `b + a < 10` equal wherever no arm stands, by the comparisons' linear views. Inside the guard's arm the written spelling is `true` by its equation, so while nothing answered the respelling, conversion refused inside the arm a pair it held outside it. `curios_analysis::answers` is the rule, the elaborator's reducer asks it at the same point, and `curios-elab`'s `reduce::reduction_tests` holds this proposition under this name.
+///
+/// Mutation-checked: with `answers` holding only a term identical to its key, both respellings stay stuck.
+#[test]
+fn a_guard_answers_a_term_the_readers_hold_equal_to_it() {
+    let a = binder(1, "a");
+    let b = binder(2, "b");
+    let sum = |left: &Free, right: &Free| {
+        Term::intrinsic(Intrinsic::nat_add(
+            Term::free_var(left),
+            Term::free_var(right),
+        ))
+    };
+    let guard = Term::intrinsic(Intrinsic::nat_lt(sum(&a, &b), nat(10)));
+    let commuted = Term::intrinsic(Intrinsic::nat_lt(sum(&b, &a), nat(10)));
+    let dual = Term::intrinsic(Intrinsic::NatLe(nat(10), sum(&b, &a)));
+
+    let mut kernel = kernel();
+    kernel.assume(&a, &nat_type());
+    kernel.assume(&b, &nat_type());
+
+    kernel.scoped(|kernel| {
+        kernel
+            .refine(guard.clone(), Term::intrinsic(Intrinsic::Bool(true)))
+            .expect("the equation records");
+
+        assert_eq!(
+            whnf(kernel, commuted.clone()).expect("reduces").as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            whnf(kernel, dual.clone()).expect("reduces").as_bool(),
+            Some(false)
+        );
+    });
+
+    assert_eq!(
+        whnf(&mut kernel, commuted).expect("reduces").as_bool(),
+        None,
+        "outside the arm the respelling is the stuck comparison it is"
+    );
+}
