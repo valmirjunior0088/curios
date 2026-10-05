@@ -60,14 +60,14 @@ The binders are `a: Nat, b: Nat, c: Nat, f: (Nat) -> Nat, w: (n: Nat, at: Holds(
 
 A cell is held where `wonder diagnostics -` reports nothing but warnings, the kernel's where its report opens "the kernel refused", and refused otherwise.
 
-**The count**, `counted`, at `361b36e8c`: two samples in each checker's reducer, read from the profiles `cargo xtask clippy` files for `/std` — `curios-prelude-archive/.artifacts/profile.tsv` for elaboration, `curios-prelude/.artifacts/profile.tsv` for certification — folded by `curios profile`. `classable_fold` is the atoms of a stuck operation the readers read through, where `classable` says some two may be one; `missed_lookup` is the equations in force a stuck reduct could be a reduct of, where none answers.
+**The count**, `counted`, at `84660ecbb`: two samples in each checker's reducer, read from the profiles `cargo xtask clippy` files for `/std` — `curios-prelude-archive/.artifacts/profile.tsv` for elaboration, `curios-prelude/.artifacts/profile.tsv` for certification — folded by `curios profile` before another build of the prelude writes over them, which a package's test build does. `classable_fold` is the atoms of a stuck operation whose fold pairs them, where `classable` says some two may be one, each such operation being one the reducer classes; `missed_lookup` is the equations in force a stuck reduct could be a reduct of, where none answers once asked.
 
 | Sample | Stuck terms | Asked in all | At most |
 | --- | --- | --- | --- |
-| `reduce::classable_fold`, elaboration | 4,297 | 14,784 atoms | 10 |
-| `reduce::missed_lookup`, elaboration | 33,415 | 96,571 equations | 14 |
-| `whnf::classable_fold`, certification | 1,280 | 3,812 atoms | 10 |
-| `whnf::missed_lookup`, certification | 11,442 | 26,332 equations | 7 |
+| `reduce::classable_fold`, elaboration | 2,533 | 7,662 atoms | 8 |
+| `reduce::missed_lookup`, elaboration | 19,804 | 67,646 equations | 14 |
+| `whnf::classable_fold`, certification | 702 | 1,759 atoms | 6 |
+| `whnf::missed_lookup`, certification | 11,803 | 28,762 equations | 7 |
 
 ## Stages
 
