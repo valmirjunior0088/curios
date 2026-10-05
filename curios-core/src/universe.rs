@@ -408,6 +408,25 @@ impl UniverseContext {
             .collect()
     }
 
+    /// This context with no constraint saying where in a text it was raised; its kind, its declaration and its binder stand. What a consed declaration carries: the position is read by a report about that declaration's own elaboration, which is over by the time it is stored.
+    pub fn unplaced(&self) -> Self {
+        Self {
+            parameter_count: self.parameter_count,
+            constraints: self
+                .constraints
+                .iter()
+                .map(|constraint| UniverseConstraint {
+                    lower: constraint.lower.clone(),
+                    upper: constraint.upper.clone(),
+                    origin: UniverseConstraintOrigin {
+                        span: None,
+                        ..constraint.origin.clone()
+                    },
+                })
+                .collect(),
+        }
+    }
+
     pub(crate) fn map_levels(&self, mut map: impl FnMut(&Level) -> Level) -> Self {
         Self {
             parameter_count: self.parameter_count,

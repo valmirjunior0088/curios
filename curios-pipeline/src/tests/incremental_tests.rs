@@ -183,6 +183,7 @@ pub let twice: Nat = apply(double, 2);
     }
     assert_eq!(incremental.core().items.len(), 4);
     assert_modules_agree(unit_of(&inserted).core(), incremental.core());
+    assert_stored_alike(&unit_of(&inserted), &incremental);
 }
 
 /// A struct literal names its declaration in the registry rather than the variable graph, so an item building one depends on the declaration through the reach edge `mentions` cannot see — and a changed registry entry marks its declaring item changed.
@@ -210,6 +211,7 @@ pub let unrelated: Nat = 7;
     );
     assert!(reuses_body(&baseline, &incremental, "unrelated"));
     assert_modules_agree(unit_of(&sealed).core(), incremental.core());
+    assert_stored_alike(&unit_of(&sealed), &incremental);
 }
 
 /// A field's mark is part of its declaration: hiding a field changes what a literal of the structure writes and what a position counts. An edit that moves the mark and nothing else therefore recompiles the items that read the structure, against the declaration as it now stands.
@@ -235,6 +237,7 @@ pub let unrelated: Nat = 7;
     );
     assert!(reuses_body(&baseline, &incremental, "unrelated"));
     assert_modules_agree(unit_of(&hidden).core(), incremental.core());
+    assert_stored_alike(&unit_of(&hidden), &incremental);
 }
 
 // A family's variance composes through the families it holds, so an edit that turns one of their levels invariant moves the vector of every family that reaches it. Such a family mentions the edited declaration, so it is elaborated again with the items that read its entry, and the recompile carries the vector a whole compile does.
@@ -268,6 +271,7 @@ pub let unrelated: Nat = 7;
         [Variance::Invariant]
     );
     assert_modules_agree(unit_of(&pinned).core(), incremental.core());
+    assert_stored_alike(&unit_of(&pinned), &incremental);
 }
 
 /// A baseline from unrelated text invalidates everything, and the recompile is then a whole compile by another route.

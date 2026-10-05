@@ -65,7 +65,7 @@ impl StructDecl {
     /// This declaration with every term hash-consed against `sharing`. See [`Module::shared`](crate::Module::shared).
     pub fn shared(&self, sharing: &Sharing) -> Self {
         Self {
-            universe_context: self.universe_context.clone(),
+            universe_context: self.universe_context.unplaced(),
             arity: sharing.share(&self.arity),
             result_sort: sharing.share(&self.result_sort),
             module: self.module,

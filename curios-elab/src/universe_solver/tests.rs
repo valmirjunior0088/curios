@@ -1,4 +1,8 @@
-use {super::*, std::collections::BTreeSet};
+use {
+    super::*,
+    curios_utilities::{Source, Span},
+    std::collections::BTreeSet,
+};
 
 /// The test surface over the solver's private state, kept beside the tests rather than gated inside the production module.
 impl UniverseSolver {
@@ -25,6 +29,42 @@ impl UniverseSolver {
 
 fn origin(label: &str) -> UniverseConstraintOrigin {
     UniverseConstraintOrigin::new(UniverseConstraintKind::Other(label.into()))
+}
+
+/// A constraint instantiated from a scheme carries no position, and names the declaration and binder the scheme's own was raised for: where that was raised is a line of the scheme's declaration, another unit's among them.
+#[test]
+fn a_constraint_instantiated_from_a_scheme_carries_no_position() {
+    let raised = UniverseConstraintOrigin {
+        span: Some(Span::new(Source::inline("Type"), 0, 4)),
+        kind: UniverseConstraintKind::Cumulativity,
+        declaration: Some("/lib/wrap".into()),
+        binder: Some("A".into()),
+    };
+    let scheme = UniverseContext {
+        parameter_count: 2,
+        constraints: vec![UniverseConstraint {
+            lower: Level::param(UniverseParam(0)),
+            upper: Level::param(UniverseParam(1)),
+            origin: raised,
+        }],
+    };
+    let mut solver = UniverseSolver::new(0);
+
+    solver.instantiate(&scheme).unwrap();
+
+    let [instantiated] = solver.constraints() else {
+        panic!("one constraint, got {:?}", solver.constraints());
+    };
+    assert_eq!(instantiated.origin.span, None);
+    assert_eq!(
+        instantiated.origin.kind,
+        UniverseConstraintKind::SchemeInstantiation
+    );
+    assert_eq!(
+        instantiated.origin.declaration.as_deref(),
+        Some("/lib/wrap")
+    );
+    assert_eq!(instantiated.origin.binder.as_deref(), Some("A"));
 }
 
 #[test]

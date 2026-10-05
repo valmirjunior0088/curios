@@ -403,7 +403,7 @@ pub struct Module {
 }
 
 impl Module {
-    /// This module with every term hash-consed against `sharing` — one shared allocation for each structure as it is spelled, under no position.
+    /// This module with every term hash-consed against `sharing` — one shared allocation for each structure as it is spelled, under no position — and with no universe constraint saying where it was raised.
     ///
     /// Built for an elaborated module about to be archived. Elaboration constructs the same types, telescopes, and proof spines independently in definition after definition, and nothing deduplicates them, because `Rc` sharing only ever arises from *cloning* a value: two definitions that build the same type build it twice. Unshared, the prelude's nodes outnumber its distinct structures several times over (the prelude build reports each root's distinct count), and the archive would store that expansion in full and every restored traversal walk it in full.
     ///
@@ -412,7 +412,7 @@ impl Module {
         let definition = |definition: &Definition| Definition {
             name: definition.name,
             kind: definition.kind.clone(),
-            universe_context: definition.universe_context.clone(),
+            universe_context: definition.universe_context.unplaced(),
             island: definition.island,
             totality: definition.totality,
             type_: sharing.share(&definition.type_),
@@ -437,7 +437,10 @@ impl Module {
                             })
                             .collect(),
                         // Mapped in place rather than opened and re-closed: the round trip rebuilds every node twice and drops every memoized derivation with it, and the rebuilt nodes would escape this very pass.
-                        group: rec.group.map_members(|term| sharing.share(term)),
+                        group: rec
+                            .group
+                            .map_members(|term| sharing.share(term))
+                            .with_universe_context(rec.group.universe_context().unplaced()),
                     }),
                 })
                 .collect(),
