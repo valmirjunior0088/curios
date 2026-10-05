@@ -708,12 +708,91 @@ pub(super) const TWO_NEUTRALS_AT_A_RECORD_WITH_A_RELEVANT_FIELD_STAY_APART: &str
         /std/Io/pure(())
         "#;
 
-pub(super) const TWO_NEUTRALS_AT_A_STRUCT_WITH_A_FIELD_STAY_APART: &str = r#"
-        use /std/{Eq, Nat};
+pub(super) const ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_WITH_ONE_INHABITANT: &str = r#"
+        use /std/{Eq, Nat, Bool};
 
         struct W: pub Type { u: {} }
 
-        let apart(r : W, s : W) -> Eq(@(W))(r, s) = Eq/refl();
+        struct Proved: pub Type { p: Eq()(0, 0) }
+
+        struct N: pub Type { w: W, f: (Nat) -> {}, r: {a: {}, b: Proved} }
+
+        let at_a_struct_of_a_unit(r : W, s : W) -> Eq(@(W))(r, s) = Eq/refl();
+
+        let by_a_cast(F : (W) -> Type, r : W, s : W, x : F(r)) -> F(s) = x;
+
+        let at_a_struct_of_a_proof(r : Proved, s : Proved) -> Eq(@(Proved))(r, s) = Eq/refl();
+
+        let at_a_struct_of_such(r : N, s : N) -> Eq(@(N))(r, s) = Eq/refl();
+
+        let two_applications(f : (Nat) -> W, g : (Nat) -> W, n : Nat)
+            -> Eq(@(W))(f(n), g(n))
+            = Eq/refl();
+
+        let two_stuck_matches(b : Bool, r : W, s : W)
+            -> Eq(@(W))(match b: (_) => W | true => r | false => r end,
+                        match b: (_) => W | true => s | false => s end)
+            = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const TWO_NEUTRALS_AT_A_STRUCT_WITH_A_RELEVANT_FIELD_STAY_APART: &str = r#"
+        use /std/{Eq, Nat};
+
+        struct V: pub Type { n: Nat, u: {} }
+
+        let apart(r : V, s : V) -> Eq(@(V))(r, s) = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART: &str = r#"
+        use /std/{Eq, Nat};
+
+        struct R: pub Type { next: (Nat) -> R }
+
+        let apart(r : R, s : R) -> Eq(@(R))(r, s) = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_ONE_INHABITANT: &str = r#"
+        use /std/{Eq, Nat, Bool};
+
+        struct W: pub Type { u: {} }
+
+        let at_a_record_of_units(b : Bool, r : {{}, {}}, s : {{}, {}})
+            -> Eq(@(Nat))((match b: (_) => {{{}, {}}, Nat} | true => (r, 1) | false => (r, 2) end).1,
+                          (match b: (_) => {{{}, {}}, Nat} | true => (s, 1) | false => (s, 2) end).1)
+            = Eq/refl();
+
+        let at_a_function_into_a_unit(b : Bool, r : (Nat) -> {}, s : (Nat) -> {})
+            -> Eq(@(Nat))((match b: (_) => {(Nat) -> {}, Nat} | true => (r, 1) | false => (r, 2) end).1,
+                          (match b: (_) => {(Nat) -> {}, Nat} | true => (s, 1) | false => (s, 2) end).1)
+            = Eq/refl();
+
+        let at_a_struct_of_a_unit(b : Bool, r : W, s : W)
+            -> Eq(@(Nat))((match b: (_) => {W, Nat} | true => (r, 1) | false => (r, 2) end).1,
+                          (match b: (_) => {W, Nat} | true => (s, 1) | false => (s, 2) end).1)
+            = Eq/refl();
+
+        let at_a_proposition_whose_implicit_is_solved(b : Bool, p : Eq()(0, 0), q : Eq()(0, 0))
+            -> Eq(@(Nat))((match b: (_) => {Eq()(0, 0), Nat} | true => (p, 1) | false => (p, 2) end).1,
+                          (match b: (_) => {Eq()(0, 0), Nat} | true => (q, 1) | false => (p, 2) end).1)
+            = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const TWO_NEUTRALS_STAY_APART_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_A_RELEVANT_FIELD:
+    &str = r#"
+        use /std/{Eq, Nat, Bool};
+
+        let apart(b : Bool, r : {Nat, {}}, s : {Nat, {}})
+            -> Eq(@(Nat))((match b: (_) => {{Nat, {}}, Nat} | true => (r, 1) | false => (r, 2) end).1,
+                          (match b: (_) => {{Nat, {}}, Nat} | true => (s, 1) | false => (s, 2) end).1)
+            = Eq/refl();
 
         /std/Io/pure(())
         "#;
@@ -813,6 +892,67 @@ pub(super) const TWO_CALLS_THAT_DIFFER_IN_A_RELEVANT_ARGUMENT_STAY_APART: &str =
 
         let apart(a : Nat, b : Nat, g : (Nat) -> Nat, x : Eq(@((Nat) -> Nat))(shift(a), g))
             -> Eq(@((Nat) -> Nat))(shift(b), g) = x;
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_WHEREVER_THEY_SIT: &str = r#"
+        use /std/{Eq, Nat, Bool, List};
+
+        induct Zero: (Nat) -> pub Prop
+        | zero(): (0)
+        end
+
+        let through(n : Nat, e : Zero(n)) -> Nat = match e | zero() => 1 end;
+
+        let into(n : Nat, e : Zero(n)) -> (Nat) -> Nat =
+            match e: (_, _) => (Nat) -> Nat | zero() => (x : Nat) => x end;
+
+        let pair(n : Nat, e : Zero(n)) -> {Nat, Nat} =
+            match e: (_, _) => {Nat, Nat} | zero() => (1, 2) end;
+
+        let a_curried_call(n : Nat, p : Zero(n), q : Zero(n))
+            -> Eq(@(Nat))(into(n, p)(3), into(n, q)(3)) = Eq/refl();
+
+        let under_a_lambda(n : Nat, p : Zero(n), q : Zero(n))
+            -> Eq(@((Nat) -> Nat))((z : Nat) => through(n, p), (z : Nat) => through(n, q))
+            = Eq/refl();
+
+        let in_a_tuple(n : Nat, p : Zero(n), q : Zero(n))
+            -> Eq(@({Nat, Nat}))((through(n, p), 0), (through(n, q), 0)) = Eq/refl();
+
+        let in_a_let(n : Nat, p : Zero(n), q : Zero(n))
+            -> Eq(@(Nat))((let z = through(n, p); z), (let z = through(n, q); z)) = Eq/refl();
+
+        let in_a_list(n : Nat, p : Zero(n), q : Zero(n))
+            -> Eq(@(List(Nat)))([through(n, p)], [through(n, q)]) = Eq/refl();
+
+        let as_a_scrutinee(n : Nat, p : Zero(n), q : Zero(n))
+            -> Eq(@(Nat))(match through(n, p): (_) => Nat | 0 => 0 | pred + 1 => 1 end,
+                          match through(n, q): (_) => Nat | 0 => 0 | pred + 1 => 1 end)
+            = Eq/refl();
+
+        let as_an_operand(n : Nat, p : Zero(n), q : Zero(n))
+            -> Eq(@(Nat))(through(n, p) + 1, through(n, q) + 1) = Eq/refl();
+
+        let under_a_projection(n : Nat, p : Zero(n), q : Zero(n))
+            -> Eq(@(Nat))(pair(n, p).0, pair(n, q).0) = Eq/refl();
+
+        let past_a_stuck_head(n : Nat, b : Bool, f : (Zero(n)) -> Nat, g : (Zero(n)) -> Nat,
+                              p : Zero(n), q : Zero(n),
+                              x : Eq()((match b: (_) => (Zero(n)) -> Nat | true => f | false => g end)(p), 0))
+            -> Eq()((match b: (_) => (Zero(n)) -> Nat | true => f | false => g end)(q), 0) = x;
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const TWO_CALLS_THAT_DIFFER_IN_A_RELEVANT_ARGUMENT_STAY_APART_WHEREVER_THEY_SIT: &str = r#"
+        use /std/{Eq, Nat};
+
+        let halved(m : Nat) -> Nat = match m | 0 => 0 | k + 1 => k end;
+
+        let apart(a : Nat, b : Nat)
+            -> Eq(@(Nat))((let z = halved(a); z), (let z = halved(b); z)) = Eq/refl();
 
         /std/Io/pure(())
         "#;

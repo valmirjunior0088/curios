@@ -6,7 +6,8 @@ use {
     crate::Kernel,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Free, Global, InductDecl, Intrinsic, Level, Nat, Telescope, Term, UniverseContext,
+        Free, Global, InductDecl, Intrinsic, Level, Nat, StructDecl, StructType, Subterm,
+        Telescope, Term, UniverseContext,
     },
     curios_utilities::Qualifier,
 };
@@ -95,6 +96,29 @@ pub(super) fn polymorphic_fold(level: Level) -> Term {
         )],
         Term::free_var(&f),
     )
+}
+
+/// A struct type declared with `fields` and no parameter, for the goals that need a nominal type.
+pub(super) fn declare_struct(kernel: &mut Kernel, path: &str, fields: Telescope<()>) -> Term {
+    let name = Global::Authored(Qualifier::from([path]));
+    kernel.declare_struct(
+        &name,
+        &StructDecl {
+            universe_context: UniverseContext::default(),
+            arity: Telescope::done(fields),
+            result_sort: Term::type_ground(),
+            module: Qualifier::from([path]),
+            rep_public: true,
+            polarities: Vec::new(),
+            plicities: Vec::new(),
+        },
+    );
+
+    Term::from(Subterm::StructType(StructType {
+        name,
+        universes: Vec::new(),
+        params: Vec::new(),
+    }))
 }
 
 /// `induct Wit(P : <param_sort>) : (p : P)` — a family whose index type *is* its own parameter.

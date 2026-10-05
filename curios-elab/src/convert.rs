@@ -1,3 +1,6 @@
+mod inhabited;
+use inhabited::*;
+
 mod intrinsic;
 use intrinsic::*;
 
@@ -1077,24 +1080,7 @@ impl Convert {
                 self.enqueue_fields(projections(&this), projections(&that), Some(telescope));
                 Ok(true)
             }
-            // A nominal struct is a named tuple with no constructor tag (`structure.rs`'s own doc: "an Inductive minus the indices and the per-constructor map"), so it gets the same η treatment — recover the field count from the registry (`compare_struct` recovers the field *types* the same way) since, unlike a `TupleType`, a `StructType` doesn't carry its telescope inline.
-            // Its projections stay at `Type`, where the tuple's are at their fields' types: the kernel has no eta between two neutrals at a struct that has fields, so a field decided by its type would be accepted here alone.
-            Subterm::StructType(StructType { name, .. }) => {
-                let n = context
-                    .struct_decl(&name)
-                    .map(|struct_decl| struct_decl.field_count());
-                let Some(n) = n else {
-                    return Ok(false);
-                };
-                for i in 0..n {
-                    self.enqueue(
-                        Term::type_ground(),
-                        Term::proj(this.clone(), i),
-                        Term::proj(that.clone(), i),
-                    );
-                }
-                Ok(true)
-            }
+            // A nominal struct has no eta between two neutrals, here as in the kernel: projecting both poses their heads again, which only two equal heads pass, and what eta would decide besides is read off the type before the dispatch (`decided_by_its_type`).
             _ => Ok(false),
         }
     }
@@ -1757,8 +1743,15 @@ impl Convert {
                 continue;
             }
 
-            // Unit eta, by the goal's type: a type with no field has one inhabitant, so the goal is decided here whatever the two sides' shapes, as the kernel decides it ahead of every structural rule. Left to `eta_expand_neutral`, two sides of one shape — two stuck matches, two applications — would be compared structurally and refused, and conversion would not be transitive at the type. After the metavariable dispatch, as the check above is, so a flexible side is still solved.
-            if field_less(context, &type_) {
+            // A goal its type decides ahead of every structural rule, as the kernel decides it: the empty Σ, where eta leaves nothing to compare, and two neutrals at a nominal struct with one inhabitant by its shape, which has no eta by its type. Left to the dispatch, two sides of one shape — two stuck matches, two applications — would be compared structurally and refused, and conversion would not be transitive at the type. After the metavariable dispatch, as the check above is, so a flexible side is still solved.
+            if decided_by_its_type(context, &type_, &this, &that)? {
+                continue;
+            }
+
+            // Where the problem's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand — a stuck elimination's scrutinee, a projection's head. What a type directs between two neutrals is then asked of the type a lookup gives both sides, as the kernel asks it.
+            if matches!(&*type_, Subterm::Type(_) | Subterm::Prop)
+                && by_their_own_type(context, &this, &that)?
+            {
                 continue;
             }
 
@@ -2118,15 +2111,56 @@ fn another_former(context: &Context, type_: &Term) -> bool {
     type_.is_type_former(&context.syntax())
 }
 
-/// Whether `type_`, in weak-head normal form, is a type with no field: the empty Σ, or a nominal struct whose declaration has none.
-fn field_less(context: &Context, type_: &Term) -> bool {
+/// Whether a goal at `type_`, in weak-head normal form, is decided by the type: the empty Σ, where eta leaves nothing to compare, and a nominal struct that has one inhabitant by its shape, between two sides neither of which is its literal. A struct has no eta by its type — a literal opens one, against a neutral and field by field against another — so two neutrals have none to open, and what eta would decide between them is read off the type. A function and a record type with fields are left to eta, which decides the same.
+fn decided_by_its_type(
+    context: &mut Context,
+    type_: &Term,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, ReduceError> {
+    let literal = |term: &Term| matches!(&**term, Subterm::Struct(_));
+
     match &**type_ {
-        Subterm::TupleType(TupleType { telescope, .. }) => telescope.is_empty(),
-        Subterm::StructType(StructType { name, .. }) => context
-            .struct_decl(name)
-            .is_some_and(|declaration| declaration.field_count() == 0),
-        _ => false,
+        Subterm::TupleType(TupleType { telescope, .. }) => Ok(telescope.is_empty()),
+        Subterm::StructType(_) if !literal(this) && !literal(that) => {
+            one_inhabitant(context, type_)
+        }
+        _ => Ok(false),
     }
+}
+
+/// What a type directs between two terms, asked of the type a lookup reads where the problem carries none: two terms a lookup types at one type that has one inhabitant are equal. The two looked-up types are compared, so it is the typed rule with its type looked up; `curios-cert`'s rule of the same name says why neither side is expanded — eta between two neutrals decides nothing the type's shape does not, and the goal it would pose at a looked-up type is one the recurrence rule would assume.
+///
+/// Each side and each looked-up type is read through the solutions already committed, so the verdict does not follow whether an implicit was written or solved. Nothing here solves: one that still mentions an unsolved metavariable is left to the rules that do.
+fn by_their_own_type(context: &mut Context, this: &Term, that: &Term) -> Result<bool, ReduceError> {
+    let through = |context: &Context, term: &Term| match term.has_metavar() {
+        true => zonk_solved_term_metas(context, term),
+        false => term.clone(),
+    };
+    let (Some(this_type), Some(that_type)) = (
+        synth_neutral(context, &[], this)?,
+        synth_neutral(context, &[], that)?,
+    ) else {
+        return Ok(false);
+    };
+
+    // The type first, and the sides only where it decides: nearly every pair here is two types at a sort, which this leaves at the cost of two lookups.
+    let this_type = through(context, &this_type);
+    if this_type.has_metavar() || !one_inhabitant(context, &this_type)? {
+        return Ok(false);
+    }
+    let that_type = through(context, &that_type);
+    if through(context, this).has_metavar()
+        || through(context, that).has_metavar()
+        || that_type.has_metavar()
+    {
+        return Ok(false);
+    }
+
+    Ok(matches!(
+        convert_outcome(context, &Term::type_ground(), &this_type, &that_type)?,
+        Outcome::Converts
+    ))
 }
 
 /// What a pair of sides is as a level question, once the term metavariables already solved are materialized: [`Identification`]'s four verdicts, plus a pair that could still become a level question once its remaining metavariables are solved.

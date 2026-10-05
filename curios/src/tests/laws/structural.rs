@@ -11,6 +11,7 @@ pub(super) const STRUCTURAL: &str =
     "use /std/{Eq, Nat, Bool, List, Option, Io}; use /std/Bool/{Holds};
 struct Record: pub Type { a: Nat, b: Nat }
 struct Empty: pub Type {}
+struct Unital: pub Type { unit: {}, proof: Holds(0 < 10) }
 struct Bounded: pub Type { n: Nat, ok: Holds(n < 10) }
 struct Box(A: Type): pub Type { held: A }
 induct Zero: (Nat) -> pub Prop
@@ -235,6 +236,25 @@ pub(super) const SEEDS: &[Seeds] = &[
             held("unit eta at a struct, two neutrals", "v", "u"),
         ],
     },
+    // A struct whose fields each have one inhabitant has one too, and a nominal struct has no eta by its type: the literal meets a neutral by its shape, and two neutrals by nothing but the shape of the type.
+    Seeds {
+        type_: "Unital",
+        binders: "u: Unital, v: Unital, f: (Nat) -> Unital, e: (Nat) -> Unital, n: Nat, p: Holds(0 < 10)",
+        compound: None,
+        seeds: &[
+            held(
+                "one inhabitant at a struct, the literal",
+                "Unital { unit = (), proof = p }",
+                "u",
+            ),
+            held("one inhabitant at a struct, two neutrals", "v", "u"),
+            held(
+                "one inhabitant at a struct, two applications",
+                "f(n)",
+                "e(n)",
+            ),
+        ],
+    },
     Seeds {
         type_: "Nat",
         binders: "a: Nat, b: Nat, f: (Holds(a < 10)) -> Nat, c: (Nat) -> Nat, p1: Holds(a < 10), p2: Holds(a < 10)",
@@ -355,7 +375,7 @@ fn every_held_seed_the_table_does_not_list_closes_by_refl() {
             .filter(|seed| {
                 !listed
                     .iter()
-                    .any(|parted| parted.audit == Audit::Seeds && parted.row == seed.rule)
+                    .any(|(audit, row, ..)| *audit == Audit::Seeds && row == seed.rule)
             })
             .map(|seed| seeds.row(seed))
             .collect::<Vec<_>>();

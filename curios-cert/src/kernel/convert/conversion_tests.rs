@@ -238,6 +238,112 @@ fn any_two_terms_converge_at_a_type_with_no_field() {
     assert_eq!(convert(&mut kernel, &one_field, &u, &v), Ok(false));
 }
 
+/// A nominal struct has no eta by its type, so what eta would decide between two terms at one is read off the type: any two converge at a struct every field of which has one inhabitant — a unit, a proof, a function into a unit, a record of such, another such struct — whatever their shapes. The elaborator's twin of this proposition shares the name.
+///
+/// The refusals are the rule's bounds. One relevant field keeps two variables apart, at whatever depth it sits; and a struct that reaches itself answers no where it is met again, which is what ends the walk.
+///
+/// Mutation-checked: with the struct left to the structural rules the four held goals are refused; with every struct counted the three refused goals are accepted; and without the answer at a struct met again the last goal spends the budget.
+#[test]
+fn any_two_terms_converge_at_a_struct_with_one_inhabitant() {
+    let mut kernel = kernel();
+    let (u, v) = (
+        Term::free_var(&binder(0, "u")),
+        Term::free_var(&binder(1, "v")),
+    );
+    let applied = |head: u32, hint: &str, argument: usize| {
+        Term::apply(Term::free_var(&binder(head, hint)), [nat(argument)])
+    };
+    let unit = Term::tuple_type_unit;
+    let proposition = declare(&mut kernel, "P", Term::prop());
+    let mut declared = |path: &str, fields: Vec<(Free, Term)>| {
+        declare_struct(&mut kernel, path, Telescope::build(fields, ()))
+    };
+
+    let of_a_unit = declared("W", vec![(binder(8, "u"), unit())]);
+    let of_a_proof = declared("Proved", vec![(binder(8, "p"), proposition)]);
+    let nested = declared(
+        "N",
+        vec![
+            (binder(8, "w"), of_a_unit.clone()),
+            (
+                binder(9, "f"),
+                Term::func_type([(binder(10, "x"), nat_type())], unit()),
+            ),
+            (
+                binder(11, "r"),
+                Term::tuple_type([
+                    (binder(12, "a"), unit()),
+                    (binder(13, "b"), of_a_proof.clone()),
+                ]),
+            ),
+        ],
+    );
+    let of_a_number = declared(
+        "V",
+        vec![(binder(8, "n"), nat_type()), (binder(9, "u"), unit())],
+    );
+    let over_a_number = declared(
+        "M",
+        vec![
+            (binder(8, "w"), of_a_unit.clone()),
+            (binder(9, "v"), of_a_number.clone()),
+        ],
+    );
+    // `struct R(n: Nat) { next: (m: Nat) -> R(m) }`, which reaches itself at another parameter each time.
+    let reaching_itself = {
+        let name = Global::Authored(Qualifier::from(["R"]));
+        let at = |param: Term| {
+            Term::from(Subterm::StructType(StructType {
+                name,
+                universes: Vec::new(),
+                params: vec![param],
+            }))
+        };
+        let (n, m) = (binder(8, "n"), binder(9, "m"));
+        let next = Term::func_type([(m, nat_type())], at(Term::free_var(&m)));
+        kernel.declare_struct(
+            &name,
+            &StructDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::build(
+                    [(n, nat_type())],
+                    Telescope::build([(binder(10, "next"), next)], ()),
+                ),
+                result_sort: Term::type_ground(),
+                module: Qualifier::from(["R"]),
+                rep_public: true,
+                polarities: Vec::new(),
+                plicities: Vec::new(),
+            },
+        );
+
+        at(nat(0))
+    };
+
+    assert_eq!(
+        [
+            convert(&mut kernel, &of_a_unit, &u, &v),
+            convert(
+                &mut kernel,
+                &of_a_unit,
+                &applied(2, "f", 0),
+                &applied(3, "g", 1)
+            ),
+            convert(&mut kernel, &of_a_proof, &u, &v),
+            convert(&mut kernel, &nested, &u, &v),
+        ],
+        [Ok(true), Ok(true), Ok(true), Ok(true)]
+    );
+    assert_eq!(
+        [
+            convert(&mut kernel, &of_a_number, &u, &v),
+            convert(&mut kernel, &over_a_number, &u, &v),
+            convert(&mut kernel, &reaching_itself, &u, &v),
+        ],
+        [Ok(false), Ok(false), Ok(false)]
+    );
+}
+
 /// Eta by the goal's type is fired ahead of every structural rule, whatever the two sides' shapes: two stuck applications of two heads converge at a record of units, by their projections, and at a function into a unit, by their applications, where a structural comparison would set head against head and refuse. At a record with a relevant field the projections are compared, and the two stay apart. The elaborator's twin of this proposition shares the name.
 #[test]
 fn eta_by_the_goals_type_is_fired_whatever_the_two_sides_shapes() {
@@ -317,29 +423,6 @@ fn eta_by_a_literal_is_refused_at_a_type_former_that_is_not_its_own() {
         ],
         [Ok(true), Ok(true), Ok(true), Ok(true), Ok(true)]
     );
-}
-
-/// A struct type declared with `fields` and no parameter, for the goals that need a nominal type.
-fn declare_struct(kernel: &mut Kernel, path: &str, fields: Telescope<()>) -> Term {
-    let name = Global::Authored(Qualifier::from([path]));
-    kernel.declare_struct(
-        &name,
-        &StructDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(fields),
-            result_sort: Term::type_ground(),
-            module: Qualifier::from([path]),
-            rep_public: true,
-            polarities: Vec::new(),
-            plicities: Vec::new(),
-        },
-    );
-
-    Term::from(Subterm::StructType(StructType {
-        name,
-        universes: Vec::new(),
-        params: Vec::new(),
-    }))
 }
 
 /// A literal's shape fires eta against a neutral inhabitant alone. Against a canonical form — which only a caller comparing two terms of different types could hand over — neither rule fires, and the unit literal's empty walk equates it with no literal of another type.

@@ -53,7 +53,7 @@ fn an_expansion_that_swaps_its_components_is_not_eta_in_an_arm() {
 
 // **Unit eta is the type's, in both checkers.** A type with no field — the empty Σ, a nominal struct that declares none — has one inhabitant, so any two terms convert at it, and each checker decides the goal by its type ahead of every structural rule. The elaborator reached the rule only between two sides no structural rule claimed and the kernel had it against a literal alone, so two variables elaborated and were refused by the kernel, and two applications or two stuck matches were refused by the elaborator, which held each equal to a variable. The first two programs are the ones that reached the kernel's refusal; the rest are the shapes, and the two eta rules that carry a goal to a unit.
 //
-// The two refusals beside it are what keep the acceptance from reading as "any two records convert": one relevant field keeps two neutrals apart, and a nominal struct that has a field is no unit, whatever the field's type.
+// The refusal beside it is what keeps the acceptance from reading as "any two records convert": one relevant field keeps two neutrals apart.
 #[test]
 fn any_two_terms_convert_at_a_type_with_no_field() {
     assert_eq!(run(ANY_TWO_TERMS_CONVERT_AT_A_TYPE_WITH_NO_FIELD), b"1");
@@ -67,10 +67,48 @@ fn two_neutrals_at_a_record_with_a_relevant_field_stay_apart() {
     );
 }
 
+// **A nominal struct has no eta by its type, and what eta would decide is read off the type.** Two neutrals at a struct have no literal to open, so neither checker expands them: any two terms convert at a struct every field of which has one inhabitant — a unit, a proof, a function into a unit, a record or a struct of such — and are left to their heads otherwise. The elaborator projected two neutrals at a struct and compared the projections with no type, which decided nothing, and the kernel compared their heads; once a lookup typed those projections the elaborator accepted two variables at a struct of a unit and the kernel refused them, which is the first program.
+//
+// The two refusals beside it are the rule's bounds: one relevant field keeps two neutrals apart, and a struct that reaches itself answers no where it is met again, which is what ends the walk.
 #[test]
-fn two_neutrals_at_a_struct_with_a_field_stay_apart() {
+fn any_two_terms_convert_at_a_struct_with_one_inhabitant() {
+    assert_eq!(
+        run(ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_WITH_ONE_INHABITANT),
+        b"1"
+    );
+}
+
+#[test]
+fn two_neutrals_at_a_struct_with_a_relevant_field_stay_apart() {
     rejected_by(
-        TWO_NEUTRALS_AT_A_STRUCT_WITH_A_FIELD_STAY_APART,
+        TWO_NEUTRALS_AT_A_STRUCT_WITH_A_RELEVANT_FIELD_STAY_APART,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn two_neutrals_at_a_struct_that_reaches_itself_stay_apart() {
+    rejected_by(
+        TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART,
+        "type mismatch",
+    );
+}
+
+// **Where a child is compared with no type, what a type directs between two neutrals is read off the type a lookup gives both.** A tuple literal's component inside a stuck elimination's arm is such a child, and two variables there at a record of units, at a function into a unit or at a struct of a unit were refused by both checkers, which each equate them wherever a type reaches them. Neither side is expanded: eta between two neutrals decides nothing the type's shape does not, and the goal it would pose at a looked-up type is one the recurrence rule assumes. The last program is two proofs of a proposition whose implicit the elaborator solved, which it refused where the same proposition written out converged.
+//
+// The refusal beside it is the same pair at a record with a relevant field.
+#[test]
+fn two_neutrals_convert_where_a_lookup_gives_them_a_type_with_one_inhabitant() {
+    assert_eq!(
+        run(TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_ONE_INHABITANT),
+        b"1"
+    );
+}
+
+#[test]
+fn two_neutrals_stay_apart_where_a_lookup_gives_them_a_type_with_a_relevant_field() {
+    rejected_by(
+        TWO_NEUTRALS_STAY_APART_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_A_RELEVANT_FIELD,
         "type mismatch",
     );
 }

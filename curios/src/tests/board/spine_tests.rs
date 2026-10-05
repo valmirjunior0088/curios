@@ -55,6 +55,25 @@ fn two_calls_that_differ_in_a_relevant_argument_stay_apart() {
     );
 }
 
+// **Two calls of one definition converge wherever they sit, whichever rule reaches them.** The spine rules decide the pair only while it is still spelled as two calls. Under a lambda's body, a tuple's component, a `let`'s value, a list's element, a `match`'s scrutinee, an operation's operand and a projection's head, reduction reaches the call first and unfolds it, and the two proofs become a stuck elimination's scrutinees, which were compared at `Type` and held apart: by the kernel alone under the first two, by both checkers under the rest, and by the elaborator alone at a curried call read by reflexivity. A scrutinee is compared at the type a lookup gives it, where that is a proposition, so the unfolded forms converge and the verdict no longer follows which spelling survived. The last program is a proof past a stuck `match`'s head, an argument neither checker types, read the same way.
+//
+// The refusal beside it is two calls that differ in an argument that matters, under a `let`: the lookup types it at `Nat`, where nothing ends the comparison.
+#[test]
+fn two_calls_of_one_definition_convert_wherever_they_sit() {
+    assert_eq!(
+        run(TWO_CALLS_OF_ONE_DEFINITION_CONVERT_WHEREVER_THEY_SIT),
+        b"1"
+    );
+}
+
+#[test]
+fn two_calls_that_differ_in_a_relevant_argument_stay_apart_wherever_they_sit() {
+    rejected_by(
+        TWO_CALLS_THAT_DIFFER_IN_A_RELEVANT_ARGUMENT_STAY_APART_WHEREVER_THEY_SIT,
+        "type mismatch",
+    );
+}
+
 // The same pair where the definition mentions `Eq`, which makes it universe-polymorphic: each occurrence is an instance at levels of its own. Its heads are compared after the spines, which is when their levels are identified; a spine rule matching a bare variable head only would refuse it.
 #[test]
 fn a_polymorphic_definition_applied_to_two_proofs_converts() {

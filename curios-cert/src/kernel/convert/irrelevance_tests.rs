@@ -28,9 +28,9 @@ fn any_two_inhabitants_of_a_proposition_convert() {
     );
 }
 
-/// **Two applications of one definition are compared by their spines before either is unfolded**, so two proofs passed to it meet irrelevance at the parameter's own type. Unfolded first, `h`'s body leaves each proof as the scrutinee of a stuck elimination, which is compared at `Type`, and the pair would be refused where the elaborator — comparing the spines of one global first — accepts it. `tests::board`'s row of the same name is the program.
+/// **Two applications of one definition are compared by their spines before either is unfolded**, so two proofs passed to it meet irrelevance at the parameter's own type, and neither call is opened to say so. `tests::board`'s row of the same name is the program.
 ///
-/// The control is the same definition over a relevant family: the spines disagree there, the pair unfolds, and the two eliminations stay apart. Mutation-checked: removing the spine attempt before forcing fails the proposition's half, and reading no telescope off a `rec` projection leaves this passing — that half is `recursion_tests`'s `two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding`.
+/// The control is the same definition over a relevant family: the spines disagree there, the pair unfolds, and the two eliminations stay apart. The proposition's half holds by either rule — unfolded, the two proofs are a stuck elimination's scrutinees, which the type a lookup gives them equates (`two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant`) — so what this holds is the verdict, and that the spines reach it without unfolding is what the comparison costs less by.
 #[test]
 fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
     let applied_to_two = |sort: Term| {
@@ -71,9 +71,9 @@ fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
     );
 }
 
-/// The spines of two calls of one definition are compared on the pair as posed, ahead of eta by the goal's type, and through a curried spine. At a function or a record type eta would hand on each call applied or projected, which is no call of a definition at its head: both calls would unfold, and the two proofs would be compared at `Type` as a stuck elimination's scrutinees. The same holds for the definition's call applied once more, `h(p)(3)`, whose head is the call. `tests::board`'s row of the same name is the programs.
+/// The spines of two calls of one definition are compared on the pair as posed, ahead of eta by the goal's type, and through a curried spine: at a function type, at a record type, and for the definition's call applied once more, `h(p)(3)`, whose head is the call. `tests::board`'s row of the same name is the programs.
 ///
-/// The control for each is the same definition over a relevant family, where the spines disagree and the pair stays apart. Mutation-checked: with the spines tried after eta by the type the record's goal is refused — the function's is still caught, through its curried spine once eta has applied both calls — and without the curried head the third goal is.
+/// The control for each is the same definition over a relevant family, where the spines disagree and the pair stays apart. Each held goal holds by either rule: left to eta by the type, both calls unfold and the two proofs are a stuck elimination's scrutinees, which the type a lookup gives them equates. So this holds the verdict at each type, which does not follow where the spine rule sits; trying it first, as the elaborator does, is what keeps the two calls folded.
 #[test]
 fn two_calls_of_one_definition_convert_by_their_spines_at_any_type() {
     let judged = |sort: Term| {
@@ -140,9 +140,9 @@ fn two_calls_of_one_definition_convert_by_their_spines_at_any_type() {
     );
 }
 
-/// A spine's arguments are compared at the types its head assigns under every head a lookup types: past a curried head, `f(0)(p)`, and past a projected one, `r.0(p)`, as past a variable's own. Compared at `Type` there, two proofs of one proposition would stay apart where the elaborator, which asks the same lookup of whatever the head is, has accepted them.
+/// A spine's arguments are compared at the types its head assigns under every head a lookup types: past a curried head, `f(0)(p)`, and past a projected one, `r.0(p)`, as past a variable's own.
 ///
-/// The control is the same two spines over a relevant family. Mutation-checked: with the head's type read under a variable, an instance and a `rec` projection alone, both goals are refused at the proposition.
+/// The control is the same two spines over a relevant family. Two proofs of one proposition converge compared at `Type` too, by the type a lookup gives each, so this holds the verdict under each head, and the head's telescope is what reaches it without a lookup of every argument.
 #[test]
 fn a_spines_arguments_are_typed_under_a_curried_and_a_projected_head() {
     let judged = |sort: Term| {
@@ -192,6 +192,124 @@ fn a_spines_arguments_are_typed_under_a_curried_and_a_projected_head() {
 
     assert_eq!(judged(Term::prop()), [Ok(true), Ok(true)]);
     assert_eq!(judged(Term::type_ground()), [Ok(false), Ok(false)]);
+}
+
+/// Where a child is compared with no type, what a type directs between two neutrals is read off the type a lookup gives both: two proofs of one proposition converge at `Type`, and so do two variables at the empty record, at a record of units, at a function into a unit, at a struct that declares no field, at a struct of a unit and at a recursive definition's call that unfolds to one of these, at whatever depth; and two eliminations of two such proofs, whose scrutinees are compared with no type, are one term. It is what keeps a verdict from following whether a definition's call was unfolded before the pair was posed. The elaborator's twin of this proposition shares the name.
+///
+/// Neither side is expanded, and the refusals say what that keeps apart: two variables at a record with a relevant field, two proofs of two propositions and two numbers.
+///
+/// Mutation-checked: without the lookup the nine held goals are refused; with the two looked-up types left uncompared, two proofs of two propositions converge; and with eta taken at the looked-up type in place of reading it, two variables at a record with a relevant field converge, the projections' heads asking the pair again and the recurrence rule assuming it.
+#[test]
+fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() {
+    let mut kernel = kernel();
+    let proposition = declare(&mut kernel, "P", Term::prop());
+    let another = declare(&mut kernel, "Q", Term::prop());
+    let field_less = declare_struct(&mut kernel, "U", Telescope::done(()));
+    let unit = Term::tuple_type_unit();
+    let of_a_unit = declare_struct(
+        &mut kernel,
+        "W",
+        Telescope::build([(binder(89, "u"), unit.clone())], ()),
+    );
+    let record = Term::tuple_type([
+        (binder(90, "a"), nat_type()),
+        (binder(91, "b"), unit.clone()),
+    ]);
+    let units = Term::tuple_type([
+        (binder(90, "a"), unit.clone()),
+        (binder(91, "b"), unit.clone()),
+    ]);
+    let function = Term::func_type([(binder(92, "x"), nat_type())], unit.clone());
+    // `rec F : (Nat) -> Type = (n) => match n | 0 => {} | pred + 1 => {a: F(pred)}; F`. `F(0)` unfolds to the unit, and `F(1)` to a record of it.
+    let nested = {
+        let (f, n, motive) = (binder(93, "F"), binder(94, "n"), binder(95, "m"));
+        let (pred, ih) = (binder(96, "pred"), binder(97, "ih"));
+        let again = Term::apply(Term::free_var(&f), [Term::free_var(&pred)]);
+        let family = Term::func_type([(n, nat_type())], Term::type_ground());
+        let body = Term::func(
+            [(n, nat_type())],
+            Term::nat_match(
+                Term::free_var(&n),
+                Some(&motive),
+                Term::type_ground(),
+                unit.clone(),
+                &pred,
+                &ih,
+                Term::tuple_type([(binder(98, "a"), again)]),
+            ),
+        );
+        let definition = Term::rec([(f, family, body)], Term::free_var(&f));
+
+        move |depth: usize| Term::apply(definition.clone(), [nat(depth)])
+    };
+    let (folded, folded_twice) = (nested(0), nested(1));
+
+    let mut assumed = |index: u32, hint: &str, type_: &Term| {
+        let name = binder(index, hint);
+        kernel.assume(&name, type_);
+
+        Term::free_var(&name)
+    };
+    let (p, q) = (assumed(0, "p", &proposition), assumed(1, "q", &proposition));
+    let other = assumed(2, "r", &another);
+    let (u, v) = (assumed(3, "u", &unit), assumed(4, "v", &unit));
+    let (s, t) = (assumed(5, "s", &field_less), assumed(6, "t", &field_less));
+    let (x, y) = (assumed(7, "x", &record), assumed(8, "y", &record));
+    let (f, g) = (assumed(9, "f", &function), assumed(10, "g", &function));
+    let (a, b) = (assumed(11, "a", &nat_type()), assumed(12, "b", &nat_type()));
+    let (c, d) = (assumed(13, "c", &units), assumed(14, "d", &units));
+    let (w, z) = (assumed(15, "w", &of_a_unit), assumed(16, "z", &of_a_unit));
+    let (h, k) = (assumed(17, "h", &folded), assumed(18, "k", &folded));
+    let (i, j) = (
+        assumed(19, "i", &folded_twice),
+        assumed(20, "j", &folded_twice),
+    );
+
+    let eliminated = |proof: &Term| {
+        Term::from(Subterm::Match(Match {
+            head: proof.clone(),
+            result: MatchResult::Ambient(nat_type()),
+            cases: Cases::Induct {
+                cases: Vec::new(),
+                default: None,
+            },
+        }))
+    };
+    let (ground, number) = (Term::type_ground(), nat_type());
+    let mut at = |type_: &Term, this: &Term, that: &Term| convert(&mut kernel, type_, this, that);
+
+    assert_eq!(
+        [
+            at(&ground, &p, &q),
+            at(&ground, &u, &v),
+            at(&ground, &s, &t),
+            at(&ground, &c, &d),
+            at(&ground, &f, &g),
+            at(&ground, &w, &z),
+            at(&ground, &h, &k),
+            at(&ground, &i, &j),
+            at(&number, &eliminated(&p), &eliminated(&q)),
+        ],
+        [
+            Ok(true),
+            Ok(true),
+            Ok(true),
+            Ok(true),
+            Ok(true),
+            Ok(true),
+            Ok(true),
+            Ok(true),
+            Ok(true)
+        ]
+    );
+    assert_eq!(
+        [
+            at(&ground, &x, &y),
+            at(&ground, &p, &other),
+            at(&ground, &a, &b),
+        ],
+        [Ok(false), Ok(false), Ok(false)]
+    );
 }
 
 /// The same two terms at a *relevant* type are not interchangeable. Irrelevance is a property of the type, and this is the direction that would be unsound to get wrong.
