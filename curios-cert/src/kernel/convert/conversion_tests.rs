@@ -368,6 +368,92 @@ fn any_two_terms_converge_at_a_struct_with_one_inhabitant() {
     );
 }
 
+/// A goal's type is read forced: a member of a declaration group is folded in weak-head form, and every rule a type directs is keyed on the type's own shape. Two variables converge at a group's member that is a struct of a unit, closed or over a variable, the unit, a record of units or a function into a unit, and stay apart at one that is a struct or a record with a relevant field. The elaborator's twin of this proposition shares the name.
+///
+/// Mutation-checked: with the type read in weak-head form, the five held goals are refused.
+#[test]
+fn a_goals_type_is_read_forced() {
+    let mut kernel = kernel();
+    let (u, v) = (
+        Term::free_var(&binder(0, "u")),
+        Term::free_var(&binder(1, "v")),
+    );
+    let (a, b, x) = (binder(8, "a"), binder(9, "b"), binder(10, "x"));
+    let unit = Term::tuple_type_unit;
+    let of_a_unit = declare_struct(&mut kernel, "W", Telescope::build([(a, unit())], ()));
+    let of_a_number = declare_struct(&mut kernel, "V", Telescope::build([(a, nat_type())], ()));
+    // `struct Tagged(n: Nat) { u: {} }` at a variable: a type with one inhabitant that is not closed.
+    let over_a_variable = {
+        let name = Global::Authored(Qualifier::from(["Tagged"]));
+        kernel.declare_struct(
+            &name,
+            &StructDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::build(
+                    [(binder(11, "n"), nat_type())],
+                    Telescope::build([(a, unit())], ()),
+                ),
+                result_sort: Term::type_ground(),
+                module: Qualifier::from(["Tagged"]),
+                rep_public: true,
+                polarities: Vec::new(),
+                plicities: Vec::new(),
+            },
+        );
+
+        Term::from(Subterm::StructType(StructType {
+            name,
+            universes: Vec::new(),
+            params: vec![Term::free_var(&binder(12, "k"))],
+        }))
+    };
+    // `rec First : Type = <body> and Second : Type = {}; First`, the spelling a declaration in a group is referred to by.
+    let member = |body: Term| {
+        let (first, second) = (binder(20, "First"), binder(21, "Second"));
+
+        Term::rec(
+            [
+                (first, Term::type_ground(), body),
+                (second, Term::type_ground(), Term::tuple_type_unit()),
+            ],
+            Term::free_var(&first),
+        )
+    };
+
+    assert_eq!(
+        [
+            convert(&mut kernel, &member(of_a_unit), &u, &v),
+            convert(&mut kernel, &member(over_a_variable), &u, &v),
+            convert(&mut kernel, &member(unit()), &u, &v),
+            convert(
+                &mut kernel,
+                &member(Term::tuple_type([(a, unit()), (b, unit())])),
+                &u,
+                &v
+            ),
+            convert(
+                &mut kernel,
+                &member(Term::func_type([(x, nat_type())], unit())),
+                &u,
+                &v
+            ),
+        ],
+        [Ok(true), Ok(true), Ok(true), Ok(true), Ok(true)]
+    );
+    assert_eq!(
+        [
+            convert(&mut kernel, &member(of_a_number), &u, &v),
+            convert(
+                &mut kernel,
+                &member(Term::tuple_type([(a, nat_type()), (b, unit())])),
+                &u,
+                &v
+            ),
+        ],
+        [Ok(false), Ok(false)]
+    );
+}
+
 /// Eta by the goal's type is fired ahead of every structural rule, whatever the two sides' shapes: two stuck applications of two heads converge at a record of units, by their projections, and at a function into a unit, by their applications, where a structural comparison would set head against head and refuse. At a record with a relevant field the projections are compared, and the two stay apart. The elaborator's twin of this proposition shares the name.
 #[test]
 fn eta_by_the_goals_type_is_fired_whatever_the_two_sides_shapes() {

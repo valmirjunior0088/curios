@@ -120,6 +120,22 @@ fn two_neutrals_at_a_struct_that_reaches_itself_stay_apart_inside_its_declaratio
     );
 }
 
+// **A goal's type is read forced in both checkers.** A struct declared with `and` is referred to through its group, and a type a recursive definition computes is a call of it: weak-head reduction leaves both folded, and every rule a type directs is keyed on the type's own shape. The elaborator read a goal's type in weak-head form and refused two variables at such a struct where the same struct declared alone, or written out, converged, where the kernel, which forces the type, accepts them, and where its own lookup, which forces what it reads, accepted them at a child no type was handed for.
+//
+// The refusal beside it is a group's member with a relevant field.
+#[test]
+fn a_goals_type_is_read_forced() {
+    assert_eq!(run(A_GOALS_TYPE_IS_READ_FORCED), b"1");
+}
+
+#[test]
+fn two_neutrals_at_a_groups_member_with_a_relevant_field_stay_apart() {
+    rejected_by(
+        TWO_NEUTRALS_AT_A_GROUPS_MEMBER_WITH_A_RELEVANT_FIELD_STAY_APART,
+        "type mismatch",
+    );
+}
+
 // **Where a child is compared with no type, what a type directs between two neutrals is read off the type a lookup gives both.** A tuple literal's component inside a stuck elimination's arm is such a child, and two variables there at a record of units, at a function into a unit or at a struct of a unit were refused by both checkers, which each equate them wherever a type reaches them. Neither side is expanded: eta between two neutrals decides nothing the type's shape does not, and the goal it would pose at a looked-up type is one the recurrence rule assumes. The last program is two proofs of a proposition whose implicit the elaborator solved, which it refused where the same proposition written out converged.
 //
 // The refusal beside it is the same pair at a record with a relevant field.

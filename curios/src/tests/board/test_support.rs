@@ -805,6 +805,45 @@ pub(super) const TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART_INSIDE_
         /std/Io/pure(())
         "#;
 
+pub(super) const A_GOALS_TYPE_IS_READ_FORCED: &str = r#"
+        use /std/{Eq, Nat, Bool};
+
+        struct Outer: pub Type { inner: Inner, u: {} }
+        and Inner: pub Type { u: {} }
+
+        struct Pair(A: Type): pub Type { a: A, b: A }
+
+        let Tower(n : Nat) -> Type = match n: (_) => Type | 0 => {} | p + 1 => Pair(Tower(p)) end;
+
+        let at_a_member(r : Inner, s : Inner) -> Eq(@(Inner))(r, s) = Eq/refl();
+
+        let at_a_member_that_holds_another(r : Outer, s : Outer) -> Eq(@(Outer))(r, s) = Eq/refl();
+
+        let by_a_cast(F : (Inner) -> Type, r : Inner, s : Inner, x : F(r)) -> F(s) = x;
+
+        let at_a_struct_a_definition_computes(r : Tower(2), s : Tower(2))
+            -> Eq(@(Tower(2)))(r, s)
+            = Eq/refl();
+
+        let where_a_lookup_reads_the_type(b : Bool, r : Outer, s : Outer)
+            -> Eq(@(Nat))((match b: (_) => {Outer, Nat} | true => (r, 1) | false => (r, 2) end).1,
+                          (match b: (_) => {Outer, Nat} | true => (s, 1) | false => (s, 2) end).1)
+            = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const TWO_NEUTRALS_AT_A_GROUPS_MEMBER_WITH_A_RELEVANT_FIELD_STAY_APART: &str = r#"
+        use /std/{Eq, Nat};
+
+        struct Outer: pub Type { inner: Inner, u: {} }
+        and Inner: pub Type { n: Nat }
+
+        let apart(r : Outer, s : Outer) -> Eq(@(Outer))(r, s) = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
 pub(super) const TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_ONE_INHABITANT: &str = r#"
         use /std/{Eq, Nat, Bool};
 

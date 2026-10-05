@@ -306,6 +306,94 @@ fn any_two_terms_converge_at_a_struct_with_one_inhabitant() {
     );
 }
 
+/// A goal's type is read forced: a member of a declaration group is folded in weak-head form, and every rule a type directs is keyed on the type's own shape. Two variables converge at a group's member that is a struct of a unit, closed or over a variable, the unit, a record of units or a function into a unit, and stay apart at one that is a struct or a record with a relevant field. The kernel's twin of this proposition shares the name.
+///
+/// Mutation-checked: with the type read in weak-head form, the goal at the struct over a variable is refused; a closed type's forced form is the reduct the sort judgment left cached, and the other goals are met again by eta where the dispatch ends.
+#[test]
+fn a_goals_type_is_read_forced() {
+    let mut context = context();
+    let (u, v) = (
+        Term::free_var(&context.fresh(Some("u"))),
+        Term::free_var(&context.fresh(Some("v"))),
+    );
+    let (a, b, x) = (
+        context.fresh(Some("a")),
+        context.fresh(Some("b")),
+        context.fresh(Some("x")),
+    );
+    let unit = Term::tuple_type_unit;
+    let of_a_unit = declare_struct(&mut context, "W", Telescope::build([(a, unit())], ()));
+    let of_a_number = declare_struct(&mut context, "V", Telescope::build([(a, nat_type())], ()));
+    // `struct Tagged(n: Nat) { u: {} }` at a variable: a type with one inhabitant that is not closed, so that no cached reduct of it stands in for the forcing.
+    let over_a_variable = {
+        let (n, k) = (context.fresh(Some("n")), context.fresh(Some("k")));
+        context
+            .register_struct(
+                &nominal("Tagged"),
+                StructDecl {
+                    universe_context: UniverseContext::empty(),
+                    arity: Telescope::build([(n, nat_type())], Telescope::build([(a, unit())], ())),
+                    result_sort: Term::type_ground(),
+                    module: Qualifier::empty(),
+                    rep_public: true,
+                    polarities: Vec::new(),
+                    plicities: Vec::new(),
+                },
+            )
+            .unwrap();
+
+        Term::from(Subterm::StructType(StructType {
+            name: nominal("Tagged"),
+            universes: Vec::new(),
+            params: vec![Term::free_var(&k)],
+        }))
+    };
+    // `rec First : Type = <body> and Second : Type = {}; First`, the spelling a declaration in a group is referred to by.
+    let (first, second) = (context.fresh(Some("First")), context.fresh(Some("Second")));
+    let member = |body: Term| {
+        Term::rec(
+            [
+                (first, Term::type_ground(), body),
+                (second, Term::type_ground(), Term::tuple_type_unit()),
+            ],
+            Term::free_var(&first),
+        )
+    };
+
+    assert_eq!(
+        [
+            convert(&mut context, &member(of_a_unit), &u, &v),
+            convert(&mut context, &member(over_a_variable), &u, &v),
+            convert(&mut context, &member(unit()), &u, &v),
+            convert(
+                &mut context,
+                &member(Term::tuple_type([(a, unit()), (b, unit())])),
+                &u,
+                &v
+            ),
+            convert(
+                &mut context,
+                &member(Term::func_type([(x, nat_type())], unit())),
+                &u,
+                &v
+            ),
+        ],
+        [Ok(true), Ok(true), Ok(true), Ok(true), Ok(true)]
+    );
+    assert_eq!(
+        [
+            convert(&mut context, &member(of_a_number), &u, &v),
+            convert(
+                &mut context,
+                &member(Term::tuple_type([(a, nat_type()), (b, unit())])),
+                &u,
+                &v
+            ),
+        ],
+        [Ok(false), Ok(false)]
+    );
+}
+
 /// Eta by the goal's type is fired ahead of every structural rule, whatever the two sides' shapes: two stuck applications of two heads converge at a record of units, by their projections, and at a function into a unit, by their applications, where the structural rule would set head against head and refuse. At a record with a relevant field the projections are compared, and the two stay apart. The kernel's twin of this proposition shares the name.
 ///
 /// Mutation-checked: with eta by the type left to the dispatch's last arm, the two goals a unit decides are refused.

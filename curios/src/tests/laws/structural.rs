@@ -14,6 +14,8 @@ struct Empty: pub Type {}
 struct Unital: pub Type { unit: {}, proof: Holds(0 < 10) }
 struct Bounded: pub Type { n: Nat, ok: Holds(n < 10) }
 struct Box(A: Type): pub Type { held: A }
+struct Holder: pub Type { member: Member, unit: {} }
+and Member: pub Type { unit: {} }
 induct Zero: (Nat) -> pub Prop
 | zero(): (0)
 end
@@ -276,6 +278,29 @@ pub(super) const SEEDS: &[Seeds] = &[
             ),
             held(
                 "one inhabitant at a struct nested in its own parameter, two applications",
+                "f(n)",
+                "e(n)",
+            ),
+        ],
+    },
+    // A struct declared in a group is referred to through the group, which weak-head reduction leaves folded: each checker reads a goal's type forced, so its inhabitants are read there as anywhere.
+    Seeds {
+        type_: "Holder",
+        binders: "u: Holder, v: Holder, f: (Nat) -> Holder, e: (Nat) -> Holder, n: Nat",
+        compound: None,
+        seeds: &[
+            held(
+                "one inhabitant at a struct declared in a group, the literal",
+                "Holder { member = Member { unit = () }, unit = () }",
+                "u",
+            ),
+            held(
+                "one inhabitant at a struct declared in a group, two neutrals",
+                "v",
+                "u",
+            ),
+            held(
+                "one inhabitant at a struct declared in a group, two applications",
                 "f(n)",
                 "e(n)",
             ),

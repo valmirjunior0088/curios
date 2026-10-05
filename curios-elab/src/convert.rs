@@ -1830,7 +1830,8 @@ impl Convert {
 
             let this = reduce(context, this)?;
             let that = reduce(context, that)?;
-            let type_ = reduce(context, type_)?;
+            // Forced, as the kernel reads a goal's type: weak-head form leaves a member of a declaration group folded, and no rule keyed on the type's shape sees through it.
+            let type_ = reduce_forced(context, type_)?;
 
             if this == that {
                 continue;
