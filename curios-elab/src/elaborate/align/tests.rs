@@ -1,7 +1,7 @@
 //! The alignment rule on the examples it is stated with.
 
 use {
-    super::{Misaligned, align},
+    super::{Misaligned, align, stands_at},
     curios_utilities::Plicity::{self, Explicit as P, Implicit as A, Witness as U},
 };
 
@@ -77,6 +77,14 @@ fn a_trailing_run_is_written_from_its_first_slot() {
         align(&tail, &[P, A, U, A]),
         Err(Misaligned::Surplus { member: 3 })
     );
+}
+
+/// A hidden member with no slot left in its run stands at the plain slot the plain members before it have reached, or past them all.
+#[test]
+fn a_surplus_hidden_member_stands_at_the_plain_slot_reached() {
+    assert_eq!(stands_at(&JOIN, &[A, U, U, P], 2), Some(2));
+    assert_eq!(stands_at(&TWO, &[P, A, P], 1), Some(5));
+    assert_eq!(stands_at(&JOIN, &[P, U], 1), None);
 }
 
 #[test]

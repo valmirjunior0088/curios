@@ -1,5 +1,5 @@
 use {
-    super::{Context, Error, Mode, check, elaborate, expect},
+    super::{Context, Error, Misaligned, Mode, align, check, elaborate, expect, stands_at},
     crate::{
         BinderSite, FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_intrinsic_head,
         check_motive, contradicted_guard, fill_placeholder, is_prop, reduce_with, refine_head,
@@ -807,7 +807,7 @@ fn singleton_eliminable(
     Ok(true)
 }
 
-/// The intrinsic eliminator's typing rule. Arm binders are typed directly from the constructor's registry telescope instantiated at the scrutinee type's parameters — no projections from a stuck payload — and each arm's binder count is statically checked against that telescope.
+/// The intrinsic eliminator's typing rule. Arm binders are typed directly from the constructor's registry telescope instantiated at the scrutinee type's parameters — no projections from a stuck payload — and each arm's written binders are aligned to that telescope's marks, a hidden payload left out bound all the same.
 ///
 /// The motive binds the scrutinee's indices and then the scrutinee, whatever its body does with them: each arm checks against the motive at *that case's* target indices, the whole match types at the scrutinee's *actual* indices, and a catch-all default — which binds nothing and refines no index — checks at the actual indices too.
 fn elaborate_induct_match(
@@ -909,7 +909,7 @@ fn elaborate_induct_match(
         .map(|(tag, _)| tag)
         .find(|tag| !induct_decl.declares(tag))
     {
-        // Each constructor as a pattern writes it, one placeholder per payload under the mark its position takes, so the report shows what the arm could have named.
+        // Each constructor as a pattern writes it, one placeholder per plain payload — a hidden one is left out — so the report shows what the arm could have named.
         let constructors = induct_decl
             .constructor_order()
             .map(|constructor| {
@@ -917,10 +917,8 @@ fn elaborate_induct_match(
                     .payload_plicities(constructor)
                     .unwrap_or_default()
                     .iter()
-                    .map(|plicity| match plicity {
-                        Plicity::Implicit => "@_",
-                        Plicity::Explicit | Plicity::Witness => "_",
-                    })
+                    .filter(|plicity| **plicity == Plicity::Explicit)
+                    .map(|_| "_")
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("{constructor}({payload})")
@@ -974,39 +972,52 @@ fn elaborate_induct_match(
             .instantiate(tag, &params)
             .expect("constructor instantiates at its inductive's parameters");
 
-        // Static arity check: the arm's binder count must equal the constructor's payload arity.
+        // An arm's written binders meet the payload's slots as a lambda's meet a function type's ([`align`]): the plain binders are the plain payloads, in order, and between two of them the hidden binders written are the first of their run. A hidden payload no binder was written for is bound all the same, hintless, so nothing in the arm names it and it is in scope as its mark makes it.
         let arity = telescope.len();
-        if scope.arity() != arity {
-            return Err(Error::ctor_arity_mismatch(
-                tag.clone(),
-                arity,
-                scope.arity(),
-            ));
-        }
-
-        // Check each written pattern plicity against the constructor's canonical payload plicity: a payload slot the declaration marked `@` must be matched with `@`, an unmarked payload with a plain binder. (Alignment is exact here — pattern insertion is deferred, so arity already matched above.)
-        let payload_plicities = induct_decl
-            .payload_plicities(tag)
-            .expect("constructor payload plicities parallel its telescope");
-        for (position, (written, canonical)) in
-            scope.plicities().iter().zip(&payload_plicities).enumerate()
-        {
-            if written != canonical {
-                return Err(Error::BinderPlicityMismatch {
-                    site: BinderSite::Payload {
-                        constructor: tag.to_string(),
-                    },
-                    position: position + 1,
-                    binder: String::new(),
-                    expected: *canonical,
-                    written: *written,
-                });
+        let payload_plicities = telescope.marks();
+        let written = scope.plicities();
+        let plain = |marks: &[Plicity]| {
+            marks
+                .iter()
+                .filter(|mark| **mark == Plicity::Explicit)
+                .count()
+        };
+        let fills = align(&payload_plicities, written).map_err(|misaligned| match misaligned {
+            // Plain payloads against plain binders: a hidden payload is bound rather than written, so a total would name a count the arm may not write.
+            Misaligned::Missing | Misaligned::Extra { .. } => {
+                Error::ctor_arity_mismatch(tag.clone(), plain(&payload_plicities), plain(written))
             }
-        }
+            Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
+                written[member],
+                payload_plicities[slot],
+                telescope.labels()[slot],
+            ),
+            // A marked binder with no hidden payload left in its run: at the plain payload the plain binders before it have reached, which no mark binds, or past the last.
+            Misaligned::Surplus { member } => {
+                match stands_at(&payload_plicities, written, member) {
+                    Some(slot) => Error::BinderPlicityMismatch {
+                        site: BinderSite::Payload {
+                            constructor: tag.to_string(),
+                        },
+                        position: slot + 1,
+                        binder: String::new(),
+                        expected: payload_plicities[slot],
+                        written: written[member],
+                    },
+                    None => Error::hidden_member_without_slot(written[member]),
+                }
+            }
+        })?;
 
-        // Open the telescope with fresh names paralleling the arm's binder labels; each binder is assumed at its declared (dependent) type.
-        let labels = (0..scope.arity())
-            .map(|index| context.fresh_for(scope.body.hint(index), scope.body.written(index)))
+        // Open the telescope with fresh names, one per payload: a written binder's under its own label, each binder assumed at its declared (dependent) type.
+        let labels = fills
+            .iter()
+            .map(|fill| match fill {
+                Some(member) => {
+                    context.fresh_for(scope.body.hint(*member), scope.body.written(*member))
+                }
+                None => context.fresh(None),
+            })
             .collect::<Vec<_>>();
         let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
 
@@ -1037,18 +1048,24 @@ fn elaborate_induct_match(
                 let expected = result.at(&head_elaborated, &actual_indices, &ix_c, &ctor_val);
                 retype_locals(context, &head_elaborated, &ctor_val, solutions);
 
-                let var_refs = vars.iter().collect::<Vec<_>>();
+                // The body is closed over the binders the arm wrote, which the alignment matched to their payloads in order.
+                let var_refs = vars
+                    .iter()
+                    .zip(&fills)
+                    .filter(|(_, fill)| fill.is_some())
+                    .map(|(var, _)| var)
+                    .collect::<Vec<_>>();
                 check(context, &scope.open(&var_refs), expected)
             })
             .map_err(|error| from_arm(context, &head_elaborated, &ctor_val, error))?;
 
         let label_strs = labels.iter().collect::<Vec<_>>();
-        // Rebuild the arm with the constructor's canonical payload plicities, so a re-elaborated arm re-checks identically (idempotence).
+        // Rebuild the arm over every payload under the constructor's canonical marks, so a re-elaborated arm writes each binder and re-checks identically (idempotence).
         cases_elaborated.push((
             tag.clone(),
             InductArm::new(
                 Scope::close(Many(arity), &label_strs, body_elaborated),
-                payload_plicities.to_vec(),
+                payload_plicities,
             ),
         ));
     }

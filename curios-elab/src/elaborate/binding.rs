@@ -1,5 +1,5 @@
 use {
-    super::{Misaligned, align, check_witness_domain, insert_auto_argument},
+    super::{Misaligned, align, check_witness_domain, insert_auto_argument, stands_at},
     crate::{
         BinderSite, Context, DomainScope, EmbeddingSite, Error, HeadKey, Mode, ParkedWork,
         SlotPositions, WitnessKey, attempt_witness_goal, check, check_is_sort, check_rec_totality,
@@ -1049,25 +1049,16 @@ pub(super) fn elaborate_func_check(
         )
         .at_opt(written_at(telescope, member)),
         // A marked binder with no hidden slot left in its run. It stands at the explicit slot the plain binders before it have reached, which a mark can never claim, or past the last slot, where it claims nothing.
-        Misaligned::Surplus { member } => {
-            let plain_before = explicit(&written_plicities[..member]);
-            let reached = slots
-                .iter()
-                .enumerate()
-                .filter(|(_, slot)| **slot == Plicity::Explicit)
-                .map(|(index, _)| index)
-                .nth(plain_before);
-            match reached {
-                Some(slot) => Error::BinderPlicityMismatch {
-                    site: BinderSite::Parameter,
-                    position: slot + 1,
-                    binder: ft.telescope.labels()[slot].to_string(),
-                    expected: slots[slot],
-                    written: written_plicities[member],
-                },
-                None => Error::surplus_func_binders(written_plicities.len() - member, slots.len()),
-            }
-        }
+        Misaligned::Surplus { member } => match stands_at(&slots, written_plicities, member) {
+            Some(slot) => Error::BinderPlicityMismatch {
+                site: BinderSite::Parameter,
+                position: slot + 1,
+                binder: ft.telescope.labels()[slot].to_string(),
+                expected: slots[slot],
+                written: written_plicities[member],
+            },
+            None => Error::surplus_func_binders(written_plicities.len() - member, slots.len()),
+        },
     })?;
 
     let mut domains: Vec<(Plicity, Free, Term)> = Vec::new();

@@ -138,7 +138,7 @@ fn inductive_match_catch_all_covers_unenumerated_constructors() {
     assert_eq!(run(source), b"114");
 }
 
-// An arm naming no constructor of the scrutinee's type is told which it has, each as a pattern writes it — a payload as `_`, an implicit one as `@_`.
+// An arm naming no constructor of the scrutinee's type is told which it has, each as a pattern writes it — a plain payload as `_`, a hidden one left out.
 #[test]
 fn an_arm_naming_no_constructor_is_told_which_there_are() {
     let nullary = error(
@@ -166,7 +166,7 @@ fn an_arm_naming_no_constructor_is_told_which_there_are() {
         "#,
     );
     assert!(
-        payloads.contains("its constructors are empty(), push(@_, _, _)"),
+        payloads.contains("its constructors are empty(), push(_, _)"),
         "unexpected error: {payloads}"
     );
 }

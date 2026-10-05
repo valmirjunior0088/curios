@@ -45,6 +45,7 @@ Neither patch holds. Detecting dead code after synthesizing it — skipping a de
 
 - a binder row joins every constructor's group of the column's inductive, named or not, so a default matrix arises only where a user's catch-all or a bind arm's fallthrough supplies one, and nothing dead is ever built;
 - a constructor inversion discharges is not a group at all, so a binder row is not specialized into an impossible case;
+- a row's constructor arguments are aligned to the payload's marks where its group is specialized, by the rule an arm's binders are aligned by (`curios-elab`'s `align`), so rows of one constructor may write different hidden payloads, where lowering holds a group's rows to one written shape;
 - the motive attaches to the head's split exactly as a written motive attaches today; a match whose head is not a single dispatch still refuses one;
 - an elided motive is ambient at every split the compiler builds, as it is at any split ([An elimination at an ambient goal](../../design/soundness/elimination/an-elimination-at-an-ambient-goal.md)), except a `Nat`, list or packed column compiled as induction whose hypothesis a row uses, which keeps its family;
 - a `Nat` column is induction when a row peels a successor and literal dispatch otherwise, and dispatch still needs a default — a binder row now supplies it as well as a catch-all does.

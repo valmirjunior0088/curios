@@ -561,7 +561,7 @@ A motive may only be written where the head dispatches directly: every arm's top
 
 ### Inductive patterns
 
-An inductive pattern names a constructor and supplies one pattern per payload position.
+An inductive pattern names a constructor and supplies one pattern per plain payload.
 
 ```crs
 match option
@@ -570,12 +570,17 @@ match option
 end
 ```
 
-A constructor is named bare: the scrutinee's type supplies the namespace, so `Option/some(n)` is refused as a pattern. A payload position the constructor declared implicit (`@`) must be matched with `@`; a plain payload is matched without a mark. A constructor pattern supplies one pattern per payload position, hidden ones included — omitted hidden payload patterns are not inserted, unlike lambda binders. Witness payloads are not a surface feature, so `use` is not accepted in a constructor pattern.
+A constructor is named bare: the scrutinee's type supplies the namespace, so `Option/some(n)` is refused as a pattern. A pattern is written as the call that builds the value is: the plain payloads each take a pattern, in order, and a payload the constructor declared implicit (`@`) is left out, or written under `@` ahead of the plain payload it precedes, where the arm names it. A payload left out is bound all the same, so a bound it states is a fact in the arm. Rows of one constructor write the same hidden payloads. Witness payloads are not a surface feature, so `use` is not accepted in a constructor pattern.
 
 ```crs
 match vector
 | nil() => fallback
-| cons(@length, head, tail) => head
+| cons(head, tail) => head
+end
+
+match vector
+| nil() => 0
+| cons(@length, head, tail) => length + 1
 end
 ```
 
