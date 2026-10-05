@@ -1,4 +1,5 @@
 use /std/{Nat, Byte, Bytes, Bits, Bool, Str, List, Option, Int, Flt};
+use /std/Bool/{Holds};
 
 --- How a value encodes to the bytes that identify it.
 ---
@@ -9,7 +10,6 @@ pub concept Hash(T: Type): pub Type {
 }
 
 pub use Hash/*;
-use /std/Bool/{Holds};
 
 --- `b` ahead of enough zero bytes to reach `width`, or `b` itself when it is already that long.
 ---
