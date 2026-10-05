@@ -290,28 +290,28 @@ const ATOMS: &[Atoms] = &[
         right: "f(b + a)",
         zero: "0",
         nat: true,
-        refused: &[Fold::Equal, Fold::AtMost, Fold::Difference, Fold::Match],
+        refused: &[],
     },
     Atoms {
         left: "w(a, p1)",
         right: "w(a, p2)",
         zero: "0",
         nat: true,
-        refused: &[Fold::Equal, Fold::AtMost, Fold::Difference, Fold::Match],
+        refused: &[],
     },
     Atoms {
         left: "u((x) => x + a)",
         right: "u((x) => a + x)",
         zero: "0",
         nat: true,
-        refused: &[Fold::Equal, Fold::AtMost, Fold::Difference, Fold::Match],
+        refused: &[],
     },
     Atoms {
         left: "v(i + j)",
         right: "v(j + i)",
         zero: "+0",
         nat: false,
-        refused: &[Fold::Equal, Fold::AtMost, Fold::Match],
+        refused: &[],
     },
 ];
 

@@ -1225,3 +1225,71 @@ fn a_reduced_spelling_is_settled_by_the_reduction_that_asks_for_it() {
         "the memos changed what one reduction or the other makes of the term"
     );
 }
+
+/// A stuck fold is taken again over the atoms the kernel's own conversion holds one: an equality, an ordering and a truncated difference over `f(a + b)` and `f(b + a)` are decided, where a fold that pairs atoms by identity left each stuck and conversion was no congruence under it. The control is a call on another argument, and a fold that decides no more is left as plain reduction spells it, with nothing respelled written back.
+///
+/// Plain reduction takes no fold again, which the reading through `Env::force` holds after the judgment's own reduct is remembered. `curios-elab`'s `reduce::reduction_tests` holds this proposition under this name.
+#[test]
+fn a_stuck_fold_is_taken_again_over_atoms_conversion_holds_one() {
+    let mut kernel = kernel();
+    let asked = Asked::over(&mut kernel);
+    let left = asked.call(&asked.a, &asked.b);
+    let right = asked.call(&asked.b, &asked.a);
+
+    let equal = Term::intrinsic(Intrinsic::nat_eql(left.clone(), right.clone()));
+    assert_eq!(
+        whnf(&mut kernel, equal.clone()).expect("reduces").as_bool(),
+        Some(true)
+    );
+    let at_most = Term::intrinsic(Intrinsic::nat_lte(left.clone(), right.clone()));
+    assert_eq!(
+        whnf(&mut kernel, at_most).expect("reduces").as_bool(),
+        Some(true)
+    );
+    let difference = Term::intrinsic(Intrinsic::nat_sub(left.clone(), right.clone()));
+    assert_eq!(whnf(&mut kernel, difference), Ok(nat(0)));
+
+    let other = Term::intrinsic(Intrinsic::nat_eql(
+        left.clone(),
+        asked.call(&asked.a, &asked.c),
+    ));
+    assert_eq!(whnf(&mut kernel, other).expect("reduces").as_bool(), None);
+
+    assert_eq!(
+        Env::force(&mut kernel, &equal).expect("reduces").as_bool(),
+        None,
+        "plain reduction takes no fold again"
+    );
+
+    let undecided = Term::intrinsic(Intrinsic::nat_lt(
+        left,
+        Term::intrinsic(Intrinsic::NatMul(right, Term::free_var(&asked.c))),
+    ));
+    let plain = Env::force(&mut kernel, &undecided).expect("reduces");
+    assert_eq!(whnf(&mut kernel, undecided), Ok(plain));
+}
+
+/// A fold inside a question is not taken again, a question being answered by plain reduction (`a_question_is_answered_by_reduction_that_asks_nothing` holds the same of a guard's lookup): `h(f(a + b) == f(b + a)) == h(true)` stays stuck, its two calls being one only to a conversion that takes the fold in the first one's argument again.
+///
+/// Mutation-checked: with the fold taken again under plain reduction too, the question decides the argument and the comparison is `true`.
+#[test]
+fn a_fold_inside_a_question_is_not_taken_again() {
+    let mut kernel = kernel();
+    let asked = Asked::over(&mut kernel);
+    let h = &asked.h;
+    let equal = Term::intrinsic(Intrinsic::nat_eql(
+        asked.call(&asked.a, &asked.b),
+        asked.call(&asked.b, &asked.a),
+    ));
+    let nested = Term::intrinsic(Intrinsic::nat_eql(
+        Term::apply(Term::free_var(h), [equal.clone()]),
+        Term::apply(Term::free_var(h), [Term::intrinsic(Intrinsic::Bool(true))]),
+    ));
+
+    assert_eq!(
+        whnf(&mut kernel, equal).expect("reduces").as_bool(),
+        Some(true),
+        "one question deep the fold is decided, or the refusal below proves nothing"
+    );
+    assert_eq!(whnf(&mut kernel, nested).expect("reduces").as_bool(), None);
+}

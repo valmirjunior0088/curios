@@ -26,14 +26,11 @@ use {
         Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
         Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe, Proj, Rec,
         RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var, Variant, Visit,
-        accelerable, instantiate_universe_levels_scoped, probe_spellings, reduce_closed,
-        reduce_intrinsic,
+        accelerable, atoms_within, classable, instantiate_universe_levels_scoped, probe_spellings,
+        reduce_closed, reduce_intrinsic, refold,
     },
     curios_utilities::recurse,
 };
-
-#[cfg(feature = "profile")]
-use curios_core::{atoms_within, classable};
 
 /// The kernel's side of the closed-machine seam: the same delta `step_var` and `step_instance` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
 impl ClosedHost for Kernel {
@@ -185,14 +182,17 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
                 // A stuck form standing under an arm's case equation *is* that case's value, definitionally; continue from it. This is the *second* of the two probe points, and it does not merge with the one above: that one asks about a term before it is taken apart, this one about a form reduction produced, and routing this one back to the top would re-decompose a normal form forever.
                 match refined_reduct(kernel, &value)? {
                     Some(refined) => term = refined,
-                    None => {
-                        sample_classable(kernel, &value)?;
-                        // Remembered under the term this level was *entered* with, not the one the loop finished on — the same key the probe above will present.
-                        let replay = kernel.replay_since(value.clone(), before);
-                        kernel.whnf_store(entry, false, replay);
+                    None => match refolded(kernel, &value)? {
+                        // A fold the kernel's own conversion decided: what it folded to is reduced on, as an equation's answer is.
+                        Some(folded) => term = folded,
+                        None => {
+                            // Remembered under the term this level was *entered* with, not the one the loop finished on — the same key the probe above will present.
+                            let replay = kernel.replay_since(value.clone(), before);
+                            kernel.whnf_store(entry, false, replay);
 
-                        return Ok(value);
-                    }
+                            return Ok(value);
+                        }
+                    },
                 }
             }
         }
@@ -311,22 +311,26 @@ fn answered(
     })
 }
 
-/// Report, under `profile`, what a stuck operation would put to the kernel's conversion were reduction to class its atoms: how many atoms the readers read in it, where some two of them may be one. Counted before the rule that asks, so what the rule costs over `/std` is known first.
-#[cfg(feature = "profile")]
-fn sample_classable(kernel: &mut Kernel, value: &Term) -> Result<(), ReduceError> {
+/// A stuck operation folded once more with its atoms classed by the kernel's own conversion, where that decides more than the fold did (`curios_core::refold`): `None` where its fold pairs no atoms, where no two of them may be one, or where the fold over the classed atoms still stands at the operation.
+///
+/// **Reduction asks conversion here, and at a missed equation, and nowhere else.** A fold pairs atoms by identity, so two atoms that convert without being identical — a call under two proofs of its bound, two calls whose arguments commute a sum — left `f(a + b) == f(b + a)` stuck where conversion holds its sides one term, and conversion was no congruence under the fold. Each checker asks its own conversion, the elaborator's reducer at the same point.
+///
+/// **Only of a term that names a local, and never by plain reduction.** A local-free term's reduct is remembered for the declaration and must be one function of the definition store whichever reduction takes it, so nothing is asked of it; and plain reduction asks nothing at all ([`Kernel::plainly`]), which is what answers a question and what a shared analysis reads by.
+fn refolded(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, ReduceError> {
+    if kernel.plain() || !value.has_local_free() {
+        return Ok(None);
+    }
     let Subterm::Intrinsic(operation) = &**value else {
-        return Ok(());
+        return Ok(None);
     };
     let atoms = atoms_within(kernel, operation)?;
-    if classable(&atoms) {
-        curios_profile::sample!("whnf::classable_fold", atoms.len());
+    if !classable(&atoms) {
+        return Ok(None);
     }
-    Ok(())
-}
-
-#[cfg(not(feature = "profile"))]
-fn sample_classable(_kernel: &mut Kernel, _value: &Term) -> Result<(), ReduceError> {
-    Ok(())
+    // What a stuck fold puts to conversion: the atoms it pairs, where some two may be one.
+    curios_profile::sample!("whnf::classable_fold", atoms.len());
+    let classes = asked_classes(kernel, &atoms)?;
+    refold(kernel, operation, &classes)
 }
 
 /// `term` with each operand in weak-head normal form, where it is a tagged intrinsic — the form a refinement's reduced spelling and the value probed against it are both held in. Anything else is its own canonical form.

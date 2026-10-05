@@ -166,6 +166,14 @@ const ATOMS_HELD: &[&str] = &[
     "Eq()(u((x) => x + a) + u((x) => x + b), u((x) => b + x) + u((x) => a + x))",
     // Three spellings of one atom are one monomial, so their coefficients merge.
     "Eq()((match n | 0 => a + b + d | _ => c end) + (match n | 0 => b + a + d | _ => c end) + (match n | 0 => d + b + a | _ => c end), 3 * (match n | 0 => a + b + d | _ => c end))",
+    // A fold over two atoms that convert is the fold over one: reduction asks its checker's conversion which atoms of a stuck fold are one, so conversion is a congruence under the fold, and a `match` on it reduces.
+    "Eq()(f(a + b) == f(b + a), true)",
+    "Eq()(f(a + b) <= f(b + a), true)",
+    "Eq()(f(a + b) - f(b + a), 0)",
+    "Eq()(w(a, p1) == w(a, p2), true)",
+    "Eq()(u((x) => x + a) - u((x) => a + x), 0)",
+    "Eq()(h(i + j) == h(j + i), true)",
+    "Eq()(match f(a + b) == f(b + a) | true => 0 | false => 1 end, 0)",
 ];
 
 const CARRIERS: &[Carrier] = &[

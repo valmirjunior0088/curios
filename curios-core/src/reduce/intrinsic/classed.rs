@@ -10,7 +10,8 @@
 
 use {
     crate::{
-        Cost, Declaration, Intrinsic, Nat, Probe, ReduceError, Reducer, Subterm, Term, Var, Visit,
+        Cost, Declaration, Free, Intrinsic, Nat, Probe, ReduceError, Reducer, Subterm, Term, Var,
+        Visit, reduce_intrinsic,
     },
     curios_algebra::{Carrier, Family, Operation, declares},
     curios_utilities::recurse,
@@ -80,18 +81,19 @@ pub fn atoms_of(
     Ok(atoms)
 }
 
-/// The atoms the readers read in one stuck operation, each once, in the order a walk of its operands meets them: empty where the readers do not read through it.
+/// The atoms the fold of one stuck operation pairs, each once, in the order a walk of its operands meets them: empty where its fold pairs none (`folds_over_atoms`).
 ///
-/// **The operation is taken as it stands.** It is the reduct a reducer has just reached, and forcing it again would ask that reducer for the term it is in the middle of reducing; its operands are forced as every node below them is.
+/// **The operation and its operands are taken as they stand.** It is the reduct a reducer has just reached, so forcing it would ask that reducer for the term it is in the middle of reducing, and its operands are as the fold left them (`Standing`). A node the fold left as written — a connective's right operand behind a stuck left — is an atom here as it is spelled.
 pub fn atoms_within(
     reducer: &mut impl Reducer,
     operation: &Intrinsic,
 ) -> Result<Vec<Term>, ReduceError> {
-    if !read_through(operation) {
+    if !folds_over_atoms(operation) {
         return Ok(Vec::new());
     }
     let mut atoms = Vec::new();
-    let mut walk = Walk::new(reducer, |atom: &Term| {
+    let mut standing = Standing(reducer);
+    let mut walk = Walk::new(&mut standing, |atom: &Term| {
         if !atoms.contains(atom) {
             atoms.push(atom.clone());
         }
@@ -99,6 +101,46 @@ pub fn atoms_within(
     });
     walk.operands(&Term::intrinsic(operation.clone()), operation)?;
     Ok(atoms)
+}
+
+/// A stuck `operation` folded once more over its atoms as `classes` spells them: the fold of the classed operation where it is no longer that operation — a literal, an operand, another operation — and `None` where no atom joined another's class or the fold still stands at the operation.
+///
+/// **A fold pairs atoms by their identity, and which atoms are one is its checker's conversion's to say.** `f(a + b) == f(b + a)` is stuck to the fold and `true` to conversion, so a `match` on it would not reduce where conversion holds its two sides one term. The checker classes the operation's atoms ([`atoms_within`], [`Classes::of`]) and the fold is taken again over one spelling to a class.
+///
+/// **A fold that decides no more keeps the spelling it had.** Classing picks a representative by the order a walk met the atoms in, which is no property of the term, so a classed operation that is still stuck at its operation is dropped and the operation stands as it was written: nothing respelled is written back. What is kept is a term the fold built out of the operation's own operands, as it builds one for two atoms spelled alike.
+pub fn refold(
+    reducer: &mut impl Reducer,
+    operation: &Intrinsic,
+    classes: &Classes,
+) -> Result<Option<Term>, ReduceError> {
+    if classes.is_empty() {
+        return Ok(None);
+    }
+    let term = Term::intrinsic(operation.clone());
+    let mut standing = Standing(&mut *reducer);
+    let mut walk = Walk::new(&mut standing, |atom: &Term| {
+        classes
+            .representatives
+            .get(atom)
+            .cloned()
+            .unwrap_or_else(|| atom.clone())
+    });
+    let respelled = walk.operands(&term, operation)?;
+    let built = walk.built;
+    reducer.spend(Cost::term(built))?;
+    let Subterm::Intrinsic(respelled) = &*respelled else {
+        return Ok(None);
+    };
+    if respelled == operation {
+        return Ok(None);
+    }
+
+    let folded = reduce_intrinsic(reducer, respelled)?;
+    let stands = matches!(
+        &folded,
+        Subterm::Intrinsic(still) if mem::discriminant(still) == mem::discriminant(operation)
+    );
+    Ok((!stands).then(|| folded.into()))
 }
 
 /// Whether some two of `atoms` may be one, so classing them could change what the readers read.
@@ -163,6 +205,40 @@ fn read_through_forced(reducer: &mut impl Reducer, term: &Term) -> Result<bool, 
         &*forced(reducer, term)?,
         Subterm::Intrinsic(intrinsic) if read_through(intrinsic)
     ))
+}
+
+/// Whether a stuck `intrinsic`'s fold pairs the atoms of its operands: every operation the readers read through, and a truncated difference at `Nat`, whose fold cancels what its two operands share. Asked of the operation a fold left stuck and of no node beneath it, where [`read_through`] alone says what an atom is.
+fn folds_over_atoms(intrinsic: &Intrinsic) -> bool {
+    read_through(intrinsic)
+        || matches!(
+            intrinsic.algebra(),
+            Declaration::Operation {
+                carrier: Carrier::Natural,
+                operation: Operation::Difference,
+                ..
+            }
+        )
+}
+
+/// A reducer that takes every term as reduced already, for a walk over a stuck operation a reducer has just left: its operands are as the fold reduced them, and forcing them again is work the kernel's memo replays the identities of on every read, which a walk made at every stuck fold would compound. What the walk builds is still charged to the reducer this one stands before.
+struct Standing<'a, R>(&'a mut R);
+
+impl<R: Reducer> Reducer for Standing<'_, R> {
+    fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Ok(term)
+    }
+
+    fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Ok(term)
+    }
+
+    fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
+        self.0.spend(cost)
+    }
+
+    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
+        self.0.fresh_binder(hint)
+    }
 }
 
 /// Whether the readers read through `intrinsic` to its operands: a sum, a product, a connective or a comparison of the carriers the algebra decides, a `Nat`'s successor floor, and every operation the law table declares commutative, whose operands a symmetric reader pairs.

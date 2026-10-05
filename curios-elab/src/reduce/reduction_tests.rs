@@ -1447,3 +1447,70 @@ fn a_reduced_spelling_is_settled_by_the_reduction_that_asks_for_it() {
         assert_eq!(judged(context), Ok(Some(true)));
     });
 }
+
+/// A stuck fold is taken again over the atoms the elaborator's own conversion holds one, a fold that decides no more is left as plain reduction spells it, and plain reduction takes no fold again. The kernel's `whnf::equations_tests` holds this proposition under this name.
+#[test]
+fn a_stuck_fold_is_taken_again_over_atoms_conversion_holds_one() {
+    let mut context = context();
+    let asked = Asked::over(&mut context);
+    let left = asked.call(&asked.a, &asked.b);
+    let right = asked.call(&asked.b, &asked.a);
+    let decided =
+        |context: &mut Context, term: Term| reduce(context, term).map(|reduct| reduct.as_bool());
+
+    let equal = Term::intrinsic(Intrinsic::nat_eql(left.clone(), right.clone()));
+    assert_eq!(decided(&mut context, equal.clone()), Ok(Some(true)));
+    let at_most = Term::intrinsic(Intrinsic::nat_lte(left.clone(), right.clone()));
+    assert_eq!(decided(&mut context, at_most), Ok(Some(true)));
+    let difference = Term::intrinsic(Intrinsic::nat_sub(left.clone(), right.clone()));
+    assert_eq!(reduce(&mut context, difference), Ok(nat(0)));
+
+    let other = Term::intrinsic(Intrinsic::nat_eql(
+        left.clone(),
+        asked.call(&asked.a, &asked.c),
+    ));
+    assert_eq!(decided(&mut context, other), Ok(None));
+
+    let read = curios_analysis::Env::force(&mut context, &equal).ok();
+    assert_eq!(
+        read.map(|reduct| reduct.as_bool()),
+        Some(None),
+        "plain reduction takes no fold again"
+    );
+
+    let undecided = Term::intrinsic(Intrinsic::nat_lt(
+        left,
+        Term::intrinsic(Intrinsic::NatMul(right, Term::free_var(&asked.c))),
+    ));
+    let plain = curios_analysis::Env::force(&mut context, &undecided).ok();
+    assert_eq!(reduce(&mut context, undecided).ok(), plain);
+    assert!(plain.is_some());
+}
+
+/// A fold inside a question is not taken again, a question being answered by plain reduction: `h(f(a + b) == f(b + a)) == h(true)` stays stuck. The kernel's `whnf::equations_tests` holds this proposition under this name.
+///
+/// Mutation-checked: with the fold taken again under plain reduction too, the question decides the argument and the comparison is `true`.
+#[test]
+fn a_fold_inside_a_question_is_not_taken_again() {
+    let mut context = context();
+    let asked = Asked::over(&mut context);
+    let h = &asked.h;
+    let equal = Term::intrinsic(Intrinsic::nat_eql(
+        asked.call(&asked.a, &asked.b),
+        asked.call(&asked.b, &asked.a),
+    ));
+    let nested = Term::intrinsic(Intrinsic::nat_eql(
+        Term::apply(Term::free_var(h), [equal.clone()]),
+        Term::apply(Term::free_var(h), [Term::intrinsic(Intrinsic::Bool(true))]),
+    ));
+
+    assert_eq!(
+        reduce(&mut context, equal).map(|reduct| reduct.as_bool()),
+        Ok(Some(true)),
+        "one question deep the fold is decided, or the refusal below proves nothing"
+    );
+    assert_eq!(
+        reduce(&mut context, nested).map(|reduct| reduct.as_bool()),
+        Ok(None)
+    );
+}
