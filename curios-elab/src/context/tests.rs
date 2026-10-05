@@ -467,6 +467,29 @@ fn a_frames_guards_are_read_back_in_the_order_they_were_recorded() {
     });
 }
 
+/// A frame's definitions are read back in the order they were defined, as its guards are: a frozen frame hands them to a retry in it, and a report names an unfolded `rec` group by the first definition of its structure it finds. Eight names agreeing with a hash map's own order by chance is one run in forty thousand.
+#[test]
+fn a_frames_definitions_are_read_back_in_the_order_they_were_defined() {
+    let mut context = context();
+    let names = (0..8_usize)
+        .map(|n| context.fresh(Some(&format!("d{n}"))))
+        .collect::<Vec<_>>();
+
+    context.with_frame(|context| {
+        for (n, name) in names.iter().enumerate() {
+            context.define(name, &Term::intrinsic(Intrinsic::Nat(Nat::new(n))), None);
+        }
+
+        let frozen = context.freeze_frame();
+        let defined = frozen
+            .definitions
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>();
+        assert_eq!(defined, names);
+    });
+}
+
 /// A metavariable born in a retry is born in the problem's context: its telescope holds the locals the problem froze, and none of the live context's, which its spine would otherwise carry into a term that never bound them.
 #[test]
 fn a_metavariable_born_in_a_retry_has_exactly_the_frozen_locals() {

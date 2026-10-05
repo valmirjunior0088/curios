@@ -160,9 +160,9 @@ impl FrozenFrame {
     }
 }
 
-/// One frame's refinements of one kind, read back in the order they were recorded.
+/// One frame's definitions, or its refinements of one kind, read back in the order they were recorded.
 ///
-/// A hash map's own order differs from one process to the next, and a frame's refinements are read in order: the guards a proof the elaborator writes is built from are admitted as they are met, so a frame holding two would yield two proofs of one bound, by the run.
+/// A hash map's own order differs from one process to the next, and a frame's entries are read in order: the guards a proof the elaborator writes is built from are admitted as they are met, so a frame holding two would yield two proofs of one bound, by the run; and a report names an unfolded `rec` group by the first definition it finds of that structure, so two groups of one structure would be spelled either way.
 #[derive(Debug)]
 struct Recorded<K, V> {
     places: HashMap<K, usize>,
@@ -207,6 +207,17 @@ impl<K: Eq + Hash + Clone, V> Recorded<K, V> {
     fn keys(&self) -> impl Iterator<Item = &K> {
         self.entries.iter().map(|(key, _)| key)
     }
+
+    /// Forget `key`, the entries recorded after it each moving up one place.
+    fn remove(&mut self, key: &K) {
+        let Some(place) = self.places.remove(key) else {
+            return;
+        };
+        self.entries.remove(place);
+        for (later, _) in &self.entries[place..] {
+            *self.places.get_mut(later).expect("an entry has a place") -= 1;
+        }
+    }
 }
 
 /// The frame-scoped lexical stores. `Context` holds exactly one of these; see the module documentation for the cache-coordination contract.
@@ -214,7 +225,7 @@ impl<K: Eq + Hash + Clone, V> Recorded<K, V> {
 pub(crate) struct Frames {
     assumptions: Vec<HashMap<Free, Term>>,
     assumption_universes: Vec<HashMap<Free, UniverseContext>>,
-    definitions: Vec<HashMap<Free, DefEntry>>,
+    definitions: Vec<Recorded<Free, DefEntry>>,
     /// Counterfactual match-arm refinements (`refine_head`), kept parallel to `definitions` but suppressible: re-validation of a metavariable solution must keep stable definitions yet ignore these.
     refinements: Vec<Recorded<Free, Term>>,
     refinement_projections: Vec<Recorded<(Term, usize), ProjectionEntry>>,
@@ -259,7 +270,7 @@ impl Frames {
         Self {
             assumptions: vec![HashMap::new()],
             assumption_universes: vec![HashMap::new()],
-            definitions: vec![HashMap::new()],
+            definitions: vec![Recorded::new()],
             refinements: vec![Recorded::new()],
             refinement_projections: vec![Recorded::new()],
             refinement_scrutinees: vec![Recorded::new()],
@@ -281,7 +292,7 @@ impl Frames {
     pub(crate) fn enter(&mut self) {
         self.assumptions.push(HashMap::new());
         self.assumption_universes.push(HashMap::new());
-        self.definitions.push(HashMap::new());
+        self.definitions.push(Recorded::new());
         self.refinements.push(Recorded::new());
         self.refinement_projections.push(Recorded::new());
         self.refinement_scrutinees.push(Recorded::new());
@@ -528,7 +539,7 @@ impl Frames {
     pub(crate) fn rec_definitions(&self) -> Vec<(RecGroup, Vec<Global>)> {
         let mut groups: Vec<(RecGroup, Vec<Option<Global>>)> = Vec::new();
         for definitions in &self.definitions {
-            for (name, entry) in definitions {
+            for (name, entry) in definitions.iter() {
                 let Free::Global(global) = name else {
                     continue;
                 };
@@ -970,7 +981,7 @@ impl Frames {
         FrozenFrame {
             // Past `base_locals`, exactly as `identity_snapshot` slices Γ. The whole of `local` would also carry the top-level binders, and `restore_frame` re-`assume`s whatever it is given — which stamps each restored name with an *empty* universe context in the new frame. A polymorphic global would then be shadowed by a monomorphic copy of itself, and instantiating it at its real levels fails the arity check against the wrong scheme.
             assumptions: self.local[self.visible_local_start()..].to_vec(),
-            definitions: flatten_frames(&self.definitions[1..]),
+            definitions: flatten_recorded(&self.definitions[1..]),
             refinements: Refinements {
                 variables: flatten_recorded(&self.refinements[from..]),
                 projections: flatten_recorded(&self.refinement_projections[from..]),
@@ -981,15 +992,7 @@ impl Frames {
     }
 }
 
-/// Every entry of `frames`, outermost frame first.
-fn flatten_frames<K: Clone, V: Clone>(frames: &[HashMap<K, V>]) -> Vec<(K, V)> {
-    frames
-        .iter()
-        .flat_map(|frame| frame.iter().map(|(k, v)| (k.clone(), v.clone())))
-        .collect()
-}
-
-/// Every refinement of `frames`, outermost frame first, each frame's in the order it recorded them.
+/// Every entry of `frames`, outermost frame first, each frame's in the order it recorded them.
 fn flatten_recorded<K: Eq + Hash + Clone, V: Clone>(frames: &[Recorded<K, V>]) -> Vec<(K, V)> {
     frames
         .iter()

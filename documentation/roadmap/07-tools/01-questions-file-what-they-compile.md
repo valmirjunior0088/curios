@@ -9,9 +9,9 @@ Working specification for bringing `lint` and the `wonder` queries under [A comm
 | A unit is a function of what it was compiled from | the same bytes from any process | landed: [`curios-unit`](../../../curios-unit/README.md#a-unit-is-a-function-of-what-it-was-compiled-from) |
 | One unit, whoever files it | a question's slot is a build's | landed for a unit compiled whole: [`curios-wonder`](../../../curios-wonder/README.md#a-question-files-the-units-it-compiled-from-disk) |
 | One unit, however it was compiled | whole or over a baseline, so what is compiled over one is filed | stages 7 and 8 here |
-| A successor depends on what it read | an edit stops recompiling every unit after it | [One environment](../05-compilation/02-one-environment.md), [item tasks](../05-compilation/03-item-tasks.md) |
+| A successor depends on what it read | an edit stops recompiling every unit after it | [One environment](../05-compilation/02-a-declaration-is-a-function-of-what-it-reads.md), [item tasks](../05-compilation/03-item-tasks.md) |
 
-Stage 7's gate over the standard library needs [One environment](../05-compilation/02-one-environment.md) to have made a declaration a function of what it reads: its identities counting from zero for it, without which a proof follows the declarations before it, and a goal answered the same whenever it is asked, without which a recompile settles a universe level a whole compile leaves open. Stage 8 follows its restating of [Cached verdicts](../../design/soundness/admission/cached-verdicts.md)' per-item argument over recorded reads, on top of which it changes who may file.
+Stage 7's gate over the standard library needs [One environment](../05-compilation/02-a-declaration-is-a-function-of-what-it-reads.md) to have made a declaration a function of what it reads: its identities counting from zero for it, without which a proof follows the declarations before it, and a goal answered the same whenever it is asked, without which a recompile settles a universe level a whole compile leaves open. Stage 8 follows its restating of [Cached verdicts](../../design/soundness/admission/cached-verdicts.md)' per-item argument over recorded reads, on top of which it changes who may file.
 
 ## What this builds on
 
@@ -70,7 +70,7 @@ Stages 2 to 6 are landed, and the fixtures' half of stage 7:
 - The parts of a unit that are not items are stored as a whole compile stores them: its credited binders a set, ordered by declaration and place whichever pass credited them, and the record a recompile joins holding the definitions the new text declares and no other.
 - `curios-pipeline/src/tests/incremental_tests.rs` holds each fixture's unit compiled over a baseline to the stored bytes of the unit compiled whole.
 
-After [One environment](../05-compilation/02-one-environment.md):
+After [One environment](../05-compilation/02-a-declaration-is-a-function-of-what-it-reads.md):
 
 7. **The gate, over the standard library.** *Whole against over a baseline*, for its leaf and its hub, names no part that differs: whatever it still names is made the same first, each difference with its cause stated before it is removed.
 8. **A question files what it compiled over a baseline.** `Overlaid` keeps no account of having handed out a baseline and files whatever the disk confirms, and a question files the package `std`. [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md), [Cached verdicts](../../design/soundness/admission/cached-verdicts.md) and `curios-verdicts`' `README.md` say what is now filed, and why it may be.
