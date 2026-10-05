@@ -193,11 +193,21 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             }
 
             let mut cursor = telescope.cursor();
-            for param in apply.params() {
+            for (position, argument) in apply.arguments.iter().enumerate() {
                 let (_, domain) = cursor.entry().expect("arity was checked above");
+                // An argument stands under its parameter's mark. Held here, where the parameter is at hand, so a spine's marks are a function of its head's type and conversion has nothing to read in them.
+                let declared = cursor.mark().expect("arity was checked above");
+                if argument.plicity != declared {
+                    return Err(Error::Mark {
+                        counted: Counted::Arguments,
+                        position: position + 1,
+                        declared,
+                        written: argument.plicity,
+                    });
+                }
 
-                check(kernel, param, &domain)?;
-                cursor.advance(param.clone());
+                check(kernel, &argument.term, &domain)?;
+                cursor.advance(argument.term.clone());
             }
 
             if !spine_head {

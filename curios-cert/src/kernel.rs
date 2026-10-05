@@ -57,7 +57,7 @@ use {
         Module, Polarity, Probe, Reads, ReduceError, Reducer, Spelling, StructDecl, Term,
         UniverseConstraint, UniverseContext, UniverseError, Variance, build_shorten_layered,
     },
-    curios_utilities::SyntaxRegistry,
+    curios_utilities::{Plicity, SyntaxRegistry},
     std::{fmt, rc::Rc},
 };
 
@@ -138,6 +138,13 @@ pub enum Error {
         counted: Counted,
         expected: usize,
         actual: usize,
+    },
+    /// A written mark that is not its slot's: an argument's against its parameter's, or an arm binder's against its payload's. `counted` says which, and `position` counts from one.
+    Mark {
+        counted: Counted,
+        position: usize,
+        declared: Plicity,
+        written: Plicity,
     },
     /// A proposition eliminated into a relevant result while carrying something a program could read back. Permitted only for an empty proposition or a singleton whose payload is entirely determined.
     LargeElimination(Global),
@@ -306,6 +313,24 @@ impl fmt::Display for Displayed<'_> {
                 actual,
             } => {
                 write!(formatter, "{counted}: expected {expected}, found {actual}")
+            }
+            Error::Mark {
+                counted,
+                position,
+                declared,
+                written,
+            } => {
+                let spelled = |mark: &Plicity| match mark {
+                    Plicity::Explicit => "plain",
+                    Plicity::Implicit => "`@`",
+                    Plicity::Witness => "`use`",
+                };
+                write!(
+                    formatter,
+                    "{counted}: the one at position {position} is written {}, and its slot is {}",
+                    spelled(written),
+                    spelled(declared)
+                )
             }
             Error::LargeElimination(name) => write!(
                 formatter,

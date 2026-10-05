@@ -392,7 +392,7 @@ fn one_definition_by_its_spines(
     let (Subterm::Apply(left), Subterm::Apply(right)) = (&**this, &**that) else {
         return Ok(false);
     };
-    if !left.plicities().eq(right.plicities()) {
+    if left.arguments.len() != right.arguments.len() {
         return Ok(false);
     }
 
@@ -584,7 +584,8 @@ fn structural(
 
         // Spine against spine, and when that fails, one definitional unfolding each: two applications of the same fold can differ in an argument position the fold discards — `is_trimmed(h ++ rest)` against `is_trimmed(rest)` — so a spine mismatch is not yet a verdict when either head is a folded recursive call. Two heads that are instances of one group are decided by their levels first: at unequal levels the pair is refused outright, because an unfolding reproduces the same two heads on the recursive call and would recurse until the host died; at equal levels the spines decide, and a mismatch there still earns the retry.
         (Subterm::Apply(left), Subterm::Apply(right)) => {
-            if left.plicities().eq(right.plicities()) {
+            // The arguments alone: each stands under its parameter's mark, which typing holds it to, so two spines of one head have one sequence of marks and comparing them would decide nothing.
+            if left.arguments.len() == right.arguments.len() {
                 let heads = match rec_instances(kernel, &left.head, &right.head) {
                     Some(false) => return Ok(false),
                     Some(true) => true,
@@ -1292,10 +1293,7 @@ fn ground_cases(
                 _ => None,
             };
             for ((this_tag, this_arm), (that_tag, that_arm)) in this_cases.iter().zip(that_cases) {
-                if this_tag != that_tag
-                    || this_arm.plicities() != that_arm.plicities()
-                    || this_arm.body.arity() != that_arm.body.arity()
-                {
+                if this_tag != that_tag || this_arm.body.arity() != that_arm.body.arity() {
                     return Ok(false);
                 }
                 let signature = family

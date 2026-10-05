@@ -106,6 +106,18 @@ fn check_arm(
             actual: arm.arity(),
         });
     }
+    // An arm binds each payload under the payload's own mark, as an argument stands under its parameter's.
+    for (position, (declared, written)) in signature.marks().iter().zip(arm.plicities()).enumerate()
+    {
+        if declared != written {
+            return Err(Error::Mark {
+                counted: Counted::ArmBinders,
+                position: position + 1,
+                declared: *declared,
+                written: *written,
+            });
+        }
+    }
 
     kernel.scoped(|kernel| {
         open_payload(kernel, signature, |kernel, binders, payload, targets| {

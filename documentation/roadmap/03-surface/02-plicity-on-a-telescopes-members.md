@@ -11,7 +11,7 @@ It is independent of every other spec. [Typed patterns](01-typed-patterns.md) la
 - **A hidden member left out is still in scope.** An unnamed `@` binder's proposition is a fact wherever its telescope is opened: in a definition's body, in an arm, whose payload `assume_payload` assumes, and one level down in a structure- or tuple-typed hypothesis (`Reader::hypothesis`, `curios-elab/src/entailment/facts.rs`). A `use` member is in the witness scope.
 - **A constructor's payload declares `@`** (`parse_induct_payload_field`), and construction fills it as any call does, a constructor being a function: `/std/Io/Chunk/chunk(b)` over `chunk(bytes: Bytes, @some: Holds(0 < Bytes/len(bytes)))`.
 - **A structure's fields are a telescope.** `StructDecl::arity` is the parameters ending in the fields, and a concept is a structure whose `use` fields are its superclass edges.
-- **Core's marks.** A telescope's every entry is a type under a mark (`curios-core/src/scope/telescope.rs`): a `FuncType`, a `Func` and an `InductParam` are their telescopes and nothing beside, and a declaration's parameters and a concept's `use` fields stand under their marks in its arity. What a concept's edge reaches is read off its field's elaborated type where the concept's fields are elaborated (`superclass_targets`, `curios-elab/src/resolve.rs`), so an alias of a concept application is an edge. The marks an author wrote ride on what was written: a field of each `Apply` argument, and a sealed vector beside an `InductArm`'s binders.
+- **Core's marks.** A telescope's every entry is a type under a mark (`curios-core/src/scope/telescope.rs`): a `FuncType`, a `Func` and an `InductParam` are their telescopes and nothing beside, and a declaration's parameters and a concept's `use` fields stand under their marks in its arity. What a concept's edge reaches is read off its field's elaborated type where the concept's fields are elaborated (`superclass_targets`, `curios-elab/src/resolve.rs`), so an alias of a concept application is an edge. The marks an author wrote ride on what was written: a field of each `Apply` argument, and a sealed vector beside an `InductArm`'s binders. The kernel holds each to its slot's where it types the application and the arm, and conversion reads none in either checker.
 
 ## The gap
 
@@ -28,7 +28,6 @@ Read from the code and from probes of the compiler at `87189c97d`, the counts ov
 - **A structure's field takes no mark** (`FIELD_TAKES_NO_MARK`, `curios-text/src/parse/marks.rs`), so the bound a payload fills by itself is a field written at every literal. `/std/Str/At`'s ten literals write twenty proofs; 10 of `/std`'s 77 structures carry a proof field.
 - **Reading a concept value counts its edges.** Over `concept Over(A: Type) { use Base(A), over(A) -> Str }`, `let Over { over } = dict;` binds `over` to the `Base(A)` edge, and `dict.0` is the edge, where a literal leaves the edges out of its positional sequence. A `use _` written in that pattern reports a missing `}`.
 - **A bound a fact in scope states outright is filled only where it is arithmetic.** `entail` (`curios-elab/src/entailment.rs`) reads `Nat` and `Int` comparisons, so over `opaque(b: Bool, @Holds(b))`, `let same(b: Bool, @Holds(b)) -> Nat = opaque(b);` reports `nothing discharged Holds(b)`. Seven of `/std/Str/At`'s ten `boundary` proofs are a hypothesis, another value's field or a lemma.
-- **The kernel's conversion compares marks none of its rules checks**: those of an application's arguments and of an arm's binders ([Soundness: findings](../01-soundness/00-findings.md)).
 
 ## Prior art
 
@@ -52,13 +51,12 @@ Read from the code and from probes of the compiler at `87189c97d`, the counts ov
 
 ## Stages
 
-1. **A written mark is checked where it is typed.** Decision 3. Check: an argument and an arm binder under another mark than its slot's are each refused by the kernel, and a fixture puts two applications differing in a mark alone to both checkers' conversion.
-2. **One declare, one fill, one open.** Decision 5: the lambda's walk and the spread's call `align`, and every site enters a member through one function. No verdict moves.
-3. **An arm opens by the rule.** Decision 6. Check: `push(head, tail)`, `refl()`, and `chunk(bytes)` with its bound a fact in the arm; each misalignment by its wording; a group of differing rows refused as today.
-4. **A written position counts plain members.** Decision 7. Check: over a concept value `.0` is the first method and `Over { over }` binds it; a mark in a struct pattern is refused by its rule.
-5. **A structure's field declares `@`.** Decision 8, through the grammar, the printer and the editors. Check: a fixture per form, the spread both ways, a `Spell` round trip, and a hidden field ahead of a plain one read by pattern and by position.
-6. **A bound a fact states is filled by it.** Decision 9. Check: an opaque `Holds(b)` under `@Holds(b)`, a field one level down, and a refusal two levels down.
-7. **`/std` reads by the rule.** The arms that write only `@_` drop it, and a structure's proof field becomes `@` where a literal sheds a written proof by it.
+1. **One declare, one fill, one open.** Decision 5: the lambda's walk and the spread's call `align`, and every site enters a member through one function. No verdict moves.
+2. **An arm opens by the rule.** Decision 6. Check: `push(head, tail)`, `refl()`, and `chunk(bytes)` with its bound a fact in the arm; each misalignment by its wording; a group of differing rows refused as today.
+3. **A written position counts plain members.** Decision 7. Check: over a concept value `.0` is the first method and `Over { over }` binds it; a mark in a struct pattern is refused by its rule.
+4. **A structure's field declares `@`.** Decision 8, through the grammar, the printer and the editors. Check: a fixture per form, the spread both ways, a `Spell` round trip, and a hidden field ahead of a plain one read by pattern and by position.
+5. **A bound a fact states is filled by it.** Decision 9. Check: an opaque `Holds(b)` under `@Holds(b)`, a field one level down, and a refusal two levels down.
+6. **`/std` reads by the rule.** The arms that write only `@_` drop it, and a structure's proof field becomes `@` where a literal sheds a written proof by it.
 
 ## Verification
 

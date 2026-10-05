@@ -1002,3 +1002,17 @@ fn a_remembered_verdict_does_not_outlive_its_binder() {
     assert_eq!(compared_under(Term::prop()), Ok(true));
     assert_eq!(compared_under(Term::type_ground()), Ok(false));
 }
+
+/// Two spines of one head converge by their arguments alone. A written mark is held to its parameter's where the application is typed, so two well-typed spines of one head cannot differ in one, and conversion reads none. Put to both checkers under this name.
+#[test]
+fn applications_differing_in_a_mark_alone_convert() {
+    let mut kernel = kernel();
+    let f = binder(0, "f");
+    let x = binder(1, "x");
+    kernel.assume(&f, &Term::func_type([(x, nat_type())], nat_type()));
+
+    let plain = Term::apply(Term::free_var(&f), [nat(1)]);
+    let marked = Term::apply_marked(Term::free_var(&f), [(Plicity::Implicit, nat(1))]);
+
+    assert_eq!(convert(&mut kernel, &nat_type(), &plain, &marked), Ok(true));
+}

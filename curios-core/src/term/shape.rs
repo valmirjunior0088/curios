@@ -414,7 +414,7 @@ impl MatchResult {
     }
 }
 
-/// One enumerated arm of a [`Cases::Induct`]: the arm body closed over its payload binders, plus a plicity vector paralleling those binders one mark per slot. `plicities.len()` equals `body.arity()`. Before elaboration the marks are the written constructor-pattern plicities; after elaboration they are the constructor's canonical payload plicities. Reduction and erasure open the body positionally and never read the marks; conversion compares them alongside the bodies. Kept beside the body (rather than in a second map) and sealed at the crate boundary behind [`InductArm::new`], so the two can never drift apart.
+/// One enumerated arm of a [`Cases::Induct`]: the arm body closed over its payload binders, plus a plicity vector paralleling those binders one mark per slot. `plicities.len()` equals `body.arity()`. Before elaboration the marks are the written constructor-pattern plicities; after elaboration they are the constructor's canonical payload plicities. Reduction, erasure and conversion open the body positionally and never read the marks; the kernel holds them to the payload's where it types the arm. Kept beside the body (rather than in a second map) and sealed at the crate boundary behind [`InductArm::new`], so the two can never drift apart.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct InductArm {

@@ -832,3 +832,18 @@ fn a_recurrence_blocked_on_a_metavariable_parks_and_commits_once_it_is_solved() 
     );
     assert_eq!(zonked(&context, u0), zonked(&context, u1));
 }
+
+/// Two spines of one head converge by their arguments alone: an application is rebuilt under its binders' marks where it is elaborated, so conversion reads none. Put to both checkers under this name.
+#[test]
+fn applications_differing_in_a_mark_alone_convert() {
+    let mut context = context();
+    let f = context.fresh(Some("f"));
+    let x = context.fresh(Some("x"));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    context.assume(&f, &Term::func_type([(x, nat_type.clone())], nat_type));
+
+    let plain = Term::apply(Term::free_var(&f), [nat(1)]);
+    let marked = Term::apply_marked(Term::free_var(&f), [(Plicity::Implicit, nat(1))]);
+
+    assert_eq!(conv(&mut context, &plain, &marked), Ok(true));
+}

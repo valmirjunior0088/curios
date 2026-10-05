@@ -1378,6 +1378,38 @@ pub(super) fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
     }
 }
 
+/// `f : (a : Nat) -> Type = (a) => Nat` with `held : f(3)`, the argument written under `mark` where its parameter is plain.
+pub(super) fn marked_apply_module(mark: Plicity) -> Module {
+    let a = Free::local(993, Some("a"));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
+    let former = Global::Authored(Qualifier::from(["f"]));
+
+    Module {
+        mounts: Vec::new(),
+        items: vec![
+            authored(
+                &former,
+                Term::func_type([(a, nat.clone())], Term::type_ground()),
+                Term::func([(a, nat.clone())], nat),
+            ),
+            authored(
+                &Global::Authored(Qualifier::from(["held"])),
+                Term::apply_marked(
+                    Term::free_var(&Free::from(&former)),
+                    [(mark, three.clone())],
+                ),
+                three,
+            ),
+        ],
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    }
+}
+
 /// `rec f : (a : Nat, b : Nat) -> Type = (a, b) => Nat; f(3)` as a declared type.
 pub(super) fn rec_apply_module() -> Module {
     let a = Free::local(990, Some("a"));
