@@ -111,7 +111,9 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Tools
 
-- [ ] [Questions file what they compile](roadmap/07-tools/01-questions-file-what-they-compile.md) — what a question compiles over a baseline is never filed, so after a saved edit every `lint` and `wonder` invocation recompiles until a build files the unit
+- [x] [A command compiles only as far as its answer needs, and a project keeps what it compiled](design/tools/a-command-compiles-only-as-far-as-its-answer-needs-and-a-project-keeps-what-it-compiled.md): `lint` and the `wonder` queries file what they compile where the disk holds what it was compiled from, whole or over a baseline, in the slot and with the bytes a build files there, and say so where the store cannot be written
+- [ ] A question about a program checks its entry every time — an entry is no unit (`Fold::check`), so nothing a question compiles of it is filed and no payload a build filed answers one
+- [ ] A build compiles a moved unit whole where a question compiles it over a baseline — `Verdicts`' own `Cache::baseline` answers none
 - [ ] [Profiling in the budget's own units](roadmap/07-tools/02-profiling-in-budget-units.md) — not refined yet; a profile reports durations rather than the budget's machine-independent units, and counts no priced site
 - [x] [A diagnostic spells what its reader can write](design/tools/a-diagnostic-spells-what-its-reader-can-write.md): spans across every stage, names as resolution reaches them, written goals reporting their scope and verified candidate fits
 - [x] [An argument names one subject, and each command states what it accepts](design/tools/an-argument-names-one-subject-and-each-command-states-what-it-accepts.md): `run`, `compile`, `document`, `test`, `curate`, `pin`, `new`, `lint`, `format`, `wonder` and `profile`
