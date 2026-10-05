@@ -80,7 +80,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 ## Compilation
 
 - [x] [Every stage but reduction costs the graph it is handed](design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md): a read visits a node once, a rebuild keeps the graph, a judgment is remembered while what it read stands, a print is bounded, and the kernel binds a `let`, so a chain of `let`s each naming the one before it twice compiles in its size
-- [ ] [One environment, and every read recorded](roadmap/05-compilation/02-one-environment.md) — the item graph is computed three times, the elaborator threads state from item to item, and every compile re-seeds all its predecessors
+- [ ] [A declaration is a function of what it reads](roadmap/05-compilation/02-a-declaration-is-a-function-of-what-it-reads.md) — what a declaration compiles to follows the order and the number of the declarations elaborated before it, a witness goal with no entry yet defers past its item, the item graph is computed three times over names, and every compile re-seeds all its predecessors
 - [ ] [A compilation is a graph of item tasks](roadmap/05-compilation/03-item-tasks.md) — nothing the compiler holds can cross a thread, so a compilation occupies one core
 - [ ] [Size cliffs](roadmap/05-compilation/04-size-cliffs.md) — not refined yet; elaboration is not linear in `let` depth, the parser buys its depth with stack, and every binding gets a fresh local
 - [ ] [What unbounded `Nat` and `Int` still cost at run time](roadmap/05-compilation/05-unbounded-nat-costs.md) — not refined yet; a field is a reference, a chain boxes between steps, and the fast path tests a tag per operand

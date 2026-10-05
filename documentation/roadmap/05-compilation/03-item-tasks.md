@@ -1,13 +1,13 @@
 # A compilation is a graph of item tasks
 
-Working specification for multithreaded compilation, the payoff of [one environment](02-one-environment.md). Once every read goes through that environment, no artifact carries a minted identity ([a unit carries none another compilation could mint](../../../curios-unit/README.md#a-unit-carries-no-identity-another-compilation-could-mint)) and no verdict depends on history ([no memo outlives its declaration](../../design/soundness/a-reduction-step-costs-what-it-builds.md)), the items of a compilation can run on as many workers as the product supplies, and the determinism those establish is what the gate holds them to. The compiler is single-threaded today by omission rather than by decision, and every design statement to the contrary is listed under what this overturns.
+Working specification for multithreaded compilation, the payoff of [a declaration being a function of what it reads](02-a-declaration-is-a-function-of-what-it-reads.md). Once that holds, no artifact carries a minted identity ([a unit carries none another compilation could mint](../../../curios-unit/README.md#a-unit-carries-no-identity-another-compilation-could-mint)) and no verdict depends on history ([no memo outlives its declaration](../../design/soundness/a-reduction-step-costs-what-it-builds.md)), the items of a compilation can run on as many workers as the product supplies, in any order, and the determinism that property gives is what the gate holds them to. The compiler is single-threaded today by omission rather than by decision, and every design statement to the contrary is listed under what this overturns.
 
-It needs [one environment](02-one-environment.md) and what that builds on, and not [checked evidence](../01-soundness/03-checked-evidence.md); [Cranelift's parallel compilation](../../../curios-runtime/README.md#compilation-runs-across-threads-and-only-where-compilation-exists) is already its first parallelism.
+It needs [that specification](02-a-declaration-is-a-function-of-what-it-reads.md) whole, with its one environment, and what it builds on, and not [checked evidence](../01-soundness/03-checked-evidence.md); [Cranelift's parallel compilation](../../../curios-runtime/README.md#compilation-runs-across-threads-and-only-where-compilation-exists) is already its first parallelism.
 
 ## What this builds on
 
 - **What already runs beside the compiler**: `wonder server`'s protocol thread, Binaryen behind its process lock, and the prelude images validated once per process.
-- **The one environment**, whose recorded graph says which items may run together, and the critical path it measured.
+- **The one environment**, whose recorded graph says which items may run together, and the throughput [its specification](02-a-declaration-is-a-function-of-what-it-reads.md) measures that graph to admit.
 - **Peers.** Lean 4.19 elaborates theorem bodies in parallel (lean4#7084). rustc parallelizes type checking per item under one build that selects serial or parallel synchronization at run time (`rustc_data_structures::sync`, `DynSend`/`DynSync`). Kontroli, a Rust checker for the λΠ-calculus modulo rewriting (Färber, CPP 2022), measured `Arc` terms 28.2% slower than `Rc` on one thread, won already at two threads, and reached 6.6× at eight. Rocq checks opaque proofs in worker processes (Barras, Tankink and Tassi, ITP 2015); GHC compiles modules in parallel under `-j`.
 
 ## The gap
@@ -18,7 +18,7 @@ It needs [one environment](02-one-environment.md) and what that builds on, and n
 
 ## Permanent decisions
 
-**The determinism contract.** A compilation's units, verdicts, diagnostics and emitted bytes are the same for every number of workers. The schedule is never an input: not to a verdict, not to a minted identity, not to the order anything is reported in. That is also what keeps the worker count out of a stored unit's address.
+**The determinism contract.** A compilation's units, verdicts, diagnostics and emitted bytes are the same for every number of workers: [a declaration is a function of what it reads](02-a-declaration-is-a-function-of-what-it-reads.md), held under a schedule. The schedule is never an input: not to a verdict, not to a minted identity, not to the order anything is reported in. That is also what keeps the worker count out of a stored unit's address.
 
 **The execution strategy is the product's.** `curios-pipeline` declares an executor seam, as it declares `Cache`: `curios` supplies a work-stealing pool, and `curios-js` and the fixtures supply one worker. One worker is the same code, not a second path.
 
@@ -30,7 +30,7 @@ It needs [one environment](02-one-environment.md) and what that builds on, and n
 | --- | --- |
 | Erasure | Per item, into an erased form addressed by global name; the back end links the items reachable from the entry into an arena of its own. The cumulative arena is deleted. This is linking by name, not the relocation of an index `curios-unit`'s README rejected |
 | Stored units | Addressed over their dependency closure's content rather than an ordered predecessor list, since the arena that forced the order is gone and the seed table is each unit's own |
-| Executor | Once-written cells on the product's pool. An item becomes ready when the declarations its lowering names are published; a request discovered while running — a chosen witness, an unfolded body — waits on the task that holds it or runs it inline if nothing has started it. A cycle is detected over who waits for whom and reported by its members in source order, which is the same report under any schedule |
+| Executor | Once-written cells on the product's pool. An item becomes ready when the declarations its lowering names are published; a read discovered while running — a chosen witness, a key, an unfolded body — of a cell not yet written voids the attempt, as it does on one worker, and the item is queued again behind the declaration it needs, which is started where no worker holds it. No worker waits on another, so nothing deadlocks, and a cycle is read off what each voided item needed and reported by its members in source order, which is the same report under any schedule |
 | Parsing and lowering | Per file, then per module in two phases over the possibly cyclic module graph: collect every module's exports, then lower |
 | Terms and trees | `Arc`-shared; `Cell` caches computed at construction, `OnceCell`s become `OnceLock`s |
 | Per-thread tables | The prelude restored once per process; the packrat, comment and formatter tables become state of the parse that owns them; the parsed-file memo becomes the session's |

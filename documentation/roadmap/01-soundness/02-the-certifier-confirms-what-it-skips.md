@@ -2,7 +2,7 @@
 
 Working specification for making the kernel's skip a checked step. [An independent kernel re-checks what the elaborator accepts](../../design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md) states the rule: the certifier judges every declaration it is handed, and passes one over only where the environment already holds that very declaration. Its walk decides by name alone ([Judging only what is not in scope](../../design/soundness/admission/judging-only-what-is-not-in-scope.md)), so a declaration under a name the environment holds is passed over whatever it is; here it is passed over only where it is the environment's own, and refused otherwise. One comparison at the gate, in `curios-cert` alone.
 
-It is independent of every other spec. [One environment](../05-compilation/02-one-environment.md) later replaces the walk's gate with a declaration's write-once cells and inherits the rule stated here.
+It is independent of every other spec. [A declaration is a function of what it reads](../05-compilation/02-a-declaration-is-a-function-of-what-it-reads.md) later replaces the walk's gate with a declaration's write-once cells and inherits the rule stated here.
 
 ## What this builds on
 
