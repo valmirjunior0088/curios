@@ -87,10 +87,6 @@ pub enum Error {
     CyclicReExport {
         label: String,
     },
-    /// A `use`-marked concept field's type is not a concept application (a path, optionally applied). Only such a type names a superclass edge. Superclass fields are anonymous, so the enclosing concept identifies the offender.
-    MalformedSuperField {
-        concept: String,
-    },
     /// A concept declares a `use` parameter. A concept's premise is a superclass field; a parameter would put the premise's dictionary in the concept's identity.
     ConceptUseParameter {
         concept: String,
@@ -290,12 +286,6 @@ impl fmt::Display for Error {
             }
             Error::CyclicReExport { label } => {
                 write!(f, "cyclic re-export with no concrete target: {label}")
-            }
-            Error::MalformedSuperField { concept } => {
-                write!(
-                    f,
-                    "concept `{concept}` has a `use` field whose type is not a concept application"
-                )
             }
             Error::ConceptUseParameter { concept } => {
                 write!(

@@ -529,10 +529,10 @@ pub enum Error {
     CyclicSuperclass {
         concept: String,
     },
-    /// A concept's `use`-marked field names a superclass that isn't a registered concept at all (e.g. it resolves to a struct or inductive).
+    /// A concept's `use`-marked field whose type reduces to no application of a registered concept (e.g. to a struct or an inductive): resolution answers nothing else, so it reaches no superclass.
     UnknownSuperclass {
         concept: String,
-        target: String,
+        target: Box<Term>,
     },
     /// A witness's concept parameter at `position` (0-based) does not reduce to a rigid nominal or intrinsic head — nothing to key the table entry on.
     InvalidWitnessHead {
@@ -1215,13 +1215,13 @@ impl Error {
         }
     }
 
-    pub(crate) fn unknown_superclass<N: Into<String>, T: Into<String>>(
+    pub(crate) fn unknown_superclass<N: Into<String>, T: Into<Term>>(
         concept: N,
         target: T,
     ) -> Self {
         Self::UnknownSuperclass {
             concept: concept.into(),
-            target: target.into(),
+            target: Box::new(target.into()),
         }
     }
 

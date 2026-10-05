@@ -987,7 +987,7 @@ satisfy Rem(Nat) {
 }
 ```
 
-A field beginning with `use` is an anonymous superclass edge. Its type must be a concept application.
+A field beginning with `use` is an anonymous superclass edge. Its type must reduce to a concept application, as a `use` parameter's must, so an alias of one is an edge.
 
 ```crs
 pub concept Ord(A: Type): pub Type {

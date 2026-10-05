@@ -533,9 +533,9 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
     else {
         return Ok(Vec::new());
     };
-    let Some(concept) = context.concept(name).cloned() else {
+    if context.concept(name).is_none() {
         return Ok(Vec::new());
-    };
+    }
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
         return Ok(Vec::new());
     };
@@ -546,13 +546,17 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
         universes,
     )?;
     let telescope = arity.open(&params.iter().collect::<Vec<_>>());
-    let mut out = Vec::with_capacity(concept.supers.len());
-    for (index, _) in &concept.supers {
+    // An edge is a `use` field of the concept's telescope, so where the edges stand is the telescope's to say.
+    let mut out = Vec::new();
+    for (index, mark) in telescope.marks().into_iter().enumerate() {
+        if mark != Plicity::Witness {
+            continue;
+        }
         let field_type = telescope
             .clone()
-            .field_type_from(node, *index)
-            .expect("superclass field index is within the concept's telescope");
-        out.push((Term::proj(node.clone(), *index), field_type));
+            .field_type_from(node, index)
+            .expect("a field's position is within its telescope");
+        out.push((Term::proj(node.clone(), index), field_type));
     }
 
     Ok(out)
@@ -1134,21 +1138,56 @@ fn measure(args: &[Term], binders: &BTreeSet<&Free>) -> (usize, BTreeMap<Free, u
     (size, occurrences)
 }
 
-/// Validate the seeded concept registry: every superclass edge targets a registered, different concept, and the graph is acyclic.
+/// What each superclass edge of the concept `name` reaches: the concept its `use` field's type reduces to an application of. Read under the frame the fields were checked in, since an edge's type may name the concept's parameters.
+///
+/// Where an edge stands is its field's mark; this is the other half, and it is read off the elaborated type rather than the written head, so an alias of a concept application is an edge, as it is a premise.
+pub(crate) fn superclass_targets(
+    context: &mut Context,
+    name: &Global,
+    edges: &[Term],
+) -> Result<Vec<Global>, Error> {
+    edges
+        .iter()
+        .map(|edge| {
+            let reduced = reduce_with(context, edge)?;
+            match &*reduced {
+                Subterm::StructType(reached) if context.concept(&reached.name).is_some() => {
+                    Ok(reached.name)
+                }
+                _ => {
+                    Err(Error::unknown_superclass(name.symbol(), edge.clone()).at_opt(edge.span()))
+                }
+            }
+        })
+        .collect()
+}
+
+/// Record what the superclass edges of the concept `name` reach, and hold the superclass graph to its rule with them in it.
+pub(crate) fn record_superclasses(
+    context: &mut Context,
+    name: &Global,
+    supers: Vec<Global>,
+) -> Result<(), Error> {
+    let Some(concept) = context.concept(name).cloned() else {
+        return Ok(());
+    };
+    context.update_concept(name, ConceptDecl { supers, ..concept });
+
+    check_concept_registry(context)
+}
+
+/// Validate the concept registry as it stands: every superclass edge recorded reaches a registered concept, and the graph they form is acyclic. A concept whose fields are not elaborated yet has no edge recorded, and is held when its own are ([`record_superclasses`]) — so a cycle is refused where its last edge arrives.
 pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
     let concepts = context.concepts();
 
     for (name, concept) in concepts {
-        for (position, target) in &concept.supers {
+        for target in &concept.supers {
             if !concepts.contains_key(target) {
-                return Err(Error::unknown_superclass(name.symbol(), target.symbol()));
+                return Err(Error::unknown_superclass(
+                    name.symbol(),
+                    Term::free_var(&Free::Global(*target)),
+                ));
             }
-            // A superclass position indexes the concept's own field list, and nothing between the lowerer that mints it and the readers that index by it says so. Asserted here rather than at each reader because this is where the registries are seeded and where the rest of what a `supers` entry promises is already checked; a position no field answers to is a lowering defect, not a program's.
-            assert!(
-                *position < concept.fields.len(),
-                "a superclass position of '{}' lies within its field list",
-                name.symbol()
-            );
         }
     }
 
@@ -1168,7 +1207,7 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
         let concept = concepts
             .get(name)
             .expect("every superclass target is a registered concept");
-        for (_, target) in &concept.supers {
+        for target in &concept.supers {
             visit(concepts, target, visiting, done)?;
         }
         visiting.remove(name);

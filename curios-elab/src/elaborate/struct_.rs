@@ -212,12 +212,12 @@ pub(super) fn elaborate_struct(
     let field_telescope = struct_decl.fields_at(&resolved);
 
     // A concept's `use`-marked (superclass) fields are the hidden slots of its field telescope, and the entries meet them as a call's arguments meet a function's ([`align`]): the plain entries are the fields, in order, and before each the `use` entries written are the first of the edges that precede it, in order. An edge left out, or written `use _`, becomes a witness-resolution goal. The check order is telescope order.
+    let slots = field_telescope.marks();
     // The concept each `use` position edges to is kept beside it rather than dropped: an unfilled position becomes a resolution goal, and that goal's provenance is the one place the superclass can be named as itself.
     let use_positions: Vec<(usize, Global)> = match context.concept(name) {
-        Some(concept) => concept.supers.clone(),
+        Some(concept) => concept.edges(&field_telescope),
         None => Vec::new(),
     };
-    debug_assert!(use_positions.windows(2).all(|w| w[0].0 < w[1].0));
 
     // The written entries in order, each under its mark; an empty entry list is all-plain-unlabeled (the internal normal form).
     let written: Vec<(Plicity, Option<&str>, &Term)> = match entries.is_empty() {
@@ -250,7 +250,7 @@ pub(super) fn elaborate_struct(
     let plain_labels: Vec<&str> = labels
         .iter()
         .enumerate()
-        .filter(|(position, _)| !use_positions.iter().any(|(index, _)| index == position))
+        .filter(|(position, _)| slots[*position] == Plicity::Explicit)
         .map(|(_, label)| *label)
         .collect();
 
@@ -317,14 +317,6 @@ pub(super) fn elaborate_struct(
     }
 
     // One source per declared position, by the alignment walk. The plain fields were counted against the telescope above, with the labels that report can name, and a literal's only hidden mark is `use`, so the one refusal left is a `use` entry with no edge in its run: written after the field the edges precede, or past the last of them.
-    let slots = (0..field_telescope.len())
-        .map(
-            |position| match use_positions.iter().any(|(index, _)| *index == position) {
-                true => Plicity::Witness,
-                false => Plicity::Explicit,
-            },
-        )
-        .collect::<Vec<_>>();
     let marks = written.iter().map(|(mark, ..)| *mark).collect::<Vec<_>>();
     let fills = align(&slots, &marks).map_err(|misaligned| match misaligned {
         Misaligned::Surplus { member } => {
@@ -348,19 +340,15 @@ pub(super) fn elaborate_struct(
             match field {
                 Some(field) => FieldSource::Written(field),
                 // A `use` position is an anonymous superclass field, so the provenance names the concept it *edges to* rather than reaching for a label, which it does not have. The short name, since the goal's own line already carries the application it is wanted at.
-                None => {
-                    let (_, edge) = use_positions
+                None => FieldSource::Resolve {
+                    func: CalleeId::Function(Free::Global(*name)),
+                    edge: use_positions
                         .iter()
                         .find(|(index, _)| *index == position)
-                        .expect("only a superclass edge is left to resolution");
-                    FieldSource::Resolve {
-                        func: CalleeId::Function(Free::Global(*name)),
-                        edge: edge
-                            .qualifier()
-                            .map(|path| path.last().to_string())
-                            .unwrap_or_default(),
-                    }
-                }
+                        .and_then(|(_, edge)| edge.qualifier())
+                        .map(|path| path.last().to_string())
+                        .unwrap_or_default(),
+                },
             }
         })
         .collect::<Vec<_>>();
@@ -488,12 +476,8 @@ pub(super) fn elaborate_struct_spread(
 
         let field_telescope = struct_decl.fields_at(&resolved);
 
-        // Same shape as the plain path's, so the two read alike; the edge itself is unused here, because a spread *copies* a superclass field from the base rather than re-resolving it.
-        let use_positions: Vec<(usize, Global)> = match context.concept(name) {
-            Some(concept) => concept.supers.clone(),
-            None => Vec::new(),
-        };
-        debug_assert!(use_positions.windows(2).all(|w| w[0].0 < w[1].0));
+        // The edges are the telescope's `use` fields; what one reaches is unused here, because a spread *copies* a superclass field from the base rather than re-resolving it.
+        let slots = field_telescope.marks();
 
         if entries[1..]
             .iter()
@@ -504,7 +488,7 @@ pub(super) fn elaborate_struct_spread(
         }
 
         let labels = field_telescope.labels();
-        let is_edge = |position: usize| use_positions.iter().any(|(index, _)| *index == position);
+        let is_edge = |position: usize| slots[position] == Plicity::Witness;
         let listed = || {
             labels
                 .iter()

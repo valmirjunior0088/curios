@@ -1122,9 +1122,10 @@ impl fmt::Display for Displayed<'_> {
                 )
             }
             Error::UnknownSuperclass { concept, target } => {
+                let target = target.spelled(spelling);
                 write!(
                     f,
-                    "concept '{concept}' names '{target}' as a superclass, but '{target}' is not a registered concept"
+                    "concept '{concept}' names '{target}' as a superclass, but '{target}' is not a concept application"
                 )
             }
             Error::InvalidWitnessHead { position, head } => {

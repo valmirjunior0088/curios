@@ -517,13 +517,17 @@ impl Module {
                 continue;
             };
             let parameters = concept.params.len();
+            let edges = self
+                .struct_decls
+                .get(name)
+                .map(|declaration| concept.edges(declaration.fields()))
+                .unwrap_or_default();
             let fields = concept
                 .fields
                 .iter()
                 .enumerate()
                 .map(|(index, label)| {
-                    if let Some((_, reached)) =
-                        concept.supers.iter().find(|(position, _)| *position == index)
+                    if let Some((_, reached)) = edges.iter().find(|(position, _)| *position == index)
                     {
                         return FieldSpelling::Super(*reached);
                     }

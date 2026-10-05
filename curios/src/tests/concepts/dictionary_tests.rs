@@ -237,6 +237,39 @@ fn a_concept_group_may_name_one_anothers_dictionaries() {
     assert_eq!(run(source), b"18");
 }
 
+// A superclass edge is read off its field's elaborated type, so an alias of a concept application is an edge, as it is a premise, and what the alias names is reached through it.
+#[test]
+fn an_alias_of_a_concept_application_is_a_superclass_edge() {
+    let source = r#"
+        use /std/{Nat, Str};
+        concept Base(A : Type) : pub Type { base(A) -> Str }
+        satisfy Base(Nat) { base(n) = "base" }
+        let BaseNat : Type = Base(Nat);
+        concept Over(A : Type) : pub Type { use BaseNat, over(A) -> Str }
+        satisfy Over(Nat) { over(n) = "over" }
+        let through(use Over(Nat), n : Nat) -> Str = Base/base(n);
+        /std/print(through(1))
+        "#;
+
+    assert_eq!(run(source), b"base");
+}
+
+// A `use` field whose type reduces to no concept application reaches nothing resolution could answer with, and is refused where the concept is declared, by the type as written.
+#[test]
+fn a_use_field_that_is_no_concept_application_is_refused() {
+    let source = r#"
+        use /std/{Nat, Str};
+        concept Over(A : Type) : pub Type { use Nat, over(A) -> Str }
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("names 'Nat' as a superclass, but 'Nat' is not a concept application"),
+        "got: {report}"
+    );
+}
+
 // A superclass cycle is a resolution loop, so it is refused whether or not the two concepts are declared together.
 #[test]
 fn a_superclass_cycle_is_refused_inside_a_group() {

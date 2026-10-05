@@ -539,33 +539,6 @@ fn constructor_plicity(declared: Plicity) -> Plicity {
     }
 }
 
-impl Term {
-    // The head name of a concept-application term (a path, optionally applied) — used to read the super concept off a `use`-marked field's type. `None` if the type is not shaped like a concept application. This is into_core-specific vocabulary (concept applications are a `into_core` pass concept), so it lives here rather than on `Term`'s own `impl` in `term.rs`.
-    fn concept_app_head(&self) -> Option<Name> {
-        match self.as_subterm() {
-            Subterm::Name(name) => Some(name.clone()),
-            Subterm::Apply(apply) => apply.head.concept_app_head(),
-            _ => None,
-        }
-    }
-}
-
-// Resolve a super concept's head to its qualified core name — the same rule `Lowerer`'s term-reference arm uses, minus the local-binder shadowing (a declaration-site super edge has no enclosing value scope).
-fn resolve_concept_head(context: &Context, name: &Name) -> Result<curios_core::Global, Error> {
-    let qualifier = if name.is_abs() || !name.is_single() {
-        context.resolve_term_name(name)?
-    } else {
-        match context.bindings().get(name.head()) {
-            Some(qualifier) => {
-                context.note_binding_use(name.head());
-                *qualifier
-            }
-            None => Qualifier::from([name.head()]),
-        }
-    };
-    Ok(curios_core::Global::Authored(qualifier))
-}
-
 #[allow(clippy::too_many_arguments)]
 fn process_items(
     top_items: &[TopItem],
@@ -1256,29 +1229,14 @@ fn process_items(
                         },
                     );
 
-                    // Superclass edges: each `use`-marked field names a super concept by its (resolved, qualified) head.
-                    let supers = concept
-                        .fields
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, field)| field.is_super())
-                        .map(|(idx, field)| {
-                            let head = field.type_.concept_app_head().ok_or_else(|| {
-                                Error::MalformedSuperField {
-                                    concept: concept.label.to_string(),
-                                }
-                            })?;
-                            Ok((idx, resolve_concept_head(context, &head)?))
-                        })
-                        .collect::<Result<Vec<_>, Error>>()?;
-
                     concepts.insert(
                         name,
                         curios_core::ConceptDecl {
                             universe_context: curios_core::UniverseContext::empty(),
                             params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
                             fields: field_labels.clone(),
-                            supers,
+                            // What each `use` field reaches is read off its elaborated type, where the fields are elaborated.
+                            supers: Vec::new(),
                         },
                     );
 

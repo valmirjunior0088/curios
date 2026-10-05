@@ -10,9 +10,10 @@ use {
         DeferredRefusal, Established, ItemStamp, ScheduledTest, Zonked, check_concept_registry,
         check_is_sort, check_positivity, check_proof_totality, check_rec_item_totality,
         check_type_totality, check_variance, check_written_type_totality, collect_goal_reports,
-        finish_deferred_witnesses, is_prop, record_definition_totality, record_totality,
-        record_variances, reduce_with, register_witness, retry_deferred_witnesses, sort_term,
-        test_program_tail, zonk, zonk_arity, zonk_entry, zonk_module, zonk_solved_term_metas,
+        finish_deferred_witnesses, is_prop, record_definition_totality, record_superclasses,
+        record_totality, record_variances, reduce_with, register_witness, retry_deferred_witnesses,
+        sort_term, superclass_targets, test_program_tail, zonk, zonk_arity, zonk_entry,
+        zonk_module, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_core::{
@@ -383,26 +384,40 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
     // Open the parameters, then check the field telescope they terminate in against `Type` under the binders before it.
     //
     // The parameters are opened rather than checked: `share_struct_params` elaborated them before the former's body was, and they are the terms that body was checked against. Elaborating them again would file a second set of universe instances beside the ones already in play.
-    let (param_entries, field_entries) = context.with_frame(|context| -> Result<_, Error> {
-        // Under their declared marks, so a `use` parameter is in the witness scope of the fields, as it is in the former's own function type, and a concept's superclass edge in that of the fields below it.
-        let (params, inner) = assume_telescope_entries(context, struct_decl.arity.clone());
-        let (fields, ()) = check_telescope_entries(context, inner)?;
+    let (param_entries, field_entries, supers) =
+        context.with_frame(|context| -> Result<_, Error> {
+            // Under their declared marks, so a `use` parameter is in the witness scope of the fields, as it is in the former's own function type, and a concept's superclass edge in that of the fields below it.
+            let (params, inner) = assume_telescope_entries(context, struct_decl.arity.clone());
+            let (fields, ()) = check_telescope_entries(context, inner)?;
 
-        // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof irrelevance, yet projection is an *unguarded* eliminator — it reads a field out of a value the theory believes is interchangeable with any other. That is consistent only when no field is informative, the singleton-elimination condition (`elaborate_match::singleton_eliminable`) checked here at declaration time rather than per projection. A struct carries no indices, so nothing is forced and the condition reduces to: every field type is itself a proposition. With this enforced, every projection lands in a `Prop`, so `elaborate_proj` needs no guard.
-        if declared_prop {
-            for ((_, _, ty), label) in fields.iter().zip(&field_labels) {
-                if !is_prop(context, ty)? {
-                    return Err(Error::informative_prop_struct(
-                        name.symbol(),
-                        label.clone(),
-                        ty.clone(),
-                    ));
+            // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof irrelevance, yet projection is an *unguarded* eliminator — it reads a field out of a value the theory believes is interchangeable with any other. That is consistent only when no field is informative, the singleton-elimination condition (`elaborate_match::singleton_eliminable`) checked here at declaration time rather than per projection. A struct carries no indices, so nothing is forced and the condition reduces to: every field type is itself a proposition. With this enforced, every projection lands in a `Prop`, so `elaborate_proj` needs no guard.
+            if declared_prop {
+                for ((_, _, ty), label) in fields.iter().zip(&field_labels) {
+                    if !is_prop(context, ty)? {
+                        return Err(Error::informative_prop_struct(
+                            name.symbol(),
+                            label.clone(),
+                            ty.clone(),
+                        ));
+                    }
                 }
             }
-        }
 
-        Ok((params, fields))
-    })?;
+            // What each superclass edge of a concept reaches, read while the parameters its type may name are in scope.
+            let supers = match context.concept(name).is_some() {
+                true => {
+                    let edges = fields
+                        .iter()
+                        .filter(|(mark, ..)| *mark == Plicity::Witness)
+                        .map(|(_, _, ty)| ty.clone())
+                        .collect::<Vec<_>>();
+                    Some(superclass_targets(context, name, &edges)?)
+                }
+                false => None,
+            };
+
+            Ok((params, fields, supers))
+        })?;
 
     let param_refs = param_labels.iter().map(String::as_str).collect::<Vec<_>>();
     let field_refs = field_labels.iter().map(String::as_str).collect::<Vec<_>>();
@@ -432,6 +447,9 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
             variances: struct_decl.variances,
         },
     );
+    if let Some(supers) = supers {
+        record_superclasses(context, name, supers)?;
+    }
 
     Ok(())
 }
