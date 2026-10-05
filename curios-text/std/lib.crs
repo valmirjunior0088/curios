@@ -3,7 +3,7 @@ pub mod ops;
 
 --- Sequencing: the concept postfix `!` is a call to, in the monad of its region.
 ---
---- A region's monad is read from the region's type, never from an action sequenced in it. An action of another monad reaches the region through `Lift`.
+--- A region's monad is read from the region's type, never from an action sequenced in it. An action of another monad reaches the region through `Monad/Lift`.
 pub mod Monad;
 pub use Monad/{let Monad};
 

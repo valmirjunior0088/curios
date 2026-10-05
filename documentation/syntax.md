@@ -467,7 +467,7 @@ Every value body is a sequencing region. Lambda bodies, match arms, and recursiv
 
 A region's monad is read from the region's type and never inferred from a sequenced action. A region whose type is not yet known waits for it, and one whose type can never name a monad — the body of a lambda in inference position, say — is rejected with a request to annotate the enclosing result type.
 
-An action whose own monad differs from the region's is lifted through the declared `Lift` witness for that ordered pair, and a pair with no witness is rejected. See [Lifting between monads](#lifting-between-monads).
+An action whose own monad differs from the region's is lifted through the declared `Monad/Lift` witness for that ordered pair, and a pair with no witness is rejected. See [Lifting between monads](#lifting-between-monads).
 
 Postfix `!` is not allowed in types. The token `!=` is an infix operator and is not parsed as postfix `!` followed by `=`.
 
@@ -501,11 +501,11 @@ let contents: Try(Io, Io/Error, Bytes) =
 
 ### Lifting between monads
 
-`/std/Monad/Lift(M, N)` declares the canonical embedding of monad `M` into monad `N`: one method, `lift`, taking an `M(A)` to an `N(A)`, with `Monad` witnesses for both sides as superclasses — so an embedding between non-monads cannot be declared. Like every witness, one `Lift` witness may occupy each ordered pair of monads program-wide, so which embedding runs is a fact about the program, never about a call site.
+`/std/Monad/Lift(M, N)` declares the canonical embedding of monad `M` into monad `N`: one method, `Monad/lift`, taking an `M(A)` to an `N(A)`, with `Monad` witnesses for both sides as superclasses — so an embedding between non-monads cannot be declared. Like every witness, one `Monad/Lift` witness may occupy each ordered pair of monads program-wide, so which embedding runs is a fact about the program, never about a call site.
 
 ```crs
-satisfy Lift(Io, Async) {
-    lift = lift,
+satisfy Monad/Lift(Io, Async) {
+    lift = Async/lift,
 }
 ```
 
@@ -518,9 +518,9 @@ pub let fiber: Async({}) =
     Async/pure(());
 ```
 
-The explicit spelling `lift(action)` names the same embedding, with the target monad inferred from the region. A region's tail — the last expression of a value body, a lambda body, or a match arm — is lifted by the same read when its head's declared monad and the region's are both monads and differ; a tail that is no monadic action keeps the ordinary type mismatch. The read is of the action's *head's declaration*, so one whose head is not a declared name — a projection, a call of a lambda — is not embedded on its own: it reports as an action of one monad where another is expected, and `lift(action)` is the spelling that embeds it.
+The explicit spelling `Monad/lift(action)` names the same embedding, with the target monad inferred from the region. A region's tail — the last expression of a value body, a lambda body, or a match arm — is lifted by the same read when its head's declared monad and the region's are both monads and differ; a tail that is no monadic action keeps the ordinary type mismatch. The read is of the action's *head's declaration*, so one whose head is not a declared name — a projection, a call of a lambda — is not embedded on its own: it reports as an action of one monad where another is expected, and `Monad/lift(action)` is the spelling that embeds it.
 
-Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does not let an `Io` action sequence in a `Sched` region: the missing `Lift(Io, Sched)` is reported, together with any chain of declared embeddings that would have reached it. The composite is declared like any other — a decision about `Sched`, written by its author, not derived by the compiler ([A fallible operation returns `Try`, and `!` lifts along declared edges](design/standard-library/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md)).
+Embeddings never chain. Declaring `Monad/Lift(Io, Job)` and `Monad/Lift(Job, Sched)` does not let an `Io` action sequence in a `Sched` region: the missing `Monad/Lift(Io, Sched)` is reported, together with any chain of declared embeddings that would have reached it. The composite is declared like any other — a decision about `Sched`, written by its author, not derived by the compiler ([A fallible operation returns `Try`, and `!` lifts along declared edges](design/standard-library/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md)).
 
 ## Pattern matching
 
@@ -1109,7 +1109,7 @@ A derived `Spell`'s text re-parses wherever the type's name is visible unqualifi
 
 ### Witness premises
 
-A witness premise must be a concept application strictly smaller than the witness's own: every variable in it is bound by the witness's telescope, no variable occurs more often in it than in the witness's concept application, and it has fewer nodes in all. A premise may therefore name a constant beside a binder — `use Lift(Io, M)` under `Lift(Io, (A: Type) => Try(M, E, A))` — while `use Show(A)` under `Show(A)` is refused. Resolution terminates because the premises shrink ([Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md)).
+A witness premise must be a concept application strictly smaller than the witness's own: every variable in it is bound by the witness's telescope, no variable occurs more often in it than in the witness's concept application, and it has fewer nodes in all. A premise may therefore name a constant beside a binder — `use Monad/Lift(Io, M)` under `Monad/Lift(Io, (A: Type) => Try(M, E, A))` — while `use Show(A)` under `Show(A)` is refused. Resolution terminates because the premises shrink ([Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md)).
 
 ### Orphan rule
 
@@ -1249,7 +1249,7 @@ A bound the facts do not imply is refused. The report names the facts considered
 | `@A: Type` / `@T` / `@value` | Implicit parameter or hidden structure field, named or as its type alone / explicitly supplied implicit argument or hidden field |
 | `use C(A)` / `use _` / `use value` | Witness parameter of a signature / its place in a lambda / explicitly supplied witness argument, or superclass field of a concept literal |
 | `?` | Written goal — reports scope, type and fits, then fails compilation |
-| `term!` | Monadic bind through `Monad`, lifting a cross-monad action through `Lift` |
+| `term!` | Monadic bind through `Monad`, lifting a cross-monad action through `Monad/Lift` |
 | `"""` … `"""` | Block string literal — the lines between the delimiters, their shared indentation removed |
 | `b[...]` / `x[...]` | `Bits` / `Bytes` literal — grain letter glued to the bracket |
 | `Name { ... }` | Structure or concept literal |

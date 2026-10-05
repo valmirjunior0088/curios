@@ -1,5 +1,4 @@
 use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Io, Handle};
-use /std/Monad/{Lift};
 use /std/time/{Duration};
 use /std/Handle/{Interest, Readiness};
 
@@ -829,10 +828,10 @@ satisfy Monad(Async) {
     bind = bind,
 }
 
-satisfy Lift(Io, Async) {
+satisfy Monad/Lift(Io, Async) {
     lift = lift,
 }
 
-satisfy Lift(Async, Async) {
+satisfy Monad/Lift(Async, Async) {
     lift(@_, m) = m,
 }

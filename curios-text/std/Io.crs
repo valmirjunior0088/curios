@@ -1,7 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
 use /std/{Monad, Bytes, Byte, Nat, Option, Result, Async, Handle};
-use /std/Monad/{Lift};
 
 --- The failure every host operation reports.
 pub mod Error;
@@ -13,8 +12,8 @@ satisfy Monad(Io) {
     bind = bind,
 }
 
---- The identity edge, for a witness whose premise is `Lift(Io, M)` at `M = Io`.
-satisfy Lift(Io, Io) {
+--- The identity edge, for a witness whose premise is `Monad/Lift(Io, M)` at `M = Io`.
+satisfy Monad/Lift(Io, Io) {
     lift(@_, m) = m,
 }
 
