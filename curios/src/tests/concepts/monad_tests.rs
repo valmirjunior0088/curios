@@ -177,6 +177,9 @@ const TRY: Region = Region {
 
 const REGIONS: [&Region; 5] = [&RESULT, &OPTION, &STATE, &IO, &TRY];
 
+// The regions whose monad is an instance of an `induct` or a `struct`; `Io` unfolds, and its level goes with it.
+const NOMINAL: [&Region; 4] = [&RESULT, &OPTION, &STATE, &TRY];
+
 // How a cell sequences its action: `!`, `Monad/bind` written out, or the monad's own function, which names no witness.
 #[derive(Clone, Copy)]
 enum Spelling {
@@ -255,7 +258,6 @@ impl Region {
 }
 
 const BELOW_ITSELF: &str = "strictly below itself";
-const MISMATCH: &str = "type mismatch";
 
 fn accepted(source: &str) {
     if let Err(message) = typecheck(source) {
@@ -270,39 +272,41 @@ fn refused(source: &str, report: &str) {
     }
 }
 
-// `!` holds its region at the level of the action it binds: a region's monad is one nominal instance, and both checkers compare a nominal type's universe levels for equality. `Io` unfolds and its level goes with it. The monad's own function names no witness and instantiates each side apart; `Try`'s is `a_transformers_own_bind_holds_a_bare_base_monad_at_one_instance`'s.
+// `!` holds its region at the level of the action it binds: a region's monad is one nominal instance, and both checkers compare a nominal type's universe levels for equality. The monad's own function names no witness and instantiates each side apart.
 #[test]
 fn a_bang_holds_its_region_at_a_lower_nominal_actions_level() {
-    for region in [&RESULT, &OPTION, &STATE, &TRY] {
+    for region in NOMINAL {
         refused(&region.big(Spelling::Bang), BELOW_ITSELF);
     }
     accepted(&IO.big(Spelling::Bang));
 
-    for region in [&RESULT, &OPTION, &STATE, &IO] {
+    for region in REGIONS {
         accepted(&region.big(Spelling::Own));
     }
 }
 
-// `!` resolves its witness at the region's payload, before the action is read, so an action above the region no longer fits the method. Over `Option` the same program is accepted.
+// A witness's levels close with the declaration that resolves it, so `!`, which resolves its witness before the action is read, takes an action above its region.
 #[test]
-fn a_bang_refuses_an_action_above_its_region() {
-    for region in [&RESULT, &STATE, &TRY] {
-        refused(&region.one(Spelling::Bang), BELOW_ITSELF);
+fn a_bang_takes_an_action_above_its_region() {
+    for region in REGIONS {
+        accepted(&region.one(Spelling::Bang));
     }
-    refused(&IO.one(Spelling::Bang), MISMATCH);
-    accepted(&OPTION.one(Spelling::Bang));
+}
 
+#[test]
+fn a_monads_own_bind_takes_an_action_above_its_region() {
     for region in REGIONS {
         accepted(&region.one(Spelling::Own));
     }
 }
 
-// Written out, `Monad/bind` infers its monad from the action and its witness closes at the action's payload, so a larger region does not fit.
+// Written out, `Monad/bind` infers its monad from the action, and a nominal action's levels are then the region's, so a larger region does not fit.
 #[test]
-fn a_written_bind_holds_its_region_at_its_actions_level() {
-    for region in REGIONS {
+fn a_written_bind_holds_its_region_at_a_nominal_actions_level() {
+    for region in NOMINAL {
         refused(&region.big(Spelling::Written), BELOW_ITSELF);
     }
+    accepted(&IO.big(Spelling::Written));
 }
 
 #[test]
@@ -313,11 +317,11 @@ fn a_written_bind_takes_an_action_above_its_region() {
 }
 
 #[test]
-fn a_region_binding_actions_at_two_levels_is_refused() {
-    for region in [&RESULT, &OPTION, &STATE, &TRY] {
+fn a_nominal_region_binding_actions_at_two_levels_is_refused() {
+    for region in NOMINAL {
         refused(&region.both(), BELOW_ITSELF);
     }
-    refused(&IO.both(), MISMATCH);
+    accepted(&IO.both());
 }
 
 // The refusal needs no `!`: a family applied at two payloads holds its nominal instances to one level.
@@ -334,20 +338,20 @@ fn a_family_at_two_payloads_holds_its_nominal_instances_to_one_level() {
     refused(through, BELOW_ITSELF);
 }
 
-// A region accepted below its action carries the action's level in its signature, so a caller setting it beside a region at its own level is refused. `Io`'s level goes with its unfolding.
+// A nominal region accepted below its action carries the action's level in its signature, so a caller setting it beside a region at its own level is refused.
 #[test]
 fn a_region_raised_to_its_actions_level_is_refused_beside_one_at_its_own() {
-    for region in [&RESULT, &OPTION, &STATE, &TRY] {
-        refused(&region.pick(Spelling::Written), BELOW_ITSELF);
+    for spelling in [Spelling::Bang, Spelling::Written] {
+        for region in NOMINAL {
+            refused(&region.pick(spelling), BELOW_ITSELF);
+        }
+        accepted(&IO.pick(spelling));
     }
-    accepted(&IO.pick(Spelling::Written));
-
-    refused(&OPTION.pick(Spelling::Bang), BELOW_ITSELF);
 }
 
-// `Try/bind` takes its base monad as one argument, and a bare former is held at one instance: a larger region is refused over `Io` and over `Option`, and accepted over `Io` eta-expanded.
+// `Try/bind` takes its base monad as one argument, and a declaration that names one bare leaves its level to its callers: a larger region is accepted over `Io`, over `Option` and over `Io` eta-expanded.
 #[test]
-fn a_transformers_own_bind_holds_a_bare_base_monad_at_one_instance() {
+fn a_transformers_own_bind_takes_a_larger_region_over_a_bare_base_monad() {
     let over = |base: &str| {
         format!(
             r#"
@@ -359,7 +363,7 @@ fn a_transformers_own_bind_holds_a_bare_base_monad_at_one_instance() {
         )
     };
 
-    refused(&over("Io"), BELOW_ITSELF);
-    refused(&over("Option"), BELOW_ITSELF);
-    accepted(&over("(A: Type) => Io(A)"));
+    for base in ["Io", "Option", "(A: Type) => Io(A)"] {
+        accepted(&over(base));
+    }
 }

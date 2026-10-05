@@ -520,6 +520,47 @@ fn a_type_named_through_a_higher_universe_solves_at_its_own() {
     assert_eq!(run(source), b"true");
 }
 
+// **A level a witness's side condition bounds settles at zero.** `Value` carries a type, so its level is its caller's, and `one` and `plain` keep it. `all` has both a local definition over `Value` and a `Monad` witness resolved in its body: the witness requires the error type's level to be at most the payload's, the error type's is floored at zero and still open when the signature's occurrences settle, and the payload's level takes it as its bound and follows it to zero. Following a bound down is what settles `Io(List(Str))` at zero, so the order is not the defect; what would tell the two apart is where each bound came from. The roadmap's "A universe level settled before its evidence is in" holds the gap, and this pins the loss so that closing it flips a fixture.
+#[test]
+fn a_level_bounded_through_a_witnesses_side_condition_settles_at_zero() {
+    let source = r#"
+        use /std/{Str, List, Result};
+        pub struct Value: pub Type { A: Type, read: (Str) -> Result(Str, A) }
+        let all(v: Value, xs: List(Str)) -> Result(Str, List(v.A)) =
+            let read_with(w: Value, s: Str) -> Result(Str, w.A) =
+                Result/map_failure(w.read(s), (reason) => Str/concat("bad: ", reason));
+            List/traverse(xs, (s) => read_with(v, s));
+        let one(v: Value, xs: List(Str)) -> Result(Str, List(v.A)) =
+            let read_with(w: Value, s: Str) -> Result(Str, w.A) =
+                Result/map_failure(w.read(s), (reason) => Str/concat("bad: ", reason));
+            match xs
+            | [] => Result/success([])
+            | [s, .._] => Result/map_success(read_with(v, s), (a) => [a])
+            end;
+        let plain(v: Value, xs: List(Str)) -> Result(Str, List(v.A)) =
+            List/traverse(xs, (s) => v.read(s));
+        /std/print("settled")
+        "#;
+
+    let parameters = universe_parameters(source);
+
+    assert_eq!(
+        parameters.get("/all"),
+        Some(&0),
+        "a level bounded through a witness's side condition kept its caller's choice, so the gap this pins has closed: {parameters:?}",
+    );
+    assert_eq!(
+        parameters.get("/one"),
+        Some(&1),
+        "a local definition alone took the level, so the control no longer separates the two: {parameters:?}",
+    );
+    assert_eq!(
+        parameters.get("/plain"),
+        Some(&1),
+        "a witness alone took the level, so the control no longer separates the two: {parameters:?}",
+    );
+}
+
 // **A bare former passed as a family is held at one instance.** `through(Io, …)` checks both arguments against `Io` at the instance it was passed at, and the refusal reads as that instance being committed before `Io` unfolds to a former that carries no level. Eta-expanded, `F(Nat)` is a redex and both sides are reduced, so the same program is accepted. `/sys/List` and an alias of `Io` are refused alike.
 #[test]
 fn a_bare_former_passed_as_a_family_is_held_at_one_instance() {

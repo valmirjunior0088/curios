@@ -1,6 +1,6 @@
 # A universe level settled before its evidence is in
 
-Working specification for two places where [a universe level that settles by where it came from](../../design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md) settles before what would decide it is known: a declaration whose witness goal resolves after its scheme has closed, and two instances whose levels conversion commits equal without unfolding. The first is closed by [one environment](../05-compilation/02-one-environment.md)'s first stage and held here; the second is measured before anything is changed.
+Working specification for three places where [a universe level that settles by where it came from](../../design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-came-from.md) settles before what would decide it is known: a declaration whose witness goal resolves after its scheme has closed, two instances whose levels conversion commits equal without unfolding, and a signature's level that settles at zero through a bound a witness's side condition put on it. The first is closed by [one environment](../05-compilation/02-one-environment.md)'s first stage and held here; the second is measured before anything is changed; the third has no rule chosen yet.
 
 [`!` sequences actions whatever level their payloads sit at](01-bang-sequences-at-every-level.md) takes what a nominal type's levels compare as, what the commitments below pair at a nominal type's irrelevant level, and the closing of a witness resolved while its consumer is open; what is held here is independent of it.
 
@@ -46,7 +46,20 @@ let through(F: (Type) -> Type, x: F(Nat), y: F(Type)) -> Nat = 0;
 let probe(n: Nat) -> Nat = through(Io, small(n), Io/pure(Nat));
 ```
 
-It is refused, `this Type would need to be strictly below itself`, `1 ≤ 0`, and is accepted with `(A) => Io(A)` in `Io`'s place. `List` in `Io`'s place and an alias, `let Act(A: Type) -> Type = Io(A)`, are refused alike, and `curios`'s `tests::universes::a_bare_former_passed_as_a_family_is_held_at_one_instance` holds them. A transformer meets it with no `through`: `Try/bind(small(n), (_) => Try/pure(Nat))` at `Try(Io, Str, Type)` is refused and at `Try((A: Type) => Io(A), Str, Type)` accepted, `Try` taking its base monad as one argument. The cause is not traced; it reads as `F(Nat)` being `Io(Nat)` at the instance `F` was passed at, so the sides differ in levels alone and the pair is committed before `Io` unfolds to a former that carries none, where under the lambda `F(Nat)` is a redex, the sides differ in more than levels, and both are reduced. What the commitment costs across `/std` is not known: an occurrence's level settles at its floor, which two occurrences over one argument share, so a pair identification commits may be a pair `finalize` would have equated anyway.
+It is refused, `this Type would need to be strictly below itself`, `1 ≤ 0`, and is accepted with `(A) => Io(A)` in `Io`'s place. `List` in `Io`'s place and an alias, `let Act(A: Type) -> Type = Io(A)`, are refused alike, and `curios`'s `tests::universes::a_bare_former_passed_as_a_family_is_held_at_one_instance` holds them. The cause is not traced; it reads as `F(Nat)` being `Io(Nat)` at the instance `F` was passed at, so the sides differ in levels alone and the pair is committed before `Io` unfolds to a former that carries none, where under the lambda `F(Nat)` is a redex, the sides differ in more than levels, and both are reduced. What the commitment costs across `/std` is not known: an occurrence's level settles at its floor, which two occurrences over one argument share, so a pair identification commits may be a pair `finalize` would have equated anyway.
+
+**A level a witness's side condition bounds settles at zero.** `Value` carries a type, so its level is its caller's to choose:
+
+```crs
+use /std/{Str, List, Result};
+pub struct Value: pub Type { A: Type, read: (Str) -> Result(Str, A) }
+let all(v: Value, xs: List(Str)) -> Result(Str, List(v.A)) =
+    let read_with(w: Value, s: Str) -> Result(Str, w.A) =
+        Result/map_failure(w.read(s), (reason) => Str/concat("bad: ", reason));
+    List/traverse(xs, (s) => read_with(v, s));
+```
+
+`all` elaborates at `Value.{0}`, and so cannot be handed a `Value` whose `A` is `Type`; with the local definition alone, or with `List/traverse` alone, the same function keeps `Value`'s level as a parameter (`tests::universes::a_level_bounded_through_a_witnesses_side_condition_settles_at_zero`). The `Monad` witness for `(A) => Result(E, A)` requires the error type's level to be at most the payload's, since the monad takes `Type a` to `Type a`. A witness's levels close with the declaration that resolves it, so that condition is live when `UniverseSolver::settle` runs over the signature's occurrences: the error type's level is floored at zero and not yet settled, the payload's, visited first, takes it as its principal lower bound, and when the error type's settles at zero the payload's is zero with it. Following a bound down is what settles `Io(List(Str))` at zero, as the universe decision asks, so the order is not the defect. What separates the two is where the bound came from, an occurrence's own argument or a witness's side condition, and the solver keeps no such difference. `/std/Cli`'s `field` and `fill` lose their `Kind`'s level by the census the same way and are refused nothing, their callers sitting at zero; whether their cause is this one exactly is not traced.
 
 ## Prior art
 
@@ -77,7 +90,8 @@ It is refused, `this Type would need to be strictly below itself`, `1 ≤ 0`, an
 - **Soft edges for `!` and for `use` premises.** A `use` premise is reached through any function that takes one, so the edge is the call graph's closure; a soft edge dropped at a deadlock leaves the goal deferred and the declaration grounded, so the fix holds only where the sort happens not to deadlock; and the sort itself is deleted by one environment.
 - **Weak constraints for identified levels.** A constraint that may be forgotten needs the conversion it justified to hold without it, which for a definition means unfolding it, the cost identification exists to avoid.
 - **Generalizing a pending goal's levels.** `finalize`'s documentation names the two `/std` declarations the kernel then refuses.
+- **Reading a bound only once the level it names has settled.** It keeps `all`'s level and leaves `field`'s and `fill`'s where they are, and it gives twenty-two of `/std`'s definitions a parameter no caller needs, `/std/Io/read_line`'s and `/sys/Handle/read`'s among them: an `Io` over a payload at zero stops following its payload down, which is what settling an occurrence at its argument is for.
 
 ## Completion and retirement
 
-Done when a declaration's levels do not depend on where its witnesses are declared, the interim report is in, and the census is taken and acted on. The design decision carries what remains. Replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.
+Done when a declaration's levels do not depend on where its witnesses are declared, the interim report is in, the census is taken and acted on, and a signature's level is not settled through a witness's side condition. The design decision carries what remains. Replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.

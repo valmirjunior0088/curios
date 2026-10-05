@@ -155,6 +155,8 @@ pub struct Context {
     checked_site: Rc<str>,
     /// The item being elaborated, stamped onto every witness goal it defers.
     item: ItemStamp,
+    /// Whether the declaration being elaborated can still settle a universe level: from [`Context::enter_item`] until its levels are finalized. A witness resolved while this holds leaves the levels its scheme minted to that finalization; one resolved after has none left, and closes them where it resolves.
+    scheme_open: bool,
     /// The names whose declarations the parser could not read, handed in before elaboration so their dependents are withheld from the start. Empty until a lowering reports them.
     broken: BTreeSet<Global>,
     // The names the type-directed features synthesize — infix dispatch and row subsumption. Supplied rather than spelled: the elaborator knows *which* declaration it needs, and `curios-prelude` knows what that declaration is called. See [`Context::syntax`].
@@ -225,6 +227,7 @@ impl Context {
             checked_by: Vec::new(),
             checked_site: Rc::from("the entrypoint"),
             item: ItemStamp(0),
+            scheme_open: false,
             broken: BTreeSet::new(),
             syntax,
             imports: Imports::default(),
@@ -360,11 +363,13 @@ impl Context {
         self.item = item;
     }
 
-    /// Run `f` as `item`, restoring the current item after: a deferred goal retried later still belongs to the item that raised it, and a re-deferral must keep saying so.
+    /// Run `f` as `item`, restoring the current item after: a deferred goal retried later still belongs to the item that raised it, and a re-deferral must keep saying so. That item has finalized, so `f` runs with its scheme closed.
     pub(crate) fn with_item<R>(&mut self, item: ItemStamp, f: impl FnOnce(&mut Self) -> R) -> R {
         let outer = mem::replace(&mut self.item, item);
+        let open = mem::replace(&mut self.scheme_open, false);
         let result = f(self);
         self.item = outer;
+        self.scheme_open = open;
         result
     }
 
@@ -413,9 +418,10 @@ impl Context {
         local
     }
 
-    /// Elaborate the item `declaration` from here on — `None` for an entry's final term — forgetting where the previous item's locals were opened: a proof is written only while its bound's item elaborates.
+    /// Elaborate the item `declaration` from here on — `None` for an entry's final term — forgetting where the previous item's locals were opened: a proof is written only while its bound's item elaborates. Its scheme is open until its universe levels are finalized.
     pub(crate) fn enter_item(&mut self, declaration: Option<Global>) {
         self.opened.clear();
+        self.scheme_open = true;
         self.enter_declaration(declaration);
     }
 
@@ -1952,6 +1958,7 @@ impl Context {
             .flat_map(|term| self.universe_metas_in(term))
             .collect::<BTreeSet<_>>();
         self.universes_mut().default(metas).map_err(Error::from)?;
+        self.scheme_open = false;
         let solver = self.universe_solver.clone();
         let terms = terms
             .iter()
@@ -1977,6 +1984,7 @@ impl Context {
             .universes_mut()
             .finalize(interface, internal, pending)
             .map_err(Error::from)?;
+        self.scheme_open = false;
         self.caches.invalidate_for_universe_rewrite();
         self.frames.forget_spellings();
         Ok(universe_context)
@@ -1991,20 +1999,26 @@ impl Context {
         self.universes_mut()
             .finalize_at_instance(metas, instance, parameter_count)
             .map_err(Error::from)?;
+        self.scheme_open = false;
         self.caches.invalidate_for_universe_rewrite();
         self.frames.forget_spellings();
         Ok(())
     }
 
+    /// Settle the levels a witness's scheme minted at one use: pinned to what its goal fixes, and closed there only once the declaration that raised the goal has finalized.
     pub(crate) fn close_universe_instance(
         &mut self,
         minted: &[Level],
         instance: &[Level],
         determined: &[Level],
     ) -> Result<(), Error> {
-        self.universes_mut()
-            .close_instance(minted, instance, determined)
-            .map_err(Error::from)?;
+        match self.scheme_open {
+            true => self.universes_mut().pin_instance(instance, determined),
+            false => self
+                .universes_mut()
+                .close_instance(minted, instance, determined),
+        }
+        .map_err(Error::from)?;
         self.caches.invalidate_for_universe_rewrite();
         self.frames.forget_spellings();
         Ok(())
