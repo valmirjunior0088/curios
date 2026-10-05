@@ -183,7 +183,11 @@ fn specialize(
     )
 }
 
-/// Re-assume every local the solution re-types at its specialized type — the shared [`retyped`], which the elaborator's arms apply too. The shadow is what a lookup finds — locals resolve innermost-first — and the enclosing `mark`/`retract` bracket retracts it with the arm.
+/// Re-assume every local the solution re-types at its specialized type — the shared [`retyped`], which the elaborator's arms apply too — and bind again every `let`-bound local the solution moves. The shadow is what a lookup finds, and the enclosing `mark`/`retract` bracket retracts it with the arm.
+///
+/// **A `let`-bound local is moved where its value, read by value, names a solved variable.** The arm's body and expectation have the solution substituted through them, and a `let` substituted into either would have had it substituted through its value too. Bound, the local a body names still stands for the value as it was outside the arm; bound again, it stands for what the substitution would have left in its place. One the solution only re-types is bound again at the value it had — assumed, it would stand for nothing.
+///
+/// **Bound again from the value as written, in scope order.** A `let`'s value names the `let`s before it, so with those already bound again its own value is its written one with the solution substituted, read by value where they now stand. Substituting through each value by value instead would walk, for every `let` in scope, everything beneath it — the square of a chain of `let`s at every arm.
 pub(super) fn shadow(kernel: &mut Kernel, solutions: &[(Free, Term)]) {
     if solutions.is_empty() {
         return;
@@ -194,9 +198,33 @@ pub(super) fn shadow(kernel: &mut Kernel, solutions: &[(Free, Term)]) {
         .into_iter()
         .zip(kernel.local_types())
         .collect::<Vec<_>>();
+    let retyped = retyped(&*kernel, &locals, solutions);
+    let bound = kernel.bound_locals();
 
-    for (name, type_) in retyped(&*kernel, &locals, solutions) {
-        kernel.assume(&name, &type_);
+    for (name, type_) in &retyped {
+        if !bound.iter().any(|local| local.name == *name) {
+            kernel.assume(name, type_);
+        }
+    }
+    for local in &bound {
+        // The innermost of the name's re-typings, which is the one a lookup finds.
+        let specialized = retyped
+            .iter()
+            .rev()
+            .find(|(name, _)| *name == local.name)
+            .map(|(_, type_)| type_);
+        let moved = solutions
+            .iter()
+            .any(|(solved, _)| local.value.mentions_free(solved));
+
+        if moved || specialized.is_some() {
+            kernel.bind(
+                &local.name,
+                specialized.unwrap_or(&local.type_),
+                &local.written.substitute(solutions),
+                local.encloses_partial,
+            );
+        }
     }
 }
 

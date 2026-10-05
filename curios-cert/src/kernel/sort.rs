@@ -80,6 +80,11 @@ impl Sort {
     ///
     /// Remembered per type, and probed here at every field and domain the rules below ask about: a type is a graph, and a record of two fields at one type asks one question where a walk per path asks two at every level. `Memos` states how long an answer stands.
     pub(crate) fn of(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Error> {
+        // A type is classified by value, as it is reduced: an answer is filed under the spelling a substituted `let` leaves, so one type asked about under two `let`-bound names is one question, and everything asked beneath is a part or a reduct of a type that was.
+        if !kernel.reads_by_value() {
+            let type_ = kernel.by_value(type_);
+            return kernel.reading(|kernel| Sort::of(kernel, &type_));
+        }
         curios_profile::profile!("Sort::of");
         if let Some(sort) = kernel.sort_hit(type_) {
             return Ok(sort);

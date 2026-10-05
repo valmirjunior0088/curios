@@ -19,6 +19,8 @@ mod intrinsic;
 use intrinsic::*;
 
 #[cfg(test)]
+mod binding_tests;
+#[cfg(test)]
 mod declaration_tests;
 #[cfg(test)]
 mod intrinsic_tests;
@@ -40,12 +42,13 @@ use {
     curios_analysis::spine,
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance,
-        InstanceHead, Intrinsic, Let, Lockstep, Many, MatchResult, Nat, Produced, Proj, Rec,
-        Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType,
+        InstanceHead, Intrinsic, Let, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj,
+        Rec, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType,
         Variant, foreign_signature,
     },
     curios_num::{Binary, Grain, Natural},
     curios_utilities::recurse,
+    std::convert::Infallible,
 };
 
 /// The type of `term`.
@@ -90,6 +93,20 @@ pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, Error> {
 /// [`infer`]'s rules, one per term form. `spine_head` says `term` is the head of an application spine, whose call the spine records whole.
 fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Term, Error> {
     kernel.spend(Cost::STEP)?;
+
+    // A recursive group is read by value: its verdict and its members' are filed under the group, and the obligations look them up from recorded positions, which are by value.
+    let by_value;
+    let term = match &**term {
+        Subterm::Rec(_)
+        | Subterm::Instance(Instance {
+            head: InstanceHead::RecProj(..),
+            ..
+        }) => {
+            by_value = kernel.by_value(term);
+            &by_value
+        }
+        _ => term,
+    };
 
     match &**term {
         // `Type u : Type (u + 1)`, and `Prop : Type 0`. The hierarchy is what makes `Type : Type` — and Girard's paradox with it — unstatable.
@@ -333,9 +350,13 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
         // An elimination's type is its result at this scrutinee: a motive binds the family's indices and then the scrutinee itself, so opening it at those is the rule for the *type*; an ambient goal is that type as written.
         //
         // Whether the term deserves that type is `eliminate`'s job: each arm must inhabit the result at its own constructor's index targets, and a proposition may not be eliminated into a relevant result unless it carries nothing to extract.
+        //
+        // **The scrutinee is typed where it stands and read by value, and so is the result.** The rule decides by the scrutinee's spelling — a variable is solved and the goal read over it, an expression has its equation recorded and an ambient goal's occurrences of it replaced — and it refuses a fold whose motive reaches the scrutinee other than through its binder by looking for it. A `let`-bound name in either would hide what each of those reads: `let m = n; match n : (_) => Eq()(m, 0) | …` states a motive that captures `n` and spells none of it. So both are read as a substituted `let` leaves them, and the arms are typed by name.
         Subterm::Match(m) => {
             let scrutinee_type = infer(kernel, &m.head)?;
             let scrutinee_type = kernel.reduce_forced(scrutinee_type)?;
+            let head = kernel.by_value(&m.head);
+            let result = result_by_value(kernel, &m.result);
             let family = match &*scrutinee_type {
                 Subterm::InductType(family) => Some(family.clone()),
                 _ => None,
@@ -345,7 +366,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
                 .map(|family| family.indices.clone())
                 .unwrap_or_default();
 
-            if let Some(motive) = m.result.family()
+            if let Some(motive) = result.family()
                 && motive.arity() != indices.len() + 1
             {
                 return Err(Error::Arity {
@@ -358,33 +379,22 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             check_cases(
                 kernel,
                 family.as_ref(),
-                &m.result,
+                &result,
                 &m.cases,
-                &m.head,
+                &head,
                 &scrutinee_type,
             )?;
 
-            Ok(m.result.of(&m.head, &indices))
+            Ok(result.of(&head, &indices))
         }
 
-        // `let` is checked binding by binding and then substituted away, which is the same rule reduction uses. Each binding sees exactly the values before it: a `let` is non-recursive, and self-reference is `rec`'s.
+        // The tail's type may name the binders, which close with the `let`: it is stated by value, while they stand.
         Subterm::Let(Let { bindings, tail }) => {
-            let mut values = Vec::with_capacity(bindings.len());
+            under_bindings(kernel, bindings, tail, |kernel, tail| {
+                let inferred = infer(kernel, tail)?;
 
-            for binding in bindings {
-                let refs = values.iter().collect::<Vec<_>>();
-                let type_ = binding.type_().release(&refs);
-                let value = binding.value().release(&refs);
-
-                infer_type(kernel, &type_)?;
-                check(kernel, &value, &type_)?;
-                values.push(value);
-            }
-
-            let refs = values.iter().collect::<Vec<_>>();
-            let tail = tail.open(&refs);
-
-            infer(kernel, &tail)
+                Ok(kernel.by_value(&inferred))
+            })
         }
 
         // A recursive group, checked by the one rule that holds it — asked here rather than restated, so a `rec` in a term and a `rec` at the top level cannot come to disagree about what makes a group legal.
@@ -844,6 +854,52 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Er
     checked
 }
 
+/// Check a `let`'s bindings in order and judge its tail under the locals they bind.
+///
+/// **A `let` is bound, not substituted.** Each value is checked once, where the `let` stands, and the tail is typed over a local that stands for it ([`Kernel::bind`]). Substituting the values hands typing the tail's tree: a value named twice is typed twice, and under an arm each copy again under that arm's own equation, which no table answers across. Each binding sees exactly the binders before it: a `let` is non-recursive, and self-reference is `rec`'s. Reduction keeps substituting a `let` it meets (`step_let`), and what it builds is counted.
+///
+/// `judge` is handed the tail opened over the binders, and runs while they stand.
+fn under_bindings<T>(
+    kernel: &mut Kernel,
+    bindings: &[LetBinding],
+    tail: &Scope<Many>,
+    judge: impl FnOnce(&mut Kernel, &Term) -> Result<T, Error>,
+) -> Result<T, Error> {
+    kernel.naming(|kernel| {
+        kernel.scoped(|kernel| {
+            let mut binders: Vec<Term> = Vec::with_capacity(bindings.len());
+
+            for (index, binding) in bindings.iter().enumerate() {
+                let refs = binders.iter().collect::<Vec<_>>();
+                let type_ = binding.type_().release(&refs);
+                let value = binding.value().release(&refs);
+
+                infer_type(kernel, &type_)?;
+                let partial = kernel.partial_groups();
+                check(kernel, &value, &type_)?;
+                let binder = kernel.fresh(tail.hint(index));
+                kernel.bind(&binder, &type_, &value, kernel.partial_groups() > partial);
+                binders.push(Term::free_var(&binder));
+            }
+
+            let refs = binders.iter().collect::<Vec<_>>();
+            judge(kernel, &tail.open(&refs))
+        })
+    })
+}
+
+/// An elimination's result by value: the ambient goal, or the motive's body under its binders — see the `Match` rule.
+fn result_by_value(kernel: &Kernel, result: &MatchResult) -> MatchResult {
+    match result {
+        MatchResult::Ambient(goal) => MatchResult::Ambient(kernel.by_value(goal)),
+        MatchResult::Family(motive) => {
+            let Ok(motive) = motive.try_map_body(|body| Ok::<_, Infallible>(kernel.by_value(body)));
+
+            MatchResult::Family(motive)
+        }
+    }
+}
+
 /// [`check`]'s rules, past the position it records: `let`'s descent, Π- and Σ-introduction, and inference for the rest.
 fn check_rules(
     kernel: &mut Kernel,
@@ -853,21 +909,9 @@ fn check_rules(
 ) -> Result<(), Error> {
     // A `let` carries no type of its own — the tail's type is the whole term's — so the expectation descends through it: the same binding validation as inference, with only the tail's mode changed. Without this, a dependent tuple or lambda under a `let` reaches the checked rules below as an inference and manufactures the non-dependent type they exist to avoid.
     if let Subterm::Let(Let { bindings, tail }) = &**term {
-        let mut values = Vec::with_capacity(bindings.len());
-        for binding in bindings {
-            let refs = values.iter().collect::<Vec<_>>();
-            let type_ = binding.type_().release(&refs);
-            let value = binding.value().release(&refs);
-
-            infer_type(kernel, &type_)?;
-            check(kernel, &value, &type_)?;
-            values.push(value);
-        }
-
-        let refs = values.iter().collect::<Vec<_>>();
-        let tail = tail.open(&refs);
-
-        return check(kernel, &tail, expected);
+        return under_bindings(kernel, bindings, tail, |kernel, tail| {
+            check(kernel, tail, expected)
+        });
     }
 
     // The Π-introduction half of the checked rules below: a lambda checks against a function type by walking both telescopes under one shared binder set — each domain pair invariant by conversion, exactly as subsumption compares them — and checking the body against the expected codomain. Routing the body through `check` rather than inference is what lets a tuple body reach the Σ rule with its expectation intact; the inferred route would manufacture the non-dependent codomain first.

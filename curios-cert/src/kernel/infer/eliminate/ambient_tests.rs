@@ -154,7 +154,7 @@ fn a_lying_ambient_goal_is_refused() {
     ));
 }
 
-/// An ambient result over an expression scrutinee — what substituting a `let` value or an argument into the variable form leaves behind — reads the goal's occurrences of that expression as the case: `P(0, f(n))` over `match f(n)` is `P(0, a())` in the `a` arm, which `h : P(0, f(n))` inhabits there through the case equation the arm records for `f(n)`, exactly as it would under a family. A goal that never names the expression is the same goal in every arm.
+/// An ambient result over an expression scrutinee — what a `let`-bound scrutinee read by value, or an argument substituted into the variable form, leaves behind — reads the goal's occurrences of that expression as the case: `P(0, f(n))` over `match f(n)` is `P(0, a())` in the `a` arm, which `h : P(0, f(n))` inhabits there through the case equation the arm records for `f(n)`, exactly as it would under a family. A goal that never names the expression is the same goal in every arm.
 #[test]
 fn an_ambient_result_over_an_expression_replaces_its_occurrences() {
     let mut kernel = kernel();

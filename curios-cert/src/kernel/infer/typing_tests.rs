@@ -160,9 +160,9 @@ fn projecting_from_a_non_tuple_is_refused() {
     ));
 }
 
-/// `let` is checked binding by binding and then substituted, so the tail's type is computed with the values in place rather than with opaque names.
+/// `let` is checked binding by binding, and its tail typed over the binders — `binding_tests` holds what binding one means.
 #[test]
-fn a_let_checks_its_binding_and_substitutes_it() {
+fn a_let_checks_its_binding_before_its_tail() {
     let mut kernel = kernel();
     let x = binder(0, "x");
 

@@ -15,7 +15,7 @@ fn over(name: &Free) -> Term {
     Term::intrinsic(Intrinsic::nat_add(Term::free_var(name), nat(1)))
 }
 
-/// `let t = s; match t | …` solves `s`, the variable the kernel's arm meets once the `let` is substituted. Controls: a top-level name is no local and solves nothing, and neither does an expression.
+/// `let t = s; match t | …` solves `s`, the variable the kernel's arm meets, its scrutinee read by value. Controls: a top-level name is no local and solves nothing, and neither does an expression.
 #[test]
 fn a_let_of_a_variable_solves_the_variable_beneath_it() {
     let s = Free::local(1, Some("s"));
@@ -40,7 +40,7 @@ fn a_let_of_a_variable_solves_the_variable_beneath_it() {
     }
 }
 
-/// With `s` solved, a local typed over `s` is re-typed, and so is one typed over `let t = s`, with `t` inlined — both are typed over `s` once the kernel has substituted the `let`. A local mentioning neither keeps its entry, and so does `s`, whose occurrences the arm substitutes.
+/// With `s` solved, a local typed over `s` is re-typed, and so is one typed over `let t = s`, with `t` inlined — both are typed over `s` as the kernel holds a type, by value. A local mentioning neither keeps its entry, and so does `s`, whose occurrences the arm substitutes.
 #[test]
 fn a_local_typed_through_a_let_is_retyped_with_the_let_inlined() {
     let s = Free::local(1, Some("s"));

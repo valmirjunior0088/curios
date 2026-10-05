@@ -1,6 +1,6 @@
 //! What the kernel sees of a term that one of its checkers holds under local definitions.
 //!
-//! The kernel substitutes a `let` before it checks what follows; the elaborator keeps one as a local definition, so a term it holds may name a `let` where the kernel's copy of the same term has the value. Every rule that records or compares what the kernel sees — the locals a case's solution re-types, the variables an index equation may solve, the variable a scrutinee is, the spelling a guard's equation is recorded under — has to read through those definitions, and this module is that reading, stated once. It reads through [`Env::unfold`] and nothing else, so a driver whose locals carry no definitions, as the kernel's do not, sees every term unchanged.
+//! The kernel hands every rule here its terms by value, each `let`-bound name unfolded; the elaborator keeps a `let` as a local definition, so a term it holds may name a `let` where the kernel's copy of the same term has the value. Every rule that records or compares what the kernel sees — the locals a case's solution re-types, the variables an index equation may solve, the variable a scrutinee is, the spelling a guard's equation is recorded under — has to read through those definitions, and this module is that reading, stated once. It reads through [`Env::unfold`] and nothing else, so a driver that answers no local definition, as the kernel does not, sees every term unchanged.
 //!
 //! # Why one reading
 //!

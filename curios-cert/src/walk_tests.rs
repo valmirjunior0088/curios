@@ -92,6 +92,35 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
             )
             .is_ok_and(|equal| equal)
         }),
+        // Sixty `let`s, each a match on `g(b)` with the line before in both arms. Every arm holds its own equation, so nothing typed under one answers under the other; the tail is typed over the binders, and each line once.
+        ("a `let` chain through arms on an expression", {
+            let g = Free::local(6, Some("g"));
+            let b = Free::local(7, Some("b"));
+            let boolean = Term::intrinsic(Intrinsic::BoolType);
+            let mut kernel = kernel(&n, &a);
+            kernel.assume(
+                &g,
+                &Term::func_type([(Free::local(8, None), boolean.clone())], boolean.clone()),
+            );
+            kernel.assume(&b, &boolean);
+
+            let guard = Term::apply(Term::free_var(&g), [Term::free_var(&b)]);
+            let lines = (0..=60)
+                .map(|line| Free::local(20 + line, Some("x")))
+                .collect::<Vec<_>>();
+            let mut items = vec![(lines[0], nat.clone(), Term::free_var(&n))];
+            for line in 1..=60 {
+                let before = Term::free_var(&lines[line - 1]);
+                let arms =
+                    Term::bool_match(guard.clone(), None, nat.clone(), before.clone(), before);
+                items.push((lines[line], nat.clone(), arms));
+            }
+
+            infer(
+                &mut kernel,
+                &Term::let_block(items, Term::free_var(&lines[60])),
+            ) == Ok(nat.clone())
+        }),
         (
             "the sort of a closed type",
             Sort::of(&mut kernel(&n, &a), &doubled_record(nat.clone())) == ground,

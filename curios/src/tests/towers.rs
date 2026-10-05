@@ -2,7 +2,7 @@
 //!
 //! A tower is a chain of `let`s in which each line names the line before it twice: `n` lines are a graph of `n` nodes whose tree has `2ⁿ`. A stage that walks the graph pays a line for a line; one that walks it once per path doubles with every line, and at sixty lines does not answer. Every tower here is an ordinary program that reduces nothing, so what it costs is what the stages other than reduction cost — the half of `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md`'s premise a budget cannot hold, and the subject of `documentation/roadmap/05-compilation/01-shared-term-costs.md`.
 //!
-//! A shape that compiles at sixty lines is a fixture here; `tower_measurements` counts what every shape costs each checker at two heights, the shapes still walked per path among them. What a tower's type costs to *show* is held here too: its print is its tree, and both a rung and a report end.
+//! A shape that compiles at sixty lines is a fixture here; `tower_measurements` counts what every shape costs each checker at two heights. What a tower's type costs to *show* is held here too: its print is its tree, and both a rung and a report end.
 
 #[cfg(feature = "profile")]
 mod measurement_tests;
@@ -36,6 +36,10 @@ enum Shape {
     Lists(Stands),
     /// `match b | true => x | false => x end`, each arm the line before.
     Arms(Stands),
+    /// `match g(b) | true => x | false => x end`, each arm the line before under a scrutinee that is no variable: an arm records its case equation, and what is typed under one answers under no other.
+    Guards(Stands),
+    /// `g(x, x) + tower(g, p)`, in a recursive member's body: every line calls the member, so no line's type is remembered and each is typed where it stands.
+    Recursions,
     /// `{T, T}`, a top-level alias of the alias before it.
     Aliases,
     /// `(T) -> T`, a top-level alias of the alias before it.
@@ -137,6 +141,38 @@ fn tower(shape: Shape, lines: usize) -> String {
                 line: |x| format!("match b | true => {x} | false => {x} end"),
                 result: |last, again| match again {
                     Some(again) => format!("{last} + {again}"),
+                    None => last.to_string(),
+                },
+            },
+        ),
+        Shape::Guards(stands) => function(
+            &mut source,
+            stands,
+            lines,
+            &Body {
+                imports: "Nat, Bool",
+                parameters: "g: (Bool) -> Bool, b: Bool, n: Nat",
+                forwarded: "g, b, ",
+                first: |n| n.to_string(),
+                line: |x| format!("match g(b) | true => {x} | false => {x} end"),
+                result: |last, again| match again {
+                    Some(again) => format!("{last} + {again}"),
+                    None => last.to_string(),
+                },
+            },
+        ),
+        Shape::Recursions => function(
+            &mut source,
+            Stands::Member,
+            lines,
+            &Body {
+                imports: "Nat",
+                parameters: "g: (Nat, Nat) -> Nat, n: Nat",
+                forwarded: "g, ",
+                first: |n| format!("g({n}, {n})"),
+                line: |x| format!("g({x}, {x}) + tower(g, p)"),
+                result: |last, again| match again {
+                    Some(again) => format!("g({last}, {again})"),
                     None => last.to_string(),
                 },
             },
@@ -257,7 +293,7 @@ fn a_sixty_line_chain_compiles() {
     }
 }
 
-/// The towers both checkers walk in their size, at sixty lines: calls, pairs, lists and arms in a function's body and in a recursive member's, both aliases, the two towers claimed equal, and the two chains of calls built apart.
+/// The towers both checkers walk in their size, at sixty lines: calls, pairs, lists, arms on a variable and arms on an expression in a function's body and in a recursive member's, lines that each call their member, both aliases, the two towers claimed equal, and the two chains of calls built apart.
 #[test]
 fn a_sixty_line_tower_compiles() {
     for shape in [
@@ -269,6 +305,9 @@ fn a_sixty_line_tower_compiles() {
         Shape::Lists(Stands::Member),
         Shape::Arms(Stands::Function),
         Shape::Arms(Stands::Member),
+        Shape::Guards(Stands::Function),
+        Shape::Guards(Stands::Member),
+        Shape::Recursions,
         Shape::Aliases,
         Shape::Arrows,
         Shape::TwoTowers,

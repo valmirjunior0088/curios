@@ -8,7 +8,7 @@
 //!
 //! # Through local definitions
 //!
-//! The kernel substitutes a `let` before it checks what follows; the elaborator keeps one as a local definition. Both rules read through local definitions by the one reading [`Unfolding`] and [`beneath`] state, so they are stated over what the kernel sees: a scrutinee that is a `let` of a variable solves that variable, and a local whose type mentions a `let` reaching a solved variable is re-typed with that definition substituted. The kernel's locals carry no definitions, so for it the reading is the identity.
+//! The kernel hands these rules its terms by value, each `let`-bound name unfolded; the elaborator keeps a `let` as a local definition. Both rules read through local definitions by the one reading [`Unfolding`] and [`beneath`] state, so they are stated over what the kernel sees: a scrutinee that is a `let` of a variable solves that variable, and a local whose type mentions a `let` reaching a solved variable is re-typed with that definition substituted. The kernel answers no local definition, so for it the reading is the identity.
 
 #[cfg(test)]
 mod tests;

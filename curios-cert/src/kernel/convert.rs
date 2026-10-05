@@ -53,7 +53,13 @@ pub fn convert(kernel: &mut Kernel, type_: &Term, this: &Term, that: &Term) -> R
     curios_profile::profile!("convert");
     let mut history = History::default();
 
-    compare(kernel, &mut history, type_, this, that)
+    // Conversion reads by value, as reduction does and for its reason: it compares spellings, keys its history and its verdicts on them, and opens no `let`.
+    let (type_, this, that) = (
+        kernel.by_value(type_),
+        kernel.by_value(this),
+        kernel.by_value(that),
+    );
+    kernel.reading(|kernel| compare(kernel, &mut history, &type_, &this, &that))
 }
 
 /// The goals conversion is currently inside.

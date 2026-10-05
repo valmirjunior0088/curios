@@ -60,7 +60,7 @@ pub trait Env {
     /// `&mut self` for the *implementors'* sake — both mint from an interior counter and could take `&self`, but the elaborator's method is spelled `&mut` and a trait should not force a signature change to satisfy it.
     fn fresh(&mut self, hint: Option<&str>) -> Free;
 
-    /// Whether `name` is a local the walk in progress opened, as opposed to a top-level name, whose meaning no case can refine. A local may carry a definition — the elaborator keeps a `let` as one, where the kernel has substituted it away — which [`Env::unfold`] answers.
+    /// Whether `name` is a local the walk in progress opened, as opposed to a top-level name, whose meaning no case can refine. A local may carry a definition — the elaborator keeps a `let` as one, where the kernel hands an analysis its terms by value and answers none — which [`Env::unfold`] answers.
     fn is_local(&self, name: &Free) -> bool;
 
     /// What `name` unfolds to through its *definition* — never through a refinement. The two implementations are semantically identical, which is deliberate: a definitions-only reading needs no invariant about when the elaborator's refinement store happens to be empty.

@@ -985,6 +985,8 @@ pub(super) enum FoldMotive {
     Honest,
     /// `(m) => Eq()(m, m)`, with `refl(k + 1)` in the successor arm: the same shape at a goal each arm can inhabit, so the module is otherwise well-formed.
     Reflexive,
+    /// `let a = n; … (_) => Eq()(a, 0)`: the capture, with the scrutinee named through a `let` — a motive that spells none of it.
+    CapturedThroughLet,
 }
 
 /// `all_zero : (n : Nat) -> Eq()(n, 0)` (or `Eq()(n, n)` for [`FoldMotive::Reflexive`]) by a `Nat` fold under the given motive, with `refl` in the zero arm.
@@ -1011,6 +1013,8 @@ pub(super) fn fold_motive(motive: FoldMotive) -> Module {
     let bound = Free::local(611, Some("m"));
     let pred = Free::local(612, Some("k"));
     let hypothesis = Free::local(613, Some("ih"));
+    let alias = Free::local(614, Some("a"));
+    let through_let = matches!(motive, FoldMotive::CapturedThroughLet);
     let successor = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&pred), literal(1)));
 
     let (goal, family, step) = match motive {
@@ -1029,23 +1033,30 @@ pub(super) fn fold_motive(motive: FoldMotive) -> Module {
             equal(Term::free_var(&n), Term::free_var(&n)),
             refl(successor),
         ),
+        FoldMotive::CapturedThroughLet => (
+            equal(Term::free_var(&alias), literal(0)),
+            equal(Term::free_var(&n), literal(0)),
+            Term::free_var(&hypothesis),
+        ),
     };
     let motive = Scope::close(Many(1), &[&bound], goal);
+    let fold = Term::nat_match_scoped(
+        Term::free_var(&n),
+        motive,
+        refl(literal(0)),
+        &pred,
+        &hypothesis,
+        step,
+    );
+    let body = match through_let {
+        true => Term::let_(&alias, nat(), Term::free_var(&n), fold),
+        false => fold,
+    };
 
     let all_zero = authored(
         &Global::Authored(Qualifier::from(["all_zero"])),
         Term::func_type([(n, nat())], family),
-        Term::func(
-            [(n, nat())],
-            Term::nat_match_scoped(
-                Term::free_var(&n),
-                motive,
-                refl(literal(0)),
-                &pred,
-                &hypothesis,
-                step,
-            ),
-        ),
+        Term::func([(n, nat())], body),
     );
 
     Module {

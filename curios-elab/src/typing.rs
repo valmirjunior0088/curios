@@ -941,7 +941,7 @@ fn retry_checking(
 
 /// Register a counterfactual match-arm refinement of a scrutinee, so a context hypothesis whose type mentions it reduces at the arm's value. The frame holding the refinement is scoped to the arm, so the (counterfactual) assumption does not leak. Three keyings, by head shape:
 ///
-/// - a `Var` reduces to the value (`refine`), and a local `let`'s definition is refined to the same value in turn: the kernel substitutes a `let` rather than binding it, so the scrutinee it matches on is the definition, and a name refined alone disagrees with the definition it unfolds to — the solver reifies a local definition into the solution it stores, and that spelling saw nothing;
+/// - a `Var` reduces to the value (`refine`), and a local `let`'s definition is refined to the same value in turn: the kernel reads a scrutinee by value, so the one it matches on is the definition, and a name refined alone disagrees with the definition it unfolds to — the solver reifies a local definition into the solution it stores, and that spelling saw nothing;
 /// - a projection — a `Bool`/`Nat` match on a tuple field — refines that projection (`refine_projection`);
 /// - any other head — a stuck application like `classify(c)` / `Nat/in_range(...)` — is canonicalized (head verbatim, arguments in WHNF) and recorded in the term-keyed scrutinee store (`refine_scrutinee`), so an occurrence spelled with differently-reduced arguments still matches.
 ///
@@ -979,7 +979,7 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
                 .map(|(key, original)| (key, original, false))
                 .collect::<Vec<_>>();
 
-            // The kernel substitutes a `let` before it checks what follows, so an occurrence reached by unfolding a definition spells the values the guard's local definitions stand for, where one written in the guard's own scope spells their names. The kernel's spelling is recorded beside the written one, as an alias: the exact lookup meets it, and settlement never reduces it.
+            // The kernel reads a term by value where reduction is entered, so an occurrence reached by unfolding a definition spells the values the guard's local definitions stand for, where one written in the guard's own scope spells their names. The kernel's spelling is recorded beside the written one, as an alias: the exact lookup meets it, and settlement never reduces it.
             let unfolded = Unfolding::everything(&*context).term(head);
             if unfolded != *head {
                 for (key, original) in scrutinee_spellings(context, &unfolded)? {

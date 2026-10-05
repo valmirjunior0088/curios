@@ -102,7 +102,7 @@ pub fn invert_indices_outer<J: Judge>(
 ///
 /// Direction one pins a payload binder to the rigid actual it must equal ([`invert_indices`]). Direction two refines an outer variable to the target it must equal, and is the same unifier with its sides swapped ([`invert_indices_outer`]): it solves flexible variables on what is now the target side, the occurs check refusing a solution that mentions any other refinable variable — which is exactly the parameter cycle (`b := b + 1` through a family parameter) that must not substitute. The directions run in sequence, the first solution applied to the targets before the second runs, which keeps one equation from being solved twice in opposite orientations; and a pinned binder's value may mention an outer variable the second direction refined, so the first solution is rewritten through the second — the reverse cannot happen, the second having run on targets the first was already applied to — which makes the union idempotent in one pass.
 ///
-/// The outer variables are the locals the kernel's spelling of the actual indices names ([`locals_beneath`]), never a top-level name, whose meaning no case can refine: a local carrying a definition contributes the locals its definition names instead, which is what the index mentions once the `let` is substituted.
+/// The outer variables are the locals the kernel's spelling of the actual indices names ([`locals_beneath`]), never a top-level name, whose meaning no case can refine: a local carrying a definition contributes the locals its definition names instead, which is what the index mentions read by value.
 ///
 /// `Impossible` when either direction finds a definite clash, which makes the case unreachable.
 pub fn solve_indices<J: Judge>(

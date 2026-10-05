@@ -456,6 +456,8 @@ pub struct Kernel {
     assumed: Vec<UniverseConstraint>,
     /// Whether the closed machine may run — false only in the differential fixture's strategy arm, which is what makes the machine's reducts checkable against the strategy's at all.
     machine: bool,
+    /// Whether the terms in hand are already by value: set where reduction or conversion is entered from typing, so the entries beneath read what they are handed, and put back where typing binds a `let`. See [`Kernel::by_value`].
+    reading: bool,
 }
 
 impl Kernel {
@@ -472,6 +474,7 @@ impl Kernel {
             syntax,
             assumed: Vec::new(),
             machine: true,
+            reading: false,
         }
     }
 
@@ -737,6 +740,60 @@ impl Kernel {
         }
     }
 
+    /// Open a `let`'s binder: [`Kernel::assume`] for a local that stands for `value`, which the caller has checked at `type_` — `encloses_partial` saying that check enclosed a group that does not descend.
+    ///
+    /// **A `let` is bound for typing and read by value by everything else.** The tail is typed over the binder, so a value named twice is typed once; a variable is typed by the binder's type. Whatever reads a term for more than its type is handed the term with the name unfolded ([`Kernel::by_value`]), which is the term a substituted `let` leaves, so reduction's tables, an arm's equations, the recorded positions and the graded calls are keyed and read as they are where a `let` is substituted. The local stands for one value for as long as its opening does, so what the typing tables remember of a term naming it stays true while its binder stands — the life they have.
+    pub(crate) fn bind(&mut self, name: &Free, type_: &Term, value: &Term, encloses_partial: bool) {
+        if let Some(index) = name.local_index() {
+            self.spend.reserve(index);
+        }
+        // A local bound again stands for another value, which is what a term naming it was typed through: the typings go, and nothing else does, since every other table is keyed by value and names no `let`.
+        if self.scope.bind(name, type_, value, encloses_partial) {
+            self.memos.begin_sizes();
+        }
+    }
+
+    /// `term` by value — see the scope's `by_value`. A term already by value is handed back as it is.
+    pub(crate) fn by_value(&self, term: &Term) -> Term {
+        match self.reading {
+            true => term.clone(),
+            false => self.scope.by_value(term),
+        }
+    }
+
+    /// Run `read` over terms that are by value: reduction and conversion entered inside it read what they are handed. Entered where either is reached from typing, so a term is unfolded once at the outermost entry and never beneath it, where every term is a subterm or a reduct of one that was.
+    pub(crate) fn reading<T>(&mut self, read: impl FnOnce(&mut Self) -> T) -> T {
+        let outer = std::mem::replace(&mut self.reading, true);
+        let outcome = read(self);
+        self.reading = outer;
+
+        outcome
+    }
+
+    /// Whether the terms in hand are already by value.
+    pub(crate) fn reads_by_value(&self) -> bool {
+        self.reading
+    }
+
+    /// Run `walk` over terms that may name a `let`-bound local: the bracket typing a `let`'s tail runs in, wherever it is reached from.
+    pub(crate) fn naming<T>(&mut self, walk: impl FnOnce(&mut Self) -> T) -> T {
+        let outer = std::mem::replace(&mut self.reading, false);
+        let outcome = walk(self);
+        self.reading = outer;
+
+        outcome
+    }
+
+    /// Whether `name` is a local a `let` bound.
+    pub(crate) fn binds(&self, name: &Free) -> bool {
+        self.scope.binds(name)
+    }
+
+    /// The `let`-bound locals in scope — see the scope's `bound_locals`.
+    pub(crate) fn bound_locals(&self) -> Vec<LetBound> {
+        self.scope.bound_locals()
+    }
+
     /// Step `walk` past its next binder: mint one from the entry's hint, open it at `domain`, and hand it back for the caller's own capture.
     pub(crate) fn advance_assumed(&mut self, walk: &mut impl Advance, domain: &Term) -> Free {
         let binder = walk.advance_fresh(|hint| self.fresh(hint));
@@ -919,6 +976,8 @@ impl Kernel {
             return None;
         }
 
+        // The half is filed under the type by value, as its sort is.
+        let type_ = &self.by_value(type_);
         let erased = match self.standing(self.memos.half(type_)) {
             Some(erased) => erased,
             None => {
@@ -932,7 +991,14 @@ impl Kernel {
             }
         };
 
-        erased.map(|erased| self.positions.push(term, erased))
+        let erased = erased?;
+        // A position is read for what its term reaches, and a `let`-bound local's name says nothing of what it stands for: the term is recorded by value, with whether a value it names enclosed a group that does not descend — the group was typed where the `let` binds it, not inside this term.
+        let position = self.positions.push(&self.by_value(term), erased);
+        if self.scope.names_partial(term) {
+            self.positions.enclose_partial(position);
+        }
+
+        Some(position)
     }
 
     /// The position recorded at `position`, where there is one, enclosed a group that does not descend.

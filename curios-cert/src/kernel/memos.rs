@@ -278,7 +278,7 @@ impl Memos {
         self.converted.begin_equations();
     }
 
-    /// Discard the typings read off the scope, and nothing else. Called wherever what the enclosing arms established for the call recorder changes: a group typed inside a term closes under it, so a type or a check remembered on one side of that change does not answer on the other. A reduct and a sort read none of it.
+    /// Discard the typings read off the scope, and nothing else. Called wherever what the enclosing arms established for the call recorder changes: a group typed inside a term closes under it, so a type or a check remembered on one side of that change does not answer on the other. A reduct and a sort read none of it. Called too where an arm binds a `let`-bound local again: a typing of a term naming it read what it stood for, and a reduct, a sort and a verdict are keyed by value and name none.
     pub(super) fn begin_sizes(&mut self) {
         self.types.begin_equations();
         self.checked.begin_equations();

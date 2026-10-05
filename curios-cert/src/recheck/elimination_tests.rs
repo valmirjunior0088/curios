@@ -298,6 +298,26 @@ fn a_fold_motive_that_captures_its_scrutinee_is_refused() {
     );
 }
 
+/// The same capture stated through a `let`: `let a = n; match n : (_) => Eq()(a, 0) | …`. The motive spells none of the scrutinee, and the kernel types a `let`'s tail over its binder — so the refusal rests on the elimination reading its scrutinee and its result by value, as a substituted `let` leaves them.
+///
+/// Mutation-checked: with the result read as it is written, the fold is accepted, and `all_zero : (n : Nat) -> Eq()(n, 0)` with it.
+#[test]
+fn a_fold_motive_that_captures_its_scrutinee_through_a_let_is_refused() {
+    let verdicts = fixture_verdicts(
+        &fold_motive(FoldMotive::CapturedThroughLet),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::FoldMotiveCapturesScrutinee(_))),
+        "the kernel typed a fold's hypothesis at the arm's own goal: {verdicts:?}",
+    );
+}
+
 #[test]
 fn a_fold_motive_that_binds_its_scrutinee_types_the_hypothesis_at_the_tail() {
     let verdicts = fixture_verdicts(

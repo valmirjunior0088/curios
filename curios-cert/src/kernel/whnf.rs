@@ -56,6 +56,11 @@ impl Reducer for Kernel {
     }
 
     fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
+        // By value before the table is asked, as [`whnf`] is: its keys are the spellings reduction sees.
+        if !self.reads_by_value() {
+            let term = self.by_value(&term);
+            return self.reading(|kernel| kernel.reduce_forced(term));
+        }
         if let Some(replayed) = self.whnf_hit(&term, true) {
             return Ok(replayed);
         }
@@ -89,7 +94,14 @@ enum Step {
 /// Reduce `term` until its head constructor is stable.
 ///
 /// Guarded by [`recurse`] for the same reason the crate duplicates the strategy at all: the kernel has to accept every term the elaborator produced, on the same thread stack, so a depth it aborts at that the elaborator does not is a term that typechecks and then fails to certify. An intrinsic's operands re-enter through [`reduce_intrinsic`], which is shared, so a deep `add` chain puts one native frame per link on this side exactly as it does on the other.
+///
+/// **Reduction reads by value.** Typing walks a `let`'s tail over its binder, so the term it hands over may name one. Where reduction is entered from outside, the name gives way to what it stands for, once, and everything beneath — the tables' keys, the case equations' probes, the closed machine's gate — meets the spelling a substituted `let` leaves, which is the spelling each was argued over. A remembered reduct therefore never rests on a `let`'s binding, which an arm may replace and no key of these tables carries.
 pub(crate) fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
+    if !kernel.reads_by_value() {
+        let term = kernel.by_value(&term);
+        return kernel.reading(|kernel| whnf(kernel, term));
+    }
+
     // The level itself, charged when it is deeper than any this judgment has reached — see `Spend::enter_level`. What it buys is that depth is bounded by the budget rather than by how much stack the host handed the process, which would otherwise be the one resource this walk consumes without being counted.
     kernel.enter_level()?;
     let reduct = recurse(|| whnf_within(kernel, term));
@@ -286,6 +298,10 @@ pub(crate) fn canonical_operands(kernel: &mut Kernel, term: &Term) -> Result<Ter
 ///
 /// The body is reduced by a nested `whnf`, which remembers it under the body's term for the rest of the declaration, so the next occurrence of the name in this declaration continues from the reduct instead of re-deriving it — and nothing is remembered past the declaration. The nested `whnf` recurses one native frame per link of a definition-reference chain, which is authored depth, not data depth.
 fn step_var(kernel: &mut Kernel, var: Var) -> Result<Step, ReduceError> {
+    debug_assert!(
+        !kernel.binds(var.unwrap()),
+        "a `let`-bound local reached reduction by name"
+    );
     let Some(body) = kernel.value(var.unwrap()).cloned() else {
         return Ok(Step::Stop(Term::var(var)));
     };

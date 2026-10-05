@@ -7,6 +7,7 @@
 use {
     curios_analysis::{could_reduce_to, records_case_equation},
     curios_core::{Bound, Free, Term},
+    std::collections::HashMap,
 };
 
 /// A checkpoint into both stacks, restored together so neither can outlive the arm that opened it.
@@ -45,11 +46,36 @@ enum Reduct {
     Known(Option<Term>),
 }
 
+/// What a `let` bound a local to.
+struct Value {
+    /// The value as the `let` states it, over the binders in scope where it stands — what an arm binds the local again from.
+    written: Term,
+    /// The value by value: every `let`-bound local it names unfolded in turn. What [`Scope::by_value`] puts in the local's place.
+    term: Term,
+    /// Whether checking the value, or a `let`-bound local it names, enclosed a group that does not descend.
+    encloses_partial: bool,
+}
+
+/// A `let`-bound local as an arm reads it, to bind again the ones its solution moves.
+pub(crate) struct LetBound {
+    pub(crate) name: Free,
+    pub(crate) type_: Term,
+    /// What it stands for, as its `let` states it.
+    pub(crate) written: Term,
+    /// What it stands for, by value — which names a variable exactly where a solution for that variable moves it.
+    pub(crate) value: Term,
+    pub(crate) encloses_partial: bool,
+}
+
 /// A binder the walk in progress opened.
 struct Local {
     name: Free,
-    /// What it was opened at. A local has a type and never a value: `let` substitutes rather than binding, so nothing in scope here can be unfolded.
+    /// What it was opened at, by value.
     type_: Term,
+    /// What a `let` bound it to — `None` for a binder that stands for nothing: a parameter, a payload, a member under check. Typing walks a `let`'s tail over such a local; whatever reads a term for more than its type reads this in its place ([`Scope::by_value`]).
+    value: Option<Value>,
+    /// Where the binder of the same name this one shadows sits, for [`Scope::retract`] to put back.
+    shadowed: Option<usize>,
     /// `type_` as the conversion history keys it, with every binder opened before it renamed to its position — or `None` for a type with loose indices, whose renaming depends on how many binders stand beside it and is taken at each key instead. See [`Scope::history_context`].
     keyed: Option<Term>,
     /// Which opening this is, counted over the whole walk — what a [`Prefix`] names.
@@ -60,6 +86,10 @@ struct Local {
 pub(super) struct Scope {
     /// Binders opened by the walk in progress, outermost first.
     locals: Vec<Local>,
+    /// Where each name's innermost binder sits in `locals`. A `let` is a binder, so a chain of them is as deep a scope as it is long, and a lookup that scanned for its name would cost the chain at every variable.
+    innermost: HashMap<Free, usize>,
+    /// How many of the binders in scope a `let` bound.
+    bound: usize,
     /// The case equations of the arms currently being checked, innermost last: within an arm, the scrutinee expression *is* the case's value, definitionally — the built-in face of the convoy pattern, which is how the elaborator's refinement store reads inside an arm. The reducer consults these at stuck heads.
     refinements: Vec<Refinement>,
     /// How many equations are currently in force, when that is fewer than there are. `Some(n)` withholds everything from `n` inwards for the duration of one [`Scope::unasked_refinement`] settlement — see [`Scope::hide_refinements_from`].
@@ -69,9 +99,31 @@ pub(super) struct Scope {
 }
 
 impl Scope {
-    /// Open a binder: bring `name : type_` into scope for the walk in progress, answering whether that re-types a binder already in scope — an arm re-assumes a local at its specialized type, and the shadow is what a lookup finds for as long as the arm stands, which changes what a term naming it is typed at.
+    /// Open a binder that stands for nothing: bring `name : type_` into scope for the walk in progress, answering whether that re-types a binder already in scope — an arm re-assumes a local at its specialized type, and the shadow is what a lookup finds for as long as the arm stands, which changes what a term naming it is typed at.
     pub(super) fn assume(&mut self, name: &Free, type_: &Term) -> bool {
-        let retyped = self.locals.iter().any(|local| local.name == *name);
+        self.open(name, type_, None)
+    }
+
+    /// Open a `let`'s binder: bring `name : type_` into scope standing for `value`, which the caller has checked at `type_` where the `let` stands — `encloses_partial` saying that check enclosed a group that does not descend. Answers as [`Scope::assume`] does, an arm binding a local again at the value its solution gives it.
+    pub(super) fn bind(
+        &mut self,
+        name: &Free,
+        type_: &Term,
+        value: &Term,
+        encloses_partial: bool,
+    ) -> bool {
+        let value = Value {
+            encloses_partial: encloses_partial || self.names_partial(value),
+            term: self.by_value(value),
+            written: value.clone(),
+        };
+
+        self.open(name, type_, Some(value))
+    }
+
+    /// The type is held by value, so everything that reads a local's type — a variable's typing, the arm rule's re-typing, the conversion history's key — reads the type it reads where a `let` is substituted.
+    fn open(&mut self, name: &Free, type_: &Term, value: Option<Value>) -> bool {
+        let type_ = self.by_value(type_);
         let keyed = (type_.reach() == 0).then(|| {
             let opened = self
                 .locals
@@ -80,15 +132,73 @@ impl Scope {
                 .collect::<Vec<_>>();
             type_.capture(&opened)
         });
+        let shadowed = self.innermost.insert(*name, self.locals.len());
         self.openings += 1;
+        self.bound += usize::from(value.is_some());
         self.locals.push(Local {
             name: *name,
-            type_: type_.clone(),
+            type_,
+            value,
+            shadowed,
             keyed,
             opening: self.openings,
         });
 
-        retyped
+        shadowed.is_some()
+    }
+
+    /// The innermost binder called `name`.
+    fn local(&self, name: &Free) -> Option<&Local> {
+        self.innermost.get(name).map(|&at| &self.locals[at])
+    }
+
+    /// `term` by value: every `let`-bound local it names replaced by what the local stands for, itself by value. This is the term a `let` substituted into its tail leaves in `term`'s place, and it is what every reader of a spelling is handed — reduction and conversion, an elimination's scrutinee and result, an arm's equation, a recorded position, a graded call. Typing alone walks a tail by name, which is what types each value once.
+    pub(super) fn by_value(&self, term: &Term) -> Term {
+        if self.bound == 0 || !term.has_local_free() {
+            return term.clone();
+        }
+        let values = term
+            .free_vars_shared()
+            .iter()
+            .filter_map(|name| Some((*name, self.local(name)?.value.as_ref()?.term.clone())))
+            .collect::<Vec<_>>();
+
+        term.substitute(&values)
+    }
+
+    /// Whether `name` is a local a `let` bound.
+    pub(super) fn binds(&self, name: &Free) -> bool {
+        self.local(name).is_some_and(|local| local.value.is_some())
+    }
+
+    /// Whether `term` names a `let`-bound local whose value enclosed a group that does not descend.
+    pub(super) fn names_partial(&self, term: &Term) -> bool {
+        self.bound != 0
+            && term.has_local_free()
+            && term.free_vars_shared().iter().any(|name| {
+                self.local(name)
+                    .and_then(|local| local.value.as_ref())
+                    .is_some_and(|value| value.encloses_partial)
+            })
+    }
+
+    /// The `let`-bound locals in scope, outermost first. A name bound twice is reported once, at its innermost binding.
+    pub(super) fn bound_locals(&self) -> Vec<LetBound> {
+        self.locals
+            .iter()
+            .enumerate()
+            .filter(|(at, local)| self.innermost.get(&local.name) == Some(at))
+            .filter_map(|(_, local)| {
+                let value = local.value.as_ref()?;
+                Some(LetBound {
+                    name: local.name,
+                    type_: local.type_.clone(),
+                    written: value.written.clone(),
+                    value: value.term.clone(),
+                    encloses_partial: value.encloses_partial,
+                })
+            })
+            .collect()
     }
 
     /// The binders in scope now, for [`Scope::stands`] to be asked about later.
@@ -230,13 +340,9 @@ impl Scope {
 
     /// The type `name` was opened at, if it is a binder currently in scope.
     ///
-    /// Innermost first — which cannot actually matter, since binder identities are minted unique, but scanning in that order means the rule does not depend on that being true.
+    /// The innermost binder of the name: an arm opens a local again at its specialized type, and that is the one a lookup finds while the arm stands.
     pub(super) fn local_type(&self, name: &Free) -> Option<&Term> {
-        self.locals
-            .iter()
-            .rev()
-            .find(|local| local.name == *name)
-            .map(|local| &local.type_)
+        self.local(name).map(|local| &local.type_)
     }
 
     /// The current depth of both stacks, to be handed back to [`Scope::retract`].
@@ -256,7 +362,14 @@ impl Scope {
             "a scope retracted while an equation's reduced spelling was being settled"
         );
 
-        self.locals.truncate(mark.locals);
+        // Innermost first, so a name opened twice inside the bracket ends at the binder that stood before it.
+        for local in self.locals.drain(mark.locals..).rev() {
+            self.bound -= usize::from(local.value.is_some());
+            match local.shadowed {
+                Some(at) => self.innermost.insert(local.name, at),
+                None => self.innermost.remove(&local.name),
+            };
+        }
         let dropped = self.refinements.len() > mark.refinements;
         self.refinements.truncate(mark.refinements);
         dropped

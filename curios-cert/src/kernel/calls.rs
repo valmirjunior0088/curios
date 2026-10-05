@@ -191,10 +191,15 @@ impl Kernel {
             return Ok(());
         };
         let arity = self.calls.frames[frame].arities[callee];
+        // A call is graded on what it passes, and a `let`-bound local passes what it stands for.
+        let arguments = arguments
+            .iter()
+            .map(|argument| self.by_value(argument))
+            .collect::<Vec<_>>();
 
         // Taken out for the grading and put back: the grader reads the context while reducing through this kernel, and nothing it reduces opens an arm.
         let context = std::mem::take(&mut self.calls.context);
-        let call = grade(self, &context, caller, &params, callee, arity, arguments);
+        let call = grade(self, &context, caller, &params, callee, arity, &arguments);
         self.calls.context = context;
         self.calls.frames[frame].calls.push(call?);
         Ok(())
