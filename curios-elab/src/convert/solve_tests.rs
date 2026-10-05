@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_core::{
-        Atom, Free, InductDecl, InductParam, Intrinsic, MetavarId, MetavarOrigin, Nat, Subterm,
-        Telescope, Term, UniverseContext,
+        Atom, Free, InductDecl, InductParam, Intrinsic, Level, MetavarId, MetavarOrigin, Nat,
+        Subterm, Telescope, Term, UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -115,6 +115,55 @@ fn revalidation_admits_checkable_but_not_inferable_candidate() {
     let pair = Term::tuple([nat(1), nat(2)]);
     assert_eq!(conv(&mut context, &Term::hole(0), &pair), Ok(true));
     assert_eq!(context.metavar_solution(MetavarId(0)), Some(&pair));
+}
+
+// What is committed is the term the check rebuilt. A lambda annotated below the domain it is solved at checks, its annotation against that domain by subsumption, and is committed at the domain, which is the annotation the kernel requires of it; committed as it came, it is a solution the elaborator accepts and the kernel refuses. The same holds of a lambda beneath a tuple, which the check reaches through the tuple's field type.
+#[test]
+fn a_candidate_is_committed_as_its_check_rebuilt_it() {
+    let mut context = context();
+    let carrier = context.fresh(Some("T"));
+    let field = context.fresh(Some("f"));
+    let sort = |level: u32| Term::type_at(Level::constant(level));
+    let identity = |level: u32| Term::func([(carrier, sort(level))], Term::free_var(&carrier));
+    let family = Term::func_type([(carrier, sort(1))], sort(1));
+    let annotation = |term: &Term| {
+        let Subterm::Func(func) = &**term else {
+            panic!("not a lambda: {term}");
+        };
+        func.telescope
+            .cursor()
+            .entry()
+            .expect("a lambda binds a parameter")
+            .1
+    };
+
+    // ?0 : (Type 1) -> Type 1, against the identity annotated at Type 0.
+    context.birth_metavar(MetavarId(0), Vec::new(), family.clone());
+    assert_eq!(conv(&mut context, &Term::hole(0), &identity(0)), Ok(true));
+    let solution = context
+        .metavar_solution(MetavarId(0))
+        .cloned()
+        .expect("the candidate checks");
+    assert_eq!(annotation(&solution), sort(1));
+
+    // ?1 : {f: (Type 1) -> Type 1}, against a tuple holding that identity.
+    context.birth_metavar(
+        MetavarId(1),
+        Vec::new(),
+        Term::tuple_type([(field, family)]),
+    );
+    assert_eq!(
+        conv(&mut context, &Term::hole(1), &Term::tuple([identity(0)])),
+        Ok(true)
+    );
+    let solution = context
+        .metavar_solution(MetavarId(1))
+        .cloned()
+        .expect("the candidate checks");
+    let Subterm::Tuple(tuple) = &*solution else {
+        panic!("not a tuple: {solution}");
+    };
+    assert_eq!(annotation(&tuple.fields[0]), sort(1));
 }
 
 #[test]

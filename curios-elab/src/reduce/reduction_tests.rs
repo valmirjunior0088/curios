@@ -5,10 +5,12 @@ use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Apply, Bound, Exhaustion, Free, Intrinsic, Level, MetavarId, MetavarOrigin, Nat,
-        ReduceError, Subterm, Term, UniverseContext, UniverseMetaId, UniverseParam,
+        Apply, Bound, Exhaustion, Free, InductDecl, Intrinsic, Level, MetavarId, MetavarOrigin,
+        Nat, ReduceError, Subterm, Telescope, Term, UniverseContext, UniverseMetaId, UniverseParam,
+        Variance,
     },
     curios_num::{Binary, Floating, Grain, Integer, Rounding},
+    curios_utilities::Qualifier,
 };
 
 #[test]
@@ -804,6 +806,54 @@ fn scrutinee_refinement_does_not_fire_at_another_ground_universe_instance() {
     let canonical = canonical_scrutinee(&mut context, &registered).unwrap();
     context.refine_scrutinee_spellings(vec![(canonical, registered, false)], &nat(1));
 
+    assert_eq!(reduce(&mut context, probe.clone()), Ok(probe));
+}
+
+/// [`scrutinee_refinement_does_not_fire_at_another_ground_universe_instance`] with the level on a nominal node whose family is irrelevant in it. Conversion calls `Wrap.{0}(Nat)` and `Wrap.{1}(Nat)` one type, and the guard still keeps the two spellings apart: it reads no family's variance, because the kernel's key is the scrutinee compared with every level, and an equation fired here would be one the kernel does not fire.
+///
+/// Mutation-checked against a guard handed the context's registries, under which the two spellings stop clashing and the arm's value answers the probe.
+#[test]
+fn scrutinee_refinement_does_not_fire_at_another_instance_of_an_irrelevant_level() {
+    let mut context = context();
+    let classify = context.fresh(Some("classify"));
+    let carrier = context.fresh(Some("A"));
+    let sort = Term::type_at(Level::param(UniverseParam(0)));
+    context
+        .register_induct(
+            &nominal("Wrap"),
+            InductDecl {
+                universe_context: UniverseContext {
+                    parameter_count: 1,
+                    constraints: Vec::new(),
+                },
+                arity: Telescope::build([(carrier, sort.clone())], Telescope::done(())),
+                constructors: Vec::new(),
+                result_sort: sort,
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: vec![Variance::Irrelevant],
+                plicities: Vec::new(),
+            },
+        )
+        .unwrap();
+    let at = |level: Level| {
+        Term::apply(
+            Term::free_var(&classify),
+            [Term::induct_type_at(
+                nominal("Wrap"),
+                [level],
+                [Term::intrinsic(Intrinsic::NatType)],
+                Vec::<Term>::new(),
+            )],
+        )
+    };
+    let registered = at(Level::zero());
+    let probe = at(Level::constant(1));
+    let canonical = canonical_scrutinee(&mut context, &registered).unwrap();
+    context.refine_scrutinee_spellings(vec![(canonical, registered.clone(), false)], &nat(1));
+
+    assert_eq!(reduce(&mut context, registered), Ok(nat(1)));
     assert_eq!(reduce(&mut context, probe.clone()), Ok(probe));
 }
 

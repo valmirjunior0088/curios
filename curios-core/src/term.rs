@@ -8,6 +8,8 @@ mod sharing_tests;
 mod test_support;
 #[cfg(test)]
 mod traversal_tests;
+#[cfg(test)]
+mod variance_tests;
 
 // Deliberately not re-exported: the caches are [`Node`]'s private business.
 mod scalars;
@@ -24,9 +26,10 @@ pub use subterm::*;
 
 use {
     super::{
-        Atom, Bound, Enter, Free, Global, Intrinsic, Level, LevelHead, Many, MaskedLevels, Scope,
-        SelfReference, Spelled, Spelling, Telescope, Three, Two, UniverseMetaId, Var, Visit,
-        print_term, project_erased_universes, stamp_declaration_instance, universe_metas,
+        Atom, Bound, Enter, Families, Free, Global, Intrinsic, Level, LevelHead, Many,
+        MaskedLevels, Scope, SelfReference, Spelled, Spelling, Telescope, Three, Two,
+        UniverseMetaId, Var, Variance, Visit, print_term, project_erased_universes,
+        stamp_declaration_instance, universe_metas,
     },
     curios_abi::ForeignFunction,
     curios_num::{Grain, Natural},
@@ -1499,11 +1502,14 @@ impl Term {
     /// **Aligned by correspondence, not by position in two vectors.** Each pair of levels is taken from one pair of corresponding nodes, so the alignment holds whatever sharing either side has. Two stripped vectors agree only when both sides are walked as trees; a walk that skipped repeated nodes would record a side's shared subterm once and the other's unshared copies twice, and zip unrelated levels together.
     ///
     /// A ground `Type 0` is a level position like any other, so `(Type 0, Type u)` against `(Type u, Type 0)` differs in two pairs rather than aligning `u` with itself. A pair is reported once however many paths reach it, which is all its readers need: each asks whether every pair can be identified, never how many times one occurs.
+    ///
+    /// **A level a family is irrelevant in is not a difference.** `families` is the caller's reading of the nominal families, and under it the pair at each position a family's vector calls irrelevant is set apart ([`LevelDifferences::irrelevant`]), at a nominal node, at the family's name applied in full, and at an `induct`'s former applied in full by its group's projection: two instances apart in such a level alone are one type, so there is nothing to identify. A bare or partly applied former keeps every pair. Under `()` nothing is set apart and no former is read as its node.
     pub fn level_differences(
         &self,
         other: &Term,
         mut is_wildcard: impl FnMut(&Term) -> bool,
-    ) -> Option<Vec<(usize, Level, Level)>> {
+        families: &impl Families,
+    ) -> Option<LevelDifferences> {
         let mut visit = Visit::masking_levels(|_, _| None, Term::from(Subterm::Prop));
         let mut mask = |subterm: &Subterm| {
             let masked = subterm.traverse(&mut visit);
@@ -1511,7 +1517,7 @@ impl Term {
             (masked, children, levels)
         };
 
-        let mut differences = Vec::new();
+        let mut differences = LevelDifferences::default();
         let mut work = vec![(0, self.clone(), other.clone())];
         let mut entered: HashSet<(*const Node, *const Node, usize)> = HashSet::new();
 
@@ -1526,6 +1532,50 @@ impl Term {
                 continue;
             }
 
+            // A former applied in full by its group's projection is read as the node it builds: the two instantiated groups differ in their binders' annotations as well, which no instance holds.
+            if families.reads_formers()
+                && let (Some(this_node), Some(that_node)) =
+                    (this.applied_former(), that.applied_former())
+            {
+                work.push((depth, this_node, that_node));
+                continue;
+            }
+
+            // A family's name applied in full: its instance's levels at the invariant positions, then its arguments.
+            if let (Some(this_applied), Some(that_applied)) =
+                (Applied::of(&this, families), Applied::of(&that, families))
+            {
+                if this_applied.name != that_applied.name
+                    || this_applied.levels.len() != that_applied.levels.len()
+                    || this_applied.arguments.len() != that_applied.arguments.len()
+                {
+                    return None;
+                }
+                for (position, (this_level, that_level)) in this_applied
+                    .levels
+                    .iter()
+                    .zip(that_applied.levels)
+                    .enumerate()
+                {
+                    if this_level != that_level {
+                        let pair = (depth, this_level.clone(), that_level.clone());
+                        match families.variance(this_applied.name, position) {
+                            Variance::Invariant => differences.compared.push(pair),
+                            Variance::Irrelevant => differences.irrelevant.push(pair),
+                        }
+                    }
+                }
+                work.extend(
+                    this_applied
+                        .arguments
+                        .into_iter()
+                        .zip(that_applied.arguments)
+                        .rev()
+                        .map(|(this, that)| (depth, this.clone(), that.clone())),
+                );
+                continue;
+            }
+
             let (this_masked, this_children, this_levels) = mask(this.look());
             let (that_masked, that_children, that_levels) = mask(that.look());
             if this_masked != that_masked
@@ -1535,9 +1585,19 @@ impl Term {
                 return None;
             }
 
-            for ((below, this_level), (_, that_level)) in this_levels.into_iter().zip(that_levels) {
+            // A nominal node's own levels are its `universes`, in order, so a position there is a universe parameter.
+            let family = this.look().nominal_name();
+            for (position, ((below, this_level), (_, that_level))) in
+                this_levels.into_iter().zip(that_levels).enumerate()
+            {
+                let irrelevant = family
+                    .is_some_and(|name| families.variance(name, position) == Variance::Irrelevant);
                 if this_level != that_level {
-                    differences.push((depth + below, this_level, that_level));
+                    let pair = (depth + below, this_level, that_level);
+                    match irrelevant {
+                        false => differences.compared.push(pair),
+                        true => differences.irrelevant.push(pair),
+                    }
                 }
             }
             // Reversed onto the stack, so the first child is the next node taken: pre-order, so "the first decisive pair" is the first in reading order.
@@ -1551,6 +1611,120 @@ impl Term {
         }
 
         Some(differences)
+    }
+
+    /// The family and the instance, where this term is that family's name applied in full: the one spelling of a nominal type a caller can meet before any reduction.
+    pub fn applied_family(&self, families: &impl Families) -> Option<(&Global, &[Level])> {
+        Applied::of(self, families).map(|applied| (applied.name, applied.levels))
+    }
+
+    /// The nominal node this application is, where it applies an `induct`'s former in full by its group's projection: the spelling an instance of the family's name reduces to.
+    ///
+    /// Reduction hands an instance of a name whose value is a projection the group with its levels substituted in, so two such heads differ in the group's binder annotations as well as in the node its member's body builds. That body is lambdas over the node, `(E, A) => Result(E, A)` or `(F) => (D) => Fam(F)(D)`, so opening each telescope at the spine it was applied to is the node, with no reduction to run. The closed body is read for that shape first: opening a member substitutes the whole group into it, which is not worth paying for a recursive function.
+    pub fn applied_former(&self) -> Option<Term> {
+        let mut spines = Vec::new();
+        let mut head = self;
+        while let Subterm::Apply(apply) = head.look() {
+            spines.push(apply.params().collect::<Vec<_>>());
+            head = &apply.head;
+        }
+        let (group, index) = head.look().as_rec_proj()?;
+        if spines.is_empty() {
+            return None;
+        }
+        spines.reverse();
+
+        let mut peeked = group.iter().nth(index)?.body.body();
+        for spine in &spines {
+            let Subterm::Func(Func { telescope, .. }) = peeked.look() else {
+                return None;
+            };
+            if telescope.len() != spine.len() {
+                return None;
+            }
+            peeked = telescope.terminal();
+        }
+        if !matches!(peeked.look(), Subterm::InductType(_)) {
+            return None;
+        }
+
+        let mut opened = group.member_body(index);
+        for spine in &spines {
+            let Subterm::Func(Func { telescope, .. }) = opened.look() else {
+                return None;
+            };
+            opened = telescope.open(spine);
+        }
+
+        Some(opened)
+    }
+}
+
+/// The level pairs two terms that differ in nothing else differ in, each with its universe-binder depth, in traversal order: what [`Term::level_differences`] answers.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LevelDifferences {
+    /// The pairs at positions whose levels are part of the term: two terms are one only where every one of these is one level.
+    pub compared: Vec<(usize, Level, Level)>,
+    /// The pairs at positions a nominal family is irrelevant in, under the reading the walk was handed. They are no difference between the two terms; a caller that would rather hold one instance than two may still join them.
+    pub irrelevant: Vec<(usize, Level, Level)>,
+}
+
+/// A family's name applied in full, as conversion's raw spellings hold it: the name, the instance's levels, and the arguments, parameters then indices.
+///
+/// One spine supplies the parameters of a family with no index, or the indices of one with no parameter; a family with both is applied in two, `Fam.{u,v,w}(F)(N(F))`. A bare name is in full only for a family that takes neither. Anything short of that, a former passed as a family or one applied to its parameters and waiting for an index, is not this, and its levels are aligned every one.
+struct Applied<'a> {
+    name: &'a Global,
+    levels: &'a [Level],
+    arguments: Vec<&'a Term>,
+}
+
+impl<'a> Applied<'a> {
+    fn of(term: &'a Term, families: &impl Families) -> Option<Self> {
+        fn named(head: &Term) -> Option<(&Global, &[Level])> {
+            let Subterm::Instance(Instance {
+                head: InstanceHead::Var(var),
+                levels,
+            }) = head.look()
+            else {
+                return None;
+            };
+
+            Some((var.as_free()?.as_global()?, levels.as_slice()))
+        }
+
+        if let Some((name, levels)) = named(term) {
+            return (families.shape(name)? == (0, 0)).then_some(Self {
+                name,
+                levels,
+                arguments: Vec::new(),
+            });
+        }
+        let Subterm::Apply(outer) = term.look() else {
+            return None;
+        };
+        if let Some((name, levels)) = named(&outer.head) {
+            let supplied = outer.arguments.len();
+            let shape = families.shape(name)?;
+
+            return (shape == (supplied, 0) || shape == (0, supplied)).then(|| Self {
+                name,
+                levels,
+                arguments: outer.params().collect(),
+            });
+        }
+        let Subterm::Apply(inner) = outer.head.look() else {
+            return None;
+        };
+        let (name, levels) = named(&inner.head)?;
+        let (params, indices) = families.shape(name)?;
+
+        (indices > 0 && inner.arguments.len() == params && outer.arguments.len() == indices).then(
+            || Self {
+                name,
+                levels,
+                arguments: inner.params().chain(outer.params()).collect(),
+            },
+        )
     }
 }
 

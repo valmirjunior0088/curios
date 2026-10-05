@@ -1,6 +1,11 @@
 //! `!` sequencing through a user monad witness, including a two-parameter region.
 
-use crate::tests::{run, typecheck};
+use {
+    crate::tests::run,
+    curios_core::Zonked,
+    curios_pipeline::{DEFAULT_STEP_BUDGET, recheck_with_prelude, typecheck_with_prelude},
+    curios_text::{Entrypoint, RootSource},
+};
 
 // The List witness: bind is concat-map.
 #[test]
@@ -175,10 +180,16 @@ const TRY: Region = Region {
     bind: "Try/bind",
 };
 
-const REGIONS: [&Region; 5] = [&RESULT, &OPTION, &STATE, &IO, &TRY];
+// `Try` over `Io` written as a lambda: the same monad with no bare former in it.
+const TRY_LAMBDA: Region = Region {
+    uses: "Str, Nat, Bool, Io, Try, Monad",
+    small: "Try((A: Type) => Io(A), Str, Nat)",
+    large: "Try((A: Type) => Io(A), Str, Type)",
+    pure: "Try/pure",
+    bind: "Try/bind",
+};
 
-// The regions whose monad is an instance of an `induct` or a `struct`; `Io` unfolds, and its level goes with it.
-const NOMINAL: [&Region; 4] = [&RESULT, &OPTION, &STATE, &TRY];
+const REGIONS: [&Region; 5] = [&RESULT, &OPTION, &STATE, &IO, &TRY];
 
 // How a cell sequences its action: `!`, `Monad/bind` written out, or the monad's own function, which names no witness.
 #[derive(Clone, Copy)]
@@ -244,6 +255,13 @@ impl Region {
         ))
     }
 
+    // A region one level above a large action. `large`'s instance is decided, where `small`'s over a bare base monad is its caller's, so this is the cell in which two decided instances meet.
+    fn huge(&self, spelling: Spelling) -> String {
+        let body = self.sequenced(spelling, "large(n)", &format!("{}(Type)", self.pure));
+
+        self.program(&format!("pub let huge(n: Nat) -> {} = {body};", self.large))
+    }
+
     // `one` set beside a region at its own level by a caller.
     fn pick(&self, spelling: Spelling) -> String {
         let one = self.one_declaration(spelling);
@@ -259,27 +277,51 @@ impl Region {
 
 const BELOW_ITSELF: &str = "strictly below itself";
 
+// What the two checkers say of a cell, asked without erasing or emitting it: the elaborator's refusal as a compilation prints it, or what the kernel refuses of the program the elaborator built. A cell is about its levels, which both have judged by then, and compiled whole the matrix costs a minute a test.
+fn judged(source: &str) -> Result<Vec<String>, String> {
+    let entrypoint = source.parse::<Entrypoint>().expect("the cell parses");
+    let checked = typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+        .map_err(|refused| refused.to_string())?;
+    assert!(
+        checked.obligations.is_empty(),
+        "a cell raises an erasure obligation: {source}"
+    );
+    let program = Zonked::project(&checked.program).expect("an elaborated program is zonked");
+
+    Ok(recheck_with_prelude(&program, DEFAULT_STEP_BUDGET)
+        .iter()
+        .map(|verdict| format!("{verdict:?}"))
+        .collect())
+}
+
 fn accepted(source: &str) {
-    if let Err(message) = typecheck(source) {
-        panic!("refused: {source}\n{message}");
+    match judged(source) {
+        Ok(verdicts) => assert!(
+            verdicts.is_empty(),
+            "the kernel refuses: {source}\n{verdicts:?}"
+        ),
+        Err(message) => panic!("refused: {source}\n{message}"),
     }
 }
 
 fn refused(source: &str, report: &str) {
-    match typecheck(source) {
-        Ok(()) => panic!("accepted: {source}"),
+    match judged(source) {
+        Ok(_) => panic!("accepted: {source}"),
         Err(message) => assert!(message.contains(report), "got: {message}\nfor: {source}"),
     }
 }
 
-// `!` holds its region at the level of the action it binds: a region's monad is one nominal instance, and both checkers compare a nominal type's universe levels for equality. The monad's own function names no witness and instantiates each side apart.
+// A region's monad is one nominal instance and its action's another, apart in a level that only types a payload. Both checkers call the two one type, so `!` sequences the action whatever level its payload sits at.
 #[test]
-fn a_bang_holds_its_region_at_a_lower_nominal_actions_level() {
-    for region in NOMINAL {
-        refused(&region.big(Spelling::Bang), BELOW_ITSELF);
+fn a_bang_sequences_an_action_below_its_region() {
+    for region in REGIONS {
+        accepted(&region.big(Spelling::Bang));
     }
-    accepted(&IO.big(Spelling::Bang));
+}
 
+// The control: a monad's own function names no witness and instantiates each side apart.
+#[test]
+fn a_monads_own_bind_sequences_an_action_below_its_region() {
     for region in REGIONS {
         accepted(&region.big(Spelling::Own));
     }
@@ -300,13 +342,12 @@ fn a_monads_own_bind_takes_an_action_above_its_region() {
     }
 }
 
-// Written out, `Monad/bind` infers its monad from the action, and a nominal action's levels are then the region's, so a larger region does not fit.
+// Written out, `Monad/bind` infers its monad from the action. The family it imitates is an occurrence of its own, so the monad is not held to the action's level.
 #[test]
-fn a_written_bind_holds_its_region_at_a_nominal_actions_level() {
-    for region in NOMINAL {
-        refused(&region.big(Spelling::Written), BELOW_ITSELF);
+fn a_written_bind_sequences_an_action_below_its_region() {
+    for region in REGIONS {
+        accepted(&region.big(Spelling::Written));
     }
-    accepted(&IO.big(Spelling::Written));
 }
 
 #[test]
@@ -317,16 +358,15 @@ fn a_written_bind_takes_an_action_above_its_region() {
 }
 
 #[test]
-fn a_nominal_region_binding_actions_at_two_levels_is_refused() {
-    for region in NOMINAL {
-        refused(&region.both(), BELOW_ITSELF);
+fn a_region_binds_actions_at_two_levels() {
+    for region in REGIONS {
+        accepted(&region.both());
     }
-    accepted(&IO.both());
 }
 
-// The refusal needs no `!`: a family applied at two payloads holds its nominal instances to one level.
+// It needs no `!`: a family applied at two payloads takes a nominal instance at each.
 #[test]
-fn a_family_at_two_payloads_holds_its_nominal_instances_to_one_level() {
+fn a_family_takes_nominal_instances_at_two_payloads() {
     let through = r#"
         use /std/{Str, Nat, Result};
         let small(n: Nat) -> Result(Str, Nat) = Result/success(n);
@@ -335,17 +375,21 @@ fn a_family_at_two_payloads_holds_its_nominal_instances_to_one_level() {
         /std/print("bound")
         "#;
 
-    refused(through, BELOW_ITSELF);
+    accepted(through);
 }
 
-// A nominal region accepted below its action carries the action's level in its signature, so a caller setting it beside a region at its own level is refused.
+// A region accepted below its action is one type with a region at its own level, whatever level its signature carries, so a caller sets the two beside each other.
 #[test]
-fn a_region_raised_to_its_actions_level_is_refused_beside_one_at_its_own() {
-    for spelling in [Spelling::Bang, Spelling::Written] {
-        for region in NOMINAL {
-            refused(&region.pick(spelling), BELOW_ITSELF);
-        }
-        accepted(&IO.pick(spelling));
+fn a_region_bound_with_bang_below_its_action_sits_beside_one_at_its_own_level() {
+    for region in REGIONS {
+        accepted(&region.pick(Spelling::Bang));
+    }
+}
+
+#[test]
+fn a_region_bound_by_a_written_bind_below_its_action_sits_beside_one_at_its_own_level() {
+    for region in REGIONS {
+        accepted(&region.pick(Spelling::Written));
     }
 }
 
@@ -366,4 +410,33 @@ fn a_transformers_own_bind_takes_a_larger_region_over_a_bare_base_monad() {
     for base in ["Io", "Option", "(A: Type) => Io(A)"] {
         accepted(&over(base));
     }
+}
+
+// One level up the action's instance is decided, and so is the region's: two constants no equation could join, where `small`'s level over a bare base monad is its caller's to choose.
+#[test]
+fn a_bang_sequences_a_decided_action_below_its_region() {
+    for region in [&RESULT, &OPTION, &STATE, &IO, &TRY_LAMBDA] {
+        accepted(&region.huge(Spelling::Bang));
+    }
+}
+
+// Over `Try` the base monad is an implicit that unification solves from the action. It is committed as its check rebuilt it, at the domain `Try/bind` takes it at, so the kernel is handed the same monad whichever side solved it.
+#[test]
+fn a_monads_own_bind_sequences_a_decided_action_below_its_region() {
+    for region in [&RESULT, &OPTION, &STATE, &TRY, &TRY_LAMBDA] {
+        accepted(&region.huge(Spelling::Own));
+    }
+}
+
+#[test]
+fn a_written_bind_sequences_a_decided_action_below_its_region() {
+    for region in [&RESULT, &OPTION, &STATE, &TRY, &TRY_LAMBDA] {
+        accepted(&region.huge(Spelling::Written));
+    }
+}
+
+// A bare `Io` is no nominal instance: its level is compared, and the levels-only shortcut commits the region's to the action's before either is unfolded. The refusal is the one the roadmap's *A universe level settled before its evidence is in* owns, reached through `Try`; the same region bound by `Try/bind` or by `Monad/bind` written out is accepted above.
+#[test]
+fn a_bang_over_a_bare_base_monad_holds_its_region_at_a_decided_actions_level() {
+    refused(&TRY.huge(Spelling::Bang), BELOW_ITSELF);
 }

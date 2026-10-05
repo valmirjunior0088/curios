@@ -3,7 +3,10 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_core::{InductDecl, Intrinsic, MetavarId, StructDecl, Telescope, Term, UniverseContext},
+    curios_core::{
+        InductDecl, Intrinsic, Level, MetavarId, StructDecl, Telescope, Term, UniverseContext,
+        UniverseParam, Variance,
+    },
     curios_utilities::Qualifier,
 };
 
@@ -49,6 +52,31 @@ fn register_vec(context: &mut Context) {
                 rep_public: true,
                 polarities: Vec::new(),
                 variances: Vec::new(),
+                plicities: Vec::new(),
+            },
+        )
+        .unwrap();
+}
+
+/// Register `induct Wrap.{u}(A: Type u): Type u`, carrying `variance` for its one level.
+fn register_wrap(context: &mut Context, variance: Variance) {
+    let elem = context.fresh(Some("A"));
+    let sort = Term::type_at(Level::param(UniverseParam(0)));
+    context
+        .register_induct(
+            &nominal("Wrap"),
+            InductDecl {
+                universe_context: UniverseContext {
+                    parameter_count: 1,
+                    constraints: Vec::new(),
+                },
+                arity: Telescope::build([(elem, sort.clone())], Telescope::done(())),
+                constructors: Vec::new(),
+                result_sort: sort,
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: vec![variance],
                 plicities: Vec::new(),
             },
         )
@@ -246,4 +274,32 @@ fn solves_flex_apply_against_intrinsic_former() {
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
     assert_eq!(context.metavar_solution(MetavarId(1)), Some(&nat_type()));
+}
+
+// An imitated family is a fresh occurrence of it, paired with the rigid side's as two instances are. `?0 : (Type 1) -> Type 1` against `Wrap.{0}(Nat)`: the candidate `(A) => Wrap.{l}(A)` needs `l` at 1 for its binder. Where `Wrap` is irrelevant in the level, the pair with the rigid side's zero is only recorded, so the candidate fits and the declaration closes; where it is invariant the pair is an equation and the declaration is refused. Built at the rigid side's own instance, the candidate is refused in both.
+#[test]
+fn an_imitated_family_takes_an_instance_of_its_own() {
+    for (variance, refused) in [(Variance::Irrelevant, false), (Variance::Invariant, true)] {
+        let mut context = context();
+        register_wrap(&mut context, variance);
+        let large = Term::type_at(Level::constant(1));
+        let kind = Term::func_type([(context.fresh(Some("A")), large.clone())], large.clone());
+        context.birth_metavar(MetavarId(0), Vec::new(), kind);
+        context.birth_metavar(MetavarId(1), Vec::new(), large);
+
+        let flex = Term::apply(Term::hole(0), [Term::hole(1)]);
+        let rigid = Term::induct_type_at(
+            nominal("Wrap"),
+            [Level::zero()],
+            [nat_type()],
+            Vec::<Term>::new(),
+        );
+        assert_eq!(conv(&mut context, &flex, &rigid), Ok(true), "{variance:?}");
+        assert!(context.metavar_solution(MetavarId(0)).is_some());
+        assert_eq!(
+            context.universes_mut().finalize([], [], []).is_err(),
+            refused,
+            "{variance:?}"
+        );
+    }
 }

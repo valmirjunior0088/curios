@@ -7,6 +7,8 @@ use constraints::*;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod weak_tests;
 
 use {
     curios_core::{
@@ -23,6 +25,7 @@ pub struct UniverseMark {
     constraints: StoreScope,
     solution_log_len: usize,
     floor_log_len: usize,
+    weak_len: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +33,8 @@ pub(crate) struct UniverseStateToken {
     next_meta: usize,
     constraints: StoreMark,
     solution_log_len: usize,
+    /// A weak equation is a write like any other to whoever asks whether the solver moved: it changes where the declaration's levels settle, so an elaboration that recorded one is not a pure function of its inputs.
+    weak_len: usize,
 }
 #[derive(Debug, Clone)]
 struct UniverseMeta {
@@ -438,6 +443,8 @@ pub struct UniverseSolver {
     floor_log: Vec<UniverseMetaId>,
     next_meta: usize,
     consistency: Option<ConsistencyCache>,
+    /// The pairs conversion met at positions a nominal family is irrelevant in, in the order it met them. None is a constraint, since no checker compares the two levels of one; each is tried where its declaration's levels settle ([`UniverseSolver::join_weak_equations`]).
+    weak: Vec<(Level, Level)>,
 }
 
 /// The meta `level` is, when it is one bare meta at offset zero.
@@ -502,6 +509,7 @@ impl UniverseSolver {
             floor_log: Vec::new(),
             next_meta: meta_floor,
             consistency: None,
+            weak: Vec::new(),
         }
     }
 
@@ -563,6 +571,7 @@ impl UniverseSolver {
             constraints: self.constraints.enter(),
             solution_log_len: self.solution_log.len(),
             floor_log_len: self.floor_log.len(),
+            weak_len: self.weak.len(),
         }
     }
 
@@ -576,10 +585,11 @@ impl UniverseSolver {
             next_meta: self.next_meta,
             constraints: self.constraints.mark(),
             solution_log_len: self.solution_log.len(),
+            weak_len: self.weak.len(),
         }
     }
 
-    /// Restore both stores to `mark`. Solutions are unwound first: the constraint journal's pre-images were taken *before* the assignments that rewrote them, so the two unwind in the same direction.
+    /// Restore both stores to `mark`. Solutions are unwound first: the constraint journal's pre-images were taken *before* the assignments that rewrote them, so the two unwind in the same direction. A weak equation met since the mark goes with what met it.
     pub fn rollback(&mut self, mark: UniverseMark) {
         while self.solution_log.len() > mark.solution_log_len {
             let meta = self.solution_log.pop().unwrap();
@@ -591,12 +601,14 @@ impl UniverseSolver {
         }
         self.constraints.rollback(mark.constraints);
         self.consistency = None;
+        self.weak.truncate(mark.weak_len);
     }
 
     /// Release inference constraints after their enclosing declaration has finalized. Any relation that remains externally meaningful has already been projected into that declaration's [`UniverseContext`]; later uses reinsert the stored residual context at fresh instances.
     pub(crate) fn clear_constraints(&mut self) {
         self.constraints.clear();
         self.consistency = None;
+        self.weak.clear();
     }
 
     /// How many constraints the store holds — none between declarations, which is what a refused item's boundary must leave.
@@ -697,6 +709,70 @@ impl UniverseSolver {
         }
         self.release(mark);
         Ok(())
+    }
+
+    /// Record that `left` and `right` met at a position a nominal family is irrelevant in.
+    ///
+    /// The two instances are one type whatever these levels are, so nothing is required of them, and an equation here would refuse a program both checkers accept. They are recorded because one instance is what a declaration should hold where it can. Left alone, each occurrence settles from its own bounds: a level nothing else bounds becomes a parameter of the declaration, a former's level floats above its argument's, and one family's occurrences in one signature land apart. Rocq records the same pair, "'weak' constraints … when comparing universes in an irrelevant position", and says of doing without them that it "may produce arbitrary numbers of universes".
+    pub fn add_weak_eq(&mut self, left: Level, right: Level) {
+        if left != right {
+            self.weak.push((left, right));
+        }
+    }
+
+    /// Join every weak equation the store can hold, and drop the rest.
+    ///
+    /// Asked where a declaration's levels are about to settle, so every requirement its elaboration raised is in the store. A pair with no open level on either side names no level to choose and is dropped unread: two constants, or a constant and a parameter. The rest are tried together, one consistency check for the declaration; where that is refused they are retaken one at a time in the order they were met, each kept where the store stays consistent.
+    ///
+    /// Where every pair can hold, the store that results is the one an equation at each of those positions would have given, so a declaration that elaborates with those equations required elaborates to the same levels with them weak. Where one cannot, dropping it refuses nothing and decides nothing a checker reads: the two instances it came from convert as they stand. What the order chooses, there alone, is which level an irrelevant occurrence lands on.
+    ///
+    /// Rocq unifies a weak pair "when neither is smaller than the other and one is flexible". This joins a pair one side of which already bounds the other too: a former's level left above its argument's is slack a signature then generalizes.
+    fn join_weak_equations(&mut self) {
+        curios_profile::profile!("universe::join_weak_equations");
+        let pairs = std::mem::take(&mut self.weak)
+            .into_iter()
+            .filter_map(|(left, right)| {
+                let left = self.zonk(&left).ok()?;
+                let right = self.zonk(&right).ok()?;
+                let open = left.metas().chain(right.metas()).next().is_some();
+                (left != right && open).then_some((left, right))
+            })
+            .collect::<Vec<_>>();
+        if pairs.is_empty() {
+            return;
+        }
+        curios_profile::sample!("universe::weak_equations", pairs.len());
+        let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion);
+
+        let mark = self.mark();
+        let joined = pairs.iter().all(|(left, right)| {
+            self.add_eq(left.clone(), right.clone(), origin.clone())
+                .is_ok()
+        });
+        if joined && self.check_consistent().is_ok() {
+            self.release(mark);
+            return;
+        }
+        self.rollback(mark);
+        self.release(mark);
+
+        for (left, right) in pairs {
+            let mark = self.mark();
+            let joined = self
+                .add_eq(left.clone(), right.clone(), origin.clone())
+                .is_ok()
+                && self.check_consistent().is_ok();
+            if !joined {
+                self.rollback(mark);
+                curios_profile::note!(
+                    target: "curios_elab::universe",
+                    left = %left,
+                    right = %right,
+                    "dropped a weak equation the store refuses",
+                );
+            }
+            self.release(mark);
+        }
     }
 
     /// Default an equation whose zonked sides differ at exactly one meta atom with a shared offset: `max(s, α+k) = max(s, β+k)` pins one meta to the other instead of parking two inequalities the bound propagators cannot decompose. Without this, independently instantiated spellings of one written annotation meet only here, both metas survive to declaration finalization, and the scheme generalizes two parameters where the program wrote one universe.
@@ -1476,6 +1552,8 @@ impl UniverseSolver {
         pending: impl IntoIterator<Item = UniverseMetaId>,
     ) -> Result<UniverseContext, UniverseError> {
         curios_profile::profile!("universe::finalize");
+        // First, while every level elaboration left open is still open: a weak equation joins two of them, and what follows settles the classes that leaves.
+        self.join_weak_equations();
         // Follow each interface level to the metas that actually carry it. Conversion aliases one meta onto another whenever two spellings of a level are forced equal — keeping the member of greater provenance, but not by the signature's choice — so the set the caller computed from the declaration's type can name metas that were solved away, several links back from the ones still standing. Those representatives are then reached by `universe_metas_in(&body)` instead and land on the internal side, where `minimize` takes least solutions for them; the declaration comes back at a ground level rather than generalized over a level its own signature mentions, and every polymorphic caller is refused by the kernel for supplying a parameter where it demands a constant.
         let interface = self.representatives(interface);
         let pending = self.representatives(pending);
@@ -1559,6 +1637,7 @@ impl UniverseSolver {
         parameter_count: usize,
     ) -> Result<(), UniverseError> {
         curios_profile::profile!("universe::finalize_at_instance");
+        self.join_weak_equations();
         if instance.len() != parameter_count {
             return Err(UniverseError::InstanceArity {
                 expected: parameter_count,
@@ -1599,6 +1678,8 @@ impl UniverseSolver {
         determined: &[Level],
     ) -> Result<(), UniverseError> {
         self.pin_instance(instance, determined)?;
+        // The declaration that would have joined them has closed, so what this resolution met is joined here, after the goal has fixed what it fixes.
+        self.join_weak_equations();
 
         let open = minted
             .iter()
@@ -1663,6 +1744,7 @@ impl UniverseSolver {
         &mut self,
         metas: impl IntoIterator<Item = UniverseMetaId>,
     ) -> Result<(), UniverseError> {
+        self.join_weak_equations();
         let relevant = self.connected_metas(metas);
         self.minimize(&relevant, &relevant)?;
         self.check_consistent()?;

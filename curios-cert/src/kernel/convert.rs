@@ -1052,11 +1052,15 @@ fn rec_instances(kernel: &Kernel, this: &Term, that: &Term) -> Option<bool> {
         return Some(true);
     }
 
-    this.level_differences(that, |_| false).map(|differences| {
-        differences.iter().all(|(depth, this_level, that_level)| {
-            *depth == 0 && kernel.level_eq(this_level, that_level)
+    this.level_differences(that, |_| false, &())
+        .map(|differences| {
+            differences
+                .compared
+                .iter()
+                .all(|(depth, this_level, that_level)| {
+                    *depth == 0 && kernel.level_eq(this_level, that_level)
+                })
         })
-    })
 }
 
 /// Whether `term` is a projection of a group at a family's former: a member whose body is lambdas over the nominal node it builds.

@@ -245,6 +245,17 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
         Term::apply(Term::free_var(&x), [Term::var(Var::bound(0))]),
         60,
     );
+    let families = Registry {
+        inducts: [(nominal("Wrap"), shaped(1, 0, &[Variance::Irrelevant]))].into(),
+    };
+    let wrapped = |level: u32| {
+        Term::induct_type_at(
+            nominal("Wrap"),
+            [Level::constant(level)],
+            [Term::intrinsic(Intrinsic::NatType)],
+            Vec::<Term>::new(),
+        )
+    };
 
     let rows: Vec<(&str, bool)> = vec![
         ("equality", term == doubled(base.clone(), 60)),
@@ -282,8 +293,25 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
                     60,
                 ),
                 |_| false,
+                &(),
             )
-            .is_some_and(|pairs| pairs.len() == 1),
+            .is_some_and(|found| found.compared.len() == 1),
+        ),
+        (
+            "level differences under a reading of the families",
+            doubled(wrapped(0), 60)
+                .level_differences(&doubled(wrapped(1), 60), |_| false, &families)
+                .is_some_and(|found| found.compared.is_empty()),
+        ),
+        (
+            "level differences over applied formers",
+            doubled(former_applied("Wrap", 0), 60)
+                .level_differences(
+                    &doubled(former_applied("Wrap", 1), 60),
+                    |_| false,
+                    &families,
+                )
+                .is_some_and(|found| found.compared.is_empty()),
         ),
         (
             "the shared level rewrite",

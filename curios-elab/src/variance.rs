@@ -5,9 +5,20 @@
 use {
     super::{Context, Error, zonk_solved_term_metas},
     curios_analysis::{Declarations, VarianceVectors, variance_vectors},
-    curios_core::{Global, InductDecl, InductParam, Module, StructDecl, Variance},
+    curios_core::{Families, Global, InductDecl, InductParam, Module, StructDecl, Variance},
     std::collections::BTreeMap,
 };
+
+/// The registries as conversion's level alignment reads them: a family's vector is the one its entry holds while the unit elaborates, empty for a family still inside its own group, so every level of it is compared there.
+impl Families for Context {
+    fn induct(&self, name: &Global) -> Option<&InductDecl> {
+        self.induct_decl(name)
+    }
+
+    fn struct_(&self, name: &Global) -> Option<&StructDecl> {
+        self.struct_decl(name)
+    }
+}
 
 /// Record each of `names`' variance vectors on its registry entry: the families of one group, analyzed together as that group finalizes, so a later item that compares two of their instances reads them.
 ///

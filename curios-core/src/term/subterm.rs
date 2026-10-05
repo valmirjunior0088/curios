@@ -77,6 +77,17 @@ impl Subterm {
         term.as_rec_proj()
     }
 
+    /// The family a nominal node is an instance or a value of.
+    pub(super) fn nominal_name(&self) -> Option<&Global> {
+        match self {
+            Subterm::InductType(InductType { name, .. })
+            | Subterm::StructType(StructType { name, .. })
+            | Subterm::Variant(Variant { name, .. })
+            | Subterm::Struct(Struct { name, .. }) => Some(name),
+            _ => None,
+        }
+    }
+
     pub(super) fn any_direct_universe_meta(
         &self,
         pred: &mut impl FnMut(UniverseMetaId) -> bool,

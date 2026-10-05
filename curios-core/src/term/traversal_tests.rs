@@ -291,23 +291,28 @@ fn level_differences_count_a_ground_sort_as_a_position() {
 
     assert_eq!(
         Term::tuple([ground.clone(), u.clone()])
-            .level_differences(&Term::tuple([u.clone(), ground]), |_| false),
+            .level_differences(&Term::tuple([u.clone(), ground]), |_| false, &())
+            .map(|found| found.compared),
         Some(vec![
             (0, Level::zero(), u_level.clone()),
             (0, u_level.clone(), Level::zero())
         ])
     );
     assert_eq!(
-        Term::tuple([u.clone(), Term::intrinsic(Intrinsic::NatType)]).level_differences(
-            &Term::tuple([v, Term::intrinsic(Intrinsic::NatType)]),
-            |_| false
-        ),
+        Term::tuple([u.clone(), Term::intrinsic(Intrinsic::NatType)])
+            .level_differences(
+                &Term::tuple([v, Term::intrinsic(Intrinsic::NatType)]),
+                |_| false,
+                &()
+            )
+            .map(|found| found.compared),
         Some(vec![(0, u_level, Level::param(UniverseParam(1)))])
     );
     assert_eq!(
         Term::tuple([u.clone(), Term::intrinsic(Intrinsic::NatType)]).level_differences(
             &Term::tuple([u, Term::intrinsic(Intrinsic::BoolType)]),
-            |_| false
+            |_| false,
+            &()
         ),
         None
     );
@@ -324,7 +329,8 @@ fn level_differences_walk_the_graph_not_the_tree() {
     }
 
     assert_eq!(
-        this.level_differences(&that, |_| false),
+        this.level_differences(&that, |_| false, &())
+            .map(|found| found.compared),
         Some(vec![(
             0,
             Level::param(UniverseParam(0)),
@@ -341,10 +347,13 @@ fn level_differences_skip_what_a_wildcard_covers() {
     let is_hole = |term: &Term| matches!(&**term, Subterm::Metavar(_));
 
     assert_eq!(
-        Term::tuple([Term::hole(0), u.clone()]).level_differences(
-            &Term::tuple([Term::intrinsic(Intrinsic::BoolType), v]),
-            is_hole
-        ),
+        Term::tuple([Term::hole(0), u.clone()])
+            .level_differences(
+                &Term::tuple([Term::intrinsic(Intrinsic::BoolType), v]),
+                is_hole,
+                &()
+            )
+            .map(|found| found.compared),
         Some(vec![(
             0,
             Level::param(UniverseParam(0)),
@@ -353,7 +362,8 @@ fn level_differences_skip_what_a_wildcard_covers() {
     );
     assert_eq!(
         Term::tuple([Term::hole(0), u.clone()])
-            .level_differences(&Term::tuple([u.clone(), u]), is_hole),
+            .level_differences(&Term::tuple([u.clone(), u]), is_hole, &())
+            .map(|found| found.compared),
         Some(Vec::new())
     );
 }

@@ -449,11 +449,9 @@ let field(name: Str, k: Kind, occurrences: List(Str)) -> Result(Failure, KindCar
 let fill(@spec: List(Arg), slots: Slots(spec)) -> Result(Failure, Values(spec)) =
     match slots
     | nil() => Result/success(Values/nil())
-    -- `Result/bind` rather than `!`: the payload, a `Carrier`, sits a level below `Values`, and a nominal type's levels are compared for equality, so `!` would hold the region at the payload's level.
     | cons(@a, @_, found, tail) =>
-        Result/bind(
-            field(a.long, a.kind, found),
-            (head) => Result/map_success(fill(tail), (more) => Values/cons(head, more)))
+        let head = field(a.long, a.kind, found)!;
+        Result/map_success(fill(tail), (more) => Values/cons(head, more))
     end;
 
 --- A line read against `spec`, performing nothing. Help wins over every other reading of the line, and the version is answered only when there is one.

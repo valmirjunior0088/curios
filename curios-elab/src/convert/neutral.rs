@@ -6,8 +6,8 @@ use {
     super::instantiate_bound_at,
     crate::{Context, reduce, reduce_forced},
     curios_core::{
-        Argument, Field, Free, FuncType, InductType, Instance, InstanceHead, Level, Match,
-        MatchResult, Proj, ReduceError, StructType, Subterm, Term, TupleType,
+        Argument, Families, Field, Free, FuncType, InductType, Instance, InstanceHead, Level,
+        Match, MatchResult, Proj, ReduceError, StructType, Subterm, Term, TupleType,
         UniverseConstraintKind, UniverseConstraintOrigin, instantiate_universe_levels_scoped,
     },
     std::rc::Rc,
@@ -18,19 +18,24 @@ use {
 /// Comparing the two sides through `project_erased_universes` and accepting on projection equality would rest on the premise that a universe instance cannot affect computation, and that premise is false (see `documentation/design/soundness/elimination/case-equations-and-their-key.md`): `Type u` embeds a level *in a term*, so a definition carrying a level into a constructor payload reduces to genuinely different values at two instances, and the projection would accept such pairs with no residue for the declaration boundary to refuse. Identification leaves the residue.
 ///
 /// What it answers is one of [`Identification`]'s verdicts. Declines — answering anything but `Identified`, with **nothing inserted**, so the structural path below judges the problem instead — on a pair of unequal ground levels, where there is nothing to identify and the problem may still hold by value, and on a differing pair under a universe binder, whose bound parameters the ambient solver cannot constrain. Every pair is checked before any is committed, because a decline that had already inserted would not be a fall-through.
+///
+/// A level a nominal family is irrelevant in is no difference to identify: the walk is handed the context's registries and sets such a pair apart, so two instances apart in it alone are identified with nothing committed. Where the sides are identified, each pair set apart is recorded as a weak equation ([`UniverseSolver::add_weak_eq`](crate::UniverseSolver::add_weak_eq)), which the declaration's closing joins where it can.
 pub(super) fn identify_universe_levels(
     context: &mut Context,
     this: &Term,
     that: &Term,
 ) -> Result<Identification, ReduceError> {
-    let pending = match align_universe_levels(context, this, that)? {
-        Alignment::Pending(pending) => pending,
+    let (compared, irrelevant) = match align_universe_levels(context, this, that, &*context)? {
+        Alignment::Pending {
+            compared,
+            irrelevant,
+        } => (compared, irrelevant),
         Alignment::Distinct => return Ok(Identification::Distinct),
         Alignment::UnderBinder => return Ok(Identification::UnderBinder),
         Alignment::GroundUnequal => return Ok(Identification::GroundUnequal),
     };
 
-    for (this_level, that_level) in pending {
+    for (this_level, that_level) in compared {
         context
             .universes_mut()
             .add_eq(
@@ -39,6 +44,9 @@ pub(super) fn identify_universe_levels(
                 UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
             )
             .map_err(ReduceError::Universe)?;
+    }
+    for (this_level, that_level) in irrelevant {
+        context.universes_mut().add_weak_eq(this_level, that_level);
     }
 
     Ok(Identification::Identified)
@@ -49,13 +57,15 @@ pub(super) fn identify_universe_levels(
 /// The refusing half of [`align_universe_levels`], and the one a *store* can use. Conversion answers its question by committing the differing pairs equal, which is licensed because a goal asked it; a refinement probe is a search over candidate keys, and committing a universe equality on the strength of a speculative match would constrain the declaration from a lookup. This commits nothing and only ever declines, so it is safe to ask wherever a key has already matched.
 ///
 /// `false` for everything that is not a decided disagreement — sides differing in more than levels, a pair under a universe binder, a pair either of whose sides is still undecided. That is deliberate and is what keeps the answer the *refusing* direction only: an undecided level may yet be solved either way, and collapsing those is exactly what the refinement key is for.
+///
+/// It reads no family's variance. The kernel's key is the scrutinee compared with every level, so an equation this guard let through on an irrelevant one would be an equation the kernel does not fire.
 pub(crate) fn levels_clash_on_a_decided_instance(
     context: &Context,
     this: &Term,
     that: &Term,
 ) -> Result<bool, ReduceError> {
     Ok(matches!(
-        align_universe_levels(context, this, that)?,
+        align_universe_levels(context, this, that, &())?,
         Alignment::GroundUnequal
     ))
 }
@@ -65,17 +75,26 @@ pub(crate) fn levels_clash_on_a_decided_instance(
 /// One walk over the pair, shared with the kernel: [`Term::level_differences`] answers whether the sides differ in nothing but levels and which level pairs they differ in, a ground `Type 0` counted as a level, and it walks the graph rather than the tree, so identifying two spellings costs what the spellings are and not what they unfold to.
 ///
 /// Every pair is checked before any verdict that would insert, because a decline that had already inserted would not be a fall-through — which is why the commitment lives in [`identify_universe_levels`] and the walk here hands back what it *would* commit.
+///
+/// `families` is the caller's reading of the nominal families: conversion's, under which the pair at an irrelevant position is set apart, or `()`, under which every level is compared. A pair set apart under a universe binder is left out altogether, the ambient solver having no hold on a bound parameter.
 fn align_universe_levels(
     context: &Context,
     this: &Term,
     that: &Term,
+    families: &impl Families,
 ) -> Result<Alignment, ReduceError> {
-    let Some(differences) = this.level_differences(that, |_| false) else {
+    let Some(differences) = this.level_differences(that, |_| false, families) else {
         return Ok(Alignment::Distinct);
     };
 
-    let mut pending = Vec::new();
-    for (depth, this_level, that_level) in differences {
+    let irrelevant = differences
+        .irrelevant
+        .into_iter()
+        .filter(|(depth, _, _)| *depth == 0)
+        .map(|(_, this_level, that_level)| (this_level, that_level))
+        .collect();
+    let mut compared = Vec::new();
+    for (depth, this_level, that_level) in differences.compared {
         if depth > 0 {
             return Ok(Alignment::UnderBinder);
         }
@@ -95,10 +114,13 @@ fn align_universe_levels(
             return Ok(Alignment::GroundUnequal);
         }
 
-        pending.push((this_level, that_level));
+        compared.push((this_level, that_level));
     }
 
-    Ok(Alignment::Pending(pending))
+    Ok(Alignment::Pending {
+        compared,
+        irrelevant,
+    })
 }
 
 /// What [`align_universe_levels`] found, before anybody decides what to do about it.
@@ -106,8 +128,11 @@ enum Alignment {
     Distinct,
     UnderBinder,
     GroundUnequal,
-    /// The sides differ in levels alone, and these are the zonked pairs a commitment would have to join.
-    Pending(Vec<(Level, Level)>),
+    /// The sides differ in levels alone: the zonked pairs a commitment would have to join, and the pairs at irrelevant positions, which it may.
+    Pending {
+        compared: Vec<(Level, Level)>,
+        irrelevant: Vec<(Level, Level)>,
+    },
 }
 
 /// What [`identify_universe_levels`] found: the sides are one term now that their levels are committed equal; they differ in more than levels; a differing pair is two unequal ground levels, which no commitment can join; or a differing pair sits under a universe binder, whose bound parameters the ambient solver cannot constrain.

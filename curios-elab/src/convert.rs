@@ -28,6 +28,8 @@ mod solve_tests;
 mod structural_tests;
 #[cfg(test)]
 mod test_support;
+#[cfg(test)]
+mod variance_tests;
 
 use {
     super::{
@@ -36,11 +38,12 @@ use {
     },
     crate::{Declined, metavar_origins, metavar_spines, zonk_solved_term_metas},
     curios_core::{
-        Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Free, Func, FuncType,
-        Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Level, Lockstep, Many,
-        Match, MatchResult, Metavar, Probe, Proj, Rec, ReduceError, Scope, Step, Struct,
-        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, Variant, past_bool_cap,
+        Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Families, Free, Func,
+        FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Level,
+        Lockstep, Many, Match, MatchResult, Metavar, Probe, Proj, Rec, ReduceError, Scope, Step,
+        Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, Variance, Variant,
+        past_bool_cap,
     },
     curios_utilities::Plicity,
     std::{
@@ -61,8 +64,8 @@ enum Solved {
 
 /// What re-validation made of a candidate against its metavariable's frozen type.
 enum Revalidated {
-    /// It checks.
-    Fits,
+    /// It checks, and this is the term the check rebuilt.
+    Fits(Term),
     /// The check failed where it wanted to park: a type it met still waits on a metavariable, and nothing has been judged.
     Undecided,
     /// It does not check.
@@ -171,6 +174,35 @@ impl Convert {
             return Ok(false);
         }
         for (left, right) in left.iter().zip(right) {
+            context
+                .universes_mut()
+                .add_eq(
+                    left.clone(),
+                    right.clone(),
+                    UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+                )
+                .map_err(ReduceError::Universe)?;
+        }
+        Ok(true)
+    }
+
+    /// [`Self::compare_levels`] for two instances of the family `name`: one equation per level the family is invariant in, and a weak one where it is irrelevant, two instances apart in such a level alone being one type. The weak equation refuses nothing; it is what lets the declaration's closing hold the two occurrences at one instance where it can ([`UniverseSolver::add_weak_eq`](crate::UniverseSolver::add_weak_eq)).
+    fn compare_nominal_levels(
+        context: &mut Context,
+        name: &Global,
+        left: &[Level],
+        right: &[Level],
+    ) -> Result<bool, ReduceError> {
+        if left.len() != right.len() {
+            return Ok(false);
+        }
+        for (index, (left, right)) in left.iter().zip(right).enumerate() {
+            if context.variance(name, index) == Variance::Irrelevant {
+                context
+                    .universes_mut()
+                    .add_weak_eq(left.clone(), right.clone());
+                continue;
+            }
             context
                 .universes_mut()
                 .add_eq(
@@ -555,8 +587,21 @@ impl Convert {
             );
         }
         if polymorphic && converts {
-            converts = identify_universe_levels(context, &this.head, &that.head)?
-                == Identification::Identified;
+            // A family's name applied in full by one spine is the node it builds, and the two instances are identified as two nodes are. A curried head keeps the identification of the two heads whole: where that declines, the pair goes on to reduction and meets as two nodes.
+            let instances = this_term
+                .applied_family(&*context)
+                .zip(that_term.applied_family(&*context))
+                .filter(|_| matches!(&*this.head, Subterm::Instance(_)))
+                .map(|((name, this), (_, that))| (*name, this.to_vec(), that.to_vec()));
+            converts = match instances {
+                Some((name, this, that)) => {
+                    Self::compare_nominal_levels(context, &name, &this, &that)?
+                }
+                None => {
+                    identify_universe_levels(context, &this.head, &that.head)?
+                        == Identification::Identified
+                }
+            };
         }
         match converts {
             true => context.end_solutions(mark),
@@ -673,7 +718,7 @@ impl Convert {
         {
             return Ok(false);
         }
-        if !Self::compare_levels(context, &this.universes, &that.universes)? {
+        if !Self::compare_nominal_levels(context, &this.name, &this.universes, &that.universes)? {
             return Ok(false);
         }
 
@@ -760,7 +805,7 @@ impl Convert {
         {
             return Ok(false);
         }
-        if !Self::compare_levels(context, &this.universes, &that.universes)? {
+        if !Self::compare_nominal_levels(context, &this.name, &this.universes, &that.universes)? {
             return Ok(false);
         }
 
@@ -802,7 +847,7 @@ impl Convert {
         if this.name != that.name || this.params.len() != that.params.len() {
             return Ok(false);
         }
-        if !Self::compare_levels(context, &this.universes, &that.universes)? {
+        if !Self::compare_nominal_levels(context, &this.name, &this.universes, &that.universes)? {
             return Ok(false);
         }
 
@@ -825,7 +870,7 @@ impl Convert {
         {
             return Ok(false);
         }
-        if !Self::compare_levels(context, &this.universes, &that.universes)? {
+        if !Self::compare_nominal_levels(context, &this.name, &this.universes, &that.universes)? {
             return Ok(false);
         }
 
@@ -1486,7 +1531,7 @@ impl Convert {
             }
         }
 
-        // Re-validation: the (inverted) candidate must *check* against the metavariable's frozen result type, under its birth context Γ and the refinements it was born under — nothing of an arm it is solved in, all of the arm it was born in — as an *oracle*, constraint parking suppressed (see `Context::with_oracle`). Stable definitions are kept. Checking (rather than synthesizing then converting) admits candidates that are checkable but not inferable — a bare lambda whose domain only `result` knows, an unannotated tuple — which are still the correct solution at the frozen type. The validation run itself can solve *other* metavariables (inference may mint and pin fresh implicits); the mark/rollback bracket unwinds those if the candidate is rejected, so a failed oracle leaves no fingerprints.
+        // Re-validation: the (inverted) candidate must *check* against the metavariable's frozen result type, under its birth context Γ and the refinements it was born under — nothing of an arm it is solved in, all of the arm it was born in — as an *oracle*, constraint parking suppressed (see `Context::with_oracle`). Stable definitions are kept. Checking (rather than synthesizing then converting) admits candidates that are checkable but not inferable — a bare lambda whose domain only `result` knows, an unannotated tuple — which are still the correct solution at the frozen type. What is committed is the term the check rebuilt, as everywhere elaboration checks a term: the check compares a lambda's annotation with the domain it is checked at by subsumption and rebuilds the lambda at that domain, while the kernel compares the two by conversion, so a candidate committed as it came keeps an annotation the kernel refuses — `(T: Type 0) => Io(T)`, the reduct of `Io` at one instance, standing where `(Type 1) -> Type 1` is wanted — and which side of a problem solved the metavariable would decide whether the program certifies. The validation run itself can solve *other* metavariables (inference may mint and pin fresh implicits); the mark/rollback bracket unwinds those if the candidate is rejected, so a failed oracle leaves no fingerprints.
         let mark = context.solution_mark();
         let revalidated = context.with_frame(|context| {
             for (name, ty) in telescope.iter() {
@@ -1510,7 +1555,7 @@ impl Convert {
                     .probed_refusal()?;
 
                 Ok(match checked {
-                    Some(_) => Revalidated::Fits,
+                    Some(rebuilt) => Revalidated::Fits(rebuilt),
                     None if context.declined_to_park() => Revalidated::Undecided,
                     None => Revalidated::Refused,
                 })
@@ -1526,9 +1571,9 @@ impl Convert {
         };
 
         let solved = match revalidated {
-            Revalidated::Fits => {
+            Revalidated::Fits(rebuilt) => {
                 context.end_solutions(mark);
-                context.solve_metavar(id, inverted);
+                context.solve_metavar(id, rebuilt);
                 self.progress = true;
                 return Ok(Solved::Done);
             }
@@ -1569,6 +1614,7 @@ impl Convert {
     /// Deliberate restrictions (cf. the guards in `solve`):
     /// - **right-biased** partial application — for a spine of `k` arguments against `n` rigid arguments, `k < n` commits `?m := λx₁…xₖ. T(b₁, …, b_{n−k}, x₁, …, xₖ)`, the conventional choice kind-currying makes (it is why `Monad (Either e)` works in Haskell). The fixed prefix is taken from the rigid side, which a telescope's left-to-right dependency order keeps well-scoped, and `k` is never guessed: it is the spine's own length, checked against `?m`'s frozen birth arity. An equation whose intended solution abstracts a *prefix* is guessed wrong and blocked — incompleteness moves rather than disappearing — and a kind-wrong split (abstracting an index the birth type sorts differently) is refused by the re-validation below before it commits;
     /// - imitation only — the constant (`?m := λ_. T(b̄)`) and projection (`?m := λx. x`) solutions are never produced;
+    /// - a nominal `T` is imitated at an occurrence of its own ([`Self::occurrence_of`]), so the candidate is what a written `(x̄) => T(b̄, x̄)` elaborates to and not a function of the one instance it was solved from;
     /// - rigid heads only — nominal constructors and the unary intrinsic formers (`List`, `Cell`), whose argument rides inside the `Intrinsic` node;
     /// - flex–flex stays blocked (dispatched before the structural match);
     /// - a rejected or postponed guess *blocks* the problem, never hard-fails it: refuting the imitation does not prove the equation unsatisfiable (a constant solution could still exist), and blocking preserves the drain's retry semantics — a permanently blocked problem surfaces as a type mismatch at its origin.
@@ -1586,11 +1632,12 @@ impl Convert {
             return self.eta_expand_neutral(context, problem.this, problem.that, problem.type_);
         };
 
-        type MkBody = Box<dyn Fn(&[Term]) -> Term>;
-        let (rigid_args, mk_body): (Vec<Term>, MkBody) = match &*rigid {
+        // The rigid side's arguments, how its node is rebuilt over other arguments at an instance, and, for a nominal node, the family and the instance the rigid side stands at.
+        type MkBody = Box<dyn Fn(Vec<Level>, &[Term]) -> Term>;
+        type Family = Option<(Global, Vec<Level>)>;
+        let (rigid_args, mk_body, family): (Vec<Term>, MkBody, Family) = match &*rigid {
             Subterm::InductType(induct_decl) => {
                 let name = induct_decl.name;
-                let universes = induct_decl.universes.clone();
                 let n_params = induct_decl.params.len();
                 let args = induct_decl
                     .params
@@ -1600,44 +1647,49 @@ impl Convert {
                     .collect();
                 (
                     args,
-                    Box::new(move |vars| {
+                    Box::new(move |universes, vars| {
                         let (params, indices) = vars.split_at(n_params);
                         Term::induct_type_at(
                             name,
-                            universes.clone(),
+                            universes,
                             params.iter().cloned(),
                             indices.iter().cloned(),
                         )
                     }),
+                    Some((name, induct_decl.universes.clone())),
                 )
             }
             // Struct types carry no indices.
             Subterm::StructType(struct_decl) => {
                 let name = struct_decl.name;
-                let universes = struct_decl.universes.clone();
                 (
                     struct_decl.params.clone(),
-                    Box::new(move |vars| {
-                        Term::struct_type_at(name, universes.clone(), vars.iter().cloned())
+                    Box::new(move |universes, vars| {
+                        Term::struct_type_at(name, universes, vars.iter().cloned())
                     }),
+                    Some((name, struct_decl.universes.clone())),
                 )
             }
-            // The unary intrinsic type formers: their argument rides inside the `Intrinsic` node, so the imitation body rebuilds the node over the binder (`?m := λT. List(T)` for `?m(?A) ≡ List(Nat)`).
+            // The unary intrinsic type formers: their argument rides inside the `Intrinsic` node, so the imitation body rebuilds the node over the binder (`?m := λT. List(T)` for `?m(?A) ≡ List(Nat)`). They carry no instance.
             Subterm::Intrinsic(Intrinsic::ListType(elem)) => (
                 vec![elem.clone()],
-                Box::new(|vars| Term::intrinsic(Intrinsic::ListType(vars[0].clone()))),
+                Box::new(|_, vars| Term::intrinsic(Intrinsic::ListType(vars[0].clone()))),
+                None,
             ),
             Subterm::Intrinsic(Intrinsic::CellType(elem)) => (
                 vec![elem.clone()],
-                Box::new(|vars| Term::intrinsic(Intrinsic::CellType(vars[0].clone()))),
+                Box::new(|_, vars| Term::intrinsic(Intrinsic::CellType(vars[0].clone()))),
+                None,
             ),
             Subterm::Intrinsic(Intrinsic::ChannelType(elem)) => (
                 vec![elem.clone()],
-                Box::new(|vars| Term::intrinsic(Intrinsic::ChannelType(vars[0].clone()))),
+                Box::new(|_, vars| Term::intrinsic(Intrinsic::ChannelType(vars[0].clone()))),
+                None,
             ),
             Subterm::Intrinsic(Intrinsic::IoType(elem)) => (
                 vec![elem.clone()],
-                Box::new(|vars| Term::intrinsic(Intrinsic::IoType(vars[0].clone()))),
+                Box::new(|_, vars| Term::intrinsic(Intrinsic::IoType(vars[0].clone()))),
+                None,
             ),
             _ => unreachable!("the callers pass a nominal or intrinsic-former rigid side"),
         };
@@ -1681,10 +1733,8 @@ impl Convert {
             .cloned()
             .chain(binder_vars.iter().cloned())
             .collect::<Vec<_>>();
-        let body = mk_body(&full_args);
-        let candidate = Term::func_marked(domains.clone(), body);
 
-        // The invariant `solve_at_birth` protects, upheld here by hand (the committed solution is the built candidate, not the rigid side itself): a solution must not be derived from a spelling that holds only under refinements the metavariable was not born under. Where those are in view and the spelling at its birth differs, the nominal shape may be their doing — postpone rather than commit.
+        // The invariant `solve_at_birth` protects, upheld here by hand (the committed solution is the built candidate, not the rigid side itself): a solution must not be derived from a spelling that holds only under refinements the metavariable was not born under. Where those are in view and the spelling at its birth differs, the nominal shape may be their doing — postpone rather than commit. Asked before the candidate's instance is minted, so every return past it has one transaction to close.
         if let Some(birth) = context
             .metavar_entry(metavar.id)
             .map(|entry| entry.refinements.clone())
@@ -1697,8 +1747,23 @@ impl Convert {
             }
         }
 
+        // The instance is minted, paired with the rigid side's and offered to `solve` in one transaction: `solve` brackets its own re-validation alone, so a candidate it postpones or refuses before that would leave the occurrence and its equations standing with no term to hold them.
+        let mark = context.solution_mark();
+        let instance = match &family {
+            Some((name, universes)) => Self::occurrence_of(context, name, universes),
+            None => Ok(Vec::new()),
+        };
         // `solve` supplies the occurs check, the embedded-metavariable guard, the spine inversion and scope check (against `?m`'s own birth spine), and re-validation: the candidate is `check`ed against the frozen birth type under the birth context, which is what rejects an ill-kinded imitation before it commits.
-        match self.solve(context, &metavar, &candidate)? {
+        let solved = instance.and_then(|instance| {
+            let candidate = Term::func_marked(domains.clone(), mk_body(instance, &full_args));
+
+            self.solve(context, &metavar, &candidate)
+        });
+        if !matches!(solved, Ok(Solved::Done)) {
+            context.rollback_solutions(mark);
+        }
+        context.end_solutions(mark);
+        match solved? {
             Solved::Done => {}
             Solved::Postponed | Solved::Failed => return self.block(context, problem),
         }
@@ -1715,6 +1780,38 @@ impl Convert {
         }
 
         Ok(true)
+    }
+
+    /// The instance a candidate imitating `name`'s node is built at: a fresh occurrence of the family, paired with the instance `universes` the rigid side stands at as conversion pairs two instances, an equation at each level the family is invariant in and a weak one where it is irrelevant.
+    ///
+    /// Built at the rigid side's own instance, the candidate holds `?m`'s binders to the levels of the one occurrence `?m` happened to be solved from: `?M(?A)` against `Result.{0,0}(Str, Nat)` makes `M` a monad of small payloads alone, and a region that binds a larger one through `Monad/bind` written out is refused where the same region written with `!`, which is handed its monad, is accepted. The weak equation keeps the rigid side's instance wherever it served: the declaration's closing joins the two unless the candidate's binders need the level elsewhere.
+    ///
+    /// A family still inside its own group stands at levels its unfinished scheme does not count, and one no registry holds has no scheme to instantiate; either is imitated at the rigid side's instance, every level of it being compared there.
+    fn occurrence_of(
+        context: &mut Context,
+        name: &Global,
+        universes: &[Level],
+    ) -> Result<Vec<Level>, ReduceError> {
+        let scheme = context
+            .induct_decl(name)
+            .map(|declaration| declaration.universe_context.clone())
+            .or_else(|| {
+                context
+                    .struct_decl(name)
+                    .map(|declaration| declaration.universe_context.clone())
+            })
+            .filter(|scheme| scheme.parameter_count == universes.len());
+        let Some(scheme) = scheme else {
+            return Ok(universes.to_vec());
+        };
+
+        let fresh = context
+            .universes_mut()
+            .instantiate(&scheme)
+            .map_err(ReduceError::Universe)?;
+        Self::compare_nominal_levels(context, name, &fresh, universes)?;
+
+        Ok(fresh)
     }
 
     /// Solve flex–rigid with a candidate spelled under the refinements the metavariable was born under. The drain reduces problems under the live frame, where the refinements of the arm the problem sits in apply — sound for discharging a problem, but not for committing a solution: a metavariable must not be pinned to a value that holds only inside an arm it was not born in (`?k := 0` because the nil arm refined `n := 0`). Where the refinements in view are its birth's — the metavariable solved in the arm it was born in — the rigid side is its spelling, or what it was reduced from where the reduct does not re-check; otherwise the original rigid term is re-reduced under its birth's alone and solved against that spelling. Refinements only ever *add* reductions, so a solution found this way still discharges the problem as it stands. A problem whose verdict changes at the birth's refinements is the other refinements' doing — nothing is globally forced, so it postpones rather than failing or committing.
@@ -1975,6 +2072,14 @@ impl Convert {
                 (Subterm::Intrinsic(_), Subterm::Intrinsic(_))
             ) && connectives_convert(context, &this, &that)?
             {
+                continue;
+            }
+
+            // A family's former applied in full on both sides is the two nodes it builds. Compared as nodes, their levels go by the family's variance; as two projections of one group they would be a level question over every level the instantiation touched, a binder's annotation included.
+            if let (Some(this_node), Some(that_node)) =
+                (this.applied_former(), that.applied_former())
+            {
+                self.enqueue(type_, this_node, that_node);
                 continue;
             }
 
@@ -2446,7 +2551,7 @@ fn level_question(
     // After zonking, every metavariable still standing is unsolved, so agreement modulo levels with those as wildcards is exactly "these could become one term modulo levels".
     let wildcard = |term: &Term| matches!(&**term, Subterm::Metavar(_));
 
-    Ok(match this.level_differences(&that, wildcard) {
+    Ok(match this.level_differences(&that, wildcard, &()) {
         Some(_) => LevelQuestion::Blocked,
         None => LevelQuestion::Distinct,
     })
