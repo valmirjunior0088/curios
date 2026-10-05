@@ -778,7 +778,7 @@ fn refined_by_spelling(
 ///
 /// **The kernel's `refined_reduct`, so that the two checkers look in the same places.** Every other lookup here keeps a key's head as written — the shallow key verbatim, the escalation with only its arguments reduced — so without this a stuck form reduction reached *through* the guard's definition would never meet it: under `match small(k) | true => …`, with `small(n) = n < 10`, the arm's hypothesis `Holds(k < 10)` is the guard itself one definition down, the kernel answers it `true`, and the elaborator would refuse it. A field checked before its struct's parameter is inferred meets the same miss later, parked already unfolded to `?k < 10` and retried as `k < 10`.
 ///
-/// So each entry is compared at the form reduction itself gives it — weak-head, operands canonical where it is a tagged comparison, solved metavariables materialized, universes erased — and the dual and successor spellings with it, exactly as the kernel settles and compares. The settled spellings are asked first, innermost first, and only when none answers is the innermost entry not yet asked settled, one at a time, until one answers or none is left: a settlement is the one cost here, and a probe an already-settled spelling answers pays none.
+/// So each entry is compared at the form reduction itself gives it — weak-head, operands canonical where it is a tagged comparison, solved metavariables materialized, universes erased — exactly as the kernel settles and compares. A reduct's dual and its spelling across the successor seam are the shared rule's to answer ([`answered`]), so no spelling but the probe's own is compared with a reduct here. The settled spellings are asked first, innermost first, and only when none answers is the innermost entry not yet asked settled, one at a time, until one answers or none is left: a settlement is the one cost here, and a probe an already-settled spelling answers pays none.
 ///
 /// **What decides whether to settle at all is the kernel's filter**: an entry is a candidate only if the probe names no local its key does not, since reduction can drop a local and never introduce one. Without it, every stuck form under a binder some other judgment opened would settle some key in any arm. And the probe must bear a local itself, as the kernel's must: a local-free term has nothing an arm's equation could be about that reduction would not already have decided.
 fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, ReduceError> {
@@ -793,23 +793,14 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
     let probe = reduct_spelling(context, value)?;
     // The binders the form names that are proofs, which the filter in front of every entry passes over.
     let proofs = proofs_named(context, &probe)?;
-    // The spellings a settled entry can answer, each with whether its literal is negated on the way: the probe itself and its successor spelling are the entry's proposition, the duals its negation.
-    let others = match &*probe {
-        Subterm::Intrinsic(intrinsic) => probe_spellings(intrinsic)
-            .map(|(spelling, negated)| (Term::intrinsic(spelling), negated))
-            .collect(),
-        _ => Vec::new(),
-    };
-    let spellings = std::iter::once((probe.clone(), false))
-        .chain(others)
-        .map(|(spelling, negated)| (project_erased_universes(&spelling), negated))
-        .collect::<Vec<_>>();
+    // The spelling a settled entry is compared at: the probe's own, its universes erased.
+    let compared = project_erased_universes(&probe);
 
     // The entries already put to the shared rule, so each is asked once however many settlements the loop makes.
     let mut consulted = Vec::new();
 
     loop {
-        let unsettled = match scan_settled(context, value, &probe, &spellings, &proofs)? {
+        let unsettled = match scan_settled(context, value, &probe, &compared, &proofs)? {
             Scan::Answer(answer) => return Ok(Some(answer)),
             Scan::Settle {
                 frame,
@@ -1025,7 +1016,7 @@ impl Driver for Reading<'_> {
 
 /// What one pass over the visible entries found for a stuck reduct.
 enum Scan {
-    /// A settled spelling answered: the entry's value, negated where the probe met it as its dual.
+    /// A settled spelling is the probe's: the entry's value.
     Answer(Term),
     /// Nothing settled answered, and this is the innermost entry the probe could be a reduct of that has never been settled.
     Settle {
@@ -1037,12 +1028,12 @@ enum Scan {
     Miss,
 }
 
-/// One pass, innermost first: a settled spelling that answers wins outright, and only where none does is the first eligible unsettled entry handed back to be settled — the kernel's order, which asks every settled spelling before it pays for a settlement. Every comparison is a cached hash until two terms are equal.
+/// One pass, innermost first, `compared` being the probe with its universes erased: a settled spelling that answers wins outright, and only where none does is the first eligible unsettled entry handed back to be settled — the kernel's order, which asks every settled spelling before it pays for a settlement. Every comparison is a cached hash until two terms are equal.
 fn scan_settled(
     context: &Context,
     value: &Term,
     probe: &Term,
-    spellings: &[(Term, bool)],
+    compared: &Term,
     proofs: &[Free],
 ) -> Result<Scan, ReduceError> {
     let mut unsettled = None;
@@ -1050,23 +1041,10 @@ fn scan_settled(
     for (frame, key, entry) in context.visible_scrutinee_entries() {
         match context.settled_key(frame, key) {
             Some(Some(settled)) => {
-                for (spelling, negated) in spellings {
-                    if settled.compared != *spelling
-                        || levels_clash_on_a_decided_instance(context, value, &settled.unerased)?
-                    {
-                        continue;
-                    }
-
-                    let answer = match negated {
-                        false => Some(entry.value.clone()),
-                        true => entry
-                            .value
-                            .as_bool()
-                            .map(|literal| Term::intrinsic(Intrinsic::Bool(!literal))),
-                    };
-                    if let Some(answer) = answer {
-                        return Ok(Scan::Answer(answer));
-                    }
+                if settled.compared == *compared
+                    && !levels_clash_on_a_decided_instance(context, value, &settled.unerased)?
+                {
+                    return Ok(Scan::Answer(entry.value.clone()));
                 }
             }
             Some(None) => {}

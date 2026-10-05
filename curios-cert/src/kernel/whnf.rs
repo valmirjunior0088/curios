@@ -218,7 +218,7 @@ fn refined_spelling(kernel: &Kernel, term: &Term) -> Option<Term> {
 ///
 /// **The local-bearing gate is the guard, not an optimization.** `Scope::refine` records only local-bearing written spellings, but a *reduced* spelling is whatever reduction returned and may well be local-free. Refusing to probe on a local-free term is what keeps every refined term local-bearing, which is the half of the evaluation memos' first invariant this component owns: a local-free term's entry outlives the arm, so a local-free term whose reduct came from a case equation is precisely the entry that could outlive the arm that justified it — where a local-bearing term's entry is cleared with the arm's equations and may. It is also what makes the deferral pay — an arm body of literals reduces to local-free forms and settles nothing at all.
 ///
-/// **A settled spelling answers what the readers hold equal to it.** Where no settled spelling is the probe's, each is put to `curios_analysis::answers` with it: the rule the elaborator's reducer asks at the same point, so a guard respelled inside the theory — a sum commuted, a dual with its sides moved — is answered by both or by neither.
+/// **A settled spelling answers what the readers hold equal to it.** Where no settled spelling is the probe's, each is put to `curios_analysis::answers` with it: the rule the elaborator's reducer asks at the same point, so a guard respelled inside the theory — a sum commuted, a dual with its sides moved — is answered by both or by neither. A reduct's dual and its spelling across the successor seam are the rule's to answer as well, so no spelling but the probe's own is compared with a reduct here; [`refined_spelling`] asks them of the written key, before anything is reduced.
 ///
 /// **The reduced spellings meet in operand-canonical form.** A settled reduct is the key's weak-head form with each operand weak-head reduced, and the value probed against it is brought to the same form here, so that `x && true` under a `match x && g(7)` meets the key whose `g(7)` the settlement folded, and `x && h(7)` meets it too. A weak-head form alone would not do: a `&&` behind a stuck left leaves its right as written, and the two spellings would then differ by exactly the fold the escalation exists to see through. It is computed only on a miss under a live equation and only for a tagged intrinsic — a `head_key` — which is the same path the elaborator's `refined_after_fold` canonicalizes on, and what keeps the two checkers reaching the same occurrences.
 fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, ReduceError> {
@@ -236,13 +236,6 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
     let canonical = canonical_operands(kernel, value)?;
     // The binders the form names that are proofs, which the filter in front of every equation passes over.
     let proofs = kernel.proofs_named(&canonical)?;
-    // The other spellings under the reduced spelling too, for the reason the written pass asks them: a guard whose operands the probe presents folded — the dispatch's resolved spelling carries them as written, and a guard `i < List/len(l)` records the call its author wrote while the bound arrives with that call folded to its intrinsic — answers only once its reduct is settled, so every spelling is asked of the settled reducts exactly as the written and resolved spellings were asked of the record. Nothing is recorded under any of them, and the elaborator looks in the same places.
-    let spellings = match &*canonical {
-        Subterm::Intrinsic(intrinsic) => probe_spellings(intrinsic)
-            .map(|(spelling, negated)| (Term::intrinsic(spelling), negated))
-            .collect(),
-        _ => Vec::new(),
-    };
 
     // The equations already put to the shared rule, so each is asked once however many settlements the loop makes.
     let mut consulted = Vec::new();
@@ -250,13 +243,6 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
     loop {
         if let Some(refined) = kernel.refinement_of_reduct(&canonical) {
             return Ok(Some(refined));
-        }
-        // A dual's literal is the guard's negated, and the successor spelling's is the guard's own: one proposition, where the dual's are opposite ones.
-        if let Some(answer) = spellings.iter().find_map(|(spelling, negated)| {
-            let literal = kernel.refinement_of_reduct(spelling)?.as_bool()?;
-            Some(Term::intrinsic(Intrinsic::Bool(literal != *negated)))
-        }) {
-            return Ok(Some(answer));
         }
         // The settled spellings once more, by the rule both reducers share: a term the carriers' readers hold equal to a key, or to a key negated, is the key's term, and so is one the kernel's own conversion says is.
         for (index, reduct, value) in kernel.settled_refinements(&canonical, &proofs) {
@@ -269,12 +255,7 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
             }
         }
 
-        let unasked = kernel.unasked_refinement(&canonical, &proofs).or_else(|| {
-            spellings
-                .iter()
-                .find_map(|(spelling, _)| kernel.unasked_refinement(spelling, &proofs))
-        });
-        let Some((index, key)) = unasked else {
+        let Some((index, key)) = kernel.unasked_refinement(&canonical, &proofs) else {
             // What a lookup that asked conversion would have been put to: the equations this stuck form could be a reduct of, each settled and none answering.
             #[cfg(feature = "profile")]
             if let asked @ 1.. = kernel.reachable_refinements(&canonical, &proofs) {
