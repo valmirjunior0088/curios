@@ -1,6 +1,6 @@
 ---
 description: Run the hand-off gate — every step in the background as soon as what it reads is ready, plus the checks the change's files call for — and report each step's result
-allowed-tools: Read, Edit, Write, Grep, Glob, Bash(cargo:*), Bash(git:*), Bash(npm:*), Bash(rg:*), Bash(cp:*)
+allowed-tools: Read, Edit, Write, Grep, Glob, Monitor, Bash(cargo:*), Bash(git:*), Bash(npm:*), Bash(rg:*), Bash(cp:*)
 ---
 
 The hand-off gate for code. Why the gate holds these steps and no others is `documentation/design/every-gate-step-catches-what-no-other-step-does.md`. The base it runs against is the one the user names, and local `main` otherwise — where the effort is committed on `main` itself, the commit it started from. `origin/main` is never the base: it stands where the last push left it.
@@ -17,20 +17,33 @@ Add the checks the change calls for, read off `git diff --name-only` against the
 
 ## How it runs
 
-The steps fall into four groups, one per place they build in. Each Workspace step is its own tracked background task, each other group is one task running its steps in order and stopping at the first that fails, and there is no job cap:
+Every step starts as soon as what it reads is ready, and there is no job cap. A chain, written with `→`, is one tracked background task running its steps in order and stopping at the first that fails; every other step is a task of its own:
 
-| Group | Steps | Builds in |
-| :--- | :--- | :--- |
-| Workspace | `runtime` and `fmt-check`, with the dependency check where the change calls for it; then `clippy`, `doctest` and `docs`, with the bundle test where the change calls for it; then the Binaryen cache check, where the change calls for it; then `js-test`; last, `test` | the root workspace's `target/` |
-| Zed | `zed-fmt-check` → `zed-clippy` → `zed-test` → `zed-build` | `editors/zed`, its own workspace; `zed-test` also hashes `editors/grammar` as it is on disk |
-| Grammar | `grammar-install` → `grammar-test` | `editors/grammar`, whose `src/` `grammar-test` regenerates |
-| VS Code | `vscode-install` → `vscode-test` → `vscode-build` | `editors/vscode` |
+| Starts | Steps |
+| :--- | :--- |
+| At once | `runtime`; `fmt-check`; `js-test`; `grammar-install` → `grammar-test`; `vscode-install` → `vscode-test` → `vscode-build`; `zed-fmt-check` → `zed-clippy` → `zed-build`; the dependency check, where the change calls for it |
+| Once `runtime` has passed | `clippy`; `doctest`; `docs`; the bundle test, where the change calls for it |
+| Once `grammar-test` has passed | `zed-test` |
+| Once `clippy`, `doctest`, `docs` and the bundle test have finished | the Binaryen cache check, where the change calls for it |
+| Once every other step has finished | `test`, by itself |
 
-Workspace, Grammar and VS Code start at once, and Zed once Grammar has finished, since `zed-test` would hash the grammar while `grammar-test` rewrites it. Inside Workspace, `clippy`, `doctest`, `docs` and the bundle test wait for `runtime` to pass, because `curios` embeds the launcher it files and a build before it embeds the old one. The Binaryen cache check waits for every step that builds `curios`, since it deletes the Binaryen build `curios` links. `test` takes hours, so it starts once every other Workspace step has finished. Workspace steps listed together, between semicolons, run beside each other: Cargo's lock on a build directory interleaves the builds that would conflict.
+What orders them, and nothing else does:
 
-- Each npm chain is one task, in order, because `npm clean-install` deletes `node_modules` under a test running beside it. The Zed chain is one task too, and like `vscode-build` its last step, `zed-build`, is the one that produces what the editor loads.
+- **A step that builds `curios` waits for `runtime`**, because `curios` embeds the launcher it files and a build before it embeds the old one. `js-test` builds the browser bundle, which depends on neither `curios` nor the launcher, so it does not wait.
+- **`zed-test` waits for `grammar-test`**, since it hashes `editors/grammar` as it is on disk and `grammar-test` regenerates its `src/`. The extension's other steps read nothing of the grammar, and `zed-build`, like `vscode-build`, is the one that produces what the editor loads.
+- **An npm chain keeps its order**, because `npm clean-install` deletes `node_modules` under a test running beside it.
+- **The Binaryen cache check waits for every step that builds `curios`**, since it deletes the Binaryen build `curios` links.
+- **`test` takes hours**, so it starts once every other step has finished and runs by itself.
+
+Cargo locks a build directory per target and profile. `clippy`, `doctest`, `docs` and `test` all build in the root workspace's `target/debug`, so they compile in turn, in whatever order they reach the lock, while `runtime` and `js-test` build beside them in directories of their own and the Zed steps in `editors/zed`. Every `cargo xtask` launch takes the `target/debug` lock too, being a `cargo run` in the root workspace: a step launched during one of those builds waits for it before its own tool starts, which is why a step that can start at once does.
+
 - Each step writes `<its command> > <scratchpad>/gate/<step>.log 2>&1; echo "EXIT=$?" >> <scratchpad>/gate/<step>.log`, a chain's steps one log each. The exit code is the log's last line; a task notification's code is the wrapper's.
-- A step or group that waits starts when the notification of the last one it waits on arrives. Never detach with `&`, and never add a shell that waits on another. Do other work until the notifications arrive, and read the logs then.
+- A step that waits starts when the notification of the last one it waits on arrives. Never detach with `&`, and never add a shell that waits on another. Do other work until the notifications arrive, and read the logs then.
+- `test` gets a Monitor on its log, started with it: one event when the build ends and the suite starts, one for every five hundredth test to finish and one for every test that does not pass, since the suite runs with `--no-fail-fast` and its exit code comes only at the end. Nextest numbers each result `(N/TOTAL)`, which is what the filter below reads. Re-arm it at each expiry, with `tail -n 0` so nothing is reported twice, until the step's notification arrives.
+
+```sh
+tail -n +1 -F <scratchpad>/gate/test.log | awk '/^ +PASS /{ if ($0 ~ /\( *[0-9]*(000|500)\//) { print; fflush() } next } /^ +SLOW /{ next } /^ +[A-Z][A-Z0-9 -]* \[/ || /^error/ || /^ +Starting / || /^EXIT=/ { print; fflush() }'
+```
 
 ## When a step fails
 
