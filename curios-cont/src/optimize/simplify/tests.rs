@@ -2,8 +2,9 @@
 
 use {
     super::{
-        eliminate_dead_bindings, eliminate_dead_parameters, fold_intrinsic_identities,
-        forward_aggregate_projections, forward_calls, forward_continuations, rewrite_atoms,
+        eliminate_dead_bindings, eliminate_dead_calls, eliminate_dead_parameters,
+        fold_intrinsic_identities, forward_aggregate_projections, forward_calls,
+        forward_continuations, rewrite_atoms,
     },
     crate::{
         Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
@@ -611,5 +612,165 @@ fn a_closure_value_jumped_to_a_join_that_calls_it_stays_a_jump() {
 
     assert!(!forward_calls(&mut module));
     assert!(matches!(module.node(jump), Some(Node::ApplyCont(_))));
+    module.verify().unwrap();
+}
+
+/// A call returning `width` results; only `read` reaches the entry's return sentinel.
+fn returning_call(
+    width: usize,
+    read: Option<usize>,
+) -> (Module, NodeId, FunctionId, ContinuationId) {
+    let mut module = Module::new();
+    let main = module.reserve_function();
+    let callee = module.reserve_function();
+    let callee_return = module.reserve_continuation();
+    let callee_body = module.add_node(Node::ApplyCont(Edge {
+        target: callee_return,
+        args: (0..width)
+            .map(|index| Atom::Literal(Literal::Nat(Natural::from(index as u32))))
+            .collect(),
+    }));
+    module.define_function(
+        callee,
+        Function {
+            debug_name: Some("callee".into()),
+            params: vec![],
+            return_cont: callee_return,
+            body: callee_body,
+            droppable: true,
+        },
+    );
+    let main_return = module.reserve_continuation();
+    let resume = module.reserve_continuation();
+    let params: Vec<_> = (0..width).map(|_| module.add_value(None)).collect();
+    let resume_body = module.add_node(Node::ApplyCont(Edge {
+        target: main_return,
+        args: vec![read.map_or_else(
+            || Atom::Literal(Literal::Nat(Natural::from(0u32))),
+            |index| Atom::Value(params[index]),
+        )],
+    }));
+    module.define_continuation(
+        resume,
+        Continuation {
+            debug_name: Some("resume".into()),
+            params,
+            body: resume_body,
+        },
+    );
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![],
+        return_to: resume,
+    });
+    let resuming = module.add_node(Node::LetCont {
+        continuations: vec![resume],
+        body: call,
+    });
+    let body = module.add_node(Node::LetFun {
+        functions: vec![callee],
+        body: resuming,
+    });
+    module.define_function(
+        main,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    (module, call, callee, resume)
+}
+
+#[test]
+fn dead_calls_jump_to_the_resume_with_unused_result_padding() {
+    let (mut module, call, _, resume) = returning_call(1, None);
+    assert!(eliminate_dead_calls(&mut module));
+    assert!(matches!(
+        module.node(call),
+        Some(Node::ApplyCont(Edge { target, args }))
+            if *target == resume && args == &vec![Atom::Filler]
+    ));
+    module.verify().unwrap();
+    assert!(!eliminate_dead_calls(&mut module));
+}
+
+#[test]
+fn dead_calls_pad_every_result_of_a_split_return() {
+    let (mut module, call, _, resume) = returning_call(2, None);
+    assert!(eliminate_dead_calls(&mut module));
+    assert!(matches!(
+        module.node(call),
+        Some(Node::ApplyCont(Edge { target, args }))
+            if *target == resume && args == &vec![Atom::Filler; 2]
+    ));
+    module.verify().unwrap();
+}
+
+#[test]
+fn dead_calls_keep_a_call_whose_result_is_read() {
+    let (mut module, call, _, _) = returning_call(1, Some(0));
+    assert!(!eliminate_dead_calls(&mut module));
+    assert!(matches!(module.node(call), Some(Node::ApplyFun { .. })));
+    module.verify().unwrap();
+}
+
+#[test]
+fn dead_calls_keep_a_call_when_only_its_second_result_is_read() {
+    let (mut module, call, _, _) = returning_call(2, Some(1));
+    assert!(!eliminate_dead_calls(&mut module));
+    assert!(matches!(module.node(call), Some(Node::ApplyFun { .. })));
+    module.verify().unwrap();
+}
+
+#[test]
+fn dead_calls_require_the_callees_proof_of_omission() {
+    let (mut module, call, callee, _) = returning_call(1, None);
+    module.function_mut(callee).unwrap().droppable = false;
+    assert!(!eliminate_dead_calls(&mut module));
+    assert!(matches!(module.node(call), Some(Node::ApplyFun { .. })));
+    module.verify().unwrap();
+}
+
+#[test]
+fn dead_calls_keep_tail_calls() {
+    let (mut module, call, callee, _) = returning_call(1, None);
+    let return_to = module
+        .function(module.entry().unwrap())
+        .unwrap()
+        .return_cont;
+    module.set_node(
+        call,
+        Node::ApplyFun {
+            callee: Callee::Known(callee),
+            args: vec![],
+            return_to,
+        },
+    );
+    module.verify().unwrap();
+    assert!(!eliminate_dead_calls(&mut module));
+    module.verify().unwrap();
+}
+
+#[test]
+fn dead_calls_keep_unknown_closure_calls() {
+    let (mut module, call, _, resume) = returning_call(1, None);
+    let closure = module.add_value(None);
+    let main = module.entry().unwrap();
+    module.function_mut(main).unwrap().params.push(closure);
+    module.set_node(
+        call,
+        Node::ApplyFun {
+            callee: Callee::Closure(closure),
+            args: vec![],
+            return_to: resume,
+        },
+    );
+    module.verify().unwrap();
+    assert!(!eliminate_dead_calls(&mut module));
     module.verify().unwrap();
 }

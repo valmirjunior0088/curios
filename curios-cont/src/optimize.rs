@@ -36,9 +36,6 @@ mod uncurry;
 pub(crate) use uncurry::*;
 
 use super::{Module, known_values};
-// Only the instrument below reads the demand lattice, and it compiles away without the feature.
-#[cfg(feature = "profile")]
-use super::{Callee, Demand, Node, demand_of, demands};
 
 /// How many live nodes a callee with more than one call site may have and still be inlined into each of them.
 ///
@@ -118,10 +115,7 @@ pub fn optimize(module: &mut Module) {
                 "cont::eliminate_dead_parameters",
                 eliminate_dead_parameters(module)
             )
-            | {
-                sample_droppable_dead_calls(module);
-                false
-            }
+            | pass!("cont::eliminate_dead_calls", eliminate_dead_calls(module))
             | pass!(
                 "cont::inline_single_use_continuations",
                 inline_single_use_continuations(module)
@@ -168,56 +162,6 @@ pub fn optimize(module: &mut Module) {
     module
         .verify()
         .expect("invalid high CPS after optimization");
-}
-
-/// How many calls stand where a dead-call deletion would remove one — a rule no pass applies, so this sampler is the `droppable` flag's one reader: a known callee whose definition was proved total and performs nothing, with a result nothing reads.
-///
-/// **A measurement, not a rule.** Whether such a call is ever *observed* here is the question the deletion rests on, and reading the pass list does not answer it: the result becomes unread only once [`eliminate_dead_parameters`] has stripped it, and inlining and contification consume the call in the same round — so the call may be gone before it is ever dead. Counting at the one point the rule would fire is what settles that for the price of a counter.
-///
-/// The condition is the deletion's own, and it is read off [`super::demand`]'s lattice: the value the call returns into — its return continuation's parameter — is `Unused`, which is the state in which the call could be spliced to a jump. A tail call is never counted, because its `return_to` is the function's own bodyless sentinel and the result is what the caller resumes on, so there is no parameter to read a demand off and none is read.
-///
-/// **Not whether the return continuation holds no parameter at all**, a state nothing in the pipeline produces: a non-tail resume is minted at arity one by the Ersd lowering, and of the three writers of a continuation's parameter list, [`eliminate_dead_parameters`] skips every continuation that is a return target, [`split_returns`] sets a width of two or more, and specialization copies a clone's list — so a count on that condition could only ever read zero, whether or not a call was dead. Asking the lattice asks the question the deletion actually rests on.
-///
-/// # What it last reported
-///
-/// `present` 7 over `total(Vec/of_list(List/replicate(List/len(args), 7)))`; `dead` has not been taken under this condition.
-///
-/// Retake it with `cargo xtask profile <source>` and read `cont::droppable_dead_calls` in the folded output, or `curios/.artifacts/profile.tsv` directly when the program exits non-zero, since the recipe folds nothing then. Perturb the source first: a cached unit skips the optimizer entirely and reports no sample at all.
-fn sample_droppable_dead_calls(module: &Module) {
-    let _ = module;
-    #[cfg(feature = "profile")]
-    {
-        // Two numbers, because one cannot tell the two causes of a zero apart: a call already consumed by inlining or contification, and a call still standing whose result is still read.
-        let mut present = 0u64;
-        let mut dead = 0u64;
-        let demands = demands(module);
-        for node in module.nodes().iter().flatten() {
-            let Node::ApplyFun {
-                callee: Callee::Known(callee),
-                return_to,
-                ..
-            } = node
-            else {
-                continue;
-            };
-            if !module
-                .function(*callee)
-                .is_some_and(|function| function.droppable)
-            {
-                continue;
-            }
-            present += 1;
-            if module
-                .continuation(*return_to)
-                .and_then(|continuation| continuation.params.first())
-                .is_some_and(|result| demand_of(&demands, *result) == Demand::Unused)
-            {
-                dead += 1;
-            }
-        }
-        curios_profile::sample!("cont::droppable_calls_present", present);
-        curios_profile::sample!("cont::droppable_dead_calls", dead);
-    }
 }
 
 #[cfg(test)]

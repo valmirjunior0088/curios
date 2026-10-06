@@ -871,6 +871,51 @@ pub(crate) fn forward_aggregate_projections(module: &mut Module) -> bool {
     }
     true
 }
+/// Delete a known call only when its carried proof permits omission and every result is unread. A bodyless return sentinel has no local result demand, so a tail call is kept.
+///
+/// The jump retains the resume's arity with fillers: the emitter supplies null or the receiving register's zero, and no result reads either. Taking one demand snapshot is sufficient because deleting these calls can only remove demands; newly dead results are found in the next optimizer round.
+pub(crate) fn eliminate_dead_calls(module: &mut Module) -> bool {
+    let demands = demands(module);
+    let mut replacements = Vec::new();
+    for (id, node) in module.live_nodes() {
+        let Node::ApplyFun {
+            callee: Callee::Known(callee),
+            return_to,
+            ..
+        } = node
+        else {
+            continue;
+        };
+        if !module
+            .function(*callee)
+            .is_some_and(|function| function.droppable)
+        {
+            continue;
+        }
+        let Some(resume) = module.continuation(*return_to) else {
+            continue;
+        };
+        if resume
+            .params
+            .iter()
+            .all(|result| demand_of(&demands, *result) == Demand::Unused)
+        {
+            replacements.push((
+                id,
+                Edge {
+                    target: *return_to,
+                    args: vec![Atom::Filler; resume.params.len()],
+                },
+            ));
+        }
+    }
+    let changed = !replacements.is_empty();
+    for (id, edge) in replacements {
+        module.set_node(id, Node::ApplyCont(edge));
+    }
+    changed
+}
+
 pub(crate) fn eliminate_dead_bindings(module: &mut Module) -> bool {
     let mut changed = false;
     // Remove dead bindings in sweeps: count value uses once, collect every binding the snapshot proves dead, and splice them all out in a single chain-resolving pass rather than recomputing the counts and rewiring the whole module for one removal at a time. Removing a binding only ever lowers another value's use count, so a value dead in the snapshot stays dead; a binding that a removal newly exposes is collected by the next sweep.
