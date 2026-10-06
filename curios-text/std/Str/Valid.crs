@@ -1,7 +1,59 @@
-use /std/Str/{classify, Scan, step, scan_from, pending, concluded, advanced, begins_scalars_of,
-    continues, classify_continues, step_of_continuing};
+use /std/Str/{Class, classify, Scan, step, scan_from, pending, concluded, advanced,
+    begins_scalars_of, continues};
 use /std/{Bool, Byte, Bytes, Char, Eq, Nat, Option, Str};
 use /std/Bool/{True, False, Holds};
+
+--- That a class asks its continuation bytes for a range inside `0x80..=0xBF`.
+let class_continues(k: Class) -> Bool =
+    match k | ascii() => true | lead(_, lo, hi, _) => 0x80 <= lo && hi <= 0xBF | bad() => true end;
+
+--- Every lead `classify` reports asks its continuation bytes for a range inside `0x80..=0xBF`. Walked by `classify`'s own guards, each of which fixes the range it reports.
+let classify_continues(c: Byte) -> Holds(class_continues(classify(c))) =
+    let n = Byte/to_nat(c);
+    match Nat/in_range(n, 0x0, 0x7F)
+    | true => True/qed()
+    | false =>
+        match Nat/in_range(n, 0xC2, 0xDF)
+        | true => True/qed()
+        | false =>
+            match Nat/in_range(n, 0xE0, 0xEF)
+            | true =>
+                match n == 0xE0
+                | true => match n == 0xED | true => True/qed() | false => True/qed() end
+                | false => match n == 0xED | true => True/qed() | false => True/qed() end
+                end
+            | false =>
+                match Nat/in_range(n, 0xF0, 0xF4)
+                | true =>
+                    match n == 0xF0
+                    | true => match n == 0xF4 | true => True/qed() | false => True/qed() end
+                    | false => match n == 0xF4 | true => True/qed() | false => True/qed() end
+                    end
+                | false => True/qed()
+                end
+            end
+        end
+    end;
+
+--- A scan between characters that meets a byte continuing one goes bad: `classify` reports no lead for it, each of its guards refuted by the byte's range.
+let step_of_continuing(c: Byte, q: Holds(continues(c))) -> Eq()(step(c, Scan/lead()), Scan/bad()) =
+    let n = Byte/to_nat(c);
+    match Nat/in_range(n, 0x0, 0x7F)
+    | true => match False/refuted() end
+    | false =>
+        match Nat/in_range(n, 0xC2, 0xDF)
+        | true => match False/refuted() end
+        | false =>
+            match Nat/in_range(n, 0xE0, 0xEF)
+            | true => match False/refuted() end
+            | false =>
+                match Nat/in_range(n, 0xF0, 0xF4)
+                | true => match False/refuted() end
+                | false => Eq/refl()
+                end
+            end
+        end
+    end;
 
 --- Whether a scan has come to rest between characters.
 let at_lead(s: Scan) -> Bool =

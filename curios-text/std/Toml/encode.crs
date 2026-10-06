@@ -1,5 +1,5 @@
-use /std/{Nat, Int, Flt, Bool, Bytes, Char, Str, List, Map, Option};
-use /std/Toml/{Toml, Date, Time};
+use /std/{Nat, Int, Flt, Bool, Bytes, Char, Str, List, Map, Option, Toml};
+use /std/Toml/{Date, Time};
 use /std/Toml/scan/{is_bare_byte};
 
 let bare_ok(s: Str) -> Bool =

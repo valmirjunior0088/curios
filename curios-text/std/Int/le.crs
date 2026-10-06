@@ -1,6 +1,16 @@
+pub use /sys/Int/{le};
 use /std/{Nat, Int, Bool, Option, Eq};
 use /std/Bool/{True, Holds};
-use /std/Int/{floor, floor_mul, positive};
+
+-- The floors the order laws stand on, stated over abstract naturals, where the comparison decides them by comparing preimages; a law instantiates one at the naturals its hypotheses name, and the instance reduces to the comparison the law concludes.
+let floor(x: Nat, y: Nat) -> Holds(+0 <= Nat/to_int(x) + Nat/to_int(y)) =
+    True/qed();
+
+let floor_mul(x: Nat, y: Nat) -> Holds(+0 <= Nat/to_int(x) * Nat/to_int(y)) =
+    True/qed();
+
+let positive(m: Nat, y: Nat) -> Holds(+0 < Nat/to_int(m + 1) + Nat/to_int(y)) =
+    True/qed();
 
 --- `n <= n`.
 pub let refl(n: Int) -> Holds(n <= n) =

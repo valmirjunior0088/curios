@@ -37,7 +37,7 @@ pub let readable(@A: Type, r: Receiver(A)) -> Async/Wait =
         let count = /sys/Channel/count(r.0)!;
         let closed = /sys/Channel/closed(r.0)!;
         Io/pure(count > 0 || closed);
-    Async/Waiting/probe(ready());
+    Async/Wait/probe(Async/Probe { ready() });
 
 --- A wait satisfied while the channel has room or is closed.
 pub let writable(@A: Type, s: Sender(A)) -> Async/Wait =
@@ -46,7 +46,7 @@ pub let writable(@A: Type, s: Sender(A)) -> Async/Wait =
         let capacity = /sys/Channel/capacity(s.0)!;
         let closed = /sys/Channel/closed(s.0)!;
         Io/pure(count < capacity || closed);
-    Async/Waiting/probe(ready());
+    Async/Wait/probe(Async/Probe { ready() });
 
 --- An offer that yields the next value, or `none` once the channel is closed and drained.
 pub let recv_offer(@A: Type, r: Receiver(A)) -> Offer(Option(A)) =

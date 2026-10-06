@@ -1350,7 +1350,7 @@ fn code_modules() -> Vec<SysModule> {
     ]
 }
 
-/// Every module `/sys` declares before the host's rows join them: the carriers in the order the root lists them, each holding its type former and the intrinsic operations over it and all but the two packed runs hoisting the type to the root.
+/// Every module `/sys` declares before the host's rows join them: the carriers in the order the root lists them, each holding its type former and the intrinsic operations over it, and hoisting the type to the root.
 fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
     vec![
         SysModule::carrier(
@@ -1377,8 +1377,7 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
             pub_let("Flt", type_(), flt()),
             flt_ops(syntax),
         ),
-        // The two packed runs share every operation name, so neither type is hoisted: `Bits` and `Bytes` are reached through their own modules.
-        SysModule::packed(
+        SysModule::carrier(
             "Bits",
             &["A packed run of bits, written `b[…]`."],
             pub_let("Bits", type_(), bin(Grain::B)),
@@ -1388,7 +1387,7 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
             ]
             .concat(),
         ),
-        SysModule::packed(
+        SysModule::carrier(
             "Bytes",
             &["A packed run of bytes, written `x[…]`."],
             pub_let("Bytes", type_(), bin(Grain::X)),

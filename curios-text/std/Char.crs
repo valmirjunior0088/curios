@@ -2,10 +2,6 @@ use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, Str, Show, Spell, Ord};
 use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp};
 
---- Whether `code` is a Unicode scalar value: a code point up to `U+10FFFF` outside the surrogate range.
-let is_valid(code: Nat) -> Bool =
-    code < 0xD800 || code >= 0xE000 && code <= 0x10FFFF;
-
 --- That a code point is a Unicode scalar value, which is what `Char` carries, and deciding it where no guard has.
 pub mod Valid;
 pub use Valid/{let Valid};

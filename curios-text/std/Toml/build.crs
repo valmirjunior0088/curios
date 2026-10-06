@@ -1,7 +1,26 @@
-use /std/{Nat, Bool, Bytes, Str, List, Map, Result};
-use /std/Toml/{Toml, Seg, Origin, Error, let Build};
+use /std/{Nat, Bool, Bytes, Str, List, Map, Result, Toml};
+use /std/Toml/{Error};
 use /std/Toml/Error/{Rule};
 use /std/Bool/{Holds};
+
+induct Seg: Type
+| plain(Str)
+| at(name: Str, index: Nat)
+end
+
+induct Origin: Type
+| header()
+| implicit()
+| dotted()
+| inline()
+| many()
+end
+
+pub struct Build: Type {
+    root: Map(Str, Toml),
+    side: Map(Bytes, Origin),
+    scope: List(Seg),
+}
 
 induct Act: Type
 | act_table()
@@ -12,6 +31,10 @@ end
 --- The empty document: nothing in the table, no origin recorded for any path, and no header in scope.
 pub let build_empty: Build =
     Build { root = Map/empty(), side = Map/empty(), scope = [] };
+
+--- The document a build has put together so far.
+pub let root(b: Build) -> Map(Str, Toml) =
+    b.root;
 
 let seg_key(pre: Bytes, seg: Seg) -> Bytes =
     match seg

@@ -1,4 +1,5 @@
-use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Io, Handle};
+use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Io, Handle,
+    print_err};
 use /std/time/{Duration};
 use /std/Handle/{Interest, Readiness};
 use /std/Bool/{Holds};
@@ -36,37 +37,14 @@ struct Guard: Type {
     release: Io({}),
 }
 
---- `Wait`'s representation, sealed so a wait is built only through `Wait`'s constructors.
-induct Waiting: Type
-| handle(Handle, Interest)
-| timer(Duration)
-| probe(Io(Bool))
-end
-
---- One condition a parked fiber waits for. Readiness is observed again whenever the scheduler becomes idle.
-pub let Wait: Type =
-    Waiting;
+--- A check the scheduler repeats whenever it becomes idle. Only `/std/Async` writes one, so what a scan runs is an observation and never an effect.
+pub struct Probe: Type {
+    Io(Bool),
+}
 
 --- The conditions a fiber parks on: a handle ready for an interest, time elapsed, a cell filled, and a channel readable or writable.
-pub mod Wait
-    pub use /std/Async/Channel/{readable, writable};
-    use /std/{Cell, Option, Io, Handle};
-    use /std/Handle/{Interest};
-    use /std/time/{Duration};
-    use /std/Async/{Wait, Waiting};
-
-    --- Until the handle is ready for the requested interest.
-    pub let ready(handle: Handle, interest: Interest) -> Wait =
-        Waiting/handle(handle, interest);
-
-    --- Until this much time has passed after parking.
-    pub let elapsed(duration: Duration) -> Wait =
-        Waiting/timer(duration);
-
-    --- Until the write-once cell is filled.
-    pub let filled(@A: Type, cell: Cell(A)) -> Wait =
-        Waiting/probe(Io/bind(Cell/poll(cell), (held) => Io/pure(Option/is_some(held))));
-end
+pub mod Wait;
+pub use Wait/{let Wait};
 
 induct Pause: Type
 | park(waits: List(Wait))
@@ -263,15 +241,16 @@ pub let copy(
         end;
     go();
 
+let fulfilled(@A: Type, f: Future(A)) -> Wait =
+    Wait/probe(Probe { Io/bind(Future/poll(f), (held) => Io/pure(Option/is_some(held))) });
+
 --- The value `f` is fulfilled with, parking until it is.
 pub let await(@A: Type, f: Future(A)) -> Async(A) =
     let polled = Future/poll(f)!;
     match polled
     | some(a) => pure(a)
     | none() =>
-        let _ =
-            park([
-                Waiting/probe(Io/bind(Future/poll(f), (held) => Io/pure(Option/is_some(held))))])!;
+        let _ = park([fulfilled(f)])!;
         await(f)
     end;
 
@@ -499,21 +478,21 @@ let enqueue(q: Queues, j: Job) -> Queues =
 
 let register_wait(q: Queues, slot: Slot, w: Wait) -> Io(Queues) =
     match w
-    | handle(h, interest) =>
+    | ready(h, interest) =>
         Io/pure(
             Queues {
                 ..q,
                 blocked = [..q.blocked, Parked { handle = h, interest = interest, slot = slot }],
             })
-    | timer(d) =>
+    | elapsed(d) =>
         let now = Duration/now()!;
         Io/pure(
             Queues {
                 ..q,
                 sleeping = [..q.sleeping, Sleeper { due = Duration/add(now, d), slot = slot }],
             })
-    | probe(ready) =>
-        Io/pure(Queues { ..q, probes = [..q.probes, Probed { ready = ready, slot = slot }] })
+    | probe(p) =>
+        Io/pure(Queues { ..q, probes = [..q.probes, Probed { ready = p.0, slot = slot }] })
     end;
 
 let register_waits(q: Queues, slot: Slot, ws: List(Wait)) -> Io(Queues) =
@@ -685,7 +664,7 @@ pub let run(main: Async({})) -> Io({}) =
     | success(_) => Io/pure(())
     | failure(d) =>
         let _ =
-            /std/print_err(
+            print_err(
                 Str/flatten([
                     "async: deadlocked, no runnable work remains and ",
                     Nat/to_str(d.parked),
@@ -786,11 +765,7 @@ pub let after(d: Duration) -> Io(Offer({})) =
 
 --- An offer that yields the task's answer once it has one.
 pub let joined(@A: Type, task: Task(A)) -> Offer(A) =
-    Offer/new(
-        Future/poll(task.result),
-        Io/pure(
-            Waiting/probe(
-                Io/bind(Future/poll(task.result), (held) => Io/pure(Option/is_some(held))))));
+    Offer/new(Future/poll(task.result), Io/pure(fulfilled(task.result)));
 
 let spawn_all(@A: Type, tasks: List(Async(A))) -> Async(List(Task(A))) =
     match tasks

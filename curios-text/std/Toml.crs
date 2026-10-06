@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Bytes, Str, List, Map};
+use /std/{Int, Flt, Bool, Str, List, Map};
 
 --- A calendar date, and the bound its fields carry.
 pub mod Date;
@@ -43,25 +43,6 @@ pub induct Toml: pub Type
 end
 
 pub use Toml/*;
-
-induct Seg: Type
-| plain(Str)
-| at(name: Str, index: Nat)
-end
-
-induct Origin: Type
-| header()
-| implicit()
-| dotted()
-| inline()
-| many()
-end
-
-struct Build: Type {
-    root: Map(Str, Toml),
-    side: Map(Bytes, Origin),
-    scope: List(Seg),
-}
 
 --- Why a document did not decode.
 pub mod Error;

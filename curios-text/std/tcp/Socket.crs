@@ -1,7 +1,16 @@
 use /std/{Bytes, Str, Nat, Bool, Result, Try, Async, Io, Handle};
-use /std/tcp/{resolve, let Socket};
+use /std/tcp/{resolve};
 use /std/Handle/{Interest};
 use /std/Bool/{Holds};
+
+--- A connected socket, read and written as a stream.
+pub struct Socket: Type {
+    Handle,
+}
+
+--- The connection the host handed over as `handle`.
+pub let of_handle(handle: Handle) -> Socket =
+    Socket { handle };
 
 --- Up to `n` bytes, parking until some arrive.
 pub let read(c: Socket, n: Nat, @positive: Holds(0 < n)) -> Async(Io/Chunk) =

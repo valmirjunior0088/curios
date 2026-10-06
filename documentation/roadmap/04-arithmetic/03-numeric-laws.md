@@ -10,7 +10,7 @@ The operations these laws are about — `pow`, `min`, `max`, `abs` and `sign` �
 
 The library carries what reduction does not state:
 
-- `/std/Nat/div_mod` hands back the quotient and remainder `/` and `%` compute, with Euclid's identity (`joined`) and the bound (`bounded`) as its proofs;
+- `/std/Nat/DivMod/of` hands back the quotient and remainder `/` and `%` compute, with Euclid's identity (`joined`) and the bound (`bounded`) as its proofs;
 - `/std/Nat/Divides(d, n)` is a multiple witness, with `refl`, `trans`, `zero`, `one`, `add`, `mul`, and `of_rem`, which turns a zero remainder into divisibility with the quotient as the witness;
 - `/std/Nat/lt` and `/std/Nat/le` carry the order laws, and `/std/WellFounded/recurse` over `WellFounded/lt` is strong induction along `<` — the measure a Euclidean recursion recurses on;
 - `/std/Int`'s indexed `Sign` view — every `Int` is `nonneg(n)`, the embedding of `n`, or `neg(n)`, which is `-1 - Nat/to_int(n)` — with `view`, `trichotomy` and `eq_of_eql`;

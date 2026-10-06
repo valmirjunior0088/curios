@@ -1,0 +1,23 @@
+use /std/{Io, Async, Handle};
+
+--- One end of a pipe to the child, read and written as a stream.
+pub struct Pipe: Type {
+    Handle,
+}
+
+--- The end the host handed over as `handle`.
+pub let of_handle(handle: Handle) -> Pipe =
+    Pipe { handle };
+
+--- Close this end.
+pub let close(p: Pipe) -> Io({}) =
+    Handle/close(p.0);
+
+satisfy Async/Read(Async, Pipe) {
+    read(p, n, @positive) = Async/Read/read(@Async, @Handle, p.0, n, @positive),
+}
+
+satisfy Async/Write(Async, Pipe) {
+    write(p, b) = Async/Write/write(p.0, b),
+    flush(p) = Async/Write/flush(p.0),
+}

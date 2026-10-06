@@ -1,5 +1,4 @@
-use /std/{Nat, Flt, Bool, Byte, Option, Bytes, Parse};
-use /std/Toml/{Toml};
+use /std/{Nat, Flt, Bool, Byte, Option, Bytes, Parse, Toml};
 use /std/Toml/scan/{hex_val};
 
 let dec_digit(n: Nat) -> Option(Nat) =

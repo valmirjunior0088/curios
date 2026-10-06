@@ -1,3 +1,4 @@
+pub use /sys/Nat/{lt};
 use /std/{Nat, Bool, Option};
 use /std/Bool/{True, Holds};
 

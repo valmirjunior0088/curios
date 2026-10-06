@@ -1,11 +1,22 @@
 pub use /sys/{Nat};
-pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr,
-    to_int, to_flt, to_byte};
+pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, gt, ge, and, or, xor, shl, shr, to_int,
+    to_flt, to_byte};
 use /std/{Str, Option, Char, Bool, Ordering, Show, Spell, Ord, Eq};
 use /std/Bool/{Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
--- Ahead of every operator this file uses: a use elaborated before the row it dispatches through loses the row's bound.
+--- `a < b`'s laws, and its crossings with `a <= b`.
+---
+--- Proved by recursion on the numbers rather than on evidence: one more on each side of a decided comparison cancels, so the hypothesis about `a + 1` and `b + 1` already is the one about `a` and `b`.
+pub mod lt;
+pub use lt/{let lt};
+
+--- `a <= b`'s laws.
+---
+--- Decided, so a guard already taken discharges it for free; a proof that has to recurse walks the numbers, as `lt`'s do.
+pub mod le;
+pub use le/{let le};
+
 satisfy Eql(Nat) {
     eql = eql,
     neq = neq,
@@ -157,19 +168,9 @@ satisfy Ord(Nat) {
     ord = ord,
 }
 
---- `a < b`'s laws, and its crossings with `a <= b`.
----
---- Proved by recursion on the numbers rather than on evidence: one more on each side of a decided comparison cancels, so the hypothesis about `a + 1` and `b + 1` already is the one about `a` and `b`.
-pub mod lt;
-
---- `a <= b`'s laws.
----
---- Decided, so a guard already taken discharges it for free; a proof that has to recurse walks the numbers, as `lt`'s do.
-pub mod le;
-
---- Division with remainder, certified: `div_mod` hands back the quotient and remainder `/` and `%` compute, with Euclid's identity and the remainder's bound.
-pub mod div_mod;
-pub use div_mod/{let div_mod, DivMod};
+--- Division with remainder, certified: `of` hands back the quotient and remainder `/` and `%` compute, with Euclid's identity and the remainder's bound.
+pub mod DivMod;
+pub use DivMod/{let DivMod};
 
 --- That `d` divides `n`, with its laws beneath.
 pub mod Divides;

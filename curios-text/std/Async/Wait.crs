@@ -1,0 +1,21 @@
+pub use /std/Async/Channel/{readable, writable};
+use /std/{Cell, Option, Io, Handle};
+use /std/Async/{Probe};
+use /std/Handle/{Interest};
+use /std/time/{Duration};
+
+--- One condition a parked fiber waits for. Readiness is observed again whenever the scheduler becomes idle.
+pub induct Wait: pub Type
+--- Until the handle is ready for the requested interest.
+| ready(Handle, Interest)
+--- Until this much time has passed after parking.
+| elapsed(Duration)
+--- Until the probe answers that it holds.
+| probe(Probe)
+end
+
+pub use Wait/*;
+
+--- Until the write-once cell is filled.
+pub let filled(@A: Type, cell: Cell(A)) -> Wait =
+    Wait/probe(Probe { Io/bind(Cell/poll(cell), (held) => Io/pure(Option/is_some(held))) });

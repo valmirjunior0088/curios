@@ -1,0 +1,24 @@
+use /std/{Nat, Str, Show};
+use /std/ops/{Eql};
+
+--- An exit code, or the signal that ended the child.
+pub induct Exit: pub Type
+--- It returned, with this code.
+| exited(Nat)
+--- A signal ended it, this one.
+| signaled(Nat)
+end
+
+pub use Exit/*;
+
+satisfy Eql(Exit) {
+    ..
+}
+
+satisfy Show(Exit) {
+    show(e) =
+        match e
+        | exited(code) => Str/flatten(["exited(", Nat/to_str(code), ")"])
+        | signaled(signal) => Str/flatten(["signaled(", Nat/to_str(signal), ")"])
+        end,
+}

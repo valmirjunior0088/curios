@@ -789,6 +789,8 @@ use /std/Nat/{Lt};
 use /{Owner};
 ```
 
+A `use` takes effect where it is written: the items after it in its module see what it imports, and the items before it do not. The module's own declarations have no such order, and are in scope throughout it.
+
 Inside a group, a bare name imports both a child module and a value with that name when both exist. `mod Name` imports only the module namespace; `let Name` imports only the value namespace.
 
 ```crs

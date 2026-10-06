@@ -1,6 +1,6 @@
-use /std/{Bool, Str, List, Map, Result, Bytes, Parse};
-use /std/Toml/{Toml, Error, let Build};
-use /std/Toml/build/{apply_assign, apply_header, apply_aot, build_empty};
+use /std/{Bool, Str, List, Map, Result, Bytes, Parse, Toml};
+use /std/Toml/{Error};
+use /std/Toml/build/{Build, apply_assign, apply_header, apply_aot, build_empty, root};
 use /std/Toml/scan/{line_end, trivia, ws};
 use /std/Toml/keys/{key_part};
 use /std/Toml/values/{value_parse};
@@ -80,5 +80,5 @@ pub let decode(source: Str) -> Result(Error, Map(Str, Toml)) =
                 | table_header(path) => apply_header(b, path)
                 | array_header(path) => apply_aot(b, path)
                 end)!;
-        Result/success(built.root)
+        Result/success(root(built))
     end;

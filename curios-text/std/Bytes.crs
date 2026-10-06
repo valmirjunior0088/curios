@@ -1,4 +1,5 @@
-pub use /sys/Bytes/{let Bytes, get, len, eql, slice, replicate, and, or, xor, to_bits};
+pub use /sys/{Bytes};
+pub use /sys/Bytes/{get, len, eql, slice, replicate, and, or, xor, to_bits};
 use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Ordering, Ord, WellFounded};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql, Cmp};

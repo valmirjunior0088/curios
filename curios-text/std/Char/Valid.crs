@@ -1,12 +1,15 @@
-use /std/{Nat, Option};
+use /std/{Nat, Bool, Option};
 use /std/Bool/{True, Holds};
-use /std/Char/{is_valid};
+
+--- Whether `code` is a Unicode scalar value: a code point up to `U+10FFFF` outside the surrogate range.
+let of(code: Nat) -> Bool =
+    code < 0xD800 || code >= 0xE000 && code <= 0x10FFFF;
 
 --- That `code` is a Unicode scalar value, which is what `Char` carries.
 ---
 --- Decided, so a literal or a guard already taken discharges it by reduction.
 pub let Valid(code: Nat) -> Prop =
-    Holds(is_valid(code));
+    Holds(of(code));
 
 --- A code below the surrogates is a scalar value.
 pub let below_surrogates(code: Nat, p: Holds(code < 0xD800)) -> Valid(code) =
@@ -58,7 +61,7 @@ pub let below_surrogates_of(
 
 --- The evidence that `code` is a Unicode scalar value, or `none`.
 pub let try(code: Nat) -> Option(Valid(code)) =
-    match is_valid(code): (r) => Option(Holds(r))
+    match of(code): (r) => Option(Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;

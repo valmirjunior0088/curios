@@ -1,9 +1,19 @@
 pub use /sys/{Int};
-pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr, to_nat,
+pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, gt, ge, and, or, xor, shl, shr, to_nat,
     to_flt};
 use /std/{Nat, Bool, Str, Option, Ordering, Show, Spell, Ord, Eq};
 use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
+
+--- The laws of `a < b`, and its crossings with `a <= b`.
+---
+--- Each law names the difference a hypothesis makes non-negative as a natural, with `to_nat`, and concludes from `Nat`'s own floor read through the widening — the order on `Int` is `Nat`'s, carried along the embedding.
+pub mod lt;
+pub use lt/{let lt};
+
+--- The laws of `a <= b`.
+pub mod le;
+pub use le/{let le};
 
 --- That `a` is not zero, decided — what `/` and `%` on `Int` ask of a divisor.
 pub let NonZero(a: Int) -> Prop =
@@ -12,14 +22,6 @@ pub let NonZero(a: Int) -> Prop =
 --- That `a` is zero or above, decided.
 pub let NonNeg(a: Int) -> Prop =
     Holds(ge(a, 0));
-
---- The laws of `a < b`, and its crossings with `a <= b`.
----
---- Each law names the difference a hypothesis makes non-negative as a natural, with `to_nat`, and concludes from `Nat`'s own floor read through the widening — the order on `Int` is `Nat`'s, carried along the embedding.
-pub mod lt;
-
---- The laws of `a <= b`.
-pub mod le;
 
 --- An integer is a natural widened, or one below the negation of one: the two canonical forms, as the family's indices.
 ---
@@ -45,16 +47,6 @@ pub let view(i: Int) -> Sign(i) =
                 Sign/neg(to_nat(-1 - i, @ok))
         end(c);
     go(i >= +0, Eq/refl());
-
--- The floors the order laws stand on, stated over abstract naturals, where the comparison decides them by comparing preimages; a law instantiates one at the naturals its hypotheses name, and the instance reduces to the comparison the law concludes.
-let floor(x: Nat, y: Nat) -> Holds(+0 <= Nat/to_int(x) + Nat/to_int(y)) =
-    True/qed();
-
-let floor_mul(x: Nat, y: Nat) -> Holds(+0 <= Nat/to_int(x) * Nat/to_int(y)) =
-    True/qed();
-
-let positive(m: Nat, y: Nat) -> Holds(+0 < Nat/to_int(m + 1) + Nat/to_int(y)) =
-    True/qed();
 
 let absurd_succ(@P: Type, x: Nat, h: Holds(+0 == Nat/to_int(x) + 1)) -> P =
     match h: (_) => P end;

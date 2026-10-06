@@ -1,3 +1,4 @@
+pub use /sys/Int/{lt};
 use /std/{Int, Bool, Option};
 use /std/Bool/{True, Holds};
 

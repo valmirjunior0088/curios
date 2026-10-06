@@ -75,7 +75,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 - [x] [A term is one where conversion says so](design/arithmetic/a-term-is-one-where-conversion-says-so.md): a pair's atoms classed by each checker's own conversion, a commutative operation's operands paired and never compared by position, the one metavariable an equation is linear in solved by exact division, an implicit with two solutions refused, a mismatch saying what was not compared, an arm's equation answering the terms conversion holds equal to its scrutinee by one rule in both checkers and following the solution its arm is checked under, a stuck fold taken again over the atoms conversion holds one, and totality reading terms by a reduction that asks conversion nothing
 - [x] [A bound is a decided proposition discharged by reduction](design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md), filled on retry once its proposition is known
 - [x] [A bound that follows from the facts in scope is proved by the elaborator](design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md), by linear arithmetic with a quotient's bounds, subtraction's cases and products, in an ordinary term both checkers recheck
-- [x] Certified division with remainder and divisibility (`/std/Nat/div_mod`, `/std/Nat/Divides`), and `Int`'s order carried from `Nat` along the embedding
+- [x] Certified division with remainder and divisibility (`/std/Nat/DivMod`, `/std/Nat/Divides`), and `Int`'s order carried from `Nat` along the embedding
 
 ## Compilation
 

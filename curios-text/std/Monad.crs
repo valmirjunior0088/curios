@@ -6,7 +6,7 @@ pub concept Monad(M: (Type) -> Type): pub Type {
     bind(@A: Type, @B: Type, M(A), (A) -> M(B)) -> M(B),
 }
 
-pub use Monad/{pure, bind};
+pub use Monad/*;
 
 --- The canonical embedding of one monad into another, which `!` inserts where an action's monad differs from its region's.
 ---
@@ -18,4 +18,4 @@ pub concept Lift(M: (Type) -> Type, N: (Type) -> Type): pub Type {
     lift(@A: Type, M(A)) -> N(A),
 }
 
-pub use Lift/{lift};
+pub use Lift/*;

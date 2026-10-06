@@ -1,45 +1,23 @@
 use /std/{Option, Try, Async, Io, Handle};
-use /std/Command/{let Child, let Pipe};
+use /std/Command/{Pipe, Exit};
 use /std/Handle/{Interest};
 
---- How a child ended: with an exit code, or by a signal.
-pub mod Exit
-    use /std/{Nat, Str, Show};
-    use /std/ops/{Eql};
-
-    --- An exit code, or the signal that ended the child.
-    pub induct Exit: pub Type
-    --- It returned, with this code.
-    | exited(Nat)
-    --- A signal ended it, this one.
-    | signaled(Nat)
-    end
-
-    pub use Exit/*;
-
-    satisfy Eql(Exit) {
-        ..
-    }
-
-    satisfy Show(Exit) {
-        show(e) =
-            match e
-            | exited(code) => Str/flatten(["exited(", Nat/to_str(code), ")"])
-            | signaled(signal) => Str/flatten(["signaled(", Nat/to_str(signal), ")"])
-            end,
-    }
-end
-
-pub use Exit/{let Exit};
-
-satisfy Async/Read(Async, Pipe) {
-    read(p, n, @positive) = Async/Read/read(@Async, @Handle, p.0, n, @positive),
+--- A running child, and whichever of its streams were piped.
+pub struct Child: Type {
+    handle: Handle,
+    stdin: Option(Pipe),
+    stdout: Option(Pipe),
+    stderr: Option(Pipe),
 }
 
-satisfy Async/Write(Async, Pipe) {
-    write(p, b) = Async/Write/write(p.0, b),
-    flush(p) = Async/Write/flush(p.0),
-}
+--- The child the host started under `handle`, with the pipes it handed over.
+pub let of_handle(
+    handle: Handle,
+    stdin: Option(Pipe),
+    stdout: Option(Pipe),
+    stderr: Option(Pipe),
+) -> Child =
+    Child { handle = handle, stdin = stdin, stdout = stdout, stderr = stderr };
 
 --- The pipe to the child's standard input, when it was piped.
 pub let stdin(c: Child) -> Option(Pipe) =
@@ -54,7 +32,7 @@ pub let stderr(c: Child) -> Option(Pipe) =
     c.stderr;
 
 let close_pipe(p: Option(Pipe)) -> Io({}) =
-    match p | some(p) => Handle/close(p.0) | none() => Io/pure(()) end;
+    match p | some(p) => Pipe/close(p) | none() => Io/pure(()) end;
 
 let close_pipes(c: Child) -> Io({}) =
     let _ = close_pipe(c.stdin)!;

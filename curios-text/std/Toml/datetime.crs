@@ -1,5 +1,5 @@
-use /std/{Nat, Int, Bool, Byte, Bytes, Parse};
-use /std/Toml/{Toml, Date, Time, OffsetDateTime, LocalDateTime};
+use /std/{Nat, Int, Bool, Byte, Bytes, Parse, Toml};
+use /std/Toml/{Date, Time, OffsetDateTime, LocalDateTime};
 
 let digit: Parse(Bytes, Nat) =
     Parse/label(

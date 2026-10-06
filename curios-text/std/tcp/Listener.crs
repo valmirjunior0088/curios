@@ -1,5 +1,5 @@
 use /std/{Bytes, Str, Nat, Result, Try, Async, Io, Handle};
-use /std/tcp/{resolve, let Socket};
+use /std/tcp/{resolve, Socket};
 use /std/Handle/{Interest};
 
 --- A bound, listening socket.
@@ -48,7 +48,7 @@ let accepted(l: Listener) -> Async(Result(Io/Error, Handle)) =
 --- The next connection, parking until a peer arrives.
 pub let accept(l: Listener) -> Try(Async, Io/Error, Socket) =
     let h = Try/attempt(accepted(l))!;
-    Try/pure(Socket { h });
+    Try/pure(Socket/of_handle(h));
 
 --- Close `l`.
 pub let close(l: Listener) -> Io({}) =
@@ -67,7 +67,7 @@ let accept_loop(l: Listener, on_conn: (Handle) -> Async({})) -> Async({}) =
 
 --- `handler` over the connection, then what the connection holds of the writes it accepted handed on, so a TLS stream has sent its records before it is closed.
 let served(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
-    let _ = handler(Socket { h })!;
+    let _ = handler(Socket/of_handle(h))!;
     let _ = Async/Write/flush(h)!;
     Async/pure(());
 

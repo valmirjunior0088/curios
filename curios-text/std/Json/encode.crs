@@ -1,5 +1,4 @@
-use /std/{Str, Bool, Char, Flt, Option, List};
-use /std/Json/{Json};
+use /std/{Str, Bool, Char, Flt, Option, List, Json};
 
 let encode_num(n: Flt) -> Str =
     match Flt/is_finite(n)

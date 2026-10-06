@@ -262,14 +262,6 @@ impl SysModule {
         }
     }
 
-    /// A carrier the root does not re-export — a packed run, reached through its own module because the two of them share every operation name.
-    pub(super) fn packed(label: &str, doc: &[&str], former: Decl, ops: Vec<TopItem>) -> Self {
-        Self {
-            hoisted: false,
-            ..Self::carrier(label, doc, former, ops)
-        }
-    }
-
     /// A module with no type former: the wire-code mirrors, the one process operation no row describes, and — with an empty run — a subject nothing declared, opened by the first host row that names it.
     pub(super) fn ops(label: &str, decls: Vec<Decl>) -> Self {
         Self {

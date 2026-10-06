@@ -257,7 +257,7 @@ const ROWS: &[Row] = &[
         "Nat",
         "match code >= 0x800 | false => 0 | true => match code / 4096 == 0 | false => 0 | true => match (code % 4096) / 64 >= 32 | true => 0 | false => match False/refuted() end end end end",
     ),
-    // Products of two facts for a variable multiplier: `Nat/div_mod`'s two proofs.
+    // Products of two facts for a variable multiplier: `Nat/DivMod`'s two proofs.
     claim(
         "m: Nat, n: Nat, d: Nat, ok: Holds(0 < d), p: Holds(m * d <= n)",
         "Holds(m <= Nat/div(n, d, @ok))",

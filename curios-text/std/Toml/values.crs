@@ -1,5 +1,5 @@
-use /std/{Byte, Str, List, Map, Bytes, Parse};
-use /std/Toml/{Toml};
+use /std/{Byte, Str, List, Map, Bytes, Parse, Toml};
+use /std/Toml/{Error};
 use /std/Toml/build/{inline_fold};
 use /std/Toml/scan/{trivia, ws};
 use /std/Toml/strings/{str_basic, str_literal, str_ml_basic, str_ml_literal};
@@ -66,7 +66,7 @@ and inline_parse: Parse(Bytes, Toml) =
         let _ = Parse/label(Parse/bytes/expect('}'), "expected ',' or '}' in inline table")!;
         match inline_fold(pairs)
         | success(m) => Parse/pure(Toml/table(m))
-        | failure(e) => Parse/fail(/std/Toml/Error/message(e))
+        | failure(e) => Parse/fail(Error/message(e))
         end
     end
 and inline_pair: Parse(Bytes, {List(Str), Toml}) =

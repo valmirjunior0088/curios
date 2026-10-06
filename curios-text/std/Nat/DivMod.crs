@@ -16,7 +16,7 @@ pub struct DivMod(n: Nat, d: Nat): pub Type {
 --- Division with remainder, certified: the quotient and remainder `/` and `%` compute, with their equation and bound.
 ---
 --- Both proofs are the reducer's own: Euclid's identity recombines the quotient and remainder into `n`, and a remainder sits below its divisor by definition.
-pub let div_mod(n: Nat, d: Nat, @ok: Holds(0 < d)) -> DivMod(n, d) =
+pub let of(n: Nat, d: Nat, @ok: Holds(0 < d)) -> DivMod(n, d) =
     DivMod {
         quotient = Nat/div(n, d, @ok),
         remainder = Nat/rem(n, d, @ok),

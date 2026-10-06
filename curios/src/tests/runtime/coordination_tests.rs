@@ -78,12 +78,9 @@ fn a_zero_capacity_is_refused_at_the_public_constructor() {
 
 #[test]
 fn arbitrary_wait_probes_are_private() {
-    for name in ["/std/Async/Waiting/probe", "/std/Async/Wait/probe"] {
-        let source = format!("let w = {name}(/std/Io/pure(true)); /std/Io/pure(())");
-        let error = typecheck(&source).expect_err("a program cannot manufacture a probe");
-        assert!(
-            error.contains("private") || error.contains("not found") || error.contains("unbound"),
-            "{error}"
-        );
-    }
+    let error = typecheck(
+        "let w = /std/Async/Wait/probe(/std/Async/Probe { /std/Io/pure(true) }); /std/Io/pure(())",
+    )
+    .expect_err("a program cannot manufacture a probe");
+    assert!(error.contains("private"), "{error}");
 }
