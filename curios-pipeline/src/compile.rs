@@ -920,7 +920,7 @@ pub fn compile_unit(
 ///
 /// Declared here and implemented in `curios-verdicts`, because the fold is what consults one and this crate must never learn what a project is. What crosses the boundary is a unit — never a path, never a manifest, and never a key this crate would have to know how to build.
 ///
-/// **A unit handed back is one that was judged when it was recorded, and taking it is taking that on trust.** That is a change to what the compiler believes rather than an optimization of what it does, which is why the argument for it lives in [Cached verdicts](../../documentation/design/soundness/admission/cached-verdicts.md) rather than here: the implementation chooses the key, and the key is the whole of what the argument rests on.
+/// **A unit handed back is one that was judged when it was recorded, and taking it is taking that on trust.** That is a change to what the compiler believes rather than an optimization of what it does, which is why the argument for it lives in [Cached verdicts](../../documentation/design/soundness/cached-verdicts.md) rather than here: the implementation chooses the key, and the key is the whole of what the argument rests on.
 pub trait Cache {
     /// The unit already recorded for `source`, if one is.
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit>;

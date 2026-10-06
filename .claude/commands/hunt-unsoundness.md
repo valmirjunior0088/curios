@@ -6,7 +6,7 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(gi
 
 Find a closed term the checkers admit at `/std/Bool/False`.
 
-`$ARGUMENTS` names a part of the board, a file under `xboard/src/board/`, and may name a rule in it by its entry under `documentation/design/soundness/<part>/`. With none given, choose a rule and say why. One invocation is one rule; iteration lives outside, under `/loop`, and the board as committed is what one run hands the next.
+`$ARGUMENTS` names a part of the board, a file under `xboard/src/board/`, and may name a rule in it by the decision that designs it. With none given, choose a rule and say why. One invocation is one rule; iteration lives outside, under `/loop`, and the board as committed is what one run hands the next.
 
 ## Authority
 
@@ -22,7 +22,7 @@ A program the elaborator admits and the kernel refuses is refused: a compilation
 
 ## Read first
 
-`xboard/README.md` states what a part, a ticket and a witness are, and `documentation/design/soundness/the-soundness-board.md` what a rule is, the trusted base, and the boundaries no rule covers. The part's board file holds every flaw already found in it, each with its witnesses, and the rule's entry under `documentation/design/soundness/<part>/` states what the rule assumes. `curios-cert`'s README and `curios-analysis`'s crate documentation are the roster of what the kernel decides and what both checkers share. Read those there. This file restates none of them.
+`xboard/README.md` states what a part, a ticket and a witness are, and `documentation/design/soundness/the-soundness-board.md` the claim, the trusted base, and the boundaries no rule covers. The part's board file holds every flaw already found in it, each with its witnesses, and a rule's decision — under `documentation/design/soundness/` or `documentation/design/theory/`, or in its crate's README — states what the rule assumes. `curios-cert`'s README and `curios-analysis`'s crate documentation are the roster of what the kernel decides and what both checkers share. Read those there. This file restates none of them.
 
 ## Recording
 

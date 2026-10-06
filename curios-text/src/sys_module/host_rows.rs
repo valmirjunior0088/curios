@@ -2,7 +2,7 @@
 //!
 //! Serves two callers that are peers rather than layers — the `/sys` roster, whose rows come off `curios_abi::host_ops`, and `into_core`, whose row is the one the user wrote. Both get the same shape, which is what keeps a call across the wire a host effect whoever declared it. It sits under `sys_module` because a wire type *is* a `/sys` carrier: the vocabulary this reads is the roster's own.
 //!
-//! **[`host_fn`] wraps every store row's result in `Io`, at this one site.** That is load-bearing rather than incidental: it is half of what narrows `documentation/design/soundness/elimination/a-term-outside-io-performs-no-effect.md` from an argument about the whole library to a check over two Rust tables — a foreign row cannot introduce an eliminator for the effect type, because every row's result is built here and [`WireType`] is a closed enum with no case that could name an `Io` in a domain. A second site building a row's result would end it.
+//! **[`host_fn`] wraps every store row's result in `Io`, at this one site.** That is load-bearing rather than incidental: it is half of what narrows `documentation/design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md` from an argument about the whole library to a check over two Rust tables — a foreign row cannot introduce an eliminator for the effect type, because every row's result is built here and [`WireType`] is a closed enum with no case that could name an `Io` in a domain. A second site building a row's result would end it.
 
 use {
     super::{

@@ -18,7 +18,7 @@
 //!
 //! 1. **Every atom cancelled**: the constant's sign is the answer. `x + y + 2 <= y + x + 3`.
 //! 2. **Every monomial of one sign over non-negative atoms**, and a constant that does not oppose them: a sum of naturals is at least its constant, so `0 < x + y + 1` is true and `x < 0` false, while `0 < x` stays open. At `Int` this holds where every atom is a widened natural.
-//! 3. **A side bounded by a literal, or through an operand it never exceeds**: `x % 7 < 7`, `x - y <= x` — the bounds oracle and domination, which `documentation/design/soundness/conversion/the-bounds-oracle-and-the-division-family.md` states.
+//! 3. **A side bounded by a literal, or through an operand it never exceeds**: `x % 7 < 7`, `x - y <= x` — the bounds oracle and domination.
 //! 4. **An equality whose constant the gcd of its coefficients does not divide**, which is false: `2 · x + 1 == 2 · y`.
 //!
 //! And between two comparisons: 5. **two comparisons whose views agree once aligned** — `<` read as the `<=` of its successor, an equality oriented by its atoms — are one proposition, whichever carrier each is at: `x + 1 <= y` and `x < y`, `Nat/to_int(m) + 1 <= Nat/to_int(n)` and `m < n`. Otherwise both are respelled from their views before the congruence compares them ([`LinearViews::align`]).

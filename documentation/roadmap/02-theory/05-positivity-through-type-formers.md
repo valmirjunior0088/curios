@@ -4,7 +4,7 @@
 
 ## What is missing
 
-`induct Mu(F : (Type) -> Type) | fix(F(Mu(F))) end` cannot be judged from its own body: whether `Mu(F)` occurs positively depends on what `F` does with its argument, which only an instance knows. The analysis answers *a position the checker cannot see through* rather than `Unused`, so the declaration is refused ([Strict positivity](../../design/soundness/formation/strict-positivity.md)).
+`induct Mu(F : (Type) -> Type) | fix(F(Mu(F))) end` cannot be judged from its own body: whether `Mu(F)` occurs positively depends on what `F` does with its argument, which only an instance knows. The analysis answers *a position the checker cannot see through* rather than `Unused`, so the declaration is refused ([Strict positivity, modulo polarity](../../design/theory/strict-positivity-modulo-polarity.md)).
 
 ## Previously discussed
 

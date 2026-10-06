@@ -1522,7 +1522,7 @@ impl Context {
 
     /// [`Frames::scrutinee_entry`]'s value, declined where `probe` and the spelling the equation was registered on disagree on a universe instance both sides have already decided.
     ///
-    /// **The guard is in the accessor, so no unguarded read of the store exists.** The key cannot carry this test: it is computed when an arm is entered, which is before the levels in it are solved, and it is then compared for as long as the arm stands. `documentation/design/soundness/elimination/case-equations-and-their-key.md`'s "concrete levels kept apart, undecided ones collapsed" therefore describes a *comparison* rather than a key, and this is the one step that happens after solving. The kernel needs none of it because it is handed a zonked module, where every instance is already ground and keying on the scrutinee itself is exact.
+    /// **The guard is in the accessor, so no unguarded read of the store exists.** The key cannot carry this test: it is computed when an arm is entered, which is before the levels in it are solved, and it is then compared for as long as the arm stands. `documentation/design/soundness/case-equations-and-their-key.md`'s "concrete levels kept apart, undecided ones collapsed" therefore describes a *comparison* rather than a key, and this is the one step that happens after solving. The kernel needs none of it because it is handed a zonked module, where every instance is already ground and keying on the scrutinee itself is exact.
     ///
     /// A universe error declines too. That is the same direction the whole guard moves in — fewer refinements fire, never more — so it can cost a reduction and never admit one.
     pub(crate) fn scrutinee_reduct(&self, canonical: &Term, probe: &Term) -> Option<&Term> {

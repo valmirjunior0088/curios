@@ -9,13 +9,13 @@ It builds on the algebra's law families and generated grid, and is independently
 - **The algebra's declarations and grid.** `Intrinsic::algebra` names every operation's algebraic role; the grid instantiates each declaration kind's laws at every carrier it covers and holds each instance through both checkers and against the carrier's semantics — for `Flt`, the binary64 model over the algebra's pattern grid; the audit covers the kinds that exist, and each kind added here extends it.
 - **The kinds already implemented**, each with an operation to carry here:
   - the semilattice on a leaf set, `peel_bool`, deciding `&&` and `||` up to commutation, association and repetition;
-  - domination, `nat_dominators`, deciding `x - y <= x` by the operand a result never exceeds ([The bounds oracle and the division family](../../design/soundness/conversion/the-bounds-oracle-and-the-division-family.md));
+  - domination, `nat_dominators`, deciding `x - y <= x` by the operand a result never exceeds;
   - symmetric operands, `peel_symmetric`, deciding a swapped `==` or bitwise operation equal;
-  - homomorphisms, `len` over concatenation and `Nat/to_int` as an ordered-semiring embedding ([Open fold laws and the sum normal form](../../design/soundness/conversion/open-fold-laws-and-the-sum-normal-form.md));
+  - homomorphisms, `len` over concatenation and `Nat/to_int` as an ordered-semiring embedding;
   - inversion pairs, a conversion reducing back through the one that inverts it;
   - idempotence, among the bitwise laws;
   - a derived operation, which is its definition.
-- **The binary64 model.** Every one of the 2⁶⁴ bit patterns is a distinct value under one symmetric NaN rule ([The binary64 model and its NaN rule](../../design/soundness/conversion/the-binary64-model-and-its-nan-rule.md)), which is what makes commutativity hold of the carrier rather than of numbers alone.
+- **The binary64 model.** Every one of the 2⁶⁴ bit patterns is a distinct value under one symmetric NaN rule ([`Flt` is specified by a model](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md)), which is what makes commutativity hold of the carrier rather than of numbers alone.
 - **The routing for new arithmetic.** `.claude/rules/checking.md`'s routing for a numeric carrier's arithmetic, which every promotion below takes whole.
 - **[The procedure that proves a bound from the facts in scope](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)**, which each promotion extends to read the operation's definition by a case split, as it reads a truncated subtraction's, so a bound over one is proved from the facts in scope.
 
@@ -72,14 +72,14 @@ Each stage moves its rows from refused to held, extends the grid's audit to the 
 
 ## Verification
 
-- Each declared law is a generated row held at every carrier and direction its declaration covers; each control is refused; one mutation per new kind is run and caught, and the board entry names it.
+- Each declared law is a generated row held at every carrier and direction its declaration covers; each control is refused; one mutation per new kind is run and caught.
 - Each promoted operation folds as it executes and agrees with `curios-num` over a generated grid, at both signs, past the i31 and past 64 bits.
 - `Flt` declarations are held to the model over the pattern grid.
 - `tests::bounds` fills a bound over each promoted operation through its definition.
 
 ## Documentation and design record
 
-- [Open fold laws and the sum normal form](../../design/soundness/conversion/open-fold-laws-and-the-sum-normal-form.md) and [The bounds oracle and the division family](../../design/soundness/conversion/the-bounds-oracle-and-the-division-family.md) gain the numeric declarations and the domination mirror; [The binary64 model and its NaN rule](../../design/soundness/conversion/the-binary64-model-and-its-nan-rule.md) gains the float declarations.
+- [A law is decided where it neither respells nor invents](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) gains the numeric declarations and the domination mirror; [`Flt` is specified by a model](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md) gains the float declarations.
 - [A law is decided where it neither respells nor invents](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md): the rows moved from refused to held.
 - `/std/Nat`, `/std/Int` and `/std/Flt` document the promoted operations and what conversion decides about them.
 

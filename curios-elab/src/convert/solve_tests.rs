@@ -1000,7 +1000,7 @@ fn arm_refinement_does_not_taint_a_committed_solution() {
     );
 }
 
-/// Two goals distinct under their binder types land on one history fingerprint; see `documentation/design/soundness/conversion/conversion-recurrence.md`.
+/// Two goals distinct under their binder types land on one history fingerprint; see `documentation/design/soundness/conversion-recurrence.md`.
 ///
 /// `history_key` renames the openings a conversion minted to placeholders by mint order and records no local context, so the body goals two telescope walks open — one under a `Nat` binder, one under a `Bool` binder, minted apart — rename onto the same entry. The drain consults `in_history` before the structural dispatch, so when both arise in one run the second is *assumed* rather than compared. The goals here are built through the same `compare_func_type` walk the drain dispatches to, and the collision fires inside a real drain too: `a_goal_assumed_by_key_collision_cannot_move_the_verdict`'s `Bool`-bound goal is skipped on the `Nat`-bound goal's entry, in both of that fixture's halves.
 ///

@@ -70,7 +70,7 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 
 Each lands alone, on its own check, and says what it expects to move; a move outside that is a finding.
 
-1. **The recorded graph.** Decisions 6 and 10 to 13 within a unit. The elaborator records its reads; the passes that write a cell run when its declaration finishes; the lowering's sort, `dependency_order` and `invalidated` are replaced by the recorded graph; a proof the elaborator writes reads where its lemmas are written; the kernel judges each declaration as it is published, filing its polarity vector; a recompile over a baseline revalidates in read order; and [cached verdicts](../../design/soundness/admission/cached-verdicts.md)' per-item argument is restated over recorded reads in the same change. Expected to move: the proofs of the `/std` items that gained a lemma by being delayed past it, which lose it. The critical path is retaken over the elaborator's reads.
+1. **The recorded graph.** Decisions 6 and 10 to 13 within a unit. The elaborator records its reads; the passes that write a cell run when its declaration finishes; the lowering's sort, `dependency_order` and `invalidated` are replaced by the recorded graph; a proof the elaborator writes reads where its lemmas are written; the kernel judges each declaration as it is published, filing its polarity vector; a recompile over a baseline revalidates in read order; and [cached verdicts](../../design/soundness/cached-verdicts.md)' per-item argument is restated over recorded reads in the same change. Expected to move: the proofs of the `/std` items that gained a lemma by being delayed past it, which lose it. The critical path is retaken over the elaborator's reads.
 2. **Across units.** `Established`, `Globals`, `Resumed` and `Predecessors` become views of it, so a unit's prologue costs what the unit reads.
 
 ## Verification
@@ -85,7 +85,7 @@ Each lands alone, on its own check, and says what it expects to move; a move out
 
 - [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md): invalidation by recorded reads. The recorded graph.
 - [`curios-unit`'s README](../../../curios-unit/README.md): *Predecessors are borrowed, per stage*, with `Predecessors`' own documentation. Across units.
-- [Cached verdicts](../../design/soundness/admission/cached-verdicts.md): the per-item argument restated over recorded reads, and a filed polarity vector given a cached verdict's standing. The recorded graph.
+- [Cached verdicts](../../design/soundness/cached-verdicts.md): the per-item argument restated over recorded reads, and a filed polarity vector given a cached verdict's standing. The recorded graph.
 - [A module is a compilation unit, and the prelude is an environment](../../design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md): a compilation stops being units folded over one dependency order. Across units.
 
 ## Rejected

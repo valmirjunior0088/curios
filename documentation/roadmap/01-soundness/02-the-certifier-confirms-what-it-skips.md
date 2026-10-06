@@ -1,6 +1,6 @@
 # The certifier confirms what it skips
 
-Working specification for making the kernel's skip a checked step. [An independent kernel re-checks what the elaborator accepts](../../design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md) states the rule: the certifier judges every declaration it is handed, and passes one over only where the environment already holds that very declaration. Its walk decides by name alone ([Judging only what is not in scope](../../design/soundness/admission/judging-only-what-is-not-in-scope.md)), so a declaration under a name the environment holds is passed over whatever it is; here it is passed over only where it is the environment's own, and refused otherwise. One comparison at the gate, in `curios-cert` alone.
+Working specification for making the kernel's skip a checked step. [An independent kernel re-checks what the elaborator accepts](../../design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md) states the rule: the certifier judges every declaration it is handed, and passes one over only where the environment already holds that very declaration. Its walk decides by name alone ([The soundness board](../../design/soundness/the-soundness-board.md)'s second boundary), so a declaration under a name the environment holds is passed over whatever it is; here it is passed over only where it is the environment's own, and refused otherwise. One comparison at the gate, in `curios-cert` alone.
 
 It is independent of every other spec. [A declaration is a function of what it reads](../05-compilation/02-a-declaration-is-a-function-of-what-it-reads.md) later replaces the walk's gate with a declaration's write-once cells and inherits the rule stated here.
 
@@ -42,7 +42,7 @@ Neither kernel has a skip: its environment is only ever added to, and it is hand
 
 ## Stages
 
-1. **The witness.** The module under *The gap* is put to the kernel. Admitted, it is an open ticket in `xboard/src/board/admission.rs`, committed alone; refused, the rule that refuses it is recorded in the board entry and no ticket is filed.
+1. **The witness.** The module under *The gap* is put to the kernel. Admitted, it is an open ticket in `xboard/src/board/admission.rs`, committed alone; refused, no ticket is filed.
 2. **The gate confirms.** `verdicts_within` compares a covered item and a covered registry entry with the environment's, per decisions 1 to 4, and `Globals::mount` asserts per decision 5. The two scope tests turn to refusals under names that say so, the ticket turns to fixed, and a third test holds the admitting half: an item equal to the environment's is passed over and the module certified.
 
 ## Verification
@@ -61,4 +61,4 @@ Neither kernel has a skip: its environment is only ever added to, and it is hand
 
 ## Completion and retirement
 
-Done when no declaration is passed over unconfirmed. [Judging only what is not in scope](../../design/soundness/admission/judging-only-what-is-not-in-scope.md) is restated in the same change: it assumes only that the environment's entries were judged by the walk that built them, which is [Cached verdicts](../../design/soundness/admission/cached-verdicts.md)' premise, and its evidence is the tests above. `recheck_over`'s and `Globals`' documentation say what is compared. Replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.
+Done when no declaration is passed over unconfirmed. [The soundness board](../../design/soundness/the-soundness-board.md)'s second boundary is restated in the same change: it assumes only that the environment's entries were judged by the walk that built them, which is [Cached verdicts](../../design/soundness/cached-verdicts.md)' premise, and its evidence is the tests above. `recheck_over`'s and `Globals`' documentation say what is compared. Replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.

@@ -36,7 +36,7 @@ The cap is also a place conversion is not transitive, by design: with `A` the co
 
 ## Rows the law grid refuses
 
-`tests::laws::written` holds rows no rule decides yet, each a candidate for a family of its own. Parity read as a clash: the gcd test decides `x * 2 + 1 == y * 2` false as a fold, and read by the `Nat` peel as `Impossible` it would let `match h end` close `Eq()(x * 2 + 1, y * 2)`, so it needs its own row and [Coverage](../../design/soundness/elimination/coverage.md)'s evidence before inversion may rely on it. Map fusion, `map(map(xs, f), g) = map(xs, (x) => g(f(x)))`. A shift by a symbolic count's exponent law, and a literal-count right shift's quotient. Boolean agreement past the truth table's cap, above.
+`tests::laws::written` holds rows no rule decides yet, each a candidate for a family of its own. Parity read as a clash: the gcd test decides `x * 2 + 1 == y * 2` false as a fold, and read by the `Nat` peel as `Impossible` it would let `match h end` close `Eq()(x * 2 + 1, y * 2)`, so it needs its own row and its own evidence before inversion may rely on it. Map fusion, `map(map(xs, f), g) = map(xs, (x) => g(f(x)))`. A shift by a symbolic count's exponent law, and a literal-count right shift's quotient. Boolean agreement past the truth table's cap, above.
 
 ## Retirement
 

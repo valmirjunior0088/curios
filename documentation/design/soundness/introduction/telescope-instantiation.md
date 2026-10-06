@@ -1,7 +1,0 @@
-# Telescope instantiation
-
-**Assumes.** A dependent telescope is opened at actuals already checked, in order, and plicity is part of a function type's identity.
-
-**Evidence.** Probed incidentally, never directly. One assumption serves five typing rules — an application's arguments, a projection's field, and the three literal forms — and four conversion sites: binder comparison, tuple eta (opened at the left side's projection), nominal argument comparison (at the left instance's actuals) and struct eta. Each opens the rest of a telescope at what it has already accepted, and is sound only because the earlier positions were established first. No fixture states the shared rule, so a fifth site is held to it only by review.
-
-The plicity clause is the half able to admit: a mark decides which binders elaboration inserts, so two function types differing in one are two calling conventions, and conflating them would apply a value through the wrong one. Conversion's function and function-type arms and subsumption each guard it ([Plicity is part of function identity](../../theory/plicity-is-part-of-function-identity.md)). A mark an author wrote — an argument's, an arm binder's — is held to its slot's where the kernel types the application and the arm, so conversion reads none in either checker: `curios-cert`'s `an_argument_stands_under_its_parameters_mark` and `an_arm_binds_under_its_payloads_marks` hold the two refusals, and `applications_differing_in_a_mark_alone_convert` puts the comparison to both.

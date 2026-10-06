@@ -100,7 +100,7 @@ fn a_vacuous_elimination_over_two_distinct_tags_is_still_accepted() {
 ///
 /// The guard is what a lie buys. `guard_large_elimination` **returns immediately when the result is not relevant** — eliminating a proposition into a proposition needs no condition. So a motive whose body is `switch i : (_) => Prop | 0 => Nat | _ => Nat` reads as `Prop` at the abstract binder, the guard would be skipped, and the very same motive *reduces to `Nat`* at the concrete index each arm is checked against, so the arms typecheck as data.
 ///
-/// `P` below is a two-constructor proposition, the shape the guard exists to refuse: `mk()` and `mk2()` both inhabit `P(0)`, proof irrelevance identifies them, and `extract` maps them to `7` and `9`. This is the route reached through the classifier rather than through the guard's own condition; see `documentation/design/soundness/elimination/large-elimination-guard.md`.
+/// `P` below is a two-constructor proposition, the shape the guard exists to refuse: `mk()` and `mk2()` both inhabit `P(0)`, proof irrelevance identifies them, and `extract` maps them to `7` and `9`. This is the route reached through the classifier rather than through the guard's own condition.
 ///
 /// Not reachable from a surface program: `curios-elab` builds a match's motive and checks the arms against it, so it never emits one that lies, which is why this is built here.
 ///

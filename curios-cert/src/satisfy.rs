@@ -8,7 +8,7 @@
 //!
 //! # The closure half is not here
 //!
-//! Whether a context is *closed* — every parameter index below the declared count and no level holding a metavariable — has essentially one implementation, so a second copy would agree by construction rather than by independence, a second opinion worth nothing (see `documentation/design/soundness/formation/universe-instances-and-constraints.md`). It is [`UniverseContext::is_closed`](curios_core::UniverseContext::is_closed), decided once on the data it is about.
+//! Whether a context is *closed* — every parameter index below the declared count and no level holding a metavariable — has essentially one implementation, so a second copy would agree by construction rather than by independence, a second opinion worth nothing (see `documentation/design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md`). It is [`UniverseContext::is_closed`](curios_core::UniverseContext::is_closed), decided once on the data it is about.
 //!
 //! Satisfiability is the opposite case and stays written twice, because here there is real algorithmic freedom for the two to differ in: this reads a least model, and the elaborator's is a run of its solver's search. That is the line — a property of the data is read once; a question that needs a procedure is answered twice.
 //!

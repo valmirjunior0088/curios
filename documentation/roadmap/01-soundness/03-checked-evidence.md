@@ -18,7 +18,7 @@ The certifier's profile is [recorded](../../../curios-cert/README.md#measuring-t
 
 **The closure is held by a sentence.** `cargo tree -p curios-cert --edges normal` is named in `curios-cert`'s README, its `lib.rs` and `.claude/rules/checking.md`, and run by nothing: a dependency added to any crate in the closure enters the trusted base with no step of the gate noticing.
 
-**One statement says less than the code does.** `curios-cert`'s `lib.rs` calls "the intrinsic roster and its folds" part of what a term *is*. Literal folds are arithmetic; the symbolic laws are a theory in Coq Modulo Theory's sense, and deciding a theory is part of the conversion rule. [The closed machine](../../design/soundness/conversion/the-closed-machine.md)'s entry argues the machine beside the folds in the same breath, where the kernel's design decision names it a trusted evaluator.
+**One statement says less than the code does.** `curios-cert`'s `lib.rs` calls "the intrinsic roster and its folds" part of what a term *is*. Literal folds are arithmetic; the symbolic laws are a theory in Coq Modulo Theory's sense, and deciding a theory is part of the conversion rule. The kernel's design decision names the machine a trusted evaluator.
 
 ## Prior art
 
@@ -62,7 +62,7 @@ The target treatment of each; stage 2 turns this into a row per procedure.
 
 ## Stages
 
-1. **The statement.** `curios-cert`'s `lib.rs` separates literal folds from the symbolic theory, and [The closed machine](../../design/soundness/conversion/the-closed-machine.md)'s entry names the machine a trusted evaluator, as the design decision does. Documentation alone; its check is that every path and test it names resolves.
+1. **The statement.** `curios-cert`'s `lib.rs` separates literal folds from the symbolic theory and names the machine a trusted evaluator, as the design decision does. Documentation alone; its check is that every path and test it names resolves.
 2. **The classification.** Every procedure a verdict of the certifier reaches in the shared layer gets a row against the grade's six clauses: the procedure, its crate, the clauses it meets, what holds it, and for a clause it fails, what is done — restated, moved to the elaborator, or given the differential it lacks. The rows live in `curios-cert`'s README. A procedure that fails a clause with no remedy is a finding or, where it admits a term at `False`, a ticket.
 3. **The chains' differential.** Each chain of sufficient rules the certifier reaches is run in its written order and in every rotation over the law grid's instances and asserted to answer alike. Mutation-checked: a rule made unsound for one instance fails the grid, and a rule made to shadow another fails the differential.
 4. **The closure in the gate.** A step of `cargo xtask` computes `curios-cert`'s normal dependency closure and compares it with the list in its README, in both directions. `.claude/rules/checking.md` names the step where it names the command.
@@ -74,7 +74,7 @@ Each stage updates the soundness and design claims it makes true; none is postpo
 
 - **Whether the certifier gets an evaluator of its own.** Decided from [the recorded profile](../../../curios-cert/README.md#measuring-the-certifier): the `reduce` and `reduce_forced` rows of the prelude's certification with the machine on, against the same stream with the machine gated off. If the strategy alone certifies `/std` within the budget every item has, the machine leaves the kernel's path and stays the elaborator's; if not, it stays a trusted evaluator.
 - **Where the classification's rows are held to the code.** A row names a procedure by path; nothing yet fails when a new procedure enters a verdict's reach without a row. Stage 2 states whether a lint can hold it or the rows are reviewed with each kernel change.
-- **The evaluator's unprobed route.** [The closed machine](../../design/soundness/conversion/the-closed-machine.md) records that whether a run-dependent rigid head could reach the elaborator's witness keying is unprobed.
+- **The evaluator's unprobed route.** Whether a run-dependent rigid head could reach the elaborator's witness keying is unprobed.
 
 ## Design decisions this overturns or corrects
 
@@ -83,7 +83,6 @@ Each is revised in the stage that makes it true.
 - [An independent kernel re-checks what the elaborator accepts](../../design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md): its sharing paragraphs restated against the classification in stage 2.
 - [`curios-analysis`'s README](../../../curios-analysis/README.md) decision *These rules are shared rather than duplicated*: they are shared because they are certifier-grade, in stage 2.
 - `curios-cert`'s module documentation: the representation claim, in stage 1.
-- Board entries: [The closed machine](../../design/soundness/conversion/the-closed-machine.md) in stage 1, and an entry for the certificate checker in stage 5.
 
 ## Rejected
 

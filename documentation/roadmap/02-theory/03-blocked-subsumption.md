@@ -90,4 +90,4 @@ The first argument solves `S` to its own sort, and the second is then held to it
 
 ## Completion and retirement
 
-Done when every subsumption the elaborator is asked is decided at the relation asked, parked or not, as [Subsumption is a relation, not a traversal order](../../design/theory/subsumption-is-a-relation-not-a-traversal-order.md) states it. [Subsumption and level entailment](../../design/soundness/formation/subsumption-and-level-entailment.md) names the new fixtures, and `subsume_telescope`'s account of why a rung is not parked goes with the walk. Replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.
+Done when every subsumption the elaborator is asked is decided at the relation asked, parked or not, as [Subsumption is a relation, not a traversal order](../../design/theory/subsumption-is-a-relation-not-a-traversal-order.md) states it. `subsume_telescope`'s account of why a rung is not parked goes with the walk. Replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.

@@ -10,6 +10,6 @@
 
 **Rejected.**
 
-- **A root as an index into the compilation's root list**, rustc's `cnum_map` reinvented: an identity meaningful only in the compilation that assigned it, stamped into an artifact another reads. `curios_core::validate_stored_identities` refuses any such identity at every seam a unit is written, and what a cached one may be believed on is [Cached verdicts](../soundness/admission/cached-verdicts.md)'s.
+- **A root as an index into the compilation's root list**, rustc's `cnum_map` reinvented: an identity meaningful only in the compilation that assigned it, stamped into an artifact another reads. `curios_core::validate_stored_identities` refuses any such identity at every seam a unit is written, and what a cached one may be believed on is [Cached verdicts](../soundness/cached-verdicts.md)'s.
 - **Resolving a mount collision by precedence**: Swift did, and then needed `::` module selectors to say what had become unsayable.
 - **Checking the positional claim instead of removing it**, sound and the wrong direction, since a wart that stops hurting stops getting removed; **carrying the boundary on `Module`**, which makes it the elaborator's claim — the kernel raises its own binder counter past each local as it enters the context rather than believe a floor a caller computes.

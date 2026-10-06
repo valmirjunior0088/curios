@@ -55,7 +55,7 @@ Each lands alone, on its own check.
 
 - [`curios-unit`'s README](../../../curios-unit/README.md): *The erased arena is the fold's, not the unit's*.
 - [`curios-prelude-archive`'s README](../../../curios-prelude-archive/README.md): `/std`'s arena stops resuming above `/sys`'s, and the images are restored once per process.
-- [Cached verdicts](../../design/soundness/admission/cached-verdicts.md): the address loses its ordered predecessors.
+- [Cached verdicts](../../design/soundness/cached-verdicts.md): the address loses its ordered predecessors.
 - `curios-wonder/src/server.rs`: its module documentation's *single-threaded by construction*.
 - `curios-pipeline`: `Progress`'s *sequential by construction*.
 - `curios-core/src/term/frees.rs`: the comment justifying a per-thread table by `Rc`.

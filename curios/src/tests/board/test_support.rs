@@ -1440,7 +1440,7 @@ pub(super) const A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE: &str = r#"
         /std/print(Nat/to_str(1))
         "#;
 
-/// The premise every rule above is stated over and no entry under `documentation/design/soundness/` names: a type is a *pure* term. A description sitting at the type level is a value, not an error, so what refuses the program is the scrutinee's own type. `Cell/fill(c, true) : Io(Bool)` describes an attempt instead of performing it, so it is not a `Bool`, not something `match` can eliminate, and not something `Eq` can be stated over. The fixture uses the write-once operation, whose repeated attempts can still yield different Booleans; its refusal must land on the unforced description.
+/// The premise every rule above is stated over: a type is a *pure* term. A description sitting at the type level is a value, not an error, so what refuses the program is the scrutinee's own type. `Cell/fill(c, true) : Io(Bool)` describes an attempt instead of performing it, so it is not a `Bool`, not something `match` can eliminate, and not something `Eq` can be stated over. The fixture uses the write-once operation, whose repeated attempts can still yield different Booleans; its refusal must land on the unforced description.
 pub(super) const AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE: &str = r#"
     use /std/{Cell, Eq, Bool, Str};
 
@@ -1518,7 +1518,7 @@ pub(super) const A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES: &str = r#"
     /std/print(refined(false, Eq/refl()))
     "#;
 
-// The route no search over the term could close. The scrutinee is `f(true)` for a *parameter* `f`: nothing in it names an effect, and at the moment an arm records its equation the binder has no value to inspect, so whether `f(true)` performs one is a property of the environment rather than of the term. The caller's `(b) => Cell/fill(c, true)` has type `(Bool) -> Io(Bool)` and does not inhabit `(Bool) -> Bool`, so the *caller's argument* is refused and the derivation never reaches an arm, a refinement, or an equation. What removes the class is an effect discipline on the arrow rather than a walk over the term (see `documentation/design/soundness/elimination/a-term-outside-io-performs-no-effect.md`), and [`a_parameter_headed_scrutinee_refines_again`] is what such a walk would cost.
+// The route no search over the term could close. The scrutinee is `f(true)` for a *parameter* `f`: nothing in it names an effect, and at the moment an arm records its equation the binder has no value to inspect, so whether `f(true)` performs one is a property of the environment rather than of the term. The caller's `(b) => Cell/fill(c, true)` has type `(Bool) -> Io(Bool)` and does not inhabit `(Bool) -> Bool`, so the *caller's argument* is refused and the derivation never reaches an arm, a refinement, or an equation. What removes the class is an effect discipline on the arrow rather than a walk over the term (see `documentation/design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md`), and [`a_parameter_headed_scrutinee_refines_again`] is what such a walk would cost.
 pub(super) const AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW: &str = r#"
     use /std/{Cell, Eq, Bool, Str};
     use /std/Bool/{False};
