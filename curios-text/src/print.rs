@@ -110,7 +110,7 @@ fn listed_block(open: impl Into<String>, items: Vec<Printer>, close: &'static st
 ///
 /// [`listed_block`]'s shape rather than [`listed`]'s, for [`listed_block`]'s reason and one of its own. A telescope is a thing that *grows*: with the closer riding, adding a parameter is a two-line change, because the line above has to give the bracket up and take a comma. And where the declaration that follows opens a brace body — every one of these but `let` — a riding closer leaves the last parameter and the first field at one indent, with only the `)` buried mid-line to say which is which.
 ///
-/// No enclosing `group`, because the extent of the group is the caller's: a `let` measures the telescope together with its `-> output` so the parameters break first and the return type gets a fresh line, while the others measure the parentheses alone.
+/// No enclosing `group`, because the extent of the group is the caller's: a `let` measures the telescope together with its `-> output`, and a `satisfy` with the application it concludes, so the parameters break first and what follows them gets a fresh line, while the others measure the parentheses alone.
 fn telescope(items: Vec<Printer>) -> Printer {
     flat([
         pure("("),
@@ -2056,21 +2056,20 @@ fn print_top_witness(items: Vec<TopWitness>) -> Printer {
     ])
 }
 
+/// A witness's telescope and the application it concludes, in **one** group, as a `let`'s parameters share one with its `-> output` and for its reason. Measured apart, a telescope that fits on its own stays flat and leaves the application to break, which stacks the concept's arguments at the body's indent with the `) {` that tells the two apart riding the last of them. Together, the telescope breaks first and the application, now starting a fresh line, fits beside the arrow.
+fn witness_signature(params: Vec<Printer>, app: Printer) -> Printer {
+    match params.is_empty() {
+        true => app,
+        false => group(flat([telescope(params), pure(" => "), app])),
+    }
+}
+
 fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
-    let params = if item.params.is_empty() {
-        pure("")
-    } else {
-        flat([
-            pure(" "),
-            group(telescope(
-                item.params
-                    .into_iter()
-                    .map(print_func_sugar_param)
-                    .collect(),
-            )),
-            pure(" =>"),
-        ])
-    };
+    let params = item
+        .params
+        .into_iter()
+        .map(print_func_sugar_param)
+        .collect();
 
     let app = match item.args {
         None => pure(item.concept.join()),
@@ -2101,7 +2100,12 @@ fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
         ]),
     };
 
-    flat([pure(keyword), params, pure(" "), app, body])
+    flat([
+        pure(keyword),
+        pure(" "),
+        witness_signature(params, app),
+        body,
+    ])
 }
 
 /// Where an `and` witness clause begins: its earliest spanned component — a telescope parameter's type, a concept argument, or the first entry — since the keyword, the concept name and the braces record no span. [`signature_start`]'s rule for a `let` clause.
@@ -2339,20 +2343,12 @@ pub(crate) fn print_concept_field_head(field: &ConceptField) -> Printer {
 
 /// The head of a `satisfy` member: the keyword, its telescope and the concept application it witnesses, without the body.
 pub(crate) fn print_witness_head(item: &TopWitness) -> Printer {
-    let params = match item.params.is_empty() {
-        true => pure(""),
-        false => flat([
-            pure(" "),
-            group(telescope(
-                item.params
-                    .iter()
-                    .cloned()
-                    .map(print_func_sugar_param)
-                    .collect(),
-            )),
-            pure(" =>"),
-        ]),
-    };
+    let params = item
+        .params
+        .iter()
+        .cloned()
+        .map(print_func_sugar_param)
+        .collect();
     let app = match &item.args {
         None => pure(item.concept.join()),
         Some(args) => flat([
@@ -2360,7 +2356,7 @@ pub(crate) fn print_witness_head(item: &TopWitness) -> Printer {
             listed("(", args.iter().cloned().map(print_argument).collect(), ")"),
         ]),
     };
-    flat([pure("satisfy"), params, pure(" "), app])
+    flat([pure("satisfy "), witness_signature(params, app)])
 }
 
 /// The head of a `foreign` declaration, which is the whole of it.

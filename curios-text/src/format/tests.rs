@@ -424,6 +424,30 @@ fn an_overflowing_telescope_dedents_its_closer() {
     assert_eq!(formatted(&output), output, "and the shape is idempotent");
 }
 
+/// A witness head too wide for its line breaks at its telescope, as a `let` breaks at its parameters before its result: the application the telescope concludes then fits beside the arrow, where breaking it instead stacks the concept's arguments at the body's own indent.
+#[test]
+fn a_witness_head_breaks_its_telescope_before_its_application() {
+    let source = concat!(
+        "use /std/{Monad, Io};\n\n",
+        "satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Monad/Lift(Io, M)) => Monad/Lift(Io, (A: Type) => Carrier(M, E, A)) {\n",
+        "    lift(@A, m) = m,\n",
+        "}\n",
+    );
+    let output = concat!(
+        "use /std/{Monad, Io};\n\n",
+        "satisfy (\n",
+        "    @M: (Type) -> Type,\n",
+        "    @E: Type,\n",
+        "    use Monad(M),\n",
+        "    use Monad/Lift(Io, M),\n",
+        ") => Monad/Lift(Io, (A: Type) => Carrier(M, E, A)) {\n",
+        "    lift(@A, m) = m,\n",
+        "}\n",
+    );
+    assert_eq!(formatted(source), output);
+    assert_eq!(formatted(output), output, "and the shape is idempotent");
+}
+
 #[test]
 fn an_inline_module_keeps_the_blank_lines_between_its_items() {
     // One rule separates module items, and a file and an inline `mod … end` share it: an inline printer joining its items with a single line would eat every blank line written inside one on the first run while the file around it kept its own.
