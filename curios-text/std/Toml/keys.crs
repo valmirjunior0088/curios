@@ -17,14 +17,11 @@ let key_bare: Parse(Bytes, Str) =
 pub let key_part: Parse(Bytes, Str) =
     Parse/or(key_bare, Parse/or(str_basic, str_literal));
 
-let dot_part: Parse(Bytes, Str) =
+let dot: Parse(Bytes, {}) =
     let _ = ws!;
     let _ = Parse/bytes/expect(0x2E)!;
-    let _ = ws!;
-    key_part;
+    ws;
 
 --- A dotted key as its parts, in the order they were written.
 pub let key_dotted: Parse(Bytes, List(Str)) =
-    let first = key_part!;
-    let rest = Parse/many0(dot_part)!;
-    Parse/pure([first, ..rest]);
+    Parse/sep_by1(key_part, dot);

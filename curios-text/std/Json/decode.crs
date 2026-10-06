@@ -131,14 +131,6 @@ let symbol(b: Byte) -> Parse(Bytes, Byte) =
     let _ = ws!;
     Parse/bytes/expect(b);
 
-let after_comma(@A: Type, elem: Parse(Bytes, A)) -> Parse(Bytes, A) =
-    let _ = symbol(0x2C)!;
-    Parse/commit(elem);
-
-let elements(@A: Type, elem: Parse(Bytes, A)) -> Parse(Bytes, List(A)) =
-    Parse/bind(elem, (first) =>
-        Parse/map(Parse/many0(after_comma(elem)), (rest) => [first, ..rest]));
-
 let bracketed(
     @A: Type,
     open: Byte,
@@ -152,7 +144,7 @@ let bracketed(
     match byte == close
     | true => Parse/map(Parse/bytes/byte, (_) => [])
     | false =>
-        let elems = Parse/commit(elements(elem))!;
+        let elems = Parse/commit(Parse/sep_by1(elem, symbol(0x2C)))!;
         let _ = Parse/label(symbol(close), after)!;
         Parse/pure(elems)
     end;

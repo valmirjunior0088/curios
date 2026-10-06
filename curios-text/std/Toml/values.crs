@@ -20,10 +20,17 @@ let val_false: Parse(Bytes, Toml) =
     Parse/map(Parse/bytes/literal("false"), (_) => Toml/bool(false));
 
 let val_number_signed: Parse(Bytes, Toml) =
-    Parse/or(flt_special, Parse/or(flt_number, int_value));
+    Parse/or(flt_number, Parse/or(int_value, flt_special));
+
+let val_special: Parse(Bytes, Toml) =
+    Parse/label(flt_special, "expected value");
 
 let val_number_digit: Parse(Bytes, Toml) =
     Parse/or(datetime_value, Parse/or(flt_number, int_value));
+
+let inline_comma: Parse(Bytes, {}) =
+    let _ = Parse/bytes/expect(0x2C)!;
+    ws;
 
 let array_parse: Parse(Bytes, Toml) =
     let _ = Parse/label(Parse/bytes/expect(0x5B), "expected array")!;
@@ -52,31 +59,24 @@ and inline_parse: Parse(Bytes, Toml) =
     let _ = Parse/label(Parse/bytes/expect(0x7B), "expected inline table")!;
     let _ = ws!;
     let empty = Parse/optional(Parse/bytes/expect(0x7D))!;
-    match empty | some(_) => Parse/pure(Toml/table(Map/empty())) | none() => inline_items([]) end
-and inline_items(acc: List({List(Str), Toml})) -> Parse(Bytes, Toml) =
+    match empty
+    | some(_) => Parse/pure(Toml/table(Map/empty()))
+    | none() =>
+        let pairs = Parse/sep_by1(inline_pair, inline_comma)!;
+        let _ = Parse/label(Parse/bytes/expect(0x7D), "expected ',' or '}' in inline table")!;
+        match inline_fold(pairs)
+        | success(m) => Parse/pure(Toml/table(m))
+        | failure(e) => Parse/fail(/std/Toml/Error/message(e))
+        end
+    end
+and inline_pair: Parse(Bytes, {List(Str), Toml}) =
     let path = key_dotted!;
     let _ = ws!;
     let _ = Parse/label(Parse/bytes/expect(0x3D), "expected '=' in inline table")!;
     let _ = ws!;
     let v = value_parse!;
     let _ = ws!;
-    let acc2 = [..acc, (path, v)];
-    let comma = Parse/optional(Parse/bytes/expect(0x2C))!;
-    match comma
-    | some(_) =>
-        let _ = ws!;
-        inline_items(acc2)
-    | none() =>
-        let stop = Parse/optional(Parse/bytes/expect(0x7D))!;
-        match stop
-        | some(_) =>
-            match inline_fold(acc2)
-            | success(m) => Parse/pure(Toml/table(m))
-            | failure(e) => Parse/fail(/std/Toml/Error/message(e))
-            end
-        | none() => Parse/fail("expected ',' or '}' in inline table")
-        end
-    end
+    Parse/pure((path, v))
 pub and value_parse: Parse(Bytes, Toml) =
     let next = Parse/bytes/peek!;
     match next
@@ -91,8 +91,8 @@ pub and value_parse: Parse(Bytes, Toml) =
         | 123 => inline_parse
         | 43 => val_number_signed
         | 45 => val_number_signed
-        | 105 => flt_special
-        | 110 => flt_special
+        | 105 => val_special
+        | 110 => val_special
         | _ => val_number_digit
         end
     end;

@@ -102,13 +102,10 @@ let hex_digit: Parse(Bytes, Nat) =
 
 --- One chunk's size line: the hexadecimal size, any extension after `;` ignored, then the line's end.
 let chunk_size: Parse(Bytes, Nat) =
-    let digits = Parse/many0(hex_digit)!;
+    let digits = Parse/label(Parse/many1(hex_digit), "a chunk states its size")!;
     let _ = Parse/bytes/take_while(until('\r'))!;
     let _ = Parse/bytes/literal("\r\n")!;
-    match digits
-    | [] => Parse/fail("a chunk states its size")
-    | _ => Parse/pure(List/fold(digits, 0, (digit, acc) => acc * 16 + digit))
-    end;
+    Parse/pure(List/fold(digits, 0, (digit, acc) => acc * 16 + digit));
 
 --- The chunks until the empty one, then any trailers, then the block's end; `acc` is what has arrived.
 let chunks(acc: Bytes) -> Parse(Bytes, Bytes) =

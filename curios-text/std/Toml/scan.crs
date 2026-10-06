@@ -53,4 +53,4 @@ pub let trivia: Parse(Bytes, {}) =
 pub let line_end: Parse(Bytes, {}) =
     let _ = ws!;
     let _ = Parse/or(comment, Parse/pure(()))!;
-    Parse/or(newline, Parse/eof());
+    Parse/label(Parse/or(newline, Parse/eof()), "expected end of line");

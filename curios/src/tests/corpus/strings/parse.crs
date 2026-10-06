@@ -1,5 +1,5 @@
 -- Parsing through `Parse`: a text parser reads characters and pieces of its input by position, a refusal says the byte offset it stopped at, and of two refusals open to an alternative the one that reached further is reported.
-use /std/{Parse, Str, Char, Result, Test};
+use /std/{Parse, Str, Char, List, Result, Test};
 
 let shown(@A: Type, r: Result(Parse/Error, A), f: (A) -> Str) -> Str =
     match r | success(a) => f(a) | failure(e) => Parse/Error/to_str(e) end;
@@ -66,3 +66,49 @@ test a_bytes_literal_is_read_byte_by_byte =
         Test/equal(
             shown(Parse/run(Parse/bytes/literal("ab"), x['a']), (_) => "ok"),
             "expected \"ab\" at byte 0")]);
+
+let digit: Parse(Str, Char) =
+    Parse/label(Parse/text/char_if(Char/is_digit), "expected a digit");
+
+let comma: Parse(Str, {}) =
+    Parse/text/literal(",");
+
+let whole(list: Parse(Str, List(Char))) -> Parse(Str, Str) =
+    let items = list!;
+    let _ = Parse/eof()!;
+    Parse/pure(Str/flatten(List/map(items, Str/of_char)));
+
+let read(list: Parse(Str, List(Char)), input: Str) -> Str =
+    shown(Parse/run(whole(list), input), (s) => Str/flatten(["[", s, "]"]));
+
+-- A separator owes the element after it, so a dangling one is refused at the element it lacks rather than handed back for whatever follows to trip on. A `_trailing` list lets a last separator close it, and a `sep_by1` owes its first element too.
+test a_separator_owes_the_element_after_it =
+    Test/equal(
+        Str/join("|", [
+            read(Parse/sep_by0(digit, comma), "1,2"),
+            read(Parse/sep_by0(digit, comma), ""),
+            read(Parse/sep_by0(digit, comma), "1,2,"),
+            read(Parse/sep_by0_trailing(digit, comma), "1,2,"),
+            read(Parse/sep_by0_trailing(digit, comma), ""),
+            read(Parse/sep_by1(digit, comma), ""),
+            read(Parse/sep_by1_trailing(digit, comma), "1,"),
+            read(Parse/sep_by1_trailing(digit, comma), ",")]),
+        "[12]|[]|expected a digit at byte 4|[12]|[]|expected a digit at byte 0|[1]|expected a digit at byte 0");
+
+-- `many1` owes its first value where `many0` answers an empty list.
+test many1_owes_its_first_value =
+    Test/equal(
+        Str/join("|", [
+            read(Parse/many0(digit), "12"),
+            read(Parse/many0(digit), ""),
+            read(Parse/many1(digit), "12"),
+            read(Parse/many1(digit), "")]),
+        "[12]|[]|[12]|expected a digit at byte 0");
+
+-- Of two alternatives that decline at one offset, the first's refusal is reported: it is the reading the choice led with.
+test or_reports_the_first_refusal_on_a_tie =
+    Test/equal(
+        shown(
+            Parse/run(Parse/or(Parse/text/literal("a"), Parse/text/literal("b")), "x"),
+            (_) => "ok"),
+        "expected \"a\" at byte 0");

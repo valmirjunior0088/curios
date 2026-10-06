@@ -20,9 +20,9 @@ satisfy Spell(Error) {
 pub let declined(message: Str, offset: Nat) -> Error =
     Error { message = message, offset = offset, committed = false };
 
---- Of two refusals, the one that reached further into the input, the later of the two on a tie: what an `or` reports when neither alternative committed, since the one that got further read more of the input as its shape.
+--- Of two refusals, the one that reached further into the input, the first of the two on a tie: what an `or` reports when neither alternative committed, since the one that got further read more of the input as its shape, and at one offset the alternative written first is the reading it led with.
 pub let further(e: Error, f: Error) -> Error =
-    match f.offset < e.offset | true => e | false => f end;
+    match e.offset < f.offset | true => f | false => e end;
 
 --- `e` as committed.
 pub let commit(e: Error) -> Error =

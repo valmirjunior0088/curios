@@ -343,7 +343,7 @@ const REASONS: &[Row] = &[
     },
     Row {
         expr: r##"reason("k = truex")"##,
-        expected: "expected end of input",
+        expected: "expected end of line",
     },
 ];
 

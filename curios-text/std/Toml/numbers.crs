@@ -16,7 +16,7 @@ let is_dec_byte(b: Byte) -> Bool =
 
 let magnitude_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Bytes, Nat) =
     match pend
-    | true => Parse/fail("malformed underscore")
+    | true => Parse/commit(Parse/fail("malformed underscore"))
     | false => match seen | true => Parse/pure(acc) | false => Parse/fail("expected digit") end
     end;
 
@@ -37,7 +37,7 @@ let magnitude(radix: Nat, digit_of: (Nat) -> Option(Nat)) -> Parse(Bytes, Nat) =
                 | true =>
                     let _ = Parse/bytes/byte!;
                     go(acc, seen, true)
-                | false => Parse/fail("malformed underscore")
+                | false => Parse/commit(Parse/fail("malformed underscore"))
                 end
             | false =>
                 match digit_of(n)
@@ -87,14 +87,17 @@ let prefixed: Parse(Bytes, Nat) =
     | _ => Parse/fail("expected digit")
     end;
 
---- Refuse a leading zero past the digits it opens. A local time read over the same digits fails past them too, and of two refusals `or` reports the one that reached further, the later on a tie — so reaching as far is what keeps this reason from being displaced by the time's.
+--- Refuse a leading zero past the digits it opens. Its callers commit to the refusal: a date or a time was offered the same digits first and declined, so what is left is a number written with a leading zero, and the reason is not one a later alternative may displace.
 let refuse_leading_zero(@A: Type) -> Parse(Bytes, A) =
     let _ = Parse/bytes/take_while((b) => is_dec_byte(b) || Byte/to_nat(b) == 0x5F)!;
     Parse/fail("leading zero");
 
 let decimal: Parse(Bytes, Nat) =
     let leading = leading_zero!;
-    match leading | true => refuse_leading_zero() | false => magnitude(10, dec_digit) end;
+    match leading
+    | true => Parse/commit(refuse_leading_zero())
+    | false => magnitude(10, dec_digit)
+    end;
 
 let int_magnitude(signed: Bool) -> Parse(Bytes, Nat) =
     match signed
@@ -129,7 +132,7 @@ let flt_digits_stop(
     pend: Bool,
 ) -> Parse(Bytes, {Nat, Nat, Nat}) =
     match pend
-    | true => Parse/fail("malformed underscore")
+    | true => Parse/commit(Parse/fail("malformed underscore"))
     | false =>
         match seen
         | true => Parse/pure((sig, count, shift))
@@ -156,7 +159,7 @@ let flt_digits(sig0: Nat, count0: Nat, frac: Bool) -> Parse(Bytes, {Nat, Nat, Na
                 | true =>
                     let _ = Parse/bytes/byte!;
                     go(sig, count, shift, seen, true)
-                | false => Parse/fail("malformed underscore")
+                | false => Parse/commit(Parse/fail("malformed underscore"))
                 end
             | Nat/in_range(n, 0x30, 0x39) =>
                 let _ = Parse/bytes/byte!;
@@ -169,7 +172,7 @@ let flt_digits(sig0: Nat, count0: Nat, frac: Bool) -> Parse(Bytes, {Nat, Nat, Na
 
 let exp_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Bytes, Nat) =
     match pend
-    | true => Parse/fail("malformed underscore")
+    | true => Parse/commit(Parse/fail("malformed underscore"))
     | false => match seen | true => Parse/pure(acc) | false => Parse/fail("expected digit") end
     end;
 
@@ -186,7 +189,7 @@ let exp_digits: Parse(Bytes, Nat) =
                 | true =>
                     let _ = Parse/bytes/byte!;
                     go(acc, seen, true)
-                | false => Parse/fail("malformed underscore")
+                | false => Parse/commit(Parse/fail("malformed underscore"))
                 end
             | Nat/in_range(n, 0x30, 0x39) =>
                 let _ = Parse/bytes/byte!;
@@ -235,7 +238,7 @@ pub let flt_number: Parse(Bytes, Toml) =
     let (negative, _) = sign!;
     let leading = leading_zero!;
     match leading
-    | true => refuse_leading_zero()
+    | true => Parse/commit(refuse_leading_zero())
     | false =>
         let (sig1, count1, _) = flt_digits(0, 0, false)!;
         let (sig2, count2, down2, has_frac) = frac_part(sig1, count1)!;

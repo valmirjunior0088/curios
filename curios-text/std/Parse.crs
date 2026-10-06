@@ -1,4 +1,4 @@
-use /std/{Result, Nat, Bytes, Str, List, Option, Monad};
+use /std/{Result, Nat, Bool, Bytes, Str, List, Option, Monad};
 
 --- Why a parser refused, and where.
 pub mod Error;
@@ -103,7 +103,7 @@ pub let bind(
 ) -> Parse(I, B) =
     chain(p, f);
 
---- `p`, or `q` from the same position when `p` declines. A committed refusal is reported as it is; when both decline, the refusal that reached further is reported, since that alternative read more of the input as its shape.
+--- `p`, or `q` from the same position when `p` declines. A committed refusal is reported as it is; when both decline, the refusal that reached further is reported, since that alternative read more of the input as its shape, and `p`'s where they stopped at one offset.
 pub let or(@I: Type, use Input(I), @A: Type, p: Parse(I, A), q: Parse(I, A)) -> Parse(I, A) =
     Of {
         run(input, at) =
@@ -214,22 +214,29 @@ pub let many0(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, List
             go([], at),
     };
 
---- `elem` separated by `sep`, zero or more times, the elements collected. A declined element after a separator gives the separator back.
-pub let sep_by0(
+--- `many0` with a first value owed: where `p` declines at the start, its refusal is the parser's rather than an empty list.
+pub let many1(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, List(A)) =
+    bind(p, (first) => map(many0(p), (rest) => [first, ..rest]));
+
+--- The loop behind the four `sep_by` parsers. `owed` says whether a first element that declines is the list's refusal or an empty list, and `trailing` whether a separator with no element after it closes the list, consumed, or leaves the element owed.
+let separated(
     @I: Type,
     use Input(I),
     @A: Type,
     @S: Type,
     elem: Parse(I, A),
     sep: Parse(I, S),
+    owed: Bool,
+    trailing: Bool,
 ) -> Parse(I, List(A)) =
     Of {
         run(input, at) =
             match elem.run(input, at)
             | failure(e) =>
                 match e.committed
-                | false => Result/success((at, []))
                 | true => Result/failure(e)
+                | false =>
+                    match owed | true => Result/failure(e) | false => Result/success((at, [])) end
                 end
             | success((first_end, first)) =>
                 let go(
@@ -246,8 +253,12 @@ pub let sep_by0(
                         match elem.run(input, sep_end)
                         | failure(e) =>
                             match e.committed
-                            | false => Result/success((cur, acc))
                             | true => Result/failure(e)
+                            | false =>
+                                match trailing
+                                | true => Result/success((sep_end, acc))
+                                | false => Result/failure(e)
+                                end
                             end
                         | success((next, x)) =>
                             match next.offset == cur.offset
@@ -259,6 +270,50 @@ pub let sep_by0(
                 go([first], first_end)
             end,
     };
+
+--- `elem` separated by `sep`, zero or more times, the elements collected. Once a separator is read the next element is owed, so its refusal is the list's: a list a separator may close is `sep_by0_trailing`.
+pub let sep_by0(
+    @I: Type,
+    use Input(I),
+    @A: Type,
+    @S: Type,
+    elem: Parse(I, A),
+    sep: Parse(I, S),
+) -> Parse(I, List(A)) =
+    separated(elem, sep, false, false);
+
+--- `sep_by0` with a first element owed: where `elem` declines at the start, its refusal is the list's rather than an empty list.
+pub let sep_by1(
+    @I: Type,
+    use Input(I),
+    @A: Type,
+    @S: Type,
+    elem: Parse(I, A),
+    sep: Parse(I, S),
+) -> Parse(I, List(A)) =
+    separated(elem, sep, true, false);
+
+--- `sep_by0` where a separator may close the list: one with no element after it is consumed, and ends it.
+pub let sep_by0_trailing(
+    @I: Type,
+    use Input(I),
+    @A: Type,
+    @S: Type,
+    elem: Parse(I, A),
+    sep: Parse(I, S),
+) -> Parse(I, List(A)) =
+    separated(elem, sep, false, true);
+
+--- `sep_by1` where a separator may close the list.
+pub let sep_by1_trailing(
+    @I: Type,
+    use Input(I),
+    @A: Type,
+    @S: Type,
+    elem: Parse(I, A),
+    sep: Parse(I, S),
+) -> Parse(I, List(A)) =
+    separated(elem, sep, true, true);
 
 satisfy (@I: Type, @P: (Bytes, Nat) -> Prop) => Monad((A: Type) => Of(I, P, A)) {
     pure(a) = unit(a),
