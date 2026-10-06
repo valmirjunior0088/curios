@@ -252,14 +252,15 @@ impl BigEmitter<'_, '_> {
         self.add_helper(BigHelper::MagMul, scope, self.words_result(), instrs);
     }
 
-    /// `mag/shl`: whole limbs of the count become an offset and the rest a shift within a limb, each limb spilling its high bits into the next.
+    /// `mag/shl`: whole limbs of the count become an offset and the rest a shift within a limb. The top limb decides whether one more is needed; the exact length is checked in 64 bits before allocating, so neither a count nor its sum with the input length can wrap.
     pub(super) fn emit_mag_shl(&mut self) {
         let mut scope = Scope::default();
         let a = scope.param("a", self.words_type());
-        let count = scope.param("count", i32_type());
+        let count = scope.param("count", i64_type());
         let la = scope.local("la", i32_type());
         let skip = scope.local("skip", i32_type());
         let bits = scope.local("bits", i32_type());
+        let width = scope.local("width", i64_type());
         let i = scope.local("i", i32_type());
         let r = scope.local("r", self.words_type());
         let v = scope.local("v", i64_type());
@@ -275,21 +276,41 @@ impl BigEmitter<'_, '_> {
         let instrs = wasm![
             len(&a),
             set(&la),
+            return_if(
+                wasm![get(&la), curios_wasm::Instr::I32Eqz],
+                vec![get(&a), curios_wasm::Instr::RefAsNonNull]
+            ),
             get(&count),
-            i32_const(5),
-            curios_wasm::Instr::I32ShrU,
-            set(&skip),
-            get(&count),
+            curios_wasm::Instr::I32WrapI64,
             i32_const(31),
             curios_wasm::Instr::I32And,
             set(&bits),
-            self.new_limbs(vec![
-                get(&la),
-                get(&skip),
-                curios_wasm::Instr::I32Add,
-                i32_const(1),
-                curios_wasm::Instr::I32Add,
-            ]),
+            get(&count),
+            i64_const(5),
+            curios_wasm::Instr::I64ShrU,
+            get(&la),
+            curios_wasm::Instr::I64ExtendI32U,
+            curios_wasm::Instr::I64Add,
+            get(&bits),
+            self.limb(
+                &a,
+                wasm![get(&la), i32_const(1), curios_wasm::Instr::I32Sub]
+            ),
+            curios_wasm::Instr::I32Clz,
+            curios_wasm::Instr::I32GtU,
+            curios_wasm::Instr::I64ExtendI32U,
+            curios_wasm::Instr::I64Add,
+            set(&width),
+            get(&width),
+            i64_const(u32::MAX.into()),
+            curios_wasm::Instr::I64GtU,
+            when(self.table.refuse_instrs(curios_cont::Panic::Capacity)),
+            get(&count),
+            i64_const(5),
+            curios_wasm::Instr::I64ShrU,
+            curios_wasm::Instr::I32WrapI64,
+            set(&skip),
+            self.new_limbs(wasm![get(&width), curios_wasm::Instr::I32WrapI64]),
             set(&r),
             i32_const(0),
             set(&i),
@@ -310,19 +331,23 @@ impl BigEmitter<'_, '_> {
                             self.limb(&r, at(0)),
                             get(&v),
                             curios_wasm::Instr::I32WrapI64,
-                            curios_wasm::Instr::I32Or,
-                        ],
+                            curios_wasm::Instr::I32Or
+                        ]
                     ),
-                    self.store(
+                    at(1),
+                    get(&width),
+                    curios_wasm::Instr::I32WrapI64,
+                    curios_wasm::Instr::I32LtU,
+                    when(self.store(
                         &r,
                         at(1),
-                        vec![
+                        wasm![
                             get(&v),
                             i64_const(32),
                             curios_wasm::Instr::I64ShrU,
-                            curios_wasm::Instr::I32WrapI64,
-                        ],
-                    ),
+                            curios_wasm::Instr::I32WrapI64
+                        ]
+                    )),
                 ],
             ),
             get(&r),

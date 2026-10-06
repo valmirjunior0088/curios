@@ -31,9 +31,9 @@ pub(crate) enum BigHelper {
     Cmp,
     /// `(anyref, anyref, i32 op) -> (ref any)`: [`Bitwise`] `op` over the infinite two's complement.
     Bitwise,
-    /// `(anyref, i32 count) -> (ref any)`: the value times `2^count`.
+    /// `(anyref, i64 count) -> (ref any)`: the value times `2^count`.
     Shl,
-    /// `(anyref, i32 count) -> (ref any)`: the floor of the value over `2^count`.
+    /// `(anyref, i64 count) -> (ref any)`: the floor of the value over `2^count`.
     Shr,
     /// `(anyref, i32 direction) -> f64`: the float the value rounds to in the direction named, through `flt/pack` — which sends a value past the largest finite one where that direction sends an overflow.
     ToF64,
@@ -41,6 +41,8 @@ pub(crate) enum BigHelper {
     OfF64,
     /// `(anyref) -> i32`: a boxed value as a machine word — exact below `2³² - 1`, saturating there.
     Word,
+    /// `(anyref) -> i64`: a boxed shift count, exact below `2⁶⁴ - 1` and saturating there, past every magnitude the limb array can hold.
+    Count,
     /// `(anyref) -> i64`: a boxed `Nat` narrowed to the host wire, refusing one at or past `2⁶⁴`.
     NatWire,
     /// `(anyref) -> i64`: a boxed `Int` narrowed to the host wire, refusing one outside `[-2⁶³, 2⁶³)`.
@@ -63,7 +65,7 @@ pub(crate) enum BigHelper {
     MagAdd,
     /// `(ref null $words, ref null $words) -> (ref $words)`: the difference of two magnitudes, the first the larger.
     MagSub,
-    /// `(ref null $words, i32 count) -> (ref $words)`: a magnitude times `2^count`.
+    /// `(ref null $words, i64 count) -> (ref $words)`: a magnitude times `2^count`.
     MagShl,
     /// `(ref null $words) -> (ref $words)`: the array negated in place as a two's-complement number, and handed back.
     MagNegate,
@@ -73,7 +75,7 @@ pub(crate) enum BigHelper {
 
 impl BigHelper {
     /// Every helper, callers before callees: the order the module emitter visits them in, so that a helper is looked at only after every body that could call it has been built.
-    pub(crate) const ALL: [BigHelper; 26] = [
+    pub(crate) const ALL: [BigHelper; 27] = [
         BigHelper::NatSub,
         BigHelper::Add,
         BigHelper::Mul,
@@ -86,6 +88,7 @@ impl BigHelper {
         BigHelper::ToF64,
         BigHelper::OfF64,
         BigHelper::Word,
+        BigHelper::Count,
         BigHelper::NatWire,
         BigHelper::IntWire,
         BigHelper::Twos,
@@ -124,6 +127,7 @@ impl BigHelper {
             BigHelper::ToF64 => "big/to_f64",
             BigHelper::OfF64 => "big/of_f64",
             BigHelper::Word => "big/word",
+            BigHelper::Count => "big/count",
             BigHelper::NatWire => "nat/wire",
             BigHelper::IntWire => "int/wire",
             BigHelper::Twos => "big/twos",
@@ -247,6 +251,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             BigHelper::ToF64 => self.emit_big_to_f64(),
             BigHelper::OfF64 => self.emit_big_of_f64(),
             BigHelper::Word => self.emit_big_word(),
+            BigHelper::Count => self.emit_big_count(),
             BigHelper::NatWire => self.emit_nat_wire(),
             BigHelper::IntWire => self.emit_int_wire(),
             BigHelper::Twos => self.emit_big_twos(),
@@ -729,7 +734,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
     fn emit_big_shl(&mut self) {
         let mut scope = Scope::default();
         let x = scope.param("x", Table::top_type(true));
-        let count = scope.param("count", i32_type());
+        let count = scope.param("count", i64_type());
         let a = scope.local("a", self.big_type());
         let m = scope.local("m", self.words_type());
         let instrs = wasm![
@@ -753,7 +758,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
     fn emit_big_shr(&mut self) {
         let mut scope = Scope::default();
         let x = scope.param("x", Table::top_type(true));
-        let count = scope.param("count", i32_type());
+        let count = scope.param("count", i64_type());
         let a = scope.local("a", self.big_type());
         let m = scope.local("m", self.words_type());
         let sa = scope.local("sa", i32_type());
@@ -833,16 +838,15 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             set(&sa),
             len(&m),
             set(&la),
-            get(&count),
-            i32_const(5),
-            curios_wasm::Instr::I32ShrU,
-            set(&skip),
-            get(&count),
-            i32_const(31),
-            curios_wasm::Instr::I32And,
-            set(&bits),
             return_if(
-                vec![get(&skip), get(&la), curios_wasm::Instr::I32GeU],
+                wasm![
+                    get(&count),
+                    i64_const(5),
+                    curios_wasm::Instr::I64ShrU,
+                    get(&la),
+                    curios_wasm::Instr::I64ExtendI32U,
+                    curios_wasm::Instr::I64GeU,
+                ],
                 vec![
                     i32_const(-1),
                     i32_const(0),
@@ -851,6 +855,16 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
                     curios_wasm::Instr::RefI31,
                 ],
             ),
+            get(&count),
+            i64_const(5),
+            curios_wasm::Instr::I64ShrU,
+            curios_wasm::Instr::I32WrapI64,
+            set(&skip),
+            get(&count),
+            curios_wasm::Instr::I32WrapI64,
+            i32_const(31),
+            curios_wasm::Instr::I32And,
+            set(&bits),
             get(&la),
             get(&skip),
             curios_wasm::Instr::I32Sub,
@@ -1087,6 +1101,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             curios_wasm::Instr::I32WrapI64,
             self.fixed_limbs(2),
             get(&exponent),
+            curios_wasm::Instr::I64ExtendI32U,
             self.helper(BigHelper::MagShl),
             self.helper(BigHelper::Norm),
         ];
@@ -1120,6 +1135,47 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         ];
 
         self.add_helper(BigHelper::Word, scope, i32_type(), instrs);
+    }
+
+    /// `big/count`: at most two unsigned limbs cross exactly; anything wider saturates past every bit a magnitude can hold. Unlike the host wire, a count this large still permits zero and sign-only answers.
+    fn emit_big_count(&mut self) {
+        let mut scope = Scope::default();
+        let x = scope.param("x", Table::top_type(true));
+        let b = scope.local("b", self.big_type());
+        let m = scope.local("m", self.words_type());
+        let instrs = wasm![
+            get(&x),
+            cast(&self.big.big),
+            set(&b),
+            self.magnitude(&b),
+            set(&m),
+            return_if(
+                wasm![
+                    self.sign(&b),
+                    len(&m),
+                    i32_const(2),
+                    curios_wasm::Instr::I32GtU,
+                    curios_wasm::Instr::I32Or
+                ],
+                vec![i64_const(-1)],
+            ),
+            self.limb64(&m, vec![i32_const(0)]),
+            len(&m),
+            i32_const(2),
+            curios_wasm::Instr::I32Eq,
+            either(
+                i64_type(),
+                wasm![
+                    self.limb64(&m, vec![i32_const(1)]),
+                    i64_const(32),
+                    curios_wasm::Instr::I64Shl
+                ],
+                vec![i64_const(0)]
+            ),
+            curios_wasm::Instr::I64Or,
+        ];
+
+        self.add_helper(BigHelper::Count, scope, i64_type(), instrs);
     }
 
     /// `nat/wire`: the host reads a `Nat` argument as an `i64` read unsigned, so a boxed one crosses when it is at most two limbs, below `2⁶⁴`, and refuses otherwise.

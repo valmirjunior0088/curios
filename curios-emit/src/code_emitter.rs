@@ -396,14 +396,17 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         }
     }
 
-    /// An operand narrowed to a word, as a shift count is: exact below `2³² - 1` and saturating there, which is past every count a shift could honour.
-    fn word(&self, operand: &Operand) -> Vec<curios_wasm::Instr> {
+    /// A shift count is exact below `2⁶⁴ - 1` and saturates there, beyond every magnitude the limb array can hold. It is never narrowed through the position's 32-bit word.
+    fn shift_count(&self, operand: &Operand) -> Vec<curios_wasm::Instr> {
         match operand {
-            Operand::Word(load) => load.clone(),
-            Operand::Reference(local) => {
-                self.context
-                    .load_as_instrs(vec![get(local)], LoadAs::Nat, true)
-            }
+            Operand::Word(load) => load
+                .iter()
+                .cloned()
+                .chain([curios_wasm::Instr::I64ExtendI32U])
+                .collect(),
+            Operand::Reference(local) => self
+                .context
+                .narrow_instrs(vec![get(local)], BigHelper::Count),
         }
     }
 
@@ -630,7 +633,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_store(dest, &curios_cont::Repr::Flt);
     }
 
-    /// Lower a left shift. The fast path shifts in 64 bits when the count is below 32, where any i31 shifted stays inside an `i64`; a larger count, like a boxed operand, goes to `big/shl` with the count narrowed to a word.
+    /// Lower a left shift. The fast path shifts in 64 bits when the count is below 32, where any i31 shifted stays inside an `i64`; a larger count, like a boxed operand, goes to `big/shl` with a 64-bit count, refusing a nonzero result beyond the limb array's capacity.
     fn emit_shift_left(
         &mut self,
         dest: &Dest<'_>,
@@ -642,7 +645,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         let slow: Vec<_> = value
             .reference()
             .into_iter()
-            .chain(self.word(&count))
+            .chain(self.shift_count(&count))
             .chain([self.big(BigHelper::Shl)])
             .collect();
         let shifted = value
@@ -700,7 +703,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         let slow = value
             .reference()
             .into_iter()
-            .chain(self.word(&count))
+            .chain(self.shift_count(&count))
             .chain([self.big(BigHelper::Shr)])
             .collect();
 

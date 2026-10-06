@@ -218,6 +218,8 @@ pub enum Panic {
     NatWire,
     /// An `Int` argument to a host function the wire's `i64` cannot carry.
     IntWire,
+    /// A value requiring more elements than its runtime array can address.
+    Capacity,
     /// A packed or list read, or a window, past the end of its value.
     OutOfBounds,
     /// A `Flt` decoded from a byte string that is not eight bytes long.
@@ -232,9 +234,10 @@ pub enum Panic {
 
 impl Panic {
     /// Every class, in declaration order: the order the emitter writes the refusal helpers a module reaches.
-    pub const ALL: [Panic; 7] = [
+    pub const ALL: [Panic; 8] = [
         Panic::NatWire,
         Panic::IntWire,
+        Panic::Capacity,
         Panic::OutOfBounds,
         Panic::FltDecode,
         Panic::Cycle,
@@ -248,6 +251,7 @@ impl fmt::Display for Panic {
         f.write_str(match self {
             Panic::NatWire => "nat_wire",
             Panic::IntWire => "int_wire",
+            Panic::Capacity => "capacity",
             Panic::OutOfBounds => "bounds",
             Panic::FltDecode => "flt",
             Panic::Cycle => "cycle",

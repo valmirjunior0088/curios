@@ -314,10 +314,10 @@ impl<'a, 'b> Context<'a, 'b> {
         producer.into_iter().chain(read).collect()
     }
 
-    /// Narrow the `Nat` or `Int` reference `producer` leaves to a machine integer: an i31 is its value read signed, and a boxed value is `boxed`'s to narrow — saturating to a word for a position, refusing past the host wire's `i64`. A reference holding a word — a boxed `Bool`, byte or tag — is an i31 and takes the first arm.
+    /// Narrow the `Nat` or `Int` reference `producer` leaves to a machine integer: an i31 is its value read signed, and a boxed value is `boxed`'s to narrow — saturating to a word for a position or an `i64` for a shift count, refusing past the host wire's `i64`. A reference holding a word — a boxed `Bool`, byte or tag — is an i31 and takes the first arm.
     ///
     /// **The producer runs inside the narrowing, so no local holds the reference.** `br_on_cast_fail` tests the value it leaves: an i31 falls straight through to be read, and anything else branches out to the helper — one test where a `ref.test` and a `ref.cast` would make two, with the common case on the straight line. A block cannot consume a value from outside itself, which is why the producer runs in here rather than into a scratch local every narrowing in a function would write.
-    fn narrow_instrs(
+    pub(super) fn narrow_instrs(
         &self,
         producer: Vec<curios_wasm::Instr>,
         boxed: BigHelper,
@@ -328,7 +328,7 @@ impl<'a, 'b> Context<'a, 'b> {
             is_nullable: true,
             heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::Any),
         };
-        // A position takes a word, and the host wire the `i64` both wire helpers answer, which an i31 reaches sign-extended.
+        // A position takes a word; a shift count and the host wire take an `i64`, which an i31 reaches sign-extended.
         let (width, widen) = match boxed {
             BigHelper::Word => (curios_wasm::NumType::I32, None),
             _ => (

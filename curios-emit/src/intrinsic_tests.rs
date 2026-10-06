@@ -1,6 +1,9 @@
 //! Every scalar intrinsic's emitted shape: the fast path it computes in, the helper it grows through, and the guard it refuses through.
 
-use {super::test_support::*, curios_num::Rounding};
+use {
+    super::test_support::*,
+    curios_num::{Natural, Rounding},
+};
 
 /// A `Nat` or `Int` operation grows rather than refusing: the module reaches no refusal but its exit's.
 #[track_caller]
@@ -118,6 +121,55 @@ fn a_nat_literal_past_the_i31_is_built_from_a_limb_segment() {
     assert_contains(&wat, "array.new_data $words");
     assert_contains(&wat, "struct.new $big");
     assert_refuses_nothing(&wat);
+}
+
+/// A count past one word is handed to the shift as an `i64`, never through the position's saturating `big/word`. Both carriers share this path.
+#[test]
+fn a_boxed_shift_count_crosses_as_a_wide_count_in_both_carriers() {
+    for operation in [
+        curios_cont::Intrinsic::NatShl,
+        curios_cont::Intrinsic::NatShr,
+        curios_cont::Intrinsic::IntShl,
+        curios_cont::Intrinsic::IntShr,
+    ] {
+        let count =
+            curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(1u64 << 32)));
+        let value = match operation {
+            curios_cont::Intrinsic::IntShl | curios_cont::Intrinsic::IntShr => int(-1),
+            _ => nat(1),
+        };
+        let mut module = curios_cont::Module::new();
+        let result = module.add_value(Some("result".into()));
+        // No exit-code conversion: every big/word call would belong to the shift's count.
+        let end = module.add_node(curios_cont::Node::Unreachable);
+        let body = module.add_node(curios_cont::Node::LetIntrinsic {
+            result,
+            op: operation,
+            args: vec![value, count],
+            next: end,
+        });
+        let return_cont = module.reserve_continuation();
+        let main = module.add_function(curios_cont::Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body,
+            droppable: false,
+        });
+        module.set_entry(main);
+        let wat = wat(&module);
+        assert_contains(&wat, "call $big/count");
+        assert_contains(&wat, "(param $count i64)");
+        assert_absent(&wat, "call $big/word");
+        if matches!(
+            operation,
+            curios_cont::Intrinsic::NatShl | curios_cont::Intrinsic::IntShl
+        ) {
+            assert_contains(&wat, "call $refuse/capacity");
+        } else {
+            assert_absent(&wat, "call $refuse/capacity");
+        }
+    }
 }
 
 // --- Int ------------------------------------------------------------------
