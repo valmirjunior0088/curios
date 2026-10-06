@@ -3,7 +3,7 @@
 //! **The payload, not the wasm module, is what this hands back**, and that is what lets one stored artifact serve `run` and `compile` alike: `run` executes it in-process exactly as it executes a fresh one, and `compile` appends it to the embedded launcher. Optimization and precompilation therefore happen here rather than in `main`, which is left dispatching.
 
 use {
-    crate::{Heading, Line, Subject, fact, processing},
+    crate::{Heading, Line, Subject, fact, note, processing},
     curios::{engine, to_cwasm},
     curios_abi::ForeignStore,
     curios_document::Documentation,
@@ -26,6 +26,15 @@ pub(crate) fn payload_of(
     cache: Option<Verdicts>,
 ) -> Result<(Vec<u8>, ForeignStore), CompileError> {
     let subject = subject_of(&program);
+
+    // A file its package's directory holds and no unit declares is built loose, which nothing below would say: the build is silent about what it was not compiled against, and a name of the package refused in it reads as a typo. A program is declared by a row, so the remedy is a build's own and not the `mod` line a question names.
+    if let Some(unlinked) = program.unlinked() {
+        note(format!(
+            "{} is in no unit of `/{}`, so it is compiled on its own against `/std`: an `[[executables]]` row in its manifest declares it",
+            unlinked.file.display(),
+            unlinked.package
+        ));
+    }
 
     // A loose program has no project, so it has no store to consult: what a compilation may reuse is a fact about the project it is in, and a loose program is in none.
     let entry = match program.entry() {

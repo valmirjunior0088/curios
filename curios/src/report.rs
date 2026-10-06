@@ -150,6 +150,11 @@ pub(crate) fn fact(heading: Heading, detail: impl fmt::Display) {
     eprintln!("{}{detail}", head("", heading));
 }
 
+/// How a build is taken rather than anything it did: a line of its own ahead of the header, spelled as a question spells its note.
+pub(crate) fn note(text: impl fmt::Display) {
+    eprintln!("note: {text}");
+}
+
 /// What a question says where the store took nothing of what it compiled: the fact a build states for the same reason, in a question's words. A store nobody can write otherwise reads as a compiler that is slow.
 pub(crate) fn unfiled(refusal: String) {
     fact(

@@ -53,9 +53,16 @@ impl Subject {
             Some(text) => Some(Source::held(&unlinked.file, text)),
             None => Source::read(&unlinked.file).ok(),
         };
+        // A question's own words for it: the file was checked, and the `mod` line is what would have a unit check it.
+        let message = format!(
+            "{} is in no unit of `/{}`, so it was checked on its own against `/std`: {}",
+            unlinked.file.display(),
+            unlinked.package,
+            unlinked.remedy
+        );
         let report = match source {
-            Some(source) => Report::at(Span::new(source, 0, 0), unlinked.message.clone()),
-            None => Report::unlocated(unlinked.message.clone()),
+            Some(source) => Report::at(Span::new(source, 0, 0), message),
+            None => Report::unlocated(message),
         };
 
         Some(Diagnosis {

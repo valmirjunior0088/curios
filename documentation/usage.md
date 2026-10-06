@@ -66,7 +66,7 @@ The dispatch is lexical and never probes the disk: an executable's name is a sin
 
 `run` and `compile` are the only commands that need a program's **own** file: a module of one is refused, naming the executable to run instead, and a library is refused as the non-program it is. Everywhere else a module reaches its unit as readily as the entry does, which is what lets a question or a lint be asked about the file in front of you.
 
-A loose file brings no project with it — no dependencies, not even the library of the package it sits in. That is deliberate: project scope is reachable only through something a manifest declares, so a scratch file cannot quietly acquire one. When a scratch program does want the library, one `[[executables]]` line gives it one.
+A loose file brings no project with it — no dependencies, not even the library of the package it sits in. That is deliberate: project scope is reachable only through something a manifest declares, so a scratch file cannot quietly acquire one. When a scratch program does want the library, one `[[executables]]` line gives it one. A file a package's directory holds and no unit declares is where that surprises, so a command says so before anything else: a question opens with a note naming the `mod` line that would declare it, and `run` and `compile` with one naming the `[[executables]]` row.
 
 ## The surface
 

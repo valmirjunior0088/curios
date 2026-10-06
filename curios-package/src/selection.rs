@@ -217,13 +217,15 @@ pub struct Home {
     pub output: PathBuf,
 }
 
-/// Why a file a package's directory holds is in none of its units: what a question says before it answers about the file on its own.
+/// Why a file a package's directory holds is in none of its units: the pieces a command words its own note from, since a question that checked the file and a build that compiled it say different things about it.
 #[derive(Debug, Clone)]
 pub struct Unlinked {
     /// The file, as it was asked about.
     pub file: PathBuf,
-    /// What to say about it, and what would put it in a unit.
-    pub message: String,
+    /// The name of the package whose directory holds it.
+    pub package: String,
+    /// What would put it in a unit as a module: the `mod` line and the file it goes in, or why nothing can declare it.
+    pub remedy: String,
 }
 
 impl Program {
@@ -425,12 +427,9 @@ fn loose(file: PathBuf) -> Selection {
 /// `file`, loose although `governing`'s package holds it, carrying `remedy` — what would put it in a unit.
 fn unlinked(file: PathBuf, governing: &Governing, remedy: String) -> Selection {
     let unlinked = Unlinked {
-        message: format!(
-            "{} is in no unit of `/{}`, so it was checked on its own against `/std`: {remedy}",
-            file.display(),
-            governing.package.name
-        ),
         file: file.clone(),
+        package: governing.package.name.clone(),
+        remedy,
     };
 
     Selection::Program(Program::loose(Entry::File(file), Some(unlinked)))

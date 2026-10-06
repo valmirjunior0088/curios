@@ -180,13 +180,9 @@ fn a_file_is_placed_by_what_declares_it_not_by_where_it_sits() {
     let unlinked = scratch
         .unlinked()
         .expect("the package holds it, and says why it is in no unit");
-    assert_eq!(
-        unlinked.message,
-        format!(
-            "{} is in no unit of `/app`, so it was checked on its own against `/std`: declare it with `mod scratch;` in lib.crs",
-            root.join("scratch.crs").display()
-        )
-    );
+    assert_eq!(unlinked.file, root.join("scratch.crs"));
+    assert_eq!(unlinked.package, "app");
+    assert_eq!(unlinked.remedy, "declare it with `mod scratch;` in lib.crs");
 }
 
 /// A file no manifest governs is loose, and has nothing to be told.
@@ -485,14 +481,9 @@ fn a_module_an_entry_declares_selects_its_program_and_one_it_does_not_is_loose()
 
     let other = selected(Some("serve/other.crs"), &root).expect("an undeclared module");
     assert!(other.home().is_none());
-    assert!(
-        other
-            .unlinked()
-            .expect("the package holds it")
-            .message
-            .ends_with("declare it with `mod other;` in serve.crs"),
-        "{:?}",
-        other.unlinked()
+    assert_eq!(
+        other.unlinked().expect("the package holds it").remedy,
+        "declare it with `mod other;` in serve.crs"
     );
 }
 
@@ -525,12 +516,12 @@ fn an_unlinked_file_is_told_what_would_declare_it() {
             "its spelling names no module a `mod` could declare",
         ),
     ] {
-        let message = selected(Some(file), &root)
+        let written = selected(Some(file), &root)
             .expect("a loose file")
             .unlinked()
-            .map(|unlinked| unlinked.message.clone())
+            .map(|unlinked| unlinked.remedy.clone())
             .unwrap_or_else(|| panic!("{file} is held by the package"));
-        assert!(message.ends_with(remedy), "{file}: {message}");
+        assert_eq!(written, remedy, "{file}");
     }
 
     let programs = tree(
@@ -541,15 +532,12 @@ fn an_unlinked_file_is_told_what_would_declare_it() {
             ("stray.crs", ""),
         ],
     );
-    let message = selected(Some("stray.crs"), &programs)
+    let remedy = selected(Some("stray.crs"), &programs)
         .expect("a loose file")
         .unlinked()
-        .map(|unlinked| unlinked.message.clone())
+        .map(|unlinked| unlinked.remedy.clone())
         .expect("the package holds it");
-    assert!(
-        message.ends_with("`/tool` has no library to declare it in"),
-        "{message}"
-    );
+    assert_eq!(remedy, "`/tool` has no library to declare it in");
 }
 
 /// A file no manifest above it governs is loose, with nothing to be told.

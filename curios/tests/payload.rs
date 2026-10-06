@@ -194,3 +194,43 @@ fn a_loose_file_compiles_only_where_output_says() {
         "a loose program has no store to file into"
     );
 }
+
+/// A file its package's directory holds and no unit declares is built against `/std` alone, and a build says so ahead of its header, naming the row that would declare it as a program — where a file no package holds is built with nothing said.
+#[test]
+fn a_file_no_unit_declares_says_so_when_built() {
+    let root = project("unlinked-build");
+    write(&root, "scratch.crs", "/std/print(\"on its own\")\n");
+
+    let ran = curios(&root, &["run", "scratch.crs"]);
+    assert_eq!(ran.stdout, b"on its own");
+    let stderr = String::from_utf8_lossy(&ran.stderr);
+    assert!(
+        stderr.starts_with(
+            "note: scratch.crs is in no unit of `/app`, so it is compiled on its own against `/std`: an `[[executables]]` row in its manifest declares it\n"
+        ),
+        "{stderr}"
+    );
+
+    let built = curios(&root, &["compile", "scratch.crs", "--output", "scratch"]);
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&built.stderr)
+            .starts_with("note: scratch.crs is in no unit of `/app`"),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+
+    let bare = temporary("unlinked-bare");
+    write(&bare, "scratch.crs", "/std/print(\"on its own\")\n");
+    let ran = curios(&bare, &["run", "scratch.crs"]);
+    assert_eq!(ran.stdout, b"on its own");
+    assert!(
+        !String::from_utf8_lossy(&ran.stderr).contains("note:"),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+}
