@@ -946,20 +946,20 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         })
     }
 
-    /// A lowered struct literal under the head it was written with. A bare head leaves the parameters to elaboration. An applied one is the type former applied as any call applies it — marks, omitted hidden arguments and `?` holes included — so it lowers as that application and the literal is stated at it, rather than the literal carrying a second argument list with rules of its own.
+    /// A lowered struct literal under the head it was written with. A bare head leaves the parameters to elaboration. An applied one is the type former applied as any call applies it — marks, omitted hidden arguments, `?` holes and a list with nothing written included — so it lowers as that application and the literal is stated at it, rather than the literal carrying a second argument list with rules of its own.
     fn headed(
         &self,
         lit: &StructLit,
         literal: curios_core::Term,
     ) -> Result<curios_core::Term, Error> {
-        if lit.params.is_empty() {
+        let Some(params) = &lit.params else {
             return Ok(literal);
-        }
+        };
 
         let former: Term = Subterm::Name(lit.head.clone()).into();
         let applied: Term = Subterm::Apply(Apply {
             head: former,
-            arguments: lit.params.clone(),
+            arguments: params.clone(),
         })
         .into();
 

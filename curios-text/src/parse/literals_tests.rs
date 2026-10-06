@@ -365,7 +365,7 @@ fn spread_entries_are_struct_literal_only() {
     else {
         panic!("expected a struct literal");
     };
-    assert_eq!(params.len(), 2);
+    assert_eq!(params.as_ref().map(Vec::len), Some(2));
     assert!(matches!(entries[0], StructLitEntry::Spread(_)));
 
     // A misplaced spread still parses — position and multiplicity are rejected at elaboration, not parse (like non-concept `use` entries).

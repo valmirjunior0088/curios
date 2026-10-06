@@ -222,7 +222,8 @@ pub struct TopWitness {
     pub doc: Option<Doc>,
     pub params: Vec<FuncSugarParam>,
     pub concept: Name,
-    pub args: Vec<Argument>,
+    /// The concept's argument list where one was written: `None` for a bare concept name, and the empty list for `C()`, the application with nothing written.
+    pub args: Option<Vec<Argument>>,
     /// The written fields, or `None` for the derived form. A body holds implementation fields and nothing else: the concept's `use`-marked (superclass) positions are never written in a witness, so resolution fills each one and every path to a superclass finds the one registered witness.
     pub body: Option<Vec<WitnessField>>,
 }

@@ -334,3 +334,27 @@ fn a_struct_group_may_name_one_another() {
 
     assert_eq!(run(source), b"3");
 }
+
+// A literal head written with a list holding nothing is the application it is anywhere else, never the bare head: refused where the former takes a plain parameter, as the type `Pair()` is, and the call that leaves `@A` to inference where every parameter is hidden.
+#[test]
+fn a_literal_head_with_nothing_written_is_the_application() {
+    let refused = r#"
+        use /std/{Nat, Bool};
+        struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
+        let p = Pair() { fst = 1, snd = true };
+        /std/print("no")
+        "#;
+    let report = error(refused);
+    assert!(
+        report.contains("wrong number of arguments: expected 2, got 0"),
+        "{report}"
+    );
+
+    let accepted = r#"
+        use /std/{Nat};
+        struct Box(@A : Type) : pub Type { value : A }
+        let b = Box() { value = 7 };
+        /std/print(Nat/to_str(b.value))
+        "#;
+    assert_eq!(run(accepted), b"7");
+}

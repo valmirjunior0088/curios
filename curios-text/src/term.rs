@@ -266,11 +266,11 @@ pub enum StructLitEntry {
     Spread(Term),
 }
 
-/// A struct literal: a head naming the struct type (`Pair`, possibly applied — `Pair(Nat, Bin)` / `Pair(Nat, ?)` — to pin the parameters) followed by a brace of entries. `params` is the optionally-applied head arguments (empty for the bare-name head; holes appear as `?` terms). An applied head is an application of the type former, so its arguments take the marks a call's do: `Box(@Nat) { … }`. Plain entries are validated positionally against the declared non-`use` labels at core elaboration; a concept's `use`-marked fields are filled by `use <term>` entries or, when omitted, by witness resolution.
+/// A struct literal: a head naming the struct type (`Pair`, possibly applied — `Pair(Nat, Bin)` / `Pair(Nat, ?)` — to pin the parameters) followed by a brace of entries. `params` is the head's argument list where one was written — `None` for the bare-name head, and the empty list for `Box()`, the application with nothing written; holes appear as `?` terms. An applied head is an application of the type former, so its arguments take the marks a call's do: `Box(@Nat) { … }`. Plain entries are validated positionally against the declared non-`use` labels at core elaboration; a concept's `use`-marked fields are filled by `use <term>` entries or, when omitted, by witness resolution.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructLit {
     pub head: Name,
-    pub params: Vec<Argument>,
+    pub params: Option<Vec<Argument>>,
     pub entries: Vec<StructLitEntry>,
 }
 

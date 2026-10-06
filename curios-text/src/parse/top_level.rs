@@ -459,7 +459,7 @@ pub(super) fn parse_induct_arity<'a>() -> Parser<'a, InductArity> {
 pub(super) fn parse_top_induct_body<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopInduct> {
     declared(
         parse_literal("(")
-            .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
+            .and_keep(sep_by1_trailing(parse_induct_param, || parse_literal(",")))
             .and_drop(parse_literal(")"))
             .or(pure(vec![]))
             // The head's arity: `: (n : Nat) -> Prop` or `: Prop`. The sort is required — there is no implicit `Type`.
@@ -557,7 +557,7 @@ fn parse_struct_field<'a>() -> Parser<'a, StructField> {
 fn parse_struct_member<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopStruct> {
     declared(
         parse_literal("(")
-            .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
+            .and_keep(sep_by1_trailing(parse_induct_param, || parse_literal(",")))
             .and_drop(parse_literal(")"))
             .or(pure(vec![]))
             // The result sort: `: Type` or `: Prop` after the parameters. Required.
@@ -648,7 +648,7 @@ pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
 fn parse_concept_member<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopConcept> {
     declared(
         parse_literal("(")
-            .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
+            .and_keep(sep_by1_trailing(parse_induct_param, || parse_literal(",")))
             .and_drop(parse_literal(")"))
             .or(pure(vec![]))
             // The representation sort: `: pub Type`, `: Type`, `: pub Prop`, or `: Prop` after the parameters. Required, like a struct's.
@@ -729,7 +729,8 @@ fn parse_witness_member<'a>(doc: Option<Doc>) -> Parser<'a, TopWitness> {
                     parse_literal(",")
                 }))
                 .and_drop(parse_literal(")"))
-                .or(pure(vec![]))
+                .map(Some)
+                .or(pure(None))
                 .and(
                     parse_literal("{").and_keep(
                         parse_literal("..")

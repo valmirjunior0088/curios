@@ -860,7 +860,7 @@ pub induct Option(A: Type): pub Type
 end
 ```
 
-Parameters follow the name, each named. A parameter marked `@` is implicit at the type constructor, and a plain or `@` parameter is implicit at every value constructor. A parameter written `use Concept(args)` is a premise the family is declared under, a witness slot of the type constructor and of every value constructor alike — see [A type declared under a premise](#a-type-declared-under-a-premise).
+Parameters follow the name, each named, and a list holds at least one: a family with none is written with no list, `induct Empty: Type`. A parameter marked `@` is implicit at the type constructor, and a plain or `@` parameter is implicit at every value constructor. A parameter written `use Concept(args)` is a premise the family is declared under, a witness slot of the type constructor and of every value constructor alike — see [A type declared under a premise](#a-type-declared-under-a-premise).
 
 The required result annotation is either a sort or an index telescope followed by a sort:
 
@@ -936,7 +936,7 @@ and Edge: pub Type { weight: Nat, to: Node }
 
 ### Structure literals
 
-A structure value names its type and supplies its fields. A head may be applied before the field block, and an applied head is the type written as it is anywhere else — a call of the type former, taking the marks, the `?` holes and the omitted hidden arguments a call takes.
+A structure value names its type and supplies its fields. A head may be applied before the field block, and an applied head is the type written as it is anywhere else — a call of the type former, taking the marks, the `?` holes and the omitted hidden arguments a call takes. A list with nothing written is that call too, never the bare head: `Box() { … }` leaves `@A` to inference as `Box()` does in a signature, and `Pair() { … }` is refused as `Pair()` is.
 
 ```crs
 Pair { fst = 1, snd = true }

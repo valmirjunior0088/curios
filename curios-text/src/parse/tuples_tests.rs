@@ -142,7 +142,7 @@ fn struct_literal_disambiguates_from_tuple_type() {
         "Pair { fst = a, snd = b }".parse::<Term>().unwrap(),
         Subterm::StructLit(StructLit {
             head: Name::from(["Pair".to_string()]),
-            params: vec![],
+            params: None,
             entries: vec![
                 StructLitEntry::Field(TupleField {
                     label: Some("fst".to_string()),
@@ -163,7 +163,7 @@ fn struct_literal_disambiguates_from_tuple_type() {
         "Str { raw }".parse::<Term>().unwrap(),
         Subterm::StructLit(StructLit {
             head: Name::from(["Str".to_string()]),
-            params: vec![],
+            params: None,
             entries: vec![StructLitEntry::Field(TupleField {
                 label: None,
                 func_params: None,

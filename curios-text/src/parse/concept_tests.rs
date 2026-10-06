@@ -120,7 +120,7 @@ fn parse_witness_item() {
     let witness = &witnesses[0];
 
     assert_eq!(witness.concept, Name::from(["Ordered".to_string()]));
-    assert_eq!(witness.args.len(), 1);
+    assert_eq!(witness.args.as_ref().map(Vec::len), Some(1));
 
     // The telescope: an implicit `@A` and an anonymous `use` premise.
     assert_eq!(witness.params.len(), 2);
@@ -244,6 +244,7 @@ fn a_literal_head_and_a_witness_head_keep_their_marks() {
         literal
             .params
             .iter()
+            .flatten()
             .map(|argument| argument.plicity)
             .collect::<Vec<_>>(),
         [Plicity::Explicit, Plicity::Witness, Plicity::Implicit],
@@ -255,8 +256,62 @@ fn a_literal_head_and_a_witness_head_keep_their_marks() {
     let TopItem::Witness(witnesses) = &entrypoint.module.items[0] else {
         panic!("expected a witness declaration");
     };
-    assert_eq!(witnesses[0].args.len(), 1);
-    assert_eq!(witnesses[0].args[0].plicity, Plicity::Implicit);
+    assert_eq!(
+        witnesses[0]
+            .args
+            .iter()
+            .flatten()
+            .map(|argument| argument.plicity)
+            .collect::<Vec<_>>(),
+        [Plicity::Implicit],
+    );
+}
+
+/// A list with nothing written is the application it is anywhere else, so both heads keep it apart from the bare name and print it back.
+#[test]
+fn a_literal_head_and_a_witness_head_keep_an_empty_list() {
+    for (source, applied) in [("Box() { value = 1 }", true), ("Box { value = 1 }", false)] {
+        let term = source.parse::<Term>().unwrap();
+        let Subterm::StructLit(literal) = term.as_subterm() else {
+            panic!("expected a struct literal");
+        };
+        assert_eq!(literal.params.is_some(), applied, "{source}");
+        assert_eq!(term.to_string(), source);
+    }
+
+    for (source, applied) in [
+        ("satisfy Marker() {}\nu", true),
+        ("satisfy Marker {}\nu", false),
+    ] {
+        let entrypoint = source.parse::<Entrypoint>().unwrap();
+        let TopItem::Witness(witnesses) = &entrypoint.module.items[0] else {
+            panic!("expected a witness declaration");
+        };
+        assert_eq!(witnesses[0].args.is_some(), applied, "{source}");
+        assert_eq!(entrypoint.to_string(), source);
+    }
+}
+
+/// A declared parameter list holds at least one parameter: an empty one would declare a type its uses could not tell from one with no list.
+#[test]
+fn a_declared_parameter_list_is_never_empty() {
+    for source in [
+        "struct Unit(): Type {} u",
+        "induct Empty(): Type end u",
+        "concept Marker(): Type {} u",
+    ] {
+        assert!(
+            source.parse::<Entrypoint>().is_err(),
+            "unexpectedly parsed {source:?}"
+        );
+    }
+    for source in [
+        "struct Unit: Type {} u",
+        "induct Empty: Type end u",
+        "concept Marker: Type {} u",
+    ] {
+        assert!(source.parse::<Entrypoint>().is_ok(), "refused {source:?}");
+    }
 }
 
 #[test]

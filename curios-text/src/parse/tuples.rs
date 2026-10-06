@@ -202,7 +202,7 @@ pub(super) fn parse_struct_entry<'a>() -> Parser<'a, StructLitEntry> {
         }))
 }
 
-// A struct literal: `Name { … }` or `Name(args) { … }`. The trailing `{` is the commit point — it distinguishes the literal from a bare name / name-application (no brace) and from a Σ-type `{ x : A }` (no head name), so there is no grammar conflict. Plain entries reuse the tuple-value grammar (`= value` or positional) and `use <term>` fills a concept's `use`-marked field; the head's arguments are a call's, marks included, since an applied head is an application of the type former.
+// A struct literal: `Name { … }` or `Name(args) { … }`, where a list with nothing written, `Name() { … }`, is kept as the application it is and not read as the bare name. The trailing `{` is the commit point — it distinguishes the literal from a bare name / name-application (no brace) and from a Σ-type `{ x : A }` (no head name), so there is no grammar conflict. Plain entries reuse the tuple-value grammar (`= value` or positional) and `use <term>` fills a concept's `use`-marked field; the head's arguments are a call's, marks included, since an applied head is an application of the type former.
 pub(super) fn parse_struct_lit<'a>() -> Parser<'a, Term> {
     parse_name()
         .and(
@@ -211,7 +211,8 @@ pub(super) fn parse_struct_lit<'a>() -> Parser<'a, Term> {
                     parse_literal(",")
                 }))
                 .and_drop(parse_literal(")"))
-                .or(pure(vec![])),
+                .map(Some)
+                .or(pure(None)),
         )
         .and_drop(parse_literal("{"))
         .and(commit(

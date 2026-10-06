@@ -306,3 +306,19 @@ fn a_witness_refusal_is_located_at_its_concept_application() {
     assert!(bare.contains("orphan witness"), "{bare}");
     assert!(bare.contains("satisfy Show(Nat) {"), "{bare}");
 }
+
+// A witness head written with a list holding nothing is the application `Show()`, so it is refused by the call's own arity report rather than read as the bare concept.
+#[test]
+fn a_witness_head_with_nothing_written_is_the_application() {
+    let source = r#"
+        use /std/{Nat, Str};
+        concept Show(A : Type) : pub Type { show(A) -> Str }
+        satisfy Show() { show(n : Nat) = "" }
+        /std/print("no")
+        "#;
+    let report = error(source);
+    assert!(
+        report.contains("wrong number of arguments: expected 1, got 0"),
+        "{report}"
+    );
+}

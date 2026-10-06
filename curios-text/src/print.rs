@@ -1328,10 +1328,9 @@ fn print_term_inner(term: Term) -> Printer {
             entries,
         }) => flat([
             pure(head.join()),
-            if params.is_empty() {
-                pure("")
-            } else {
-                listed("(", params.into_iter().map(print_argument).collect(), ")")
+            match params {
+                None => pure(""),
+                Some(params) => listed("(", params.into_iter().map(print_argument).collect(), ")"),
             },
             pure(" "),
             listed_block(
@@ -2073,17 +2072,12 @@ fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
         ])
     };
 
-    let app = if item.args.is_empty() {
-        pure(item.concept.join())
-    } else {
-        flat([
+    let app = match item.args {
+        None => pure(item.concept.join()),
+        Some(args) => flat([
             pure(item.concept.join()),
-            listed(
-                "(",
-                item.args.into_iter().map(print_argument).collect(),
-                ")",
-            ),
-        ])
+            listed("(", args.into_iter().map(print_argument).collect(), ")"),
+        ]),
     };
 
     // A derived witness's block holds `..` alone, on a line of its own as a lone entry is, and with no comma since it is none.
@@ -2117,7 +2111,9 @@ fn witness_member_start(item: &TopWitness) -> Option<usize> {
             .first()
             .and_then(|param| param.type_.span().map(|span| span.start)),
         item.args
-            .first()
+            .iter()
+            .flatten()
+            .next()
             .and_then(|arg| arg.term.span().map(|span| span.start)),
         item.body
             .as_ref()
@@ -2357,15 +2353,11 @@ pub(crate) fn print_witness_head(item: &TopWitness) -> Printer {
             pure(" =>"),
         ]),
     };
-    let app = match item.args.is_empty() {
-        true => pure(item.concept.join()),
-        false => flat([
+    let app = match &item.args {
+        None => pure(item.concept.join()),
+        Some(args) => flat([
             pure(item.concept.join()),
-            listed(
-                "(",
-                item.args.iter().cloned().map(print_argument).collect(),
-                ")",
-            ),
+            listed("(", args.iter().cloned().map(print_argument).collect(), ")"),
         ]),
     };
     flat([pure("satisfy"), params, pure(" "), app])
