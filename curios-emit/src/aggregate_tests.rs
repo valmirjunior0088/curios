@@ -76,8 +76,9 @@ fn taking_a_channel_item_clears_the_slot_without_a_host_call() {
     assert_contains(&wat, "array.new_default $elems");
     assert_contains(&wat, "array.get $elems");
     assert_contains(&wat, "ref.null any");
-    // One store enqueues; the other clears the consumed slot. The round trip needs no runtime helper or host operation.
+    // One store enqueues; the other clears the consumed slot. Creation guards the requested capacity before allocating; the state transitions need no host operation.
     assert_eq!(count(&wat, "array.set $elems"), 2, "{wat}");
+    assert_contains(&wat, "call $refuse/capacity");
     assert_eq!(count(&wat, "(call "), 0, "{wat}");
 }
 

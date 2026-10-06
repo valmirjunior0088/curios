@@ -65,6 +65,8 @@ pub use types::*;
 #[cfg(test)]
 mod aggregate_tests;
 #[cfg(test)]
+mod capacity_tests;
+#[cfg(test)]
 mod foreign_tests;
 #[cfg(test)]
 mod hoist_tests;

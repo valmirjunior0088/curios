@@ -12,7 +12,7 @@ pub(crate) fn refusal_message(class: curios_cont::Panic) -> &'static str {
             "an Int argument to a host function is outside what the wire carries: an Int crosses to the host between -2^63 and 2^63 - 1, and inside the program it is unbounded"
         }
         curios_cont::Panic::Capacity => {
-            "a value is past what the runtime can hold: its array needs more than 2^32 - 1 elements; use a smaller value"
+            "a value is past what the runtime can hold: a length or capacity exceeds 2^32 - 1 elements; use a smaller value"
         }
         curios_cont::Panic::OutOfBounds => {
             "a read reached past the end of a Bits, Bytes or List value"

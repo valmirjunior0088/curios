@@ -214,11 +214,11 @@ pub enum Node {
 /// The classes of failure a compiled program can stop with, each rendered by the emitter as one sentence naming the rule, the carrier and the remedy. A `Node::Panic` carries one; the emitter's own checks — a narrowing to the host wire, a read past the end, a `Flt` decode, a host's reply — reach for the same classes as instruction sequences, since they are decided while lowering an intrinsic rather than as nodes. The sentences themselves are the emitter's (`curios-emit`'s `refusal.rs`), so what the IR states is the vocabulary and what the emitter states is the text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panic {
-    /// A `Nat` argument to a host function the wire's unsigned `i64` cannot carry. The one place a `Nat` is narrowed by refusing: everywhere inside the program it is unbounded.
+    /// A `Nat` argument to a host function the wire's unsigned `i64` cannot carry. The host wire is bounded; the number inside the program is unbounded.
     NatWire,
     /// An `Int` argument to a host function the wire's `i64` cannot carry.
     IntWire,
-    /// A value requiring more elements than its runtime array can address.
+    /// A value whose logical length or storage capacity exceeds the runtime's 32-bit bound.
     Capacity,
     /// A packed or list read, or a window, past the end of its value.
     OutOfBounds,

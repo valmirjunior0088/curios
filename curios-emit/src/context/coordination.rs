@@ -76,7 +76,7 @@ impl<'a> Context<'a, '_> {
         let word = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
         let mut output = Vec::new();
         if target.op == curios_cont::ChannelOp::New {
-            output.extend(self.load_value_instrs(&target.args[0], LoadAs::Nat));
+            output.extend(self.load_length_instrs(&target.args[0]));
             output.push(curios_wasm::Instr::ArrayNewDefault {
                 type_name: data.payload,
             });

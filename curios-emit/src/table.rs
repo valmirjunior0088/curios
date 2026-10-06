@@ -2,7 +2,8 @@ use {
     super::{
         BigHelper, EmissionBlockName, EmissionBody, EmissionClosure, EmissionClosureName,
         EmissionCode, EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule,
-        EmissionValue, EmissionValueName, FltHelper, LoadAs, call, concrete_val, refuse_func_name,
+        EmissionValue, EmissionValueName, FltHelper, LoadAs, call, concrete_val, get, i64_const,
+        refuse_func_name, tee, when,
     },
     curios_abi::{ForeignFunction, WireLeaf, WireType},
     std::{
@@ -732,6 +733,62 @@ impl<'a> Table<'a> {
             },
             curios_wasm::Instr::Unreachable,
         ]
+    }
+
+    /// A logical length or capacity computed unsigned in 64 bits, checked before it enters a 32-bit field or allocation. `wide` holds the producer once, so the guard neither repeats it nor lets its sum wrap.
+    pub(crate) fn length_instrs(
+        &self,
+        producer: Vec<curios_wasm::Instr>,
+        wide: &curios_wasm::LocalName,
+    ) -> Vec<curios_wasm::Instr> {
+        producer
+            .into_iter()
+            .chain([
+                tee(wide),
+                i64_const(u32::MAX.into()),
+                curios_wasm::Instr::I64GtU,
+                when(self.refuse_instrs(curios_cont::Panic::Capacity)),
+                get(wide),
+                curios_wasm::Instr::I32WrapI64,
+            ])
+            .collect()
+    }
+
+    /// Two represented lengths added exactly, then checked against the logical length bound before narrowing.
+    pub(crate) fn length_sum_instrs(
+        &self,
+        lhs: Vec<curios_wasm::Instr>,
+        rhs: Vec<curios_wasm::Instr>,
+        wide: &curios_wasm::LocalName,
+    ) -> Vec<curios_wasm::Instr> {
+        self.length_instrs(
+            lhs.into_iter()
+                .chain([curios_wasm::Instr::I64ExtendI32U])
+                .chain(rhs)
+                .chain([
+                    curios_wasm::Instr::I64ExtendI32U,
+                    curios_wasm::Instr::I64Add,
+                ])
+                .collect(),
+            wide,
+        )
+    }
+
+    /// A bit length's ceiling in bytes. Widen before rounding so every valid logical length, including the last seven, has enough packed payload.
+    pub(crate) fn bits_payload_len_instrs(
+        producer: Vec<curios_wasm::Instr>,
+    ) -> Vec<curios_wasm::Instr> {
+        producer
+            .into_iter()
+            .chain([
+                curios_wasm::Instr::I64ExtendI32U,
+                i64_const(7),
+                curios_wasm::Instr::I64Add,
+                i64_const(3),
+                curios_wasm::Instr::I64ShrU,
+                curios_wasm::Instr::I32WrapI64,
+            ])
+            .collect()
     }
 
     /// `$refuse/<class> () -> ()`: build the class's sentence from its data segment, hand it to `sys.panic`, and never return. First use marks it for emission, so nothing is allocated for a refusal until one fires.

@@ -773,7 +773,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
     /// Concatenate two loaded ropes into `dest`: answer the other side when one is empty (the runtime identity shortcuts keep chains of empty seeds from deepening), else one O(1) node.
     fn concat_pair_instrs(
-        &self,
+        &mut self,
         lhs: Vec<curios_wasm::Instr>,
         rhs: Vec<curios_wasm::Instr>,
         dest: &curios_wasm::LocalName,
@@ -784,11 +784,17 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         };
 
         let mut node = vec![curios_wasm::Instr::I32Const { value: 1 }];
-        node.extend(lhs.clone());
-        node.push(Self::rope_get(rope, &rope.len_field));
-        node.extend(rhs.clone());
-        node.push(Self::rope_get(rope, &rope.len_field));
-        node.push(curios_wasm::Instr::I32Add);
+        let left_len = lhs
+            .iter()
+            .cloned()
+            .chain([Self::rope_get(rope, &rope.len_field)])
+            .collect();
+        let right_len = rhs
+            .iter()
+            .cloned()
+            .chain([Self::rope_get(rope, &rope.len_field)])
+            .collect();
+        node.extend(self.context.length_sum_instrs(left_len, right_len));
         node.extend(lhs.clone());
         node.extend(rhs.clone());
         node.push(curios_wasm::Instr::RefNull {
@@ -910,10 +916,19 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         rope: &RopeData,
     ) {
         self.emit_instr(curios_wasm::Instr::I32Const { value: 1 });
-        self.emit_instrs(self.context.load_value_instrs(carrier, load.clone()));
-        self.emit_instr(Self::rope_get(rope, &rope.len_field));
-        self.emit_instr(curios_wasm::Instr::I32Const { value: 1 });
-        self.emit_instr(curios_wasm::Instr::I32Add);
+        let length = self
+            .context
+            .load_value_instrs(carrier, load.clone())
+            .into_iter()
+            .chain([
+                Self::rope_get(rope, &rope.len_field),
+                curios_wasm::Instr::I64ExtendI32U,
+                curios_wasm::Instr::I64Const { value: 1 },
+                curios_wasm::Instr::I64Add,
+            ])
+            .collect();
+        let length = self.context.length_instrs(length);
+        self.emit_instrs(length);
         self.emit_instrs(self.context.load_value_instrs(carrier, load));
         self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
         self.emit_instr(curios_wasm::Instr::I32Const { value: 1 });
@@ -1396,11 +1411,19 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             },
         };
         let mut rope_arm = vec![curios_wasm::Instr::I32Const { value: 1 }];
-        rope_arm.extend(self.context.load_value_instrs(carrier, LoadAs::NonNull));
-        rope_arm.push(cast_rope.clone());
-        rope_arm.push(Self::rope_get(&rope, &rope.len_field));
-        rope_arm.push(curios_wasm::Instr::I32Const { value: 1 });
-        rope_arm.push(curios_wasm::Instr::I32Add);
+        let length = self
+            .context
+            .load_value_instrs(carrier, LoadAs::NonNull)
+            .into_iter()
+            .chain([
+                cast_rope.clone(),
+                Self::rope_get(&rope, &rope.len_field),
+                curios_wasm::Instr::I64ExtendI32U,
+                curios_wasm::Instr::I64Const { value: 1 },
+                curios_wasm::Instr::I64Add,
+            ])
+            .collect();
+        rope_arm.extend(self.context.length_instrs(length));
         rope_arm.extend(self.context.load_value_instrs(carrier, LoadAs::NonNull));
         rope_arm.push(cast_rope);
         rope_arm.extend(elem_leaf(elem_instrs));
@@ -2099,7 +2122,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     Grain::X => self.context.table().bytes_norm_func(),
                     Grain::B => self.context.table().bits_norm_func(),
                 };
-                let count = self.context.load_value_instrs(&args[0], LoadAs::Nat);
+                let count = self.context.load_length_instrs(&args[0]);
                 let atom = self.context.load_value_instrs(&args[1], LoadAs::Nat);
                 self.emit_instrs(count);
                 self.emit_instrs(atom);
@@ -2297,16 +2320,24 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     }),
                 );
 
-                // total = Σ operand lengths; out = a zeroed exact array; off restarts at zero because a scratch local persists across executions of one call site.
-                for (index, arg) in args.iter().enumerate() {
-                    self.emit_instrs(self.context.load_value_instrs(arg, LoadAs::List));
-                    self.emit_instr(Self::rope_get(&rope, &rope.len_field));
-                    if index != 0 {
-                        self.emit_instr(curios_wasm::Instr::I32Add);
-                    }
-                }
-                if args.is_empty() {
-                    self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
+                // Check every partial sum before allocation: each fits a represented length, so no number of operands can overflow the wide accumulator.
+                let wide = self.context.push_local(
+                    "flat_length",
+                    curios_wasm::ValType::Num(curios_wasm::NumType::I64),
+                );
+                self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
+                for arg in args {
+                    let length = self
+                        .context
+                        .load_value_instrs(arg, LoadAs::List)
+                        .into_iter()
+                        .chain([Self::rope_get(&rope, &rope.len_field)])
+                        .collect();
+                    self.emit_instrs(
+                        self.context
+                            .table()
+                            .length_sum_instrs(vec![], length, &wide),
+                    );
                 }
                 self.emit_instr(curios_wasm::Instr::LocalTee {
                     local_name: total.clone(),

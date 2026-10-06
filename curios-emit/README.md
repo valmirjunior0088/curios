@@ -6,7 +6,7 @@ The Curios WebAssembly emission: `into_wasm` takes the CPS graph `curios-ersd` b
 
 ### Cells and channels occupy the guest heap
 
-**Decision.** A write-once cell is one GC struct with a nullable payload field: null is empty, a successful fill stores a non-null value, and every later fill preserves it. A channel is a GC struct holding a preallocated nullable-reference array — its length is the capacity — a head index, a count and a closed flag. Push appends at `(head + count) % capacity`, take clears the consumed slot before advancing the head, and close preserves queued values for draining.
+**Decision.** A write-once cell is one GC struct with a nullable payload field: null is empty, a successful fill stores a non-null value, and every later fill preserves it. A channel is a GC struct holding a preallocated nullable-reference array — its length is the capacity, checked at creation to fit the unsigned 32-bit length — a head index, a count and a closed flag. Push appends at `(head + count) % capacity`, take clears the consumed slot before advancing the head, and close preserves queued values for draining.
 
 **Rationale.** The ring bounds retained storage and releases removed references without retaining a message chain; creation allocates in proportion to capacity and every later attempt uses constant storage. Neither object allocates a host handle, and storing one transfers no ownership of its resource. Both complete inline without suspension, and Ersd's lowering builds the ordinary `Option`, `Push` and `Take` layouts from the private operation results.
 

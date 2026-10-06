@@ -16,9 +16,9 @@ use force_walk::*;
 
 use {
     super::{
-        BigHelper, ImmediateLayout, RopeData, Scope, Table, block, br, br_if, call, cast,
-        concrete_val, declare_helper, either, field_get, field_set, get, i32_const, i32_type, null,
-        repeat, set, when,
+        BigHelper, Chunk, ImmediateLayout, RopeData, Scope, Table, block, br, br_if, call, cast,
+        concrete_val, declare_helper, either, field_get, field_set, get, i32_const, i32_type,
+        i64_const, i64_type, null, repeat, set, wasm, when,
     },
     curios_abi::{WireLeaf, WireType},
     curios_num::Grain,
@@ -210,13 +210,11 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         let mut instrs = walk.entry_shortcuts();
 
         // ceil(r.len / 8) zeroed destination bytes, then the worklist.
-        instrs.extend([
-            get(&walk.r),
-            field_get(&rope.base, &rope.len_field),
-            curios_wasm::Instr::I32Const { value: 7 },
-            curios_wasm::Instr::I32Add,
-            curios_wasm::Instr::I32Const { value: 3 },
-            curios_wasm::Instr::I32ShrU,
+        instrs.extend(wasm![
+            Table::bits_payload_len_instrs(vec![
+                get(&walk.r),
+                field_get(&rope.base, &rope.len_field)
+            ]),
             curios_wasm::Instr::ArrayNewDefault {
                 type_name: rope.payload.clone(),
             },
@@ -1269,25 +1267,31 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         let out = curios_wasm::LocalName::from("out");
         let len = curios_wasm::LocalName::from("len");
 
-        let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
+        let wide = curios_wasm::LocalName::from("length");
         let locals = vec![
             (out.clone(), concrete_val(rope.payload.clone(), true)),
-            (len.clone(), i32_val),
+            (len.clone(), i32_type()),
+            (wide.clone(), i64_type()),
         ];
 
-        let mut instrs = vec![get(&r), field_get(&rope.base, &rope.len_field)];
-        instrs.extend(match grain {
-            // Bytes to bits: eight of the target's units to each of the source's.
-            Grain::X => [
-                curios_wasm::Instr::I32Const { value: 3 },
-                curios_wasm::Instr::I32Shl,
-            ],
-            // Bits to bytes: the reverse, exact because the caller proved the run holds whole bytes.
-            Grain::B => [
-                curios_wasm::Instr::I32Const { value: 3 },
-                curios_wasm::Instr::I32ShrU,
-            ],
-        });
+        let source_len = vec![get(&r), field_get(&rope.base, &rope.len_field)];
+        let mut instrs = match grain {
+            Grain::X => self.table.length_instrs(
+                source_len
+                    .into_iter()
+                    .chain([
+                        curios_wasm::Instr::I64ExtendI32U,
+                        i64_const(3),
+                        curios_wasm::Instr::I64Shl,
+                    ])
+                    .collect(),
+                &wide,
+            ),
+            Grain::B => source_len
+                .into_iter()
+                .chain([i32_const(3), curios_wasm::Instr::I32ShrU])
+                .collect(),
+        };
         instrs.extend([
             set(&len),
             get(&r),
@@ -1341,17 +1345,13 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                 },
                 set(&out),
             ],
-            Grain::B => vec![
+            Grain::B => wasm![
                 curios_wasm::Instr::I32Const { value: 0 },
                 get(&atom),
                 curios_wasm::Instr::I32Sub,
                 set(&fill),
                 get(&fill),
-                get(&count),
-                curios_wasm::Instr::I32Const { value: 7 },
-                curios_wasm::Instr::I32Add,
-                curios_wasm::Instr::I32Const { value: 3 },
-                curios_wasm::Instr::I32ShrU,
+                Table::bits_payload_len_instrs(vec![get(&count)]),
                 curios_wasm::Instr::ArrayNew {
                     type_name: rope.payload.clone(),
                 },
@@ -1596,15 +1596,11 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             set(&len),
         ];
         // The payload array holds the length's ceiling in bytes: the length itself at the byte grain, `(len + 7) / 8` at the bit grain.
-        immediate.push(get(&len));
-        if unit != 1 {
-            immediate.extend([
-                curios_wasm::Instr::I32Const { value: 7 },
-                curios_wasm::Instr::I32Add,
-                curios_wasm::Instr::I32Const { value: 3 },
-                curios_wasm::Instr::I32ShrU,
-            ]);
-        }
+        immediate.extend(if unit == 1 {
+            vec![get(&len)]
+        } else {
+            Table::bits_payload_len_instrs(vec![get(&len)])
+        });
         immediate.extend([
             curios_wasm::Instr::ArrayNewDefault {
                 type_name: rope.payload.clone(),
@@ -1989,15 +1985,22 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         let rope = self.table.bin_rope();
         let b = curios_wasm::LocalName::from("b");
 
-        let instrs = vec![
-            curios_wasm::Instr::I32Const { value: 0 },
-            get(&b),
-            curios_wasm::Instr::ArrayLen,
-            curios_wasm::Instr::I32Const { value: 3 },
-            curios_wasm::Instr::I32Shl,
+        let wide = curios_wasm::LocalName::from("length");
+        let instrs = wasm![
+            i32_const(0),
+            self.table.length_instrs(
+                wasm![
+                    get(&b),
+                    curios_wasm::Instr::ArrayLen,
+                    curios_wasm::Instr::I64ExtendI32U,
+                    i64_const(3),
+                    curios_wasm::Instr::I64Shl,
+                ],
+                &wide
+            ),
             get(&b),
             curios_wasm::Instr::StructNew {
-                type_name: rope.leaf.clone(),
+                type_name: rope.leaf.clone()
             },
         ];
 
@@ -2005,7 +2008,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             func_name,
             vec![(b, concrete_val(rope.payload.clone(), false))],
             concrete_val(rope.base.clone(), false),
-            vec![],
+            vec![(wide, i64_type())],
             instrs,
         );
     }
@@ -2030,8 +2033,10 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         let count = curios_wasm::LocalName::from("count");
         let bytes = curios_wasm::LocalName::from("bytes");
 
+        let wide = curios_wasm::LocalName::from("length");
         let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
         let locals = vec![
+            (wide.clone(), i64_type()),
             (idx.clone(), i32_val.clone()),
             (count.clone(), i32_val),
             (bytes.clone(), concrete_val(bin.payload.clone(), true)),
@@ -2043,12 +2048,16 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         // The leaf's length field is logical: the payload's byte count at the byte grain, eight times it at the bit grain.
         let leaf_len = match grain {
             Grain::X => vec![get(&bytes), curios_wasm::Instr::ArrayLen],
-            Grain::B => vec![
-                get(&bytes),
-                curios_wasm::Instr::ArrayLen,
-                curios_wasm::Instr::I32Const { value: 3 },
-                curios_wasm::Instr::I32Shl,
-            ],
+            Grain::B => self.table.length_instrs(
+                wasm![
+                    get(&bytes),
+                    curios_wasm::Instr::ArrayLen,
+                    curios_wasm::Instr::I64ExtendI32U,
+                    i64_const(3),
+                    curios_wasm::Instr::I64Shl,
+                ],
+                &wide,
+            ),
         };
 
         let step = [

@@ -366,6 +366,50 @@ impl<'a, 'b> Context<'a, 'b> {
         }]
     }
 
+    /// A constructed length or capacity is held to its field's bound before narrowing; the scratch local belongs to this activation and the shared guard evaluates the producer once.
+    pub(super) fn length_instrs(
+        &mut self,
+        producer: Vec<curios_wasm::Instr>,
+    ) -> Vec<curios_wasm::Instr> {
+        let wide = self.push_local(
+            "length",
+            curios_wasm::ValType::Num(curios_wasm::NumType::I64),
+        );
+        self.table().length_instrs(producer, &wide)
+    }
+
+    /// Add two represented lengths through the shared checked sum, with a scratch local declared in this activation.
+    pub(super) fn length_sum_instrs(
+        &mut self,
+        lhs: Vec<curios_wasm::Instr>,
+        rhs: Vec<curios_wasm::Instr>,
+    ) -> Vec<curios_wasm::Instr> {
+        let wide = self.push_local(
+            "length",
+            curios_wasm::ValType::Num(curios_wasm::NumType::I64),
+        );
+        self.table().length_sum_instrs(lhs, rhs, &wide)
+    }
+
+    /// A requested construction count crosses wide, like a shift count, then refuses past the 32-bit length bound. A position's saturation cannot stand in for this check.
+    pub(super) fn load_length_instrs(
+        &mut self,
+        value: &'a EmissionValueName,
+    ) -> Vec<curios_wasm::Instr> {
+        let producer = match self.table().raw_carrier(value) {
+            Some(curios_cont::Repr::Nat) => self
+                .load_value_instrs(value, LoadAs::Nat)
+                .into_iter()
+                .chain([curios_wasm::Instr::I64ExtendI32U])
+                .collect(),
+            _ => self.narrow_instrs(
+                self.load_value_instrs(value, LoadAs::Null),
+                BigHelper::Count,
+            ),
+        };
+        self.length_instrs(producer)
+    }
+
     /// Coerce the value `producer` leaves in the register carrier its local is declared at, to what the reading position demands.
     ///
     /// The positions the analysis decided the carrier *for* want exactly what the register holds, and cost nothing — that is the whole point of deciding it. Every other position boxes the value back and then reads it the ordinary way, which is the "coercion at the disagreeing use" the analysis is built around: one `ref.i31` or one `struct.new`, set against the `ref.cast` plus `i31.get_u` that holding it boxed would have cost at *every* arithmetic use.
