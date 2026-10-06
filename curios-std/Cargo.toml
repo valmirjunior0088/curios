@@ -11,3 +11,10 @@ workspace = true
 [dependencies]
 curios-utilities = { workspace = true }
 curios-text = { workspace = true }
+
+# The library's claims compile through the whole pipeline and run under the mock host, so its suite depends on the compiler the library is a part of. Cargo admits the cycle because it runs through a dev-dependency, and `curios-prelude-archive`'s build script, which reads the normal dependencies alone, never sees it.
+[dev-dependencies]
+curios = { workspace = true }
+curios-pipeline = { workspace = true }
+curios-runtime = { workspace = true, features = ["cranelift", "test-support"] }
+curios-wonder = { workspace = true }

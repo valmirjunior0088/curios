@@ -11,6 +11,8 @@ use {
 ///
 /// Walked rather than listed, for the reason the build script discovers its inputs rather than naming them: a module added without being registered is a mistake `the_std_record_names_every_authored_source_and_no_other` catches against this walk, and one added without being formatted should not need a second list to catch it.
 pub(crate) fn authored() -> Vec<PathBuf> {
+    // The library's own tests sit inside its directory as units of their own, which no header of `/std` declares and `curios-std`'s suite holds.
+    let tests = std_directory().join("tests");
     let mut sources = Vec::new();
     let mut pending = Vec::from([std_directory()]);
 
@@ -19,6 +21,7 @@ pub(crate) fn authored() -> Vec<PathBuf> {
             let path = entry.expect("a readable entry").path();
 
             match path.is_dir() {
+                true if path == tests => {}
                 true => pending.push(path),
                 false if path.extension().is_some_and(|kind| kind == "crs") => sources.push(path),
                 false => {}

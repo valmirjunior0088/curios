@@ -1,5 +1,8 @@
 //! The `/std` root as a source: the package authored beside this file, mounted the way a package is. What `curios-prelude-archive`'s build script lowers into the archive after `/sys`, and where every tool that reads the library asks for its place.
 
+#[cfg(test)]
+mod tests;
+
 use {
     curios_text::RootSource,
     curios_utilities::{Qualifier, RootKind},

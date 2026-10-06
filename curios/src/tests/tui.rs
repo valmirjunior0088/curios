@@ -1,6 +1,6 @@
 //! `/std/Tui`, for the claims a corpus unit cannot make.
 //!
-//! Everything the library *computes* is a `test` declaration in `curios/src/tests/corpus/tui/`, where one compile serves the whole unit. What stays here is what needs the compiler's own answer rather than a program's — a spelling that must be refused, which a corpus unit could only express by failing to compile and taking its every other test with it — and what needs a terminal: the session bracket and the loop run against the scripted host, whose standard input arrives in chunks a fiber parks between, exactly as a terminal delivers keystrokes.
+//! Everything the library *computes* is a `test` declaration in `curios-std/src/tests/tui/`, where one compile serves the whole unit. What stays here is what needs the compiler's own answer rather than a program's — a spelling that must be refused, which a corpus unit could only express by failing to compile and taking its every other test with it — and what needs a terminal: the session bracket and the loop run against the scripted host, whose standard input arrives in chunks a fiber parks between, exactly as a terminal delivers keystrokes.
 
 use {
     crate::tests::{run_text, typecheck},

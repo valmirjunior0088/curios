@@ -1,6 +1,6 @@
 # curios-std
 
-The Curios standard library: the `/std` package as it is authored, in `src/` beside the few lines of Rust that say where it is. `/std` is a Curios package — `src/curios.toml`, the header `src/lib.crs` and a file per module — which `curios-prelude-archive`'s build compiles into the fixed prelude after `/sys`. An authored source module joins `/std` only through a `mod` line in its parent header. What a module offers is its own documentation comments, which `curios document --std` renders, and a decision that crosses the library is under [`documentation/design/standard-library/`](../documentation/design/standard-library/).
+The Curios standard library: the `/std` package as it is authored, in `src/` beside the few lines of Rust that say where it is. `/std` is a Curios package — `src/curios.toml`, the header `src/lib.crs` and a file per module — which `curios-prelude-archive`'s build compiles into the fixed prelude after `/sys`. An authored source module joins `/std` only through a `mod` line in its parent header. The library's own claims are written in Curios too: the units under `src/tests/`, which no header of `/std` declares and `src/tests.rs` compiles and runs, each test in an instantiation of its own. What a module offers is its own documentation comments, which `curios document --std` renders, and a decision that crosses the library is under [`documentation/design/standard-library/`](../documentation/design/standard-library/).
 
 ## Design
 

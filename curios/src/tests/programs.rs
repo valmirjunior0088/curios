@@ -1,9 +1,8 @@
-//! The programs this tree ships lint clean: every instrument under `programs/`, loose as `curios lint` places a file no unit declares, and every corpus unit under `tests/corpus/`, as its library. A lint is exact and always on, so a finding here is fixed in the program rather than excused.
+//! The programs this tree ships lint clean and are written as `curios format` writes them: every instrument under `programs/`, loose as `curios lint` places a file no unit declares. A lint is exact and always on, so a finding here is fixed in the program rather than excused.
 
 use {
     curios_pipeline::DEFAULT_STEP_BUDGET,
-    curios_text::{Overlay, RootSource},
-    curios_utilities::RootKind,
+    curios_text::{Formatted, Overlay},
     curios_wonder::{Origin, Severity, Subject, diagnostics},
     std::{
         fs,
@@ -61,31 +60,23 @@ fn every_program_lints_clean() {
     );
 }
 
+/// **The programs are written in the canonical form `curios format` produces**, as `curios-prelude-archive`'s `every_authored_source_is_canonically_formatted` holds `/std`: a tree nothing holds drifts, and a drifted file hands whoever formats it a diff that says nothing about their own change.
 #[test]
-fn every_corpus_unit_lints_clean() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("tests")
-        .join("corpus");
+fn every_program_source_is_canonically_formatted() {
     let mut wrong = Vec::new();
-    for header in programs(&root)
-        .into_iter()
-        .filter(|path| path.parent() == Some(root.as_path()))
-    {
-        let unit = header
-            .file_stem()
-            .expect("a `.crs` file has a stem")
-            .to_string_lossy()
-            .into_owned();
-        let mounted = RootSource::mounted(&unit, RootKind::Ordinary, &header, root.join(&unit));
-        wrong.extend(findings(Subject::Unit {
-            units: vec![mounted],
-        }));
+
+    for path in programs(&workspace().join("programs")) {
+        match Formatted::from_path(&path) {
+            Ok(Formatted::Unchanged(_)) => {}
+            Ok(Formatted::Changed(_)) => wrong.push(format!("{}: not canonical", path.display())),
+            Err(refusal) => wrong.push(format!("{}: {refusal}", path.display())),
+        }
     }
+
     assert!(
         wrong.is_empty(),
-        "{} findings:\n\n{}",
+        "{} of these sources are not as `curios format` writes them:\n  {}\n\nrun `cargo run --package curios -- format <file>` on each",
         wrong.len(),
-        wrong.join("\n\n")
+        wrong.join("\n  ")
     );
 }

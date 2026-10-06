@@ -19,7 +19,6 @@ mod coordination;
 #[cfg(feature = "profile")]
 use coordination::*;
 
-mod corpus;
 mod derive;
 mod document;
 mod effects;
@@ -35,13 +34,13 @@ mod host;
 mod host_boundary;
 mod inference;
 mod laws;
-mod lint;
 mod map;
 mod matching;
 mod numeric;
 mod operators;
 mod packages;
 mod positivity;
+mod programs;
 mod recovery;
 mod recursion;
 mod reduction;

@@ -848,8 +848,12 @@ dependencies = [
 name = "curios-std"
 version = "0.15.8"
 dependencies = [
+ "curios",
+ "curios-pipeline",
+ "curios-runtime",
  "curios-text",
  "curios-utilities",
+ "curios-wonder",
 ]
 
 [[package]]
