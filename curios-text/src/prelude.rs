@@ -1,17 +1,10 @@
-//! The prelude's two roots as sources: `/sys` synthesized from the host table and the intrinsic roster, `/std` read from the package this crate holds. What `curios-prelude-archive`'s build script lowers into the archive, and what its tests hold to what the archive cannot check — that they lint clean.
+//! The prelude's first root as a source: `/sys`, synthesized from the host table and the intrinsic roster. What `curios-prelude-archive`'s build script lowers into the archive ahead of `/std`, which is `curios-std`'s.
 
 use {
     crate::{RootSource, SYNTAX, sys_module},
     curios_abi::host_ops,
-    curios_utilities::{Qualifier, RootKind},
-    std::path::{Path, PathBuf},
+    curios_utilities::RootKind,
 };
-
-/// What `/std`'s manifest declares it is. Spelled here and in `std/curios.toml`, which `curios-prelude-archive`'s tests hold to agreement: reading the manifest here would make `curios-package` a prerequisite of this crate, and so of every crate that reaches the prelude, which would re-elaborate the standard library on every manifest edit.
-pub const STD_NAME: &str = "std";
-
-/// See [`STD_NAME`].
-pub const STD_DESCRIPTION: &str = "The standard library: what every Curios program gets for free, compiled into the fixed prelude beside the syntax forms and the host's operations.";
 
 /// What `/sys` is, for the record it carries. No consumer reads this page — `curios document --std` renders `/std`'s — but the record is what `/std` adopts its declarations out of, and a record states what it is about.
 const SYS_NAME: &str = "sys";
@@ -31,28 +24,4 @@ pub fn sys_source() -> RootSource {
     );
 
     modules.documented(SYS_NAME, Some(SYS_DESCRIPTION))
-}
-
-/// Where `/std` is authored: the package this crate holds beside its own sources. One statement of the place, so the archive's build, its tests and every tool that reads the library ask here rather than spell a path from where they stand.
-pub fn std_directory() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join(STD_NAME)
-}
-
-/// The `/std` root, read from the package at [`std_directory`] — the second unit, compiled against `/sys`.
-///
-/// Two sources rather than one because they are two units: `/std` references `/sys` and `/sys` references nothing above it, so the fold has an order and each half is lowered against what precedes it.
-///
-/// **Read the way a package is read, because `/std` is one.** Its header is `lib.crs` beside its own `curios.toml` and its namespace *is* that directory, which is the exception `curios-package`'s layout states for a library; nothing here enumerates its modules, because a module enters a unit by being declared `mod` in a header and the resolver reads each one when discovery asks for it.
-pub fn std_source() -> RootSource {
-    let directory = std_directory();
-
-    RootSource::mounted(
-        STD_NAME,
-        RootKind::Ordinary,
-        directory.join("lib.crs"),
-        directory,
-    )
-    // The one declaration of `/sys` anywhere. A closed root is in no unit's default set — it has no path for a manifest to name — so this is what lets `/std` wrap the intrinsics, and its absence everywhere else is what keeps them wrapped.
-    .declaring([Qualifier::from(["sys"])])
-    .documented(STD_NAME, Some(STD_DESCRIPTION))
 }

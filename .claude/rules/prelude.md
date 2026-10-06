@@ -1,7 +1,7 @@
 ---
 paths:
   - "curios-prelude-archive/**"
-  - "curios-text/std/**"
+  - "curios-std/src/**"
   - "curios-text/src/prelude.rs"
   - "curios-text/src/registry.rs"
   - "curios-prelude/**"

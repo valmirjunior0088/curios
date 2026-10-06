@@ -37,7 +37,7 @@ fn solved_goal_reports_its_solution() {
     );
 }
 
-/// A prelude signature is reported under the names it was written with: `pow(base: Nat, exp: Nat)` is one type with `min(a: Nat, b: Nat)`, ten lines over it in `curios-text/std/Nat.crs`, and is stored as its own spelling of it.
+/// A prelude signature is reported under the names it was written with: `pow(base: Nat, exp: Nat)` is one type with `min(a: Nat, b: Nat)`, ten lines over it in `curios-std/src/Nat.crs`, and is stored as its own spelling of it.
 ///
 /// Mutation-checked: with the image's table keyed on the term alone, whose equality reads no binder name, `pow` is stored as the node `min` was, and reported as `(a: /std/Nat, b: /std/Nat) -> /std/Nat`.
 #[test]

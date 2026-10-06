@@ -3,7 +3,7 @@
 //! The engine's own behaviour — which records a program yields — is covered beside it in `wonder/tests.rs`; these decide what the transports do with them: that an answer is stdout and exit 0 whatever it says, that a file is placed in its unit, and that the server publishes the same records where the editor is looking and clears them when they go.
 
 use {
-    curios_text::std_directory,
+    curios_std::std_directory,
     curios_utilities::test_support::Temporary,
     curios_wonder::SETTLE,
     std::{

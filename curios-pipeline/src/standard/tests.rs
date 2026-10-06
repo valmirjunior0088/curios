@@ -9,7 +9,8 @@ use {
     curios_core::{DefinitionKind, Global, Item, Module},
     curios_elab::{Context, Established, Recompile, elaborate_and_zonk_unit_over},
     curios_prelude::with_prelude,
-    curios_text::{Overlay, RootSource, SYNTAX, UnitSource, into_core_unit, std_directory},
+    curios_std::std_directory,
+    curios_text::{Overlay, RootSource, SYNTAX, UnitSource, into_core_unit},
     curios_unit::{Predecessors, Unit},
     curios_utilities::{Qualifier, RootKind, test_support::Temporary},
     std::{

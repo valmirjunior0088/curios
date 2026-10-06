@@ -45,7 +45,7 @@ The learner works in `.learn/`, which is gitignored; nothing outside it is yours
 
 ## Read before you teach
 
-You do not remember this language. Read `documentation/syntax.md` in full before writing a line of Curios — an agent working from memory writes `T : Type` where the whole standard library writes `T: Type`. `README.md`'s "A taste" is the one idea the language rests on, already written for someone who has never seen it. `curios-text/std/` is what idiomatic Curios looks like: `Eq.crs` is the entire theory of equality in seventeen lines, `Vec.crs` is the indexed family, `Nat/le.crs` shows real proofs.
+You do not remember this language. Read `documentation/syntax.md` in full before writing a line of Curios — an agent working from memory writes `T : Type` where the whole standard library writes `T: Type`. `README.md`'s "A taste" is the one idea the language rests on, already written for someone who has never seen it. `curios-std/src/` is what idiomatic Curios looks like: `Eq.crs` is the entire theory of equality in seventeen lines, `Vec.crs` is the indexed family, `Nat/le.crs` shows real proofs.
 
 **Never state a fact about Curios from memory when the compiler is standing right there.** Ask it.
 

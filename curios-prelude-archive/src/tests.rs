@@ -2,14 +2,12 @@
 
 use {
     crate::with_prelude,
-    curios_text::{
-        Formatted, STD_DESCRIPTION, STD_NAME, SYNTAX, prepare_prelude, std_directory, std_source,
-        sys_source,
-    },
+    curios_std::{STD_DESCRIPTION, STD_NAME, std_directory, std_source},
+    curios_text::{Formatted, SYNTAX, prepare_prelude, sys_source},
     std::{fs, path::PathBuf},
 };
 
-/// Every `.crs` file `/std` is authored in, in the one tree `curios-text` holds.
+/// Every `.crs` file `/std` is authored in, in the one tree `curios-std` holds.
 ///
 /// Walked rather than listed, for the reason the build script discovers its inputs rather than naming them: a module added without being registered is a mistake `the_std_record_names_every_authored_source_and_no_other` catches against this walk, and one added without being formatted should not need a second list to catch it.
 pub(crate) fn authored() -> Vec<PathBuf> {

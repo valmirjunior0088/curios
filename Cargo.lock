@@ -573,6 +573,7 @@ dependencies = [
  "curios-pipeline",
  "curios-profile",
  "curios-runtime",
+ "curios-std",
  "curios-text",
  "curios-utilities",
  "curios-verdicts",
@@ -774,6 +775,7 @@ dependencies = [
  "curios-ersd",
  "curios-prelude",
  "curios-profile",
+ "curios-std",
  "curios-text",
  "curios-unit",
  "curios-utilities",
@@ -806,6 +808,7 @@ dependencies = [
  "curios-ersd",
  "curios-package",
  "curios-profile",
+ "curios-std",
  "curios-text",
  "curios-unit",
  "curios-utilities",
@@ -839,6 +842,14 @@ dependencies = [
  "socket2",
  "wasmtime",
  "webpki-roots",
+]
+
+[[package]]
+name = "curios-std"
+version = "0.15.8"
+dependencies = [
+ "curios-text",
+ "curios-utilities",
 ]
 
 [[package]]

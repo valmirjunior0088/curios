@@ -7,8 +7,8 @@
   "scripts": {
     "generate": "tree-sitter generate",
     "test": "tree-sitter generate && git status --short src && test -z \"$(git status --porcelain src)\" && tree-sitter test && npm run test:corpus && npm run test:highlights",
-    "test:corpus": "find ../../curios-text/std ../../programs -name '*.crs' -exec tree-sitter parse -q {} +",
-    "test:highlights": "find ../../curios-text/std ../../programs -name '*.crs' -exec tree-sitter query -q ../zed/languages/curios/highlights.scm {} +"
+    "test:corpus": "find ../../curios-std/src ../../programs -name '*.crs' -exec tree-sitter parse -q {} +",
+    "test:highlights": "find ../../curios-std/src ../../programs -name '*.crs' -exec tree-sitter query -q ../zed/languages/curios/highlights.scm {} +"
   },
   "devDependencies": {
     "tree-sitter-cli": "0.26.13"

@@ -70,7 +70,7 @@ floor, ceil, trunc, round : Rat -> Int
 
 A reciprocal exchanges the numerator's magnitude with the denominator, carries the sign to the new numerator, negates the exponent, and normalizes. The zero case is excluded by the bound rather than answered, as every `/sys` division states its domain, and `Div(Rat)` states it the same way — `Ok(b) = NonZero(b)`, as `Div(Nat)` states `Lt(0, b)` — so `/` on `Rat` is ordinary. No infinity, NaN or signed zero enters the type.
 
-`curios-text/std/Rat.crs` is registered after `Dyadic` in `lib.crs` as `pub mod Rat; pub use Rat/{let Rat};`, with `Eql`, `Cmp`, `Ord`, `Add`, `Sub`, `Mul`, `Div`, `Show`, `Spell` and `Hash` witnesses. No compiler lowering emits `Rat`, so the syntax registry is unchanged.
+`curios-std/src/Rat.crs` is registered after `Dyadic` in `lib.crs` as `pub mod Rat; pub use Rat/{let Rat};`, with `Eql`, `Cmp`, `Ord`, `Add`, `Sub`, `Mul`, `Div`, `Show`, `Spell` and `Hash` witnesses. No compiler lowering emits `Rat`, so the syntax registry is unchanged.
 
 Verified by normalizing equivalent raw fractions, powers of two on either side, shared odd factors, denominator one and zero; by arithmetic, comparison and division against an exact rational reference over `curios-num`, folded and executed; by type-level `Eq/refl()` facts on closed values; and by the erased layout, which is exactly the three numeric fields.
 

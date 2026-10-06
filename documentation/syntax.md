@@ -4,7 +4,7 @@ This document defines the surface language accepted in `.crs` files. It is a ref
 
 A `.crs` file is a sequence of top-level items. An entrypoint closes with one final term, the description the program performs; a module file has no final term and is items alone. Everything below is an item, a term, or the spelling of one of their parts.
 
-Examples use declarations from `/std`, the standard library every program may name. The authored library under `curios-text/std/` is the main corpus of complete programs.
+Examples use declarations from `/std`, the standard library every program may name. The authored library under `curios-std/src/` is the main corpus of complete programs.
 
 - [Lexical structure](#lexical-structure)
 - [Literals](#literals)

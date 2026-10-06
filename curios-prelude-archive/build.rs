@@ -4,7 +4,8 @@ use {
         Context, ErasedArena, Established, Resumed, elaborate_and_zonk_unit, erase_unit,
         validate_lowered_universe_seeds, validate_universes,
     },
-    curios_text::{PreparedText, SYNTAX, prepare_prelude, std_source, sys_source},
+    curios_std::std_source,
+    curios_text::{PreparedText, SYNTAX, prepare_prelude, sys_source},
     curios_unit::{Record, Uncertified, framed},
     curios_utilities::{Report, Source, digest},
     std::{

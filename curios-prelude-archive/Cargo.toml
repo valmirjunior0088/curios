@@ -3,7 +3,7 @@ name = "curios-prelude-archive"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The build-scoped images of Curios's fixed /sys and /std prelude: the elaboration of the roots curios-text holds, and one archived unit each"
+description = "The build-scoped images of Curios's fixed /sys and /std prelude: the elaboration of the /sys root curios-text generates and the /std package curios-std holds, and one archived unit each"
 build = "build.rs"
 
 [lints]
@@ -41,6 +41,7 @@ curios-elab = { workspace = true, features = ["archive"] }
 curios-ersd = { workspace = true, features = ["archive"] }
 curios-profile = { workspace = true }
 curios-text = { workspace = true, features = ["archive"] }
+curios-std = { workspace = true }
 curios-unit = { workspace = true, features = ["archive"] }
 curios-archive = { workspace = true, features = ["enabled"] }
 
@@ -52,3 +53,4 @@ curios-archive = { workspace = true, features = ["enabled"] }
 curios-abi = { workspace = true, features = ["archive"] }
 curios-cert = { workspace = true, features = ["archive"] }
 curios-package = { workspace = true }
+curios-std = { workspace = true }

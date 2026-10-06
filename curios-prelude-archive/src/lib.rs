@@ -1,4 +1,4 @@
-//! The build-scoped images of Curios's fixed `/sys` and `/std` prelude: the elaboration of the sources `curios-text` holds, and the [`curios_unit::Uncertified`] unit each root is archived as.
+//! The build-scoped images of Curios's fixed `/sys` and `/std` prelude: the elaboration of the `/sys` root `curios-text` generates and the `/std` package `curios-std` holds, and the [`curios_unit::Uncertified`] unit each root is archived as.
 //!
 //! Two units, folded in that order: `/sys` names nothing above it and `/std` names `/sys`, so [`with_prelude`] hands back the pair as an ordered prefix rather than as one merged image. Each image is framed exactly as a store slot is — the record of the tree the root was compiled from, ahead of the unit — and holds the unit before certification, which `curios-prelude` performs as it restores the images for a compilation.
 //!

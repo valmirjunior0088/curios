@@ -1,6 +1,6 @@
 # curios-prelude-archive
 
-The build step that folds Curios's fixed `/sys` and `/std` prelude into the rkyv images production compilation replays — `sys.rkyv` then `std.rkyv`, one per unit — from the two roots `curios-text` holds beside the registry of the names the compiler emits in them. Consumers depend on `curios-prelude`, never on this crate, because the image here has been elaborated and not judged; the archive and replay APIs belong to the crate rustdoc.
+The build step that folds Curios's fixed `/sys` and `/std` prelude into the rkyv images production compilation replays — `sys.rkyv` then `std.rkyv`, one per unit — from its two roots: `/sys`, which `curios-text` generates beside the registry of the names the compiler emits, and `/std`, which `curios-std` holds. Consumers depend on `curios-prelude`, never on this crate, because the image here has been elaborated and not judged; the archive and replay APIs belong to the crate rustdoc.
 
 ## Design
 
