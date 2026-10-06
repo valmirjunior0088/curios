@@ -3,16 +3,16 @@ use /std/Toml/{Toml};
 use /std/Toml/scan/{hex_val};
 
 let dec_digit(n: Nat) -> Option(Nat) =
-    match Nat/in_range(n, 0x30, 0x39) | true => Option/some(n - 0x30) | false => Option/none() end;
+    match Nat/in_range(n, '0', '9') | true => Option/some(n - '0') | false => Option/none() end;
 
 let oct_digit(n: Nat) -> Option(Nat) =
-    match Nat/in_range(n, 0x30, 0x37) | true => Option/some(n - 0x30) | false => Option/none() end;
+    match Nat/in_range(n, '0', '7') | true => Option/some(n - '0') | false => Option/none() end;
 
 let bin_digit(n: Nat) -> Option(Nat) =
-    match Nat/in_range(n, 0x30, 0x31) | true => Option/some(n - 0x30) | false => Option/none() end;
+    match Nat/in_range(n, '0', '1') | true => Option/some(n - '0') | false => Option/none() end;
 
 let is_dec_byte(b: Byte) -> Bool =
-    Nat/in_range(Byte/to_nat(b), 0x30, 0x39);
+    Nat/in_range(Byte/to_nat(b), '0', '9');
 
 let magnitude_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Bytes, Nat) =
     match pend
@@ -31,7 +31,7 @@ let magnitude(radix: Nat, digit_of: (Nat) -> Option(Nat)) -> Parse(Bytes, Nat) =
         | none() => magnitude_stop(acc, seen, pend)
         | some(b) =>
             let n = Byte/to_nat(b);
-            match n == 0x5F
+            match n == '_'
             | true =>
                 match seen && Bool/not(pend)
                 | true =>
@@ -60,36 +60,36 @@ let leading_zero: Parse(Bytes, Bool) =
         Parse/or(
             Parse/map(
                 Parse/and(
-                    Parse/bytes/expect(0x30),
-                    Parse/bytes/byte_if((b) => is_dec_byte(b) || Byte/to_nat(b) == 0x5F)),
+                    Parse/bytes/expect('0'),
+                    Parse/bytes/byte_if((b) => is_dec_byte(b) || Byte/to_nat(b) == '_')),
                 (_) => true),
             Parse/pure(false)));
 
 let sign: Parse(Bytes, {Bool, Bool}) =
-    let s = Parse/optional(Parse/bytes/byte_if((b) => b == 0x2B || b == 0x2D))!;
-    match s | some(b) => Parse/pure((b == 0x2D, true)) | none() => Parse/pure((false, false)) end;
+    let s = Parse/optional(Parse/bytes/byte_if((b) => b == '+' || b == '-'))!;
+    match s | some(b) => Parse/pure((b == '-', true)) | none() => Parse/pure((false, false)) end;
 
 let is_radix_marker(b: Byte) -> Bool =
     match Byte/to_nat(b)
-    | 120 => true
-    | 111 => true
-    | 98 => true
+    | 'x' => true
+    | 'o' => true
+    | 'b' => true
     | _ => false
     end;
 
 let prefixed: Parse(Bytes, Nat) =
-    let _ = Parse/bytes/expect(0x30)!;
+    let _ = Parse/bytes/expect('0')!;
     let marker = Parse/bytes/byte!;
     match Byte/to_nat(marker)
-    | 120 => magnitude(16, hex_val)
-    | 111 => magnitude(8, oct_digit)
-    | 98 => magnitude(2, bin_digit)
+    | 'x' => magnitude(16, hex_val)
+    | 'o' => magnitude(8, oct_digit)
+    | 'b' => magnitude(2, bin_digit)
     | _ => Parse/fail("expected digit")
     end;
 
 --- Refuse a leading zero past the digits it opens. Its callers commit to the refusal: a date or a time was offered the same digits first and declined, so what is left is a number written with a leading zero, and the reason is not one a later alternative may displace.
 let refuse_leading_zero(@A: Type) -> Parse(Bytes, A) =
-    let _ = Parse/bytes/take_while((b) => is_dec_byte(b) || Byte/to_nat(b) == 0x5F)!;
+    let _ = Parse/bytes/take_while((b) => is_dec_byte(b) || Byte/to_nat(b) == '_')!;
     Parse/fail("leading zero");
 
 let decimal: Parse(Bytes, Nat) =
@@ -106,7 +106,7 @@ let int_magnitude(signed: Bool) -> Parse(Bytes, Nat) =
         let marked =
             Parse/optional(
                 Parse/lookahead(
-                    Parse/and(Parse/bytes/expect(0x30), Parse/bytes/byte_if(is_radix_marker))))!;
+                    Parse/and(Parse/bytes/expect('0'), Parse/bytes/byte_if(is_radix_marker))))!;
         match marked | some(_) => prefixed | none() => decimal end
     end;
 
@@ -154,17 +154,17 @@ let flt_digits(sig0: Nat, count0: Nat, frac: Bool) -> Parse(Bytes, {Nat, Nat, Na
         | some(b) =>
             let n = Byte/to_nat(b);
             choose
-            | n == 0x5F =>
+            | n == '_' =>
                 match seen && Bool/not(pend)
                 | true =>
                     let _ = Parse/bytes/byte!;
                     go(sig, count, shift, seen, true)
                 | false => Parse/commit(Parse/fail("malformed underscore"))
                 end
-            | Nat/in_range(n, 0x30, 0x39) =>
+            | Nat/in_range(n, '0', '9') =>
                 let _ = Parse/bytes/byte!;
                 let shift2 = match frac | true => shift + 1 | false => shift end;
-                go(sig * 10 + (n - 0x30), count + 1, shift2, true, false)
+                go(sig * 10 + (n - '0'), count + 1, shift2, true, false)
             | _ => flt_digits_stop(sig, count, shift, seen, pend)
             end
         end;
@@ -184,16 +184,16 @@ let exp_digits: Parse(Bytes, Nat) =
         | some(b) =>
             let n = Byte/to_nat(b);
             choose
-            | n == 0x5F =>
+            | n == '_' =>
                 match seen && Bool/not(pend)
                 | true =>
                     let _ = Parse/bytes/byte!;
                     go(acc, seen, true)
                 | false => Parse/commit(Parse/fail("malformed underscore"))
                 end
-            | Nat/in_range(n, 0x30, 0x39) =>
+            | Nat/in_range(n, '0', '9') =>
                 let _ = Parse/bytes/byte!;
-                go(Nat/min(acc * 10 + (n - 0x30), 2000), true, false)
+                go(Nat/min(acc * 10 + (n - '0'), 2000), true, false)
             | _ => exp_stop(acc, seen, pend)
             end
         end;
@@ -215,7 +215,7 @@ let frac_fields(sig0: Nat, count0: Nat) -> Parse(Bytes, {Nat, Nat, Nat, Bool}) =
     Parse/pure((sig, count, down, true));
 
 let frac_part(sig0: Nat, count0: Nat) -> Parse(Bytes, {Nat, Nat, Nat, Bool}) =
-    let dot = Parse/optional(Parse/bytes/expect(0x2E))!;
+    let dot = Parse/optional(Parse/bytes/expect('.'))!;
     match dot
     | none() => Parse/pure((sig0, count0, 0, false))
     | some(_) => Parse/commit(frac_fields(sig0, count0))
@@ -227,7 +227,7 @@ let exp_fields: Parse(Bytes, {Nat, Bool, Bool}) =
     Parse/pure((emag, eneg, true));
 
 let exp_part: Parse(Bytes, {Nat, Bool, Bool}) =
-    let marker = Parse/optional(Parse/bytes/byte_if((b) => b == 0x65 || b == 0x45))!;
+    let marker = Parse/optional(Parse/bytes/byte_if((b) => b == 'e' || b == 'E'))!;
     match marker
     | none() => Parse/pure((0, false, false))
     | some(_) => Parse/commit(exp_fields)

@@ -39,8 +39,8 @@ let parse_at(bytes: Bytes, pos: Nat, fuel: Nat) -> Fmt =
         | none() => Fmt/nil()
         | some(ok) =>
             match Byte/to_nat(Bytes/get(bytes, pos, @ok))
-            | 37 => Fmt/show(parse_at(bytes, pos + 1, rest))
-            | 35 => Fmt/spell(parse_at(bytes, pos + 1, rest))
+            | '%' => Fmt/show(parse_at(bytes, pos + 1, rest))
+            | '#' => Fmt/spell(parse_at(bytes, pos + 1, rest))
             | _ => parse_lit_at(bytes, pos, 0, rest)
             end
         end
@@ -53,9 +53,9 @@ and parse_lit_at(bytes: Bytes, start: Nat, taken: Nat, fuel: Nat) -> Fmt =
         | none() => flush(bytes, start, taken, Fmt/nil())
         | some(ok) =>
             match Byte/to_nat(Bytes/get(bytes, start + taken, @ok))
-            | 37 => flush(bytes, start, taken, Fmt/show(parse_at(bytes, start + taken + 1, rest)))
-            | 35 => flush(bytes, start, taken, Fmt/spell(parse_at(bytes, start + taken + 1, rest)))
-            | 92 => parse_esc_at(bytes, start, taken, rest)
+            | '%' => flush(bytes, start, taken, Fmt/show(parse_at(bytes, start + taken + 1, rest)))
+            | '#' => flush(bytes, start, taken, Fmt/spell(parse_at(bytes, start + taken + 1, rest)))
+            | '\\' => parse_esc_at(bytes, start, taken, rest)
             | _ => parse_lit_at(bytes, start, taken + 1, rest)
             end
         end
@@ -68,9 +68,9 @@ and parse_esc_at(bytes: Bytes, start: Nat, taken: Nat, fuel: Nat) -> Fmt =
         | none() => parse_lit_at(bytes, start, taken + 1, rest)
         | some(ok) =>
             match Byte/to_nat(Bytes/get(bytes, start + taken + 1, @ok))
-            | 37 =>
+            | '%' =>
                 flush(bytes, start, taken, Fmt/lit("%", parse_at(bytes, start + taken + 2, rest)))
-            | 35 =>
+            | '#' =>
                 flush(bytes, start, taken, Fmt/lit("#", parse_at(bytes, start + taken + 2, rest)))
             | _ => parse_lit_at(bytes, start, taken + 1, rest)
             end

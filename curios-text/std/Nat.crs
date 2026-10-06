@@ -64,7 +64,7 @@ pub let of_str(s: Str) -> Option(Nat) =
             (cp, acc) =>
                 let n = acc!;
                 match Char/is_digit(cp)
-                | true => Option/some(n * 10 + (Char/to_nat(cp) - 0x30))
+                | true => Option/some(n * 10 + (Char/to_nat(cp) - '0'))
                 | false => Option/none()
                 end)
     end;

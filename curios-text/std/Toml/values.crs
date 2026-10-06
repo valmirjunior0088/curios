@@ -29,26 +29,26 @@ let val_number_digit: Parse(Bytes, Toml) =
     Parse/or(datetime_value, Parse/or(flt_number, int_value));
 
 let inline_comma: Parse(Bytes, {}) =
-    let _ = Parse/bytes/expect(0x2C)!;
+    let _ = Parse/bytes/expect(',')!;
     ws;
 
 let array_parse: Parse(Bytes, Toml) =
-    let _ = Parse/label(Parse/bytes/expect(0x5B), "expected array")!;
+    let _ = Parse/label(Parse/bytes/expect('['), "expected array")!;
     array_items([])
 and array_items(acc: List(Toml)) -> Parse(Bytes, Toml) =
     let _ = trivia!;
-    let closed = Parse/optional(Parse/bytes/expect(0x5D))!;
+    let closed = Parse/optional(Parse/bytes/expect(']'))!;
     match closed
     | some(_) => Parse/pure(Toml/arr(acc))
     | none() =>
         let v = value_parse!;
         let _ = trivia!;
         let acc2 = [..acc, v];
-        let comma = Parse/optional(Parse/bytes/expect(0x2C))!;
+        let comma = Parse/optional(Parse/bytes/expect(','))!;
         match comma
         | some(_) => array_items(acc2)
         | none() =>
-            let stop = Parse/optional(Parse/bytes/expect(0x5D))!;
+            let stop = Parse/optional(Parse/bytes/expect(']'))!;
             match stop
             | some(_) => Parse/pure(Toml/arr(acc2))
             | none() => Parse/fail("expected ',' or ']' in array")
@@ -56,14 +56,14 @@ and array_items(acc: List(Toml)) -> Parse(Bytes, Toml) =
         end
     end
 and inline_parse: Parse(Bytes, Toml) =
-    let _ = Parse/label(Parse/bytes/expect(0x7B), "expected inline table")!;
+    let _ = Parse/label(Parse/bytes/expect('{'), "expected inline table")!;
     let _ = ws!;
-    let empty = Parse/optional(Parse/bytes/expect(0x7D))!;
+    let empty = Parse/optional(Parse/bytes/expect('}'))!;
     match empty
     | some(_) => Parse/pure(Toml/table(Map/empty()))
     | none() =>
         let pairs = Parse/sep_by1(inline_pair, inline_comma)!;
-        let _ = Parse/label(Parse/bytes/expect(0x7D), "expected ',' or '}' in inline table")!;
+        let _ = Parse/label(Parse/bytes/expect('}'), "expected ',' or '}' in inline table")!;
         match inline_fold(pairs)
         | success(m) => Parse/pure(Toml/table(m))
         | failure(e) => Parse/fail(/std/Toml/Error/message(e))
@@ -72,7 +72,7 @@ and inline_parse: Parse(Bytes, Toml) =
 and inline_pair: Parse(Bytes, {List(Str), Toml}) =
     let path = key_dotted!;
     let _ = ws!;
-    let _ = Parse/label(Parse/bytes/expect(0x3D), "expected '=' in inline table")!;
+    let _ = Parse/label(Parse/bytes/expect('='), "expected '=' in inline table")!;
     let _ = ws!;
     let v = value_parse!;
     let _ = ws!;
@@ -83,16 +83,16 @@ pub and value_parse: Parse(Bytes, Toml) =
     | none() => Parse/fail("expected value")
     | some(b) =>
         match Byte/to_nat(b)
-        | 34 => val_str_basic
-        | 39 => val_str_literal
-        | 116 => val_true
-        | 102 => val_false
-        | 91 => array_parse
-        | 123 => inline_parse
-        | 43 => val_number_signed
-        | 45 => val_number_signed
-        | 105 => val_special
-        | 110 => val_special
+        | '"' => val_str_basic
+        | '\'' => val_str_literal
+        | 't' => val_true
+        | 'f' => val_false
+        | '[' => array_parse
+        | '{' => inline_parse
+        | '+' => val_number_signed
+        | '-' => val_number_signed
+        | 'i' => val_special
+        | 'n' => val_special
         | _ => val_number_digit
         end
     end;

@@ -3,11 +3,11 @@ use /std/Html/{Attr};
 
 let is_ws(b: Byte) -> Bool =
     match Byte/to_nat(b)
-    | 32 => true
-    | 9 => true
-    | 10 => true
-    | 13 => true
-    | 12 => true
+    | ' ' => true
+    | '\t' => true
+    | '\n' => true
+    | '\r' => true
+    | '\u{C}' => true
     | _ => false
     end;
 

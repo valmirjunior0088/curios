@@ -49,7 +49,7 @@ pub let peek: Parse(Bytes, Option(Byte)) =
 let byte_spelling(b: Byte) -> Str =
     match Str/of_bytes(x[b])
     | some(s) =>
-        match Nat/in_range(Byte/to_nat(b), 0x21, 0x7E)
+        match Nat/in_range(Byte/to_nat(b), '!', '~')
         | true => Str/flatten(["'", s, "'"])
         | false => Str/concat("byte ", Nat/to_str(Byte/to_nat(b)))
         end

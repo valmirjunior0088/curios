@@ -4,8 +4,8 @@ use /std/Toml/{Toml, Date, Time, OffsetDateTime, LocalDateTime};
 let digit: Parse(Bytes, Nat) =
     Parse/label(
         Parse/map(
-            Parse/bytes/byte_if((b) => Nat/in_range(Byte/to_nat(b), 0x30, 0x39)),
-            (b) => Byte/to_nat(b) - 0x30),
+            Parse/bytes/byte_if((b) => Nat/in_range(Byte/to_nat(b), '0', '9')),
+            (b) => Byte/to_nat(b) - '0'),
         "expected digit");
 
 let fixed(count: Nat, acc: Nat) -> Parse(Bytes, Nat) =
@@ -33,24 +33,24 @@ let frac_digits(taken: Nat, acc: Nat, seen: Bool) -> Parse(Bytes, Nat) =
     match next
     | none() => frac_stop(taken, acc, seen)
     | some(b) =>
-        match Nat/in_range(Byte/to_nat(b), 0x30, 0x39)
+        match Nat/in_range(Byte/to_nat(b), '0', '9')
         | false => frac_stop(taken, acc, seen)
         | true =>
             let _ = Parse/bytes/byte!;
             match taken < 9
-            | true => frac_digits(taken + 1, acc * 10 + (Byte/to_nat(b) - 0x30), true)
+            | true => frac_digits(taken + 1, acc * 10 + (Byte/to_nat(b) - '0'), true)
             | false => frac_digits(taken, acc, true)
             end
         end
     end;
 
 let frac_part: Parse(Bytes, Nat) =
-    let dot = Parse/optional(Parse/bytes/expect(0x2E))!;
+    let dot = Parse/optional(Parse/bytes/expect('.'))!;
     match dot | some(_) => frac_digits(0, 0, false) | none() => Parse/pure(0) end;
 
 let date_fields(y: Nat) -> Parse(Bytes, Date) =
     let mo = fixed(2, 0)!;
-    let _ = expect(0x2D)!;
+    let _ = expect('-')!;
     let d = fixed(2, 0)!;
     match Date/try_of(y, mo, d)
     | some(date) => Parse/pure(date)
@@ -59,12 +59,12 @@ let date_fields(y: Nat) -> Parse(Bytes, Date) =
 
 let date_parse: Parse(Bytes, Date) =
     let y = fixed(4, 0)!;
-    let _ = expect(0x2D)!;
+    let _ = expect('-')!;
     Parse/commit(date_fields(y));
 
 let time_fields(h: Nat) -> Parse(Bytes, Time) =
     let mi = fixed(2, 0)!;
-    let _ = expect(0x3A)!;
+    let _ = expect(':')!;
     let s = fixed(2, 0)!;
     let ns = frac_part!;
     match Time/try_of(h, mi, s, ns)
@@ -74,17 +74,17 @@ let time_fields(h: Nat) -> Parse(Bytes, Time) =
 
 let time_parse: Parse(Bytes, Time) =
     let h = fixed(2, 0)!;
-    let _ = expect(0x3A)!;
+    let _ = expect(':')!;
     Parse/commit(time_fields(h));
 
 let offset_fields(sign: Byte) -> Parse(Bytes, Int) =
     let oh = fixed(2, 0)!;
-    let _ = expect(0x3A)!;
+    let _ = expect(':')!;
     let om = fixed(2, 0)!;
     match oh <= 23 && om <= 59
     | true =>
         let mins = oh * 60 + om;
-        match sign == 0x2D
+        match sign == '-'
         | true => Parse/pure(+0 - Nat/to_int(mins))
         | false => Parse/pure(Nat/to_int(mins))
         end
@@ -92,12 +92,12 @@ let offset_fields(sign: Byte) -> Parse(Bytes, Int) =
     end;
 
 let offset_parse: Parse(Bytes, Int) =
-    let zulu = Parse/optional(Parse/bytes/byte_if((b) => b == 0x5A || b == 0x7A))!;
+    let zulu = Parse/optional(Parse/bytes/byte_if((b) => b == 'Z' || b == 'z'))!;
     match zulu
     | some(_) => Parse/pure(+0)
     | none() =>
         let sign =
-            Parse/label(Parse/bytes/byte_if((b) => b == 0x2B || b == 0x2D), "expected offset")!;
+            Parse/label(Parse/bytes/byte_if((b) => b == '+' || b == '-'), "expected offset")!;
         Parse/commit(offset_fields(sign))
     end;
 
@@ -109,7 +109,7 @@ let offset_tail(date: Date, time: Time) -> Parse(Bytes, Toml) =
     end;
 
 let date_time_tail(date: Date) -> Parse(Bytes, Toml) =
-    let _ = Parse/bytes/byte_if((b) => b == 0x54 || b == 0x74 || b == 0x20)!;
+    let _ = Parse/bytes/byte_if((b) => b == 'T' || b == 't' || b == ' ')!;
     let time = time_parse!;
     Parse/or(
         offset_tail(date, time),

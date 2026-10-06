@@ -19,7 +19,7 @@ pub let key_part: Parse(Bytes, Str) =
 
 let dot: Parse(Bytes, {}) =
     let _ = ws!;
-    let _ = Parse/bytes/expect(0x2E)!;
+    let _ = Parse/bytes/expect('.')!;
     ws;
 
 --- A dotted key as its parts, in the order they were written.

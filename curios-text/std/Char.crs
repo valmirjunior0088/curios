@@ -72,19 +72,19 @@ pub let Le(a: Char, b: Char) -> Prop =
 
 --- Space, tab, newline, vertical tab, form feed or carriage return.
 pub let is_whitespace(c: Char) -> Bool =
-    c.code == 0x20 || Nat/in_range(c.code, 0x9, 0xD);
+    c.code == ' ' || Nat/in_range(c.code, '\t', '\r');
 
 --- `0` through `9`.
 pub let is_digit(c: Char) -> Bool =
-    Nat/in_range(c.code, 0x30, 0x39);
+    Nat/in_range(c.code, '0', '9');
 
 --- `a` through `z`.
 pub let is_lower(c: Char) -> Bool =
-    Nat/in_range(c.code, 0x61, 0x7A);
+    Nat/in_range(c.code, 'a', 'z');
 
 --- `A` through `Z`.
 pub let is_upper(c: Char) -> Bool =
-    Nat/in_range(c.code, 0x41, 0x5A);
+    Nat/in_range(c.code, 'A', 'Z');
 
 --- An ASCII letter.
 pub let is_alpha(c: Char) -> Bool =
@@ -113,16 +113,16 @@ pub let to_ascii_upper(c: Char) -> Char =
 --- The lowercase hexadecimal digit for `nibble` modulo sixteen. Both codes are scalar values by reduction, since a remainder sits below its divisor.
 pub let hex_digit(nibble: Nat) -> Char =
     match nibble % 0x10 < 10
-    | true => Char { code = nibble % 0x10 + 0x30 }
-    | false => Char { code = nibble % 0x10 - 10 + 0x61 }
+    | true => Char { code = nibble % 0x10 + '0' }
+    | false => Char { code = nibble % 0x10 - 10 + 'a' }
     end;
 
 --- The value of a hexadecimal digit in either case, or `none`.
 pub let of_hex_digit(c: Char) -> Option(Nat) =
     choose
-    | is_digit(c) => Option/some(c.code - 0x30)
-    | Nat/in_range(c.code, 0x61, 0x66) => Option/some(c.code - 0x61 + 10)
-    | Nat/in_range(c.code, 0x41, 0x46) => Option/some(c.code - 0x41 + 10)
+    | is_digit(c) => Option/some(c.code - '0')
+    | Nat/in_range(c.code, 'a', 'f') => Option/some(c.code - 'a' + 10)
+    | Nat/in_range(c.code, 'A', 'F') => Option/some(c.code - 'A' + 10)
     | _ => Option/none()
     end;
 

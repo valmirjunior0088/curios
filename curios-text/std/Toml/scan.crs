@@ -2,25 +2,24 @@ use /std/{Nat, Bool, Byte, Option, Bytes, Parse};
 
 let is_ws_byte(b: Byte) -> Bool =
     let n = Byte/to_nat(b);
-    n == 0x20 || n == 0x9;
+    n == ' ' || n == '\t';
 
 --- Whether `b` may appear in a bare key: an ASCII letter or digit, `-`, or `_`.
 pub let is_bare_byte(b: Byte) -> Bool =
     let n = Byte/to_nat(b);
-    Nat/in_range(n, 0x41, 0x5A) || Nat/in_range(n, 0x61, 0x7A) || Nat/in_range(n, 0x30, 0x39)
-        || n == 0x2D
-        || n == 0x5F;
+    Nat/in_range(n, 'A', 'Z') || Nat/in_range(n, 'a', 'z') || Nat/in_range(n, '0', '9') || n == '-'
+        || n == '_';
 
 let is_comment_byte(b: Byte) -> Bool =
     let n = Byte/to_nat(b);
-    n == 0x9 || Nat/in_range(n, 0x20, 0x7E) || n >= 0x80;
+    n == '\t' || Nat/in_range(n, ' ', '~') || n >= 0x80;
 
 --- The value of the hexadecimal digit at code point `n`, or `none` where `n` is not one.
 pub let hex_val(n: Nat) -> Option(Nat) =
     choose
-    | Nat/in_range(n, 0x30, 0x39) => Option/some(n - 0x30)
-    | Nat/in_range(n, 0x61, 0x66) => Option/some(n - 0x61 + 10)
-    | Nat/in_range(n, 0x41, 0x46) => Option/some(n - 0x41 + 10)
+    | Nat/in_range(n, '0', '9') => Option/some(n - '0')
+    | Nat/in_range(n, 'a', 'f') => Option/some(n - 'a' + 10)
+    | Nat/in_range(n, 'A', 'F') => Option/some(n - 'A' + 10)
     | _ => Option/none()
     end;
 
@@ -29,23 +28,23 @@ pub let ws: Parse(Bytes, {}) =
     Parse/map(Parse/bytes/take_while(is_ws_byte), (_) => ());
 
 let comment: Parse(Bytes, {}) =
-    let _ = Parse/bytes/expect(0x23)!;
+    let _ = Parse/bytes/expect('#')!;
     Parse/map(Parse/bytes/take_while(is_comment_byte), (_) => ());
 
 --- One line break, either `\r\n` or a bare `\n`.
 pub let newline: Parse(Bytes, {}) =
     Parse/or(
-        Parse/map(Parse/and(Parse/bytes/expect(0xD), Parse/bytes/expect(0xA)), (_) => ()),
-        Parse/map(Parse/bytes/expect(0xA), (_) => ()));
+        Parse/map(Parse/and(Parse/bytes/expect('\r'), Parse/bytes/expect('\n')), (_) => ()),
+        Parse/map(Parse/bytes/expect('\n'), (_) => ()));
 
 --- Whitespace, line breaks and comments, as much as there is: what may sit between two items.
 pub let trivia: Parse(Bytes, {}) =
     Parse/map(
         Parse/many0(
             Parse/or(
-                Parse/map(Parse/bytes/expect(0x20), (_) => ()),
+                Parse/map(Parse/bytes/expect(' '), (_) => ()),
                 Parse/or(
-                    Parse/map(Parse/bytes/expect(0x9), (_) => ()),
+                    Parse/map(Parse/bytes/expect('\t'), (_) => ()),
                     Parse/or(newline, comment)))),
         (_) => ());
 

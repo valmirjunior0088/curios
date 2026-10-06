@@ -96,9 +96,9 @@ let parameters(b: Bytes, i: Nat) -> Option({nums: List(Nat), final: Nat, next: N
         | none() => Option/none()
         | some(n) =>
             choose
-            | Nat/in_range(n, 0x30, 0x39) =>
-                go(j + 1, Option/some(Option/unwrap_or(current, 0) * 10 + (n - 0x30)), nums)
-            | n == 0x3B || n == 0x3A =>
+            | Nat/in_range(n, '0', '9') =>
+                go(j + 1, Option/some(Option/unwrap_or(current, 0) * 10 + (n - '0')), nums)
+            | n == ';' || n == ':' =>
                 go(j + 1, Option/none(), [Option/unwrap_or(current, 1), ..nums])
             | Nat/in_range(n, 0x20, 0x3F) => go(j + 1, current, nums)
             | Nat/in_range(n, 0x40, 0x7E) =>

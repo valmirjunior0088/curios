@@ -35,17 +35,17 @@ let escape: Parse(Bytes, Bytes) =
     | some(b) =>
         let _ = Parse/bytes/byte!;
         match Byte/to_nat(b)
-        | 98 => Parse/pure(x[0x8])
-        | 116 => Parse/pure(x[0x9])
-        | 110 => Parse/pure(x[0xA])
-        | 102 => Parse/pure(x[0xC])
-        | 114 => Parse/pure(x[0xD])
-        | 34 => Parse/pure(x[0x22])
-        | 92 => Parse/pure(x[0x5C])
-        | 117 =>
+        | 'b' => Parse/pure(x['\u{8}'])
+        | 't' => Parse/pure(x['\t'])
+        | 'n' => Parse/pure(x['\n'])
+        | 'f' => Parse/pure(x['\u{C}'])
+        | 'r' => Parse/pure(x['\r'])
+        | '"' => Parse/pure(x['"'])
+        | '\\' => Parse/pure(x['\\'])
+        | 'u' =>
             let code = hex_digits(4, 0)!;
             scalar_utf8(code)
-        | 85 =>
+        | 'U' =>
             let code = hex_digits(8, 0)!;
             scalar_utf8(code)
         | _ => Parse/fail("unknown escape")
@@ -53,7 +53,7 @@ let escape: Parse(Bytes, Bytes) =
     end;
 
 let crlf: Parse(Bytes, Option({Byte, Byte})) =
-    Parse/optional(Parse/and(Parse/bytes/expect(0xD), Parse/bytes/expect(0xA)));
+    Parse/optional(Parse/and(Parse/bytes/expect('\r'), Parse/bytes/expect('\n')));
 
 let basic_body(acc: Bytes) -> Parse(Bytes, Bytes) =
     let next = Parse/bytes/peek!;
@@ -62,14 +62,14 @@ let basic_body(acc: Bytes) -> Parse(Bytes, Bytes) =
     | some(b) =>
         let n = Byte/to_nat(b);
         choose
-        | n == 0x22 =>
+        | n == '"' =>
             let _ = Parse/bytes/byte!;
             Parse/pure(acc)
-        | n == 0x5C =>
+        | n == '\\' =>
             let _ = Parse/bytes/byte!;
             let chunk = escape!;
             basic_body(x[..acc, ..chunk])
-        | n == 0x9 =>
+        | n == '\t' =>
             let _ = Parse/bytes/byte!;
             basic_body(x[..acc, b])
         | n < 0x20 => Parse/fail("control character in string")
@@ -81,7 +81,7 @@ let basic_body(acc: Bytes) -> Parse(Bytes, Bytes) =
     end;
 
 let basic_str_scan: Parse(Bytes, Bytes) =
-    let _ = Parse/label(Parse/bytes/expect(0x22), "expected string")!;
+    let _ = Parse/label(Parse/bytes/expect('"'), "expected string")!;
     basic_body(x[]);
 
 let literal_body(acc: Bytes) -> Parse(Bytes, Bytes) =
@@ -91,10 +91,10 @@ let literal_body(acc: Bytes) -> Parse(Bytes, Bytes) =
     | some(b) =>
         let n = Byte/to_nat(b);
         choose
-        | n == 0x27 =>
+        | n == '\'' =>
             let _ = Parse/bytes/byte!;
             Parse/pure(acc)
-        | n == 0x9 =>
+        | n == '\t' =>
             let _ = Parse/bytes/byte!;
             literal_body(x[..acc, b])
         | n < 0x20 => Parse/fail("control character in string")
@@ -106,7 +106,7 @@ let literal_body(acc: Bytes) -> Parse(Bytes, Bytes) =
     end;
 
 let literal_str_scan: Parse(Bytes, Bytes) =
-    let _ = Parse/label(Parse/bytes/expect(0x27), "expected string")!;
+    let _ = Parse/label(Parse/bytes/expect('\''), "expected string")!;
     literal_body(x[]);
 
 let trim_run(seen_nl: Bool) -> Parse(Bytes, {}) =
@@ -118,16 +118,16 @@ let trim_run(seen_nl: Bool) -> Parse(Bytes, {}) =
     | some(b) =>
         let n = Byte/to_nat(b);
         choose
-        | n == 0x20 =>
+        | n == ' ' =>
             let _ = Parse/bytes/byte!;
             trim_run(seen_nl)
-        | n == 0x9 =>
+        | n == '\t' =>
             let _ = Parse/bytes/byte!;
             trim_run(seen_nl)
-        | n == 0xA =>
+        | n == '\n' =>
             let _ = Parse/bytes/byte!;
             trim_run(true)
-        | n == 0xD =>
+        | n == '\r' =>
             let pair = crlf!;
             match pair
             | some(_) => trim_run(true)
@@ -138,7 +138,7 @@ let trim_run(seen_nl: Bool) -> Parse(Bytes, {}) =
     end;
 
 let skip_opening_newline: Parse(Bytes, {}) =
-    let lf = Parse/optional(Parse/bytes/expect(0xA))!;
+    let lf = Parse/optional(Parse/bytes/expect('\n'))!;
     match lf
     | some(_) => Parse/pure(())
     | none() =>
@@ -153,21 +153,21 @@ let ml_basic_body(acc: Bytes) -> Parse(Bytes, Bytes) =
     | some(b) =>
         let n = Byte/to_nat(b);
         choose
-        | n == 0x22 =>
-            let run = Parse/bytes/take_while((c) => Byte/to_nat(c) == 0x22)!;
+        | n == '"' =>
+            let run = Parse/bytes/take_while((c) => Byte/to_nat(c) == '"')!;
             let q = Bytes/len(run);
             choose
             | q >= 6 => Parse/fail("too many quotes")
             | q >= 3 => Parse/pure(x[..acc, ..Bytes/replicate(q - 3, b)])
             | _ => ml_basic_body(x[..acc, ..Bytes/replicate(q, b)])
             end
-        | n == 0x5C =>
+        | n == '\\' =>
             let _ = Parse/bytes/byte!;
             let folded = Parse/bytes/peek!;
             match folded
             | some(w) =>
                 let m = Byte/to_nat(w);
-                match m == 0x20 || m == 0x9 || m == 0xA || m == 0xD
+                match m == ' ' || m == '\t' || m == '\n' || m == '\r'
                 | true =>
                     let _ = trim_run(false)!;
                     ml_basic_body(acc)
@@ -179,16 +179,16 @@ let ml_basic_body(acc: Bytes) -> Parse(Bytes, Bytes) =
                 let chunk = escape!;
                 ml_basic_body(x[..acc, ..chunk])
             end
-        | n == 0xA =>
+        | n == '\n' =>
             let _ = Parse/bytes/byte!;
             ml_basic_body(x[..acc, b])
-        | n == 0xD =>
+        | n == '\r' =>
             let pair = crlf!;
             match pair
-            | some(_) => ml_basic_body(x[..acc, 0xD, 0xA])
+            | some(_) => ml_basic_body(x[..acc, '\r', '\n'])
             | none() => Parse/fail("bare carriage return")
             end
-        | n == 0x9 =>
+        | n == '\t' =>
             let _ = Parse/bytes/byte!;
             ml_basic_body(x[..acc, b])
         | n < 0x20 => Parse/fail("control character in string")
@@ -206,24 +206,24 @@ let ml_literal_body(acc: Bytes) -> Parse(Bytes, Bytes) =
     | some(b) =>
         let n = Byte/to_nat(b);
         choose
-        | n == 0x27 =>
-            let run = Parse/bytes/take_while((c) => Byte/to_nat(c) == 0x27)!;
+        | n == '\'' =>
+            let run = Parse/bytes/take_while((c) => Byte/to_nat(c) == '\'')!;
             let q = Bytes/len(run);
             choose
             | q >= 6 => Parse/fail("too many quotes")
             | q >= 3 => Parse/pure(x[..acc, ..Bytes/replicate(q - 3, b)])
             | _ => ml_literal_body(x[..acc, ..Bytes/replicate(q, b)])
             end
-        | n == 0xA =>
+        | n == '\n' =>
             let _ = Parse/bytes/byte!;
             ml_literal_body(x[..acc, b])
-        | n == 0xD =>
+        | n == '\r' =>
             let pair = crlf!;
             match pair
-            | some(_) => ml_literal_body(x[..acc, 0xD, 0xA])
+            | some(_) => ml_literal_body(x[..acc, '\r', '\n'])
             | none() => Parse/fail("bare carriage return")
             end
-        | n == 0x9 =>
+        | n == '\t' =>
             let _ = Parse/bytes/byte!;
             ml_literal_body(x[..acc, b])
         | n < 0x20 => Parse/fail("control character in string")

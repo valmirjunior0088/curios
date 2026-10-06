@@ -15,7 +15,7 @@ let key_path(acc: List(Str)) -> Parse(Bytes, List(Str)) =
     let k = key_part!;
     let _ = ws!;
     let acc2 = [..acc, k];
-    let dot = Parse/optional(Parse/bytes/expect(0x2E))!;
+    let dot = Parse/optional(Parse/bytes/expect('.'))!;
     match dot
     | some(_) =>
         let _ = ws!;
@@ -26,25 +26,25 @@ let key_path(acc: List(Str)) -> Parse(Bytes, List(Str)) =
 let header(double: Bool) -> Parse(Bytes, List(Str)) =
     let _ = ws!;
     let path = key_path([])!;
-    let _ = Parse/label(Parse/bytes/expect(0x5D), "expected ']' in table header")!;
+    let _ = Parse/label(Parse/bytes/expect(']'), "expected ']' in table header")!;
     match double
     | true =>
-        let _ = Parse/label(Parse/bytes/expect(0x5D), "expected ']]' in table header")!;
+        let _ = Parse/label(Parse/bytes/expect(']'), "expected ']]' in table header")!;
         Parse/pure(path)
     | false => Parse/pure(path)
     end;
 
 let stmt: Parse(Bytes, Stmt) =
-    let bracket = Parse/optional(Parse/bytes/expect(0x5B))!;
+    let bracket = Parse/optional(Parse/bytes/expect('['))!;
     match bracket
     | none() =>
         let path = key_path([])!;
-        let _ = Parse/label(Parse/bytes/expect(0x3D), "expected '=' after key")!;
+        let _ = Parse/label(Parse/bytes/expect('='), "expected '=' after key")!;
         let _ = ws!;
         let value = value_parse!;
         Parse/pure(Stmt/assign(path, value))
     | some(_) =>
-        let doubled = Parse/optional(Parse/bytes/expect(0x5B))!;
+        let doubled = Parse/optional(Parse/bytes/expect('['))!;
         match doubled
         | some(_) =>
             let path = header(true)!;

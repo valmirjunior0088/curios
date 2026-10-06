@@ -540,7 +540,7 @@ let decimal_value(s: Str) -> Option(Nat) =
         (c, acc) =>
             let a = acc!;
             match Char/is_digit(c)
-            | true => Option/some(a * 10 + (Char/to_nat(c) - 0x30))
+            | true => Option/some(a * 10 + (Char/to_nat(c) - '0'))
             | false => Option/none()
             end);
 

@@ -53,7 +53,7 @@ pub let read_line(i: Input) -> Io(Option(Bytes)) =
         let c = read(i, 1)!;
         match c
         | chunk(b, @some) =>
-            match Byte/to_nat(Bytes/get(b, 0, @some)) == 0xA
+            match Byte/to_nat(Bytes/get(b, 0, @some)) == '\n'
             | true => Io/pure(Option/some(acc))
             | false => go(x[..acc, ..b])
             end
