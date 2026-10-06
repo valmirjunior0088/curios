@@ -104,7 +104,9 @@ pub use Command/{let Command};
 pub mod Async;
 pub use Async/{let Async};
 
---- One Unicode scalar value, certified against the surrogate range. A conversion that always yields one builds its certificate, and one that may not answers an `Option`, so no character is ever a stand-in. Classification and case conversion are ASCII-only.
+--- One Unicode scalar value, certified against the surrogate range.
+---
+--- A conversion that always yields one builds its certificate, and one that may not answers an `Option`, so no character is ever a stand-in. Classification and case conversion are ASCII-only.
 pub mod Char;
 pub use Char/{let Char};
 
@@ -138,7 +140,9 @@ pub use Map/{let Map};
 pub mod Set;
 pub use Set/{let Set};
 
---- Well-founded recursion: `recurse` is the fixpoint along any relation proved well-founded, at a motive that is a proof or a program; `lt` proves `<` on `Nat` well-founded, and `on` and `narrow` carry that through a measure and into a narrower relation.
+--- Well-founded recursion.
+---
+--- `recurse` is the fixpoint along any relation proved well-founded, at a motive that is a proof or a program; `lt` proves `<` on `Nat` well-founded, and `on` and `narrow` carry that through a measure and into a narrower relation.
 pub mod WellFounded;
 pub use WellFounded/{let WellFounded};
 
@@ -146,7 +150,9 @@ pub use WellFounded/{let WellFounded};
 pub mod Eq;
 pub use Eq/{let Eq};
 
---- Text as certified UTF-8, addressed by position — a byte offset at which a character begins, so a piece cut between two is whole characters — and counted in Unicode scalar values where a count is what is meant. Validity is checked once, where bytes become text through `of_bytes`, and every operation carries it from there, so nothing downstream checks it again. Comparison is code-point order.
+--- Text as certified UTF-8.
+---
+--- It is addressed by position — a byte offset at which a character begins, so a piece cut between two is whole characters — and counted in Unicode scalar values where a count is what is meant. Validity is checked once, where bytes become text through `of_bytes`, and every operation carries it from there, so nothing downstream checks it again. Comparison is code-point order.
 pub mod Str;
 pub use Str/{let Str};
 
@@ -189,7 +195,9 @@ pub use Html/{let Html};
 pub mod Cli;
 pub use Cli/{let Cli};
 
---- Interpolation against a format string, checked at the call: one argument per place, shown at a `%` by any type's `Show` and spelled at a `#` by its `Spell`, with `\%` and `\#` for the literal characters. A missing or surplus argument is refused where the call is written.
+--- Interpolation against a format string, checked at the call.
+---
+--- A place takes one argument, shown at a `%` by any type's `Show` and spelled at a `#` by its `Spell`, with `\%` and `\#` for the literal characters. A missing or surplus argument is refused where the call is written.
 pub mod Fmt;
 pub use Fmt/{let Fmt};
 
@@ -202,10 +210,14 @@ pub use Test/{let Test};
 --- TCP over the host's sockets: connections and listeners as streams, parking the fiber wherever a peer decides.
 pub mod tcp;
 
---- HTTP/1.1 over `tcp`: the vocabulary of an exchange as data, and a client that performs one — one connection per request, whole bodies, a deadline and a redirect limit.
+--- HTTP/1.1 over `tcp`: the vocabulary of an exchange as data, and a client that performs one.
+---
+--- The client takes one connection per request and whole bodies, under a deadline and a redirect limit.
 pub mod http;
 
---- Clocks: `Instant` is an opaque reading of the monotonic clock, good for measuring alone; `Timestamp` is a moment that means something; `Duration` is the distance between two of either, with no sign. The two moments do not convert.
+--- Clocks: `Instant`, `Timestamp` and the `Duration` between two of either.
+---
+--- `Instant` is an opaque reading of the monotonic clock, good for measuring alone; `Timestamp` is a moment that means something; `Duration` is the distance between two of either, with no sign. The two moments do not convert.
 pub mod time;
 
 --- Randomness from the host, in `Io`.
@@ -218,10 +230,14 @@ pub mod proc;
 pub mod Tty;
 pub use Tty/{let Tty};
 
---- The filesystem beyond a file's contents: what is at a path, a directory's entries, and making, moving and removing things. Every operation is `Io`, and `Try` over it where it can fail.
+--- The filesystem beyond a file's contents: what is at a path, a directory's entries, and making, moving and removing things.
+---
+--- Every operation is `Io`, and `Try` over it where it can fail.
 pub mod fs;
 
---- A serial device: a port opened at its speed and frame, read and written as a stream and drained, its DTR and RTS lines driven and its unread input dropped, and the devices the host has listed.
+--- A serial device: a port opened at its speed and frame, and the devices the host has listed.
+---
+--- The port is read and written as a stream and drained, its DTR and RTS lines driven and its unread input dropped.
 pub mod Serial;
 pub use Serial/{let Serial};
 

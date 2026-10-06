@@ -122,7 +122,9 @@ pub let scan_from(s: Scan, b: Bytes) -> Scan =
 pub mod Valid;
 pub use Valid/{let Valid};
 
---- A position in text: a byte offset at which a character may begin, typed by the text it belongs to. Deciding one reads a single byte; that such an offset is where valid text divides into valid text is `Valid/before` and `Valid/after`.
+--- A position in text: a byte offset at which a character may begin, typed by the text it belongs to.
+---
+--- Deciding one reads a single byte; that such an offset is where valid text divides into valid text is `Valid/before` and `Valid/after`.
 pub mod At;
 pub use At/{let At};
 
