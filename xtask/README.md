@@ -36,7 +36,7 @@ The workspace's build recipes as a cargo subcommand: `cargo xtask runtime` files
 
 ### The release dance is a recipe
 
-**Decision.** `release` cuts a release end to end. It reads the workspace version from `Cargo.toml`, resolves the one its argument names, refuses unless the tree is clean, the branch is `main`, `main` agrees with `origin/main`, the tag is free and the target is above the current version, then writes the manifest, updates the lock, checks the diff it produced, commits, tags, and pushes `main` and the tag. Invoking it is the intent to publish.
+**Decision.** `release` cuts a release end to end. It reads the workspace version from `Cargo.toml`, resolves the one its argument names, refuses unless the tree is clean, the branch is `main`, `origin/main` holds no commit `main` does not, the tag is free and the target is above the current version, then writes the manifest, updates the lock, checks the diff it produced, commits, tags, and pushes `main` and the tag. Invoking it is the intent to publish.
 
 **Rationale.** The tag push fires `release.yml`, so it is the step whose spelling this crate exists to fix. The version is computed from the manifest rather than recalled, and "the diff is that one line plus the lock's member versions" is an assertion rather than a reading. The monotonicity refusal closes what the tag check cannot see: the history skips ranges — `0.1.0` is followed by `0.2.1` — so a mistyped version landing in a gap has no tag to collide with.
 
