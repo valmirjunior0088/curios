@@ -638,11 +638,15 @@ test(test)
           (identifier))))))
 
 ================================================================================
-A derived witness omits its body, alone and inside a mixed group
+A derived witness holds the dots alone, by itself and inside a mixed group
 ================================================================================
 
-satisfy Spell(Point);
-satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));
+satisfy Spell(Point) {
+    ..
+}
+satisfy (@A: Type, use Spell(A)) => Spell(Tree(A)) {
+    ..
+}
 and Equal(Point) {
     eql(a, b) = same(a, b),
 }

@@ -32,7 +32,9 @@ let total_nanos(t: Timestamp) -> Nat =
 pub let diff(a: Timestamp, b: Timestamp) -> Duration =
     Duration/of(0, total_nanos(a) - total_nanos(b));
 
-satisfy Eql(Timestamp);
+satisfy Eql(Timestamp) {
+    ..
+}
 
 --- `secs.nanos`, the nanoseconds padded to nine digits.
 satisfy Show(Timestamp) {

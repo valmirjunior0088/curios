@@ -560,7 +560,7 @@ pub enum Derivation {
 }
 
 impl Derivation {
-    /// The concept method a body-less `satisfy` of this derivation asks for — the key the lookup matches on, and the field the prelude build checks against the declaration.
+    /// The concept method a derived `satisfy` of this derivation asks for — the key the lookup matches on, and the field the prelude build checks against the declaration.
     pub const fn concept_field(self) -> ConceptField {
         match self {
             Derivation::Spell(row) => row.spell,

@@ -25,7 +25,7 @@ pub use Show/{let Show};
 
 --- A value's rendering as source that reads back: a literal, or a constructor spelled by its type's own name.
 ---
---- The text re-parses wherever the type's name is visible unqualified, and a test report spells a value with it. A declared type derives its witness with `satisfy Spell(T);`.
+--- The text re-parses wherever the type's name is visible unqualified, and a test report spells a value with it. A declared type derives its witness with `satisfy Spell(T) { .. }`.
 pub mod Spell;
 pub use Spell/{let Spell};
 
@@ -42,7 +42,7 @@ pub use Nat/{let Nat};
 
 --- A value's encoding as the bytes that identify it, and the digest of one.
 ---
---- The encoding is stable and is what `Key` proves injective; the digest over it is not, and is for dedup and cache keys rather than for anything written down. A declared type derives its witness with `satisfy Hash(T);`.
+--- The encoding is stable and is what `Key` proves injective; the digest over it is not, and is for dedup and cache keys rather than for anything written down. A declared type derives its witness with `satisfy Hash(T) { .. }`.
 pub mod Hash;
 pub use Hash/{let Hash};
 

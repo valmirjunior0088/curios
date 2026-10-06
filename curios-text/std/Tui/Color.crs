@@ -16,7 +16,9 @@ end
 
 pub use Color/*;
 
-satisfy Eql(Color);
+satisfy Eql(Color) {
+    ..
+}
 
 --- Palette colour 0.
 pub let black: Color =

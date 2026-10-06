@@ -856,7 +856,7 @@ fn a_documentation_comment_attaches_to_a_constructor_a_field_and_a_method() {
 fn a_documentation_comment_attaches_to_a_module_a_witness_a_foreign_and_a_later_member() {
     let source = concat!(
         "--- Numbers.\nmod nat;\n",
-        "--- Structural.\nsatisfy Equal(Nat);\n",
+        "--- Structural.\nsatisfy Equal(Nat) {\n    ..\n}\n",
         "--- Ticks.\nforeign clock: Nat;\n",
         "let a: Nat = 1\n--- The other.\nand b: Nat = 2;\n",
     );
@@ -976,7 +976,7 @@ fn a_documentation_comment_after_a_group_may_open_the_next_item() {
         "--- Next.\npub let x: Nat = 1;\n",
         "let a: Nat = 1\n--- Member.\npub and b: Nat = 2;\n",
         "--- Type.\npub induct T: Type\nend\n",
-        "--- Witness.\nsatisfy Spell(T);\n",
+        "--- Witness.\nsatisfy Spell(T) {\n    ..\n}\n",
     );
     let module = source.parse::<Module>().unwrap();
     assert_eq!(module.items.len(), 5);

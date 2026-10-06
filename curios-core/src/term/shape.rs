@@ -66,7 +66,7 @@ pub enum Transient {
     Bang(Bang),
     /// A term stated at a type; consumed by `elaborate_ascribed`.
     Ascribed(Ascribed),
-    /// A witness body the compiler writes — the body position of a body-less `satisfy C(T);`; consumed by `elaborate_derive`, which reads the concept application it is checked against and expands it or refuses. Carries nothing: the expected type is the whole of its input.
+    /// A witness body the compiler writes — the body position of a derived `satisfy C(T) { .. }`; consumed by `elaborate_derive`, which reads the concept application it is checked against and expands it or refuses. Carries nothing: the expected type is the whole of its input.
     Derive,
 }
 

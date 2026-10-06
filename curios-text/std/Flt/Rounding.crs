@@ -19,7 +19,9 @@ end
 
 pub use Rounding/*;
 
-satisfy Eql(Rounding);
+satisfy Eql(Rounding) {
+    ..
+}
 
 satisfy Show(Rounding) {
     show(r) =
@@ -32,8 +34,14 @@ satisfy Show(Rounding) {
         end,
 }
 
-satisfy Spell(Rounding);
+satisfy Spell(Rounding) {
+    ..
+}
 
-satisfy Ord(Rounding);
+satisfy Ord(Rounding) {
+    ..
+}
 
-satisfy Hash(Rounding);
+satisfy Hash(Rounding) {
+    ..
+}

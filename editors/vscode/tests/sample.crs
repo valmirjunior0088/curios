@@ -23,7 +23,9 @@ satisfy (@A: Type, use Show(A)) => Show(List(A)) {
     show = show_list,
 }
 
-satisfy Spell(Nat);
+satisfy Spell(Nat) {
+    ..
+}
 
 test sample_map_holds =
     Test/assert(even(zero));

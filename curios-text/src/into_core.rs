@@ -1362,7 +1362,7 @@ fn process_items(
 
                         let concept_app =
                             witness_concept_application(&witness.concept, &witness.args);
-                        // A written body is the concept literal over its fields alone, so every `use`-marked position is left to resolution, under a bare head: the declared type states the arguments once, and the literal is checked against it. A body-less one is the `Derive` transient, spanned at the concept application so a refusal lands on the declaration. Either way the telescope below wraps it identically.
+                        // A written body is the concept literal over its fields alone, so every `use`-marked position is left to resolution, under a bare head: the declared type states the arguments once, and the literal is checked against it. A derived one is the `Derive` transient, spanned at the concept application so a refusal lands on the declaration. Either way the telescope below wraps it identically.
                         let body: Term = match &witness.body {
                             Some(fields) => Subterm::StructLit(StructLit {
                                 head: witness.concept.clone(),

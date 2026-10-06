@@ -417,11 +417,11 @@ pub enum Error {
     PrivateRepresentation {
         name: String,
     },
-    /// A body-less `satisfy` for a concept the compiler has no derivation for. Derivability is registered per concept, never inferred from its shape.
+    /// A derived `satisfy` for a concept the compiler has no derivation for. Derivability is registered per concept, never inferred from its shape.
     NoDerivation {
         concept: Global,
     },
-    /// A body-less `satisfy` whose key the registered derivation cannot write a body for: the shape it excludes, named so the refusal says what to write instead.
+    /// A derived `satisfy` whose key the registered derivation cannot write a body for: the shape it excludes, named so the refusal says what to write instead.
     Underivable {
         concept: Global,
         key: Box<Term>,

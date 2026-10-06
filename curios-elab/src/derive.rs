@@ -1,4 +1,4 @@
-//! Derived witness bodies: the body a body-less `satisfy C(T);` asks the compiler to write.
+//! Derived witness bodies: the body `satisfy C(T) { .. }` asks the compiler to write.
 //!
 //! Lowering carries the declaration into Core as the same anonymous definition a written witness produces, with [`Transient::Derive`](curios_core::Transient) in body position, so the witness's telescope — its implicit binders and `use` premises — is in scope when the body is checked, and its signature registers in the witness table exactly as a written one does (orphan and duplicate-key refusals need no body). Checking the transient against the concept application is what writes the body: the roster row for the concept produces the Core the lowerer would have produced for the equivalent written witness, and that Core is elaborated under the same expectation, so a derived body is typed, resolved, zonked and certified like any authored one — the kernel never sees the transient.
 //!
@@ -77,7 +77,7 @@ pub(crate) fn elaborate_derive(
         .first()
         .cloned()
         .expect("a derivable concept takes the type it is derived for as its first parameter");
-    // Reduced once, here, because this is the term every refusal *prints*. Reducing the whole concept application above unfolds a nullary inductive's name into its recursive definition, so a refusal of `satisfy Spell(T);` would print three lines of `rec #0: Type = T; #0` where the author wrote `T` — while a struct key (already a `StructType`) and a parameterized one (an `Apply` with a nominal head) print their names. One more reduction reaches the `InductType` all three share, which is the form every other diagnostic in the compiler prints.
+    // Reduced once, here, because this is the term every refusal *prints*. Reducing the whole concept application above unfolds a nullary inductive's name into its recursive definition, so a refusal of `satisfy Spell(T) { .. }` would print three lines of `rec #0: Type = T; #0` where the author wrote `T` — while a struct key (already a `StructType`) and a parameterized one (an `Apply` with a nominal head) print their names. One more reduction reaches the `InductType` all three share, which is the form every other diagnostic in the compiler prints.
     let key = reduce_with(context, &key)?;
     let site = Site {
         concept: name,

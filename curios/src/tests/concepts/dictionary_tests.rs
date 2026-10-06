@@ -33,7 +33,7 @@ fn a_witness_never_writes_its_superclass_slot() {
         use /std/{print, Str, Bool, Ord, Ordering};
         use /std/ops/{Eql};
         induct Mine: pub Type | a() | b() end
-        satisfy Eql(Mine);
+        satisfy Eql(Mine) { .. }
         let always: Eql(Mine) = Eql { eql(x, y) = true, neq(x, y) = false };
         satisfy Ord(Mine) {
             use always,
@@ -56,7 +56,7 @@ fn a_superclass_reads_alike_through_the_table_and_through_a_witness() {
         use /std/{print, Str, Bool, Ord, Ordering};
         use /std/ops/{Eql};
         induct Mine: pub Type | a() | b() end
-        satisfy Eql(Mine);
+        satisfy Eql(Mine) { .. }
         satisfy Ord(Mine) {
             ord(x, y) = Ordering/eq(),
         }

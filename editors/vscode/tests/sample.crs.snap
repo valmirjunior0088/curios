@@ -337,14 +337,20 @@
 >}
 #^ source.curios punctuation.bracket.curios
 >
->satisfy Spell(Nat);
+>satisfy Spell(Nat) {
 #^^^^^^^ source.curios keyword.other.curios
 #       ^ source.curios
 #        ^^^^^ source.curios entity.name.type.curios
 #             ^ source.curios punctuation.bracket.curios
 #              ^^^ source.curios entity.name.type.curios
 #                 ^ source.curios punctuation.bracket.curios
-#                  ^ source.curios punctuation.separator.curios
+#                  ^ source.curios
+#                   ^ source.curios punctuation.bracket.curios
+>    ..
+#^^^^ source.curios
+#    ^^ source.curios keyword.operator.spread.curios
+>}
+#^ source.curios punctuation.bracket.curios
 >
 >test sample_map_holds =
 #^^^^ source.curios keyword.other.curios

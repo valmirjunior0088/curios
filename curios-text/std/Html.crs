@@ -27,13 +27,21 @@ end
 
 pub use Attr/*;
 
-satisfy Eql(Attr);
+satisfy Eql(Attr) {
+    ..
+}
 
-satisfy Spell(Attr);
+satisfy Spell(Attr) {
+    ..
+}
 
-satisfy Eql(Html);
+satisfy Eql(Html) {
+    ..
+}
 
-satisfy Spell(Html);
+satisfy Spell(Html) {
+    ..
+}
 
 --- A page: `html` in `lang`, a head stating the charset and `title` before `head`'s own trees, and `body`.
 pub let document(lang: Str, title: Str, head: List(Html), body: List(Html)) -> Html =

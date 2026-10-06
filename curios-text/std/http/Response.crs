@@ -9,9 +9,13 @@ pub struct Status: pub Type {
     reason: Str,
 }
 
-satisfy Eql(Status);
+satisfy Eql(Status) {
+    ..
+}
 
-satisfy Spell(Status);
+satisfy Spell(Status) {
+    ..
+}
 
 --- What came back: the status, the headers and the body.
 pub struct Response: pub Type {
@@ -20,9 +24,13 @@ pub struct Response: pub Type {
     body: Bytes,
 }
 
-satisfy Eql(Response);
+satisfy Eql(Response) {
+    ..
+}
 
-satisfy Spell(Response);
+satisfy Spell(Response) {
+    ..
+}
 
 let until(target: Byte) -> (Byte) -> Bool =
     (byte) => Bool/not(byte == target);

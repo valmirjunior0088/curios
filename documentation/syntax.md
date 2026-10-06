@@ -829,7 +829,7 @@ A declaration is in scope of its own body, so it may recurse with nothing said. 
 | Top-level `let` | `and`, its own `pub`, then `name: T = …` | one `;` |
 | `induct` | `and`, its own markers, then a head and its cases | one `end` |
 | `struct`, `concept` | `and`, its own markers, then a whole declaration | the last member's `}` |
-| `satisfy` | `and`, then a whole witness | the last member's `}` or `;` |
+| `satisfy` | `and`, then a whole witness | the last member's `}` |
 
 A local group's first member may be a pattern; every later one is a plain name stating its type, since a body mentioning the binding cannot be the source of it.
 
@@ -1032,7 +1032,7 @@ A concept returning `Prop` (or `pub Prop`) has proof-irrelevant witnesses that e
 
 ### Witness declarations
 
-`satisfy` registers an anonymous witness. Its terminal type is a concept application, written as any call is — `satisfy Named(@Nat) { … }` over `concept Named(@A: Type)` — and its body supplies the concept fields — or is omitted, asking the compiler to write it; see [Derived witnesses](#derived-witnesses).
+`satisfy` registers an anonymous witness. Its terminal type is a concept application, written as any call is — `satisfy Named(@Nat) { … }` over `concept Named(@A: Type)` — and its body supplies the concept fields — or holds `..` alone, asking the compiler to write them; see [Derived witnesses](#derived-witnesses).
 
 ```crs
 satisfy Show(Nat) {
@@ -1084,16 +1084,25 @@ sort(@_, use reverse, values)
 
 ### Derived witnesses
 
-A witness may omit its body: `satisfy Spell(Point);`, or `satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));` under a telescope, and either form may join an `and` group beside written members. The signature is the programmer's — it registers, keys, and meets the orphan and sealing rules exactly as a written witness does — and the compiler writes the body from the declaration of the type in the key ([A witness body may be written by the compiler](design/surface/a-witness-body-may-be-written-by-the-compiler.md)). Derivability is a property of the concept: `Spell`, `Eql`, `Ord` and `Hash` derive, every other concept refuses the form by name, and the hand-written witness remains the norm.
+A witness whose block holds `..` alone is derived: `satisfy Spell(Point) { .. }`, or `satisfy (@A: Type, use Spell(A)) => Spell(Tree(A)) { .. }` under a telescope, and either form may join an `and` group beside written members. The dots are not an entry — nothing is written beside them and they take no comma — so a body is written whole or derived whole. The signature is the programmer's — it registers, keys, and meets the orphan and sealing rules exactly as a written witness does — and the compiler writes the body from the declaration of the type in the key ([A witness body may be written by the compiler](design/surface/a-witness-body-may-be-written-by-the-compiler.md)). Derivability is a property of the concept: `Spell`, `Eql`, `Ord` and `Hash` derive, every other concept refuses the form by name, and the hand-written witness remains the norm.
 
 ```crs
 struct Point: pub Type { x: Nat, y: Nat }
 induct Tree(A: Type): pub Type | leaf(A) | node(Tree(A), Tree(A)) end
 
-satisfy Spell(Point);
-satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));
-and (@A: Type, use Eql(A)) => Eql(Tree(A));
-and (@A: Type, use Eql(A), use Ord(A)) => Ord(Tree(A));
+satisfy Spell(Point) {
+    ..
+}
+
+satisfy (@A: Type, use Spell(A)) => Spell(Tree(A)) {
+    ..
+}
+and (@A: Type, use Eql(A)) => Eql(Tree(A)) {
+    ..
+}
+and (@A: Type, use Eql(A), use Ord(A)) => Ord(Tree(A)) {
+    ..
+}
 ```
 
 The key must be a declared `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — fully applied, representation-transparent where the witness is declared, and not a proposition. An implicit payload or a hidden field is inferred by the re-parsed text and takes no part, and a payload that is itself a type is refused; every other goes through its own witness, resolved in the witness's scope — a telescope premise, the witness's own entry, or a member of the same `and` group. A missing one is reported against the constructor and payload, naming the `use` premise to add when the payload's type is a telescope variable.
@@ -1259,7 +1268,7 @@ A bound the facts do not imply is refused. The report names the facts considered
 | `choose ... end` | Ordered guarded ladder |
 | `test name = body;` | Declared test — a `/std/Test` description, collected per unit and run by `curios test` |
 | `satisfy C(args) { ... }` | Globally registered anonymous witness |
-| `satisfy C(args);` | Derived witness — the compiler writes the body |
+| `satisfy C(args) { .. }` | Derived witness — the compiler writes the body |
 | `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Witness under a telescope |
 | `use /std/{Nat};` / `use /std/*` / `use /{Name};` | Import a group, the exported surface, or a name from the compilation root |
 | `… and …` | [Recursive group](#recursive-groups) — `let`, `induct`, `struct`, `concept` or `satisfy` |

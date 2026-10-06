@@ -2086,7 +2086,7 @@ fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
         ])
     };
 
-    // A derived witness ends at the `;` in the brace block's place: the declaration is the whole of what was written.
+    // A derived witness's block holds `..` alone, on a line of its own as a lone entry is, and with no comma since it is none.
     let body = match item.body {
         Some(entries) => flat([
             pure(" "),
@@ -2099,7 +2099,12 @@ fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
                 "}",
             ),
         ]),
-        None => pure(";"),
+        None => flat([
+            pure(" {"),
+            indent(flat([hard_line(), pure("..")])),
+            hard_line(),
+            pure("}"),
+        ]),
     };
 
     flat([pure(keyword), params, pure(" "), app, body])

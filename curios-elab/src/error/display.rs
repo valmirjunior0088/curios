@@ -740,7 +740,7 @@ impl fmt::Display for Displayed<'_> {
                 let concept = spelling.symbol(concept);
                 write!(
                     f,
-                    "no derivation exists for '{concept}'; write the body\n  a body-less `satisfy` asks the compiler to write the witness, which it does only for a concept registered as derivable"
+                    "no derivation exists for '{concept}'; write the body\n  `{{ .. }}` asks the compiler to write the witness, which it does only for a concept registered as derivable"
                 )
             }
             Error::DeriveOutsideWitness => {

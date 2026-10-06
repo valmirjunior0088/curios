@@ -167,7 +167,7 @@ fn a_supplied_source_and_a_directory_resolve_alike() {
     assert_eq!(names(&supplied), names(&disk));
 }
 
-/// A body-less witness lowers to a `Derive` transient, which carries no `Var` — so the scheduler cannot see the renderers and method wrapper the written body would have named, and `derived_vocabulary` supplies them as hard edges instead. This is what those edges buy: the vocabulary is declared *after* the witness here and must still be emitted before it.
+/// A derived witness lowers to a `Derive` transient, which carries no `Var` — so the scheduler cannot see the renderers and method wrapper the written body would have named, and `derived_vocabulary` supplies them as hard edges instead. This is what those edges buy: the vocabulary is declared *after* the witness here and must still be emitted before it.
 ///
 /// The names come from the fixture registry rather than from `/std`, so this suite is what makes those spellings load-bearing: a row whose concept does not match what the source declares yields no edges at all, and the assertion below is what says so.
 #[test]
@@ -175,7 +175,7 @@ fn a_derived_spell_witness_orders_its_vocabulary_first() {
     let module = lowered_module(
         r#"
         pub induct Colour : pub Type | red() end
-        satisfy /std/Spell/Spell(Colour);
+        satisfy /std/Spell/Spell(Colour) { .. }
         pub mod std
             pub mod Spell
                 pub concept Spell(A : Type) : pub Type {
@@ -225,7 +225,7 @@ fn a_derived_equality_witness_orders_its_method_first() {
     let module = lowered_module(
         r#"
         pub induct Colour : pub Type | red() end
-        satisfy /std/Equal/Equal(Colour);
+        satisfy /std/Equal/Equal(Colour) { .. }
         pub mod std
             pub mod Equal
                 pub concept Equal(A : Type) : pub Type {

@@ -25,9 +25,13 @@ end
 
 pub use Code/*;
 
-satisfy Eql(Code);
+satisfy Eql(Code) {
+    ..
+}
 
-satisfy Spell(Code);
+satisfy Spell(Code) {
+    ..
+}
 
 --- A code and its modifiers.
 pub struct Key: pub Type {
@@ -37,9 +41,13 @@ pub struct Key: pub Type {
     ctrl: Bool,
 }
 
-satisfy Eql(Key);
+satisfy Eql(Key) {
+    ..
+}
 
-satisfy Spell(Key);
+satisfy Spell(Key) {
+    ..
+}
 
 --- `code` with no modifier.
 pub let plain(code: Code) -> Key =

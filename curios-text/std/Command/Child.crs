@@ -17,7 +17,9 @@ pub mod Exit
 
     pub use Exit/*;
 
-    satisfy Eql(Exit);
+    satisfy Eql(Exit) {
+        ..
+    }
 
     satisfy Show(Exit) {
         show(e) =

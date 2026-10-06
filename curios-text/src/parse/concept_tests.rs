@@ -186,11 +186,11 @@ fn witness_use_round_trip() {
         "satisfy (@A : Type, use Show(A)) => Show(List(A)) { show = g } u",
         "satisfy Show(Nat) { show = f } and Show(Bool) { show = g } u",
         "satisfy Show(Nat) { show = f } and (@A : Type, use Show(A)) => Show(List(A)) { show = g } u",
-        "satisfy Show(Nat); u",
-        "satisfy (@A : Type, use Show(A)) => Show(List(A)); u",
-        "satisfy Show(Nat); and Show(Bool); u",
-        "satisfy Show(Nat); and Show(Bool) { show = g } u",
-        "satisfy Show(Nat) { show = f } and (@A : Type, use Show(A)) => Show(List(A)); u",
+        "satisfy Show(Nat) { .. } u",
+        "satisfy (@A : Type, use Show(A)) => Show(List(A)) { .. } u",
+        "satisfy Show(Nat) { .. } and Show(Bool) { .. } u",
+        "satisfy Show(Nat) { .. } and Show(Bool) { show = g } u",
+        "satisfy Show(Nat) { show = f } and (@A : Type, use Show(A)) => Show(List(A)) { .. } u",
         "f(use dict, x)",
         "(@A : Type, use Show(A), x : A) -> A",
         "struct Slot(K : Type, use Key(K), V : Type) : Type { key : K } u",
@@ -285,9 +285,9 @@ fn witness_telescope_requires_nonempty_separator_form() {
 }
 
 #[test]
-fn a_derived_witness_has_no_body_and_prints_as_its_declaration() {
-    // `;` in the brace block's place is the derived form: the AST records no entries, and the printer writes the declaration back without inventing a block.
-    let source = "satisfy (@A : Type, use Show(A)) => Show(List(A));\nu";
+fn a_derived_witness_records_no_entries_and_prints_the_dots_on_their_own_line() {
+    // A block holding `..` alone is the derived form: the AST records no entries, and the printer writes the dots back as a lone entry sits, with no comma.
+    let source = "satisfy (@A : Type, use Show(A)) => Show(List(A)) { .. }\nu";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
     let TopItem::Witness(witnesses) = &entrypoint.module.items[0] else {
         panic!("expected a witness declaration");
@@ -297,14 +297,14 @@ fn a_derived_witness_has_no_body_and_prints_as_its_declaration() {
     assert_eq!(witnesses[0].params.len(), 2);
     assert_eq!(
         entrypoint.to_string(),
-        "satisfy (@A: Type, use Show(A)) => Show(List(A));\nu"
+        "satisfy (@A: Type, use Show(A)) => Show(List(A)) {\n    ..\n}\nu"
     );
 }
 
 #[test]
 fn a_witness_group_mixes_derived_and_written_members() {
-    // A body-less member joins an `and` group exactly as a written one does, in either position; the `;` ends the member, and the group's next member still begins at `and`.
-    let source = "satisfy Show(Nat); and Show(Bool) { show = g } and Show(Str);\nu";
+    // A derived member joins an `and` group exactly as a written one does, in either position: each ends at its own `}`, and the group's next member begins at `and`.
+    let source = "satisfy Show(Nat) { .. } and Show(Bool) { show = g } and Show(Str) { .. }\nu";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
     let TopItem::Witness(witnesses) = &entrypoint.module.items[0] else {
         panic!("expected a witness declaration");
@@ -318,16 +318,21 @@ fn a_witness_group_mixes_derived_and_written_members() {
     );
     assert_eq!(
         entrypoint.to_string(),
-        "satisfy Show(Nat);\nand Show(Bool) {\n    show = g,\n}\nand Show(Str);\nu"
+        "satisfy Show(Nat) {\n    ..\n}\nand Show(Bool) {\n    show = g,\n}\nand Show(Str) {\n    ..\n}\nu"
     );
 }
 
 #[test]
-fn a_witness_needs_a_body_or_a_semicolon() {
+fn a_witness_takes_a_block_of_its_entries_or_of_the_dots_alone() {
     for source in [
         "satisfy Show(Nat) u",
-        "satisfy Show(Nat) and Show(Bool); u",
+        "satisfy Show(Nat); u",
+        "satisfy Show(Nat) and Show(Bool) { .. } u",
         "satisfy Show(Nat) { show = f }; u",
+        "satisfy Show(Nat) { .., } u",
+        "satisfy Show(Nat) { ..base } u",
+        "satisfy Show(Nat) { .., show = f } u",
+        "satisfy Show(Nat) { show = f, .. } u",
     ] {
         assert!(
             source.parse::<Entrypoint>().is_err(),

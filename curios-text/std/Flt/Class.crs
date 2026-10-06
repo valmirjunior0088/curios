@@ -17,11 +17,17 @@ end
 
 pub use Class/*;
 
-satisfy Eql(Class);
+satisfy Eql(Class) {
+    ..
+}
 
-satisfy Spell(Class);
+satisfy Spell(Class) {
+    ..
+}
 
-satisfy Hash(Class);
+satisfy Hash(Class) {
+    ..
+}
 
 satisfy Show(Class) {
     show(c) =

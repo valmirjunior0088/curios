@@ -12,9 +12,13 @@ end
 
 pub use Scheme/*;
 
-satisfy Eql(Scheme);
+satisfy Eql(Scheme) {
+    ..
+}
 
-satisfy Spell(Scheme);
+satisfy Spell(Scheme) {
+    ..
+}
 
 --- Where a request goes: the scheme, the host, the port, the path, and the query as written after `?`, if any. A fragment is the client's and is dropped.
 pub struct Url: pub Type {
@@ -25,9 +29,13 @@ pub struct Url: pub Type {
     query: Option(Str),
 }
 
-satisfy Eql(Url);
+satisfy Eql(Url) {
+    ..
+}
 
-satisfy Spell(Url);
+satisfy Spell(Url) {
+    ..
+}
 
 --- The port a scheme implies.
 pub let default_port(s: Scheme) -> Nat =

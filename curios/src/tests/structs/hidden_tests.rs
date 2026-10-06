@@ -153,7 +153,7 @@ fn a_derived_spelling_leaves_a_hidden_field_out() {
         use /std/{Nat, Str, Spell, print};
         use /std/Bool/{Holds};
         struct Positive: pub Type { n: Nat, @ok: Holds(0 < n) }
-        satisfy Spell(Positive);
+        satisfy Spell(Positive) { .. }
         print(Spell/spell(Positive { n = 4 }))
         "#;
 

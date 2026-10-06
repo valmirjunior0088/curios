@@ -62,7 +62,9 @@ satisfy (@E: Type) => Monad((A: Type) => Result(E, A)) {
     bind(@_, @_, m, f) = bind(m, f),
 }
 
-satisfy (@A: Type, @E: Type, use Eql(A), use Eql(E)) => Eql(Result(E, A));
+satisfy (@A: Type, @E: Type, use Eql(A), use Eql(E)) => Eql(Result(E, A)) {
+    ..
+}
 
 satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(E, A)) {
     show(r) =
@@ -72,7 +74,9 @@ satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(E, A)) {
         end,
 }
 
-satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) => Spell(Result(E, A));
+satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) => Spell(Result(E, A)) {
+    ..
+}
 
 --- `failure` below `success`; two failures by `E`'s order and two successes by `A`'s.
 pub let ord(

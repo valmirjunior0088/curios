@@ -14,7 +14,9 @@ pub induct Kind: pub Type
 | other()
 end
 
-satisfy Eql(Kind);
+satisfy Eql(Kind) {
+    ..
+}
 
 satisfy Show(Kind) {
     show(k) =

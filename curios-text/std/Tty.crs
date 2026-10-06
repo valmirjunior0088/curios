@@ -16,7 +16,9 @@ pub struct Size: pub Type {
     rows: Nat,
 }
 
-satisfy Eql(Size);
+satisfy Eql(Size) {
+    ..
+}
 
 satisfy Show(Size) {
     show(s) = Str/flatten([Nat/to_str(s.cols), "x", Nat/to_str(s.rows)]),

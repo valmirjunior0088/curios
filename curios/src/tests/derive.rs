@@ -1,4 +1,4 @@
-//! Derived witnesses: the body-less `satisfy C(T);` form, the transient it lowers to, and what the compiler writes — or refuses — in its place.
+//! Derived witnesses: the `satisfy C(T) { .. }` form, the transient it lowers to, and what the compiler writes — or refuses — in its place.
 
 use crate::tests::{core, core_elab, error, run};
 
@@ -9,7 +9,7 @@ fn an_enumeration_spells_as_its_constructor_paths() {
     let source = r#"
         use /std/{Str, Spell, print};
         induct Color: pub Type | red() | green() end
-        satisfy Spell(Color);
+        satisfy Spell(Color) { .. }
         let _ = print(Spell/spell(Color/red()))!;
         let _ = print("\n")!;
         print(Spell/spell(Color/green()))
@@ -24,7 +24,7 @@ fn payloads_spell_through_their_own_witnesses() {
     let source = r#"
         use /std/{Nat, Str, Bool, List, Spell, print};
         induct Shape: pub Type | dot(Nat) | tag(Str, Bool) | many(List(Nat)) end
-        satisfy Spell(Shape);
+        satisfy Spell(Shape) { .. }
         let _ = print(Spell/spell(Shape/dot(1)))!;
         let _ = print("\n")!;
         let _ = print(Spell/spell(Shape/tag("a\n", true)))!;
@@ -44,7 +44,7 @@ fn a_parameterized_family_spells_under_its_premise() {
     let source = r#"
         use /std/{Nat, Str, Spell, print};
         induct Box(A: Type): pub Type | boxed(A) end
-        satisfy (@A: Type, use Spell(A)) => Spell(Box(A));
+        satisfy (@A: Type, use Spell(A)) => Spell(Box(A)) { .. }
         let _ = print(Spell/spell(Box/boxed(3)))!;
         let _ = print("\n")!;
         print(Spell/spell(Box/boxed(Box/boxed("x"))))
@@ -59,7 +59,7 @@ fn a_recursive_family_spells_through_its_own_entry_and_re_parses() {
     let source = r#"
         use /std/{Nat, Str, Spell, print};
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
-        satisfy Spell(Tree);
+        satisfy Spell(Tree) { .. }
         let built = Tree/node(Tree/leaf(1), Tree/node(Tree/leaf(2), Tree/leaf(3)));
         let written: Tree = Tree/node(Tree/leaf(1), Tree/node(Tree/leaf(2), Tree/leaf(3)));
         let _ = print(Spell/spell(built))!;
@@ -78,8 +78,8 @@ fn a_mutual_group_derives_as_one() {
         induct Tree: pub Type | leaf(Nat) | forest(Forest)
         and Forest: pub Type | nil() | cons(Tree, Forest)
         end
-        satisfy Spell(Tree);
-        and Spell(Forest);
+        satisfy Spell(Tree) { .. }
+        and Spell(Forest) { .. }
         print(Spell/spell(Tree/forest(Forest/cons(Tree/leaf(1), Forest/nil()))))
         "#;
 
@@ -96,8 +96,8 @@ fn a_struct_spells_as_its_literal() {
         use /std/{Nat, Str, Spell, print};
         struct Point: pub Type { x: Nat, y: Nat }
         struct Meters: pub Type { Nat }
-        satisfy Spell(Point);
-        satisfy Spell(Meters);
+        satisfy Spell(Point) { .. }
+        satisfy Spell(Meters) { .. }
         let _ = print(Spell/spell(Point { x = 1, y = 2 }))!;
         let _ = print("\n")!;
         print(Spell/spell(Meters { 5 }))
@@ -111,7 +111,7 @@ fn a_tuple_payload_spells_as_its_literal() {
     let source = r#"
         use /std/{Nat, Bool, Str, Spell, print};
         induct Pair: pub Type | pair({Nat, Bool}) end
-        satisfy Spell(Pair);
+        satisfy Spell(Pair) { .. }
         print(Spell/spell(Pair/pair((1, true))))
         "#;
 
@@ -124,7 +124,7 @@ fn a_proof_payload_spells_as_a_goal() {
     let source = r#"
         use /std/{Nat, Str, Eq, Spell, print};
         induct Certified: pub Type | cert(n: Nat, proof: Eq()(n, n)) end
-        satisfy Spell(Certified);
+        satisfy Spell(Certified) { .. }
         print(Spell/spell(Certified/cert(1, Eq/refl())))
         "#;
 
@@ -140,7 +140,7 @@ fn an_indexed_family_spells_each_constructor() {
         | nil(): (0)
         | cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
         end
-        satisfy (@T: Type, @n: Nat, use Spell(T)) => Spell(Vec(T)(n));
+        satisfy (@T: Type, @n: Nat, use Spell(T)) => Spell(Vec(T)(n)) { .. }
         print(Spell/spell(Vec/cons(1, Vec/cons(2, Vec/nil()))))
         "#;
 
@@ -152,7 +152,7 @@ fn the_stages_show_the_transient_and_its_expansion() {
     let source = r#"
         use /std/{Nat, Str, Spell, print};
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
-        satisfy Spell(Tree);
+        satisfy Spell(Tree) { .. }
         print(Spell/spell(Tree/leaf(1)))
         "#;
 
@@ -171,7 +171,7 @@ fn derived_equality_is_structural() {
         use /std/{Nat, Bool, Str, print};
         use /std/ops/{Eql};
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
-        satisfy Eql(Tree);
+        satisfy Eql(Tree) { .. }
         let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
         let _ = print(show(Tree/leaf(1) == Tree/leaf(1)))!;
         let _ = print(show(Tree/leaf(1) == Tree/leaf(2)))!;
@@ -191,8 +191,8 @@ fn a_struct_and_a_parameterized_family_compare_fieldwise() {
         use /std/ops/{Eql};
         struct Point: pub Type { x: Nat, y: Nat }
         induct Box(A: Type): pub Type | boxed(A) end
-        satisfy Eql(Point);
-        satisfy (@A: Type, use Eql(A)) => Eql(Box(A));
+        satisfy Eql(Point) { .. }
+        satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
         let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
         let _ = print(show(Point { x = 1, y = 2 } == Point { x = 1, y = 2 }))!;
         let _ = print(show(Point { x = 1, y = 2 } != Point { x = 1, y = 3 }))!;
@@ -214,8 +214,8 @@ fn proofs_and_implicit_payloads_take_no_part_in_equality() {
         | nil(): (0)
         | cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
         end
-        satisfy Eql(Certified);
-        satisfy (@T: Type, @n: Nat, use Eql(T)) => Eql(Vec(T)(n));
+        satisfy Eql(Certified) { .. }
+        satisfy (@T: Type, @n: Nat, use Eql(T)) => Eql(Vec(T)(n)) { .. }
         let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
         let _ = print(show(Certified/cert(1, Eq/refl()) == Certified/cert(1, Eq/refl())))!;
         let _ = print(show(Certified/cert(1, Eq/refl()) == Certified/cert(2, Eq/refl())))!;
@@ -232,7 +232,7 @@ fn the_eql_derivation_shares_the_eligibility_and_the_provenance() {
         use /std/{Str};
         use /std/ops/{Eql};
         induct Attested: pub Prop | yes() end
-        satisfy Eql(Attested);
+        satisfy Eql(Attested) { .. }
         /std/print("")
         "#;
     let report = error(proposition);
@@ -245,7 +245,7 @@ fn the_eql_derivation_shares_the_eligibility_and_the_provenance() {
         use /std/{Str};
         use /std/ops/{Eql};
         induct Box(A: Type): pub Type | boxed(A) end
-        satisfy (@A: Type) => Eql(Box(A));
+        satisfy (@A: Type) => Eql(Box(A)) { .. }
         /std/print("")
         "#;
     let report = error(premise);
@@ -297,7 +297,7 @@ fn an_ineligible_key_is_refused_by_its_shape() {
     let proposition = r#"
         use /std/{Str, Spell};
         induct Attested: pub Prop | yes() end
-        satisfy Spell(Attested);
+        satisfy Spell(Attested) { .. }
         /std/print("")
         "#;
     let report = error(proposition);
@@ -311,7 +311,7 @@ fn an_ineligible_key_is_refused_by_its_shape() {
         pub concept Tag(A: Type): pub Type {
             tag(A) -> Str,
         }
-        satisfy Spell(Tag(Nat));
+        satisfy Spell(Tag(Nat)) { .. }
         /std/print("")
         "#;
     let report = error(concept);
@@ -325,7 +325,7 @@ fn an_ineligible_key_is_refused_by_its_shape() {
     let type_valued = r#"
         use /std/{Str, Spell};
         induct Holder: pub Type | holds(Prop) end
-        satisfy Spell(Holder);
+        satisfy Spell(Holder) { .. }
         /std/print("")
         "#;
     let report = error(type_valued);
@@ -338,7 +338,7 @@ fn an_ineligible_key_is_refused_by_its_shape() {
     let recursive = r#"
         use /std/{Str, Spell};
         induct R: pub Type | node(R, Type) | leaf() end
-        satisfy Spell(R);
+        satisfy Spell(R) { .. }
         /std/print("")
         "#;
     let report = error(recursive);
@@ -358,7 +358,7 @@ fn a_private_representation_refuses_the_derivation_outside_its_module() {
             pub induct Secret: Type | s(Nat) end
         end
         use Guard/{Secret};
-        satisfy Spell(Secret);
+        satisfy Spell(Secret) { .. }
         /std/print("")
         "#;
 
@@ -374,7 +374,7 @@ fn a_missing_payload_witness_names_the_payload_and_the_premise_to_add() {
     let premise = r#"
         use /std/{Str, Spell};
         induct Box(A: Type): pub Type | boxed(A) end
-        satisfy (@A: Type) => Spell(Box(A));
+        satisfy (@A: Type) => Spell(Box(A)) { .. }
         /std/print("")
         "#;
     let report = error(premise);
@@ -387,7 +387,7 @@ fn a_missing_payload_witness_names_the_payload_and_the_premise_to_add() {
         use /std/{Str, Spell};
         induct Opaque: pub Type | o() end
         induct Holder: pub Type | holds(inner: Opaque) end
-        satisfy Spell(Holder);
+        satisfy Spell(Holder) { .. }
         /std/print("")
         "#;
     // The goal's spelling is the deferred-goal report's, rendered as every report renders a type — the nominal name, not its recursive-group projection; the derivation's contribution is the provenance line, located at the declaration.
@@ -398,7 +398,7 @@ fn a_missing_payload_witness_names_the_payload_and_the_premise_to_add() {
         ),
         "{report}"
     );
-    assert!(report.contains("satisfy Spell(Holder);"), "{report}");
+    assert!(report.contains("satisfy Spell(Holder) { .. }"), "{report}");
 }
 
 // The renderers spell the two shapes a derived body is built from, pinned as the text a re-parse reads: a derivation's output is only ever their output over spelled pieces. An empty label is the positional field of a newtype-like struct.
@@ -443,13 +443,13 @@ fn a_tuple_spells_as_its_literal() {
 
 // The lowered module carries the declaration as the same anonymous definition a written witness produces, with the `derive` transient in body position — under the telescope where it has one, so the premises are in scope when the body is checked.
 #[test]
-fn a_body_less_witness_lowers_to_the_derive_transient() {
+fn a_derived_witness_lowers_to_the_derive_transient() {
     let source = r#"
         use /std/{Str, Show};
         induct Point: pub Type | origin() end
         induct Wrap(A: Type): pub Type | wrap(A) end
-        satisfy Show(Point);
-        satisfy (@A: Type, use Show(A)) => Show(Wrap(A));
+        satisfy Show(Point) { .. }
+        satisfy (@A: Type, use Show(A)) => Show(Wrap(A)) { .. }
         /std/print("")
         "#;
 
@@ -463,7 +463,7 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
     let standard = r#"
         use /std/{Str, Show};
         induct Point: pub Type | origin() end
-        satisfy Show(Point);
+        satisfy Show(Point) { .. }
         /std/print("")
         "#;
     assert!(
@@ -477,7 +477,7 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
         pub concept Tag(A: Type): pub Type {
             tag(A) -> Str,
         }
-        satisfy Tag(Nat);
+        satisfy Tag(Nat) { .. }
         /std/print("")
         "#;
     assert!(
@@ -489,7 +489,7 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
     let premised = r#"
         use /std/{Str, Show};
         induct Wrap(A: Type): pub Type | wrap(A) end
-        satisfy (@A: Type, use Show(A)) => Show(Wrap(A));
+        satisfy (@A: Type, use Show(A)) => Show(Wrap(A)) { .. }
         /std/print("")
         "#;
     assert!(
@@ -499,12 +499,12 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
     );
 }
 
-// Registration reads the signature alone, so the orphan rule and the one-witness-per-key rule refuse a body-less declaration with the written form's exact reports (`concepts/coherence_tests.rs`).
+// Registration reads the signature alone, so the orphan rule and the one-witness-per-key rule refuse a derived declaration with the written form's exact reports (`concepts/coherence_tests.rs`).
 #[test]
-fn the_signature_refusals_fire_on_a_body_less_witness_as_on_a_written_one() {
+fn the_signature_refusals_fire_on_a_derived_witness_as_on_a_written_one() {
     let orphan = r#"
         use /std/{Bool, Ord};
-        satisfy Ord(Bool);
+        satisfy Ord(Bool) { .. }
         /std/print("")
         "#;
     let rendered = error(orphan);
@@ -515,8 +515,8 @@ fn the_signature_refusals_fire_on_a_body_less_witness_as_on_a_written_one() {
         ),
         "{rendered}"
     );
-    // Located at the written concept application, exactly as the written form is: a body-less declaration has the same declared type.
-    assert!(rendered.contains("satisfy Ord(Bool);"), "{rendered}");
+    // Located at the written concept application, exactly as the written form is: a derived declaration has the same declared type.
+    assert!(rendered.contains("satisfy Ord(Bool) { .. }"), "{rendered}");
 
     let duplicate = r#"
         use /std/{Nat, Str};
@@ -526,7 +526,7 @@ fn the_signature_refusals_fire_on_a_body_less_witness_as_on_a_written_one() {
         satisfy Show(Nat) {
             show(n) = Nat/to_str(n)
         }
-        satisfy Show(Nat);
+        satisfy Show(Nat) { .. }
         /std/print("")
         "#;
     let rendered = error(duplicate);
@@ -538,7 +538,7 @@ fn the_signature_refusals_fire_on_a_body_less_witness_as_on_a_written_one() {
         ),
         "{rendered}"
     );
-    assert!(rendered.contains("satisfy Show(Nat);"), "{rendered}");
+    assert!(rendered.contains("satisfy Show(Nat) { .. }"), "{rendered}");
 }
 
 // A parameterized family is a type constructor, not a type, and the head refuses before any body is reached — with the written form's exact report, the telescope form `(@A: Type, …) => C(Tree(A))` being what to write instead.
@@ -552,14 +552,14 @@ fn a_parameterized_head_is_refused_as_a_written_witness_is() {
         }
         /std/print("")
         "#;
-    let body_less = r#"
+    let derived = r#"
         use /std/{Str, Show};
         induct Tree(A: Type): pub Type | leaf(A) end
-        satisfy Show(Tree);
+        satisfy Show(Tree) { .. }
         /std/print("")
         "#;
 
-    let report = error(body_less);
+    let report = error(derived);
     let written = error(written);
     assert!(
         report.contains("type mismatch\n  inferred: (A: Type) -> Type\n  expected: Type"),
@@ -575,7 +575,7 @@ fn a_parameterized_head_is_refused_as_a_written_witness_is() {
 
 // Sealing is decided at the declaration, before the derivation lookup: the refusal is the written form's (`concepts/sealed_tests.rs`), so no derivation could become a door through representation privacy.
 #[test]
-fn a_sealed_concept_refuses_a_body_less_witness_outside_its_module() {
+fn a_sealed_concept_refuses_a_derived_witness_outside_its_module() {
     let source = r#"
         use /std/{Nat, Str};
         mod Guard
@@ -588,7 +588,7 @@ fn a_sealed_concept_refuses_a_body_less_witness_outside_its_module() {
             }
         end
         use Guard/{Tag};
-        satisfy Tag(Str);
+        satisfy Tag(Str) { .. }
         /std/print("no")
         "#;
 
@@ -608,8 +608,8 @@ fn derived_order_ranks_constructors_then_payloads() {
         use /std/{Nat, Str, Ord, Show, print};
         use /std/ops/{Eql};
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
-        satisfy Eql(Tree);
-        satisfy Ord(Tree);
+        satisfy Eql(Tree) { .. }
+        satisfy Ord(Tree) { .. }
         let show(t: Tree, u: Tree) -> Str = Str/concat(Show/show(Ord/ord(t, u)), " ");
         let _ = print(show(Tree/leaf(1), Tree/node(Tree/leaf(1), Tree/leaf(1))))!;
         let _ = print(show(Tree/node(Tree/leaf(1), Tree/leaf(1)), Tree/leaf(9)))!;
@@ -631,10 +631,10 @@ fn a_struct_and_a_parameterized_family_order_fieldwise() {
         use /std/ops/{Eql};
         struct Point: pub Type { x: Nat, y: Nat }
         induct Box(A: Type): pub Type | boxed(A) end
-        satisfy Eql(Point);
-        satisfy Ord(Point);
-        satisfy (@A: Type, use Eql(A)) => Eql(Box(A));
-        satisfy (@A: Type, use Eql(A), use Ord(A)) => Ord(Box(A));
+        satisfy Eql(Point) { .. }
+        satisfy Ord(Point) { .. }
+        satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
+        satisfy (@A: Type, use Eql(A), use Ord(A)) => Ord(Box(A)) { .. }
         let show(@A: Type, use Ord(A), a: A, b: A) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
         let _ = print(show(Point { x = 1, y = 2 }, Point { x = 1, y = 3 }))!;
         let _ = print(show(Point { x = 2, y = 0 }, Point { x = 1, y = 9 }))!;
@@ -652,8 +652,8 @@ fn proofs_and_implicit_payloads_take_no_part_in_ordering() {
         use /std/{Nat, Str, Eq, Ord, Show, print};
         use /std/ops/{Eql};
         induct Certified: pub Type | cert(n: Nat, proof: Eq()(n, n)) end
-        satisfy Eql(Certified);
-        satisfy Ord(Certified);
+        satisfy Eql(Certified) { .. }
+        satisfy Ord(Certified) { .. }
         let show(a: Certified, b: Certified) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
         let _ = print(show(Certified/cert(1, Eq/refl()), Certified/cert(2, Eq/refl())))!;
         print(show(Certified/cert(2, Eq/refl()), Certified/cert(2, Eq/refl())))
@@ -668,7 +668,7 @@ fn an_order_derivation_needs_the_equality_its_concept_requires() {
     let source = r#"
         use /std/{Nat, Ord, print};
         induct Colour: pub Type | red() | green(Nat) end
-        satisfy Ord(Colour);
+        satisfy Ord(Colour) { .. }
         print("")
         "#;
 
@@ -679,12 +679,12 @@ fn an_order_derivation_needs_the_equality_its_concept_requires() {
         ),
         "{report}"
     );
-    assert!(report.contains("satisfy Ord(Colour);"), "{report}");
+    assert!(report.contains("satisfy Ord(Colour) { .. }"), "{report}");
 }
 
 #[test]
 fn the_standard_library_derives_order_for_ordering() {
-    // `/std/Ordering` carries the one body-less `Ord` witness in the prelude, which is what exercises the derivation's scheduler edges: they matter only within a unit, and a program compiled against `/std` is a unit of its own.
+    // `/std/Ordering` carries the one derived `Ord` witness in the prelude, which is what exercises the derivation's scheduler edges: they matter only within a unit, and a program compiled against `/std` is a unit of its own.
     let source = r#"
         use /std/{Str, Ordering, Ord, Show, print};
         let show(a: Ordering, b: Ordering) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
@@ -706,7 +706,7 @@ fn derived_hash_tags_the_constructor_and_frames_each_payload() {
     let source = r#"
         use /std/{Nat, Byte, Bytes, Str, Hash, print};
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
-        satisfy Hash(Tree);
+        satisfy Hash(Tree) { .. }
         let dots(b: Bytes) -> Str =
             Bytes/fold(b, "", (byte, acc) =>
                 Str/concat(Str/concat(acc, "."), Nat/to_str(Byte/to_nat(byte))));
@@ -728,7 +728,7 @@ fn a_derived_hash_encodes_a_struct_at_ordinal_zero() {
     let source = r#"
         use /std/{Nat, Byte, Bytes, Str, Hash, print};
         struct Point: pub Type { x: Nat, y: Nat }
-        satisfy Hash(Point);
+        satisfy Hash(Point) { .. }
         let dots(b: Bytes) -> Str =
             Bytes/fold(b, "", (byte, acc) =>
                 Str/concat(Str/concat(acc, "."), Nat/to_str(Byte/to_nat(byte))));
@@ -745,7 +745,7 @@ fn a_proof_payload_takes_no_part_in_an_encoding() {
         use /std/{Nat, Byte, Bytes, Str, Hash, print};
         use /std/Bool/{True, Holds};
         struct Small: pub Type { value: Nat, ok: Holds(Nat/lt(value, 10)) }
-        satisfy Hash(Small);
+        satisfy Hash(Small) { .. }
         let dots(b: Bytes) -> Str =
             Bytes/fold(b, "", (byte, acc) =>
                 Str/concat(Str/concat(acc, "."), Nat/to_str(Byte/to_nat(byte))));
@@ -761,7 +761,7 @@ fn a_hash_derivation_needs_its_payloads_own_witness() {
     let source = r#"
         use /std/{Hash};
         induct Box(A: Type): pub Type | wrap(A) end
-        satisfy (@A: Type) => Hash(Box(A));
+        satisfy (@A: Type) => Hash(Box(A)) { .. }
         /std/print("")
         "#;
 

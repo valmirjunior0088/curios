@@ -64,7 +64,9 @@ pub let get(@A: Type, m: Option(A), @ok: IsSome(m)) -> A =
     | none() => match ok end
     end;
 
-satisfy (@A: Type, use Eql(A)) => Eql(Option(A));
+satisfy (@A: Type, use Eql(A)) => Eql(Option(A)) {
+    ..
+}
 
 satisfy (@A: Type, use Show(A)) => Show(Option(A)) {
     show(m) =
@@ -74,7 +76,9 @@ satisfy (@A: Type, use Show(A)) => Show(Option(A)) {
         end,
 }
 
-satisfy (@A: Type, use Spell(A)) => Spell(Option(A));
+satisfy (@A: Type, use Spell(A)) => Spell(Option(A)) {
+    ..
+}
 
 satisfy Monad(Option) {
     pure = some,

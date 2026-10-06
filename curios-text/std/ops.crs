@@ -2,7 +2,7 @@ use /std/{Bool};
 
 --- Equality as a decision, which `==` and `!=` dispatch through.
 ---
---- A witness supplies both methods, since `!=` is not the negation of `eql`. A declared type derives its witness with `satisfy Eql(T);`.
+--- A witness supplies both methods, since `!=` is not the negation of `eql`. A declared type derives its witness with `satisfy Eql(T) { .. }`.
 ---
 --- Distinct from `Eq`, which is the proposition that two values are the same: a witness here answers, and owes no proof that its answer agrees.
 pub concept Eql(A: Type): pub Type {

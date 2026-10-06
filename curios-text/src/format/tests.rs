@@ -38,10 +38,11 @@ fn a_garbled_tail_is_refused_where_the_compiler_refuses_it() {
 }
 
 #[test]
-fn a_derived_witness_stays_a_declaration() {
-    // The formatter leaves the body-less form unexpanded, alone and inside a mixed group: `;` is the whole of what was written, so nothing is there to break across lines.
-    let source = "use /std/{Nat, Bool, Spell, Equal};\n\nsatisfy Spell(Nat);\n\nsatisfy Spell(Bool);\nand Equal(Bool) {\n    eql = eql,\n    neq = xor,\n}\n";
+fn a_derived_witness_keeps_its_dots_on_a_line_of_their_own() {
+    // The derived block is always broken, alone and inside a mixed group, as a block of one entry is: the dots sit one level in, and take no comma since they are no entry.
+    let source = "use /std/{Nat, Bool, Spell, Equal};\n\nsatisfy Spell(Nat) {\n    ..\n}\n\nsatisfy Spell(Bool) {\n    ..\n}\nand Equal(Bool) {\n    eql = eql,\n    neq = xor,\n}\n";
     assert_eq!(formatted(source), source);
+    assert_eq!(formatted(&source.replace("{\n    ..\n}", "{ .. }")), source);
 }
 
 /// A `foreign` declaration prints as it was written: every wire type, both list forms, a zero-argument constant and a `pub` one. The formatter's guard refuses output that does not reparse to the same program, so this pins the one thing it cannot see — a rendering that reparses to a different declaration and would rewrite every foreign row in a project.
@@ -476,7 +477,9 @@ fn documentation_comments_are_printed_where_they_were_written() {
         "}\n",
         "\n",
         "--- Structural.\n",
-        "satisfy Equal(Nat);\n",
+        "satisfy Equal(Nat) {\n",
+        "    ..\n",
+        "}\n",
         "and Equal(Bool) {\n",
         "    eql = eql,\n",
         "    neq = xor,\n",

@@ -8,9 +8,13 @@ pub struct Error: pub Type {
     committed: Bool,
 }
 
-satisfy Eql(Error);
+satisfy Eql(Error) {
+    ..
+}
 
-satisfy Spell(Error);
+satisfy Spell(Error) {
+    ..
+}
 
 --- A refusal at `offset`, open to an alternative.
 pub let declined(message: Str, offset: Nat) -> Error =

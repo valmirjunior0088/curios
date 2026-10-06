@@ -10,9 +10,13 @@ pub struct Request: pub Type {
     body: Bytes,
 }
 
-satisfy Eql(Request);
+satisfy Eql(Request) {
+    ..
+}
 
-satisfy Spell(Request);
+satisfy Spell(Request) {
+    ..
+}
 
 --- A `GET` of `url`.
 pub let get(url: Url) -> Request =

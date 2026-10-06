@@ -710,7 +710,7 @@ fn parse_witness_entry<'a>() -> Parser<'a, WitnessField> {
         .or(parse_witness_field())
 }
 
-// One witness: `Concept(args) { … }`, or `(params) => Concept(args) { … }` with a nonempty telescope. The separator makes the parameterized form's terminal concept application explicit; an empty telescope must use the bare form instead. The body is the brace block, or `;` in its place — the derived form, whose body the compiler writes — and either may follow either head.
+// One witness: `Concept(args) { … }`, or `(params) => Concept(args) { … }` with a nonempty telescope. The separator makes the parameterized form's terminal concept application explicit; an empty telescope must use the bare form instead. The brace block holds the entries, or `..` alone — the derived form, whose body the compiler writes — and either may follow either head. `..` is no entry: nothing stands beside it, and past it the block closes.
 fn parse_witness_member<'a>(doc: Option<Doc>) -> Parser<'a, TopWitness> {
     parse_literal("(")
         .and_keep(sep_by1_trailing(parse_func_sugar_param, || {
@@ -731,11 +731,14 @@ fn parse_witness_member<'a>(doc: Option<Doc>) -> Parser<'a, TopWitness> {
                 .and_drop(parse_literal(")"))
                 .or(pure(vec![]))
                 .and(
-                    parse_literal("{")
-                        .and_keep(sep_by0_trailing(parse_witness_entry, || parse_literal(",")))
-                        .and_drop(parse_literal("}"))
-                        .map(Some)
-                        .or(parse_literal(";").map(|()| None)),
+                    parse_literal("{").and_keep(
+                        parse_literal("..")
+                            .and_keep(commit(parse_literal("}")))
+                            .map(|()| None)
+                            .or(sep_by0_trailing(parse_witness_entry, || parse_literal(","))
+                                .and_drop(parse_literal("}"))
+                                .map(Some)),
+                    ),
                 ),
         ))
         .map(move |((params, concept), (args, body))| TopWitness {

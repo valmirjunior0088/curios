@@ -494,7 +494,7 @@ impl Term {
         })))
     }
 
-    /// The body of a body-less witness ([`Transient::Derive`]) — elaboration-transient, consumed by `elaborate_derive` against the concept application it is checked at.
+    /// The body of a derived witness ([`Transient::Derive`]) — elaboration-transient, consumed by `elaborate_derive` against the concept application it is checked at.
     pub fn derive() -> Self {
         Self::from(Subterm::Transient(Transient::Derive))
     }

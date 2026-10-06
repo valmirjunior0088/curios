@@ -144,7 +144,9 @@ satisfy Show(Dyadic) {
 }
 
 --- The representation as it is held, so a spelled value reads back to the same one.
-satisfy Spell(Dyadic);
+satisfy Spell(Dyadic) {
+    ..
+}
 
 --- The normalized representation's, so two representations of one number hash alike, as `eql` calls them one.
 satisfy Hash(Dyadic) {

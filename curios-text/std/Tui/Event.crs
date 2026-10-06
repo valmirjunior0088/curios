@@ -16,6 +16,10 @@ end
 
 pub use Event/*;
 
-satisfy (@E: Type, use Eql(E)) => Eql(Event(E));
+satisfy (@E: Type, use Eql(E)) => Eql(Event(E)) {
+    ..
+}
 
-satisfy (@E: Type, use Spell(E)) => Spell(Event(E));
+satisfy (@E: Type, use Spell(E)) => Spell(Event(E)) {
+    ..
+}

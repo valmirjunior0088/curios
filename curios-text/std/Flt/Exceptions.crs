@@ -59,8 +59,14 @@ pub let difference(a: Exceptions, b: Exceptions) -> Exceptions =
 pub let any(e: Exceptions) -> Bool =
     e.invalid || e.division_by_zero || e.overflow || e.underflow || e.inexact;
 
-satisfy Eql(Exceptions);
+satisfy Eql(Exceptions) {
+    ..
+}
 
-satisfy Spell(Exceptions);
+satisfy Spell(Exceptions) {
+    ..
+}
 
-satisfy Hash(Exceptions);
+satisfy Hash(Exceptions) {
+    ..
+}

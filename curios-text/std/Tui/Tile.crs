@@ -9,7 +9,9 @@ pub struct Tile: pub Type {
     style: Style,
 }
 
-satisfy Eql(Tile);
+satisfy Eql(Tile) {
+    ..
+}
 
 --- A space in the plain style.
 pub let blank: Tile =

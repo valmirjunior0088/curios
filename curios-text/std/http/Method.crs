@@ -13,9 +13,13 @@ end
 
 pub use Method/*;
 
-satisfy Eql(Method);
+satisfy Eql(Method) {
+    ..
+}
 
-satisfy Spell(Method);
+satisfy Spell(Method) {
+    ..
+}
 
 --- The method as the wire spells it.
 pub let to_str(m: Method) -> Str =

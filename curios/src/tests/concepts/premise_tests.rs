@@ -113,9 +113,9 @@ fn a_type_under_a_premise_derives() {
         | done()
         | link(K, V, Chain(K, V))
         end
-        satisfy (@K: Type, use Key(K), @V: Type, use Eql(K), use Eql(V)) => Eql(Slot(K, V));
-        satisfy (@K: Type, use Key(K), @V: Type, use Spell(K), use Spell(V)) => Spell(Slot(K, V));
-        satisfy (@K: Type, use Key(K), @V: Type, use Spell(K), use Spell(V)) => Spell(Chain(K, V));
+        satisfy (@K: Type, use Key(K), @V: Type, use Eql(K), use Eql(V)) => Eql(Slot(K, V)) { .. }
+        satisfy (@K: Type, use Key(K), @V: Type, use Spell(K), use Spell(V)) => Spell(Slot(K, V)) { .. }
+        satisfy (@K: Type, use Key(K), @V: Type, use Spell(K), use Spell(V)) => Spell(Chain(K, V)) { .. }
         let one: Slot(Nat, Str) = Slot { key = 1, value = "one" };
         let chain: Chain(Nat, Str) = Chain/link(1, "one", Chain/done());
         print(Str/concat(Bool/to_str(one == one), Str/concat(Spell/spell(one), Spell/spell(chain))))
