@@ -12,11 +12,14 @@ use {
     std::fmt,
 };
 
-/// `/std/Bool/False` as an elaborated program mentions it, by the name the compiler's own registry holds: what a module built by hand is put at, what its terms name `False` by, and the type the pipeline states for a program put as a proof.
+/// The name the compiler's own registry holds `/std/Bool/False` under: its type former's, and the key its registry entry stands at.
+pub fn false_name() -> Global {
+    Global::Authored(SYNTAX.proof.false_type.qualifier())
+}
+
+/// `/std/Bool/False` as an elaborated program mentions it, by [`false_name`]: what a module built by hand is put at, what its terms name `False` by, and the type the pipeline states for a program put as a proof.
 pub fn false_type() -> Term {
-    Term::free_var(&Free::from(&Global::Authored(
-        SYNTAX.proof.false_type.qualifier(),
-    )))
+    Term::free_var(&Free::from(&false_name()))
 }
 
 /// One of the two checkers.
