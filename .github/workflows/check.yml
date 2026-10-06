@@ -76,8 +76,8 @@ jobs:
         run: cargo xtask test --shard ${{ matrix.shard }}/${{ strategy.job-total }}
 
   # The native host's macOS branches — the serial speed ioctl, the modem-line opcodes, the device listing — are compiled by no Linux job, and the release workflow would be the first to meet them. The runtime's tests need neither the launcher nor Binaryen.
-  runtime-macos:
-    name: Runtime tests (macOS)
+  tests-curios-runtime-macos:
+    name: Tests (`curios-runtime`) (macOS)
     runs-on: macos-14
     timeout-minutes: 60
     steps:
