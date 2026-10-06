@@ -1,4 +1,4 @@
-//! A proof gives a program no behaviour: an erased proof is never computed, wherever it is bound, while a kept value still is — and a program pays for nothing it does not name.
+//! Erasure removes proofs; optimization removes unused total values, but preserves calls that may diverge — and a program pays for nothing it does not name.
 
 use crate::tests::{cont_optm, run};
 
@@ -16,7 +16,7 @@ fn proof_bound_as_a_statement_does_not_run_its_certificate() {
     assert_eq!(run(source), b"ok");
 }
 
-// A proof bound by a local `let` is a kept slot holding nothing: the name is bound and the proof is not computed. The recursion that builds it would otherwise survive to the optimized program as a loop whose result is dropped, since nothing below Core knows a call is total.
+// A proof bound by a local `let` is a kept slot holding nothing: the name is bound and the proof is not computed. Its certificate contributes no runtime recursion.
 #[test]
 fn a_let_bound_proof_leaves_no_computation_behind() {
     let source = r#"
@@ -37,7 +37,7 @@ fn a_let_bound_proof_leaves_no_computation_behind() {
     );
 }
 
-// A top-level item that is not a function is a value computed at initialization, and a proof there is a kept slot like a local one. Pruning drops an unused item whose evaluation the erased program calls pure; a lemma that recurses is one it would have to keep, since a recursive call may diverge for all it knows, and computed it would run — here three hundred steps — before the program's first instruction.
+// A proof bound as a top-level item contributes no initialization work. Its certificate is erased before the program begins, wherever the proof is bound.
 #[test]
 fn a_top_level_proof_does_not_run_before_the_program() {
     let source = r#"
@@ -56,9 +56,9 @@ fn a_top_level_proof_does_not_run_before_the_program() {
     assert_eq!(run(source), b"ok");
 }
 
-// The control: a binding that is a value is still computed where it is written, used or not. The same shape of recursion as `le/trans`, bound as a `Nat` and never read, survives to the optimized program, since nothing below Core knows the call is total.
+// The termination verdict reaches the backend through `Function::droppable`: a total call with no observable effects and an unread result may be omitted even when its result is a value rather than a proof.
 #[test]
-fn a_let_bound_value_is_still_computed() {
+fn an_unused_total_value_leaves_no_computation_behind() {
     let source = r#"
         use /std/{Nat, List, Io, proc};
         let count(a: Nat, b: Nat) -> Nat =
@@ -70,8 +70,27 @@ fn a_let_bound_value_is_still_computed() {
         "#;
     let optimized = cont_optm(source);
     assert!(
+        !optimized.contains("count"),
+        "the unused total value's recursion reached the optimized program:\n{optimized}"
+    );
+}
+
+// An unread result alone does not license omission: retaining a call that may diverge preserves whether the program reaches its exit.
+#[test]
+fn an_unused_partial_value_is_still_computed() {
+    let source = r#"
+        use /std/{Nat, List, Io, proc};
+        let count(a: Nat, b: Nat) -> Nat =
+            match a | 0 => b | _ + 1 => count(a, b + 1) end;
+        Io/bind(proc/args, (args) =>
+            let n = List/len(args);
+            let _unused = count(n, n);
+            proc/exit(Nat/to_byte(n % 256)))
+        "#;
+    let optimized = cont_optm(source);
+    assert!(
         optimized.contains("count"),
-        "the value's recursion was dropped from the optimized program:\n{optimized}"
+        "the partial value's recursion was dropped from the optimized program:\n{optimized}"
     );
 }
 
