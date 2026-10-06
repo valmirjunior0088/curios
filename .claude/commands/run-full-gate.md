@@ -3,7 +3,7 @@ description: Run the hand-off gate — every step in the background as soon as w
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash(cargo:*), Bash(git:*), Bash(npm:*), Bash(rg:*), Bash(cp:*)
 ---
 
-The hand-off gate for code. Why the gate holds these steps and no others is `documentation/design/every-gate-step-catches-what-no-other-step-does.md`. The base it runs against is the one the user names, and `origin/main` otherwise.
+The hand-off gate for code. Why the gate holds these steps and no others is `documentation/design/every-gate-step-catches-what-no-other-step-does.md`. The base it runs against is the one the user names, and local `main` otherwise — where the effort is committed on `main` itself, the commit it started from. `origin/main` is never the base: it stands where the last push left it.
 
 ## What it needs
 
