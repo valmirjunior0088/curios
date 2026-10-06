@@ -240,7 +240,7 @@ pub(crate) fn specialize_scc_calls(module: &mut Module, budget: &mut usize) -> b
     }
     false
 }
-/// SpecConstr-style call-pattern specialization. When a known-callee call passes a statically-known tagged tuple into a parameter the callee deconstructs, clone the callee with that constructor rebuilt at its entry so the existing aggregate-projection and known-switch simplifications collapse the deconstruction on a later iteration. The constructor's dynamic fields are threaded as fresh parameters (a worker/wrapper rebuild) and the clone's recursive self-calls fall back to the general function, so it peels the one matched level rather than assuming the recursion stays in pattern. Every call sharing the `(callee, index, tag, arity)` pattern repoints to the single clone, so equivalent sites specialize once. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
+/// SpecConstr-style call-pattern specialization. When a known-callee call passes a statically-known tagged tuple into a parameter the callee deconstructs, clone the callee with that constructor rebuilt at its entry so the existing aggregate-projection and known-switch simplifications collapse the deconstruction on a later iteration. The constructor's dynamic fields are threaded as fresh parameters (a worker/wrapper rebuild) and the clone's recursive self-calls fall back to the general function, so it peels the one matched level rather than assuming the recursion stays in pattern. Every call sharing the `(callee, index, tag, arity, row)` pattern repoints to the single clone, so equivalent sites specialize once. The row identity distinguishes nominal constructors of the same width and tag from each other and from structural tuples, since the clone rebuilds the selected constructor. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
 pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) -> bool {
     if *budget == 0 {
         return false;
@@ -369,10 +369,10 @@ pub(crate) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) 
         let Some(Atom::Value(value)) = args.get(index) else {
             continue;
         };
-        let Some((site_tag, site_fields, _)) = constructors.get(value) else {
+        let Some((site_tag, site_fields, site_row)) = constructors.get(value) else {
             continue;
         };
-        if *site_tag != tag || site_fields.len() != arity {
+        if *site_tag != tag || site_fields.len() != arity || *site_row != row {
             continue;
         }
         let spliced = site_fields[1..].to_vec();
@@ -468,7 +468,7 @@ pub(crate) fn clone_scc(
 ) -> BTreeMap<FunctionId, FunctionId> {
     copy_bodies(module, members, &BTreeSet::new()).functions
 }
-/// SpecConstr for continuation joins — the join-point analogue of [`specialize_call_patterns`]. When an edge jumps a statically-known tagged tuple into a multi-transfer continuation that deconstructs it, clone the continuation with the constructor rebuilt at its entry and its dynamic fields threaded as parameters, so the existing aggregate-projection and known-switch simplifications collapse the deconstruction — and usually the allocation and the branch — on a later iteration. Every edge sharing the `(target, index, tag, arity)` pattern repoints to the single clone. Single-transfer joins are excluded: `inline_single_use_continuations` already collapses them outright. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
+/// SpecConstr for continuation joins — the join-point analogue of [`specialize_call_patterns`]. When an edge jumps a statically-known tagged tuple into a multi-transfer continuation that deconstructs it, clone the continuation with the constructor rebuilt at its entry and its dynamic fields threaded as parameters, so the existing aggregate-projection and known-switch simplifications collapse the deconstruction — and usually the allocation and the branch — on a later iteration. Every edge sharing the `(target, index, tag, arity, row)` pattern repoints to the single clone. The row identity matches the constructor the clone rebuilds, as for calls. Single-transfer joins are excluded: `inline_single_use_continuations` already collapses them outright. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
 pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut usize) -> bool {
     if *budget == 0 {
         return false;
@@ -567,10 +567,10 @@ pub(crate) fn specialize_jump_patterns(module: &mut Module, budget: &mut usize) 
         let Some(Atom::Value(value)) = edge.args.get(index) else {
             return false;
         };
-        let Some((site_tag, site_fields, _)) = constructors.get(value) else {
+        let Some((site_tag, site_fields, site_row)) = constructors.get(value) else {
             return false;
         };
-        if *site_tag != tag || site_fields.len() != arity {
+        if *site_tag != tag || site_fields.len() != arity || *site_row != row {
             return false;
         }
         let spliced = site_fields[1..].to_vec();

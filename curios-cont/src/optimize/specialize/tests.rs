@@ -4,8 +4,9 @@ use {
     super::{specialize_call_patterns, specialize_jump_patterns, specialize_scc_calls},
     crate::{
         Atom, BRANCH_CLONE_LIMIT, BRANCH_SPECIALIZATION_GROWTH_LIMIT, Callee, Continuation, Edge,
-        Function, Intrinsic, Literal, Module, Node, SCC_CLONE_LIMIT, SCC_CLONE_NODE_LIMIT,
-        ValueExpr, forward_aggregate_projections, function_nodes, known_values, simplify_nodes,
+        Function, Intrinsic, Literal, Module, Node, Row, RowId, SCC_CLONE_LIMIT,
+        SCC_CLONE_NODE_LIMIT, Slot, ValueExpr, forward_aggregate_projections, function_nodes,
+        known_values, simplify_nodes,
         test_support::{
             PolymorphicLoop, has_switch, known_callee, polymorphic_loop, tagged_consumer,
             tagged_join,
@@ -493,4 +494,145 @@ fn jump_specialization_respects_its_budget() {
     let (mut module, _, _, _, _) = tagged_join();
     let mut budget = 0;
     assert!(!specialize_jump_patterns(&mut module, &mut budget));
+}
+
+/// Keep tag and width equal while varying only the constructor vocabulary. The projection belongs to the selected pattern; the tests inspect routing before the general consumer's other paths simplify.
+fn set_constructor_rows(module: &mut Module, rows: &[Option<RowId>]) {
+    let ids: Vec<_> = module.live_nodes().map(|(id, _)| id).collect();
+    let mut constructors = rows.iter();
+    for id in ids {
+        match module.node_mut(id).unwrap() {
+            Node::LetValue {
+                value: ValueExpr::Tuple(fields),
+                ..
+            } => {
+                let row = constructors
+                    .next()
+                    .expect("each fixture constructor has a vocabulary");
+                *fields = vec![
+                    Atom::Literal(Literal::Nat(Natural::from(0u32))),
+                    fields.get(1).cloned().unwrap_or(Atom::Filler),
+                ];
+                if let Some(row) = row {
+                    let fields = std::mem::take(fields);
+                    if let Node::LetValue { value, .. } = module.node_mut(id).unwrap() {
+                        *value = ValueExpr::Row(*row, fields);
+                    }
+                }
+            }
+            Node::LetIntrinsic {
+                op: Intrinsic::TupleGet(index),
+                ..
+            } => {
+                if let Some(row) = rows[0] {
+                    let index = *index;
+                    if let Node::LetIntrinsic { op, .. } = module.node_mut(id).unwrap() {
+                        *op = Intrinsic::RowGet(row, index);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    assert!(constructors.next().is_none());
+    module.verify().unwrap();
+}
+
+#[test]
+fn call_patterns_share_clones_only_with_the_same_constructor_vocabulary() {
+    for nominal in [false, true] {
+        let (mut module, calls, consume) = tagged_consumer(0, &[0, 0, 0, 0]);
+        let first = module.add_row(Row {
+            debug_name: Some("first".into()),
+            slots: vec![Slot::Tag, Slot::Opaque],
+        });
+        let second = module.add_row(Row {
+            debug_name: Some("second".into()),
+            slots: vec![Slot::Tag, Slot::Opaque],
+        });
+        let selected = nominal.then_some(first);
+        let other = if nominal { None } else { Some(first) };
+        set_constructor_rows(&mut module, &[selected, selected, Some(second), other]);
+
+        let mut budget = BRANCH_CLONE_LIMIT;
+        assert!(specialize_call_patterns(&mut module, &mut budget));
+        module.verify().unwrap();
+        let clone = known_callee(&module, calls[0]);
+        assert_ne!(clone, consume);
+        assert_eq!(
+            known_callee(&module, calls[1]),
+            clone,
+            "the matching vocabulary reuses the clone"
+        );
+        for &call in &calls[2..] {
+            assert_eq!(
+                known_callee(&module, call),
+                consume,
+                "a different vocabulary keeps the general function"
+            );
+        }
+        assert_eq!(budget, BRANCH_CLONE_LIMIT - 1);
+    }
+}
+
+#[test]
+fn jump_patterns_share_clones_only_with_the_same_constructor_vocabulary() {
+    for nominal in [false, true] {
+        for other_nominal in [false, true] {
+            if !nominal && !other_nominal {
+                continue;
+            }
+            let (mut module, join, some_jump, none_jump, x) = tagged_join();
+            let first = module.add_row(Row {
+                debug_name: Some("first".into()),
+                slots: vec![Slot::Tag, Slot::Opaque],
+            });
+            let second = module.add_row(Row {
+                debug_name: Some("second".into()),
+                slots: vec![Slot::Tag, Slot::Opaque],
+            });
+            set_constructor_rows(
+                &mut module,
+                &[nominal.then_some(first), other_nominal.then_some(second)],
+            );
+            // Both switch edges carry the same constructor, while the other predecessor carries a different vocabulary with the same tag and width.
+            let Some(Node::ApplyCont(edge)) = module.node(some_jump) else {
+                panic!("the predecessor is a jump")
+            };
+            let edge = edge.clone();
+            *module.node_mut(some_jump).unwrap() = Node::Switch {
+                scrutinee: Atom::Value(x),
+                cases: BTreeMap::from([(0, edge.clone())]),
+                default: Some(edge),
+            };
+            module.verify().unwrap();
+            let mut budget = BRANCH_CLONE_LIMIT;
+            assert!(specialize_jump_patterns(&mut module, &mut budget));
+            module.verify().unwrap();
+            let Some(Node::Switch {
+                cases,
+                default: Some(default),
+                ..
+            }) = module.node(some_jump)
+            else {
+                panic!("the predecessor stays a switch")
+            };
+            let edge = &cases[&0];
+            assert_ne!(edge.target, join);
+            assert_eq!(
+                default.target, edge.target,
+                "equivalent switch edges reuse the clone"
+            );
+            assert_eq!(edge.args, vec![Atom::Value(x)]);
+            let Some(Node::ApplyCont(other)) = module.node(none_jump) else {
+                panic!("the other predecessor stays a jump")
+            };
+            assert_eq!(
+                other.target, join,
+                "a different vocabulary keeps the general join"
+            );
+            assert_eq!(other.args.len(), 1);
+            assert_eq!(budget, BRANCH_CLONE_LIMIT - 1);
+        }
+    }
 }
