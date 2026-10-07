@@ -2,6 +2,8 @@
 //!
 //! Erasure walks terms that are elaborated, zonked and projected out of their universes, and asks of them what the elaborator's engine answers: a type's head, its sort, what a name is assumed at, which equations an arm stands under. It elaborates nothing, so nothing that exists because a unit is being elaborated is its to reach — no attempt's metavariables, no unfinished declaration, no use site's module. [`Retyping`] is how that is held: it owns a context it made, whose elaboration half is the empty one a fresh context has, and it offers the binder supply, the frame bracket, the lookups, the budget and the engine's entries a walk over finished terms needs, each by name, and nothing else of the context.
 //!
+//! **Its reduction asks conversion, as the reduction that accepted the term did.** A type's head may show only where a stuck fold's atoms are classed or an arm's equation is met at another spelling, and erasure needs the head of every callee, record and scrutinee it eliminates. A reader whose reduction asked nothing (`Context::plainly`) would meet a type both checkers read and have no head to read off it.
+//!
 //! It lives in the context's module tree because its frame bracket hands the closure the reader itself: that takes the two halves of `Context::with_frame`, which no module outside the tree can call apart, so the bracket stays the only way into a frame.
 
 use {
