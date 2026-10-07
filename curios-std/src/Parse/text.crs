@@ -81,6 +81,20 @@ pub let take_while(pred: (Char) -> Bool) -> Parse(Str, Str) =
                 Str/between(text(at), position(at), taken.past, @taken.reach))),
     };
 
+--- Everything before the next occurrence of `lit`, or to the end of the input where it does not occur, as the piece of the input it is. `lit` itself is left unconsumed.
+pub let until(lit: Str) -> Parse(Str, Str) =
+    Of {
+        run(_, at) =
+            let rest = Str/after(text(at), position(at));
+            match Str/index_of_substr(rest, lit)
+            | some(found) =>
+                Result/success((
+                    back(at, Str/At/of_after(text(at), position(at), found)),
+                    Str/before(rest, found)))
+            | none() => Result/success((back(at, Str/At/finish(text(at))), rest))
+            end,
+    };
+
 --- The next character without consuming it, or `none` at the end of the input.
 pub let peek: Parse(Str, Option(Char)) =
     Of {

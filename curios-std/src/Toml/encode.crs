@@ -1,13 +1,9 @@
-use /std/{Nat, Int, Flt, Bool, Bytes, Char, Str, List, Map, Option, Toml};
+use /std/{Nat, Int, Flt, Bool, Char, Str, List, Map, Option, Toml};
 use /std/Toml/{Date, Time};
-use /std/Toml/scan/{is_bare_byte};
+use /std/Toml/scan/{is_bare_char};
 
 let bare_ok(s: Str) -> Bool =
-    let bs = Str/to_bytes(s);
-    match Bytes/len(bs) == 0
-    | true => false
-    | false => Bytes/fold(bs, true, (b, ok) => ok && is_bare_byte(b))
-    end;
+    Bool/not(Str/is_empty(s)) && Str/fold(s, true, (c, ok) => ok && is_bare_char(c));
 
 --- What a character is written as inside a basic string, when it is not written as itself: the quote, the backslash, the control characters and DEL, which TOML escapes.
 let escaped(c: Char) -> Option(Str) =

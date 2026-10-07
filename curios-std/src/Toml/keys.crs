@@ -1,27 +1,20 @@
-use /std/{Bytes, Str, List, Parse};
-use /std/Toml/scan/{is_bare_byte, ws};
+use /std/{Str, List, Parse};
+use /std/Toml/scan/{is_bare_char, ws};
 use /std/Toml/strings/{str_basic, str_literal};
 
-let key_bare: Parse(Bytes, Str) =
-    let chunk = Parse/bytes/take_while(is_bare_byte)!;
-    match Bytes/len(chunk) == 0
-    | true => Parse/fail("expected key")
-    | false =>
-        match Str/of_bytes(chunk)
-        | success(s) => Parse/pure(s)
-        | failure(_) => Parse/fail("expected key")
-        end
-    end;
+let key_bare: Parse(Str, Str) =
+    let chunk = Parse/text/take_while(is_bare_char)!;
+    match Str/is_empty(chunk) | true => Parse/fail("expected key") | false => Parse/pure(chunk) end;
 
 --- One key: bare, or quoted as a basic or a literal string.
-pub let key_part: Parse(Bytes, Str) =
+pub let key_part: Parse(Str, Str) =
     Parse/or(key_bare, Parse/or(str_basic, str_literal));
 
-let dot: Parse(Bytes, {}) =
+let dot: Parse(Str, {}) =
     let _ = ws!;
-    let _ = Parse/bytes/expect('.')!;
+    let _ = Parse/text/expect('.')!;
     ws;
 
 --- A dotted key as its parts, in the order they were written.
-pub let key_dotted: Parse(Bytes, List(Str)) =
+pub let key_dotted: Parse(Str, List(Str)) =
     Parse/sep_by1(key_part, dot);

@@ -112,3 +112,20 @@ test or_reports_the_first_refusal_on_a_tie =
             Parse/run(Parse/or(Parse/text/literal("a"), Parse/text/literal("b")), "x"),
             (_) => "ok"),
         "expected \"a\" at byte 0");
+
+let cut(lit: Str) -> Parse(Str, {Str, Str}) =
+    let before = Parse/text/until(lit)!;
+    let rest = Parse/text/rest!;
+    Parse/pure((before, rest));
+
+-- `until` answers the piece of the input before a literal's next occurrence and leaves the literal unread, with multi-byte characters on either side of it. Where the literal does not occur it answers all that is left, and an occurrence where the parser stands is an empty piece.
+test until_reads_the_piece_before_a_literal =
+    let read(lit: Str, input: Str) -> Str =
+        shown(Parse/run(cut(lit), input), ((before, rest)) => Str/flatten([before, "|", rest]));
+    Test/equal(
+        Str/join(" / ", [
+            read("-->", "é → ü-->𝄞"),
+            read("-->", "no end -- > here"),
+            read("→", "→x"),
+            read("-->", "")]),
+        "é → ü|-->𝄞 / no end -- > here| / |→x / |");

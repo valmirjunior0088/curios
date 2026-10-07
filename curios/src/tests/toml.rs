@@ -78,6 +78,10 @@ const SCALARS: &[Row] = &[
 /// Every string form and escape, re-encoded to the basic-string spelling.
 const STRINGS: &[Row] = &[
     Row {
+        expr: r##"canon("s = \"é→𝄞\"\nl = 'ü–𝄞'\n\"ké\" = 1 # ñ\n")"##,
+        expected: "\"ké\" = 1\nl = \"ü–𝄞\"\ns = \"é→𝄞\"\n",
+    },
+    Row {
         expr: r##"canon("e = \"a\tb\\u0041\\U0001F600\"")"##,
         expected: "e = \"a\\tbA😀\"\n",
     },

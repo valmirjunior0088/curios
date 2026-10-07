@@ -95,3 +95,16 @@ test queries_walk_the_tree =
         Test/equal(Html/text_of(tree), "firstsecond"),
         Test/equal(Html/title_of(page), Option/some("A & B")),
         Test/equal(Html/title_of(tree), Option/none())]);
+
+-- Text is read as the text it is: characters of two, three and four bytes stand in a text run, an attribute value, a comment and a raw-text element as they were written, and what `render` writes of them reads back.
+test multi_byte_text_reads_as_written =
+    let tree =
+        Html/fragment([
+            Html/element("p", [Attr/attr("title", "é→𝄞")], [Html/text("é → 𝄞")]),
+            Html/comment("ü–𝄞"),
+            Html/element("script", [], [Html/text("let s = \"é→𝄞\";")])]);
+    Test/all([
+        Test/equal(
+            Html/of_str("<p title=\"é→𝄞\">é → 𝄞</p><!--ü–𝄞--><script>let s = \"é→𝄞\";</script>"),
+            Result/success(tree)),
+        Test/equal(Html/of_str(Html/render(tree)), Result/success(tree))]);

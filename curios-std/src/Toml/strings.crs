@@ -1,20 +1,20 @@
-use /std/{Nat, Bool, Byte, Bytes, Char, Str, Option, Parse};
+use /std/{Nat, Bool, Char, Str, Option, Parse};
 use /std/Toml/scan/{hex_val};
 
-let hex_digit: Parse(Bytes, Nat) =
-    let next = Parse/bytes/peek!;
+let hex_digit: Parse(Str, Nat) =
+    let next = Parse/text/peek!;
     match next
     | none() => Parse/fail("unterminated escape")
-    | some(b) =>
-        match hex_val(Byte/to_nat(b))
+    | some(c) =>
+        match hex_val(Char/to_nat(c))
         | some(v) =>
-            let _ = Parse/bytes/byte!;
+            let _ = Parse/text/char!;
             Parse/pure(v)
         | none() => Parse/fail("invalid hex digit in escape")
         end
     end;
 
-let hex_digits(count: Nat, acc: Nat) -> Parse(Bytes, Nat) =
+let hex_digits(count: Nat, acc: Nat) -> Parse(Str, Nat) =
     match count
     | 0 => Parse/pure(acc)
     | pred + 1 =>
@@ -22,112 +22,107 @@ let hex_digits(count: Nat, acc: Nat) -> Parse(Bytes, Nat) =
         hex_digits(pred, acc * 0x10 + v)
     end;
 
-let scalar_utf8(code: Nat) -> Parse(Bytes, Bytes) =
+--- The character `code` is, as the text it is, declining a value that is no Unicode scalar.
+let scalar(code: Nat) -> Parse(Str, Str) =
     match Char/of_nat(code)
-    | some(c) => Parse/pure(Char/to_utf8(c))
+    | some(c) => Parse/pure(Str/of_char(c))
     | none() => Parse/fail("invalid Unicode scalar in escape")
     end;
 
-let escape: Parse(Bytes, Bytes) =
-    let next = Parse/bytes/peek!;
+--- What follows a backslash: the character the escape names.
+let escape: Parse(Str, Str) =
+    let next = Parse/text/peek!;
     match next
     | none() => Parse/fail("unterminated escape")
-    | some(b) =>
-        let _ = Parse/bytes/byte!;
-        match Byte/to_nat(b)
-        | 'b' => Parse/pure(x['\u{8}'])
-        | 't' => Parse/pure(x['\t'])
-        | 'n' => Parse/pure(x['\n'])
-        | 'f' => Parse/pure(x['\u{C}'])
-        | 'r' => Parse/pure(x['\r'])
-        | '"' => Parse/pure(x['"'])
-        | '\\' => Parse/pure(x['\\'])
+    | some(c) =>
+        let _ = Parse/text/char!;
+        match Char/to_nat(c)
+        | 'b' => Parse/pure("\u{8}")
+        | 't' => Parse/pure("\t")
+        | 'n' => Parse/pure("\n")
+        | 'f' => Parse/pure("\u{C}")
+        | 'r' => Parse/pure("\r")
+        | '"' => Parse/pure("\"")
+        | '\\' => Parse/pure("\\")
         | 'u' =>
             let code = hex_digits(4, 0)!;
-            scalar_utf8(code)
+            scalar(code)
         | 'U' =>
             let code = hex_digits(8, 0)!;
-            scalar_utf8(code)
+            scalar(code)
         | _ => Parse/fail("unknown escape")
         end
     end;
 
-let crlf: Parse(Bytes, Option({Byte, Byte})) =
-    Parse/optional(Parse/and(Parse/bytes/expect('\r'), Parse/bytes/expect('\n')));
+let crlf: Parse(Str, Option({Char, Char})) =
+    Parse/optional(Parse/and(Parse/text/expect('\r'), Parse/text/expect('\n')));
 
-let basic_body(acc: Bytes) -> Parse(Bytes, Bytes) =
-    let next = Parse/bytes/peek!;
+--- Whether `c` stands in a string as written whatever delimits it: a tab, or any character that is no control character.
+let is_text(c: Char) -> Bool =
+    let n = Char/to_nat(c);
+    n == '\t' || n >= 0x20 && n != 0x7F;
+
+--- A basic string's body from where it stands: the runs of the input between its escapes and the character each escape names, joined after `acc`, up to the closing quote.
+let basic_body(acc: Str) -> Parse(Str, Str) =
+    let run = Parse/text/take_while((c) => is_text(c) && c != '"' && c != '\\')!;
+    let here = Str/concat(acc, run);
+    let next = Parse/text/peek!;
     match next
     | none() => Parse/fail("unterminated string")
-    | some(b) =>
-        let n = Byte/to_nat(b);
+    | some(c) =>
         choose
-        | n == '"' =>
-            let _ = Parse/bytes/byte!;
-            Parse/pure(acc)
-        | n == '\\' =>
-            let _ = Parse/bytes/byte!;
-            let chunk = escape!;
-            basic_body(x[..acc, ..chunk])
-        | n == '\t' =>
-            let _ = Parse/bytes/byte!;
-            basic_body(x[..acc, b])
-        | n < 0x20 => Parse/fail("control character in string")
-        | n == 0x7F => Parse/fail("control character in string")
-        | _ =>
-            let _ = Parse/bytes/byte!;
-            basic_body(x[..acc, b])
+        | c == '"' =>
+            let _ = Parse/text/char!;
+            Parse/pure(here)
+        | c == '\\' =>
+            let _ = Parse/text/char!;
+            let piece = escape!;
+            basic_body(Str/concat(here, piece))
+        | _ => Parse/fail("control character in string")
         end
     end;
 
-let basic_str_scan: Parse(Bytes, Bytes) =
-    let _ = Parse/label(Parse/bytes/expect('"'), "expected string")!;
-    basic_body(x[]);
+let basic_str_scan: Parse(Str, Str) =
+    let _ = Parse/label(Parse/text/expect('"'), "expected string")!;
+    basic_body("");
 
-let literal_body(acc: Bytes) -> Parse(Bytes, Bytes) =
-    let next = Parse/bytes/peek!;
+--- A literal string's body: the piece of the input up to the closing quote, taken as written.
+let literal_body: Parse(Str, Str) =
+    let run = Parse/text/take_while((c) => is_text(c) && c != '\'')!;
+    let next = Parse/text/peek!;
     match next
     | none() => Parse/fail("unterminated string")
-    | some(b) =>
-        let n = Byte/to_nat(b);
-        choose
-        | n == '\'' =>
-            let _ = Parse/bytes/byte!;
-            Parse/pure(acc)
-        | n == '\t' =>
-            let _ = Parse/bytes/byte!;
-            literal_body(x[..acc, b])
-        | n < 0x20 => Parse/fail("control character in string")
-        | n == 0x7F => Parse/fail("control character in string")
-        | _ =>
-            let _ = Parse/bytes/byte!;
-            literal_body(x[..acc, b])
+    | some(c) =>
+        match c == '\''
+        | true =>
+            let _ = Parse/text/char!;
+            Parse/pure(run)
+        | false => Parse/fail("control character in string")
         end
     end;
 
-let literal_str_scan: Parse(Bytes, Bytes) =
-    let _ = Parse/label(Parse/bytes/expect('\''), "expected string")!;
-    literal_body(x[]);
+let literal_str_scan: Parse(Str, Str) =
+    let _ = Parse/label(Parse/text/expect('\''), "expected string")!;
+    literal_body;
 
-let trim_run(seen_nl: Bool) -> Parse(Bytes, {}) =
-    let stop: Parse(Bytes, {}) =
+let trim_run(seen_nl: Bool) -> Parse(Str, {}) =
+    let stop: Parse(Str, {}) =
         match seen_nl | true => Parse/pure(()) | false => Parse/fail("invalid escape") end;
-    let next = Parse/bytes/peek!;
+    let next = Parse/text/peek!;
     match next
     | none() => stop
-    | some(b) =>
-        let n = Byte/to_nat(b);
+    | some(c) =>
         choose
-        | n == ' ' =>
-            let _ = Parse/bytes/byte!;
+        | c == ' ' =>
+            let _ = Parse/text/char!;
             trim_run(seen_nl)
-        | n == '\t' =>
-            let _ = Parse/bytes/byte!;
+        | c == '\t' =>
+            let _ = Parse/text/char!;
             trim_run(seen_nl)
-        | n == '\n' =>
-            let _ = Parse/bytes/byte!;
+        | c == '\n' =>
+            let _ = Parse/text/char!;
             trim_run(true)
-        | n == '\r' =>
+        | c == '\r' =>
             let pair = crlf!;
             match pair
             | some(_) => trim_run(true)
@@ -137,8 +132,8 @@ let trim_run(seen_nl: Bool) -> Parse(Bytes, {}) =
         end
     end;
 
-let skip_opening_newline: Parse(Bytes, {}) =
-    let lf = Parse/optional(Parse/bytes/expect('\n'))!;
+let skip_opening_newline: Parse(Str, {}) =
+    let lf = Parse/optional(Parse/text/expect('\n'))!;
     match lf
     | some(_) => Parse/pure(())
     | none() =>
@@ -146,120 +141,98 @@ let skip_opening_newline: Parse(Bytes, {}) =
         Parse/pure(())
     end;
 
-let ml_basic_body(acc: Bytes) -> Parse(Bytes, Bytes) =
-    let next = Parse/bytes/peek!;
+--- A run of `quote` inside a multi-line string, read whole: fewer than three are text and the body goes on, three to five close the string with what is past the third kept as text, and six or more are refused. The text so far, and whether the string is closed.
+let quote_run(quote: Char, acc: Str) -> Parse(Str, {Str, Bool}) =
+    let run = Parse/text/take_while((c) => c == quote)!;
+    let q = Str/len(run);
+    let mark = Str/of_char(quote);
+    choose
+    | q >= 6 => Parse/fail("too many quotes")
+    | q >= 3 => Parse/pure((Str/concat(acc, Str/repeat(mark, q - 3)), true))
+    | _ => Parse/pure((Str/concat(acc, run), false))
+    end;
+
+let ml_basic_body(acc: Str) -> Parse(Str, Str) =
+    let run = Parse/text/take_while((c) => is_text(c) && c != '"' && c != '\\')!;
+    let here = Str/concat(acc, run);
+    let next = Parse/text/peek!;
     match next
     | none() => Parse/fail("unterminated string")
-    | some(b) =>
-        let n = Byte/to_nat(b);
+    | some(c) =>
         choose
-        | n == '"' =>
-            let run = Parse/bytes/take_while((c) => Byte/to_nat(c) == '"')!;
-            let q = Bytes/len(run);
-            choose
-            | q >= 6 => Parse/fail("too many quotes")
-            | q >= 3 => Parse/pure(x[..acc, ..Bytes/replicate(q - 3, b)])
-            | _ => ml_basic_body(x[..acc, ..Bytes/replicate(q, b)])
-            end
-        | n == '\\' =>
-            let _ = Parse/bytes/byte!;
-            let folded = Parse/bytes/peek!;
+        | c == '"' =>
+            let (kept, closed) = quote_run('"', here)!;
+            match closed | true => Parse/pure(kept) | false => ml_basic_body(kept) end
+        | c == '\\' =>
+            let _ = Parse/text/char!;
+            let folded = Parse/text/peek!;
             match folded
             | some(w) =>
-                let m = Byte/to_nat(w);
-                match m == ' ' || m == '\t' || m == '\n' || m == '\r'
+                match w == ' ' || w == '\t' || w == '\n' || w == '\r'
                 | true =>
                     let _ = trim_run(false)!;
-                    ml_basic_body(acc)
+                    ml_basic_body(here)
                 | false =>
-                    let chunk = escape!;
-                    ml_basic_body(x[..acc, ..chunk])
+                    let piece = escape!;
+                    ml_basic_body(Str/concat(here, piece))
                 end
             | none() =>
-                let chunk = escape!;
-                ml_basic_body(x[..acc, ..chunk])
+                let piece = escape!;
+                ml_basic_body(Str/concat(here, piece))
             end
-        | n == '\n' =>
-            let _ = Parse/bytes/byte!;
-            ml_basic_body(x[..acc, b])
-        | n == '\r' =>
+        | c == '\n' =>
+            let _ = Parse/text/char!;
+            ml_basic_body(Str/concat(here, "\n"))
+        | c == '\r' =>
             let pair = crlf!;
             match pair
-            | some(_) => ml_basic_body(x[..acc, '\r', '\n'])
+            | some(_) => ml_basic_body(Str/concat(here, "\r\n"))
             | none() => Parse/fail("bare carriage return")
             end
-        | n == '\t' =>
-            let _ = Parse/bytes/byte!;
-            ml_basic_body(x[..acc, b])
-        | n < 0x20 => Parse/fail("control character in string")
-        | n == 0x7F => Parse/fail("control character in string")
-        | _ =>
-            let _ = Parse/bytes/byte!;
-            ml_basic_body(x[..acc, b])
+        | _ => Parse/fail("control character in string")
         end
     end;
 
-let ml_literal_body(acc: Bytes) -> Parse(Bytes, Bytes) =
-    let next = Parse/bytes/peek!;
+let ml_literal_body(acc: Str) -> Parse(Str, Str) =
+    let run = Parse/text/take_while((c) => is_text(c) && c != '\'')!;
+    let here = Str/concat(acc, run);
+    let next = Parse/text/peek!;
     match next
     | none() => Parse/fail("unterminated string")
-    | some(b) =>
-        let n = Byte/to_nat(b);
+    | some(c) =>
         choose
-        | n == '\'' =>
-            let run = Parse/bytes/take_while((c) => Byte/to_nat(c) == '\'')!;
-            let q = Bytes/len(run);
-            choose
-            | q >= 6 => Parse/fail("too many quotes")
-            | q >= 3 => Parse/pure(x[..acc, ..Bytes/replicate(q - 3, b)])
-            | _ => ml_literal_body(x[..acc, ..Bytes/replicate(q, b)])
-            end
-        | n == '\n' =>
-            let _ = Parse/bytes/byte!;
-            ml_literal_body(x[..acc, b])
-        | n == '\r' =>
+        | c == '\'' =>
+            let (kept, closed) = quote_run('\'', here)!;
+            match closed | true => Parse/pure(kept) | false => ml_literal_body(kept) end
+        | c == '\n' =>
+            let _ = Parse/text/char!;
+            ml_literal_body(Str/concat(here, "\n"))
+        | c == '\r' =>
             let pair = crlf!;
             match pair
-            | some(_) => ml_literal_body(x[..acc, '\r', '\n'])
+            | some(_) => ml_literal_body(Str/concat(here, "\r\n"))
             | none() => Parse/fail("bare carriage return")
             end
-        | n == '\t' =>
-            let _ = Parse/bytes/byte!;
-            ml_literal_body(x[..acc, b])
-        | n < 0x20 => Parse/fail("control character in string")
-        | n == 0x7F => Parse/fail("control character in string")
-        | _ =>
-            let _ = Parse/bytes/byte!;
-            ml_literal_body(x[..acc, b])
+        | _ => Parse/fail("control character in string")
         end
-    end;
-
-let str_of(b: Bytes) -> Parse(Bytes, Str) =
-    match Str/of_bytes(b)
-    | success(s) => Parse/pure(s)
-    | failure(_) => Parse/fail("invalid UTF-8 in string")
     end;
 
 --- A basic string, delimited by `"`, with its escapes resolved.
-pub let str_basic: Parse(Bytes, Str) =
-    let b = basic_str_scan!;
-    str_of(b);
+pub let str_basic: Parse(Str, Str) =
+    basic_str_scan;
 
 --- A literal string, delimited by `'`, taken as written.
-pub let str_literal: Parse(Bytes, Str) =
-    let b = literal_str_scan!;
-    str_of(b);
+pub let str_literal: Parse(Str, Str) =
+    literal_str_scan;
 
 --- A multi-line basic string, delimited by `"""`, with its escapes resolved and the opening line break dropped.
-pub let str_ml_basic: Parse(Bytes, Str) =
-    let _ = Parse/bytes/literal("\"\"\"")!;
+pub let str_ml_basic: Parse(Str, Str) =
+    let _ = Parse/text/literal("\"\"\"")!;
     let _ = skip_opening_newline!;
-    let b = ml_basic_body(x[])!;
-    str_of(b);
+    ml_basic_body("");
 
 --- A multi-line literal string, delimited by `'''`, taken as written with the opening line break dropped.
-pub let str_ml_literal: Parse(Bytes, Str) =
-    let _ = Parse/bytes/literal("'''")!;
+pub let str_ml_literal: Parse(Str, Str) =
+    let _ = Parse/text/literal("'''")!;
     let _ = skip_opening_newline!;
-    let b = ml_literal_body(x[])!;
-    str_of(b);
+    ml_literal_body("");

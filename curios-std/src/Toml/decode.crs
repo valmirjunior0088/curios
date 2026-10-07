@@ -1,4 +1,4 @@
-use /std/{Bool, Str, List, Map, Result, Bytes, Parse, Toml};
+use /std/{Bool, Str, List, Map, Result, Parse, Toml};
 use /std/Toml/{Error};
 use /std/Toml/build/{Build, apply_assign, apply_header, apply_aot, build_empty, root};
 use /std/Toml/scan/{line_end, trivia, ws};
@@ -11,11 +11,11 @@ induct Stmt: Type
 | array_header(List(Str))
 end
 
-let key_path(acc: List(Str)) -> Parse(Bytes, List(Str)) =
+let key_path(acc: List(Str)) -> Parse(Str, List(Str)) =
     let k = key_part!;
     let _ = ws!;
     let acc2 = [..acc, k];
-    let dot = Parse/optional(Parse/bytes/expect('.'))!;
+    let dot = Parse/optional(Parse/text/expect('.'))!;
     match dot
     | some(_) =>
         let _ = ws!;
@@ -23,28 +23,28 @@ let key_path(acc: List(Str)) -> Parse(Bytes, List(Str)) =
     | none() => Parse/pure(acc2)
     end;
 
-let header(double: Bool) -> Parse(Bytes, List(Str)) =
+let header(double: Bool) -> Parse(Str, List(Str)) =
     let _ = ws!;
     let path = key_path([])!;
-    let _ = Parse/label(Parse/bytes/expect(']'), "expected ']' in table header")!;
+    let _ = Parse/label(Parse/text/expect(']'), "expected ']' in table header")!;
     match double
     | true =>
-        let _ = Parse/label(Parse/bytes/expect(']'), "expected ']]' in table header")!;
+        let _ = Parse/label(Parse/text/expect(']'), "expected ']]' in table header")!;
         Parse/pure(path)
     | false => Parse/pure(path)
     end;
 
-let stmt: Parse(Bytes, Stmt) =
-    let bracket = Parse/optional(Parse/bytes/expect('['))!;
+let stmt: Parse(Str, Stmt) =
+    let bracket = Parse/optional(Parse/text/expect('['))!;
     match bracket
     | none() =>
         let path = key_path([])!;
-        let _ = Parse/label(Parse/bytes/expect('='), "expected '=' after key")!;
+        let _ = Parse/label(Parse/text/expect('='), "expected '=' after key")!;
         let _ = ws!;
         let value = value_parse!;
         Parse/pure(Stmt/assign(path, value))
     | some(_) =>
-        let doubled = Parse/optional(Parse/bytes/expect('['))!;
+        let doubled = Parse/optional(Parse/text/expect('['))!;
         match doubled
         | some(_) =>
             let path = header(true)!;
@@ -55,7 +55,7 @@ let stmt: Parse(Bytes, Stmt) =
         end
     end;
 
-let stmts(acc: List(Stmt)) -> Parse(Bytes, List(Stmt)) =
+let stmts(acc: List(Stmt)) -> Parse(Str, List(Stmt)) =
     let _ = trivia!;
     let done = Parse/optional(Parse/eof())!;
     match done
@@ -68,7 +68,7 @@ let stmts(acc: List(Stmt)) -> Parse(Bytes, List(Stmt)) =
 
 --- Exactly one whole document as its root table; anything after it is refused, as is a document that breaks the table-construction rules.
 pub let decode(source: Str) -> Result(Error, Map(Str, Toml)) =
-    match Parse/run(stmts([]), Str/to_bytes(source))
+    match Parse/run(stmts([]), source)
     | failure(e) => Result/failure(Error/syntax(e))
     | success(parsed) =>
         let start: Result(Error, Build) = Result/success(build_empty);

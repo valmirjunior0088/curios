@@ -1,17 +1,17 @@
-use /std/{Nat, Bool, Byte, Option, Bytes, Parse};
+use /std/{Nat, Bool, Char, Str, Option, Parse};
 
-let is_ws_byte(b: Byte) -> Bool =
-    let n = Byte/to_nat(b);
+let is_ws_char(c: Char) -> Bool =
+    let n = Char/to_nat(c);
     n == ' ' || n == '\t';
 
---- Whether `b` may appear in a bare key: an ASCII letter or digit, `-`, or `_`.
-pub let is_bare_byte(b: Byte) -> Bool =
-    let n = Byte/to_nat(b);
+--- Whether `c` may appear in a bare key: an ASCII letter or digit, `-`, or `_`.
+pub let is_bare_char(c: Char) -> Bool =
+    let n = Char/to_nat(c);
     Nat/in_range(n, 'A', 'Z') || Nat/in_range(n, 'a', 'z') || Nat/in_range(n, '0', '9') || n == '-'
         || n == '_';
 
-let is_comment_byte(b: Byte) -> Bool =
-    let n = Byte/to_nat(b);
+let is_comment_char(c: Char) -> Bool =
+    let n = Char/to_nat(c);
     n == '\t' || Nat/in_range(n, ' ', '~') || n >= 0x80;
 
 --- The value of the hexadecimal digit at code point `n`, or `none` where `n` is not one.
@@ -24,32 +24,32 @@ pub let hex_val(n: Nat) -> Option(Nat) =
     end;
 
 --- Spaces and tabs, as many as there are.
-pub let ws: Parse(Bytes, {}) =
-    Parse/map(Parse/bytes/take_while(is_ws_byte), (_) => ());
+pub let ws: Parse(Str, {}) =
+    Parse/map(Parse/text/take_while(is_ws_char), (_) => ());
 
-let comment: Parse(Bytes, {}) =
-    let _ = Parse/bytes/expect('#')!;
-    Parse/map(Parse/bytes/take_while(is_comment_byte), (_) => ());
+let comment: Parse(Str, {}) =
+    let _ = Parse/text/expect('#')!;
+    Parse/map(Parse/text/take_while(is_comment_char), (_) => ());
 
 --- One line break, either `\r\n` or a bare `\n`.
-pub let newline: Parse(Bytes, {}) =
+pub let newline: Parse(Str, {}) =
     Parse/or(
-        Parse/map(Parse/and(Parse/bytes/expect('\r'), Parse/bytes/expect('\n')), (_) => ()),
-        Parse/map(Parse/bytes/expect('\n'), (_) => ()));
+        Parse/map(Parse/and(Parse/text/expect('\r'), Parse/text/expect('\n')), (_) => ()),
+        Parse/map(Parse/text/expect('\n'), (_) => ()));
 
 --- Whitespace, line breaks and comments, as much as there is: what may sit between two items.
-pub let trivia: Parse(Bytes, {}) =
+pub let trivia: Parse(Str, {}) =
     Parse/map(
         Parse/many0(
             Parse/or(
-                Parse/map(Parse/bytes/expect(' '), (_) => ()),
+                Parse/map(Parse/text/expect(' '), (_) => ()),
                 Parse/or(
-                    Parse/map(Parse/bytes/expect('\t'), (_) => ()),
+                    Parse/map(Parse/text/expect('\t'), (_) => ()),
                     Parse/or(newline, comment)))),
         (_) => ());
 
 --- The end of a line: trailing whitespace, an optional comment, then a line break or the end of the input.
-pub let line_end: Parse(Bytes, {}) =
+pub let line_end: Parse(Str, {}) =
     let _ = ws!;
     let _ = Parse/or(comment, Parse/pure(()))!;
     Parse/label(Parse/or(newline, Parse/eof()), "expected end of line");
