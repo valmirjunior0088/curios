@@ -1,13 +1,13 @@
 //! Which of a declaration's levels its callers choose, and where every other one lands.
 
 use {
-    super::test_support::universe_parameters,
+    super::test_support::{definition_variances, universe_parameters},
     crate::tests::{run, typecheck},
 };
 
-// A universe parameter is minted only from a declaration's *interface* — its type and the registry signatures a use site instantiates. A level reachable only through the body is minimized to a constant instead (`UniverseSolver::finalize`'s `internal` set, which no occurrence could choose a value for), so `carrier`, whose sole sort occurrence is the `Type` it stores, is monomorphic, while `holder`, whose level is tied to a `Type`-sorted parameter, generalizes.
+// A universe parameter is minted only from a declaration's *interface* — its type and the registry signatures a use site instantiates. A level reachable only through the body is minimized to a constant instead (`UniverseSolver::finalize`'s `internal` set, which no occurrence could choose a value for). So `carrier`'s one parameter is the level its result holds, `Box`'s own, which the family is invariant in and a caller may need higher, and the `Type` it stores is no second one; `holder` takes that one beside the level of its `Type`-sorted parameter.
 //
-// That asymmetry is what shuts [Case equations and their key](../../../documentation/design/soundness/case-equations-and-their-key.md)'s still-open elaborator-side copy against *source*. The defect needs two occurrences of one definition at differing instances whose values differ by level, and only a level carried into a payload can make a value differ — `Type u` embedded in a term is the entry's own counterexample. Such a level is body-only, so it never becomes a parameter, so no occurrence can choose one and the pair has no surface spelling. The entry records that nothing in the corpus spells it; what this pins is the stronger claim that nothing *can*, which is the half that does not decay when the corpus changes.
+// That is no bound on what a value carries. A parameter's own sort reaches a payload through an implicit argument, `lifted` storing `Type u` for its `S: Type u`, so its vector reads both of its levels held where `holder`'s reads its parameter's irrelevant, and two instances of `lifted` at one argument are two values: the pair [Case equations and their key](../../../documentation/design/soundness/case-equations-and-their-key.md) keeps a key's levels for.
 //
 // The counts are asserted rather than a printout matched, because the parameter count is the thing the argument turns on and a printer is free to render it differently.
 #[test]
@@ -17,8 +17,12 @@ fn a_body_carried_level_is_minimized_rather_than_generalized() {
         induct Box : pub Type
         | wrap(Type)
         end
+        induct Any : pub Type
+        | any(@A: Type, a: A)
+        end
         let carrier : Box = Box/wrap(Type);
         let holder(@A : Type) -> Box = Box/wrap(A);
+        let lifted(S : Type) -> Any = Any/any(S);
         /std/print("both")
         "#;
 
@@ -26,13 +30,26 @@ fn a_body_carried_level_is_minimized_rather_than_generalized() {
 
     assert_eq!(
         parameters.get("/carrier"),
-        Some(&0),
-        "a body-carried level became a parameter a use site can choose: {parameters:?}",
+        Some(&1),
+        "a body-carried level became a parameter a use site can choose, or the level its result holds stopped being one: {parameters:?}",
     );
     assert_eq!(
         parameters.get("/holder"),
-        Some(&1),
+        Some(&2),
         "an interface level stopped generalizing, so the control no longer separates the two: {parameters:?}",
+    );
+
+    let held = definition_variances(source);
+
+    assert_eq!(
+        held.get("/holder").map(String::as_str),
+        Some("*="),
+        "a value that stores its parameter came to hold that parameter's sort, or stopped holding its family's level: {held:?}",
+    );
+    assert_eq!(
+        held.get("/lifted").map(String::as_str),
+        Some("=="),
+        "a value that stores its parameter's sort stopped holding it: {held:?}",
     );
 }
 
@@ -229,9 +246,9 @@ fn a_type_named_through_a_higher_universe_solves_at_its_own() {
     assert_eq!(run(source), b"true");
 }
 
-// **A level a witness's side condition bounds settles at zero.** `Value` carries a type, so its level is its caller's, and `one` and `plain` keep it. `all` has both a local definition over `Value` and a `Monad` witness resolved in its body: the witness requires the error type's level to be at most the payload's, the error type's is floored at zero and still open when the signature's occurrences settle, and the payload's level takes it as its bound and follows it to zero. Following a bound down is what settles `Io(List(Str))` at zero, so the order is not the defect; what would tell the two apart is where each bound came from. The roadmap's "A universe level settled before its evidence is in" holds the gap, and this pins the loss so that closing it flips a fixture.
+// **A level a signature holds where conversion compares it stays its caller's, whatever its body bounds it by.** `Value` carries a type and is invariant in its level, so `v`'s is the declaration's parameter. `all` has both a local definition over `Value` and a `Monad` witness resolved in its body: the witness requires the error type's level to be at most the payload's, which leaves the payload's level a lower bound, and an occurrence nothing holds follows such a bound down, as `Io(List(Str))` follows its payload to zero. A level held by its position does not: the bound is the declaration's constraint. `one` and `plain`, each with one of the two, are the controls.
 #[test]
-fn a_level_bounded_through_a_witnesses_side_condition_settles_at_zero() {
+fn a_level_a_signature_holds_stays_its_callers_through_a_bound_from_the_body() {
     let source = r#"
         use /std/{Str, List, Result};
         pub struct Value: pub Type { A: Type, read: (Str) -> Result(Str, A) }
@@ -253,26 +270,14 @@ fn a_level_bounded_through_a_witnesses_side_condition_settles_at_zero() {
 
     let parameters = universe_parameters(source);
 
-    assert_eq!(
-        parameters.get("/all"),
-        Some(&0),
-        "a level bounded through a witness's side condition kept its caller's choice, so the gap this pins has closed: {parameters:?}",
-    );
-    assert_eq!(
-        parameters.get("/one"),
-        Some(&1),
-        "a local definition alone took the level, so the control no longer separates the two: {parameters:?}",
-    );
-    assert_eq!(
-        parameters.get("/plain"),
-        Some(&1),
-        "a witness alone took the level, so the control no longer separates the two: {parameters:?}",
-    );
+    for name in ["/all", "/one", "/plain"] {
+        assert_eq!(parameters.get(name), Some(&1), "{name}: {parameters:?}");
+    }
 }
 
-// **A result settles at its floor where conversion compares its level.** A tuple type's field, a former's argument and a level a family is invariant in are compared for equality, so no rule lifts `small()` to the type `big()` answers at, and a function answering either is refused. Written as a parameter's type the same level is the declaration's: `takes` is the control. The roadmap's *A universe level settled before its evidence is in* owns the refusal, and this pins the loss so that closing it flips a fixture.
+// **A result keeps its level where conversion compares it.** A tuple type's field, a former's argument and a level a family is invariant in are compared for equality, so no rule lifts a `small()` settled at its floor to the type `big()` answers at. Each is the declaration's parameter with its floor as a constraint, as the same type written as a parameter's is in `takes`, and a function answering either instantiates both at one level.
 #[test]
-fn a_result_at_a_compared_position_settles_at_its_floor() {
+fn a_result_at_a_compared_position_keeps_its_level() {
     let value = "pub struct Value: pub Type { A: Type, read: (Str) -> Result(Str, A) }";
     let rows = [
         ("", "{A: Type, a: A}", "(Nat, 0)", "(Type, Nat)"),
@@ -300,23 +305,22 @@ fn a_result_at_a_compared_position_settles_at_its_floor() {
 
     for (declarations, type_, small, big) in rows {
         let parameters = universe_parameters(&program(declarations, type_, small, big, ""));
-        assert_eq!(
-            parameters.get("/small"),
-            Some(&0),
-            "a result at a compared position kept its caller's choice, so the gap this pins has closed: {type_}: {parameters:?}",
-        );
-        assert_eq!(
-            parameters.get("/takes"),
-            Some(&1),
-            "the same type as a parameter's lost its level, so the control no longer separates the two: {type_}: {parameters:?}",
-        );
+        for name in ["/small", "/big", "/takes"] {
+            assert_eq!(
+                parameters.get(name),
+                Some(&1),
+                "{name}: {type_}: {parameters:?}"
+            );
+        }
 
         let pick = format!(
             "pub let pick(b: Bool) -> {type_} = match b | true => small() | false => big() end;"
         );
-        let message = typecheck(&program(declarations, type_, small, big, &pick))
-            .expect_err("two producers at two floors do not meet");
-        assert!(message.contains("strictly below itself"), "got: {message}");
+        assert_eq!(
+            typecheck(&program(declarations, type_, small, big, &pick)),
+            Ok(()),
+            "{type_}"
+        );
     }
 }
 
@@ -360,7 +364,7 @@ fn a_type_valued_definitions_body_level_settles_at_zero() {
     assert!(message.contains("strictly below itself"), "got: {message}");
 }
 
-// **The library's instances.** `/std/Cli` describes a spec at any level and parses at one: `help` prints a spec whose reader answers a type, and `parse` refuses that spec, its walk held at the zeros its private `Claim` alias's body settles at and its `fill` at the zero a witness's side condition leaves `field`. The stock readers settle at their floor, so a spec holding `nat` beside a reader of a type is refused where it is built. The roadmap's *A universe level settled before its evidence is in* owns all three.
+// **The library's instances.** `/std/Cli` describes a spec at any level and parses at one: `help` prints a spec whose reader answers a type, and `parse` refuses that spec, its walk held at the zeros its private `Claim` alias's body settles at. The stock readers keep their level, a `Value` being invariant in it, so a spec holds `nat` beside a reader of a type. The roadmap's *A universe level settled before its evidence is in* owns the refusal that is left.
 #[test]
 fn the_command_line_parser_is_held_at_one_universe_instance() {
     let program = |body: &str| {
@@ -382,13 +386,16 @@ fn the_command_line_parser_is_held_at_one_universe_instance() {
     let printed = String::from_utf8(run(&described)).expect("help prints text");
     assert!(printed.contains("--t <T>"), "got: {printed}");
 
-    for refused in [
-        r#"pub let parsed: Outcome(spec) = parse(spec, [], Option/none());
-        /std/print("parsed")"#,
+    let mixed = program(
         r#"pub let mixed: List(Arg) = [option("n", nat, "a number"), option("t", large, "a type")];
         /std/print("mixed")"#,
-    ] {
-        let message = typecheck(&program(refused)).expect_err("the parser sits at one instance");
-        assert!(message.contains("strictly below itself"), "got: {message}");
-    }
+    );
+    assert_eq!(typecheck(&mixed), Ok(()));
+
+    let parsed = program(
+        r#"pub let parsed: Outcome(spec) = parse(spec, [], Option/none());
+        /std/print("parsed")"#,
+    );
+    let message = typecheck(&parsed).expect_err("the parser sits at one instance");
+    assert!(message.contains("strictly below itself"), "got: {message}");
 }

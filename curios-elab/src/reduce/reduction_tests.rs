@@ -794,7 +794,7 @@ fn scrutinee_refinement_ignores_fresh_universe_instances() {
 ///
 /// A fresh instance is undecided and collapses — the test above is that rule, and it is what the prelude needs — but `Type u` embeds a level in a *term*, so a definition carrying its parameter into a constructor payload reduces to genuinely different values at two ground instances. Erasing the instance identifies them, and the arm's equation then refines a stuck term it was never shown to be about. The kernel refuses the coercion this forges (`curios-cert`'s `recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance`, over the whole module); this is the elaborator's own store, asked directly.
 ///
-/// The probe is checker-level rather than a source program on purpose: the pair has no surface spelling, because `UniverseSolver::finalize` minimizes a body-only level to a constant instead of generalizing it.
+/// The probe is checker-level rather than a source program on purpose: the surface has no spelling for an instance, so a program arranges two ground instances only through what bounds them, where this states them.
 ///
 /// Mutation-checked: removing the guard fails these two and leaves both `ignores_fresh_universe_instances` tests green, so the forgery pair and the collapse pair are not testing one thing twice — which is the whole of what the guard is claimed to do.
 #[test]

@@ -6,12 +6,13 @@
 
 use {
     super::{Context, Error, Published, zonk_solved_term_metas},
-    curios_analysis::{Declarations, Passed, VarianceVectors, held_levels, variance_vectors},
+    curios_analysis::{Declarations, VarianceVectors, held_levels, variance_vectors},
     curios_core::{
-        Families, Func, FuncType, Global, InductDecl, InductParam, LevelHead, StructDecl, Subterm,
-        Term, UniverseContext, UniverseParam, Variance, universe_params,
+        Bound, Families, Func, FuncType, Global, InductDecl, InductParam, Level, LevelHead,
+        StructDecl, Subterm, Term, UniverseContext, UniverseMetaId, UniverseParam, Variance,
+        rewrite_universe_levels_scoped_shared, universe_params,
     },
-    std::collections::BTreeMap,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 /// The registries as conversion's level alignment reads them: a family's vector is the one its entry holds while the unit elaborates, empty for a family still inside its own group, so every level of it is compared there, and a definition's is the one it finished with.
@@ -143,7 +144,7 @@ pub(crate) fn definition_variances(
                 }
                 None => body.clone(),
             };
-            let found = held_levels(context, &[applied], Passed::AsWritten);
+            let found = held_levels(context, &[applied]);
 
             Box::new(move |parameter| found.holds(LevelHead::Param(parameter)))
         }
@@ -167,6 +168,63 @@ pub(crate) fn definition_variances(
             false => Variance::Irrelevant,
         })
         .collect()
+}
+
+/// The levels `type_`, a declaration's signature while its levels are still open, holds where conversion compares them: in each of its domains and in a terminal that is no sort, at a position no family or definition is irrelevant in. They are what [`UniverseSolver::finalize`](crate::UniverseSolver::finalize) holds as the declaration's parameters.
+///
+/// A terminal sort is unread, cumulativity lifting it, and every other part is read as it is written ([`compared_in`]). Where a part may hold any level, every level the signature mentions is held.
+pub(crate) fn compared_levels(context: &mut Context, type_: &Term) -> BTreeSet<UniverseMetaId> {
+    curios_profile::profile!("compared_levels");
+    let type_ = &zonk_solved_term_metas(context, type_);
+    let mut parts = Vec::new();
+    let mut terminal = type_.clone();
+    loop {
+        let rest = match &*terminal {
+            Subterm::FuncType(FuncType { telescope, .. }) => {
+                let mut cursor = telescope.cursor();
+                while let Some((_, domain)) = cursor.entry() {
+                    parts.push(domain);
+                    cursor.advance(Term::free_var(&context.fresh(None)));
+                }
+                cursor.body()
+            }
+            _ => None,
+        };
+        match rest {
+            Some(rest) => terminal = rest,
+            None => break,
+        }
+    }
+    if !matches!(&*terminal, Subterm::Type(_) | Subterm::Prop) {
+        parts.push(terminal);
+    }
+
+    compared_in(context, &parts).unwrap_or_else(|| context.universe_metas_in(type_))
+}
+
+/// The levels still open that `parts` hold where two instances of them would be compared, or `None` where a part may hold any.
+///
+/// **Read by the alignment conversion reads two terms by.** Each part is aligned with itself one level up ([`Term::level_differences`]), so every level it carries is one pair, set apart by the position it stands at as the alignment sets it apart between two terms: compared, at a position a vector calls irrelevant, or at a function short of its application, a bare former or a lambda's binder annotation, which eta applies before either side is read. A level in a compared pair is held. So what a declaration keeps is what conversion would be asked to equate between two instances of it, by the one reading of which positions those are, and nothing is reduced to say so: an applied definition answers by the vector it finished with.
+///
+/// That holds a level reduction would have dropped, in an argument a definition's value never reads, which costs a parameter and commits nothing. A metavariable still unsolved may be solved with any level, so a part that holds one answers `None`.
+fn compared_in(context: &Context, parts: &[Term]) -> Option<BTreeSet<UniverseMetaId>> {
+    let mut held = BTreeSet::new();
+    for part in parts {
+        if part.has_metavar() {
+            return None;
+        }
+        let lifted =
+            rewrite_universe_levels_scoped_shared(part, |_, level: &Level| level.succ()).ok()?;
+        let differences = part.level_differences(&lifted, |_| false, context)?;
+        held.extend(
+            differences
+                .compared
+                .iter()
+                .flat_map(|(_, level, _)| level.metas()),
+        );
+    }
+
+    Some(held)
 }
 
 /// Whether a definition of this type answers a type: its terminal, past every function type, is a sort.

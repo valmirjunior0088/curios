@@ -12,7 +12,7 @@ use {
     crate::{
         Declared, Established, GoalReport, GoalSite, Published, ScheduledTest, Spelled, Written,
         Zonked, check_concept_registry, check_is_sort, check_proof_totality,
-        check_rec_item_totality, check_type_totality, check_written_type_totality,
+        check_rec_item_totality, check_type_totality, check_written_type_totality, compared_levels,
         decide_polarities, definition_variances, goal_sites, hold_variances, is_prop,
         record_definition_totality, record_superclasses, record_variances, reduce_with,
         register_witness, report_goals, sort_term, stamp_totality, superclass_targets,
@@ -604,8 +604,9 @@ fn finalize_definition(
     }
     let mut internal = context.universe_metas_in(&body);
     internal.extend(determined);
+    let compared = compared_levels(context, &type_);
 
-    let universe_context = context.finalize_universe_metas(interface, internal)?;
+    let universe_context = context.finalize_universe_metas(interface, internal, compared)?;
     let levels = universe_context.identity_instance();
     let owned = BTreeSet::from([*name]);
     // A non-recursive definition's own name stays free in its signature, body, and registry entry: nothing captures it, so each occurrence carries the instance itself. A definition whose body names *itself* is about to be captured by a single-member group instead, and its occurrences reach that binder — see [`elaborate_module_let`].
@@ -1018,7 +1019,11 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .flat_map(|body| context.universe_metas_in(body))
         .collect::<BTreeSet<_>>();
     internal.extend(determined);
-    let universe_context = context.finalize_universe_metas(interface, internal)?;
+    let compared = types
+        .iter()
+        .flat_map(|type_| compared_levels(context, type_))
+        .collect::<BTreeSet<_>>();
+    let universe_context = context.finalize_universe_metas(interface, internal, compared)?;
 
     // The group's members are monomorphic in their own universes, so every occurrence of one member inside the group — in a signature, a body, or a rebuilt registry telescope — denotes the group's own instance. Those occurrences were elaborated before the parameters existed and carry no instance at all until this rewrite gives them one.
     let instance = universe_context.identity_instance();

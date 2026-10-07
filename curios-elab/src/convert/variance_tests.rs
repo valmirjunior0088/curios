@@ -128,7 +128,10 @@ fn an_irrelevant_level_is_joined_where_it_can_be_and_never_required() {
                 ),
                 Ok(true)
             );
-            let scheme = context.universes_mut().finalize([this, that], []).unwrap();
+            let scheme = context
+                .universes_mut()
+                .finalize([this, that], [], [])
+                .unwrap();
             assert_eq!(scheme.parameter_count, 1, "{variance:?}, redex: {redex}");
 
             let mut context = self::context();
@@ -152,7 +155,7 @@ fn an_irrelevant_level_is_joined_where_it_can_be_and_never_required() {
                 Ok(true)
             );
             assert_eq!(
-                context.universes_mut().finalize([bounded], []).is_err(),
+                context.universes_mut().finalize([bounded], [], []).is_err(),
                 required,
                 "{variance:?}, redex: {redex}"
             );
@@ -195,7 +198,10 @@ fn a_definition_applied_in_full_is_joined_where_it_can_be_and_never_required() {
             ),
             Ok(true)
         );
-        let scheme = context.universes_mut().finalize([this, that], []).unwrap();
+        let scheme = context
+            .universes_mut()
+            .finalize([this, that], [], [])
+            .unwrap();
         assert_eq!(scheme.parameter_count, 1, "{variance:?}");
 
         let mut context = self::context();
@@ -210,7 +216,7 @@ fn a_definition_applied_in_full_is_joined_where_it_can_be_and_never_required() {
             Ok(true)
         );
         assert_eq!(
-            context.universes_mut().finalize([bounded], []).is_err(),
+            context.universes_mut().finalize([bounded], [], []).is_err(),
             required,
             "{variance:?}"
         );
@@ -236,7 +242,7 @@ fn two_lambdas_apart_in_a_binders_annotation_are_left_to_their_function_type() {
             ),
             Ok(true)
         );
-        assert!(context.universes_mut().finalize([bounded], []).is_ok());
+        assert!(context.universes_mut().finalize([bounded], [], []).is_ok());
 
         let mut context = self::context();
         let this = open(&mut context);
@@ -250,7 +256,10 @@ fn two_lambdas_apart_in_a_binders_annotation_are_left_to_their_function_type() {
             ),
             Ok(true)
         );
-        let scheme = context.universes_mut().finalize([this, that], []).unwrap();
+        let scheme = context
+            .universes_mut()
+            .finalize([this, that], [], [])
+            .unwrap();
         assert_eq!(scheme.parameter_count, 1);
     }
 }
@@ -275,7 +284,10 @@ fn a_definition_passed_bare_is_left_to_its_function_type() {
             ),
             Ok(true)
         );
-        let scheme = context.universes_mut().finalize([this, that], []).unwrap();
+        let scheme = context
+            .universes_mut()
+            .finalize([this, that], [], [])
+            .unwrap();
         assert_eq!(scheme.parameter_count, 1, "{variance:?}");
 
         let mut context = self::context();
@@ -291,7 +303,7 @@ fn a_definition_passed_bare_is_left_to_its_function_type() {
             Ok(true)
         );
         assert_eq!(
-            context.universes_mut().finalize([bounded], []).is_err(),
+            context.universes_mut().finalize([bounded], [], []).is_err(),
             required,
             "{variance:?}"
         );

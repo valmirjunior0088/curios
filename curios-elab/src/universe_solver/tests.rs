@@ -477,7 +477,7 @@ fn forced_equalities_share_one_generalized_parameter() {
         .add_eq(Level::meta(u), Level::meta(v), origin("equal"))
         .unwrap();
 
-    let context = solver.finalize([u, v], []).unwrap();
+    let context = solver.finalize([u, v], [], []).unwrap();
     assert_eq!(context.parameter_count, 1);
     assert!(context.constraints.is_empty());
 }
@@ -499,7 +499,7 @@ fn a_level_bounded_by_zero_generalizes_to_the_constant() {
         )
         .unwrap();
 
-    let context = solver.finalize([u, v], []).unwrap();
+    let context = solver.finalize([u, v], [], []).unwrap();
     assert_eq!(context.parameter_count, 1);
     let bounds = context
         .constraints
@@ -528,7 +528,7 @@ fn a_maximum_bounded_by_zero_holds_every_part_at_zero() {
         .add_leq(both, Level::meta(w), origin("below"))
         .unwrap();
 
-    let context = solver.finalize([u, v, w], []).unwrap();
+    let context = solver.finalize([u, v, w], [], []).unwrap();
     assert_eq!(context.parameter_count, 1);
     assert!(context.constraints.is_empty());
     assert_eq!(solver.zonk(&Level::meta(u)).unwrap(), Level::zero());
@@ -558,7 +558,7 @@ fn a_lone_level_equal_to_another_is_that_level() {
         )
         .unwrap();
 
-    let context = solver.finalize([u, v, w, x], []).unwrap();
+    let context = solver.finalize([u, v, w, x], [], []).unwrap();
     assert_eq!(context.parameter_count, 2);
     assert!(context.constraints.is_empty());
     let (first, second) = (
@@ -590,7 +590,7 @@ fn a_level_determined_once_minimizing_settles_another_is_merged() {
         )
         .unwrap();
 
-    let context = solver.finalize([a, b], [c]).unwrap();
+    let context = solver.finalize([a, b], [c], []).unwrap();
     assert_eq!(context.parameter_count, 1);
     assert!(context.constraints.is_empty());
 }
@@ -608,7 +608,7 @@ fn an_equation_between_maxima_determines_neither_side() {
         )
         .unwrap();
 
-    let context = solver.finalize([a, b, c, d], []).unwrap();
+    let context = solver.finalize([a, b, c, d], [], []).unwrap();
     assert_eq!(context.parameter_count, 4);
     assert_eq!(context.constraints.len(), 2);
     universe_context_validate(&context).unwrap();
@@ -627,7 +627,7 @@ fn non_principal_flexible_levels_are_promoted_to_residual_parameters() {
         )
         .unwrap();
 
-    let context = solver.finalize([left, right], []).unwrap();
+    let context = solver.finalize([left, right], [], []).unwrap();
     assert_eq!(context.parameter_count, 2);
     assert_eq!(context.constraints.len(), 1);
     universe_context_validate(&context).unwrap();
@@ -647,7 +647,7 @@ fn generalization_rejects_a_constraint_mentioning_an_enclosing_parameter() {
         .unwrap();
 
     assert!(matches!(
-        solver.finalize([outer], []),
+        solver.finalize([outer], [], []),
         Err(UniverseError::EscapingLevel)
     ));
 }
@@ -808,7 +808,7 @@ fn an_interface_level_is_generalized_through_a_chain_of_aliases() {
     solver.assign(middle, Level::meta(carrier)).unwrap();
 
     // The body mentions the level too, so the walk that collects internal levels reaches the carrier.
-    let context = solver.finalize([signature], [carrier]).unwrap();
+    let context = solver.finalize([signature], [carrier], []).unwrap();
 
     assert_eq!(
         context.parameter_count, 1,

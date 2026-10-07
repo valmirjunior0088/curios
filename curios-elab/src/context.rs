@@ -2499,11 +2499,12 @@ impl Context {
         &mut self,
         interface: BTreeSet<UniverseMetaId>,
         internal: BTreeSet<UniverseMetaId>,
+        compared: BTreeSet<UniverseMetaId>,
     ) -> Result<UniverseContext, Error> {
         curios_profile::profile!("ctx::finalize_universe_metas");
         let universe_context = self
             .universes_mut()
-            .finalize(interface, internal)
+            .finalize(interface, internal, compared)
             .map_err(Error::from)?;
         self.scheme_open = false;
         self.caches.invalidate_for_universe_rewrite();

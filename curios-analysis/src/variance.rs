@@ -11,9 +11,9 @@
 use {
     crate::{Declarations, Env, binders, forceable, labelled, rec_member},
     curios_core::{
-        Advance, Bound, Func, FuncType, Global, InductType, Instance, InstanceHead, Level,
-        LevelHead, RecGroup, Struct, StructType, Subterm, Telescope, Term, TupleType,
-        UniverseParam, Variance, Variant, universe_metas, universe_params,
+        Advance, Bound, Func, FuncType, Global, InductType, Instance, Level, LevelHead, RecGroup,
+        Struct, StructType, Subterm, Telescope, Term, TupleType, UniverseParam, Variance, Variant,
+        universe_metas, universe_params,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -64,7 +64,7 @@ pub fn variance_vectors<E: Env>(
     loop {
         let mut changed = false;
         for (name, entry) in &split {
-            let (marked, refused) = sweep(env, &vectors, &entry.parts, Passed::AsWritten);
+            let (marked, refused) = sweep(env, &vectors, &entry.parts);
             if exhausted.is_none()
                 && let Some(error) = refused
             {
@@ -165,16 +165,10 @@ impl Vectors {
 }
 
 /// The levels `parts` fix under the current estimates, and the first reduction the driver refused while finding them.
-fn sweep<E: Env>(
-    env: &mut E,
-    vectors: &Vectors,
-    parts: &[Term],
-    passed: Passed,
-) -> (Marked, Option<E::Error>) {
+fn sweep<E: Env>(env: &mut E, vectors: &Vectors, parts: &[Term]) -> (Marked, Option<E::Error>) {
     let mut walk = Walk {
         env,
         vectors,
-        passed,
         forcing: Vec::new(),
         marked: Marked::default(),
         refused: None,
@@ -202,17 +196,6 @@ impl Marked {
     }
 }
 
-/// How a walk reads a family passed as an argument: a lambda, or a former not applied in full.
-///
-/// The two readings are what two instances hold of one at the two places conversion can meet it. Neither is the other's approximation: which a caller asks for is which place its question is about.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Passed {
-    /// A lambda's binders' types as well as its body, and every level of a former: what is compared where two of them meet at no function type, which is where a family's vector has to hold.
-    AsWritten,
-    /// A lambda's body at fresh binders, and a former by its family's vector: what is compared where two of them meet at their function type, eta applying both sides to the same binders before either is read.
-    UnderEta,
-}
-
 /// What [`held_levels`] found: the level heads its terms hold where conversion compares them, whether one of them may hold any, and the first reduction the driver refused.
 #[derive(Debug)]
 pub struct HeldLevels<E> {
@@ -228,15 +211,17 @@ impl<E> HeldLevels<E> {
     }
 }
 
-/// The levels `parts` hold where two instances of what they are part of would be compared: the walk [`variance_vectors`] runs over a family's telescopes, over terms its caller chose, with a family passed as an argument read as `passed` says.
+/// The levels the reducts of `parts` hold where two instances of what they are part of would be compared: the walk [`variance_vectors`] runs over a family's telescopes, over terms its caller chose.
 ///
-/// It is the walk and nothing of what it is asked about. Which terms of a declaration stand for it, a definition's body at its binders or a signature's domains, is the caller's, and so is what a held level means there. A level is reported by its head, a declaration's parameter or a level still open while the declaration elaborates, so one walk answers before and after a declaration's levels close. Every family answers from the driver's registry, a name it does not hold reading invariant.
-pub fn held_levels<E: Env>(env: &mut E, parts: &[Term], passed: Passed) -> HeldLevels<E::Error> {
+/// It is the walk and nothing of what it is asked about. Which terms of a declaration stand for it is the caller's, and so is what a held level means there. A level is reported by its head, a declaration's parameter or a level still open while the declaration elaborates, so one walk answers before and after a declaration's levels close. Every family answers from the driver's registry, a name it does not hold reading invariant.
+///
+/// It forces what it reads, so it is for a term read once, a definition's body where its levels close. What a term holds as it is written, with nothing reduced, is `curios-core`'s `Term::level_differences` to say.
+pub fn held_levels<E: Env>(env: &mut E, parts: &[Term]) -> HeldLevels<E::Error> {
     curios_profile::profile!("held_levels");
     let vectors = Vectors {
         computed: BTreeMap::new(),
     };
-    let (marked, exhausted) = sweep(env, &vectors, parts, passed);
+    let (marked, exhausted) = sweep(env, &vectors, parts);
 
     HeldLevels {
         heads: marked.heads,
@@ -249,7 +234,6 @@ pub fn held_levels<E: Env>(env: &mut E, parts: &[Term], passed: Passed) -> HeldL
 struct Walk<'a, E: Env> {
     env: &'a mut E,
     vectors: &'a Vectors,
-    passed: Passed,
     /// The `rec` members this walk is already inside, innermost last: positivity's guard, for positivity's reason.
     forcing: Vec<(RecGroup, usize)>,
     marked: Marked,
@@ -321,44 +305,7 @@ impl<E: Env> Walk<'_, E> {
         });
     }
 
-    /// A family's name short of its full application, read under eta: its instance by the family's vector, as the node it builds once applied is read, and the arguments it was given. `false` for every other term, and under [`Passed::AsWritten`].
-    fn former_under_eta(&mut self, term: &Term) -> bool {
-        if self.passed != Passed::UnderEta {
-            return false;
-        }
-        let mut head = term;
-        let mut arguments = Vec::new();
-        while let Subterm::Apply(apply) = &**head {
-            arguments.extend(apply.params().cloned());
-            head = &apply.head;
-        }
-        let Subterm::Instance(Instance {
-            head: InstanceHead::Var(var),
-            levels,
-        }) = &**head
-        else {
-            return false;
-        };
-        let Some(name) = var.as_free().and_then(|free| free.as_global()).copied() else {
-            return false;
-        };
-        if self.env.induct_decl(&name).is_none() && self.env.struct_decl(&name).is_none() {
-            return false;
-        }
-
-        self.nominal(&name, levels);
-        for argument in &arguments {
-            self.walk(argument);
-        }
-
-        true
-    }
-
     fn walk(&mut self, term: &Term) {
-        if self.former_under_eta(term) {
-            return;
-        }
-
         // A `rec` member this path is already inside is left folded, as positivity leaves it: forcing it again exposes the same node one level deeper.
         let member = rec_member(term);
         let cyclic = member
@@ -389,20 +336,10 @@ impl<E: Env> Walk<'_, E> {
                 self.telescope(telescope, |walk, codomain| walk.walk(&codomain));
             }
             Subterm::TupleType(TupleType { telescope }) => self.telescope(telescope, |_, ()| {}),
-            // A lambda standing in a type is a family passed as an argument, `(A: Type) => Result(E, A)`: its binders' types and its body are what an instance holds of it, and its body alone where it is read under eta.
-            Subterm::Func(Func { telescope, .. }) => match self.passed {
-                Passed::AsWritten => self.telescope(telescope, |walk, body| walk.walk(&body)),
-                Passed::UnderEta => {
-                    let mut cursor = telescope.cursor();
-                    while cursor.entry().is_some() {
-                        cursor.advance_fresh(|hint| {
-                            self.env.fresh(hint.filter(|hint| !hint.is_empty()))
-                        });
-                    }
-                    let body = cursor.body().expect("a cursor past every entry");
-                    self.walk(&body);
-                }
-            },
+            // A lambda standing in a type is a family passed as an argument, `(A: Type) => Result(E, A)`: its binders' types and its body are what an instance holds of it.
+            Subterm::Func(Func { telescope, .. }) => {
+                self.telescope(telescope, |walk, body| walk.walk(&body));
+            }
 
             Subterm::InductType(InductType {
                 name,

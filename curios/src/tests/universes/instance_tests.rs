@@ -82,7 +82,7 @@ fn a_solution_naming_its_own_group_is_stamped_with_the_groups_instance() {
     }
 }
 
-// `use_call`'s two spellings of `zip` are two instances of one recursive group, related only by `u ≤ x1`, `v ≤ z1` if left apart, which the kernel would refuse. The elaborator identifies the two instances where they meet, so the declared type's `zip` is spelled at the list levels the body already carries and the kernel accepts the program by identity. Nothing merges: the signature keeps the two levels its writer chose, `A`'s and `B`'s, which is what the count pins — the identification chose one spelling for one occurrence rather than making two parameters one. Every other level is an occurrence's, and finalization settles each at the level its argument or its floor gives it (`UniverseSolver::finalize`): `List(A)` at `A`'s, `Eq()(List/len(b), n)` at zero, which is why the count is two.
+// `use_call`'s two spellings of `zip` are two instances of one recursive group, related only by `u ≤ x1`, `v ≤ z1` if left apart, which the kernel would refuse. The elaborator identifies the two instances where they meet, so the declared type's `zip` is spelled at the levels the body already carries and the kernel accepts the program by identity. Nothing merges: the signature keeps the two levels its writer chose, `A`'s and `B`'s, and the two of the instance of `zip` its result names, which is what the count pins — the identification chose one spelling for one occurrence rather than making two parameters one. Two calls of a recursive definition are compared at every level, so that instance's levels stand where conversion compares them and are the signature's callers' to choose. Every other level is an occurrence's at a position its family is irrelevant in, and finalization settles each at the level its argument or its floor gives it (`UniverseSolver::finalize`): `List(A)` at `A`'s, `Eq()(List/len(b), n)` at zero, which is why the count is four.
 #[test]
 fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_levels_identified() {
     typecheck_within(DEFAULT_STEP_BUDGET, TWO_INSTANCES_OF_ZIP)
@@ -91,7 +91,7 @@ fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_l
     let parameters = universe_parameters(TWO_INSTANCES_OF_ZIP);
     assert_eq!(
         parameters.get("/use_call"),
-        Some(&2),
+        Some(&4),
         "identifying the two spellings changed how polymorphic the signature is: {parameters:?}",
     );
 }
@@ -117,8 +117,9 @@ fn a_family_whose_payload_resolves_through_a_later_witness_reads_its_final_teles
     let ordered = family_variances(&program(induct, "Str"));
     assert_eq!(
         ordered.get("/Holder").map(String::as_str),
-        Some("*"),
-        "a level that only types a parameter stopped reading irrelevant: {ordered:?}",
+        // The witness takes the level `Sized` is invariant in, its result holding it where conversion compares it, and the family whose payload names the witness takes that level beside its own: two, both irrelevant.
+        Some("**"),
+        "a level that only types a parameter stopped reading irrelevant, or the witness's level stopped being the family's: {ordered:?}",
     );
     // The struct is accepted as the inductive is; only an inductive family's vector is listed.
     family_variances(&program(struct_, "Str"));

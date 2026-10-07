@@ -6,6 +6,8 @@ mod constraints;
 use constraints::*;
 
 #[cfg(test)]
+mod held_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod weak_tests;
@@ -1382,6 +1384,23 @@ impl UniverseSolver {
         Ok((context, replacement))
     }
 
+    /// The levels that carry `metas` ([`Self::representatives`]), each kept from minimization: one an invented classifier or a `Type` written outside an input position stood for is an occurrence's from here on.
+    fn hold(
+        &mut self,
+        metas: impl IntoIterator<Item = UniverseMetaId>,
+    ) -> BTreeSet<UniverseMetaId> {
+        let held = self.representatives(metas);
+        for meta in &held {
+            if let Some(entry) = self.metas.get_mut(meta.0)
+                && entry.provenance == Provenance::Inferred
+            {
+                entry.provenance = Provenance::Occurrence;
+            }
+        }
+
+        held
+    }
+
     /// Solve `metas` as if each were an inferred output, restoring their declared roles afterwards. Solving ranges over `scope` so a minimized level can still be determined by its relations to levels outside the requested set.
     ///
     /// Minimization is a property of the *position* a level occupies rather than of the level itself: one written `Type` is an input where a use site can choose it and an ordinary classifier where it cannot.
@@ -1556,15 +1575,20 @@ impl UniverseSolver {
     ///
     /// `interface` is the declaration's externally visible universe surface — its type and the registry signatures a use site instantiates. `internal` levels occur only in the body, so no occurrence could ever choose them; they are minimized instead of becoming parameters a caller cannot supply. An internal level with no principal solution is still generalized, because the residual context must stay closed.
     ///
-    /// Two kinds of level are settled rather than generalized, by `Self::settle`: a level the constraints reach that neither the type nor the body mentions, and an interface level whose representative is an occurrence's. The last is Rocq's minimization — at an application, "a `j ≤ i` constraint will be generated. It is however often the case that an equation `j = i` would be more appropriate, when `f`'s universes are fresh" — and Agda's under `--cumulativity`, which instantiates a level bounded only from below to the join of its bounds. It is what keeps a written type where its reduct is: both checkers size a tuple type or a Π from its parts' reducts, where an occurrence's instance is gone, so an occurrence left at a parameter above its argument's level is a written type above the level its enclosing type was sized for.
+    /// `compared` are the interface's levels that stand where conversion compares them: in a domain, or in a result that is no sort, at a position no family or definition is irrelevant in. Each is held with every level joined to it: the declaration's parameter with its bounds, neither minimized nor settled, since a caller that needs it higher has no other way to say so, and a level it was settled at is one a later use can tell from the one it needed. Read off the signature's term and followed by class, so which member of an identified pair survives decides nothing.
+    ///
+    /// Two kinds of level are settled rather than generalized, by `Self::settle`: a level the constraints reach that neither the type nor the body mentions, and an interface level whose representative is an occurrence's and which nothing holds. The last is Rocq's minimization — at an application, "a `j ≤ i` constraint will be generated. It is however often the case that an equation `j = i` would be more appropriate, when `f`'s universes are fresh" — and Agda's under `--cumulativity`, which instantiates a level bounded only from below to the join of its bounds. It is what keeps a written type where its reduct is: both checkers size a tuple type or a Π from its parts' reducts, where an occurrence's instance is gone, so an occurrence left at a parameter above its argument's level is a written type above the level its enclosing type was sized for.
     pub fn finalize(
         &mut self,
         interface: impl IntoIterator<Item = UniverseMetaId>,
         internal: impl IntoIterator<Item = UniverseMetaId>,
+        compared: impl IntoIterator<Item = UniverseMetaId>,
     ) -> Result<UniverseContext, UniverseError> {
         curios_profile::profile!("universe::finalize");
         // First, while every level elaboration left open is still open: a weak equation joins two of them, and what follows settles the classes that leaves.
         self.join_weak_equations();
+        // A held level is no classifier to minimize, whatever wrote it: a `Type` written in a result is an occurrence's from here on, which keeps it its class's representative over an invented one.
+        let held = self.hold(compared);
         // Follow each interface level to the metas that actually carry it. Conversion aliases one meta onto another whenever two spellings of a level are forced equal — keeping the member of greater provenance, but not by the signature's choice — so the set the caller computed from the declaration's type can name metas that were solved away, several links back from the ones still standing. Those representatives are then reached by `universe_metas_in(&body)` instead and land on the internal side, where `minimize` takes least solutions for them; the declaration comes back at a ground level rather than generalized over a level its own signature mentions, and every polymorphic caller is refused by the kernel for supplying a parameter where it demands a constant.
         let interface = self.representatives(interface);
         let internal = internal
@@ -1578,14 +1602,19 @@ impl UniverseSolver {
         curios_profile::sample!("universe::finalize_internal_metas", internal.len());
         curios_profile::sample!("universe::finalize_connected_metas", relevant.len());
         curios_profile::sample!("universe::finalize_store_len", self.constraints.len());
+        curios_profile::sample!("universe::finalize_held_metas", held.len());
         self.minimize(&internal, &relevant)?;
         // Minimizing solves body-only levels after the determined ones were merged, and a solution can determine another: `a ≤ b` with `b ≤ max(a, c)` becomes mutual once `c` is zero. So the merge is asked once more of what minimizing left.
         self.merge_forced_equalities(&relevant)?;
+        // A merge can have joined a held level to another, which is then held with it.
+        let held = self.hold(held);
         // An occurrence's level in the signature settles at its recorded floor: `List(Nat)` in a domain sits at `Type 0` where its reduct does, rather than at a parameter no caller needs. As in Rocq, a level settles only at a lower bound something recorded, so one nothing bounded from below stays — and a chosen level identified with an occurrence stays with it, being the class's representative.
         let occurrences = interface
             .iter()
             .copied()
-            .filter(|meta| self.provenance(*meta) == Some(Provenance::Occurrence))
+            .filter(|meta| {
+                self.provenance(*meta) == Some(Provenance::Occurrence) && !held.contains(meta)
+            })
             .collect::<BTreeSet<_>>();
         let floored = occurrences
             .iter()

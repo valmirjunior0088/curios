@@ -163,13 +163,23 @@ fn elaborator_alone(header: &str, name: &str, rows: &[(String, String)]) -> Vec<
     holds
 }
 
-/// What a row's statement is a call of: the claim that two terms of one type are equal, beside the proof that the first equals itself. One call hands both halves the same type and the same left side, so they differ in nothing but the right side — two statements written apart would each settle levels of their own, and the kernel would refuse the claim for those.
-const CLAIMED: &str =
-    "let claimed(@A: Type, a: A, b: A) -> {Prop, Eq(@A)(a, a)} = (Eq(@A)(a, b), Eq/refl());";
+/// What a row's statement answers at: the claim that two terms of one type are equal, beside the proof that the first equals itself, packed with that type and that first term.
+///
+/// The type names neither side, which is what keeps the two at one universe instance. A level a signature holds where conversion compares it is its declaration's parameter, so a side the statement's type named would stand at the statement's own parameter where the other closes at its least level: two instances of one recursive call, which the kernel compares at every level and refuses for those alone.
+const PACKED: &str = "{T: Type, claim: Prop, left: T, proof: Eq(@T)(left, left)}";
+
+/// Where [`PACKED`] holds the claim's type and the claim's body, by position.
+const CLAIM: usize = 1;
+const PROOF: usize = 3;
+
+/// What a row's statement is a call of, answering at [`PACKED`]. One call hands both halves the same type and the same left side, so they differ in nothing but the right side — two statements written apart would each settle levels of their own, and the kernel would refuse the claim for those.
+fn claimed() -> String {
+    format!("let claimed(@A: Type, a: A, b: A) -> {PACKED} = (A, Eq(@A)(a, b), a, Eq/refl());")
+}
 
 /// What the kernel says of each row when it alone is asked, in the rows' order: `None` where it holds the row, and its refusal where it does not.
 ///
-/// Each row is stated as one call of [`CLAIMED`], which elaborates whatever the row's side, since it asks only that the two sides have one type; [`typecheck_with_prelude`] stops short of the kernel. The claim the kernel then judges is that call's two halves under the statement's own binders: its first projection is the claim's type and its second the claim's body. Every term in it is one the elaborator built, and the one comparison it leaves the kernel is the row's left side against its right, at their type.
+/// Each row is stated as one call of [`claimed`], which elaborates whatever the row's side, since it asks only that the two sides have one type; [`typecheck_with_prelude`] stops short of the kernel. The claim the kernel then judges is that call's two halves under the statement's own binders: its [`CLAIM`] component is the claim's type and its [`PROOF`] component the claim's body. Every term in it is one the elaborator built, and the one comparison it leaves the kernel is the row's left side against its right, at their type.
 fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_cert::Error>> {
     let items = rows
         .iter()
@@ -186,13 +196,11 @@ fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_ce
                 type_ => format!("{type_}, {left}, {right}"),
             };
             // A top-level definition states its type, which here restates the call's; the claim is taken from the call.
-            format!(
-                "let stated{index}({binders}) -> {{Prop, {head}({left}, {left})}} = claimed({arguments});"
-            )
+            format!("let stated{index}({binders}) -> {PACKED} = claimed({arguments});")
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let entrypoint = format!("{header}\n{CLAIMED}\n{items}\nIo/pure(())")
+    let entrypoint = format!("{header}\n{}\n{items}\nIo/pure(())", claimed())
         .parse::<Entrypoint>()
         .expect("the rows parse");
     let mut program = typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
@@ -228,8 +236,8 @@ fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_ce
 
             Definition {
                 name: named(format!("claim{index}")),
-                type_: Term::func_type_marked(binders.clone(), Term::proj(call.clone(), 0)),
-                body: Term::func_marked(binders, Term::proj(call, 1)),
+                type_: Term::func_type_marked(binders.clone(), Term::proj(call.clone(), CLAIM)),
+                body: Term::func_marked(binders, Term::proj(call, PROOF)),
                 ..stated.clone()
             }
         })
