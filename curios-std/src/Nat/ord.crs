@@ -1,0 +1,47 @@
+use /std/{Nat, Eq, Ordering, Ord};
+use /std/Bool/{True, False, Holds};
+
+--- The order of the two.
+pub let ord(x: Nat, y: Nat) -> Ordering =
+    choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
+
+--- `ord` answers the flipped answer with its operands swapped.
+---
+--- By the two guards `ord` reads, taken on each side. The arms no two numbers reach are refuted from the guards, and the two a failed `==` leaves are closed by the equation the other guards give, carried into the comparison that failed.
+pub let flips: Ord/Flips(ord) =
+    (a, b) =>
+        match a < b
+        | true =>
+            match b < a
+            | true => match False/refuted() end
+            | false =>
+                match b == a
+                | true => match False/refuted() end
+                | false => Eq/refl()
+                end
+            end
+        | false =>
+            match a == b
+            | true =>
+                match b < a
+                | true => match False/refuted() end
+                | false =>
+                    match b == a
+                    | true => Eq/refl()
+                    | false =>
+                        let same = Nat/eq_of_eql(a, b, True/proved());
+                        let held: Holds(b == a) =
+                            Eq/subst((x: Nat) => Holds(b == x), Eq/sym(same), True/qed());
+                        match held end
+                    end
+                end
+            | false =>
+                match b < a
+                | true => Eq/refl()
+                | false =>
+                    let same = Nat/le/antisym(a, b, True/proved(), True/proved());
+                    let held: Holds(a == b) = Eq/subst((x: Nat) => Holds(a == x), same, True/qed());
+                    match held end
+                end
+            end
+        end;

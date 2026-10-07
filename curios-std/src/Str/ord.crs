@@ -1,0 +1,9 @@
+use /std/{Str, Bytes, Ordering, Ord};
+
+--- Code-point order.
+pub let ord(a: Str, b: Str) -> Ordering =
+    Bytes/ord(Str/to_bytes(a), Str/to_bytes(b));
+
+--- `ord` answers the flipped answer with its operands swapped: `Bytes/ord`'s law, over the two texts' bytes.
+pub let flips: Ord/Flips(ord) =
+    (a, b) => Bytes/ord/flips(Str/to_bytes(a), Str/to_bytes(b));

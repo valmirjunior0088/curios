@@ -15,7 +15,7 @@ It waits on no other spec.
 
 ## The gap
 
-- **No comparator in `/std` has a stated law, so the sort's theorem is read at no type's own order.** That `Nat/ord` answers `gt` one way exactly where it answers `lt` the other is provable and unstated, as it is of `Bytes/ord` and `Str/ord`, and [the numeric laws](../04-arithmetic/03-numeric-laws.md) state it at `Nat` and `Int`.
+Nothing of it is left open: every stage has landed, and what remains is the timing below and this specification's retirement.
 
 ## Prior art
 
@@ -37,11 +37,7 @@ It waits on no other spec.
 
 ## Stages
 
-Each lands alone and is one commit. What the theorem is stated in has landed: `/std/List/Permutation` and `/std/List/Member`, `/std/List/ordered` and `/std/List/Pairwise`, and `/std/Ord`'s `Flips`, `Transitive`, `le` and `then`. The sort has landed with its theorem: `/std/List/sort_by` is the merge sort, with `permuted`, `ordered` and `sorted`, and `/std/List/sort` reads the three at `Ord/ord`.
-
-**Stage 4 — the laws the sort is used at.** `Nat/ord/flips`, taken from [the numeric laws](../04-arithmetic/03-numeric-laws.md) where they have landed and written here otherwise; `Bytes/ord/flips` and `Str/ord/flips`; and `sort`'s three theorems.
-
-Check: the `aggregates` unit states a list of `Nat` and a list of `Str` sorted, and two sorts in a row in order by both keys through `Pairwise/of_ordered`.
+Each lands alone and is one commit. What the theorem is stated in has landed: `/std/List/Permutation` and `/std/List/Member`, `/std/List/ordered` and `/std/List/Pairwise`, and `/std/Ord`'s `Flips`, `Transitive`, `le` and `then`. The sort has landed with its theorem: `/std/List/sort_by` is the merge sort, with `permuted`, `ordered` and `sorted`, and `/std/List/sort` reads the three at `Ord/ord`. And the laws it is used at have landed: `Nat/ord/flips`, `Bytes/ord/flips` and `Str/ord/flips`, each in a module beside its comparator.
 
 ## Verification
 

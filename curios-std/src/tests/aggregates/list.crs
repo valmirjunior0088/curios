@@ -173,3 +173,17 @@ let _two_sorts_order_by_both_keys(
             earlier_carries,
             once,
             List/sort_by/sorted(earlier, earlier_flips, l)));
+
+-- The theorem read at the orders the examples above sort by: a list of naturals and a list of texts, each by its type's own order, whose flip stands in a module beside it.
+let _naturals_sort_in_order(
+    l: List(Nat),
+) -> Holds(List/ordered(List/sort(l), Ord/le((a: Nat, b: Nat) => Ord/ord(a, b)))) =
+    List/sort/sorted(Nat/ord/flips, l);
+
+let _texts_sort_in_order(
+    l: List(Str),
+) -> Holds(List/ordered(List/sort(l), Ord/le((a: Str, b: Str) => Ord/ord(a, b)))) =
+    List/sort/sorted(Str/ord/flips, l);
+
+let _a_sort_of_texts_rearranges(l: List(Str)) -> Permutation()(l, List/sort(l)) =
+    List/sort/permuted(l);

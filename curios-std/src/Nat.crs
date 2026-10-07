@@ -1,7 +1,7 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, gt, ge, and, or, xor, shl, shr, pow,
     to_int, to_flt, to_byte};
-use /std/{Str, Option, Char, Bool, Ordering, Show, Spell, Ord, Eq};
+use /std/{Str, Option, Char, Bool, Show, Spell, Ord, Eq};
 use /std/Bool/{Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
@@ -142,9 +142,9 @@ pub let eq_of_eql(a: Nat, b: Nat, h: Holds(a == b)) -> Eq()(a, b) =
         end
     end;
 
---- The order of the two.
-pub let ord(x: Nat, y: Nat) -> Ordering =
-    choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
+--- The order of two naturals, and its laws.
+pub mod ord;
+pub use ord/{let ord};
 
 satisfy Show(Nat) {
     show = to_str,

@@ -806,9 +806,9 @@ satisfy Spell(Str) {
         concat("\"", concat(body, "\"")),
 }
 
---- Code-point order.
-pub let ord(a: Str, b: Str) -> Ordering =
-    Bytes/ord(to_bytes(a), to_bytes(b));
+--- The order of two texts, by code point, and its laws.
+pub mod ord;
+pub use ord/{let ord};
 
 satisfy Cmp(Str) {
     lt(a, b) = Ordering/is_lt(ord(a, b)),

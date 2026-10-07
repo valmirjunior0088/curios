@@ -241,21 +241,9 @@ pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
         (i, ok) => List/get(@Bytes, parts, i, @ok),
         (l, r) => x[..l, ..sep, ..r]);
 
---- Bytewise, a proper prefix first.
-pub let ord(a: Bytes, b: Bytes) -> Ordering =
-    match a
-    | x[] => match b | x[] => Ordering/eq() | _ => Ordering/lt() end
-    | x[h, ..t] =>
-        match b
-        | x[] => Ordering/gt()
-        | x[k, ..r] =>
-            match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
-            | eq() => ord(t, r)
-            | lt() => Ordering/lt()
-            | gt() => Ordering/gt()
-            end
-        end
-    end;
+--- The order of two byte strings, bytewise with a proper prefix first, and its laws.
+pub mod ord;
+pub use ord/{let ord};
 
 satisfy Eql(Bytes) {
     eql = eql,

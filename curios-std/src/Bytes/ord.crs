@@ -1,0 +1,73 @@
+use /std/{Nat, Byte, Bytes, Eq, Ordering, Ord};
+
+--- Bytewise, a proper prefix first.
+---
+--- A walk over both runs' structure, so a type may name it and its laws are folds.
+pub let ord(a: Bytes, b: Bytes) -> Ordering =
+    match a
+    | x[] => match b | x[] => Ordering/eq() | _ => Ordering/lt() end
+    | x[h, ..t] =>
+        match b
+        | x[] => Ordering/gt()
+        | x[k, ..r] =>
+            match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
+            | eq() => ord(t, r)
+            | lt() => Ordering/lt()
+            | gt() => Ordering/gt()
+            end
+        end
+    end;
+
+--- `ord` answers the flipped answer with its operands swapped.
+---
+--- A fold over the first run, for every second: where the two heads differ the answer is theirs, which `Nat/ord/flips` flips, and where they tie it is the tails'.
+pub let flips: Ord/Flips(ord) =
+    (a, b) =>
+        match a: (m) => (b: Bytes) -> Eq()(ord(b, m), Ordering/flip(ord(m, b)))
+        | x[] => (b) => match b | x[] => Eq/refl() | x[_, .._] => Eq/refl() end
+        | x[h, ..t]; ih =>
+            (b) =>
+                match b
+                | x[] => Eq/refl()
+                | x[k, ..r] =>
+                    let swapped = Nat/ord/flips(Byte/to_nat(h), Byte/to_nat(k));
+                    match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
+                    | lt() =>
+                        Eq/subst(
+                            (o: Ordering) =>
+                                Eq()(
+                                    match o
+                                    | eq() => ord(r, t)
+                                    | lt() => Ordering/lt()
+                                    | gt() => Ordering/gt()
+                                    end,
+                                    Ordering/gt()),
+                            Eq/sym(swapped),
+                            Eq/refl())
+                    | gt() =>
+                        Eq/subst(
+                            (o: Ordering) =>
+                                Eq()(
+                                    match o
+                                    | eq() => ord(r, t)
+                                    | lt() => Ordering/lt()
+                                    | gt() => Ordering/gt()
+                                    end,
+                                    Ordering/lt()),
+                            Eq/sym(swapped),
+                            Eq/refl())
+                    | eq() =>
+                        Eq/subst(
+                            (o: Ordering) =>
+                                Eq()(
+                                    match o
+                                    | eq() => ord(r, t)
+                                    | lt() => Ordering/lt()
+                                    | gt() => Ordering/gt()
+                                    end,
+                                    Ordering/flip(ord(t, r))),
+                            Eq/sym(swapped),
+                            ih(r))
+                    end
+                end
+        end(b);
