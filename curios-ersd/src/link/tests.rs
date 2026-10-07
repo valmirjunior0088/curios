@@ -182,6 +182,19 @@ fn a_schema_is_registered_once_where_the_resolution_says_it_is_held() {
 }
 
 #[test]
+fn a_fragments_rows_are_linked_without_its_items() {
+    let (fragment, schema) = pair();
+
+    let mut program = Module::new();
+    let linked = program.link_rows(&fragment, &Resolution::default());
+
+    assert_eq!(program.products().len(), 1);
+    assert_eq!(linked.product(schema), ProductId(0));
+    assert!(program.items().is_empty());
+    assert!(program.constants().is_empty());
+}
+
+#[test]
 fn an_imported_value_stands_for_the_atom_it_resolves_to() {
     let mut defining = ErsdBuilder::new();
     let one = nat(&mut defining, 1);

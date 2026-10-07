@@ -6,7 +6,7 @@
 //!
 //! **The order is the scope's.** Units in dependency order, each one's items in the order it stores them, then the program's own and its entry: every item after the items it imports from, which is the order their statements evaluate in.
 //!
-//! **A schema is its declaration's.** The item that declares a structure or an inductive registers its row, and a fragment that imports the row is linked after that item, its schema resolved to the one the item registered. An anonymous row is declared by no item: the first fragment linked that holds one of a width registers it, and every later one is resolved to it.
+//! **A schema is its declaration's.** The item that declares a structure or an inductive registers its row, and a fragment that imports the row is linked after that item's rows are, its schema resolved to the one the item registered. Only the rows: a declaration a program constructs or matches values of, and names nowhere else, contributes its schemas and none of what its own item erased to ([`curios_ersd::Module::link_rows`]). An anonymous row is declared by no item: the first fragment linked that holds one of a width registers it, and every later one is resolved to it.
 
 use {
     super::{Binding, ErasedItem, ErasedProgram, ErasedUnit, Erasures},
@@ -33,19 +33,7 @@ impl Linking {
                 panic!("{name} is imported before the item that binds it is linked")
             })
         };
-        let environment = erased.environment();
-        for name in environment.imported_rows() {
-            // A newtype's row has no schema, so nothing of it is resolved.
-            let held = match environment.struct_row(name) {
-                Some(row) => row.schema.is_none() || self.structs.contains_key(name),
-                None => self.families.contains_key(name),
-            };
-            assert!(
-                held,
-                "the row of {name} is imported before the item that declares it is linked",
-            );
-        }
-        let mut resolution = curios_ersd::Resolution {
+        let resolution = curios_ersd::Resolution {
             values: erased.values().iter().map(bound).collect(),
             functions: erased
                 .functions()
@@ -55,8 +43,43 @@ impl Linking {
                     atom => panic!("{name} is imported as a function and bound to {atom:?}"),
                 })
                 .collect(),
-            ..Default::default()
+            ..self.held(erased)
         };
+
+        let linked = self.module.link(erased.module(), &resolution);
+
+        self.hold(erased, &linked);
+        for (name, binding) in erased.environment().bindings() {
+            if let Binding::Atom(atom) = binding {
+                self.bound.insert(*name, linked.atom(atom));
+            }
+        }
+    }
+
+    /// Register one item's schemas and nothing else of its fragment: the rows a linked fragment imports from a declaration the program never reaches.
+    fn add_rows(&mut self, erased: &ErasedItem) {
+        let resolution = self.held(erased);
+        let linked = self.module.link_rows(erased.module(), &resolution);
+
+        self.hold(erased, &linked);
+    }
+
+    /// Which of `erased`'s schemas the program already holds, each with where: a row by the declaration it is the row of, an anonymous one by its width.
+    fn held(&self, erased: &ErasedItem) -> curios_ersd::Resolution {
+        let environment = erased.environment();
+        for name in environment.imported_rows() {
+            // A newtype's row has no schema, so nothing of it is resolved.
+            let held = match environment.struct_row(name) {
+                Some(row) => row.schema.is_none() || self.structs.contains_key(name),
+                None => self.families.contains_key(name),
+            };
+            assert!(
+                held,
+                "the row of {name} is imported before the rows of the item that declares it are linked",
+            );
+        }
+
+        let mut resolution = curios_ersd::Resolution::default();
         for (name, schema) in environment.struct_schemas() {
             if let Some(&held) = self.structs.get(name) {
                 resolution.products.insert(schema, held);
@@ -73,8 +96,12 @@ impl Linking {
             }
         }
 
-        let linked = self.module.link(erased.module(), &resolution);
+        resolution
+    }
 
+    /// Record where each schema of `erased` landed, for the fragments linked after it.
+    fn hold(&mut self, erased: &ErasedItem, linked: &curios_ersd::Linked) {
+        let environment = erased.environment();
         for (name, schema) in environment.struct_schemas() {
             self.structs.entry(*name).or_insert(linked.product(schema));
         }
@@ -84,45 +111,54 @@ impl Linking {
         for (name, family) in environment.families() {
             self.families.entry(*name).or_insert(linked.family(family));
         }
-        for (name, binding) in environment.bindings() {
-            if let Binding::Atom(atom) = binding {
-                self.bound.insert(*name, linked.atom(atom));
-            }
-        }
     }
 }
 
-/// The items of each unit in scope a program links: what `roots` import, transitively, the items declaring the rows they import among them, and every item that computes at initialization with what it imports — each unit's as the places of its items, ascending.
-fn reached<'a>(
-    scope: Erasures<'_>,
-    roots: impl Iterator<Item = &'a ErasedItem>,
-) -> Vec<BTreeSet<usize>> {
-    let units = scope.units();
-    let mut reached = vec![BTreeSet::new(); units.len()];
-    let mut pending = Vec::new();
+/// What a program takes of each unit in scope, as the places of its items, ascending.
+struct Reached {
+    /// The items it links.
+    items: Vec<BTreeSet<usize>>,
+    /// The items whose rows it links: the declarations of the rows a linked item imports, with theirs.
+    rows: Vec<BTreeSet<usize>>,
+}
 
-    let imports = |erased: &ErasedItem, pending: &mut Vec<(usize, usize)>| {
-        for name in erased
-            .values()
-            .iter()
-            .chain(erased.functions())
-            .chain(erased.environment().imported_rows())
-        {
-            // A name no unit in scope declares is the program's own, and every item of the program is linked.
-            if let Some(place) = scope.place(name) {
-                pending.push(place);
-            }
-        }
+/// The unit and the place of the item declaring each of `names` that a unit in scope declares. A name none declares is the program's own, and every item of the program is linked.
+fn places<'n>(scope: Erasures<'_>, names: impl Iterator<Item = &'n Global>) -> Vec<(usize, usize)> {
+    names.filter_map(|name| scope.place(name)).collect()
+}
+
+/// What a program takes of each unit in scope: the items `roots` import, transitively, and every item that computes at initialization with what it imports; and, of the declarations whose rows any of those import, the rows.
+fn reached<'a>(scope: Erasures<'_>, roots: impl Iterator<Item = &'a ErasedItem>) -> Reached {
+    let units = scope.units();
+    let mut reached = Reached {
+        items: vec![BTreeSet::new(); units.len()],
+        rows: vec![BTreeSet::new(); units.len()],
     };
+    let mut items = Vec::new();
+    let mut rows = Vec::new();
+
     for root in roots {
-        imports(root, &mut pending);
+        items.extend(places(scope, root.values().iter().chain(root.functions())));
+        rows.extend(places(scope, root.environment().imported_rows()));
     }
     for (unit, erased) in units.iter().enumerate() {
-        pending.extend(erased.computing().map(|place| (unit, place)));
+        items.extend(erased.computing().map(|place| (unit, place)));
     }
-    while let Some((unit, place)) = pending.pop() {
-        if reached[unit].insert(place) {
-            imports(&units[unit].items()[place], &mut pending);
+    while let Some((unit, place)) = items.pop() {
+        if reached.items[unit].insert(place) {
+            let erased = &units[unit].items()[place];
+            items.extend(places(
+                scope,
+                erased.values().iter().chain(erased.functions()),
+            ));
+            rows.extend(places(scope, erased.environment().imported_rows()));
+        }
+    }
+    // A row's fields name other rows, which the declaring fragment imports in its turn.
+    while let Some((unit, place)) = rows.pop() {
+        if reached.rows[unit].insert(place) {
+            let erased = &units[unit].items()[place];
+            rows.extend(places(scope, erased.environment().imported_rows()));
         }
     }
 
@@ -147,13 +183,22 @@ pub(super) fn link(
     );
     curios_profile::sample!(
         "link::reached",
-        reached.iter().map(BTreeSet::len).sum::<usize>()
+        reached.items.iter().map(BTreeSet::len).sum::<usize>()
     );
 
     let mut linking = Linking::default();
-    for (unit, places) in scope.units().iter().zip(&reached) {
-        for &place in places {
-            linking.add(&unit.items()[place]);
+    for (unit, (items, rows)) in scope
+        .units()
+        .iter()
+        .zip(reached.items.iter().zip(&reached.rows))
+    {
+        // In the order the unit stores its items, which puts a declaration ahead of whatever imports its rows.
+        for &place in items.union(rows) {
+            let erased = &unit.items()[place];
+            match items.contains(&place) {
+                true => linking.add(erased),
+                false => linking.add_rows(erased),
+            }
         }
     }
     for erased in own.items() {

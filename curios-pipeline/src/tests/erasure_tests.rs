@@ -75,6 +75,29 @@ fn a_program_links_the_library_its_entry_reaches() {
     );
 }
 
+/// A program that constructs or matches a declaration's values holds the declaration's row and nothing of what its type former erased to: `/std/Map` is a parameterised type, whose former erases to a function no program applies.
+#[test]
+fn a_program_holds_a_declarations_row_without_its_type_former() {
+    let module = erase_to_ersd(r#"/std/Fmt/print("hello")"#);
+    let map = "/std/Map/Map";
+
+    assert!(
+        module
+            .products()
+            .iter()
+            .any(|schema| schema.debug_name.as_deref() == Some(map)),
+        "the program holds no row of {map}"
+    );
+    assert!(
+        !module
+            .functions()
+            .iter()
+            .flatten()
+            .any(|function| function.debug_name.as_deref() == Some(map)),
+        "the program links what {map}'s type former erased to"
+    );
+}
+
 #[test]
 fn arena_erasure_is_deterministic_across_compiles() {
     let source = "let subject : /std/Nat = /std/Nat/add(20, 22);

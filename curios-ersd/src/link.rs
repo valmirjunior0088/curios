@@ -5,6 +5,8 @@
 //! **What a module keeps outside its arenas is interned, not appended.** A constant, a foreign row and a schema are each one in a program however many fragments spell them. Constants and rows intern by their own identity. A schema has none a module can read — two structures of one shape are two schemas — so whoever links says which of a fragment's schemas the program already holds ([`Resolution::products`], [`Resolution::families`]), and every other is registered as new.
 //!
 //! **An imported function's stub is not linked.** Its parameters and its body exist so that the fragment verifies alone; in a program the identity is the function it stands for.
+//!
+//! **A fragment's schemas can be linked without it** ([`Module::link_rows`]): a program that constructs or matches a declaration's values holds the declaration's row, and has no use for what the declaration's own item computes unless something reaches it.
 
 #[cfg(test)]
 mod tests;
@@ -212,6 +214,21 @@ impl Module {
         }
     }
 
+    /// Register `fragment`'s schemas in this module and nothing else of it, each where `resolution` says this module holds it, or as a new one, and hand back where they landed.
+    pub fn link_rows(&mut self, fragment: &Module, resolution: &Resolution) -> Linked {
+        let mut tables = Tables::default();
+        self.link_schemas(fragment, resolution, &mut tables);
+        let Tables {
+            products, families, ..
+        } = tables;
+
+        Linked {
+            products,
+            families,
+            ..Default::default()
+        }
+    }
+
     /// Intern what `fragment` keeps outside its arenas into this module's tables: its constants and foreign rows by their own identity, and each schema where `resolution` says this module holds it, or as a new one.
     fn link_tables(&mut self, fragment: &Module, resolution: &Resolution) -> Tables {
         let mut tables = Tables::default();
@@ -223,7 +240,13 @@ impl Module {
             let linked = self.intern_foreign(Arc::clone(foreign));
             tables.foreigns.insert(ForeignId(index as u32), linked);
         }
+        self.link_schemas(fragment, resolution, &mut tables);
 
+        tables
+    }
+
+    /// The schema half of [`link_tables`](Self::link_tables), written into `tables`.
+    fn link_schemas(&mut self, fragment: &Module, resolution: &Resolution, tables: &mut Tables) {
         // Every schema's place before any schema's fields: a field's shape names a schema, its own among them.
         let mut registered = Vec::new();
         for (index, schema) in fragment.products().iter().enumerate() {
@@ -284,7 +307,7 @@ impl Module {
             let fields = constructor
                 .fields
                 .iter()
-                .map(|entry| field(entry, &tables))
+                .map(|entry| field(entry, tables))
                 .collect();
             let linked = self.add_constructor(
                 tables.families[&constructor.family],
@@ -297,11 +320,9 @@ impl Module {
             let fields = schema
                 .fields
                 .iter()
-                .map(|entry| field(entry, &tables))
+                .map(|entry| field(entry, tables))
                 .collect();
             self.set_product_fields(linked, fields);
         }
-
-        tables
     }
 }
