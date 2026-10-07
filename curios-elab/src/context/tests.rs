@@ -233,6 +233,38 @@ fn a_declarations_own_entry_and_a_finished_one_are_read_without_a_need() {
     assert!(context.take_needs().is_empty());
 }
 
+/// A body asked for of a declaration that has not elaborated is a need, by each way a reduction asks: the name would reduce once its declaration has finished, so a reduction that goes stuck on it has read it.
+///
+/// Mutation-checked against each accessor's record: with one left out, its read needs nothing.
+#[test]
+fn a_body_read_of_a_declaration_that_has_not_elaborated_is_a_need() {
+    let mut context = context();
+    let [a, b] = unit_of_two(&mut context);
+    let name = Free::from(&a);
+
+    context.attempt(&[&b]);
+    assert!(context.definition_body(&name).is_none());
+    assert_eq!(context.take_needs(), BTreeSet::from([a]));
+
+    context.attempt(&[&b]);
+    assert!(context.var_reduct(&name).is_none());
+    assert_eq!(context.take_needs(), BTreeSet::from([a]));
+
+    context.attempt(&[&b]);
+    assert!(context.var_reduct_at(&name).is_none());
+    assert_eq!(context.take_needs(), BTreeSet::from([a]));
+
+    // Its own body, and one that is missing for good once its declaration has finished, are no read of another.
+    context.attempt(&[&a]);
+    assert!(context.definition_body(&name).is_none());
+    assert!(context.take_needs().is_empty());
+    context.finish(&[&a]);
+    context.attempt(&[&b]);
+    assert!(context.definition_body(&name).is_none());
+    assert!(context.var_reduct(&name).is_none());
+    assert!(context.take_needs().is_empty());
+}
+
 /// A declaration's own name is bound by the group it becomes, so missing it is no read of another.
 #[test]
 fn a_declaration_reads_its_own_name_without_a_need() {

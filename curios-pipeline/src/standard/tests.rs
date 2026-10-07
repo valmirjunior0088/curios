@@ -366,7 +366,19 @@ fn std_replay_census() {
                     .min()
                     .copied()
                     .expect("a declaration declares a lowered name");
-                let own = &lowered_core.items[first];
+                // The item the declaration is written as, wherever the lowering puts the items generated from it: a concept's method wrappers leave the lowering ahead of the concept.
+                let own = names
+                    .iter()
+                    .filter_map(|name| position.get(name))
+                    .map(|place| &lowered_core.items[*place])
+                    .find(|item| {
+                        !matches!(
+                            introduced(item),
+                            DefinitionKind::InductiveConstructor { .. }
+                                | DefinitionKind::ConceptMethod { .. }
+                        )
+                    })
+                    .expect("a declaration holds the item it is written as");
                 let mut closure = names.clone();
                 if matches!(
                     introduced(own),
@@ -411,11 +423,11 @@ fn std_replay_census() {
                 match replayed {
                     Err(error) => {
                         refused += 1;
-                        let refusal = format!("{error:?}");
+                        let refusal = error.to_string().replace('\n', " | ");
                         println!(
                             "  after {padding}: {} is refused: {}",
                             own.describe(),
-                            refusal.chars().take(160).collect::<String>()
+                            refusal.chars().take(600).collect::<String>()
                         );
                     }
                     Ok(replayed) => {

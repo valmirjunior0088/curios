@@ -610,7 +610,7 @@ impl Context {
         mem::take(self.needs.get_mut())
     }
 
-    /// Record a need where `name` is declared by a declaration of the unit that has not finished, other than the one being attempted. Asked where a lookup of a global comes back empty: the answer is then not that the name means nothing, only that its declaration has not elaborated.
+    /// Record a need where `name` is declared by a declaration of the unit that has not finished, other than the one being attempted. Asked where a lookup of a global comes back empty, for its type or for its body: the answer is then not that the name means nothing or reduces no further, only that its declaration has not elaborated.
     fn missed(&self, name: &Free) {
         if let Free::Global(global) = name
             && self.unfinished.contains(global)
@@ -1473,16 +1473,34 @@ impl Context {
         self.frames.refine_projection(base, index, value);
     }
 
+    /// [`Frames::definition_body`], and a need where the body is missing because its declaration has not finished ([`Context::missed`]): a reduction that asks for one would otherwise go stuck on a name that only has no body yet, and the attempt would be judged on a term it could have reduced.
     pub(crate) fn definition_body(&self, name: &Free) -> Option<&Term> {
-        self.frames.definition_body(name)
+        let body = self.frames.definition_body(name);
+        if body.is_none() {
+            self.missed(name);
+        }
+
+        body
     }
 
+    /// [`Frames::var_reduct`], and a need as [`Context::definition_body`] records one.
     pub(crate) fn var_reduct(&self, name: &Free) -> Option<&Term> {
-        self.frames.var_reduct(name)
+        let reduct = self.frames.var_reduct(name);
+        if reduct.is_none() {
+            self.missed(name);
+        }
+
+        reduct
     }
 
+    /// [`Frames::var_reduct_at`], and a need as [`Context::definition_body`] records one.
     pub(crate) fn var_reduct_at(&self, name: &Free) -> Option<&Term> {
-        self.frames.var_reduct_at(name)
+        let reduct = self.frames.var_reduct_at(name);
+        if reduct.is_none() {
+            self.missed(name);
+        }
+
+        reduct
     }
 
     /// [`Frames::projection_entry`]'s value, declined where `base` and the base the arm scrutinized disagree on a universe instance both sides have already decided.
