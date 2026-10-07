@@ -2,7 +2,7 @@
 
 Working specification for the certified functions and theorems `/std/Nat`, `/std/Int` and `/std/Flt` lack, proved in the library over what conversion decides. [Exact rationals](04-exact-rationals.md) is the first consumer and [the binary64 conversion proofs](07-binary64-conversion-proofs.md) the second; each stage below names which of their stages it serves, so that neither writes number theory of its own.
 
-Its stage 0 is a finding of [this area](00-findings.md), taken first because every later stage meets it. It waits on no other spec.
+It waits on no other spec.
 
 ## What this builds on
 
@@ -42,8 +42,6 @@ Its stage 0 is a finding of [this area](00-findings.md), taken first because eve
 ## Stages
 
 Each lands alone and is one commit.
-
-**Stage 0 — the procedure that proves a bound reads one call as one atom.** Its [finding](00-findings.md): a hypothesis over `f(n / 2)` does not reach a bound over `2 * f(n / 2)`, the shape every proof by recursion below has. Solved metavariables are substituted in the bound and in each fact before their atoms are read, as the elaborator does before the conversion chain reads a pair. Check: the finding's statements, at `+`, `/` and `%` and from a recursive call, as rows of `curios`'s `tests::bounds`; `/std` elaborates and certifies unchanged.
 
 **Stage 1 — Euclid on `Nat`.** Serves [exact rationals](04-exact-rationals.md)' stages 1 and 4.
 

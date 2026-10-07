@@ -359,6 +359,29 @@ const ROWS: &[Row] = &[
         "List(Nat)",
         "match i < n | false => [] | true => match List/len(l) == n * k | false => [] | true => List/slice(l, i * k, k) end end",
     ),
+    // A call over an operator is one atom wherever it is stated. An operator's witness stands in a signature as the metavariable its resolution solved, and under a product, which a fold rebuilds, as the witness itself; the operands are read with the solutions substituted, at `+`, at `/` and `%`, and at `Int`.
+    claim(
+        "n: Nat, f: (Nat) -> Nat, m: Nat, h: Holds(f(n + 2) <= m), q: Holds(2 * m <= n)",
+        "Holds(2 * f(n + 2) <= n)",
+    ),
+    claim(
+        "n: Nat, f: (Nat) -> Nat, m: Nat, h: Holds(f(n / 2) <= m), q: Holds(2 * m <= n)",
+        "Holds(2 * f(n / 2) <= n)",
+    ),
+    claim(
+        "n: Nat, f: (Nat) -> Nat, m: Nat, h: Holds(f(n % 2) <= m), q: Holds(2 * m <= n)",
+        "Holds(2 * f(n % 2) <= n)",
+    ),
+    claim(
+        "i: Int, f: (Int) -> Int, m: Int, h: Holds(f(i / +2) <= m), q: Holds(2 * m <= i)",
+        "Holds(2 * f(i / +2) <= i)",
+    ),
+    // And where both statements stand in a body, as a hypothesis taken from a call and the bound it serves do in a proof by recursion.
+    body(
+        "n: Nat, f: (Nat) -> Nat, g: (m: Nat) -> Holds(f(m) <= m)",
+        "Nat",
+        "let inner: Holds(f(n / 2) <= n / 2) = g(n / 2); let doubled: Holds(2 * f(n / 2) <= n) = True/proved(); 0",
+    ),
 ];
 
 /// What the procedure must refuse.

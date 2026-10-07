@@ -14,7 +14,7 @@
 //!
 //! **A remainder by a literal is lifted away.** Conversion reads `k * (x / k) + x % k` as `x` wherever one side of a comparison holds both, so a sum of facts that holds a remainder beside its quotient's multiple is not the sum of their views. Every fact over `x % k` is therefore raised by the multiple on both sides, which conversion reads as a fact over `x` ([`Lift`]), and the remainder stays out of every form the search reads.
 //!
-//! **A statement is written as it is stated and read as it reduces.** A hypothesis, a field, a guard and the goal are opened by their heads alone, as a guard's resolved spelling is, to the comparison, range check or conjunction they state ([`opened`]), and their sides are the operands as stated; only the view reads their reducts. A reduct is no spelling to write: a call reduced to the body it unfolds to carries that body's own arms, which elaborate only where they were written, and a local definition reduced to its value names locals the arm's key does not. What the facts invent over atoms is written through the spellings the atoms were read from ([`Facts::respell`]). Where opening reaches none of the three, the statement is read reduced.
+//! **A statement is written as it is stated and read as it reduces.** A hypothesis, a field, a guard and the goal are opened by their heads alone, as a guard's resolved spelling is, to the comparison, range check or conjunction they state ([`opened`]), and their sides are the operands as stated; only the view reads their reducts, each with the metavariables elaboration has solved substituted, so an operator's witness is one term wherever it was resolved. A reduct is no spelling to write: a call reduced to the body it unfolds to carries that body's own arms, which elaborate only where they were written, and a local definition reduced to its value names locals the arm's key does not. What the facts invent over atoms is written through the spellings the atoms were read from ([`Facts::respell`]). Where opening reaches none of the three, the statement is read reduced.
 //!
 //! **A fact is `left <= right` at its carrier**, as the proof's lemmas take it: a strict fact is the loose one of its successor, which conversion reads as one proposition at `Nat` as at `Int`, and an equation is two facts. Its form is `left - right` aligned to `<=`, read by the one reader every fact and the goal share, so their atoms are one table's.
 //!
@@ -22,7 +22,7 @@
 
 use {
     super::{decision_of, global, in_scope, is_empty},
-    crate::{Context, Error, open_layer, reduce_with},
+    crate::{Context, Error, open_layer, reduce_with, zonk_solved_term_metas},
     curios_algebra::{Carrier, Lattice, LinearForm, Monomial, Operation},
     curios_analysis::RESOLVED_SPELLING_LAYERS,
     curios_core::{
@@ -1096,7 +1096,7 @@ impl<'a> Reader<'a> {
         left: &Term,
         right: &Term,
     ) -> Result<Option<LinearForm>, Error> {
-        let read = Intrinsic::NatLe(reduce_with(context, left)?, reduce_with(context, right)?);
+        let read = Intrinsic::NatLe(as_read(context, left)?, as_read(context, right)?);
         Ok(self
             .views
             .read(&read)
@@ -1202,8 +1202,8 @@ impl<'a> Reader<'a> {
         let read = comparison_of(
             carrier,
             relation,
-            &reduce_with(context, left)?,
-            &reduce_with(context, right)?,
+            &as_read(context, left)?,
+            &as_read(context, right)?,
         );
         let Some((_, view)) = self.views.read(&read) else {
             return Ok(None);
@@ -1220,12 +1220,18 @@ impl<'a> Reader<'a> {
             }
             return Ok(());
         }
-        let reduct = reduce_with(context, stated)?;
+        let reduct = as_read(context, stated)?;
         if reduct != *stated && !self.read.spelled.iter().any(|(known, _)| *known == reduct) {
             self.read.spelled.push((reduct, stated.clone()));
         }
         Ok(())
     }
+}
+
+/// `term` as the view reads it: reduced, and the reduct with the metavariables elaboration has solved substituted. An operator's witness stands in a signature as the metavariable its resolution solved and in a bound as the witness itself, a recursive member's slot stands where its name does, and reduction opens neither inside a stuck call, so a reduct read as it stands would make one call two atoms.
+fn as_read(context: &mut Context, term: &Term) -> Result<Term, Error> {
+    let reduced = reduce_with(context, term)?;
+    Ok(zonk_solved_term_metas(context, &reduced))
 }
 
 /// The goal's negation, a fact of the refuting form's false arm, where a split on the goal's decision refined it to `false`: `a < b` failing is `b <= a`, `a <= b` failing is `b < a`. Read by the same reader, after the facts, proved by `qed` there, and lifted by `lifts` as they were. `None` where the vocabulary is not in scope.
