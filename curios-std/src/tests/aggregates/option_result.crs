@@ -1,5 +1,5 @@
 -- The `Option` and `Result` surface beyond `bind` and `map`: fallbacks, filtering, the conversions between them, and the proof-carrying `Option/get`.
-use /std/{Option, Result, Nat, Str, Test};
+use /std/{Option, Result, Nat, Str, Eq, Test};
 
 test option_fallbacks_filter_and_flatten =
     let a: Option(Nat) = Option/some(1);
@@ -26,3 +26,11 @@ test option_and_result_convert_into_each_other =
 -- `IsSome` is decided by a match, so `get` on a literal `some` fills its bound by reduction with nothing written.
 test get_on_a_literal_some_discharges_its_bound =
     Test/equal(Option/get(Option/some(3)), 3);
+
+-- `some` is injective: a claim about every pair of values, so it is stated in a type and discharged on every build.
+let _two_equal_options_hold_one_value(
+    a: Nat,
+    b: Nat,
+    same: Eq()(Option/some(a), Option/some(b)),
+) -> Eq()(a, b) =
+    Option/some_injective(same);

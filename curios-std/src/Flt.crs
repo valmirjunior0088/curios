@@ -495,15 +495,11 @@ pub let total_key(f: Flt) -> Nat =
     let top = pow2(63);
     match bits >= top | true => pow2(64) - 1 - bits | false => bits + top end;
 
--- The float a run of bytes spells, and `+0.0` for a run that is not eight bytes: total, so congruence can read an encoding back. Only a proof reads it, and only at a float's own encoding, where it is that float.
-let decoded(z: Bytes) -> Flt =
-    Option/unwrap_or(try_of_le_bytes(z), +0.0);
-
 --- A float is its bytes: two floats with one encoding are one float.
 ---
 --- [`to_le_bytes`] is injective because `of_le_bytes` undoes it, which is what makes the bytes a float's identity: the two zeros and every NaN pattern are apart, as their encodings are.
 pub let eq_of_le_bytes(a: Flt, b: Flt, same: Eq()(to_le_bytes(a), to_le_bytes(b))) -> Eq()(a, b) =
-    Eq/cong(decoded, same);
+    Option/some_injective(Eq/cong(try_of_le_bytes, same));
 
 --- Two floats with one [`total_key`] are one float: the key tells every pattern apart.
 ---

@@ -63,14 +63,9 @@ pub let fold(@A: Type, b: Bits, init: A, f: (Bool, A) -> A) -> A =
     let go(z: Bits, acc: A) -> A = match z | b[] => acc | b[h, ..t] => go(t, f(h, acc)) end;
     go(b, init);
 
--- The two halves of a cons, as total functions so congruence can take one apart.
---
--- Guarded rather than bounded, for the reason `/std/Bytes`'s own `head` and `tail` are: congruence needs one function of the whole value, and a bound stated over an arbitrary run has nothing to discharge it. On a cons the guard reduces, which is the only shape either is used at.
-let head_of(x: Bits) -> Bool =
-    match x | b[] => false | b[h, .._] => h end;
-
-let tail_of(x: Bits) -> Bits =
-    match x | b[] => b[] | b[_, ..t] => t end;
+-- A cons taken apart, or `none` for no bits: one function of the whole value, which congruence needs, and no half invented for the run that has none.
+let uncons(x: Bits) -> Option({Bool, Bits}) =
+    match x | b[] => Option/none() | b[h, ..t] => Option/some((h, t)) end;
 
 --- Whether `b` has a bit at all.
 pub let nonempty(b: Bits) -> Bool =
@@ -78,7 +73,7 @@ pub let nonempty(b: Bits) -> Bool =
 
 --- A cons is injective in its head.
 ---
---- Read through a total projection of the whole value, which is what lets the equation be taken apart without a bound: the motive names `head_of` of each side, and `refl` collapses it.
+--- Read through the cons taken apart above, which is what lets the equation be taken apart without a bound: congruence carries it to the two pairs of halves, and `some` is injective.
 pub let cons_inj_head(
     @h1: Bool,
     @t1: Bits,
@@ -86,7 +81,7 @@ pub let cons_inj_head(
     @t2: Bits,
     p: Eq()(b[h1, ..t1], b[h2, ..t2]),
 ) -> Eq()(h1, h2) =
-    match p: (s, t, _) => Eq()(head_of(s), head_of(t)) | refl() => Eq/refl() end;
+    Eq/cong((halves: {Bool, Bits}) => halves.0, Option/some_injective(Eq/cong(uncons, p)));
 
 --- A cons is injective in its tail.
 pub let cons_inj_tail(
@@ -96,7 +91,7 @@ pub let cons_inj_tail(
     @t2: Bits,
     p: Eq()(b[h1, ..t1], b[h2, ..t2]),
 ) -> Eq()(t1, t2) =
-    match p: (s, t, _) => Eq()(tail_of(s), tail_of(t)) | refl() => Eq/refl() end;
+    Eq/cong((halves: {Bool, Bits}) => halves.1, Option/some_injective(Eq/cong(uncons, p)));
 
 --- Congruence for a run extended by a head and a tail, which is the rebuild the two injections above take apart.
 pub let cong_cons2(

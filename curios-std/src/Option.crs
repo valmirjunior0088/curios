@@ -1,6 +1,6 @@
 pub use /sys/{Option};
 pub use /sys/Option/{some, none};
-use /std/{Bool, Show, Spell, Str, Monad, Result, Ordering, Ord};
+use /std/{Bool, Eq, Show, Spell, Str, Monad, Result, Ordering, Ord};
 use /std/Bool/{True, False};
 use /std/ops/{Eql, Cmp};
 
@@ -63,6 +63,27 @@ pub let get(@A: Type, m: Option(A), @ok: IsSome(m)) -> A =
     | some(a) => a
     | none() => match ok end
     end;
+
+-- What an equation between two options says of what they hold: at two values, that they are one.
+let SameValue(@A: Type, a: Option(A), b: Option(A)) -> Prop =
+    match a
+    | some(x) => match b | some(y) => Eq()(x, y) | none() => True end
+    | none() => True
+    end;
+
+let same_value_refl(@A: Type, m: Option(A)) -> SameValue(m, m) =
+    match m: (z) => SameValue(z, z) | some(_) => Eq/refl() | none() => True/qed() end;
+
+--- `some` is injective: two equal options that each hold a value hold one value.
+---
+--- What takes an encoding apart with no value invented. A reader that answers an option is one function of every input, so `Eq/cong` carries an equation between two encodings to one between what it reads from each, and this carries that to the values read.
+pub let some_injective(
+    @A: Type,
+    @x: A,
+    @y: A,
+    same: Eq()(Option/some(x), Option/some(y)),
+) -> Eq()(x, y) =
+    match same: (s, t, _) => SameValue(s, t) | refl(@value) => same_value_refl(value) end;
 
 satisfy (@A: Type, use Eql(A)) => Eql(Option(A)) {
     ..

@@ -27,13 +27,9 @@ satisfy Key(Nat) {
     injective = Bytes/of_nat_injective,
 }
 
--- The byte an encoding put at index zero, read back. Total rather than bounded, because congruence needs one function of the whole value and a bound stated over an arbitrary `Bytes` has nothing to discharge it.
-let byte_of(z: Bytes) -> Byte =
-    Option/unwrap_or(Bytes/try_get(z, 0), 0);
-
---- The one byte itself, which reading index zero takes back.
+--- The one byte itself, a cons onto no bytes, which is injective in its head.
 satisfy Key(Byte) {
-    injective(_, _, same) = Eq/cong(byte_of, same),
+    injective(a, b, same) = Bytes/cons_inj_head(@a, @x[], @b, @x[], same),
 }
 
 -- Which of the two one-byte encodings a run is, as a total function of any `Bytes`.
