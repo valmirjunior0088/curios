@@ -1,0 +1,21 @@
+pub use /sys/Int/{mul};
+use /std/{Int, Eq};
+use /std/Bool/{True, Holds};
+
+-- A factor above zero cancels: the order of two products by it is the order of what it multiplies, which the elaborator proves from the facts in scope, once in each direction.
+let cancel_positive(a: Int, b: Int, k: Int, e: Eq()(a * k, b * k), p: Holds(+0 < k)) -> Eq()(a, b) =
+    Int/le/antisym(a, b, True/proved(), True/proved());
+
+--- A nonzero factor on the right cancels: `a * k = b * k` gives `a = b`.
+---
+--- The integral-domain fact, which stands in for an inverse where there is none. Conversion never takes it, since without the premise the equation says nothing of `a` and `b`. A factor below zero is the one above zero negated, which leaves the equation one.
+pub let cancel_r(a: Int, b: Int, k: Int, e: Eq()(a * k, b * k), @nz: Int/NonZero(k)) -> Eq()(a, b) =
+    match Int/trichotomy(k, +0)
+    | lt(p) => cancel_positive(a, b, +0 - k, Eq/cong((x: Int) => +0 - x, e), p)
+    | eq(z) => match Eq/subst((x: Int) => Int/NonZero(x), z, nz) end
+    | gt(p) => cancel_positive(a, b, k, e, p)
+    end;
+
+--- A nonzero factor on the left cancels: `k * a = k * b` gives `a = b`.
+pub let cancel_l(a: Int, b: Int, k: Int, e: Eq()(k * a, k * b), @nz: Int/NonZero(k)) -> Eq()(a, b) =
+    cancel_r(a, b, k, e);

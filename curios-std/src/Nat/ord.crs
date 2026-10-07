@@ -1,9 +1,101 @@
-use /std/{Nat, Eq, Ordering, Ord};
+use /std/{Nat, Bool, Eq, Ordering, Ord};
 use /std/Bool/{True, False, Holds};
 
 --- The order of the two.
 pub let ord(x: Nat, y: Nat) -> Ordering =
     choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
+
+-- Of two naturals that differ, the one that is at most the other is below it.
+let below(a: Nat, b: Nat, le: Holds(b <= a), ne: Holds(Bool/not(a == b))) -> Holds(b < a) =
+    match b < a
+    | true => True/qed()
+    | false =>
+        let same: Eq()(a, b) = Nat/le/antisym(a, b, True/proved(), le);
+        match Eq/subst((x: Nat) => Holds(Bool/not(a == x)), Eq/sym(same), ne) end
+    end;
+
+--- A number is `eq` to itself.
+pub let refl(a: Nat) -> Eq()(ord(a, a), Ordering/eq()) =
+    Eq/refl();
+
+--- `a < b` gives `ord(a, b)` as `lt`.
+pub let of_lt(a: Nat, b: Nat, p: Holds(a < b)) -> Eq()(ord(a, b), Ordering/lt()) =
+    match a < b
+    | true => Eq/refl()
+    | false => match False/refuted() end
+    end;
+
+--- An equation gives `ord(a, b)` as `eq`.
+pub let of_eq(a: Nat, b: Nat, e: Eq()(a, b)) -> Eq()(ord(a, b), Ordering/eq()) =
+    Eq/subst((x: Nat) => Eq()(ord(a, x), Ordering/eq()), e, refl(a));
+
+--- `b < a` gives `ord(a, b)` as `gt`.
+pub let of_gt(a: Nat, b: Nat, p: Holds(b < a)) -> Eq()(ord(a, b), Ordering/gt()) =
+    match a < b
+    | true => match False/refuted() end
+    | false =>
+        match a == b
+        | true => match False/refuted() end
+        | false => Eq/refl()
+        end
+    end;
+
+--- `ord(a, b)` is `lt` only where `a < b`.
+pub let lt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/lt())) -> Holds(a < b) =
+    match a < b
+    | true => True/qed()
+    | false =>
+        match a == b
+        | true => match Ordering/eq_neq_lt(h) end
+        | false => match Ordering/gt_neq_lt(h) end
+        end
+    end;
+
+--- `ord(a, b)` is `eq` only where `a` is `b`: the order agrees with equality.
+pub let eq(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
+    match a < b
+    | true => match Ordering/eq_neq_lt(Eq/sym(h)) end
+    | false =>
+        match a == b
+        | true => Nat/eq_of_eql(a, b, True/qed())
+        | false => match Ordering/gt_neq_eq(h) end
+        end
+    end;
+
+--- `ord(a, b)` is `gt` only where `b < a`.
+pub let gt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/gt())) -> Holds(b < a) =
+    match a < b
+    | true => match Ordering/gt_neq_lt(Eq/sym(h)) end
+    | false =>
+        match a == b
+        | true => match Ordering/gt_neq_eq(Eq/sym(h)) end
+        | false => below(a, b, True/proved(), True/qed())
+        end
+    end;
+
+--- `ord(a, b)` is not `gt` only where `a <= b`.
+pub let le(a: Nat, b: Nat, h: Holds(Ordering/is_le(ord(a, b)))) -> Holds(a <= b) =
+    match a < b
+    | true => True/proved()
+    | false =>
+        match a == b
+        | true => Nat/le/of_eq(Nat/eq_of_eql(a, b, True/qed()))
+        | false => match h end
+        end
+    end;
+
+--- `a <= b` gives `ord(a, b)` as `lt` or `eq`.
+pub let of_le(a: Nat, b: Nat, p: Holds(a <= b)) -> Holds(Ordering/is_le(ord(a, b))) =
+    match a < b
+    | true => True/qed()
+    | false =>
+        match a == b
+        | true => True/qed()
+        | false =>
+            let strict: Holds(b < a) = below(a, b, True/proved(), True/qed());
+            match False/refuted() end
+        end
+    end;
 
 --- `ord` answers the flipped answer with its operands swapped.
 ---
@@ -45,3 +137,7 @@ pub let flips: Ord/Flips(ord) =
                 end
             end
         end;
+
+--- `ord` as a relation carries across a middle element.
+pub let transitive: Ord/Transitive(Ord/le(ord)) =
+    (a, b, c, p, q) => of_le(a, c, Nat/le/trans(le(a, b, p), le(b, c, q)));

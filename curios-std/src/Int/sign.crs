@@ -1,5 +1,5 @@
 pub use /sys/Int/{sign};
-use /std/{Int, Eq};
+use /std/{Nat, Int, Eq};
 use /std/Bool/{True, Holds};
 
 --- `sign(a)` is `+1` where `a` is above zero.
@@ -38,4 +38,39 @@ pub let of_not_neg(a: Int, p: Holds(+0 <= a)) -> Holds(+0 <= sign(a)) =
     match Int/view(a)
     | nonneg(n) => match n | 0 => True/qed() | _ + 1 => True/qed() end
     | neg(_) => match p end
+    end;
+
+--- The sign of a product is the product of the signs.
+pub let of_mul(a: Int, b: Int) -> Eq()(sign(a * b), sign(a) * sign(b)) =
+    match Int/view(a)
+    | nonneg(m) =>
+        match m
+        | 0 => Eq/refl()
+        | _ + 1 =>
+            match Int/view(b)
+            | nonneg(n) => match n | 0 => Eq/refl() | _ + 1 => Eq/refl() end
+            | neg(_) => Eq/refl()
+            end
+        end
+    | neg(_) =>
+        match Int/view(b)
+        | nonneg(n) => match n | 0 => Eq/refl() | _ + 1 => Eq/refl() end
+        | neg(_) => Eq/refl()
+        end
+    end;
+
+--- A sign is its own sign.
+pub let of_sign(a: Int) -> Eq()(sign(sign(a)), sign(a)) =
+    match Int/view(a)
+    | nonneg(m) => match m | 0 => Eq/refl() | _ + 1 => Eq/refl() end
+    | neg(_) => Eq/refl()
+    end;
+
+--- An integer is its sign times its magnitude.
+---
+--- A product of two operations conversion reads no arm of, so a proof takes this where it rebuilds an integer from the two.
+pub let times_abs(a: Int) -> Eq()(a, sign(a) * Nat/to_int(Int/abs(a))) =
+    match Int/view(a)
+    | nonneg(m) => match m | 0 => Eq/refl() | _ + 1 => Eq/refl() end
+    | neg(_) => Eq/refl()
     end;

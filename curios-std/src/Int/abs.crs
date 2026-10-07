@@ -17,3 +17,12 @@ pub let of_neg(a: Int, p: Holds(a < +0)) -> Eq()(Nat/to_int(abs(a)), +0 - a) =
     | nonneg(_) => match p end
     | neg(_) => Eq/refl()
     end;
+
+--- The magnitude of a product is the product of the magnitudes.
+---
+--- Conversion takes it where both operands are widened naturals or their negations and not at a product of two symbols, which reaches `abs` distributed. By [`Int/view`] of each operand.
+pub let of_mul(a: Int, b: Int) -> Eq()(abs(a * b), abs(a) * abs(b)) =
+    match Int/view(a)
+    | nonneg(_) => match Int/view(b) | nonneg(_) => Eq/refl() | neg(_) => Eq/refl() end
+    | neg(_) => match Int/view(b) | nonneg(_) => Eq/refl() | neg(_) => Eq/refl() end
+    end;

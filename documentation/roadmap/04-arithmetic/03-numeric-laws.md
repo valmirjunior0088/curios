@@ -14,9 +14,6 @@ It waits on no other spec.
 
 ## The gap
 
-- **`/std/Dyadic/normalized` strips a mantissa's factors of two with no proof**: with `Nat/and`, `Nat/xor`, `Nat/log2` and `Int/shr`, none of which the logic reads, so the odd mantissa it answers is a fact no type states, where `/std/Nat/Scale/of` states it of a natural.
-- **`ord` carries no law** at `Nat` or at `Int`: that it answers `eq` exactly at an equation, and `lt` and `gt` exactly at their comparisons, is unstated.
-- **`Int` has no multiplicative cancellation**, and `abs` and `sign` of a product are refused rows of the law grid with no lemma beside them.
 - **`Flt`'s identity as bits is unstated**: that `to_le_bytes` is injective, and that the natural `ord` falls back on tells every pattern apart.
 
 ## Prior art
@@ -40,16 +37,6 @@ It waits on no other spec.
 ## Stages
 
 Each lands alone and is one commit.
-
-**Stage 4 — `Int` through its sign view.** Serves [exact rationals](04-exact-rationals.md)' stage 4.
-
-- `ord`'s laws at `Nat` and at `Int`: reflexive, `eq` exactly at an equation, `lt` and `gt` exactly at their comparisons, the flip, and transitivity.
-- Multiplicative cancellation under `NonZero`, on both sides of the product.
-- `abs(a * b)` is `abs(a) * abs(b)`, `sign(a * b)` is `sign(a) * sign(b)`, `sign` is idempotent, and `n` is `sign(n) * Nat/to_int(abs(n))`.
-- The signed scale: two integers of odd magnitude at two counts that denote one value are one integer at one count, `Scale/unique` carried through the `abs` and the `sign` of a shift, which are declared.
-- `/std/Dyadic/normalized` is rebuilt over `Scale/of` on the mantissa's magnitude, so its odd mantissa is a fact of its construction.
-
-Check: rows of the `numeric` unit at zero, both signs and equal magnitudes of opposite sign; `curios-std`'s `flt` unit, which holds `normalized` at a type.
 
 **Stage 5 — `Flt`'s bits.** No stage of exact rationals needs it; it is where [the binary64 conversion proofs](07-binary64-conversion-proofs.md) and a decision on `Key(Flt)` start.
 

@@ -67,12 +67,14 @@ pub let quotient(a: Dyadic, b: Dyadic, @ok: Int/NonZero(b.mantissa)) -> {Dyadic,
 --- The representation with an odd mantissa, or `0 · 2^0` for zero: the one each number has.
 pub let normalized(a: Dyadic) -> Dyadic =
     let m = Int/abs(a.mantissa);
-    match m
-    | 0 => of_int(+0)
-    -- `m & (m ^ (m - 1))` is the lowest set bit alone, and its position is how many zeros trail.
-    | _ =>
-        let t = Nat/log2(Nat/and(m, Nat/xor(m, m - 1)));
-        Dyadic { mantissa = Int/shr(a.mantissa, t), exponent = a.exponent + Nat/to_int(t) }
+    match 0 < m
+    | true =>
+        let scale = Nat/Scale/of(m);
+        Dyadic {
+            mantissa = Int/sign(a.mantissa) * Nat/to_int(2 * scale.half + 1),
+            exponent = a.exponent + Nat/to_int(scale.count),
+        }
+    | false => of_int(+0)
     end;
 
 --- Whether the two are one number.

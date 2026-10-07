@@ -1,0 +1,81 @@
+-- `Int` through its sign view, at zero, at both signs and at equal magnitudes of opposite sign: the order's laws, cancellation, `abs` and `sign` of a product, and the signed scale.
+use /std/{Nat, Int, Ordering, Eq};
+use /std/Bool/{True, Holds};
+
+let _a_number_orders_as_equal_to_itself(a: Int) -> Eq()(Int/ord(a, a), Ordering/eq()) =
+    Int/ord/refl(a);
+
+let _opposite_signs_of_one_magnitude_are_ordered: Holds(-7 < +7) =
+    Int/ord/lt(-7, +7, Eq/refl());
+
+let _an_answer_of_eq_is_an_equation(a: Int, h: Eq()(Int/ord(a, +0), Ordering/eq())) -> Eq()(a, +0) =
+    Int/ord/eq(a, +0, h);
+
+let _swapping_the_operands_flips_the_answer(
+    a: Int,
+    b: Int,
+) -> Eq()(Int/ord(b, a), Ordering/flip(Int/ord(a, b))) =
+    Int/ord/flips(a, b);
+
+let _the_order_is_transitive(
+    a: Int,
+    b: Int,
+    c: Int,
+    p: Holds(Ordering/is_le(Int/ord(a, b))),
+    q: Holds(Ordering/is_le(Int/ord(b, c))),
+) -> Holds(Ordering/is_le(Int/ord(a, c))) =
+    Int/ord/transitive(a, b, c, p, q);
+
+let _the_naturals_order_the_same_way(
+    a: Nat,
+    b: Nat,
+) -> Eq()(Nat/ord(b, a), Ordering/flip(Nat/ord(a, b))) =
+    Nat/ord/flips(a, b);
+
+let _a_factor_below_zero_cancels(a: Int, b: Int, e: Eq()(a * -3, b * -3)) -> Eq()(a, b) =
+    Int/mul/cancel_r(a, b, -3, e);
+
+let _a_nonzero_factor_cancels_on_the_left(
+    a: Int,
+    b: Int,
+    k: Int,
+    @nz: Int/NonZero(k),
+    e: Eq()(k * a, k * b),
+) -> Eq()(a, b) =
+    Int/mul/cancel_l(a, b, k, e);
+
+let _the_magnitude_of_a_product_is_the_product_of_the_magnitudes(
+    a: Int,
+    b: Int,
+) -> Eq()(Int/abs(a * b), Int/abs(a) * Int/abs(b)) =
+    Int/abs/of_mul(a, b);
+
+let _the_sign_of_a_product_is_the_product_of_the_signs(
+    a: Int,
+    b: Int,
+) -> Eq()(Int/sign(a * b), Int/sign(a) * Int/sign(b)) =
+    Int/sign/of_mul(a, b);
+
+let _a_sign_is_its_own_sign(a: Int) -> Eq()(Int/sign(Int/sign(a)), Int/sign(a)) =
+    Int/sign/of_sign(a);
+
+let _an_integer_is_its_sign_times_its_magnitude(
+    a: Int,
+) -> Eq()(a, Int/sign(a) * Nat/to_int(Int/abs(a))) =
+    Int/sign/times_abs(a);
+
+let _a_shift_splits_at_a_smaller_count(
+    x: Int,
+    i: Nat,
+    j: Nat,
+    fits: Holds(j <= i),
+) -> Eq()(Int/shl(x, i), Int/shl(Int/shl(x, i - j), j)) =
+    Int/shl/split(x, i, j, fits);
+
+let _two_odd_mantissas_of_one_value_are_one(
+    m: Int,
+    k: Nat,
+    odd: Holds(Int/abs(m) % 2 == 1),
+    e: Eq()(Int/shl(m, k), Int/shl(-3, 4)),
+) -> {count: Eq()(k, 4), value: Eq()(m, -3)} =
+    Int/shl/unique(m, k, -3, 4, odd, True/qed(), e);

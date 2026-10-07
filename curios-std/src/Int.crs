@@ -1,7 +1,6 @@
 pub use /sys/{Int};
-pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, gt, ge, and, or, xor, shl, shr, to_nat,
-    to_flt};
-use /std/{Nat, Bool, Str, Option, Ordering, Show, Spell, Ord, Eq};
+pub use /sys/Int/{eql, neq, add, sub, div, rem, gt, ge, and, or, xor, shr, to_nat, to_flt};
+use /std/{Nat, Bool, Str, Option, Show, Spell, Ord, Eq};
 use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
@@ -34,6 +33,20 @@ pub use abs/{let abs};
 --- `-1`, `+0` or `+1` by the sign of an integer, and the laws a hypothesis decides it by.
 pub mod sign;
 pub use sign/{let sign};
+
+--- A product, and the cancellation of a nonzero factor.
+---
+--- Conversion decides a product as a polynomial of its factors and cancels none: without the premise that a factor is not zero, `a * k = b * k` says nothing of `a` and `b`.
+pub mod mul;
+pub use mul/{let mul};
+
+--- A left shift, the split of its count, and the one odd mantissa a value has at one count.
+pub mod shl;
+pub use shl/{let shl};
+
+--- The order of two integers as an `Ordering`, and the laws that tie each answer to the comparison it stands for.
+pub mod ord;
+pub use ord/{let ord};
 
 --- That `a` is not zero, decided — what `/` and `%` on `Int` ask of a divisor.
 pub let NonZero(a: Int) -> Prop =
@@ -138,10 +151,6 @@ pub let non_neg(n: Int) -> Option(NonNeg(n)) =
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
-
---- The order of the two.
-pub let ord(x: Int, y: Int) -> Ordering =
-    choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
 
 satisfy Eql(Int) {
     eql = eql,

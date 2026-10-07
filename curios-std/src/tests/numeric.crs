@@ -9,6 +9,8 @@ mod gcd;
 
 mod scale;
 
+mod int;
+
 test nat_powers_divisors_logarithms_and_roots_compute =
     Test/equal(
         [

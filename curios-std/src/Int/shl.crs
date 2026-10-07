@@ -1,0 +1,47 @@
+pub use /sys/Int/{shl};
+use /std/{Nat, Int, Eq};
+use /std/Bool/{True, Holds};
+
+--- A shift by `i` is a shift by `i - j` and then by `j`, where `j <= i`: [`Nat/shl/split`] at a signed value.
+pub let split(
+    x: Int,
+    i: Nat,
+    j: Nat,
+    fits: Holds(j <= i),
+) -> Eq()(shl(x, i), shl(shl(x, i - j), j)) =
+    Eq/cong((count: Nat) => shl(x, count), Eq/sym(Nat/le/add_sub_cancel(j, i, fits)));
+
+--- One value has one odd mantissa at one count: two integers of odd magnitude shifted to one value are one integer, shifted by one count.
+---
+--- The signed scale, carried from [`Nat/Scale/unique`] through the sign: a shift's magnitude is its operand's shifted and its sign its operand's, which conversion decides, so the magnitudes are one odd part at one count, the signs are one, and an integer is its sign times its magnitude.
+pub let unique(
+    m: Int,
+    k: Nat,
+    n: Int,
+    j: Nat,
+    odd_m: Holds(Int/abs(m) % 2 == 1),
+    odd_n: Holds(Int/abs(n) % 2 == 1),
+    e: Eq()(shl(m, k), shl(n, j)),
+) -> {count: Eq()(k, j), value: Eq()(m, n)} =
+    let left: Eq()(Int/abs(m), 2 * (Int/abs(m) / 2) + 1) =
+        Nat/le/antisym(Int/abs(m), 2 * (Int/abs(m) / 2) + 1, True/proved(), True/proved());
+    let right: Eq()(Int/abs(n), 2 * (Int/abs(n) / 2) + 1) =
+        Nat/le/antisym(Int/abs(n), 2 * (Int/abs(n) / 2) + 1, True/proved(), True/proved());
+    let magnitudes: Eq()(Nat/shl(Int/abs(m), k), Nat/shl(Int/abs(n), j)) = Eq/cong(Int/abs, e);
+    let shaped: Eq()(Nat/shl(2 * (Int/abs(m) / 2) + 1, k), Nat/shl(2 * (Int/abs(n) / 2) + 1, j)) =
+        Eq/subst(
+            (x: Nat) => Eq()(Nat/shl(x, k), Nat/shl(2 * (Int/abs(n) / 2) + 1, j)),
+            left,
+            Eq/subst((y: Nat) => Eq()(Nat/shl(Int/abs(m), k), Nat/shl(y, j)), right, magnitudes));
+    let inner = Nat/Scale/unique(k, Int/abs(m) / 2, j, Int/abs(n) / 2, shaped);
+    let same_abs: Eq()(Int/abs(m), Int/abs(n)) =
+        Eq/trans(left, Eq/trans(Eq/cong((h: Nat) => 2 * h + 1, inner.half), Eq/sym(right)));
+    let same_sign: Eq()(Int/sign(m), Int/sign(n)) = Eq/cong(Int/sign, e);
+    let rebuilt: Eq()(Int/sign(m) * Nat/to_int(Int/abs(m)), Int/sign(n) * Nat/to_int(Int/abs(n))) =
+        Eq/subst(
+            (s: Int) => Eq()(Int/sign(m) * Nat/to_int(Int/abs(m)), s * Nat/to_int(Int/abs(n))),
+            same_sign,
+            Eq/cong((x: Nat) => Int/sign(m) * Nat/to_int(x), same_abs));
+    (
+        count = inner.count,
+        value = Eq/trans(Int/sign/times_abs(m), Eq/trans(rebuilt, Eq/sym(Int/sign/times_abs(n)))));
