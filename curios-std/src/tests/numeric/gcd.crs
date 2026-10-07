@@ -1,0 +1,93 @@
+-- The greatest common divisor where a type mentions it, at a zero, a one and equal operands, and coprimality with Euclid's lemma and the reduced fraction it serves.
+use /std/{Nat, Eq, Option, Test};
+use /std/Nat/{Divides, Gcd, Coprime};
+use /std/Bool/{Holds};
+
+let _a_type_computes_a_greatest_common_divisor: Eq()(Nat/gcd(1071, 462), 21) =
+    Eq/refl();
+
+let _a_zero_on_the_right_leaves_the_other_operand(a: Nat) -> Eq()(Nat/gcd(a, 0), a) =
+    Eq/refl();
+
+let _a_zero_on_the_left_leaves_the_other_operand(b: Nat) -> Eq()(Nat/gcd(0, b), b) =
+    Gcd/symmetric(0, b);
+
+let _zero_and_zero_share_zero: Eq()(Nat/gcd(0, 0), 0) =
+    Eq/refl();
+
+let _a_one_on_the_right_is_the_answer(a: Nat) -> Eq()(Nat/gcd(a, 1), 1) =
+    Eq/refl();
+
+let _a_one_on_the_left_is_the_answer(b: Nat) -> Eq()(Nat/gcd(1, b), 1) =
+    Gcd/symmetric(1, b);
+
+let _a_number_is_its_own_greatest_common_divisor(a: Nat) -> Eq()(a, Nat/gcd(a, a)) =
+    Gcd/unique(
+        Gcd(a, a) {
+            value = a,
+            left = Divides/refl(a),
+            right = Divides/refl(a),
+            greatest(_, p, _) = p,
+        });
+
+let _the_operands_swap(a: Nat, b: Nat) -> Eq()(Nat/gcd(a, b), Nat/gcd(b, a)) =
+    Gcd/symmetric(a, b);
+
+let _a_step_of_euclid_s_algorithm_keeps_it(
+    a: Nat,
+    b: Nat,
+    @ok: Holds(0 < b),
+) -> Eq()(Nat/gcd(a, b), Nat/gcd(b, Nat/rem(a, b, @ok))) =
+    Gcd/euclid(a, b);
+
+let _a_common_factor_stays_a_factor(
+    a: Nat,
+    b: Nat,
+) -> Eq()(Nat/gcd(a * 6, b * 6), Nat/gcd(a, b) * 6) =
+    Gcd/scaled(a, b, 6);
+
+let _it_divides_both_and_every_common_divisor_divides_it(
+    a: Nat,
+    b: Nat,
+    d: Nat,
+    p: Divides(d, a),
+    q: Divides(d, b),
+) -> {
+    left: Divides(Nat/gcd(a, b), a),
+    right: Divides(Nat/gcd(a, b), b),
+    greatest: Divides(d, Nat/gcd(a, b))} =
+    (
+        left = Gcd/of(a, b).left,
+        right = Gcd/of(a, b).right,
+        greatest = Gcd/of(a, b).greatest(d, p, q));
+
+let _nine_and_twenty_eight_are_coprime: Coprime(9, 28) =
+    Eq/refl();
+
+let _a_common_divisor_of_coprime_numbers_is_one(
+    d: Nat,
+    p: Divides(d, 9),
+    q: Divides(d, 28),
+) -> Eq()(d, 1) =
+    Coprime/common(_nine_and_twenty_eight_are_coprime, d, p, q);
+
+let _quotients_by_the_greatest_common_divisor_are_coprime: Coprime(2, 3) =
+    Coprime/quotients(12, 18);
+
+let _euclid_s_lemma_cancels_a_coprime_factor: Divides(9, 18) =
+    Coprime/cancel(18, _nine_and_twenty_eight_are_coprime, Divides/intro(56, Eq/refl()));
+
+let _a_reduced_fraction_is_the_only_one_with_its_cross_products(
+    a: Nat,
+    b: Nat,
+    p: Coprime(a, b),
+    e: Eq()(a * 3, 2 * b),
+) -> {numerator: Eq()(a, 2), denominator: Eq()(b, 3)} =
+    Coprime/unique(p, _quotients_by_the_greatest_common_divisor_are_coprime, e);
+
+test coprimality_is_decided =
+    Test/all([
+        Test/assert(Option/is_some(Coprime/try(9, 28))),
+        Test/assert(Option/is_none(Coprime/try(6, 9))),
+        Test/assert(Option/is_some(Coprime/try(1, 0))),
+        Test/assert(Option/is_none(Coprime/try(0, 0)))]);

@@ -5,6 +5,8 @@ mod products;
 
 mod euclid;
 
+mod gcd;
+
 test nat_powers_divisors_logarithms_and_roots_compute =
     Test/equal(
         [

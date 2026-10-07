@@ -59,7 +59,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Arithmetic
 
-- [ ] [Numeric laws](roadmap/04-arithmetic/03-numeric-laws.md) — no `gcd` a type may mention exists, nothing strips a number's factors of two with a proof, `ord` carries no law at `Nat` or at `Int`, `Int` lacks multiplicative cancellation, and `Flt`'s identity as bits is unstated
+- [ ] [Numeric laws](roadmap/04-arithmetic/03-numeric-laws.md) — nothing strips a number's factors of two with a proof, `ord` carries no law at `Nat` or at `Int`, `Int` lacks multiplicative cancellation, and `Flt`'s identity as bits is unstated
 - [ ] [Exact rationals and their laws](roadmap/04-arithmetic/04-exact-rationals.md) — no canonical rational library, executable binary64 conversions, exact decimals or library proofs
 - [ ] [Alternate floating-point exception handling](roadmap/04-arithmetic/05-flt-exception-handling.md) — IEEE 754's remaining §8 policies, and per-operation substitution and recording
 - [ ] [Correctly rounded elementary functions](roadmap/04-arithmetic/06-flt-elementary-functions.md) — the §9.2 functions are absent, and fuel and exhaustion need a contract

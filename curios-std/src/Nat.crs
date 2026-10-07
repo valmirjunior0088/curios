@@ -94,9 +94,9 @@ pub let of_str(s: Str) -> Option(Nat) =
 pub let pred(a: Nat) -> Nat =
     a - 1;
 
---- The greatest common divisor, with `gcd(a, 0)` as `a`. General recursion, so a type may not mention it.
+--- The greatest common divisor, with `gcd(a, 0)` as `a`, so `gcd(0, 0)` is `0`. It is [`Gcd/of`]'s value: a type may mention it, and its laws are `Gcd`'s.
 pub let gcd(a: Nat, b: Nat) -> Nat =
-    match b | 0 => a | bp + 1 => gcd(bp + 1, a % (bp + 1)) end;
+    Gcd/of(a, b).value;
 
 --- The least common multiple, with `lcm(0, 0)` as `0`.
 pub let lcm(a: Nat, b: Nat) -> Nat =
@@ -165,3 +165,11 @@ pub use DivMod/{let DivMod};
 --- That `d` divides `n`, with its laws beneath.
 pub mod Divides;
 pub use Divides/{let Divides};
+
+--- A greatest common divisor with its proofs: it divides both operands, and every common divisor divides it.
+pub mod Gcd;
+pub use Gcd/{let Gcd};
+
+--- That two numbers share no divisor but one, with Euclid's lemma and the reduced fraction beneath.
+pub mod Coprime;
+pub use Coprime/{let Coprime};

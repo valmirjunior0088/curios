@@ -1,0 +1,126 @@
+use /std/{Nat, Eq, WellFounded};
+use /std/Nat/{Divides};
+use /std/Bool/{True, Holds};
+
+--- A greatest common divisor of `a` and `b`, with what makes it one: it divides both, and every common divisor divides it.
+---
+--- [`of`] builds it by Euclid's algorithm, in one recursion that carries the proofs with the value, so a law is a field read off the result or follows from [`unique`] and none recurses again. The proofs erase, and what runs is the algorithm.
+pub struct Gcd(a: Nat, b: Nat): pub Type {
+    --- The divisor.
+    value: Nat,
+    --- It divides `a`.
+    left: Divides(value, a),
+    --- It divides `b`.
+    right: Divides(value, b),
+    --- Every common divisor of `a` and `b` divides it.
+    greatest: (d: Nat, p: Divides(d, a), q: Divides(d, b)) -> Divides(d, value),
+}
+
+--- One step of Euclid's algorithm: a greatest common divisor of `b` and `a % b` is one of `a` and `b`.
+---
+--- It divides `a` as the divisor's multiple and the remainder, which is `a` by Euclid's identity, and a common divisor of `a` and `b` divides the remainder by [`Divides/rem`].
+pub let step(a: Nat, b: Nat, @ok: Holds(0 < b), below: Gcd(b, Nat/rem(a, b, @ok))) -> Gcd(a, b) =
+    Gcd {
+        value = below.value,
+        left = Divides/add(Divides/mul(below.left, Nat/div(a, b, @ok)), below.right),
+        right = below.left,
+        greatest(d, p, q) = below.greatest(d, q, Divides/rem(a, b, p, q)),
+    };
+
+--- The greatest common divisor of `a` and `b` with its proofs, `a` itself where `b` is zero.
+---
+--- Recursion on well-founded `<` over `b`: a step hands on `b` and `a % b`, and a remainder is below its divisor by reduction. On closed operands it computes where a type mentions it.
+pub let of(a: Nat, b: Nat) -> Gcd(a, b) =
+    WellFounded/recurse(
+        (y: Nat) => (x: Nat) -> Gcd(x, y),
+        (y, ih) =>
+            (x) =>
+                match y
+                | 0 =>
+                    Gcd {
+                        value = x,
+                        left = Divides/refl(x),
+                        right = Divides/zero(x),
+                        greatest(_, p, _) = p,
+                    }
+                | yp + 1 => step(x, yp + 1, ih(x % (yp + 1), True/qed())(yp + 1))
+                end,
+        b,
+        WellFounded/lt(b))(a);
+
+--- A value with the three properties is the greatest common divisor: each of two such values divides the other.
+---
+--- How a law about `gcd` is proved without following its recursion: build the structure at the value the law names.
+pub let unique(@a: Nat, @b: Nat, g: Gcd(a, b)) -> Eq()(g.value, Nat/gcd(a, b)) =
+    Divides/antisym(
+        of(a, b).greatest(g.value, g.left, g.right),
+        g.greatest(Nat/gcd(a, b), of(a, b).left, of(a, b).right));
+
+--- `gcd(a, b)` is `gcd(b, a)`.
+pub let symmetric(a: Nat, b: Nat) -> Eq()(Nat/gcd(a, b), Nat/gcd(b, a)) =
+    let g = of(a, b);
+    unique(
+        Gcd(b, a) {
+            value = g.value,
+            left = g.right,
+            right = g.left,
+            greatest(d, p, q) = g.greatest(d, q, p),
+        });
+
+--- `gcd(a, b)` is `gcd(b, a % b)`: the equation Euclid's algorithm computes by, at a divisor reduction does not open.
+pub let euclid(
+    a: Nat,
+    b: Nat,
+    @ok: Holds(0 < b),
+) -> Eq()(Nat/gcd(a, b), Nat/gcd(b, Nat/rem(a, b, @ok))) =
+    Eq/sym(unique(step(a, b, of(b, Nat/rem(a, b, @ok)))));
+
+-- A sum scaled is its summands scaled, stated over variables: at a quotient and its remainder the left side is the dividend scaled, by Euclid's identity, which conversion would recombine before the product distributed.
+let spread(q: Nat, y: Nat, r: Nat, c: Nat) -> Eq()((q * y + r) * c, y * c * q + r * c) =
+    Eq/refl();
+
+-- A common divisor of `a * c` and `b * c` divides `gcd(a, b) * c`: [`Gcd`]'s `greatest` with every operand scaled, by the recursion `of` takes.
+let common(
+    c: Nat,
+    d: Nat,
+    a: Nat,
+    b: Nat,
+    p: Divides(d, a * c),
+    q: Divides(d, b * c),
+) -> Divides(d, Nat/gcd(a, b) * c) =
+    WellFounded/recurse(
+        (y: Nat) =>
+            (x: Nat, p: Divides(d, x * c), q: Divides(d, y * c)) -> Divides(d, Nat/gcd(x, y) * c),
+        (y, ih) =>
+            (x, p, q) =>
+                match y
+                | 0 => p
+                | yp + 1 =>
+                    let split: Eq()(x * c, (yp + 1) * c * (x / (yp + 1)) + x % (yp + 1) * c) =
+                        spread(x / (yp + 1), yp + 1, x % (yp + 1), c);
+                    let whole: Divides(d, (yp + 1) * c * (x / (yp + 1)) + x % (yp + 1) * c) =
+                        Eq/subst((t: Nat) => Divides(d, t), split, p);
+                    let rest: Divides(d, x % (yp + 1) * c) =
+                        Divides/sub(whole, Divides/mul(q, x / (yp + 1)));
+                    Eq/subst(
+                        (g: Nat) => Divides(d, g * c),
+                        Eq/sym(euclid(x, yp + 1)),
+                        ih(x % (yp + 1), True/qed())(yp + 1, q, rest))
+                end,
+        b,
+        WellFounded/lt(b))(a, p, q);
+
+-- A divisor scaled divides what it divides, scaled.
+let scale(@d: Nat, @a: Nat, p: Divides(d, a), c: Nat) -> Divides(d * c, a * c) =
+    match p | intro(k, e) => Divides/intro(k, Eq/cong((x: Nat) => x * c, e)) end;
+
+--- `gcd(a * c, b * c)` is `gcd(a, b) * c`: a common factor leaves the greatest common divisor as a factor.
+---
+--- What Euclid's lemma stands on. Each side divides the other: the scaled divisor is a common divisor of the scaled operands, and every common divisor of them divides it.
+pub let scaled(a: Nat, b: Nat, c: Nat) -> Eq()(Nat/gcd(a * c, b * c), Nat/gcd(a, b) * c) =
+    Divides/antisym(
+        common(c, Nat/gcd(a * c, b * c), a, b, of(a * c, b * c).left, of(a * c, b * c).right),
+        of(a * c, b * c).greatest(
+            Nat/gcd(a, b) * c,
+            scale(of(a, b).left, c),
+            scale(of(a, b).right, c)));

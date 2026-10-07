@@ -45,6 +45,7 @@ let row(pair: Str) -> Str =
         match m | 0 => "-" | mp + 1 => Nat/to_str(n % (mp + 1)) end,
         Nat/to_str(Nat/shl(n, k)),
         Nat/to_str(Nat/shr(n, k)),
+        Nat/to_str(Nat/gcd(n, m)),
         bits(Int/to_flt(x)),
         Int/to_str(Option/unwrap_or(Flt/try_to_int(Int/to_flt(x)), +0)),
     ]);
@@ -137,6 +138,7 @@ fn expected(x: &Integer, y: &Integer) -> String {
                 .expect("an unlimited shift answers")
         ),
         format!("{:?}", &n >> &k),
+        format!("{:?}", n.gcd(&m)),
         bytes,
         signed(&float.to_integer().expect("a finite float truncates")),
     ]

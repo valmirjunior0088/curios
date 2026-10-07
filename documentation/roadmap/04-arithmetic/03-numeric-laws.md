@@ -10,11 +10,10 @@ It waits on no other spec.
 - **Conversion decides the carriers' algebra** ([A law is decided where it neither respells nor invents](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md)): the sum normal form, Euclid's identity and the remainder's bound, a comparison through its difference, `Nat/to_int` as an ordered-semiring embedding, `shl(x, k)` as `x * pow(2, k)`, a sum in an exponent as a product, a power of a base at least one as at least one, and what is declared of `min`, `max`, `abs` and `sign`.
 - **The elaborator proves a linear step from the facts in scope** ([A bound that follows from the facts in scope is proved by the elaborator](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)), a quotient's bounds, a product of two facts and the cases of `min`, `max`, `abs` and `sign` among them. Its goal is a `<` or a `<=`, so an equation is `le/antisym` over two of them.
 - **Totality reads an arithmetic descent from a guard** ([Totality of the erased program](../../design/soundness/totality-of-the-erased-program.md)): `n / k` is below `n` where an enclosing arm rules `n`'s zero out, and a hypothesis is no such arm.
-- **The library** has `/std/Nat/DivMod/of`, which hands back `/`'s quotient and `%`'s remainder with Euclid's identity and the bound, and `DivMod/unique`, by which a quotient and a remainder that satisfy both are those two; `/std/Nat/Divides` with `refl`, `trans`, `zero`, `one`, `add`, `mul`, `sub`, `antisym`, its two bridges to a zero remainder, `of_rem` and `to_rem`, the exact quotient `exact` and the remainder's divisor `rem`; `/std/WellFounded/recurse` over `WellFounded/lt`; `/std/Int`'s `Sign` view with `trichotomy` and `eq_of_eql`; and the laws a hypothesis decides `min`, `max`, `abs` and `sign` by.
+- **The library** has `/std/Nat/DivMod/of`, which hands back `/`'s quotient and `%`'s remainder with Euclid's identity and the bound, and `DivMod/unique`, by which a quotient and a remainder that satisfy both are those two; `/std/Nat/Divides` with `refl`, `trans`, `zero`, `one`, `add`, `mul`, `sub`, `antisym`, its two bridges to a zero remainder, `of_rem` and `to_rem`, the exact quotient `exact` and the remainder's divisor `rem`; `/std/Nat/Gcd`, whose `of` builds a greatest common divisor with its two divisibilities and the property that makes it greatest, with `unique`, `symmetric`, `euclid` and `scaled`, and `Nat/gcd` as its value, which a type may mention; `/std/Nat/Coprime` with its decision `try`, `common` and `of_common`, `quotients`, Euclid's lemma `cancel` and the reduced fraction's `unique`; `/std/WellFounded/recurse` over `WellFounded/lt`; `/std/Int`'s `Sign` view with `trichotomy` and `eq_of_eql`; and the laws a hypothesis decides `min`, `max`, `abs` and `sign` by.
 
 ## The gap
 
-- **No type may mention a greatest common divisor.** `/std/Nat/gcd` recurses on a remainder, which totality does not grade, so a type that reaches it is refused as not known to terminate (`curios`'s `tests::numeric::arithmetic_tests`). No proposition says two numbers are coprime or a fraction reduced.
 - **Nothing strips a number's factors of two with a proof.** `/std/Dyadic/normalized` does it with `Nat/and`, `Nat/xor`, `Nat/log2` and `Int/shr`, none of which the logic reads, so the odd mantissa it answers is a fact no type states. `Nat/log2` carries no bound, and a power of a power or of a product has no lemma.
 - **`ord` carries no law** at `Nat` or at `Int`: that it answers `eq` exactly at an equation, and `lt` and `gt` exactly at their comparisons, is unstated.
 - **`Int` has no multiplicative cancellation**, and `abs` and `sign` of a product are refused rows of the law grid with no lemma beside them.
@@ -41,24 +40,6 @@ It waits on no other spec.
 ## Stages
 
 Each lands alone and is one commit.
-
-**Stage 2 — `Gcd` and `Coprime`.** Serves [exact rationals](04-exact-rationals.md)' stages 1 and 4.
-
-```crs
-pub struct Gcd(a: Nat, b: Nat): pub Type {
-    value: Nat,
-    left: Divides(value, a),
-    right: Divides(value, b),
-    greatest: (d: Nat, p: Divides(d, a), q: Divides(d, b)) -> Divides(d, value),
-}
-```
-
-- `Gcd/of(a, b)` builds it, and `gcd(a, b)` is its `value`, which a type may mention and which computes there on closed operands. `lcm` stands over it.
-- `Gcd/unique`: any value with the three properties is `gcd(a, b)`. Symmetry and the values at a zero and at a one follow from it with no unfolding.
-- `gcd(a * c, b * c)` is `gcd(a, b) * c`, by the one recursion that follows `of`'s, through an unfolding lemma `/std/WellFounded` gains for `recurse`.
-- `Coprime(a, b)` is `Eq()(gcd(a, b), 1)`, with its decision and its reading as every common divisor being one. The quotients of two numbers by their `gcd` are coprime; `Coprime(a, b)` and `Divides(a, b * c)` give `Divides(a, c)`, Euclid's lemma; and two reduced fractions with equal cross products have equal numerators and equal denominators.
-
-Check: the laws at a zero, a one and equal operands as rows of the `numeric` unit; `gcd` against `curios_num::Natural::gcd` in `curios`'s `tests::numeric::grid_tests`; and `tests::numeric::arithmetic_tests` holding `gcd` accepted in a type, with `Nat/sqrt` as its partial specimen.
 
 **Stage 3 — the binary scale on `Nat`.** Serves [exact rationals](04-exact-rationals.md)' stages 1, 2 and 4, and the rounding [the binary64 conversion proofs](07-binary64-conversion-proofs.md) reason about.
 

@@ -1,0 +1,94 @@
+use /std/{Nat, Eq, Option};
+use /std/Nat/{Divides, Gcd};
+use /std/Bool/{True, Holds};
+
+--- That `a` and `b` share no divisor but one: their greatest common divisor is `1`.
+pub let Coprime(a: Nat, b: Nat) -> Prop =
+    Eq()(Nat/gcd(a, b), 1);
+
+--- The procedure that decides `Coprime(a, b)`: the evidence when it holds, `none` otherwise.
+pub let try(a: Nat, b: Nat) -> Option(Coprime(a, b)) =
+    match Nat/gcd(a, b) == 1
+    | true => Option/some(Nat/eq_of_eql(Nat/gcd(a, b), 1, True/qed()))
+    | false => Option/none()
+    end;
+
+--- `Coprime(a, b)` gives `Coprime(b, a)`.
+pub let symmetric(@a: Nat, @b: Nat, c: Coprime(a, b)) -> Coprime(b, a) =
+    Eq/trans(Gcd/symmetric(b, a), c);
+
+--- Every common divisor of two coprime numbers is one.
+pub let common(
+    @a: Nat,
+    @b: Nat,
+    c: Coprime(a, b),
+    d: Nat,
+    p: Divides(d, a),
+    q: Divides(d, b),
+) -> Eq()(d, 1) =
+    Divides/antisym(
+        Eq/subst((g: Nat) => Divides(d, g), c, Gcd/of(a, b).greatest(d, p, q)),
+        Divides/one(d));
+
+--- Two numbers whose every common divisor is one are coprime: [`common`] read backwards.
+pub let of_common(
+    a: Nat,
+    b: Nat,
+    only: (d: Nat, p: Divides(d, a), q: Divides(d, b)) -> Eq()(d, 1),
+) -> Coprime(a, b) =
+    only(Nat/gcd(a, b), Gcd/of(a, b).left, Gcd/of(a, b).right);
+
+--- Two numbers divided by their greatest common divisor are coprime: what a fraction in lowest terms is made of.
+---
+--- The operands are their quotients scaled by the divisor, so by [`Gcd/scaled`] the divisor is the quotients' own scaled by itself, and a positive number that is its multiple by `x` has `x` as one.
+pub let quotients(
+    a: Nat,
+    b: Nat,
+    @ok: Holds(0 < Nat/gcd(a, b)),
+) -> Coprime(Nat/div(a, Nat/gcd(a, b), @ok), Nat/div(b, Nat/gcd(a, b), @ok)) =
+    let g = Nat/gcd(a, b);
+    let x = Nat/div(a, g, @ok);
+    let y = Nat/div(b, g, @ok);
+    let left: Eq()(a, x * g) = Divides/exact(a, g, Gcd/of(a, b).left);
+    let right: Eq()(b, y * g) = Divides/exact(b, g, Gcd/of(a, b).right);
+    let whole: Eq()(Nat/gcd(x * g, y * g), Nat/gcd(x, y) * g) = Gcd/scaled(x, y, g);
+    let back: Eq()(g, Nat/gcd(x, y) * g) =
+        Eq/subst(
+            (t: Nat) => Eq()(Nat/gcd(t, b), Nat/gcd(x, y) * g),
+            Eq/sym(left),
+            Eq/subst((t: Nat) => Eq()(Nat/gcd(x * g, t), Nat/gcd(x, y) * g), Eq/sym(right), whole));
+    Nat/le/antisym(Nat/gcd(x, y), 1, True/proved(), True/proved());
+
+--- Euclid's lemma: a number coprime to `b` that divides `b * k` divides `k`.
+---
+--- It divides `a * k` and `b * k`, so it divides their greatest common divisor, which is `gcd(a, b) * k` by [`Gcd/scaled`] and so `k`.
+pub let cancel(@a: Nat, @b: Nat, k: Nat, c: Coprime(a, b), p: Divides(a, b * k)) -> Divides(a, k) =
+    let both: Divides(a, Nat/gcd(a * k, b * k)) =
+        Gcd/of(a * k, b * k).greatest(a, Divides/intro(k, Eq/refl()), p);
+    Eq/subst(
+        (g: Nat) => Divides(a, g * k),
+        c,
+        Eq/subst((t: Nat) => Divides(a, t), Gcd/scaled(a, b, k), both));
+
+--- Two fractions in lowest terms with equal cross products are one fraction: equal numerators and equal denominators.
+---
+--- Each numerator divides the other's multiple by its own denominator, to which it is coprime, so by [`cancel`] it divides the other numerator, and two numbers that divide each other are one; the denominators the same way.
+pub let unique(
+    @a: Nat,
+    @b: Nat,
+    @c: Nat,
+    @d: Nat,
+    p: Coprime(a, b),
+    q: Coprime(c, d),
+    e: Eq()(a * d, c * b),
+) -> {numerator: Eq()(a, c), denominator: Eq()(b, d)} =
+    let crossed: Eq()(c * b, a * d) = Eq/sym(e);
+    (
+        numerator =
+            Divides/antisym(
+                cancel(c, p, Divides/intro(d, crossed)),
+                cancel(a, q, Divides/intro(b, e))),
+        denominator =
+            Divides/antisym(
+                cancel(d, symmetric(p), Divides/intro(c, e)),
+                cancel(b, symmetric(q), Divides/intro(a, crossed))));
