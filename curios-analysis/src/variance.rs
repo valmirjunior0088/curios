@@ -4,6 +4,8 @@
 //!
 //! The walk reads each type's reduct, as [`positivity_vectors`](crate::positivity_vectors) does and for its reason: a type-level `let` has to be opened to see the former it names, and a `/sys` former unfolds to an intrinsic one that carries no level. What the walk cannot see through marks every level it carries. That is the refusing direction, an invariant level being compared for equality as every level was before a vector existed.
 //!
+//! The same walk over terms its caller chose answers which levels they hold ([`held_levels`], [`held_by`]): a definition's body where its levels have closed, a group's telescopes while they are open. What a held level means there is the caller's to say.
+//!
 //! # Shared, not duplicated
 //!
 //! Both checkers run this analysis, through [`Env`], for the reason the positivity analysis gives: it is a total function of the declarations, so a second implementation would be a second run on the same input. The elaborator computes a family's vector when its group finalizes, since a later item compares two of its instances, and again over the zonked module, which is the vector a unit carries. The kernel reads the carried vector while it walks the items and recomputes its module's after: a carried irrelevance its recomputation denies refuses the module.
