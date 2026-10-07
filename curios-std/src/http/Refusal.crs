@@ -1,7 +1,7 @@
-use /std/{Str, Nat, Show, Spell};
+use /std/{Str, Show, Spell};
 use /std/ops/{Eql};
 
---- Why a message is not read. Each is a reason a peer can be told: a server answers a refused request under `code`, and a client reports a refused reply as malformed.
+--- Why a message is not read. Each is a reason a peer can be told: a server answers a refused request with the reply `Response/of_refusal` makes of it, and a client reports a refused reply as malformed.
 pub induct Refusal: pub Type
 --- The message is not one HTTP's grammar or its framing admits; what was wrong.
 | malformed(Str)
@@ -48,16 +48,3 @@ pub let to_str(r: Refusal) -> Str =
 satisfy Show(Refusal) {
     show = to_str,
 }
-
---- The status a server answers a refused request with: 400 for one that is malformed or cut short, 414 for a request line too long (RFC 9112 §3), 431 for a head too large (RFC 6585 §5), 413 for content too large, 501 for what is not implemented, 505 for a version not spoken and 408 for one that did not arrive in time.
-pub let code(r: Refusal) -> Nat =
-    match r
-    | malformed(_) => 400
-    | incomplete() => 400
-    | line_too_long() => 414
-    | head_too_large() => 431
-    | content_too_large() => 413
-    | not_implemented(_) => 501
-    | version_not_supported() => 505
-    | timed_out() => 408
-    end;

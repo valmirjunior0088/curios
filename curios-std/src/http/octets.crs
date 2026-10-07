@@ -46,18 +46,25 @@ pub let trim(b: Bytes) -> Bytes =
     let ended = front(b, trimmed_len(b));
     past(ended, leading(ended));
 
+--- The bytes of `b` from the index `from` up to `to`, or nothing where those are no part of it.
+pub let between(b: Bytes, from: Nat, to: Nat) -> Bytes =
+    match Nat/le/try(from + (to - from), Bytes/len(b))
+    | some(within) => Bytes/slice(b, from, to - from, @within)
+    | none() => x[]
+    end;
+
 --- The pieces of `b` between each `sep`, in order: one more than the separators it holds.
 pub let split(b: Bytes, sep: Byte) -> List(Bytes) =
-    let (pieces, last): {List(Bytes), Bytes} =
+    let (found, from, to): {List(Bytes), Nat, Nat} =
         Bytes/fold(
             b,
-            ([], x[]),
-            (byte, (pieces, current)) =>
+            ([], 0, 0),
+            (byte, (found, from, at)) =>
                 match byte == sep
-                | true => ([..pieces, current], x[])
-                | false => (pieces, x[..current, byte])
+                | true => ([between(b, from, at), ..found], at + 1, at + 1)
+                | false => (found, from, at + 1)
                 end);
-    [..pieces, last];
+    List/reverse([between(b, from, to), ..found]);
 
 --- The number `b` spells in decimal digits, one or more and nothing else, or `none`.
 pub let number(b: Bytes) -> Option(Nat) =

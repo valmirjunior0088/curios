@@ -139,6 +139,19 @@ test a_field_met_at_run_time_is_read_or_refused =
         Test/equal(Field/read("X A", Str/to_bytes("one")), Option/none()),
         Test/equal(Field/read("X-A", Str/to_bytes("one\ntwo")), Option/none())]);
 
+-- A list's members are read across every line of its name, each without the whitespace around it and the empty ones left out, and a comma inside a quoted string is its member's.
+test a_lists_members_are_read_across_its_lines =
+    let fields =
+        [
+            Field/of("Accept", "a, b"),
+            Field/of("X-Other", "z"),
+            Field/of("accept", " , c;q=\"1,2\" ,")];
+    Test/all([
+        Test/equal(
+            List/map(Field/members(fields, "Accept"), Str/of_bytes),
+            [Option/some("a"), Option/some("b"), Option/some("c;q=\"1,2\"")]),
+        Test/equal(Field/members(fields, "Expect"), [])]);
+
 -- A `Url` built by hand is written percent-encoded wherever the wire cannot carry an octet of it, in a request line and in a `Location` alike, and text `Url/of_str` read is written as it is.
 test a_url_reaches_the_wire_percent_encoded =
     let built =

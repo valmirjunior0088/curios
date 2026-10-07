@@ -1,6 +1,7 @@
-use /std/{Str, Bytes, Bool, List, Option, Spell};
+use /std/{Str, Bytes, Byte, Nat, Bool, List, Option, Spell};
 use /std/Bool/{Holds};
 use /std/ops/{Eql};
+use /std/http/{octets};
 
 --- A field's name: a token.
 pub mod Name;
@@ -42,6 +43,31 @@ pub let read(name: Str, value: Bytes) -> Option(Field) =
 --- The value of the first of `fields` named `name`, compared without case, or `none`.
 pub let find(fields: List(Field), name: Str) -> Option(Value) =
     Option/map(List/find(fields, (f: Field) => Name/is(f.name, name)), (f: Field) => f.value);
+
+-- The pieces of a list between its commas, a comma inside a quoted string being its member's (RFC 9110 §5.6.4).
+let pieces(b: Bytes) -> List(Bytes) =
+    let (found, from, to, _, _): {List(Bytes), Nat, Nat, Bool, Bool} =
+        Bytes/fold(
+            b,
+            ([], 0, 0, false, false),
+            (byte, (found, from, at, quoted, escaped)) =>
+                let n = Byte/to_nat(byte);
+                choose
+                | escaped => (found, from, at + 1, quoted, false)
+                | quoted => (found, from, at + 1, n != '"', n == '\\')
+                | n == ',' => ([octets/between(b, from, at), ..found], at + 1, at + 1, false, false)
+                | _ => (found, from, at + 1, n == '"', false)
+                end);
+    List/reverse([octets/between(b, from, to), ..found]);
+
+--- The members of the lists the `fields` named `name` hold, every line's in order, as RFC 9110 §5.2 joins the lines of one name: each without the whitespace around it, the empty ones left out as §5.6.1 has a recipient do, and a comma inside a quoted string left to its member.
+pub let members(fields: List(Field), name: Str) -> List(Bytes) =
+    List/filter(
+        List/flatten(
+            List/map(
+                List/filter(fields, (f: Field) => Name/is(f.name, name)),
+                (f: Field) => List/map(pieces(f.value.bytes), octets/trim))),
+        (member) => Bytes/len(member) != 0);
 
 --- The field as its line on the wire: the name, a colon and a space, the value, and the line's end.
 pub let line(f: Field) -> Bytes =

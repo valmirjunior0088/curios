@@ -53,7 +53,10 @@ pub use Response/{let Response};
 pub mod Client;
 pub use Client/{let Client};
 
---- A bound server: every connection answered by a handler that takes the request and returns the response, which the server writes.
+--- The pieces read off a socket: each asked again as bytes arrive, until it is whole, refused, or the peer has closed.
+mod stream;
+
+--- A server: each connection's request read as its framing delimits it and answered by a handler, a refusal answered with its status, and the connection ended as HTTP asks.
 pub mod Server;
 pub use Server/{let Server};
 

@@ -603,6 +603,55 @@ fn a_waiting_peer_closes_once_this_side_has_finished() {
     );
 }
 
+/// A peer scripted to stay open keeps its sending half open whatever this side does: once this side has finished, a read still answers `WouldBlock` and a poll still reports nothing to read.
+#[test]
+fn an_open_peer_stays_open_once_this_side_has_finished() {
+    let (host, io) = MockHost::builder().inbound_open([vec!["ping"]]).build();
+    let listener = host.socket_open(b"0.0.0.0:8080".to_vec()).unwrap();
+    assert_eq!(host.socket_listen(listener.clone(), 1), Ok(()));
+    let conn = host.socket_accept(listener).unwrap();
+
+    assert_eq!(
+        host.handle_read(conn.clone(), 8),
+        Ok(Some(b"ping".to_vec()))
+    );
+    assert_eq!(host.handle_finish(conn.clone()), Ok(()));
+    assert_eq!(host.handle_read(conn.clone(), 8), Err(Failure::WouldBlock));
+    assert_eq!(
+        host.handle_poll(vec![conn.clone()], vec![Poll::from_bits(event::READ)], 0)
+            .unwrap()[0]
+            .bits(),
+        0
+    );
+    host.handle_close(conn);
+
+    assert_eq!(
+        io.socket_events(),
+        [SocketEvent::Finished, SocketEvent::Closed]
+    );
+}
+
+/// A timed poll that readies nothing is answered while the scripted clock has a reading left to pass its timeout, and refused once it has none, since nothing would end the wait.
+#[test]
+fn a_timed_poll_nothing_can_end_is_refused() {
+    let (host, _io) = MockHost::builder()
+        .inbound_open([vec!["ping"]])
+        .mono([(1, 0)])
+        .build();
+    let listener = host.socket_open(b"0.0.0.0:8080".to_vec()).unwrap();
+    assert_eq!(host.socket_listen(listener.clone(), 1), Ok(()));
+    let conn = host.socket_accept(listener).unwrap();
+    let waiting = || host.handle_poll(vec![conn.clone()], vec![Poll::from_bits(event::READ)], 1000);
+
+    assert_eq!(
+        host.handle_read(conn.clone(), 8),
+        Ok(Some(b"ping".to_vec()))
+    );
+    assert!(waiting().is_ok());
+    host.clock_mono();
+    assert!(waiting().is_err());
+}
+
 /// A peer scripted to reset answers `ConnectionReset` to the read after its chunks, where one that closed answers the end of the stream.
 #[test]
 fn a_resetting_peer_answers_a_reset_after_its_chunks() {

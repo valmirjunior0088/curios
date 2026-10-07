@@ -278,6 +278,8 @@ enum Ending {
     Closed,
     /// It keeps its sending half open until this side finishes its own, as a peer waiting on a reply does: a read answers `WouldBlock` and no poll reports it readable until `handle_finish`, after which it has closed.
     Waiting,
+    /// It keeps its sending half open whatever this side does, as a peer that never closes: a read answers `WouldBlock` and no poll reports it readable.
+    Open,
     /// It resets the connection: a read answers `ConnectionReset`.
     Reset,
 }
@@ -315,7 +317,7 @@ impl Chunked {
         let Some(front) = self.chunks.front() else {
             return match self.ending {
                 Ending::Closed => Ok(None),
-                Ending::Waiting => Err(Failure::WouldBlock),
+                Ending::Waiting | Ending::Open => Err(Failure::WouldBlock),
                 Ending::Reset => Err(Failure::ConnectionReset),
             };
         };
@@ -339,11 +341,12 @@ impl Chunked {
         Ok(Some(bytes))
     }
 
-    /// Make the next chunk due — what a `handle_poll` reporting the handle readable means — and say whether a read now answers anything but `WouldBlock`: a spent script whose peer waits has nothing to read.
+    /// Make the next chunk due — what a `handle_poll` reporting the handle readable means — and say whether a read now answers anything but `WouldBlock`: a spent script whose peer waits or stays open has nothing to read.
     fn arm(&mut self) -> bool {
         self.due = true;
 
-        !(self.ending == Ending::Waiting && self.chunks.iter().all(Vec::is_empty))
+        !(matches!(self.ending, Ending::Waiting | Ending::Open)
+            && self.chunks.iter().all(Vec::is_empty))
     }
 
     /// This side has ended its sending half: a peer that waited for that closes in answer.
@@ -773,9 +776,19 @@ impl HostOps for MockHost {
             .collect();
 
         // A native poll with no timeout sleeps until a handle is ready. Nothing moves a script but the program, so one that reports nothing would be asked again without end: the call is refused, which ends the run where a real one would hang.
-        if timeout < 0 && !ready.is_empty() && ready.iter().all(|poll| poll.bits() == 0) {
+        let idle = ready.iter().all(|poll| poll.bits() == 0);
+
+        if timeout < 0 && !ready.is_empty() && idle {
             return Err(Refusal(
                 "the script readies none of the handles this poll waits on without a timeout"
+                    .to_string(),
+            ));
+        }
+
+        // A timed poll that readies nothing ends when the clock passes its timeout, and a clock with no reading left answers the epoch for good: the same wait without end, refused the same way.
+        if timeout > 0 && idle && self.clock_mono_seq.lock().unwrap().is_empty() {
+            return Err(Refusal(
+                "the script readies none of the handles this poll waits on, and its clock has no reading left to pass the timeout"
                     .to_string(),
             ));
         }
@@ -1508,7 +1521,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Script inbound requests as `inbound_chunks` does, whose peer keeps its sending half open after its chunks, as one waiting on a reply does, and closes once the server has finished its own: until then a read past the chunks answers `WouldBlock` and no poll reports the connection readable, so a server that reads past its request's end never returns.
+    /// Script inbound requests as `inbound_chunks` does, whose peer keeps its sending half open after its chunks, as one waiting on a reply does, and closes once the server has finished its own: until then a read past the chunks answers `WouldBlock` and no poll reports the connection readable, so a server that reads past its request's end is refused its poll.
     pub fn inbound_waiting<C: AsRef<[u8]>, I: IntoIterator<Item = Vec<C>>>(
         mut self,
         requests: I,
@@ -1517,6 +1530,20 @@ impl MockHostBuilder {
             requests
                 .into_iter()
                 .map(|chunks| script(chunks, Ending::Waiting)),
+        );
+
+        self
+    }
+
+    /// Script inbound requests as `inbound_chunks` does, whose peer never closes: a read past its chunks answers `WouldBlock` whatever the server has finished, so a server that waits on the peer's close leaves only when its own patience ends.
+    pub fn inbound_open<C: AsRef<[u8]>, I: IntoIterator<Item = Vec<C>>>(
+        mut self,
+        requests: I,
+    ) -> Self {
+        self.inbound.extend(
+            requests
+                .into_iter()
+                .map(|chunks| script(chunks, Ending::Open)),
         );
 
         self

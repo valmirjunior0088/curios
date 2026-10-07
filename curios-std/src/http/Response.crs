@@ -124,6 +124,20 @@ pub let of_html(
     | false => match content end
     end;
 
+--- The reply a server owes a request refused for `why`, which says why in plain text: 400 for a request that is malformed or cut short, 414 for a request line too long (RFC 9112 §3), 431 for a head too large (RFC 6585 §5), 413 for content too large, 501 for what is not implemented, 505 for a version not served, and 408 for a request that did not arrive in time.
+pub let of_refusal(why: Refusal) -> Response =
+    let said = Refusal/to_str(why);
+    match why
+    | malformed(_) => of_text(400, said)
+    | incomplete() => of_text(400, said)
+    | line_too_long() => of_text(414, said)
+    | head_too_large() => of_text(431, said)
+    | content_too_large() => of_text(413, said)
+    | not_implemented(_) => of_text(501, said)
+    | version_not_supported() => of_text(505, said)
+    | timed_out() => of_text(408, said)
+    end;
+
 --- A `303 See Other` to `url`, its `Location` the URL as the wire carries it.
 pub let redirect(url: Url) -> Response =
     Response {

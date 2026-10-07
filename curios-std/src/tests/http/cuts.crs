@@ -1,7 +1,7 @@
 -- The pieces a message is read in, asked over every way its bytes may arrive in two segments, and over every place they may stop.
 use /std/{Str, Bytes, Nat, Bool, List, Spell, Test};
 use /std/ops/{Eql};
-use /std/http/{Limits, Refusal, read};
+use /std/http/{Limits, Refusal, Framing, read};
 use /std/http/read/{Step};
 
 -- What a reader made of a piece once its segments ran out: the piece and what followed it, a refusal, or still wanting more.
@@ -129,3 +129,27 @@ test a_chunked_body_reads_whole_at_every_cut =
         Test/equal(
             fed(chunked, x[], x[], [Str/to_bytes("0\r\n"), Str/to_bytes("\r\n")]),
             Fed/whole(x[], x[]))]);
+
+let framed(framing: Framing) -> (Bytes, Bytes) -> Step(Bytes, Bytes) =
+    (content, held) => read/body(Limits/server, framing, content, held);
+
+-- A body is read as its framing delimits it, wherever the bytes are cut: nothing where there is none, its octets where a length is stated, its chunks' content where it is chunked. One framed by the close wants more however much has arrived, since only its stream's end says it is whole.
+test a_body_reads_as_its_framing_delimits_it =
+    let next = Str/to_bytes("next");
+    Test/all([
+        Test/equal(fed(framed(Framing/none()), x[], next, []), Fed/whole(x[], next)),
+        Test/assert(
+            whole_at_every_cut(
+                framed(Framing/length(5)),
+                x[],
+                Str/to_bytes("hellonext"),
+                Fed/whole(Str/to_bytes("hello"), next))),
+        Test/assert(
+            whole_at_every_cut(
+                framed(Framing/chunked()),
+                x[],
+                Str/to_bytes("5\r\nhello\r\n0\r\n\r\nnext"),
+                Fed/whole(Str/to_bytes("hello"), next))),
+        Test/equal(
+            fed(framed(Framing/close()), x[], x[], [Str/to_bytes("hel"), Str/to_bytes("lo")]),
+            Fed/wanting())]);

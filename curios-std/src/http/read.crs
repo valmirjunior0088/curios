@@ -167,21 +167,32 @@ pub let chunked(limits: Limits, content: Bytes, held: Bytes) -> Step(Bytes, Byte
         end
     end;
 
---- A whole body from bytes that will not grow, as `framing` delimits it: what a reader that holds the entire message answers. A body that has not all arrived is `incomplete`, and one framed by the close is everything held.
-pub let whole(limits: Limits, framing: Framing, held: Bytes) -> Result(Refusal, {Bytes, Bytes}) =
-    let settled(@S: Type, step: Step(S, Bytes)) -> Result(Refusal, {Bytes, Bytes}) =
-        match step
-        | took(body, rest) => Result/success((body, rest))
-        | more(_, _) => Result/failure(Refusal/incomplete())
-        | refused(why) => Result/failure(why)
-        end;
+--- A body as `framing` delimits it: nothing, `length`'s octets, `chunked`'s content, or everything until its stream ends. The state is the content decoded so far, which a chunked body alone keeps apart from the bytes held. A body framed by the close is never taken: it wants more until whoever owns its stream sees it end, when the bytes held are the body, and it holds no more than `limits.content`.
+pub let body(limits: Limits, framing: Framing, content: Bytes, held: Bytes) -> Step(Bytes, Bytes) =
     match framing
-    | none() => Result/success((x[], held))
-    | length(n) => settled(length(limits, n, held))
-    | chunked() => settled(chunked(limits, x[], held))
+    | none() => Step/took(x[], held)
+    | length(n) =>
+        match length(limits, n, held)
+        | took(taken, rest) => Step/took(taken, rest)
+        | more(_, kept) => Step/more(content, kept)
+        | refused(why) => Step/refused(why)
+        end
+    | chunked() => chunked(limits, content, held)
     | close() =>
         match Bytes/len(held) <= limits.content
-        | true => Result/success((held, x[]))
-        | false => Result/failure(Refusal/content_too_large())
+        | true => Step/more(content, held)
+        | false => Step/refused(Refusal/content_too_large())
+        end
+    end;
+
+--- A whole body from bytes that will not grow, as `framing` delimits it: what a reader that holds the entire message answers. A body that has not all arrived is `incomplete`, and one framed by the close is everything held.
+pub let whole(limits: Limits, framing: Framing, held: Bytes) -> Result(Refusal, {Bytes, Bytes}) =
+    match body(limits, framing, x[], held)
+    | took(taken, rest) => Result/success((taken, rest))
+    | refused(why) => Result/failure(why)
+    | more(_, kept) =>
+        match framing
+        | close() => Result/success((kept, x[]))
+        | _ => Result/failure(Refusal/incomplete())
         end
     end;

@@ -25,15 +25,6 @@ satisfy Spell(Framing) {
     ..
 }
 
--- The members of the lists the fields named `name` hold, every line's joined as RFC 9110 §5.2 joins them, each trimmed and the empty ones left out as §5.6.1 has a recipient do.
-let members(headers: List(Field), name: Str) -> List(Bytes) =
-    List/filter(
-        List/flatten(
-            List/map(
-                List/filter(headers, (f: Field) => Name/is(f.name, name)),
-                (f: Field) => List/map(octets/split(f.value.bytes, ','), octets/trim))),
-        (member) => Bytes/len(member) != 0);
-
 let present(headers: List(Field), name: Str) -> Bool =
     List/any(headers, (f: Field) => Name/is(f.name, name));
 
@@ -52,7 +43,7 @@ let codings(headers: List(Field)) -> Codings =
     match present(headers, "Transfer-Encoding")
     | false => Codings/absent()
     | true =>
-        match List/reverse(members(headers, "Transfer-Encoding"))
+        match List/reverse(Field/members(headers, "Transfer-Encoding"))
         | [] => Codings/other_last()
         | [last, ..before] =>
             match is_chunked(last)
@@ -67,7 +58,7 @@ let stated(headers: List(Field)) -> Result(Refusal, Option(Nat)) =
     match present(headers, "Content-Length")
     | false => Result/success(Option/none())
     | true =>
-        match List/traverse(members(headers, "Content-Length"), octets/number)
+        match List/traverse(Field/members(headers, "Content-Length"), octets/number)
         | some([first, ..rest]) =>
             match List/all(rest, (n) => n == first)
             | true => Result/success(Option/some(first))

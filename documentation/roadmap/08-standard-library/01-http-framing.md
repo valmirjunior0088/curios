@@ -1,6 +1,6 @@
 # HTTP messages as RFC 9110 and RFC 9112 frame them
 
-Working specification for the HTTP messages `/std` reads and writes other than as RFC 9110 and RFC 9112 frame them, and for the connection it closes under the answer it sent. The rule is [`curios-std`'s README](../../../curios-std/README.md#std-invents-no-value-where-a-proof-belongs-and-text-is-addressed-by-position)'s: where a branch cannot be reached its unreachability is proved, where it can the caller sees an `Option`, a `Result` or a refusal, and a default stays only where it is the specified answer, documented as such.
+Working specification for the HTTP replies `/std`'s client reads other than as RFC 9110 and RFC 9112 frame them. The rule is [`curios-std`'s README](../../../curios-std/README.md#std-invents-no-value-where-a-proof-belongs-and-text-is-addressed-by-position)'s: where a branch cannot be reached its unreachability is proved, where it can the caller sees an `Option`, a `Result` or a refusal, and a default stays only where it is the specified answer, documented as such.
 
 It is independent of every other spec. [Text read as text](02-text-read-as-text.md) leaves a head read as octets: an HTTP head is octets, not text.
 
@@ -10,21 +10,12 @@ It is independent of every other spec. [Text read as text](02-text-read-as-text.
 - **One framing core reads a message, and holds no stream.** `http/read`'s pieces — a head, a body of a stated length, a chunked body — each answer the piece and the bytes after it, a refusal, or that more is wanted, with where to resume. `http/Framing` reads how a body is delimited by RFC 9112 §6.3's rules in order, one function per direction; a head's lines are read to a `Request/Head` or a `Response/Head`; a refusal is a value of `http/Refusal`, with the status a server owes it; and `Request/of_bytes` and `Response/of_bytes` read a message held entire, within `http/Limits`. The library's tests ask the pieces at every cut of a message (`curios-std/src/tests/http/cuts.crs`).
 - **A made message is one a wire can carry.** A `Field` is a `Name`, a token, and a `Value`, octets with no control octet among them but the tab, each by a hidden proposition its literal discharges and its run-time reader answers as an `Option` (`http/Field.crs`); a `Status`'s code is three digits, and a `Response` holds content only where its status carries any (`http/Status.crs`, `http/Response.crs`). Both renderers write the framing fields, `Connection: close` and a request's `Host` themselves and skip a caller's, and a URL is written percent-encoded (`Url/escaped`), so `render` is total and refuses nothing.
 - **A stream's sending half can be ended.** `Handle/finish` ends it and leaves the receiving half as it is — a socket's write side shut down, a TLS stream's closure alert ahead of it — answering `would_block` as `Handle/flush` does and parked on the same way (`Handle.crs`; [Only a fiber waits](../../design/standard-library/only-a-fiber-waits.md)). `tcp/Socket/with` and `tcp/Listener/serve` call it before they close, and a peer that resets is `Io/Error/reset()`.
-- **The hosts are scriptable at both ends.** The mock host serves inbound connections whole or in segments (`inbound_chunks`) and outbound replies (`net`, `net_chunks`), a peer that keeps its sending half open until the server finishes its own (`inbound_waiting`) and one that resets (`net_reset`), and records each connection's writes, end, finish and close in order (`socket_events`); one compiled program runs under many of them (`curios/src/tests.rs`'s `Compiled`), and the native host's own tests reach a real peer on a loopback port the kernel picks (`curios-runtime/src/os_host/tests.rs`'s `loopback_listener`).
-- **A refused request is answered.** `http/Server`'s `answer` sends a 400 for any request its decoder refuses.
+- **The hosts are scriptable at both ends.** The mock host serves inbound connections whole or in segments (`inbound_chunks`) and outbound replies (`net`, `net_chunks`), a peer that keeps its sending half open until the server finishes its own (`inbound_waiting`), one that never closes (`inbound_open`) and one that resets (`net_reset`), records each connection's writes, end, finish and close in order (`socket_events`), and refuses a poll that nothing in the script can end; one compiled program runs under many of them (`curios/src/tests.rs`'s `Compiled`), and the native host's own tests reach a real peer on a loopback port the kernel picks (`curios-runtime/src/os_host/tests.rs`'s `loopback_listener`).
+- **A server reads a request by its framing and ends its connection as the protocol asks.** `http/Server/answer` reads a request off a socket through the framing core, `http/stream.crs`'s `fetch` and `body` asking a piece again as bytes arrive. It answers a refusal with the reply `Response/of_refusal` makes of it, a request that has not arrived whole within its deadline 408 and a handler that fails 500, tells a request that expects it to continue once its head is read, and sends a reply to `HEAD` as its head alone; then it ends its sending half and reads what the peer still sends until the peer closes or falls quiet. `serve` and `serve_tls` run it over a listener, and `curios/src/tests/host/http_tests.rs` holds it to a scripted peer, row by row.
 
 ## The gap
 
-**HTTP reads as values what it says to refuse, sends a body in reply to `HEAD`, and closes a connection under its answer.** Read from the server's read loop and the client, against RFC 9112 — a bare § is its — and RFC 9110, and run through this tree's compiler wherever a whole message or a loopback peer shows the row. No test drives `http/Server`.
-
-A request, as `http/Server` reads it:
-
-| Input | The library | The RFCs |
-| --- | --- | --- |
-| A request the reader refuses for more than its grammar: a request line, a head or content past its bound, a method or a coding not implemented, a major version other than 1 | 400: the server answers every refusal alike (`answer`) | 414 (§3), 431 (RFC 6585 §5) and 413 (RFC 9110 §15.5.14); 501 (RFC 9110 §9.1; §6.1); 505 (RFC 9110 §15.6.6) |
-| `Expect: 100-continue` | not answered, so the peer waits out its own patience before it sends its content | 100, or a final status, before the content is read (RFC 9110 §10.1.1) |
-| A request that arrives in more than 1 024 reads | what arrived within them, read as the request (`request_bytes`) | read to its end, within its bounds in octets |
-| A peer that stops sending and stays | waited on with no end | 408 (RFC 9110 §15.5.9) |
+**The client reads a reply to the connection's close, and reports one cut short as malformed.** Read from `http/Client`, against RFC 9112 — a bare § is its — and run through this tree's compiler wherever a whole message or a scripted peer shows the row.
 
 A reply, as `http/Client` reads it:
 
@@ -34,20 +25,6 @@ A reply, as `http/Client` reads it:
 | A peer that answers and keeps the connection open | the deadline, with the reply it sent lost: the client reads to the close (`Socket/call`) | whole where its framing ends (§6.3) |
 | A reply of any size | read whole into memory, and only then held to its bound | — |
 | Framed by the close, over TLS, ending without a closure alert | whole: the host reads a missing alert as the end of the stream | incomplete (§9.8) |
-
-A reply, as the server writes it:
-
-| Message | The library | The RFCs |
-| --- | --- | --- |
-| A reply to `HEAD` | the handler's body sent | no content (RFC 9110 §9.3.2); `Content-Length` may state what a `GET` would carry (RFC 9110 §8.6) |
-
-A connection, as `http/Server`, `tcp/Listener` and the native host end it:
-
-| Event | The library | The RFCs |
-| --- | --- | --- |
-| A reply sent before the request is read whole, as every refusal is | its sending half ended and the connection closed at once over the unread bytes: a peer still sending fails its write and never reads the reply, `other(32)` over loopback with 20 MB unread, where one that had finished writing reads it | the request read on until the peer closes (§9.6) |
-| A handler that fails | the connection closed with no reply | 500 (RFC 9110 §15.6.1) |
-| A server over TLS | none: `http/Server/serve` binds its own listener in the clear, and `http/Server/listen` answers a `Server` nothing accepts from | — |
 
 The last row of the reply table is the host's to answer: it is the entry of [the runtime's findings](../06-runtime/00-findings.md), which this spec's last stage fixes.
 
@@ -71,8 +48,8 @@ Taken before the first stage, each with its reason, so a stage meets none of the
 3. **A message a program makes is one a wire can carry, by its type.** A field is a `Name` and a `Value`: a name's text is a token and a value's bytes hold no control octet but the tab, each a hidden proposition its literal discharges by reduction and a run-time one by the check that answers it as an `Option`. A status's code is three digits and its reason phrase a value's bytes; a reply holds content only where its status carries any, so a body on a 1xx, 204, 205 or 304 reply is not written anywhere. `render` is therefore total and refuses nothing. A name is kept as written and compared without case, since the wire's is the sender's to choose and its meaning is not. Field values and the reason phrase are the octets the wire carried, as RFC 9110 §5.5 asks a recipient to treat obs-text, and a caller wanting text reads one through `Str/of_bytes`.
 4. **A URL reaches the wire percent-encoded.** `Url/of_str` refuses a control octet, a space and an octet past ASCII in any part, and the writers of a request line, a `Host` and a `Location` percent-encode any such octet of a `Url` a program built by hand, which is what the encoding is for. `Url` stays a record a program reads by field.
 5. **The renderer owns the framing fields.** `Content-Length`, `Transfer-Encoding`, `Connection` and a request's `Host` are written from the message, and a caller's own field of one of those names is not sent, which `with_header` and both renderers document; a message that was read keeps every field line it arrived with. Every message says `Connection: close`, since each end keeps no connection (§9.3). A reply to `HEAD` is sent as its head alone, its `Content-Length` the length of the body the handler produced. A 1xx or 204 reply carries no `Content-Length`. `POST`, `PUT` and `PATCH` always state their length.
-6. **A message is bounded in bytes and a request in time, and the bounds are a value.** `http/Limits`: a request line within 8 KiB, answered 414 past it, as §3 asks a server to support at least; a head within 64 KiB, answered 431; content within 4 MiB, today's ceiling of 1 024 reads of 4 KiB, answered 413; a chunk's size line within 4 KiB and a trailer section within the head's bound, each answered 400; and the whole request within 30 s, answered 408. A client bounds a reply's head by the same figure and its content by 64 MiB, and reports one past either as an error of its own. `http/Server`'s and `http/Client`'s documentation state them.
-7. **A refusal is a value with its status.** `http/Refusal` says why a request is not read — malformed, a target too long, a head too large, content too large, a method or a coding not implemented, a version not served, the deadline — and maps each to the reply the server owes: 400, 414, 431, 413, 501, 505, 408. A handler that fails is answered 500. A peer that closes before its request is whole is answered 400, as §8 allows.
+6. **A message is bounded in bytes and a request in time, and the bounds are values.** `http/Limits` holds the octets: a request line within 8 KiB, answered 414 past it, as §3 asks a server to support at least; a head within 64 KiB, answered 431; content within 4 MiB, answered 413; a chunk's size line within 4 KiB, answered 400; and a trailer section within the head's bound, answered 431. `http/Server` holds them beside the time: a request whole within 30 s, answered 408, and a peer that has been answered read on from until it has said nothing for a second. A client bounds a reply's head by the same figure and its content by 64 MiB, and reports one past either as an error of its own. `http/Server`'s and `http/Client`'s documentation state them.
+7. **A refusal is a value with its status.** `http/Refusal` says why a request is not read — malformed, a target too long, a head too large, content too large, a method or a coding not implemented, a version not served, the deadline — and `Response/of_refusal` makes of each the reply the server owes: 400, 414, 431, 413, 501, 505, 408. A handler that fails is answered 500. A peer that closes before its request is whole is answered 400, as §8 allows.
 8. **A request line is `method SP target SP HTTP-version`, and a request with no authority is refused.** A method the library does not name is 501; a version that is no `HTTP/1.x` is 400 and a major version other than 1 is 505; empty lines before the request line are skipped. A target is origin-form or absolute-form and anything else is 400. `Host` is one field line holding `uri-host [":" port]`; none, two or one that is not is 400 at HTTP/1.0 as at 1.1, since §3.3 lets a server refuse an empty authority, the alternative is the server's configured name, and a server bound to a wildcard address has none to offer. An absolute-form target's authority is the request's and `Host` is ignored (§3.2.2), though HTTP/1.1 still owes one.
 9. **A field line is refused, not repaired.** Whitespace before the colon, a line that begins with whitespace, a name that is no token, and a CR, LF or NUL in a value refuse a request with 400 and a reply as malformed; RFC 9110 §5.5 and §5.2 let a recipient replace them with spaces, which makes a value up. A reply's fold alone is read as a space, as §5.2 requires of a user agent. A chunk's size line is hexadecimal digits and then nothing or an extension.
 10. **A server answers `Expect: 100-continue` from the head.** An HTTP/1.1 request that expects it and has content to send is answered `100 Continue` once its head is read and framed, or its refusal at once, before any content is read (RFC 9110 §10.1.1).
@@ -82,15 +59,13 @@ Taken before the first stage, each with its reason, so a stage meets none of the
 
 ## Stages
 
-Each lands alone, and its commit removes from the tables the rows it gave their RFC's answer.
+One is left, and its commit removes from the table the rows it gave their RFC's answer.
 
-1. **The server.** `http/Server`'s connection handler over the driver under decisions 6, 7, 10 and 11, with `serve` and `serve_tls` over it; `Server`, `listen`, `close`, `needed`, `blank_line` and the count of reads go. The request table's remaining rows and the connection table's.
-2. **The client.** `http/Client`'s exchange over the driver under decisions 6 and 12, `http/Error`'s `incomplete` and its bound's arm, and decision 13 in the native host. The reply table's remaining rows.
+1. **The client.** `http/Client`'s exchange over the driver under decisions 6 and 12, `http/Error`'s `incomplete` and its bound's arm, and decision 13 in the native host. The reply table's remaining rows.
 
 ## Verification
 
-- Stage 1: a server compiled once and run over a scripted inbound host per row answers each with its status — 400, 408, 413, 414, 431, 500, 501 and 505 — reads whole a chunked request sent in segments cut inside a size line, inside a chunk and inside the trailer section, stops reading at the frame's end before a peer that stays open, answers `100 Continue` before it reads an expected body, sends a reply to `HEAD` as its head alone, and writes, finishes, drains and closes in that order.
-- Stage 2: `http/perform` over a scripted reply raises `incomplete` with the part that arrived, for a short length, a missing last chunk and a head cut short; reads a reply to `HEAD` that states a length as whole; skips a `100 Continue`; returns a reply whose peer stays open; and reports a reset as `net(reset())`. The native host answers a TLS stream ended without its alert as `tls`.
+- Stage 1: `http/perform` over a scripted reply raises `incomplete` with the part that arrived, for a short length, a missing last chunk and a head cut short; reads a reply to `HEAD` that states a length as whole; skips a `100 Continue`; returns a reply whose peer stays open; and reports a reset as `net(reset())`. The native host answers a TLS stream ended without its alert as `tls`.
 - Every stage: the prelude build is measured before and after, naming the stage, its rows read from `curios-prelude-archive/.artifacts/profile.tsv` (elaboration) and `curios-prelude/.artifacts/profile.tsv` (certification) after `cargo xtask clippy`, folded by `target/debug/curios profile <file>`, whose first data row is the total.
 
 ## Rejected

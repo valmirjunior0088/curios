@@ -1,0 +1,63 @@
+use /std/{Bytes, Result, Async, Io};
+use /std/tcp/{Socket};
+use /std/http/{Limits, Refusal, Framing, read};
+use /std/http/read/{Step};
+
+--- How reading a piece off a socket ended without it: the reader refused what arrived, the peer closed first — with what the reader held, `H` — or the wire failed.
+pub induct Stop(H: Type): pub Type
+| refused(Refusal)
+| ended(H)
+| failed(Io/Error)
+end
+
+pub use Stop/*;
+
+--- `piece` asked of the bytes held, and asked again each time `c` yields more, until it answers: the piece and the bytes after it, or how the reading stopped — where the peer closed first, with where the piece stood and the bytes held.
+pub let fetch(
+    @S: Type,
+    @A: Type,
+    c: Socket,
+    piece: (S, Bytes) -> Step(S, A),
+    state: S,
+    held: Bytes,
+) -> Async(Result(Stop({S, Bytes}), {A, Bytes})) =
+    match piece(state, held)
+    | took(a, rest) => Async/pure(Result/success((a, rest)))
+    | refused(why) => Async/pure(Result/failure(Stop/refused(why)))
+    | more(next, kept) =>
+        let arrived = Socket/read(c, 65536)!;
+        match arrived
+        | chunk(bytes) => fetch(c, piece, next, x[..kept, ..bytes])
+        | eof() => Async/pure(Result/failure(Stop/ended((next, kept))))
+        | error(e) => Async/pure(Result/failure(Stop/failed(e)))
+        end
+    end;
+
+--- The body `framing` delimits, read off `c` after the bytes held, and the bytes after it. A body framed by the close is whole when the peer closes; any other the peer closes on is cut short, and what stopped the reading holds the content that had arrived: the octets of a stated length, the whole chunks of a chunked body.
+pub let body(
+    limits: Limits,
+    c: Socket,
+    framing: Framing,
+    held: Bytes,
+) -> Async(Result(Stop(Bytes), {Bytes, Bytes})) =
+    let read =
+        fetch(
+            c,
+            (content: Bytes, bytes: Bytes) => read/body(limits, framing, content, bytes),
+            x[],
+            held)!;
+    Async/pure(
+        match read
+        | success(taken) => Result/success(taken)
+        | failure(stop) =>
+            match stop
+            | refused(why) => Result/failure(Stop/refused(why))
+            | failed(e) => Result/failure(Stop/failed(e))
+            | ended((content, kept)) =>
+                match framing
+                | close() => Result/success((kept, x[]))
+                | chunked() => Result/failure(Stop/ended(content))
+                | _ => Result/failure(Stop/ended(kept))
+                end
+            end
+        end);

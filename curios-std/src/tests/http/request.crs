@@ -1,6 +1,6 @@
 -- A request as a server reads it: the head, the framing its fields state, the body, and where it is addressed.
 use /std/{Str, Nat, Option, Result, Test};
-use /std/http/{Method, Url, Request, Limits, Refusal};
+use /std/http/{Method, Url, Request, Response, Limits, Refusal};
 use /std/http/Field/{Value};
 use /std/http/Url/{Scheme};
 
@@ -18,7 +18,7 @@ let is(s: Str, method: Method, url: Str, body: Str) -> Test =
 let refused(s: Str) -> Option(Nat) =
     match read(s)
     | success(_) => Option/none()
-    | failure(why) => Option/some(Refusal/code(why))
+    | failure(why) => Option/some(Response/of_refusal(why).status.code)
     end;
 
 let answers(s: Str, code: Nat) -> Test =
@@ -161,7 +161,7 @@ test a_request_past_a_bound_is_refused_by_the_bound =
     let under(s: Str) -> Option(Nat) =
         match Request/of_bytes(small, Scheme/http(), Str/to_bytes(s))
         | success(_) => Option/none()
-        | failure(why) => Option/some(Refusal/code(why))
+        | failure(why) => Option/some(Response/of_refusal(why).status.code)
         end;
     Test/all([
         Test/equal(under("GET / HTTP/1.1\r\nHost: h\r\n\r\n"), Option/none()),
