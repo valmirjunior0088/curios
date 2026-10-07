@@ -10,6 +10,9 @@ use free_monoid::*;
 mod laws;
 use laws::*;
 
+mod magnitude;
+use magnitude::*;
+
 mod nat;
 use nat::*;
 
@@ -768,6 +771,9 @@ pub fn reduce_intrinsic(
             )?,
             |l, r| bitwise_laws(l, r, intrinsic),
         )),
+        // `abs` and `sign`: the operand read through what leaves each — a literal factor, a negation, a power — and what is left compared or stuck (`reduce_int_abs`, `reduce_int_sign`).
+        Intrinsic::IntAbs(operand) => reduce_int_abs(reducer, operand),
+        Intrinsic::IntSign(operand) => reduce_int_sign(reducer, operand),
         Intrinsic::IntShl(left, right) => {
             let shifted = then_laws(
                 reduce_int_shift(
@@ -1013,6 +1019,10 @@ pub fn reduce_intrinsic(
             // A round trip through `Int/to_nat` is the integer it was handed — `Intrinsic::undone`. Without it a bound established in `Int` is erased by the trip, which is what `/std/Map`'s `Key(Int)` has to reconstruct an operand across.
             if let Some(operand) = intrinsic.undone(&inner) {
                 return reducer.reduce(operand.clone()).map(Term::unwrap_or_clone);
+            }
+            // A magnitude widened back is its operand, or the operand negated, where the comparison decides which.
+            if let Some(signed) = widened_magnitude(reducer, &inner)? {
+                return Ok(Term::unwrap_or_clone(signed));
             }
 
             // Pushed through `Nat`'s normal form — a literal folds, a floor becomes the constant, a sum and a product widen summand by summand — since the widening is a semiring homomorphism; `int_of_nat` states it.
@@ -2213,6 +2223,8 @@ mod free_monoid_tests;
 mod lattice_tests;
 #[cfg(test)]
 mod laws_tests;
+#[cfg(test)]
+mod magnitude_tests;
 #[cfg(test)]
 mod nat_tests;
 

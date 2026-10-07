@@ -626,6 +626,78 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_settled(dest, &[&left, &right], fast, Fast::Small, slow);
     }
 
+    /// Lower an `Int`'s magnitude: an i31 is its own or its negation's, which leaves the i31 at `-2³⁰` alone and is boxed there, and a boxed value is itself or what `big/add` under its flip takes it from zero to, by `big/cmp`'s reading of its sign.
+    fn emit_magnitude(&mut self, dest: &Dest<'_>, operand: &EmissionValueName) {
+        let operand = self.operand(operand);
+        let zero = || vec![curios_wasm::Instr::I32Const { value: 0 }];
+        let boxed_zero = || {
+            vec![
+                curios_wasm::Instr::I32Const { value: 0 },
+                curios_wasm::Instr::RefI31,
+            ]
+        };
+        let fast = sequence([
+            operand.small(),
+            zero(),
+            operand.small(),
+            vec![curios_wasm::Instr::I32Sub],
+            operand.small(),
+            zero(),
+            vec![
+                curios_wasm::Instr::I32GeS,
+                curios_wasm::Instr::Select { val_types: vec![] },
+            ],
+        ]);
+        let slow = sequence([
+            operand.reference(),
+            boxed_zero(),
+            operand.reference(),
+            vec![
+                curios_wasm::Instr::I32Const { value: 1 },
+                self.big(BigHelper::Add),
+            ],
+            operand.reference(),
+            boxed_zero(),
+            vec![
+                self.big(BigHelper::Cmp),
+                curios_wasm::Instr::I32Const { value: 0 },
+                curios_wasm::Instr::I32GeS,
+                // A register holds a reference as nullable, so the selection is typed at that and narrowed: neither is null.
+                curios_wasm::Instr::Select {
+                    val_types: vec![Table::top_type(true)],
+                },
+                curios_wasm::Instr::RefAsNonNull,
+            ],
+        ]);
+
+        self.emit_settled(dest, &[&operand], fast, Fast::Wide32, slow);
+    }
+
+    /// Lower an `Int`'s sign: `-1`, `0` or `1`, an i31 whatever the operand's size — two machine comparisons of an i31, and `big/cmp` against zero of a boxed value.
+    fn emit_sign(&mut self, dest: &Dest<'_>, operand: &EmissionValueName) {
+        let operand = self.operand(operand);
+        let zero = || vec![curios_wasm::Instr::I32Const { value: 0 }];
+        let fast = sequence([
+            operand.small(),
+            zero(),
+            vec![curios_wasm::Instr::I32GtS],
+            operand.small(),
+            zero(),
+            vec![curios_wasm::Instr::I32LtS, curios_wasm::Instr::I32Sub],
+        ]);
+        let slow = sequence([
+            operand.reference(),
+            vec![
+                curios_wasm::Instr::I32Const { value: 0 },
+                curios_wasm::Instr::RefI31,
+                self.big(BigHelper::Cmp),
+                curios_wasm::Instr::RefI31,
+            ],
+        ]);
+
+        self.emit_settled(dest, &[&operand], fast, Fast::Small, slow);
+    }
+
     /// Lower a zero test: an i31 compares, and a boxed value is never zero.
     fn emit_eqz(&mut self, dest: &Dest<'_>, operand: &EmissionValueName) {
         let operand = self.operand(operand);
@@ -1826,6 +1898,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             curios_cont::Intrinsic::NatMax | curios_cont::Intrinsic::IntMax => {
                 self.emit_extreme(dest, (&args[0], &args[1]), curios_wasm::Instr::I32GeS)
             }
+            curios_cont::Intrinsic::IntAbs => self.emit_magnitude(dest, &args[0]),
+            curios_cont::Intrinsic::IntSign => self.emit_sign(dest, &args[0]),
             curios_cont::Intrinsic::NatShl | curios_cont::Intrinsic::IntShl => {
                 self.emit_shift_left(dest, &args[0], &args[1])
             }

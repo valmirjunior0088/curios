@@ -241,6 +241,36 @@ fn int_lt_compares_signed() {
     assert_refuses_nothing(&wat);
 }
 
+// An `Int`'s magnitude is the operand or its negation: of an i31 by a machine comparison, the one negation that leaves the i31 boxed as a sum's result is, and of a boxed value by `big/cmp` against zero over `big/add` under its flip. Nothing is refused.
+#[test]
+fn an_int_s_magnitude_selects_the_operand_or_its_negation_and_boxes_the_one_past_the_i31() {
+    let wat = wat(&intrinsic_main(
+        curios_cont::Intrinsic::IntAbs,
+        vec![int(-7)],
+    ));
+    assert_contains(&wat, "i32.sub");
+    assert_contains(&wat, "i32.ge_s");
+    assert_contains(&wat, "select");
+    assert_contains(&wat, "call $big/of_i64");
+    assert_contains(&wat, "call $big/add");
+    assert_contains(&wat, "call $big/cmp");
+    assert_refuses_nothing(&wat);
+}
+
+// An `Int`'s sign is an i31 whatever its operand's size: two machine comparisons of an i31, and `big/cmp` against zero of a boxed value, with nothing boxed and nothing refused.
+#[test]
+fn an_int_s_sign_is_two_machine_comparisons_and_big_cmp_past_the_i31() {
+    let wat = wat(&intrinsic_main(
+        curios_cont::Intrinsic::IntSign,
+        vec![int(-7)],
+    ));
+    assert_contains(&wat, "i32.gt_s");
+    assert_contains(&wat, "i32.lt_s");
+    assert_contains(&wat, "call $big/cmp");
+    assert_absent(&wat, "call $big/of_i64");
+    assert_refuses_nothing(&wat);
+}
+
 /// A remainder by a small literal lies below it, so the representation analysis holds it in a word: the fast path's `i32` is the value, a helper's answer is narrowed rather than boxed, and the exit reads the word with no narrowing of its own.
 #[test]
 fn a_remainder_by_a_small_literal_is_held_in_a_word() {

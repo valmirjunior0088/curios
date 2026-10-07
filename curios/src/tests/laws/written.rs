@@ -586,11 +586,11 @@ const CARRIERS: &[Carrier] = &[
         ],
     },
     Carrier {
-        // The held rows hold today through `/std/Int`'s definitions, a `match` on the operand's sign that reduces where the operand is a combination of widened naturals, and hold after `abs` and `sign` are operations.
+        // `abs` and `sign` read their operand through what no substitution undoes: a literal factor of every coefficient, the sign of the one that leads, and a power every monomial holds.
         name: "Int abs and sign",
         binders: "i: Int, j: Int, n: Nat, m: Nat",
         held: &[
-            // `abs` inverts the embedding, through a sum, a product and a floor, and below zero where a constant makes the sign certain.
+            // `abs` inverts the embedding, through a sum, a product and a floor, and below zero where a constant makes the sign certain. Each held through the library's definitions before `abs` and `sign` were operations.
             "Eq()(Int/abs(Nat/to_int(n)), n)",
             "Eq()(Int/abs(Nat/to_int(n) + 1), n + 1)",
             "Eq()(Int/abs(Nat/to_int(n) + Nat/to_int(m)), n + m)",
@@ -608,21 +608,30 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Int/abs(-3), 3)",
             "Eq()(Int/sign(-3), -1)",
             "Eq()(Int/sign(+0), +0)",
-        ],
-        refused: &[
-            // Candidates `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with `abs` and `sign`. A negation leaves `abs` and flips `sign`, and two `abs` of opposite operands are one.
+            // A negation leaves `abs` and flips `sign`, at a variable, at a widened natural and at a difference, which is read from one end whichever it was written from: so two `abs` of opposite operands are one term, under a sum as alone.
             "Eq()(Int/abs(+0 - i), Int/abs(i))",
             "Eq()(Int/sign(+0 - i), +0 - Int/sign(i))",
             "Eq()(Int/abs(+0 - Nat/to_int(n)), n)",
             "Eq()(Int/abs(i - j), Int/abs(j - i))",
+            "Eq()(Int/sign(i - j), +0 - Int/sign(j - i))",
+            "Eq()(Int/abs(i - j) + 1, Int/abs(j - i) + 1)",
             // A literal factor leaves by its magnitude and its sign, out of a sum too, and a power as a literal does.
             "Eq()(Int/abs(8 * i), 8 * Int/abs(i))",
             "Eq()(Int/abs(-8 * i), 8 * Int/abs(i))",
             "Eq()(Int/abs(2 * i - 2 * j), 2 * Int/abs(i - j))",
+            "Eq()(Int/abs(6 * i + 9), 3 * Int/abs(2 * i + 3))",
             "Eq()(Int/sign(8 * i), Int/sign(i))",
             "Eq()(Int/sign(-8 * i), +0 - Int/sign(i))",
             "Eq()(Int/abs(Int/shl(i, n)), Nat/shl(Int/abs(i), n))",
             "Eq()(Int/sign(Int/shl(i, n)), Int/sign(i))",
+            // Each read at a product of two sums, the one shape a fold leaves standing: the operand is normalized before it is read, so a law holds of it as written and as distributed.
+            "Eq()(Int/abs(+0 - (i + 1) * (j + 1)), Int/abs((i + 1) * (j + 1)))",
+            "Eq()(Int/sign(+0 - (i + 1) * (j + 1)), +0 - Int/sign((i + 1) * (j + 1)))",
+            "Eq()(Int/abs(8 * ((i + 1) * (j + 1))), 8 * Int/abs((i + 1) * (j + 1)))",
+            "Eq()(Int/abs(Int/shl((i + 1) * (j + 1), n)), Nat/shl(Int/abs((i + 1) * (j + 1)), n))",
+            "Eq()(Int/abs((i + 1) * (j + 1)), Int/abs(i * j + i + j + 1))",
+        ],
+        refused: &[
             // Lemmas, which no stage moves: a product reaches either operation distributed, so deciding these takes factoring it; the decomposition is a product of the two; and a comparison of an `abs` with zero is a case split.
             "Eq()(Int/abs(i * j), Int/abs(i) * Int/abs(j))",
             "Eq()(Int/sign(i * j), Int/sign(i) * Int/sign(j))",
@@ -1450,9 +1459,9 @@ fn a_mismatch_nothing_compared_says_so() {
     );
 }
 
-// A `min` computes from its operands alone and reads no arm: under a guard on `a <= b`, and under a hypothesis of it, `Nat/min(a, b)` is the node it was, so `Eq/refl()` does not close it against `a`, and `Nat/min/of_le` over the fact does. So one `min` is one value in every arm it is read in, and commutation and association hold the same under a guard as outside it. The same at `Int`, and for a `max`.
+// A promoted operation computes from its operands alone and reads no arm. A `min`: under a guard on `a <= b`, and under a hypothesis of it, `Nat/min(a, b)` is the node it was, so `Eq/refl()` does not close it against `a`, and `Nat/min/of_le` over the fact does. So one `min` is one value in every arm it is read in, and commutation and association hold the same under a guard as outside it. The same at `Int`, and for a `max`.
 #[test]
-fn a_min_under_a_guard_reads_no_arm_and_a_lemma_converts_it() {
+fn a_promoted_operation_under_a_guard_reads_no_arm_and_a_lemma_converts_it() {
     let header = "use /std/{Nat, Int, Eq, Io}; use /std/Bool/{True, Holds};";
     let under = |carrier: &str, operation: &str, kept: &str, proof: &str| {
         format!(
@@ -1471,6 +1480,26 @@ fn a_min_under_a_guard_reads_no_arm_and_a_lemma_converts_it() {
         if let Err(error) = typecheck(&under(carrier, operation, kept, lemma)) {
             panic!("{carrier}/{operation}/of_le does not convert it under the guard:\n{error}");
         }
+    }
+
+    // An `abs` widened back and a `sign` read no arm either: under a guard on `+0 <= a` each is the node it was, and `Int/abs/of_non_neg` and `Int/sign/of_not_neg` over the arm's fact are the step.
+    let widened = |proof: &str| {
+        format!(
+            "{header}\npub let row(a: Int) -> Nat = match +0 <= a | true => let _: Eq()(Nat/to_int(Int/abs(a)), a) = {proof}; 0 | false => 1 end;\nIo/pure(())"
+        )
+    };
+    assert!(typecheck(&widened("Eq/refl()")).is_err());
+    if let Err(error) = typecheck(&widened("Int/abs/of_non_neg(a, True/proved())")) {
+        panic!("Int/abs/of_non_neg does not convert it under the guard:\n{error}");
+    }
+    let signed = |proof: &str| {
+        format!(
+            "{header}\npub let row(a: Int) -> Nat = match +0 < a | true => let _: Eq()(Int/sign(a), +1) = {proof}; 0 | false => 1 end;\nIo/pure(())"
+        )
+    };
+    assert!(typecheck(&signed("Eq/refl()")).is_err());
+    if let Err(error) = typecheck(&signed("Int/sign/of_pos(a, True/proved())")) {
+        panic!("Int/sign/of_pos does not convert it under the guard:\n{error}");
     }
 
     // Under a hypothesis as under a guard, and commuted there as anywhere.

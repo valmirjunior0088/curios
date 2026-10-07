@@ -24,9 +24,9 @@ It builds on the algebra's law families and generated grid, and is independently
 
 ## The gap
 
-`abs` and `sign` at `Int` are library functions, so conversion sees their unfolded matches: `abs(+0 - a)` against `abs(a)` and `sign(+0 - a)` against `+0 - sign(a)` are refused. `pow` is a library recursion by squaring, so `pow(x, y + 1)` against `pow(x, y) * x` is refused, and `shl(1, k)` against `pow(2, k)`.
+`pow` is a library recursion by squaring, which conversion sees unfolded and which steps by no successor: `pow(x, y + 1)` against `pow(x, y) * x` is refused, and `shl(1, k)` against `pow(2, k)`.
 
-What the library definitions decide today is kept: `abs(Nat/to_int(n))` is `n`, `abs(+0 - Nat/to_int(n) - 1)` is `n + 1`, `sign(Nat/to_int(n) + 1)` is `+1`, and `pow(x + 1, 2)` is `x * x + 2 * x + 1`.
+What the library definition decides today is kept: `pow(x + 1, 2)` is `x * x + 2 * x + 1`.
 
 ## An operation is declared with the theory it is decided in
 
@@ -51,17 +51,17 @@ Lemmas: `min(a, b) + max(a, b) = a + b`; `(a - b) + b = max(a, b)`; and a symbol
 
 ## `abs` and `sign`
 
-Declared at `Int`, `abs` answering a `Nat` and `sign` an `Int` in `{-1, 0, +1}`:
+`/sys` operations at `Int`, with nothing of this section left to land, `abs` answering a `Nat` and `sign` an `Int` in `{-1, 0, +1}`. Declared by what no substitution undoes of an operand read as a combination of atoms:
 
 - a negation leaves `abs` and flips `sign`: `abs(+0 - n) = abs(n)`, `sign(+0 - n) = +0 - sign(n)`;
-- a literal factor leaves, by its magnitude and its sign, and so does a power, which no substitution turns into a sum: `abs(8 * n) = 8 * abs(n)`, `sign(shl(n, k)) = sign(n)`, `abs(shl(n, k)) = shl(abs(n), k)`;
-- `abs` inverts the embedding: `abs(Nat/to_int(m)) = m`, and the `abs` of a non-negative combination of widened naturals, or of one negated, is its preimage; the `sign` of one the comparison holds positive is `+1`;
+- a literal factor leaves, by its magnitude and its sign, and so does a power, which no substitution turns into a sum: `abs(8 * n) = 8 * abs(n)`, `abs(6 * n + 9) = 3 * abs(2 * n + 3)`, `sign(shl(n, k)) = sign(n)`, `abs(shl(n, k)) = shl(abs(n), k)`;
+- `abs` inverts the embedding: `abs(Nat/to_int(m)) = m`, and the `abs` of a non-negative combination of widened naturals, or of one negated, is its preimage; the `sign` of an operand the comparison decides against zero is `+1`, `+0` or `-1`;
 - `Nat/to_int(abs(n))` is `n` where the comparison decides `0 <= n`, and `+0 - n` where it decides `n <= 0`;
-- two `abs` are one value where their operands are equal or opposite, `abs(a - b)` against `abs(b - a)`.
+- a sum of both signs is read from one end, so two `abs` of opposite operands are one term and their two `sign`s each other's negation: `abs(a - b)` against `abs(b - a)`, `sign(a - b)` against `+0 - sign(b - a)`.
 
-The operand is normalized before it is read, so one value has one reading.
+The fold normalizes its operand and reads it as a scale times what is left (`curios-algebra`'s `Scale`): the greatest literal that divides every coefficient, the sign of the coefficient that leads in an order of the monomials read from their atoms, and every power all the monomials hold. What is left shares no literal factor and leads above zero, so an operand and its negation leave one thing, one value has one reading, and no rule pairs two nodes.
 
-Lemmas: `abs(a * b) = abs(a) * abs(b)` and `sign(a * b) = sign(a) * sign(b)`, which read a product a fold has distributed, `abs((l + 1) * j)` reaching `abs` as `l * j + j`, so deciding them takes factoring a polynomial; `NonNeg(n)` giving `Eq()(Nat/to_int(abs(n)), n)`, and its twin below zero, which `/std/Map`'s `Key(Int)` consumes; and the order facts, the triangle inequality and the decomposition [the numeric laws](03-numeric-laws.md) list.
+Lemmas: `abs(a * b) = abs(a) * abs(b)` and `sign(a * b) = sign(a) * sign(b)`, which read a product a fold has distributed, `abs((l + 1) * j)` reaching `abs` as `l * j + j`, so deciding them takes factoring a polynomial; `sign(sign(a)) = sign(a)`, a case split; and the order facts, the triangle inequality and the decomposition [the numeric laws](03-numeric-laws.md) list. A declared operation reads no arm, so a hypothesis reaches `abs` through `/std/Int/abs`'s `of_non_neg` and `of_neg`, which `/std/Map`'s `Key(Int)` consumes, and `sign` through `/std/Int/sign`'s `of_pos`, `of_neg`, `of_not_pos` and `of_not_neg`; the procedure that proves a bound reads each through them, by the cases its operand's sign makes.
 
 ## Powers
 
@@ -97,16 +97,15 @@ What is not a law stays a control, refused with its counterexample: associativit
 
 ## Promotion
 
-`min` and `max` at both carriers are `/sys` operations, and `abs`, `sign` and `pow` become ones. Each is new arithmetic on a numeric carrier and takes everything `.claude/rules/checking.md`'s routing names for one: its `/sys` row and `Intrinsic::signature` entry, which the prelude build checks against each other; its literal fold in every constant folder sharing `scalar` — `curios-core`'s, `curios-ersd`'s and `curios-cont`'s; the emitter's lowering with its i31 fast path and its `big_emitter` library; its declaration; its nodes in `classed`; and the procedure's reading of its definition. Each folds as it executes, at both signs and past the i31, since `Nat` and `Int` are unbounded at every layer ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)). The library function a promotion replaces becomes a re-export under its existing name, and the rows it held by reduction are stated before it lands and hold after.
+`min` and `max` at both carriers and `abs` and `sign` at `Int` are `/sys` operations, and `pow` becomes one. Each is new arithmetic on a numeric carrier and takes everything `.claude/rules/checking.md`'s routing names for one: its `/sys` row and `Intrinsic::signature` entry, which the prelude build checks against each other; its literal fold in every constant folder sharing `scalar` — `curios-core`'s, `curios-ersd`'s and `curios-cont`'s; the emitter's lowering with its i31 fast path and its `big_emitter` library; its declaration; its nodes in `classed`; and the procedure's reading of its definition. Each folds as it executes, at both signs and past the i31, since `Nat` and `Int` are unbounded at every layer ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)). The library function a promotion replaces becomes a re-export under its existing name, and the rows it held by reduction are stated before it lands and hold after.
 
 ## Stages
 
 Every law above, every row the library definitions hold today and every control stands in the grid (`curios`'s `tests::laws::written`), each refused row commented with the stage that moves it, and the audit puts each declared law to a product of two sums.
 
-1. **`abs` and `sign`**, with the two lemmas `/std/Map` consumes.
-2. **`pow`**, the power atom becoming `pow(2, k)`.
+1. **`pow`**, the power atom becoming `pow(2, k)`.
 
-Each stage moves its rows from refused to held, extends the grid's audit to the kind it declares, and adds its operation's rows to `curios`'s `tests::bounds`.
+The stage moves its rows from refused to held, extends the grid's audit to the kind it declares, and adds its operation's rows to `curios`'s `tests::bounds`.
 
 ## Verification
 

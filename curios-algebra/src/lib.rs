@@ -31,6 +31,9 @@ pub use lattice::*;
 mod law;
 pub use law::*;
 
+mod magnitude;
+pub use magnitude::*;
+
 mod measure;
 pub use measure::*;
 

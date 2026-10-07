@@ -41,6 +41,8 @@ pub enum Intrinsic {
     IntXor,
     IntMin,
     IntMax,
+    IntAbs,
+    IntSign,
     IntShl,
     IntShr,
     IntEqz,
@@ -196,6 +198,8 @@ impl Intrinsic {
                 | Self::NatShr
                 | Self::NatEqz
                 | Self::NatToInt
+                | Self::IntAbs
+                | Self::IntSign
                 | Self::NatToFlt(_)
                 | Self::IntEql
                 | Self::IntNeq
@@ -323,6 +327,8 @@ impl Intrinsic {
             | Self::IntShl
             | Self::IntShr
             | Self::NatToInt
+            | Self::IntAbs
+            | Self::IntSign
             | Self::FltToInt
             | Self::FltMantissa
             | Self::FltExponent
@@ -388,6 +394,8 @@ impl Intrinsic {
         match self {
             Self::NatEqz
             | Self::NatToInt
+            | Self::IntAbs
+            | Self::IntSign
             | Self::NatToFlt(_)
             | Self::IntEqz
             | Self::IntToNat
@@ -522,6 +530,8 @@ impl Intrinsic {
             | Self::NatMul
             | Self::NatShl
             | Self::NatToInt
+            | Self::IntAbs
+            | Self::IntSign
             | Self::IntAdd
             | Self::IntSub
             | Self::IntMul

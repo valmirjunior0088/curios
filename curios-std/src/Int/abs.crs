@@ -1,0 +1,19 @@
+pub use /sys/Int/{abs};
+use /std/{Nat, Int, Eq};
+use /std/Bool/{Holds};
+
+--- A magnitude widened back is the integer it was taken of, where that is zero or above.
+---
+--- Conversion decides it where the comparison holds the operand at least zero as a term, and reads no hypothesis: under one this is the step. By [`Int/view`], whose arms are the two forms a magnitude is computed of.
+pub let of_non_neg(a: Int, p: Int/NonNeg(a)) -> Eq()(Nat/to_int(abs(a)), a) =
+    match Int/view(a)
+    | nonneg(_) => Eq/refl()
+    | neg(_) => match p end
+    end;
+
+--- A magnitude widened back is the negation of the integer it was taken of, where that is below zero.
+pub let of_neg(a: Int, p: Holds(a < +0)) -> Eq()(Nat/to_int(abs(a)), +0 - a) =
+    match Int/view(a)
+    | nonneg(_) => match p end
+    | neg(_) => Eq/refl()
+    end;

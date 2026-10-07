@@ -6,7 +6,7 @@
 //! - A proof field of a tuple- or struct-typed hypothesis, one level down, where the item may open the representation: `v.counted`, `hi.ok`.
 //! - A hypothesis or a field whose statement the arm's refinements reduce to an empty proposition — `in_range(n, 128, 191)` where a guard holds `n <= 127` — which refutes the scope by itself: read as `1 <= 0`, proved by its own zero-arm match.
 //! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
-//! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, and that a power `shl(1, m)` is at least one ([`Reader::definitions`]).
+//! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, an `abs`'s and a `sign`'s, and that a power `shl(1, m)` is at least one ([`Reader::definitions`]).
 //! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs.
 //! - That every monomial over naturals is at least zero, which conversion decides.
 //!
@@ -44,7 +44,7 @@ pub enum Origin {
     Guard(Term, bool),
     /// That a monomial over naturals is at least zero.
     Natural,
-    /// What an operation defines: a quotient's bound, a case of a truncated subtraction, of a `min` or of a `max`, or that a power is at least one.
+    /// What an operation defines: a quotient's bound, a case of a truncated subtraction, of a `min`, a `max`, an `abs` or a `sign`, or that a power is at least one.
     Definition,
     /// The product of two facts, from where each came.
     Product(Box<Origin>, Box<Origin>),
@@ -157,7 +157,7 @@ impl Facts {
     }
 }
 
-/// A case split an operation defines on an order of its operands, with the facts each case adds: a truncated subtraction `a - b` on `b <= a`, and a `min` or a `max` over `a` and `b` on `a <= b`.
+/// A case split an operation defines on an order of its operands, with the facts each case adds: a truncated subtraction `a - b` on `b <= a`, a `min` or a `max` over `a` and `b` on `a <= b`, an `abs` on `+0 <= a`, and a `sign` on each of `+0 < a` and `a < +0`.
 pub(super) struct Split {
     /// The comparison the proof splits on.
     pub(super) guard: Term,
@@ -175,6 +175,7 @@ pub(super) struct Reader<'a> {
     subtracted: Vec<(Term, Term)>,
     powered: Vec<Term>,
     extrema: Vec<(Extremum, Term, Term)>,
+    signed: Vec<Term>,
 }
 
 impl<'a> Reader<'a> {
@@ -192,6 +193,7 @@ impl<'a> Reader<'a> {
             subtracted: Vec::new(),
             powered: Vec::new(),
             extrema: Vec::new(),
+            signed: Vec::new(),
         }
     }
 
@@ -558,7 +560,8 @@ impl<'a> Reader<'a> {
             let subtracted = self.subtractions(context, target)?;
             let powered = self.powers(context, target)?;
             let split = self.extrema(context, target)?;
-            if !divided && !subtracted && !powered && !split {
+            let signed = self.signs(context, target)?;
+            if !divided && !subtracted && !powered && !split && !signed {
                 return Ok(());
             }
         }
@@ -678,6 +681,170 @@ impl<'a> Reader<'a> {
                 let equation = Term::apply(global(lemma), [a.clone(), b.clone(), loosened]);
                 let origin = Origin::Definition;
                 self.equation(context, extremum.carrier, &node, kept, equation, origin)
+            }
+        }
+    }
+
+    /// Each `abs` and `sign` of an `Int` among the atoms read so far, through the cases its operand's sign makes. An `abs` splits on `+0 <= a`: where it holds the magnitude widened is `a`, and where it fails it is `a` negated. A `sign` splits twice, on `+0 < a` and on `a < +0`: where either holds the sign is `+1` or `-1`, and where one fails the sign is at most or at least zero, so where both fail it is zero. Whether it read one.
+    ///
+    /// Conversion decides each from its operand as a term and reads no fact, so this is where a bound over one meets what the scope says of its operand.
+    fn signs(&mut self, context: &mut Context, target: Option<&Target>) -> Result<bool, Error> {
+        let integer = context.syntax().entailment.integer;
+        let order = order(context, Carrier::Integer);
+        let names = [
+            integer.abs_of_non_neg,
+            integer.abs_of_neg,
+            integer.sign_of_pos,
+            integer.sign_of_not_pos,
+            integer.sign_of_neg,
+            integer.sign_of_not_neg,
+            order.of_not_le,
+            order.of_not_lt,
+            order.of_eq,
+            context.syntax().entailment.sym,
+        ];
+        if !in_scope(context, &names) {
+            return Ok(false);
+        }
+
+        let mut pending: Vec<Term> = Vec::new();
+        for atom in self.atoms(target) {
+            let node = self.views.term(atom).clone();
+            let signed = matches!(
+                &*node,
+                Subterm::Intrinsic(Intrinsic::IntAbs(_) | Intrinsic::IntSign(_))
+            );
+            if signed && !self.signed.contains(&node) && !pending.contains(&node) {
+                pending.push(node);
+            }
+        }
+
+        let read = !pending.is_empty();
+        let zero = literal(Carrier::Integer, 0u32);
+        for node in pending {
+            self.signed.push(node.clone());
+            match &*node {
+                Subterm::Intrinsic(Intrinsic::IntAbs(a)) => {
+                    let guard = Intrinsic::IntLe(zero.clone(), a.clone());
+                    self.cases(context, guard, |reader, context, holds| {
+                        reader.magnitude(context, a, holds)
+                    })?;
+                }
+                Subterm::Intrinsic(Intrinsic::IntSign(a)) => {
+                    let above = Intrinsic::IntLt(zero.clone(), a.clone());
+                    self.cases(context, above, |reader, context, holds| {
+                        reader.sign(context, a, true, holds)
+                    })?;
+                    let below = Intrinsic::IntLt(a.clone(), zero.clone());
+                    self.cases(context, below, |reader, context, holds| {
+                        reader.sign(context, a, false, holds)
+                    })?;
+                }
+                _ => {}
+            }
+        }
+        Ok(read)
+    }
+
+    /// The two cases of `guard`, each read by `case` under whether the guard holds: as facts where the scope decides the guard, and otherwise as a split the search opens where it needs it.
+    fn cases(
+        &mut self,
+        context: &mut Context,
+        guard: Intrinsic,
+        mut case: impl FnMut(&mut Self, &mut Context, bool) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        let guard = Term::intrinsic(guard);
+        match &*reduce_with(context, &guard)? {
+            Subterm::Intrinsic(Intrinsic::Bool(holds)) => case(self, context, *holds),
+            _ => {
+                let holds = self.apart(context, |reader, context| case(reader, context, true))?;
+                let fails = self.apart(context, |reader, context| case(reader, context, false))?;
+                self.read.splits.push(Split {
+                    guard,
+                    holds,
+                    fails,
+                });
+                Ok(())
+            }
+        }
+    }
+
+    /// One case of `abs(a)` on `+0 <= a`. Where it holds: that, and `Nat/to_int(abs(a)) = a` by `Int/abs/of_non_neg`. Where it fails: `a < +0`, and `Nat/to_int(abs(a)) = +0 - a` by `Int/abs/of_neg`.
+    fn magnitude(&mut self, context: &mut Context, a: &Term, holds: bool) -> Result<(), Error> {
+        let integer = context.syntax().entailment.integer;
+        let zero = literal(Carrier::Integer, 0u32);
+        let widened = Term::intrinsic(Intrinsic::NatToInt(Term::intrinsic(Intrinsic::IntAbs(
+            a.clone(),
+        ))));
+        let origin = Origin::Definition;
+        match holds {
+            true => {
+                let qed = qed(context);
+                let guard = Intrinsic::IntLe(zero, a.clone());
+                self.admit(context, guard, qed.clone(), Origin::Definition)?;
+                let equation = Term::apply(global(integer.abs_of_non_neg), [a.clone(), qed]);
+                self.equation(context, Carrier::Integer, &widened, a, equation, origin)
+            }
+            false => {
+                let of_not_le = order(context, Carrier::Integer).of_not_le;
+                let below = Term::apply(global(of_not_le), [zero.clone(), a.clone(), qed(context)]);
+                let guard = Intrinsic::IntLt(a.clone(), zero.clone());
+                self.admit(context, guard, below.clone(), Origin::Definition)?;
+                let equation = Term::apply(global(integer.abs_of_neg), [a.clone(), below]);
+                let negated = Term::intrinsic(Intrinsic::IntSub(zero, a.clone()));
+                self.equation(
+                    context,
+                    Carrier::Integer,
+                    &widened,
+                    &negated,
+                    equation,
+                    origin,
+                )
+            }
+        }
+    }
+
+    /// One case of `sign(a)` on its operand standing `above` zero, `+0 < a`, or below it, `a < +0`. Where the guard holds: that, and `sign(a)` as `+1` or `-1`. Where it fails: the loose bound the other way, and `sign(a)` at most or at least zero by it.
+    fn sign(
+        &mut self,
+        context: &mut Context,
+        a: &Term,
+        above: bool,
+        holds: bool,
+    ) -> Result<(), Error> {
+        let integer = context.syntax().entailment.integer;
+        let zero = literal(Carrier::Integer, 0u32);
+        let node = Term::intrinsic(Intrinsic::IntSign(a.clone()));
+        // The guard's sides in order, and the lemmas of its two cases.
+        let (lower, upper, decided, left) = match above {
+            true => (&zero, a, integer.sign_of_pos, integer.sign_of_not_pos),
+            false => (a, &zero, integer.sign_of_neg, integer.sign_of_not_neg),
+        };
+        match holds {
+            true => {
+                let qed = qed(context);
+                let guard = Intrinsic::IntLt(lower.clone(), upper.clone());
+                self.admit(context, guard, qed.clone(), Origin::Definition)?;
+                let equation = Term::apply(global(decided), [a.clone(), qed]);
+                let value = match above {
+                    true => literal(Carrier::Integer, 1u32),
+                    false => Term::intrinsic(Intrinsic::Int(Integer::from(-1i32))),
+                };
+                let origin = Origin::Definition;
+                self.equation(context, Carrier::Integer, &node, &value, equation, origin)
+            }
+            false => {
+                let of_not_lt = order(context, Carrier::Integer).of_not_lt;
+                let failed = [lower.clone(), upper.clone(), qed(context)];
+                let loose = Term::apply(global(of_not_lt), failed);
+                let guard = Intrinsic::IntLe(upper.clone(), lower.clone());
+                self.admit(context, guard, loose.clone(), Origin::Definition)?;
+                let bound = Term::apply(global(left), [a.clone(), loose]);
+                let stated = match above {
+                    true => Intrinsic::IntLe(node, zero.clone()),
+                    false => Intrinsic::IntLe(zero.clone(), node),
+                };
+                self.admit(context, stated, bound, Origin::Definition)
             }
         }
     }

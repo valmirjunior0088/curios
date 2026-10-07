@@ -64,6 +64,8 @@ pub(crate) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         Intrinsic::NatShr => Some(Literal::Nat(nat(0)? >> nat(1)?)),
         Intrinsic::NatEqz => bool_(nat(0)?.is_zero()),
         Intrinsic::NatToInt => Some(Literal::Int(Integer::from(nat(0)?.clone()))),
+        Intrinsic::IntAbs => Some(Literal::Nat(int(0)?.magnitude())),
+        Intrinsic::IntSign => Some(Literal::Int(int(0)?.sign())),
         Intrinsic::NatToFlt(rounding) => flt_(Floating::of_natural(nat(0)?, rounding)),
         Intrinsic::IntEql => bool_(int(0)? == int(1)?),
         Intrinsic::IntNeq => bool_(int(0)? != int(1)?),

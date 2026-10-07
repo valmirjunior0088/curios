@@ -963,6 +963,8 @@ fn operation_name(operation: Operation) -> String {
             return format!("Flt/{}", rounding.integral_label());
         }
         Operation::NatToInt => "Nat/to_int",
+        Operation::IntAbs => "Int/abs",
+        Operation::IntSign => "Int/sign",
         Operation::NatToFlt(Rounding::TiesToEven) => "Nat/to_flt",
         Operation::NatToFlt(rounding) => return flt_rounded(rounding, "of_nat"),
         Operation::IntToNat => "Int/to_nat",

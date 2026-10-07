@@ -53,6 +53,15 @@ impl Integer {
         }
     }
 
+    /// `-1`, `0` or `1` as the value is below zero, zero, or above it.
+    pub fn sign(&self) -> Self {
+        Self::from(match self.value.sign() {
+            Sign::Minus => -1i32,
+            Sign::NoSign => 0,
+            Sign::Plus => 1,
+        })
+    }
+
     pub fn is_zero(&self) -> bool {
         self.value.is_zero()
     }

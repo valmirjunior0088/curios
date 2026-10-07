@@ -296,6 +296,8 @@ impl Semantics {
             | Operation::FltSqrt(_)
             | Operation::FltRoundIntegral(_)
             | Operation::NatToInt
+            | Operation::IntAbs
+            | Operation::IntSign
             | Operation::NatToFlt(_)
             | Operation::IntToNat
             | Operation::IntToFlt(_)
@@ -506,6 +508,8 @@ impl Semantics {
                 Operation::FltLe => Constant::Bool(flt(0)?.le(flt(1)?)),
 
                 Operation::NatToInt => Constant::Int(Integer::from(nat(0)?.clone())),
+                Operation::IntAbs => Constant::Nat(int(0)?.magnitude()),
+                Operation::IntSign => Constant::Int(int(0)?.sign()),
                 Operation::NatToFlt(rounding) => {
                     Constant::Flt(Floating::of_natural(nat(0)?, rounding))
                 }

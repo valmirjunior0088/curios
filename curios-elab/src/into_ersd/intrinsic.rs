@@ -328,6 +328,8 @@ pub(super) fn erase_intrinsic(
         }
 
         Intrinsic::NatToInt(inner) => op!(curios_ersd::Operation::NatToInt, nat_type, inner),
+        Intrinsic::IntAbs(inner) => op!(curios_ersd::Operation::IntAbs, int_type, inner),
+        Intrinsic::IntSign(inner) => op!(curios_ersd::Operation::IntSign, int_type, inner),
         Intrinsic::NatToFlt(rounding, inner) => {
             op!(curios_ersd::Operation::NatToFlt(*rounding), nat_type, inner)
         }

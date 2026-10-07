@@ -837,6 +837,8 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             print_intrinsic_call("Flt/of_le_bytes", vec![], vec![operand])
         }
         Intrinsic::NatToInt(operand) => print_intrinsic_call("Nat/to_int", vec![], vec![operand]),
+        Intrinsic::IntAbs(operand) => print_intrinsic_call("Int/abs", vec![], vec![operand]),
+        Intrinsic::IntSign(operand) => print_intrinsic_call("Int/sign", vec![], vec![operand]),
         Intrinsic::NatToFlt(Rounding::TiesToEven, operand) => {
             print_intrinsic_call("Nat/to_flt", vec![], vec![operand])
         }

@@ -794,6 +794,8 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::FltRoundIntegral(..)
             | Intrinsic::FltCopysign(..)
             | Intrinsic::NatToInt(..)
+            | Intrinsic::IntAbs(..)
+            | Intrinsic::IntSign(..)
             | Intrinsic::NatToFlt(..)
             | Intrinsic::IntToNat { .. }
             | Intrinsic::IntToFlt(..)

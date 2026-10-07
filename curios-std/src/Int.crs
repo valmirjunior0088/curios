@@ -25,6 +25,16 @@ pub use min/{let min};
 pub mod max;
 pub use max/{let max};
 
+--- The magnitude of an integer, as a `Nat`, and what it widens back to under a hypothesis on the integer's sign.
+---
+--- Conversion decides `abs` from its operand as a term: a negation and a literal factor leave it, and a non-negative combination of widened naturals is its own preimage. It reads no hypothesis, so under a guard on `+0 <= a` these laws are the step.
+pub mod abs;
+pub use abs/{let abs};
+
+--- `-1`, `+0` or `+1` by the sign of an integer, and the laws a hypothesis decides it by.
+pub mod sign;
+pub use sign/{let sign};
+
 --- That `a` is not zero, decided — what `/` and `%` on `Int` ask of a divisor.
 pub let NonZero(a: Int) -> Prop =
     Holds(neq(a, 0));
@@ -129,17 +139,9 @@ pub let non_neg(n: Int) -> Option(NonNeg(n)) =
     | false => Option/none()
     end;
 
---- The magnitude, as a `Nat`.
-pub let abs(n: Int) -> Nat =
-    match n >= +0 | true => to_nat(n, @True/qed()) | false => to_nat(+0 - n) end;
-
 --- The order of the two.
 pub let ord(x: Int, y: Int) -> Ordering =
     choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
-
---- `-1`, `+0` or `+1` by the sign of `n`.
-pub let sign(n: Int) -> Int =
-    choose | n < +0 => -1 | n == +0 => +0 | _ => +1 end;
 
 satisfy Eql(Int) {
     eql = eql,

@@ -1036,6 +1036,15 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
     let nat_max = |left: Term, right: Term| Term::intrinsic(Intrinsic::NatMax(left, right));
     let int_min = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntMin(left, right));
     let int_max = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntMax(left, right));
+    let int_abs = |operand: Term| Term::intrinsic(Intrinsic::IntAbs(operand));
+    let int_sign = |operand: Term| Term::intrinsic(Intrinsic::IntSign(operand));
+    let pairs = || {
+        vec![
+            vec![(&int_i, integer(-3)), (&int_j, integer(5))],
+            vec![(&int_i, integer(0)), (&int_j, integer(-1))],
+            vec![(&int_i, integer(7)), (&int_j, integer(7))],
+        ]
+    };
     let narrow = |int: Term| {
         Term::intrinsic(Intrinsic::IntToNat {
             int,
@@ -2210,6 +2219,135 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             vec![
                 vec![(&int_i, integer(-3)), (&nat_x, lit(0))],
                 vec![(&int_i, integer(5)), (&nat_x, lit(3))],
+            ],
+        ),
+        // `abs` and `sign` read their operand through what no substitution undoes — a literal factor of every coefficient, a negation of all of them, a power every monomial holds — and what is left is a preimage, a sign the comparison decides, or the stuck node over it.
+        (
+            "abs(0 - i) = abs(i)",
+            int_abs(int_sub(integer(0), i.clone())),
+            int_abs(i.clone()),
+            ints(),
+        ),
+        (
+            "sign(0 - i) = 0 - sign(i)",
+            int_sign(int_sub(integer(0), i.clone())),
+            int_sub(integer(0), int_sign(i.clone())),
+            ints(),
+        ),
+        (
+            "abs(8 * i) = 8 * abs(i)",
+            int_abs(int_mul(integer(8), i.clone())),
+            mul(lit(8), int_abs(i.clone())),
+            ints(),
+        ),
+        (
+            "abs(-8 * i) = 8 * abs(i)",
+            int_abs(int_mul(integer(-8), i.clone())),
+            mul(lit(8), int_abs(i.clone())),
+            ints(),
+        ),
+        (
+            "abs(2 * i - 2 * j) = 2 * abs(i - j)",
+            int_abs(int_sub(
+                int_mul(integer(2), i.clone()),
+                int_mul(integer(2), j.clone()),
+            )),
+            mul(lit(2), int_abs(int_sub(i.clone(), j.clone()))),
+            pairs(),
+        ),
+        (
+            "abs(-4 * i - 6 * j - 2) = 2 * abs(2 * i + 3 * j + 1)",
+            int_abs(int_sub(
+                int_sub(
+                    int_mul(integer(-4), i.clone()),
+                    int_mul(integer(6), j.clone()),
+                ),
+                integer(2),
+            )),
+            mul(
+                lit(2),
+                int_abs(int_add(
+                    int_add(
+                        int_mul(integer(2), i.clone()),
+                        int_mul(integer(3), j.clone()),
+                    ),
+                    integer(1),
+                )),
+            ),
+            pairs(),
+        ),
+        (
+            "sign(8 * i) = sign(i)",
+            int_sign(int_mul(integer(8), i.clone())),
+            int_sign(i.clone()),
+            ints(),
+        ),
+        (
+            "sign(-8 * i) = 0 - sign(i)",
+            int_sign(int_mul(integer(-8), i.clone())),
+            int_sub(integer(0), int_sign(i.clone())),
+            ints(),
+        ),
+        (
+            "abs(to_int(x)) = x",
+            int_abs(widen(x.clone())),
+            x.clone(),
+            nats(),
+        ),
+        (
+            "abs(0 - to_int(x) - 1) = x + 1",
+            int_abs(int_sub(int_sub(integer(0), widen(x.clone())), integer(1))),
+            plus(x.clone(), lit(1)),
+            nats(),
+        ),
+        (
+            "abs(shl(i, x)) = shl(abs(i), x)",
+            int_abs(Term::intrinsic(Intrinsic::IntShl(i.clone(), x.clone()))),
+            Term::intrinsic(Intrinsic::NatShl(int_abs(i.clone()), x.clone())),
+            vec![
+                vec![(&int_i, integer(-3)), (&nat_x, lit(0))],
+                vec![(&int_i, integer(5)), (&nat_x, lit(3))],
+            ],
+        ),
+        (
+            "sign(shl(i, x)) = sign(i)",
+            int_sign(Term::intrinsic(Intrinsic::IntShl(i.clone(), x.clone()))),
+            int_sign(i.clone()),
+            vec![
+                vec![(&int_i, integer(-3)), (&nat_x, lit(0))],
+                vec![(&int_i, integer(0)), (&nat_x, lit(2))],
+                vec![(&int_i, integer(5)), (&nat_x, lit(3))],
+            ],
+        ),
+        (
+            "sign(to_int(x) + 1) = 1",
+            int_sign(int_add(widen(x.clone()), integer(1))),
+            integer(1),
+            nats(),
+        ),
+        (
+            "sign(0 - to_int(x) - 1) = -1",
+            int_sign(int_sub(int_sub(integer(0), widen(x.clone())), integer(1))),
+            integer(-1),
+            nats(),
+        ),
+        (
+            "sign(to_int(shl(1, x))) = 1",
+            int_sign(widen(Term::intrinsic(Intrinsic::NatShl(lit(1), x.clone())))),
+            integer(1),
+            nats(),
+        ),
+        (
+            "to_int(abs(to_int(x) - to_int(x - y))) = to_int(x) - to_int(x - y)",
+            widen(int_abs(int_sub(
+                widen(x.clone()),
+                widen(sub(x.clone(), y.clone())),
+            ))),
+            int_sub(widen(x.clone()), widen(sub(x.clone(), y.clone()))),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(2)), (&nat_y, lit(5))],
+                vec![(&nat_x, lit(7)), (&nat_y, lit(1))],
             ],
         ),
         (

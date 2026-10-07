@@ -1,0 +1,41 @@
+pub use /sys/Int/{sign};
+use /std/{Int, Eq};
+use /std/Bool/{True, Holds};
+
+--- `sign(a)` is `+1` where `a` is above zero.
+---
+--- Conversion decides a sign where the comparison decides the operand's as a term, and reads no hypothesis: under one these laws are the step. Each is by [`Int/view`], whose arms are the forms a sign is computed of.
+pub let of_pos(a: Int, p: Holds(+0 < a)) -> Eq()(sign(a), +1) =
+    match Int/view(a)
+    | nonneg(n) =>
+        match n
+        | 0 => match p end
+        | _ + 1 => Eq/refl()
+        end
+    | neg(_) => match p end
+    end;
+
+--- `sign(a)` is `-1` where `a` is below zero.
+pub let of_neg(a: Int, p: Holds(a < +0)) -> Eq()(sign(a), -1) =
+    match Int/view(a)
+    | nonneg(_) => match p end
+    | neg(_) => Eq/refl()
+    end;
+
+--- `sign(a)` is at most zero where `a` is.
+pub let of_not_pos(a: Int, p: Holds(a <= +0)) -> Holds(sign(a) <= +0) =
+    match Int/view(a)
+    | nonneg(n) =>
+        match n
+        | 0 => True/qed()
+        | _ + 1 => match p end
+        end
+    | neg(_) => True/qed()
+    end;
+
+--- `sign(a)` is at least zero where `a` is.
+pub let of_not_neg(a: Int, p: Holds(+0 <= a)) -> Holds(+0 <= sign(a)) =
+    match Int/view(a)
+    | nonneg(n) => match n | 0 => True/qed() | _ + 1 => True/qed() end
+    | neg(_) => match p end
+    end;

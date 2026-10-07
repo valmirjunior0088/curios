@@ -366,6 +366,8 @@ pub struct EntailmentSyntax {
     pub int: OrderSyntax,
     /// What `Nat` alone needs: its subtraction truncates, and its quotients and remainders by a literal are read through their bounds.
     pub natural: NaturalSyntax,
+    /// What `Int` alone needs: its `abs` and its `sign`, each read through the cases its operand's sign makes.
+    pub integer: IntegerSyntax,
 }
 
 impl EntailmentSyntax {
@@ -381,6 +383,7 @@ impl EntailmentSyntax {
             nat,
             int,
             natural,
+            integer,
         } = self;
 
         [holds_of_eq, refl, equality, sym, range, in_range]
@@ -388,6 +391,7 @@ impl EntailmentSyntax {
             .chain(nat.targets())
             .chain(int.targets())
             .chain(natural.targets())
+            .chain(integer.targets())
     }
 }
 
@@ -417,6 +421,46 @@ impl NaturalSyntax {
         } = self;
 
         [below, above, shift, difference, truncated].into_iter()
+    }
+}
+
+/// The lemmas only `Int` needs, each stated over its operand as an argument.
+#[derive(Debug, Clone, Copy)]
+pub struct IntegerSyntax {
+    /// `+0 <= a` gives `Nat/to_int(abs(a)) = a`: the case of a magnitude its operand is.
+    pub abs_of_non_neg: SyntaxName,
+    /// `a < +0` gives `Nat/to_int(abs(a)) = +0 - a`: the case it is the operand negated.
+    pub abs_of_neg: SyntaxName,
+    /// `+0 < a` gives `sign(a) = +1`.
+    pub sign_of_pos: SyntaxName,
+    /// `a <= +0` gives `sign(a) <= +0`: what is left of a sign where its operand is not above zero.
+    pub sign_of_not_pos: SyntaxName,
+    /// `a < +0` gives `sign(a) = -1`.
+    pub sign_of_neg: SyntaxName,
+    /// `+0 <= a` gives `+0 <= sign(a)`: what is left of a sign where its operand is not below zero.
+    pub sign_of_not_neg: SyntaxName,
+}
+
+impl IntegerSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self {
+            abs_of_non_neg,
+            abs_of_neg,
+            sign_of_pos,
+            sign_of_not_pos,
+            sign_of_neg,
+            sign_of_not_neg,
+        } = self;
+
+        [
+            abs_of_non_neg,
+            abs_of_neg,
+            sign_of_pos,
+            sign_of_not_pos,
+            sign_of_neg,
+            sign_of_not_neg,
+        ]
+        .into_iter()
     }
 }
 

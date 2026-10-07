@@ -221,6 +221,8 @@ impl Sort {
                 | Intrinsic::IntXor(..)
                 | Intrinsic::IntMin(..)
                 | Intrinsic::IntMax(..)
+                | Intrinsic::IntAbs(..)
+                | Intrinsic::IntSign(..)
                 | Intrinsic::IoBind { .. }
                 | Intrinsic::IoPure { .. }
                 | Intrinsic::List { .. }

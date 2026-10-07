@@ -45,6 +45,8 @@ pub enum Operation {
     IntXor,
     IntMin,
     IntMax,
+    IntAbs,
+    IntSign,
     IntShl,
     IntShr,
     FltAdd(Rounding),
@@ -87,6 +89,8 @@ impl Operation {
             | Self::FltSqrt(_)
             | Self::FltRoundIntegral(_)
             | Self::NatToInt
+            | Self::IntAbs
+            | Self::IntSign
             | Self::NatToFlt(_)
             | Self::IntToNat
             | Self::IntToFlt(_)

@@ -62,6 +62,8 @@ pub(super) fn operation_intrinsic(operation: Operation) -> curios_cont::Intrinsi
         Operation::FltSqrt(rounding) => curios_cont::Intrinsic::FltSqrt(rounding),
         Operation::FltRoundIntegral(rounding) => curios_cont::Intrinsic::FltRoundIntegral(rounding),
         Operation::NatToInt => curios_cont::Intrinsic::NatToInt,
+        Operation::IntAbs => curios_cont::Intrinsic::IntAbs,
+        Operation::IntSign => curios_cont::Intrinsic::IntSign,
         Operation::NatToFlt(rounding) => curios_cont::Intrinsic::NatToFlt(rounding),
         Operation::IntToNat => curios_cont::Intrinsic::IntToNat,
         Operation::IntToFlt(rounding) => curios_cont::Intrinsic::IntToFlt(rounding),

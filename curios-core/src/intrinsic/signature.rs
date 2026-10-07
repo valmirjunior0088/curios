@@ -260,6 +260,8 @@ impl Intrinsic {
                 byte_type(),
             ),
             Self::NatToInt(..) => un(nat_type(), int_type()),
+            Self::IntAbs(..) => un(int_type(), nat_type()),
+            Self::IntSign(..) => un(int_type(), int_type()),
             Self::NatToFlt(..) => un(nat_type(), flt_type()),
             Self::IntToNat { int, .. } => sig(
                 vec![

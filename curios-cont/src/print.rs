@@ -688,6 +688,8 @@ fn intrinsic_name(op: &Intrinsic) -> String {
         Intrinsic::NatShr => "Nat/shr",
         Intrinsic::NatEqz => "Nat/eqz",
         Intrinsic::NatToInt => "Nat/to_int",
+        Intrinsic::IntAbs => "Int/abs",
+        Intrinsic::IntSign => "Int/sign",
         Intrinsic::NatToFlt(Rounding::TiesToEven) => "Nat/to_flt",
         Intrinsic::NatToFlt(rounding) => return flt_rounded(*rounding, "of_nat"),
         Intrinsic::IntEql => "Int/eql",

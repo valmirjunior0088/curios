@@ -39,7 +39,14 @@ test parity_and_the_int_extrema_and_sign =
                 Int/min(-18446744073709551616, +5),
                 Int/max(-18446744073709551616, -18446744073709551617)],
             [-18446744073709551616, -18446744073709551616]),
-        Test/equal([Int/sign(-9), Int/sign(+0), Int/sign(+4)], [-1, +0, +1])]);
+        Test/equal([Int/sign(-9), Int/sign(+0), Int/sign(+4)], [-1, +0, +1]),
+        Test/equal([Int/sign(-18446744073709551616), Int/sign(+18446744073709551616)], [-1, +1]),
+        Test/equal(
+            [Int/abs(-9), Int/abs(+0), Int/abs(+4), Int/abs(-1073741824)],
+            [9, 0, 4, 1073741824]),
+        Test/equal(
+            [Int/abs(-18446744073709551616), Int/abs(+18446744073709551616)],
+            [18446744073709551616, 18446744073709551616])]);
 
 -- `Flt/to_nat` and `Flt/to_int` carry the decided bounds `NonNeg` and `Finite`, and the `try_` forms are the procedures that decide them: `none` where the bound fails, the raw operation under its evidence where it holds.
 --

@@ -46,6 +46,14 @@ The carriers' algebra over abstract atoms: what conversion decides about the car
 
 **Rejected.** A sorted tree as the fold's normal form, which respells every node it is handed where two trees are compared once, as `&&` and `||` are; and a `min` that asks the comparison of the arm it stands in, which makes one node two values by where it is read ([The carriers' algebra stays in conversion](../documentation/design/arithmetic/the-carriers-algebra-stays-in-conversion.md)).
 
+### An `abs` and a `sign` read their operand as a scale over what is left
+
+**Decision.** `Scale` reads a combination's coefficients as the greatest literal that divides them all and whether the one that leads is below zero, and the combination is that scale's divisor times what is left: a combination that shares no literal factor and leads above zero. An `abs` is the factor times what is left's, and a `sign` is what is left's, flipped where the scale negates.
+
+**Rationale.** Dividing by the signed scale is what no substitution undoes: a literal factor of every coefficient divides every instance, and a combination and its negation leave one thing, so `abs(a - b)` and `abs(b - a)` are one term and `sign(a - b)` is `sign(b - a)` negated with no rule that pairs two nodes. Which coefficient leads is the caller's to say, as atom identity is: Core orders the monomials by their atoms.
+
+**Rejected.** Negating only a combination whose every coefficient is below zero, which leaves `abs(a - b)` and `abs(b - a)` two terms and takes a pairing of opposite operands that `sign` cannot share, its two readings differing by a negation outside the node; and a homomorphism of the product, `abs(a * b) = abs(a) * abs(b)`, which is decided where the product still stands and refused where a fold has distributed it, so a verdict would follow a spelling.
+
 ### A law is stated once per family, and declared per operation
 
 **Decision.** `Family` names each kind of law conversion decides — unit and absorber at either position, idempotence, self-cancellation, commutativity, associativity, complement, nested cancellation, distribution, dual, successor seam, cancellation, the length homomorphism and the inverse pair — and `laws` states each family's laws once, as equations between `Expr`s over variables and a carrier's `Constant`s. `TABLE` declares, for each operation at each carrier, exactly the families conversion decides for it, with its constants: `And` at `Bool` has the unit `true` and the absorber `false`, at ℕ the absorber `0` and no unit, and at ℤ the absorber `0` and the unit `-1`. `curios`'s `tests::laws::generated` spells every instance as Curios source and holds it through both checkers and at closed values.

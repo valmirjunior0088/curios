@@ -281,6 +281,9 @@ fn inside() -> Vec<Term> {
             below: qed(),
         },
         Intrinsic::NatToInt(nat(7)),
+        // A magnitude and a sign of an integer below zero.
+        Intrinsic::IntAbs(int(-7)),
+        Intrinsic::IntSign(int(-7)),
         Intrinsic::IntToNat {
             int: int(0),
             non_neg: qed(),

@@ -109,18 +109,28 @@ let int_injective(a: Int, b: Int, same: Eq()(Hash/hash(a), Hash/hash(b))) -> Eq(
     | true =>
         match b >= +0
         | true =>
-            Eq/cong(
-                (n: Nat) => Nat/to_int(n),
-                Bytes/of_nat_injective(Int/abs(a), Int/abs(b), Bytes/cons_inj_tail(same)))
+            let magnitudes =
+                Eq/cong(
+                    (n: Nat) => Nat/to_int(n),
+                    Bytes/of_nat_injective(Int/abs(a), Int/abs(b), Bytes/cons_inj_tail(same)));
+            Eq/trans(
+                Eq/sym(Int/abs/of_non_neg(a, True/proved())),
+                Eq/trans(magnitudes, Int/abs/of_non_neg(b, True/proved())))
         | false => match signs_differ(Bytes/cons_inj_head(same)) end
         end
     | false =>
         match b >= +0
         | true => match signs_differ(Eq/sym(Bytes/cons_inj_head(same))) end
         | false =>
+            let magnitudes =
+                Eq/cong(
+                    (n: Nat) => Nat/to_int(n),
+                    Bytes/of_nat_injective(Int/abs(a), Int/abs(b), Bytes/cons_inj_tail(same)));
             Eq/cong(
-                (n: Nat) => +0 - Nat/to_int(n),
-                Bytes/of_nat_injective(Int/abs(a), Int/abs(b), Bytes/cons_inj_tail(same)))
+                (i: Int) => +0 - i,
+                Eq/trans(
+                    Eq/sym(Int/abs/of_neg(a, True/proved())),
+                    Eq/trans(magnitudes, Int/abs/of_neg(b, True/proved()))))
         end
     end;
 

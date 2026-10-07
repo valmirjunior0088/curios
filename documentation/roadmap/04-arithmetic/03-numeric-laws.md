@@ -70,9 +70,8 @@ Two laws a proof might expect to state are already conversion's and are not lemm
 
 ## `Int`: `abs`, `sign`, `min` and `max`
 
-What holds by conversion is [declared](02-declared-operations.md): a negation leaving `abs` and flipping `sign`, a literal or a power factor leaving either, `abs` inverting the embedding, and two `abs` of opposite operands being one, which is the symmetry of `abs(a - b)`. These are lemmas, each a case split on the operand's sign with linear arithmetic in each case:
+What holds by conversion is [declared](02-declared-operations.md): a negation leaving `abs` and flipping `sign`, a literal or a power factor leaving either, `abs` inverting the embedding, and two `abs` of opposite operands being one, which is the symmetry of `abs(a - b)`. A declared operation reads no arm, so a hypothesis reaches one through `/std/Int/abs`'s `of_non_neg` and `of_neg`, which `/std/Map`'s `Key(Int)` consumes, and `/std/Int/sign`'s `of_pos`, `of_neg`, `of_not_pos` and `of_not_neg`, which the procedure that proves a bound reads `abs` and `sign` through. These are lemmas here, each a case split on the operand's sign with linear arithmetic in each case:
 
-- **under a hypothesis**: `NonNeg(n)` gives `Eq()(Nat/to_int(abs(n)), n)`, and `n < +0` gives `Eq()(+0 - Nat/to_int(abs(n)), n)`, through the sign view. They land with the declarations, `/std/Map`'s `Key(Int)` consuming both;
 - **a product**: `abs(a · b) = abs(a) · abs(b)` and `sign(a · b) = sign(a) · sign(b)`, which conversion does not take, a product reaching either operation distributed;
 - **the order facts**: `abs(n)` is zero exactly when `n` is, `Le(+0, n)` exactly when `sign(n)` is not `-1`, and `Le(-Nat/to_int(abs(n)), n)` and `Le(n, Nat/to_int(abs(n)))`;
 - **the absolute difference**: the triangle inequality `Le(abs(a - c), abs(a - b) + abs(b - c))` in `Nat` — the form a rounding error is compared in;

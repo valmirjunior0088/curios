@@ -366,6 +366,14 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
             binary("max", syntax, Intrinsic::IntMax),
         ),
         documented(
+            &["The magnitude, as a `Nat`."],
+            unary("abs", syntax, Intrinsic::IntAbs),
+        ),
+        documented(
+            &["`-1`, `+0` or `+1` by the sign of `a`."],
+            unary("sign", syntax, Intrinsic::IntSign),
+        ),
+        documented(
             &["`a` doubled `b` times."],
             operation(
                 "shl",

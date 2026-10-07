@@ -313,6 +313,31 @@ const ROWS: &[Row] = &[
         "i: Int, j: Int, k: Int, p: Holds(i <= k), q: Holds(j <= k)",
         "Holds(Int/max(i, j) <= k)",
     ),
+    // An `abs` and a `sign` are read through the cases their operand's sign makes, conversion deciding each from its operand as a term and reading no fact: a magnitude widened back is its operand where a fact holds that at least zero and is at least it wherever, an operand between a bound and its negation has its magnitude at most the bound, read at `Int` and at `Nat`, the triangle inequality opens three splits, and a sign is within one of zero and on the side its operand is, a difference's as its operands' order says.
+    claim(
+        "a: Int, p: Holds(+0 <= a)",
+        "Holds(Nat/to_int(Int/abs(a)) <= a)",
+    ),
+    claim("a: Int", "Holds(a <= Nat/to_int(Int/abs(a)))"),
+    claim(
+        "a: Int, c: Int, p: Holds(a <= c), q: Holds(+0 - c <= a)",
+        "Holds(Nat/to_int(Int/abs(a)) <= c)",
+    ),
+    claim(
+        "a: Int, n: Nat, p: Holds(a <= Nat/to_int(n)), q: Holds(+0 - Nat/to_int(n) <= a)",
+        "Holds(Int/abs(a) <= n)",
+    ),
+    claim(
+        "a: Int, b: Int",
+        "Holds(Int/abs(a + b) <= Int/abs(a) + Int/abs(b))",
+    ),
+    claim("a: Int, p: Holds(a < +0)", "Holds(0 < Int/abs(a))"),
+    claim("a: Int", "Holds(Int/sign(a) <= +1)"),
+    claim("a: Int, p: Holds(+0 < Int/sign(a))", "Holds(+0 < a)"),
+    claim(
+        "i: Int, j: Int, p: Holds(i < j)",
+        "Holds(Int/sign(i - j) < +0)",
+    ),
     // An index a caller clamps by a `min`.
     body(
         "xs: List(Nat), i: Nat, n: Nat, p: Holds(n <= List/len(xs)), q: Holds(i < Nat/min(n, 10))",
@@ -367,6 +392,9 @@ const CONTROLS: &[Row] = &[
         "a: Nat, b: Nat, c: Nat, p: Holds(a <= c)",
         "Holds(Nat/max(a, b) <= c)",
     ),
+    // A magnitude widened back with nothing said of its operand, which is the operand's negation below zero; and the sign of an operand a fact holds only at least zero, which is zero at zero.
+    claim("a: Int", "Holds(Nat/to_int(Int/abs(a)) <= a)"),
+    claim("a: Int, p: Holds(+0 <= a)", "Holds(+0 < Int/sign(a))"),
     // A remainder by a literal at `Int`, whose bounds conversion does not decide there.
     claim("x: Int", "Holds(x % +3 < +3)"),
     // Rewriting under a function by an equation, which is congruence rather than arithmetic.

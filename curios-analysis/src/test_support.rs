@@ -9,9 +9,9 @@ use {
     curios_core::{Free, Global, InductDecl, StructDecl, Term},
     curios_utilities::{
         ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
-        EqlDerivation, HashDerivation, LiftSyntax, MonadSyntax, NaturalSyntax, OperatorSyntax,
-        OptionSyntax, OrdDerivation, OrderSyntax, ProofSyntax, ResultSyntax, SpellDerivation,
-        StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+        EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
+        OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProofSyntax, ResultSyntax,
+        SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
     },
     std::{collections::BTreeMap, convert::Infallible},
 };
@@ -147,6 +147,14 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             shift: name(&["std", "Nat", "le", "add_mono_l"]),
             difference: name(&["std", "Nat", "le", "add_sub_cancel"]),
             truncated: name(&["std", "Nat", "le", "sub_zero"]),
+        },
+        integer: IntegerSyntax {
+            abs_of_non_neg: name(&["std", "Int", "abs", "of_non_neg"]),
+            abs_of_neg: name(&["std", "Int", "abs", "of_neg"]),
+            sign_of_pos: name(&["std", "Int", "sign", "of_pos"]),
+            sign_of_not_pos: name(&["std", "Int", "sign", "of_not_pos"]),
+            sign_of_neg: name(&["std", "Int", "sign", "of_neg"]),
+            sign_of_not_neg: name(&["std", "Int", "sign", "of_not_neg"]),
         },
     },
 };

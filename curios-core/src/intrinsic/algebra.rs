@@ -341,6 +341,8 @@ impl Intrinsic {
             | Intrinsic::Byte { .. }
             | Intrinsic::IntType
             | Intrinsic::Int { .. }
+            | Intrinsic::IntAbs { .. }
+            | Intrinsic::IntSign { .. }
             | Intrinsic::FltType
             | Intrinsic::Flt { .. }
             | Intrinsic::FltSub { .. }

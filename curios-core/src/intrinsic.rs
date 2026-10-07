@@ -175,6 +175,10 @@ pub enum Intrinsic<T = Term> {
     IntMin(T, T),
     /// The greater of two integers.
     IntMax(T, T),
+    /// An integer's magnitude, a natural.
+    IntAbs(T),
+    /// `-1`, `+0` or `+1` as an integer is below zero, zero, or above it.
+    IntSign(T),
     IntShl(T, T),
     IntShr(T, T),
     FltType,
@@ -811,6 +815,8 @@ impl Intrinsic {
 
             Intrinsic::FltToLeBytes(t)
             | Intrinsic::NatToInt(t)
+            | Intrinsic::IntAbs(t)
+            | Intrinsic::IntSign(t)
             | Intrinsic::NatToFlt(_, t)
             | Intrinsic::IntToFlt(_, t)
             | Intrinsic::ByteToNat(t)
@@ -1291,6 +1297,8 @@ impl Intrinsic {
                 eight_bytes: visit.visit_subterm(eight_bytes),
             },
             Intrinsic::NatToInt(inner) => Intrinsic::NatToInt(visit.visit_subterm(inner)),
+            Intrinsic::IntAbs(inner) => Intrinsic::IntAbs(visit.visit_subterm(inner)),
+            Intrinsic::IntSign(inner) => Intrinsic::IntSign(visit.visit_subterm(inner)),
             Intrinsic::NatToFlt(rounding, inner) => {
                 Intrinsic::NatToFlt(*rounding, visit.visit_subterm(inner))
             }
@@ -1721,6 +1729,8 @@ impl<T> Intrinsic<T> {
                 eight_bytes: operand(eight_bytes)?,
             },
             Intrinsic::NatToInt(inner) => Intrinsic::NatToInt(operand(inner)?),
+            Intrinsic::IntAbs(inner) => Intrinsic::IntAbs(operand(inner)?),
+            Intrinsic::IntSign(inner) => Intrinsic::IntSign(operand(inner)?),
             Intrinsic::NatToFlt(rounding, inner) => Intrinsic::NatToFlt(*rounding, operand(inner)?),
             Intrinsic::IntToNat { int, non_neg } => Intrinsic::IntToNat {
                 int: operand(int)?,

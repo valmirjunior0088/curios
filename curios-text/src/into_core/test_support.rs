@@ -7,10 +7,10 @@ use {
     curios_abi::host_ops,
     curios_utilities::{
         ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
-        EqlDerivation, HashDerivation, LiftSyntax, MonadSyntax, NaturalSyntax, OperatorSyntax,
-        OptionSyntax, OrdDerivation, OrderSyntax, ProofSyntax, Qualifier, ResultSyntax, RootKind,
-        SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
-        test_support::Temporary,
+        EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
+        OperatorSyntax, OptionSyntax, OrdDerivation, OrderSyntax, ProofSyntax, Qualifier,
+        ResultSyntax, RootKind, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
+        TestSyntax, test_support::Temporary,
     },
     std::{fs, path::Path},
 };
@@ -150,6 +150,14 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             shift: registry_name(&["std", "Nat", "le", "add_mono_l"]),
             difference: registry_name(&["std", "Nat", "le", "add_sub_cancel"]),
             truncated: registry_name(&["std", "Nat", "le", "sub_zero"]),
+        },
+        integer: IntegerSyntax {
+            abs_of_non_neg: registry_name(&["std", "Int", "abs", "of_non_neg"]),
+            abs_of_neg: registry_name(&["std", "Int", "abs", "of_neg"]),
+            sign_of_pos: registry_name(&["std", "Int", "sign", "of_pos"]),
+            sign_of_not_pos: registry_name(&["std", "Int", "sign", "of_not_pos"]),
+            sign_of_neg: registry_name(&["std", "Int", "sign", "of_neg"]),
+            sign_of_not_neg: registry_name(&["std", "Int", "sign", "of_not_neg"]),
         },
     },
 };
