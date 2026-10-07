@@ -2,8 +2,8 @@ pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, fma, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
     round, floor, ceil, trunc, nearest, copysign, to_nat, to_int, mantissa, exponent, to_le_bytes,
     of_le_bytes};
-use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Ord, Dyadic,
-    Vec, Eq};
+use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Result, Bytes, List, Ordering, Show, Spell, Ord,
+    Dyadic, Parse, Vec, Eq};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
@@ -577,17 +577,9 @@ pub let to_str(f: Flt) -> Str =
 pub let pow10(n: Nat) -> Flt =
     match n | 0 => +1.0 | _ + 1; ih => ih * +10.0 end;
 
---- The number a run of decimal digits spells, `0` for an empty one, `none` if anything else is in it.
-let decimal_value(s: Str) -> Option(Nat) =
-    Str/fold(
-        s,
-        Option/some(0),
-        (c, acc) =>
-            let a = acc!;
-            match Char/is_digit(c)
-            | true => Option/some(a * 10 + (Char/to_nat(c) - '0'))
-            | false => Option/none()
-            end);
+--- The number a run of decimal digits spells, `0` for an empty one.
+let decimal_value(run: Str) -> Nat =
+    Str/fold(run, 0, (c, n) => n * 10 + (Char/to_nat(c) - '0'));
 
 --- The float nearest to `d` times ten to the `e`, correctly rounded with ties to even, negated when `negative`. `digits` is how many decimal digits spelled `d`, leading zeros included.
 pub let of_decimal(negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =
@@ -629,93 +621,140 @@ let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) -> F
         exact/round(r, negative, q, +0 - sh2, rest != 0)
     end;
 
---- `s` read as an optional sign and what follows it: whether the sign was `-`, and the rest.
-let signed(s: Str) -> {negative: Bool, body: Str} =
-    match Str/strip_prefix(s, "-")
-    | some(body) => (negative = true, body = body)
-    | none() =>
-        match Str/strip_prefix(s, "+")
-        | some(body) => (negative = false, body = body)
-        | none() => (negative = false, body = s)
-        end
-    end;
-
---- `text` cut at its first marker, spelled `lower` or `upper`: what precedes it and what follows it, or all of `text` and `none` when it holds neither.
----
---- Cut at `lower` first, and at `upper` only where there is no `lower`, rather than at whichever comes first. The two part where both occur, and a number reader refuses such text either way: a later marker in the rest is no digit, and an earlier one in what precedes is none either.
-let marked(text: Str, lower: Str, upper: Str) -> {Str, Option(Str)} =
-    match Str/split_once(text, lower)
-    | some((head, rest)) => (head, Option/some(rest))
-    | none() =>
-        match Str/split_once(text, upper)
-        | some((head, rest)) => (head, Option/some(rest))
-        | none() => (text, Option/none())
-        end
-    end;
-
---- `mantissa` cut at its point: the digits before it and the digits after it, the latter empty with no point.
-let pointed(mantissa: Str) -> {Str, Str} =
-    match Str/split_once(mantissa, ".") | some(parts) => parts | none() => (mantissa, "") end;
-
 --- The float a decimal or hex text spells, correctly rounded: an optional sign, then digits with an optional point and an optional `e` exponent, or `0x` and hex digits with an optional point and an optional `p` exponent. An optional sign before `inf`, `infinity`, `nan` or `snan`, in any case, reads as that value of that sign, and a NaN may carry a payload as `nan(0x5)`: every spelling `to_str` and `to_hex_str` write, and what IEEE 754 §5.12.1 requires a reader to accept. `none` for any other text.
 pub let of_str(s: Str) -> Option(Flt) =
     of_str_in(Rounding/ties_to_even(), s);
 
 --- `of_str` in the direction `r`.
 let of_str_in(r: Rounding, s: Str) -> Option(Flt) =
-    let (negative, body) = signed(s);
-    choose
-    | some(f) = special_of_str(negative, body) => Option/some(f)
-    | some(digits) = hex_digits(body) => of_hex_body(r, negative, digits)
-    | _ => of_decimal_str(r, negative, body)
+    Result/to_option(Parse/run(number(r, true), s));
+
+--- An optional sign: whether it is `-`.
+let sign: Parse(Str, Bool) =
+    let written = Parse/optional(Parse/text/char_if((c) => c == '+' || c == '-'))!;
+    Parse/pure(match written | some(c) => c == '-' | none() => false end);
+
+--- A run of decimal digits, possibly empty.
+let decimal_run: Parse(Str, Str) =
+    Parse/text/take_while(Char/is_digit);
+
+--- A run of hex digits in either case, possibly empty.
+let hex_run: Parse(Str, Str) =
+    Parse/text/take_while((c) => Option/is_some(Char/of_hex_digit(c)));
+
+--- `0x`, in either case.
+let hex_mark: Parse(Str, {}) =
+    let _ = Parse/text/expect('0')!;
+    let _ = Parse/text/char_if((c) => c == 'x' || c == 'X')!;
+    Parse/pure(());
+
+--- What follows a significand: nothing, which is an exponent of zero, or `lower` or `upper` and then an optional sign and at least one decimal digit.
+let exponent_after(lower: Char, upper: Char) -> Parse(Str, Int) =
+    let marker = Parse/optional(Parse/text/char_if((c) => c == lower || c == upper))!;
+    match marker
+    | none() => Parse/pure(+0)
+    | some(_) =>
+        let negative = sign!;
+        let run = decimal_run!;
+        match Str/is_empty(run)
+        | true => Parse/fail("expected an exponent")
+        | false =>
+            let magnitude = Nat/to_int(decimal_value(run));
+            Parse/pure(match negative | true => +0 - magnitude | false => magnitude end)
+        end
     end;
 
---- The infinity or NaN a special name spells, of `negative`'s sign: `inf` or `infinity`, and a NaN as `nan_of_str` reads one. `none` for anything else. The decimal and hex readers share it, since both write these values the same way.
-let special_of_str(negative: Bool, body: Str) -> Option(Flt) =
-    choose
-    | Str/eql_ascii_ci(body, "inf") || Str/eql_ascii_ci(body, "infinity") =>
-        Option/some(match negative | true => -inf.0 | false => +inf.0 end)
-    | some(n) = nan_of_str(body) => Option/some(match negative | true => neg(n) | false => n end)
-    | _ => Option/none()
+--- What follows a point, or nothing where no point is written: the run `digits` reads after it.
+let fraction_of(digits: Parse(Str, Str)) -> Parse(Str, Str) =
+    let point = Parse/optional(Parse/text/expect('.'))!;
+    match point | some(_) => digits | none() => Parse/pure("") end;
+
+--- A NaN's payload: `(0x…)` in hex of either case, or the kind's own where none is written.
+let nan_payload(signaling: Bool) -> Parse(Str, Nat) =
+    let open = Parse/optional(Parse/text/expect('('))!;
+    match open
+    | none() => Parse/pure(match signaling | true => 1 | false => 0 end)
+    | some(_) =>
+        let _ = hex_mark!;
+        let run = hex_run!;
+        let _ = Parse/text/expect(')')!;
+        match hex_value(run)
+        | some(payload) => Parse/pure(payload)
+        | none() => Parse/fail("expected a payload")
+        end
     end;
 
---- The NaN `nan`, `snan`, `nan(0x…)` or `snan(0x…)` spells, in any case and positive, or `none` for any other text. A payload the kind cannot carry is `none` rather than `+0`: text that spells no NaN is not a number here.
-let nan_of_str(body: Str) -> Option(Flt) =
-    let (kind, open): {Str, Option(Str)} =
-        match Str/split_once(body, "(")
-        | some((kind, inner)) => (kind, Option/some(inner))
-        | none() => (body, Option/none())
-        end;
-    let signaling =
-        choose
-        | Str/eql_ascii_ci(kind, "nan") => Option/some(false)
-        | Str/eql_ascii_ci(kind, "snan") => Option/some(true)
-        | _ => Option/none()
-        end!;
-    let payload =
-        match open
-        | none() => Option/some(match signaling | true => 1 | false => 0 end)
-        | some(inner) => hex_value(hex_digits(Str/strip_suffix(inner, ")")!)!)
-        end!;
-    match signaling
+--- The NaN of one kind, of `negative`'s sign, with the payload written after its name. A payload the kind cannot carry is refused rather than read as zero: text that spells no NaN is not a number here.
+let nan(negative: Bool, signaling: Bool) -> Parse(Str, Flt) =
+    let payload = nan_payload(signaling)!;
+    let kind = match signaling | true => 0x7FF0000000000000 | false => 0x7FF8000000000000 end;
+    match payload < pow2(51) && (Bool/not(signaling) || payload >= 1)
     | true =>
-        match payload >= 1 && payload < pow2(51)
-        | true => Option/some(exact/of_bits(0x7FF0000000000000 + payload))
-        | false => Option/none()
-        end
-    | false =>
-        match payload < pow2(51)
-        | true => Option/some(exact/of_bits(0x7FF8000000000000 + payload))
-        | false => Option/none()
-        end
+        let positive = exact/of_bits(kind + payload);
+        Parse/pure(match negative | true => neg(positive) | false => positive end)
+    | false => Parse/fail("a payload the kind cannot carry")
     end;
 
---- What follows `0x` at the front of `s`, in either case, or `none` when `s` does not open with it.
-let hex_digits(s: Str) -> Option(Str) =
-    match Str/strip_prefix(s, "0x")
-    | some(digits) => Option/some(digits)
-    | none() => Str/strip_prefix(s, "0X")
+--- The infinity or NaN a special name spells, of `negative`'s sign: `inf` or `infinity`, and `nan` or `snan` with an optional payload, in any case. The decimal and hex readers share it, since both write these values the same way.
+let special(negative: Bool) -> Parse(Str, Flt) =
+    let name = Parse/text/take_while(Char/is_alpha)!;
+    choose
+    | Str/eql_ascii_ci(name, "inf") || Str/eql_ascii_ci(name, "infinity") =>
+        Parse/pure(match negative | true => -inf.0 | false => +inf.0 end)
+    | Str/eql_ascii_ci(name, "nan") => nan(negative, false)
+    | Str/eql_ascii_ci(name, "snan") => nan(negative, true)
+    | _ => Parse/fail("expected a number")
     end;
+
+--- Hex text after its sign, rounded once in the direction `r`: `0x`, hex digits with an optional point and at least one digit among them, and an optional `p` exponent. A nonzero significand is the exact dyadic `rounded/of_dyadic` rounds, whatever its exponent; a zero takes its sign here, since a dyadic's zero has none.
+let hexadecimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
+    let _ = hex_mark!;
+    let whole = hex_run!;
+    let fraction = fraction_of(hex_run)!;
+    let exponent = exponent_after('p', 'P')!;
+    match hex_value(Str/concat(whole, fraction))
+    | none() => Parse/fail("expected a hex digit")
+    | some(h) =>
+        let scaled = exponent - Nat/to_int(4 * Str/len(fraction));
+        Parse/pure(
+            match h == 0
+            | true => match negative | true => -0.0 | false => +0.0 end
+            | false =>
+                let mantissa =
+                    match negative | true => +0 - Nat/to_int(h) | false => Nat/to_int(h) end;
+                rounded/of_dyadic(r, Dyadic { mantissa = mantissa, exponent = scaled })
+            end)
+    end;
+
+--- Decimal text after its sign, rounded once in the direction `r`: digits with an optional point and at least one digit among them, and an optional `e` exponent.
+let decimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
+    let whole = decimal_run!;
+    let fraction = fraction_of(decimal_run)!;
+    match Str/is_empty(whole) && Str/is_empty(fraction)
+    | true => Parse/fail("expected a digit")
+    | false =>
+        let exponent = exponent_after('e', 'E')!;
+        let spelled = Str/concat(whole, fraction);
+        Parse/pure(
+            of_decimal_in(
+                r,
+                negative,
+                decimal_value(spelled),
+                exponent - Nat/to_int(Str/len(fraction)),
+                Str/len(spelled)))
+    end;
+
+--- A whole number text, read to its end: a sign, then a special name, hex text, or — where `decimals` — decimal text.
+let number(r: Rounding, decimals: Bool) -> Parse(Str, Flt) =
+    let negative = sign!;
+    let finite: Parse(Str, Flt) =
+        match decimals
+        | true => Parse/or(hexadecimal(r, negative), decimal(r, negative))
+        | false => hexadecimal(r, negative)
+        end;
+    let value = Parse/or(special(negative), finite)!;
+    let _ = Parse/eof()!;
+    Parse/pure(value);
 
 --- The number a nonempty run of hex digits spells, in either case, or `none`.
 let hex_value(s: Str) -> Option(Nat) =
@@ -780,28 +819,7 @@ pub let of_hex_str(s: Str) -> Option(Flt) =
 
 --- `of_hex_str` in the direction `r`.
 let of_hex_str_in(r: Rounding, s: Str) -> Option(Flt) =
-    let (negative, body) = signed(s);
-    choose
-    | some(f) = special_of_str(negative, body) => Option/some(f)
-    | some(digits) = hex_digits(body) => of_hex_body(r, negative, digits)
-    | _ => Option/none()
-    end;
-
---- The float the hex text after `0x` spells in the direction `r`, of `negative`'s sign.
-let of_hex_body(r: Rounding, negative: Bool, body: Str) -> Option(Flt) =
-    let (mantissa, scaled) = marked(body, "p", "P");
-    let exponent = match scaled | some(text) => Int/of_str(text) | none() => Option/some(+0) end!;
-    let (whole, fraction) = pointed(mantissa);
-    let h = hex_value(Str/concat(whole, fraction))!;
-    let e = exponent - Nat/to_int(4 * Str/len(fraction));
-    let top = e + Nat/to_int(exact/bit_len(h));
-    Option/some(
-        choose
-        | h == 0 => match negative | true => -0.0 | false => +0.0 end
-        | top > +1100 => clamped(r, negative, false)
-        | top < -1200 => clamped(r, negative, true)
-        | _ => exact/round(r, negative, h, e, false)
-        end);
+    Result/to_option(Parse/run(number(r, false), s));
 
 --- `f` written with exactly `n` significant digits, rounded to nearest with ties to even, and laid out as `to_str` lays out digits (§5.12.2). `rounded/to_str_significant` takes the direction.
 pub let to_str_significant(f: Flt, n: Nat, @ok: Holds(0 < n)) -> Str =
@@ -861,21 +879,6 @@ let significant(r: Rounding, d: Dyadic, n: Nat) -> Str =
         match first.0 >= high | true => (low, first.1 + +1) | false => first end;
     let (digits, k) = settled;
     Str/concat(sign, layout(digits_of(digits), k + Nat/to_int(n)));
-
---- The finite half of `of_str`: `body`, the text after the sign, read as a decimal, rounded in the direction `r` and of `negative`'s sign; `none` for text that spells no decimal.
-let of_decimal_str(r: Rounding, negative: Bool, body: Str) -> Option(Flt) =
-    let (mantissa, scaled) = marked(body, "e", "E");
-    let (whole, fraction) = pointed(mantissa);
-    match Bool/not(Str/is_empty(whole)) || Bool/not(Str/is_empty(fraction))
-    | true =>
-        let spelled = Str/concat(whole, fraction);
-        let digits = decimal_value(spelled)!;
-        let exponent =
-            match scaled | some(text) => Int/of_str(text) | none() => Option/some(+0) end!;
-        let scale = exponent - Nat/to_int(Str/len(fraction));
-        Option/some(of_decimal_in(r, negative, digits, scale, Str/len(spelled)))
-    | false => Option/none()
-    end;
 
 satisfy Eql(Flt) {
     eql = eql,
