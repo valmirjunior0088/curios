@@ -56,6 +56,17 @@ fn every_two_laws_sharing_a_side_chain() {
 /// Every law at a numeric or Boolean carrier with its first variable replaced by a compound term, which changes the atoms the law's procedure reads: `x := a + 1`, `i := l + 1`, and `b := x < y`.
 #[test]
 fn every_law_holds_at_compound_terms() {
+    held_at(successor_of_a_fresh_variable);
+}
+
+/// Every law at a numeric carrier with its first variable replaced by a product of two sums, `x := (a + 1) * (w + 1)`: the one shape a fold leaves standing where it distributes every other product, so a law whose rule reads its operand's shape meets it here as written and, at the successor above, as a fold has left it.
+#[test]
+fn every_law_holds_at_a_product_of_two_sums() {
+    held_at(product_of_two_sums);
+}
+
+/// Every law with its first variable replaced by what `compound` makes of it, where it makes anything, closed by reflexivity through both checkers.
+fn held_at(compound: fn(&Law) -> Option<(Expr, Expr)>) {
     let instances = rows(&declared())
         .iter()
         .filter_map(|row| {
@@ -135,13 +146,9 @@ fn every_commutative_law_holds_over_atoms_that_differ_in_a_proof() {
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
 
-/// The compound term a law's first variable is replaced by, where its carrier has one.
-fn compound(law: &Law) -> Option<(Expr, Expr)> {
-    let var = first_var(&law.left)?;
-    let Expr::Var { carrier, .. } = var else {
-        unreachable!("a variable")
-    };
-    let successor = |carrier, fresh| Expr::Apply {
+/// A fresh variable of `carrier` and one: `a + 1`.
+fn successor(carrier: Carrier, fresh: usize) -> Expr {
+    Expr::Apply {
         carrier,
         operation: Operation::Sum,
         operands: vec![
@@ -154,10 +161,17 @@ fn compound(law: &Law) -> Option<(Expr, Expr)> {
                 carrier,
             },
         ],
+    }
+}
+
+/// The compound term a law's first variable is replaced by, where its carrier has one: a fresh variable's successor at a numeric carrier, and a comparison of two naturals at `Bool`.
+fn successor_of_a_fresh_variable(law: &Law) -> Option<(Expr, Expr)> {
+    let var = first_var(&law.left)?;
+    let Expr::Var { carrier, .. } = var else {
+        unreachable!("a variable")
     };
     let compound = match carrier {
-        Carrier::Natural => successor(Carrier::Natural, 4),
-        Carrier::Integer => successor(Carrier::Integer, 4),
+        Carrier::Natural | Carrier::Integer => successor(carrier, 4),
         Carrier::Boolean => Expr::Apply {
             carrier: Carrier::Natural,
             operation: Operation::Less,
@@ -171,6 +185,23 @@ fn compound(law: &Law) -> Option<(Expr, Expr)> {
                     carrier: Carrier::Natural,
                 },
             ],
+        },
+        _ => return None,
+    };
+    Some((var, compound))
+}
+
+/// The product of two fresh variables' successors a law's first variable is replaced by, where its carrier is numeric.
+fn product_of_two_sums(law: &Law) -> Option<(Expr, Expr)> {
+    let var = first_var(&law.left)?;
+    let Expr::Var { carrier, .. } = var else {
+        unreachable!("a variable")
+    };
+    let compound = match carrier {
+        Carrier::Natural | Carrier::Integer => Expr::Apply {
+            carrier,
+            operation: Operation::Product,
+            operands: vec![successor(carrier, 3), successor(carrier, 4)],
         },
         _ => return None,
     };

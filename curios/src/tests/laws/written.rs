@@ -355,8 +355,19 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Nat/shr(y, x + 1), Nat/shr(Nat/shr(y, x), 1))",
         ],
         refused: &[
-            // A candidate: the exponent law holds, and follows from the rows above by induction on `y`, but a count's *symbolic* summands stay one atom rather than splitting into a product of powers.
+            // Candidates `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with the shift's exponent law: a count's symbolic summands stay one atom, where each is a power of its own, a literal coefficient that power repeated, and a product of sums in the count distributed first.
             "Eq()(Nat/shl(1, x + y), Nat/shl(1, x) * Nat/shl(1, y))",
+            "Eq()(Nat/shl(1, 2 * x), Nat/shl(1, x) * Nat/shl(1, x))",
+            "Eq()(Nat/shl(Nat/shl(x, y), x), Nat/shl(x, y + x))",
+            "Eq()(Nat/shl(1, x * (y + 1)), Nat/shl(1, x * y) * Nat/shl(1, x))",
+            // And with it, a power is at least one.
+            "Eq()(0 < Nat/shl(1, x), true)",
+            "Eq()(Nat/shl(1, x) == 0, false)",
+            "Eq()(0 < Nat/shl(x + 1, y), true)",
+            // A candidate no stage moves: a value is at most itself shifted, a product by a factor that is at least one.
+            "Eq()(x <= Nat/shl(x, y), true)",
+            // The control, and not a law: a product in the count is no product of powers, `2¹` against `2 · 2` at `x = y = 1`.
+            "Eq()(Nat/shl(1, x * y), Nat/shl(1, x) * Nat/shl(1, y))",
             // A right shift by a literal count is a quotient by `2ᵏ` and could join the division family through the Euclidean split. It may not do so by building a division node, which carries a proof that the divisor is nonzero, and a reducer may not invent one.
             "Eq()(Nat/shr(x * 4, 2), x)",
         ],
@@ -463,6 +474,245 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Nat/to_int(n) <= i, true)",
             "Eq()(Nat/to_int(m - n), Nat/to_int(m) - Nat/to_int(n))",
             "Eq()(Nat/to_int(m) - Nat/to_int(n) >= +0, true)",
+            // Candidates `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with the shift's exponent law, as on `Nat`: a count's sum splits, the embedding goes through a shift, and the signed power is the widened one, so it is positive.
+            "Eq()(Int/shl(i, n + m), Int/shl(Int/shl(i, n), m))",
+            "Eq()(Int/shl(+1, n + m), Int/shl(+1, n) * Int/shl(+1, m))",
+            "Eq()(Nat/to_int(Nat/shl(m, n)), Int/shl(Nat/to_int(m), n))",
+            "Eq()(+0 < Int/shl(+1, n), true)",
+            "Eq()(+0 <= Int/shl(Nat/to_int(m), n), true)",
+        ],
+    },
+    Carrier {
+        // Every held row holds today through `/std/Nat`'s definitions, each a `match` on a comparison that reduces, and holds after `min` and `max` are operations: stated first, they are what the promotion is held to.
+        name: "Nat min and max",
+        binders: "x: Nat, y: Nat, z: Nat",
+        held: &[
+            // An operand the comparison holds at most the other answers for both: the operand itself, a floor apart, a shared sum, zero below everything, a bound against a literal, two literals, and through a nested node.
+            "Eq()(Nat/min(x, x), x)",
+            "Eq()(Nat/max(x, x), x)",
+            "Eq()(Nat/min(x, x + 1), x)",
+            "Eq()(Nat/max(x, x + 1), x + 1)",
+            "Eq()(Nat/max(x + 3, x + 1), x + 3)",
+            "Eq()(Nat/min(x + y + 1, y + x), x + y)",
+            "Eq()(Nat/max(x, 0), x)",
+            "Eq()(Nat/min(x, 0), 0)",
+            "Eq()(Nat/min(x % 8, 8), x % 8)",
+            "Eq()(Nat/min(3, 5), 3)",
+            "Eq()(Nat/max(3, 5), 5)",
+            "Eq()(Nat/min(Nat/min(x, x + 1), y), Nat/min(x, y))",
+        ],
+        refused: &[
+            // Candidates `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with `min` and `max`. The semilattice: the definitions compare with `<`, so a commuted pair is two `match`es and zero on the left decides nothing.
+            "Eq()(Nat/min(x, y), Nat/min(y, x))",
+            "Eq()(Nat/max(x, y), Nat/max(y, x))",
+            "Eq()(Nat/min(Nat/min(x, y), z), Nat/min(x, Nat/min(y, z)))",
+            "Eq()(Nat/max(Nat/max(x, y), z), Nat/max(x, Nat/max(y, z)))",
+            "Eq()(Nat/min(0, x), 0)",
+            "Eq()(Nat/max(0, x), x)",
+            // A literal added to both operands leaves, the least floor standing outside as a sum's does.
+            "Eq()(Nat/min(x + 1, y + 1), Nat/min(x, y) + 1)",
+            "Eq()(Nat/max(x + 2, y + 3), Nat/max(x, y + 1) + 2)",
+            // An operand at most the other where the comparison decides `<=` and not `<`.
+            "Eq()(Nat/max(x, x + y), x + y)",
+            "Eq()(Nat/min(x - y, x), x - y)",
+            // Domination and its mirror, and the lattice's own bounds: at most a `min` is at most both operands.
+            "Eq()(Nat/min(x, y) <= x, true)",
+            "Eq()(Nat/min(x, y) <= y, true)",
+            "Eq()(x <= Nat/max(x, y), true)",
+            "Eq()(y <= Nat/max(x, y), true)",
+            "Eq()(Nat/min(x, y) <= Nat/max(x, y), true)",
+            "Eq()(Nat/max(x, y) <= x + y, true)",
+            "Eq()(z <= Nat/min(z + x, z + y), true)",
+            "Eq()(Nat/min(x, Nat/max(x, y)), x)",
+            "Eq()(Nat/max(x, Nat/min(x, y)), x)",
+            // Two associations whose inner node drops the operand that orders the other two: one value only where the comparison's order is transitive.
+            "Eq()(Nat/max(Nat/max(x % 8, 7), y + 7), Nat/max(x % 8, Nat/max(7, y + 7)))",
+            // Lemmas, which no stage moves: each takes a case split, or shares a symbolic summand, and the equations of a sum with `min` and `max` are not decided whole.
+            "Eq()(Nat/min(x, y) + Nat/max(x, y), x + y)",
+            "Eq()((x - y) + y, Nat/max(x, y))",
+            "Eq()(Nat/min(x + z, y + z), Nat/min(x, y) + z)",
+            // Controls, and none is a law: each fails at `x = 1, y = 0`.
+            "Eq()(Nat/min(x, y), x)",
+            "Eq()(Nat/max(x, y) <= y, true)",
+            "Eq()(Nat/min(x, y) + 1, Nat/min(x + 1, y))",
+            "Eq()(Nat/min(x, y), Nat/max(x, y))",
+        ],
+    },
+    Carrier {
+        // As `Nat`'s, over `/std/Int`'s definitions.
+        name: "Int min and max",
+        binders: "i: Int, j: Int, k: Int, n: Nat",
+        held: &[
+            "Eq()(Int/min(i, i), i)",
+            "Eq()(Int/max(i, i), i)",
+            "Eq()(Int/min(i, i + 1), i)",
+            "Eq()(Int/max(i, i - 1), i)",
+            "Eq()(Int/min(-3, +2), -3)",
+        ],
+        refused: &[
+            // Candidates the same stage moves: the semilattice, a literal on both operands of either sign, an operand below the other by a widened natural, and domination with its mirror.
+            "Eq()(Int/min(i, j), Int/min(j, i))",
+            "Eq()(Int/max(i, j), Int/max(j, i))",
+            "Eq()(Int/min(Int/min(i, j), k), Int/min(i, Int/min(j, k)))",
+            "Eq()(Int/min(i + 1, j + 1), Int/min(i, j) + 1)",
+            "Eq()(Int/max(i - 2, j + 3), Int/max(i, j + 5) - 2)",
+            "Eq()(Int/max(i, i + Nat/to_int(n)), i + Nat/to_int(n))",
+            "Eq()(Int/min(i, j) <= i, true)",
+            "Eq()(j <= Int/max(i, j), true)",
+            // Lemmas: a case split, and a negation through the lattice, which turns one operation into the other.
+            "Eq()(Int/min(i, j) + Int/max(i, j), i + j)",
+            "Eq()(+0 - Int/min(i, j), Int/max(+0 - i, +0 - j))",
+            // The control: it fails at `i = +1, j = +0`.
+            "Eq()(Int/min(i, j), i)",
+        ],
+    },
+    Carrier {
+        // The held rows hold today through `/std/Int`'s definitions, a `match` on the operand's sign that reduces where the operand is a combination of widened naturals, and hold after `abs` and `sign` are operations.
+        name: "Int abs and sign",
+        binders: "i: Int, j: Int, n: Nat, m: Nat",
+        held: &[
+            // `abs` inverts the embedding, through a sum, a product and a floor, and below zero where a constant makes the sign certain.
+            "Eq()(Int/abs(Nat/to_int(n)), n)",
+            "Eq()(Int/abs(Nat/to_int(n) + 1), n + 1)",
+            "Eq()(Int/abs(Nat/to_int(n) + Nat/to_int(m)), n + m)",
+            "Eq()(Int/abs(Nat/to_int(n) * Nat/to_int(m)), n * m)",
+            "Eq()(Int/abs(+0 - Nat/to_int(n) - 1), n + 1)",
+            "Eq()(Int/abs(Nat/to_int(Int/abs(i))), Int/abs(i))",
+            "Eq()(Nat/to_int(Int/abs(Nat/to_int(n))), Nat/to_int(n))",
+            // Widened back, the `abs` of an operand the comparison holds non-negative is the operand, where no natural is its preimage.
+            "Eq()(Nat/to_int(Int/abs(Nat/to_int(n) - Nat/to_int(n - m))), Nat/to_int(n) - Nat/to_int(n - m))",
+            "Eq()(Int/sign(Nat/to_int(n) + 1), +1)",
+            "Eq()(Int/sign(+0 - Nat/to_int(n) - 1), -1)",
+            "Eq()(Int/abs(-3), 3)",
+            "Eq()(Int/sign(-3), -1)",
+            "Eq()(Int/sign(+0), +0)",
+        ],
+        refused: &[
+            // Candidates `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with `abs` and `sign`. A negation leaves `abs` and flips `sign`, and two `abs` of opposite operands are one.
+            "Eq()(Int/abs(+0 - i), Int/abs(i))",
+            "Eq()(Int/sign(+0 - i), +0 - Int/sign(i))",
+            "Eq()(Int/abs(+0 - Nat/to_int(n)), n)",
+            "Eq()(Int/abs(i - j), Int/abs(j - i))",
+            // A literal factor leaves by its magnitude and its sign, out of a sum too, and a power as a literal does.
+            "Eq()(Int/abs(8 * i), 8 * Int/abs(i))",
+            "Eq()(Int/abs(-8 * i), 8 * Int/abs(i))",
+            "Eq()(Int/abs(2 * i - 2 * j), 2 * Int/abs(i - j))",
+            "Eq()(Int/sign(8 * i), Int/sign(i))",
+            "Eq()(Int/sign(-8 * i), +0 - Int/sign(i))",
+            "Eq()(Int/abs(Int/shl(i, n)), Nat/shl(Int/abs(i), n))",
+            "Eq()(Int/sign(Int/shl(i, n)), Int/sign(i))",
+            "Eq()(Int/sign(Nat/to_int(Nat/shl(1, n))), +1)",
+            // Lemmas, which no stage moves: a product reaches either operation distributed, so deciding these takes factoring it; the decomposition is a product of the two; and a comparison of an `abs` with zero is a case split.
+            "Eq()(Int/abs(i * j), Int/abs(i) * Int/abs(j))",
+            "Eq()(Int/sign(i * j), Int/sign(i) * Int/sign(j))",
+            "Eq()(Int/sign(i) * Nat/to_int(Int/abs(i)), i)",
+            "Eq()(Int/abs(i) == 0, i == +0)",
+            "Eq()(Int/sign(Int/sign(i)), Int/sign(i))",
+            // Controls, and none is a law: the first fails at `i = +1, j = -1`, the second at `i = +1, j = +1`, and the third at `i = -1`.
+            "Eq()(Int/abs(i + j), Int/abs(i) + Int/abs(j))",
+            "Eq()(Int/sign(i + j), Int/sign(i) + Int/sign(j))",
+            "Eq()(Nat/to_int(Int/abs(i)), i)",
+        ],
+    },
+    Carrier {
+        // The held rows hold today through `/std/Nat/pow`, a recursion by squaring that unfolds at a literal exponent, and hold after `pow` is an operation.
+        name: "Nat powers",
+        binders: "x: Nat, y: Nat, z: Nat",
+        held: &[
+            "Eq()(Nat/pow(x, 0), 1)",
+            "Eq()(Nat/pow(x, 1), x)",
+            "Eq()(Nat/pow(x, 2), x * x)",
+            "Eq()(Nat/pow(x, 3), x * x * x)",
+            "Eq()(Nat/pow(2 * x, 2), 4 * x * x)",
+            "Eq()(Nat/pow(x + 1, 2), x * x + 2 * x + 1)",
+            "Eq()(Nat/pow(2, 10), 1024)",
+            "Eq()(Nat/pow(0, 3), 0)",
+            "Eq()(Nat/pow(0, 0), 1)",
+            "Eq()(Nat/pow(1, 5), 1)",
+        ],
+        refused: &[
+            // Candidates `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with `pow`. The exponent's sum is a product: a symbolic summand, a floor, a literal coefficient, and a product of sums in the exponent, which is distributed first.
+            "Eq()(Nat/pow(x, y + z), Nat/pow(x, y) * Nat/pow(x, z))",
+            "Eq()(Nat/pow(x, y + 1), x * Nat/pow(x, y))",
+            "Eq()(Nat/pow(2, y + 3), 8 * Nat/pow(2, y))",
+            "Eq()(Nat/pow(x, 2 * y), Nat/pow(x, y) * Nat/pow(x, y))",
+            "Eq()(Nat/pow(x, y * (z + 1)), Nat/pow(x, y * z) * Nat/pow(x, y))",
+            // The bases that decide a power whatever its exponent, and a power of a positive base.
+            "Eq()(Nat/pow(1, y), 1)",
+            "Eq()(Nat/pow(0, y + 1), 0)",
+            "Eq()(0 < Nat/pow(2, y), true)",
+            "Eq()(0 < Nat/pow(x + 1, y), true)",
+            // The shift read through the power, one atom for the two.
+            "Eq()(Nat/shl(x, y), x * Nat/pow(2, y))",
+            "Eq()(Nat/shl(1, y), Nat/pow(2, y))",
+            // Lemmas, which no stage moves: a power of a power beside `pow(x, 2) = x * x` gives a power of a product, which at two literals factors a base, and no finite set of identities is complete for exponentiation. The last compares two powers of one base, a product by a factor that is at least one.
+            "Eq()(Nat/pow(Nat/pow(x, y), z), Nat/pow(x, y * z))",
+            "Eq()(Nat/pow(x * y, z), Nat/pow(x, z) * Nat/pow(y, z))",
+            "Eq()(Nat/pow(6, y), Nat/pow(2, y) * Nat/pow(3, y))",
+            "Eq()(Nat/pow(4, y), Nat/pow(2, 2 * y))",
+            "Eq()(Nat/pow(2, y) <= Nat/pow(2, y + z), true)",
+            // Controls, and none is a law: `2³` is not `3²`; a square of a sum has its cross term; a sum in the exponent is no sum of powers; and `0¹` is zero.
+            "Eq()(Nat/pow(x, y), Nat/pow(y, x))",
+            "Eq()(Nat/pow(x + y, 2), x * x + y * y)",
+            "Eq()(Nat/pow(x, y + z), Nat/pow(x, y) + Nat/pow(x, z))",
+            "Eq()(0 < Nat/pow(x, y), true)",
+        ],
+    },
+    Carrier {
+        // What `Int` shares with `Nat`, and what it does not: `Int` divides truncating toward zero and shifts right arithmetically.
+        name: "Int, the families it shares with Nat",
+        binders: "i: Int, j: Int, k: Int, n: Nat, p: Int/NonZero(j)",
+        held: &[
+            // Decided today and declared by no family: the product's associativity, and a shifted zero.
+            "Eq()((i * j) * k, i * (j * k))",
+            "Eq()(Int/shl(+0, n), +0)",
+        ],
+        refused: &[
+            // Candidates `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with the families `Int` shares with `Nat`. The bitwise identities, `-1` the unit of `and` and the absorber of `or` where `Nat` has neither.
+            "Eq()(Int/and(i, j), Int/and(j, i))",
+            "Eq()(Int/or(i, j), Int/or(j, i))",
+            "Eq()(Int/xor(i, j), Int/xor(j, i))",
+            "Eq()(Int/and(i, i), i)",
+            "Eq()(Int/or(i, i), i)",
+            "Eq()(Int/xor(i, i), +0)",
+            "Eq()(Int/and(i, +0), +0)",
+            "Eq()(Int/and(+0, i), +0)",
+            "Eq()(Int/or(i, +0), i)",
+            "Eq()(Int/xor(i, +0), i)",
+            "Eq()(Int/and(i, -1), i)",
+            "Eq()(Int/and(-1, i), i)",
+            "Eq()(Int/or(i, -1), -1)",
+            "Eq()(Int/or(-1, i), -1)",
+            // A shift by zero, and a zero shifted right.
+            "Eq()(Int/shl(i, 0), i)",
+            "Eq()(Int/shr(i, 0), i)",
+            "Eq()(Int/shr(+0, n), +0)",
+            // The division's laws that read no sign: by one, of zero, of the divisor itself, and of an exact multiple, whatever the signs of the coefficient and the divisor.
+            "Eq()(i / +1, i)",
+            "Eq()(i % +1, +0)",
+            "Eq()(i / -1, +0 - i)",
+            "Eq()(Int/div(+0, j, @p), +0)",
+            "Eq()(Int/rem(+0, j, @p), +0)",
+            "Eq()(Int/div(j, j, @p), +1)",
+            "Eq()(Int/rem(j, j, @p), +0)",
+            "Eq()((i * 2) / 2, i)",
+            "Eq()((i * 2) % 2, +0)",
+            "Eq()((i * -6) / 2, i * -3)",
+            "Eq()((i * 2) / -2, +0 - i)",
+            "Eq()((i * 4 + k * 6 + 8) / 2, i * 2 + k * 3 + 4)",
+            // A candidate no stage moves: a remainder's magnitude is below its divisor's, a bound through `abs` nothing declares.
+            "Eq()(i % 3 < +3, true)",
+            // Controls, each a law of `Nat` and none of `Int`, failing at an operand below zero: a remainder takes its dividend's sign, so an odd number's is `-1`; the floor law and the Euclidean split count whole divisors, which a truncated quotient does not; and nothing dominates below zero, where a difference, a bitwise `and`, an arithmetic shift, a quotient and a remainder each pass their operand.
+            "Eq()((i * 2 + 1) % 2, +1)",
+            "Eq()((i + 2) / 2, 1 + i / 2)",
+            "Eq()((2 * i + 1) / 2, i)",
+            "Eq()(i - k <= i, true)",
+            "Eq()(Int/and(i, k) <= i, true)",
+            "Eq()(Int/shr(i, n) <= i, true)",
+            "Eq()(i / 2 <= i, true)",
+            "Eq()(+0 <= i % 3, true)",
+            // And the complement is not the negation: `not(i)` is `-1 - i`.
+            "Eq()(Int/xor(i, -1), +0 - i)",
         ],
     },
     Carrier {
@@ -770,13 +1020,16 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Flt/rounded/fma(Flt/Rounding/toward_negative(), a, b, c), Flt/rounded/fma(Flt/Rounding/toward_negative(), b, a, c))",
             "Eq()(Flt/min(a, b), Flt/min(b, a))",
             "Eq()(Flt/max(a, b), Flt/max(b, a))",
+            // Candidates no stage moves: `min` and `max` are associative on every pattern, the greatest quieted NaN being the one either association meets, and a law over a multiset of leaves nothing consumes.
+            "Eq()(Flt/min(Flt/min(a, b), c), Flt/min(a, Flt/min(b, c)))",
+            "Eq()(Flt/max(Flt/max(a, b), c), Flt/max(a, Flt/max(b, c)))",
         ],
     },
     Carrier {
-        name: "Flt, sign operations and roundings",
+        name: "Flt, sign operations and the difference",
         binders: "a: Flt, b: Flt, c: Flt",
         held: &[],
-        // Candidate laws, each a declaration `documentation/roadmap/04-arithmetic/02-declared-operations.md` states: the sign operations are bit operations, so each holds of every pattern; the model defines a difference as the sum with its subtrahend negated; and a rounding to an integral value leaves an integral value where it is.
+        // Candidate laws, each a declaration `documentation/roadmap/04-arithmetic/02-declared-operations.md` states: the sign operations are bit operations, so each holds of every pattern, and the model defines a difference as the sum with its subtrahend negated.
         refused: &[
             "Eq()(Flt/neg(Flt/neg(a)), a)",
             "Eq()(Flt/abs(Flt/abs(a)), Flt/abs(a))",
@@ -788,11 +1041,18 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Flt/rounded/sub(Flt/Rounding/toward_zero(), a, b), Flt/rounded/add(Flt/Rounding/toward_zero(), a, Flt/neg(b)))",
             "Eq()(Flt/rounded/sub(Flt/Rounding/toward_positive(), a, b), Flt/rounded/add(Flt/Rounding/toward_positive(), a, Flt/neg(b)))",
             "Eq()(Flt/rounded/sub(Flt/Rounding/toward_negative(), a, b), Flt/rounded/add(Flt/Rounding/toward_negative(), a, Flt/neg(b)))",
-            "Eq()(Flt/rounded/to_integral(Flt/Rounding/ties_to_even(), Flt/rounded/to_integral(Flt/Rounding/ties_to_even(), a)), Flt/rounded/to_integral(Flt/Rounding/ties_to_even(), a))",
-            "Eq()(Flt/rounded/to_integral(Flt/Rounding/ties_to_away(), Flt/rounded/to_integral(Flt/Rounding/ties_to_away(), a)), Flt/rounded/to_integral(Flt/Rounding/ties_to_away(), a))",
-            "Eq()(Flt/rounded/to_integral(Flt/Rounding/toward_zero(), Flt/rounded/to_integral(Flt/Rounding/toward_zero(), a)), Flt/rounded/to_integral(Flt/Rounding/toward_zero(), a))",
-            "Eq()(Flt/rounded/to_integral(Flt/Rounding/toward_positive(), Flt/rounded/to_integral(Flt/Rounding/toward_positive(), a)), Flt/rounded/to_integral(Flt/Rounding/toward_positive(), a))",
-            "Eq()(Flt/rounded/to_integral(Flt/Rounding/toward_negative(), Flt/rounded/to_integral(Flt/Rounding/toward_negative(), a)), Flt/rounded/to_integral(Flt/Rounding/toward_negative(), a))",
+            // Every composition of the three sign operations has one normal form, a magnitude under a sign that is positive, negative, another value's, or that negated; a literal's sign is its own.
+            "Eq()(Flt/abs(Flt/copysign(a, b)), Flt/abs(a))",
+            "Eq()(Flt/copysign(a, a), a)",
+            "Eq()(Flt/copysign(Flt/abs(a), b), Flt/copysign(a, b))",
+            "Eq()(Flt/copysign(Flt/neg(a), b), Flt/copysign(a, b))",
+            "Eq()(Flt/copysign(a, Flt/abs(b)), Flt/abs(a))",
+            "Eq()(Flt/copysign(a, Flt/copysign(b, c)), Flt/copysign(a, c))",
+            "Eq()(Flt/copysign(a, 1.0), Flt/abs(a))",
+            "Eq()(Flt/copysign(-2.0, b), Flt/copysign(2.0, b))",
+            "Eq()(Flt/neg(Flt/abs(Flt/neg(a))), Flt/neg(Flt/abs(a)))",
+            // And a difference of a negation is the sum.
+            "Eq()(a - Flt/neg(b), a + b)",
         ],
     },
     Carrier {
@@ -817,6 +1077,16 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(a == a, true)",
             // A NaN on either side.
             "Eq()(a < b, Bool/not(a >= b))",
+            // A signaling NaN is quieted, so `min` is not idempotent.
+            "Eq()(Flt/min(a, a), a)",
+            // Two directions are two operations: a sum rounded toward zero is not the swapped sum rounded up.
+            "Eq()(Flt/rounded/add(Flt/Rounding/toward_zero(), a, b), Flt/rounded/add(Flt/Rounding/toward_positive(), b, a))",
+            // The addend is no factor.
+            "Eq()(Flt/rounded/fma(Flt/Rounding/ties_to_even(), a, b, c), Flt/rounded/fma(Flt/Rounding/ties_to_even(), a, c, b))",
+            // A sign operation is not the identity, and `copysign` reads its sign from its second operand alone.
+            "Eq()(Flt/neg(a), a)",
+            "Eq()(Flt/abs(Flt/neg(a)), a)",
+            "Eq()(Flt/copysign(a, b), Flt/copysign(b, a))",
         ],
     },
     Carrier {
@@ -921,6 +1191,39 @@ fn every_atom_law_closes_at_every_order_of_its_binders() {
             assert!(found.is_empty(), "{}", found.join("\n"));
         }
     }
+}
+
+/// The five rounding directions, as `/std/Flt/Rounding` spells them.
+const DIRECTIONS: [&str; 5] = [
+    "ties_to_even",
+    "ties_to_away",
+    "toward_zero",
+    "toward_positive",
+    "toward_negative",
+];
+
+#[test]
+fn a_rounding_to_an_integral_value_is_fixed_by_every_direction() {
+    // A candidate `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with the float identities, at every pair of directions: an integral value is one every direction leaves where it is, so the outer rounding reads nothing of which direction the inner one took. Refused today, each a rounding of a stuck rounding.
+    let name = "Flt, a rounding of a rounding";
+    let rounded = |direction: &str, operand: &str| {
+        format!("Flt/rounded/to_integral(Flt/Rounding/{direction}(), {operand})")
+    };
+    let rows = DIRECTIONS
+        .iter()
+        .flat_map(|outer| {
+            DIRECTIONS.iter().map(move |inner| {
+                let once = rounded(inner, "a");
+                (
+                    "a: Flt".to_owned(),
+                    format!("Eq()({}, {once})", rounded(outer, &once)),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    let mut found = misplaced(IMPORTS, name, &rows, 0);
+    found.extend(misplaced_by_the_kernel(IMPORTS, name, &rows, 0));
+    assert!(found.is_empty(), "{}", found.join("\n"));
 }
 
 /// What the rows over a recursive function are stated under: one whose body multiplies two of its own calls, so two calls that differ unfold to products nothing pairs, whose atoms are the same two calls one step on.

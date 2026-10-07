@@ -107,13 +107,14 @@ What is not a law stays a control, refused with its counterexample: associativit
 
 ## Stages
 
-1. **Rows first.** State every law above, every row the library definitions hold today and every control in the grid at every carrier and direction it applies to, each refused row commented with the stage that moves it; and put each law to the audit at a product of two sums.
-2. **`Flt`'s identities.** No promotion: the direction in an operation's identity, the symmetric declarations, the difference's fold, the idempotent roundings and the round trip, then the sign kind.
-3. **The families `Int` shares with `Nat`.** No promotion.
-4. **The shift's exponent law, and positivity.** No promotion: the count's summands split over the atom `shl(1, k)`, and a lower bound beside the upper one.
-5. **`min` and `max`**, at both carriers, with the domination mirror.
-6. **`abs` and `sign`**, with the two lemmas `/std/Map` consumes.
-7. **`pow`**, the power atom becoming `pow(2, k)`.
+Every law above, every row the library definitions hold today and every control stands in the grid (`curios`'s `tests::laws::written`), each refused row commented with the stage that moves it, and the audit puts each declared law to a product of two sums.
+
+1. **`Flt`'s identities.** No promotion: the direction in an operation's identity, the symmetric declarations, the difference's fold, the idempotent roundings and the round trip, then the sign kind.
+2. **The families `Int` shares with `Nat`.** No promotion.
+3. **The shift's exponent law, and positivity.** No promotion: the count's summands split over the atom `shl(1, k)`, and a lower bound beside the upper one.
+4. **`min` and `max`**, at both carriers, with the domination mirror.
+5. **`abs` and `sign`**, with the two lemmas `/std/Map` consumes.
+6. **`pow`**, the power atom becoming `pow(2, k)`.
 
 Each stage moves its rows from refused to held, extends the grid's audit to the kind it declares, and adds its operation's rows to `curios`'s `tests::bounds`.
 
