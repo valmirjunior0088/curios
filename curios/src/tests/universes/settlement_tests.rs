@@ -489,6 +489,20 @@ fn a_level_nothing_holds_settles_at_its_least_value() {
     assert_eq!(run(source), b"least");
 }
 
+// **A declaration under two premises over one carrier is judged alike by both checkers.** `both` builds a `Map` under its `Key(K)` premise and sorts the map's keys under its `Ord(K)` one, each premise a witness with levels of its own over the one `K`.
+#[test]
+fn a_declaration_under_a_key_and_an_order_over_one_carrier_is_judged_alike() {
+    let source = r#"
+        use /std/{Nat, List, Map, Ord};
+        pub let both(@K: Type, use Map/Key(K), use Ord(K), keys: List(K)) -> List(K) =
+            let m: Map(K, Nat) = Map/of(List/map(keys, (k: K) => (k, 0)));
+            List/sort(Map/keys(m));
+        /std/print("both")
+        "#;
+
+    assert_eq!(run(source), b"both");
+}
+
 // **A type former sits where its parts are typed, which is where the kernel types it.** A function type or a tuple type over a part whose written type is above its reduct's — a closed match typed by its motive, a call typed by its codomain, an associated type named through a witness at a level of its own — is sized from the part as typing read it. Sized from the part's reduct it sat a level short, and the kernel refused the sort the elaborator declared: `Over` at `Type` over a domain typed at its witness's level, and `listed`'s `List` at zero over a record of one.
 #[test]
 fn a_type_former_is_sized_by_its_parts_as_they_are_written() {
