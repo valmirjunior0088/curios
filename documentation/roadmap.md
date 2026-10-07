@@ -129,14 +129,14 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 ## Standard library
 
 - [x] [An HTTP message is read through one framing core, and made as one a wire can carry](../curios-std/README.md#an-http-message-is-read-through-one-framing-core-and-made-as-one-a-wire-can-carry)
-- [ ] [Text read as text, and numbers by each format's grammar](roadmap/08-standard-library/02-text-read-as-text.md) — a bytes walk reads all that is left of its input, so every decoder costs the square of its document; `Json` accepts `01` and writes infinity as `null`; the text formats and `Fmt` walk the bytes of input that began as text; and `Flt`'s readers cut text where a grammar belongs
+- [ ] [Text read as text: `http/Url`](roadmap/08-standard-library/02-text-read-as-text.md) — `http/Url/of_str` parses the bytes of the text it is given and builds its pieces back through a check no text can fail; read as text, a URL literal costs a type several times what it does over bytes, and more with every character
 - [x] `Map(K, V)` and `Set(K)`: keys held and handed back at their own type, each built and read under the `Key(K)` dictionary its type names
 - [x] [`sort` is a merge sort, proved under its comparator's laws](../curios-std/README.md#sort-is-a-merge-sort-proved-under-its-comparators-laws): its answer the input rearranged under no law, and in order by the comparator and then by the order the input had among what it ties, under the comparator's flip; a permutation, membership and a decided order in `/std/List`, and the flip stated of `Nat`, `Bytes` and `Str`
 - [ ] [A map in its keys' order](roadmap/08-standard-library/04-a-map-in-its-keys-order.md) — not refined yet; `Map` enumerates `Nat` and `Int` keys in the order of their encodings, has no operation that reads an order, and nothing in `/std` holds a key that has an order and no encoding
 - [x] Foundations: `/std/Bool`'s `True`, `False` and `Holds`, `Eq` and `Ordering`, `Option` and `Result`, `State`, `Try`, `Io/Error` and `Path`
 - [x] Collections: `List` and its helpers, `Vec` counting its list in its type, and `Map`, a canonical crit-bit trie over `Bytes` keys
-- [x] Text: proof-carrying UTF-8 `Str` addressed by proved byte positions, certified `Char`, parser combinators, typed format strings, and decimal conversions that round-trip
-- [x] Formats: `Json` over binary64, `Toml` 1.0.0, and `Html` as a tree
+- [x] Text: proof-carrying UTF-8 `Str` addressed by proved byte positions, its walks costing what they read and `Str/of_bytes` answering where bytes stop being text; certified `Char`; parser combinators over bytes and over text; typed format strings folded from their characters; and decimal conversions that round-trip, read by grammars
+- [x] Formats, each read as the text it is given by its own grammar: `Json` over finite binary64, `Toml` 1.0.0, and `Html` as a tree
 - [x] Applications: an HTTP client and server over TCP and `Async`, command-line interfaces, and terminal programs with widgets
 - [x] [Explicit invariants](../curios-std/README.md#std-invents-no-value-where-a-proof-belongs-and-text-is-addressed-by-position): decoding and encoding carry their certificates, indices carry their bounds, and a host's facts arrive first-order
 - [x] [A fallible operation returns `Try`, and `!` lifts along declared edges](design/standard-library/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md), with `Result` error first and its own monad

@@ -893,21 +893,23 @@ fn a_bytes_walk_is_run_once_however_many_follow_it() {
 ///
 /// # What it last printed
 ///
-/// At `fd1336daa`:
+/// At `3cd8ef597`:
 ///
 /// ```text
 ///   claim                        units   depth      other       units   depth      other  kernel/elab
-///   Str/split                   172052       3     168980      177546       3     174474     1.0x
-///   Str/split_once              140573       3     137501      128343       3     125271     0.9x
-///   Str/lines                   106239       3     103167      113526       3     110454     1.1x
-///   Str/replace                  66826       3      63754      102537       3      99465     1.5x
-///   Str/trim                    131829       3     128757      119179       3     116107     0.9x
-///   Str/strip_suffix             67587       5      62467       88224       5      83104     1.3x
-///   Flt/of_str                   27292       2      25244       43041       3      39969     1.6x
-///   Str/index_of                 92571       3      89499      144118       3     141046     1.6x
+///   Str/split                   197171      19     177715      174068       3     170996     0.9x
+///   Str/split_once              139839       4     135743      128166       3     125094     0.9x
+///   Str/lines                   118029      12     105741      110142       3     107070     0.9x
+///   Str/replace                 119040      15     103680       99687       3      96615     0.8x
+///   Str/trim                    130509       4     126413      117479       3     114407     0.9x
+///   Str/strip_suffix             61321       4      57225       87020       5      81900     1.4x
+///   Flt/of_str                   78970       4      74874      149228       3     146156     1.9x
+///   Str/index_of                 94631       7      87463      141503       3     138431     1.5x
 /// ```
 ///
-/// **`Flt/of_str` reads the floor**: reading `"-Infinity"` costs less than a program that only prints, so its row is that program's on both checkers and moves only if the claim comes to cost more.
+/// **A builder nests in the elaborator**: `Str/split`, `Str/lines` and `Str/replace` hand on what they have built, an argument the elaborator's reducer holds a level deeper for each piece, where the kernel's depth stays at three and its cost a little under the elaborator's.
+///
+/// **`Flt/of_str` is a grammar run**: reading `"-Infinity"` runs the reader's `Parse(Str, Flt)` grammar over nine characters, so its row is what the grammar costs each checker.
 #[test]
 #[ignore = "measurement, counted: reports what each type-level claim costs rather than asserting"]
 fn type_level_claim_measurements() {
