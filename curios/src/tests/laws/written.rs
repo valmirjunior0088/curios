@@ -368,7 +368,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Nat/shl(x, 3), 8 * x)",
             "Eq()(Nat/shl(x + 1, 2), 4 * x + 4)",
             "Eq()(Nat/shl(x, 1) + Nat/shl(y, 1), 2 * (x + y))",
-            // A symbolic count is the power `shl(1, k)` as an atom, the count's literal floor peeled into the coefficient — which is what lets a proof about a shift recurse on its count's successor — and a right shift takes a floored count in two steps.
+            // A symbolic count is a power of two as an atom, `pow(2, k)` however it is spelled, the count's literal floor peeled into the coefficient — which is what lets a proof about a shift recurse on its count's successor — and a right shift takes a floored count in two steps.
             "Eq()(Nat/shl(y, x + 1), 2 * Nat/shl(y, x))",
             "Eq()(Nat/shl(y, x + 3), 8 * Nat/shl(y, x))",
             "Eq()(Nat/shl(2, x), Nat/shl(1, x + 1))",
@@ -624,6 +624,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Int/sign(-8 * i), +0 - Int/sign(i))",
             "Eq()(Int/abs(Int/shl(i, n)), Nat/shl(Int/abs(i), n))",
             "Eq()(Int/sign(Int/shl(i, n)), Int/sign(i))",
+            "Eq()(Int/abs(Nat/to_int(Nat/pow(3, n)) * i), Nat/pow(3, n) * Int/abs(i))",
+            "Eq()(Int/sign(Nat/to_int(Nat/pow(3, n)) * i), Int/sign(i))",
             // Each read at a product of two sums, the one shape a fold leaves standing: the operand is normalized before it is read, so a law holds of it as written and as distributed.
             "Eq()(Int/abs(+0 - (i + 1) * (j + 1)), Int/abs((i + 1) * (j + 1)))",
             "Eq()(Int/sign(+0 - (i + 1) * (j + 1)), +0 - Int/sign((i + 1) * (j + 1)))",
@@ -638,6 +640,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Int/sign(i) * Nat/to_int(Int/abs(i)), i)",
             "Eq()(Int/abs(i) == 0, i == +0)",
             "Eq()(Int/sign(Int/sign(i)), Int/sign(i))",
+            // A power of a symbolic base does not leave as one of a literal base does: at a literal exponent it is so many plain factors, which stay inside, so a rule that took it out would fail there.
+            "Eq()(Int/abs(Nat/to_int(Nat/pow(m, n)) * i), Nat/pow(m, n) * Int/abs(i))",
             // Controls, and none is a law: the first fails at `i = +1, j = -1`, the second at `i = +1, j = +1`, and the third at `i = -1`.
             "Eq()(Int/abs(i + j), Int/abs(i) + Int/abs(j))",
             "Eq()(Int/sign(i + j), Int/sign(i) + Int/sign(j))",
@@ -645,10 +649,11 @@ const CARRIERS: &[Carrier] = &[
         ],
     },
     Carrier {
-        // The held rows hold today through `/std/Nat/pow`, a recursion by squaring that unfolds at a literal exponent, and hold after `pow` is an operation.
+        // `pow` is declared a morphism from `(ℕ, +)` into `(ℕ, ·)` at a fixed base, and nothing is read of the base but a literal.
         name: "Nat powers",
         binders: "x: Nat, y: Nat, z: Nat",
         held: &[
+            // Each held through `/std/Nat/pow`, a recursion by squaring that unfolded at a literal exponent, before `pow` was an operation.
             "Eq()(Nat/pow(x, 0), 1)",
             "Eq()(Nat/pow(x, 1), x)",
             "Eq()(Nat/pow(x, 2), x * x)",
@@ -659,9 +664,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Nat/pow(0, 3), 0)",
             "Eq()(Nat/pow(0, 0), 1)",
             "Eq()(Nat/pow(1, 5), 1)",
-        ],
-        refused: &[
-            // Candidates `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with `pow`. The exponent's sum is a product: a symbolic summand, a floor, a literal coefficient, and a product of sums in the exponent, which is distributed first.
+            // The exponent's sum is a product: a symbolic summand, a floor, a literal coefficient, and a product of sums in the exponent, which is distributed first.
             "Eq()(Nat/pow(x, y + z), Nat/pow(x, y) * Nat/pow(x, z))",
             "Eq()(Nat/pow(x, y + 1), x * Nat/pow(x, y))",
             "Eq()(Nat/pow(2, y + 3), 8 * Nat/pow(2, y))",
@@ -675,6 +678,12 @@ const CARRIERS: &[Carrier] = &[
             // The shift read through the power, one atom for the two.
             "Eq()(Nat/shl(x, y), x * Nat/pow(2, y))",
             "Eq()(Nat/shl(1, y), Nat/pow(2, y))",
+            // A base is an atom up to conversion: two spellings of one base are one power, a product of two sums among them, which a fold leaves standing.
+            "Eq()(Nat/pow(x + z, y), Nat/pow(z + x, y))",
+            "Eq()(Nat/pow((x + 1) * (z + 1), y), Nat/pow(x * z + x + z + 1, y))",
+            "Eq()(Nat/pow((x + 1) * (z + 1), y + 1), (x + 1) * (z + 1) * Nat/pow((x + 1) * (z + 1), y))",
+        ],
+        refused: &[
             // Lemmas, which no stage moves: a power of a power beside `pow(x, 2) = x * x` gives a power of a product, which at two literals factors a base, and no finite set of identities is complete for exponentiation. The last compares two powers of one base, a product by a factor that is at least one.
             "Eq()(Nat/pow(Nat/pow(x, y), z), Nat/pow(x, y * z))",
             "Eq()(Nat/pow(x * y, z), Nat/pow(x, z) * Nat/pow(y, z))",

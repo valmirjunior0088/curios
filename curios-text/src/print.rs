@@ -732,6 +732,9 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
         Intrinsic::NatShl(left, right) => {
             print_intrinsic_call("Nat/shl", vec![], vec![left, right])
         }
+        Intrinsic::NatPow(left, right) => {
+            print_intrinsic_call("Nat/pow", vec![], vec![left, right])
+        }
         Intrinsic::NatShr(left, right) => {
             print_intrinsic_call("Nat/shr", vec![], vec![left, right])
         }

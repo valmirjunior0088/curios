@@ -188,6 +188,7 @@ impl Intrinsic {
             | Self::NatMin(..)
             | Self::NatMax(..)
             | Self::NatShl(..)
+            | Self::NatPow(..)
             | Self::NatShr(..) => bin_op(nat_type(), nat_type()),
             Self::IntAdd(..)
             | Self::IntSub(..)

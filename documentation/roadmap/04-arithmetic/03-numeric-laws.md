@@ -40,10 +40,10 @@ The library carries what reduction does not state:
 
 ## `Nat`: the unsigned binary scale
 
-The dyadic `Rat` normalizes by stripping powers of two and compares values held at different binary exponents; both are unsigned facts about a magnitude and belong here. `shl(x, k) = x · pow(2, k)`, a sum in an exponent being a product, and a power of a positive base being positive are [declared](02-declared-operations.md).
+The dyadic `Rat` normalizes by stripping powers of two and compares values held at different binary exponents; both are unsigned facts about a magnitude and belong here. `shl(x, k) = x · pow(2, k)`, a sum in an exponent being a product, and a power being positive where the comparison holds its base at least one, as `pow(2, k)` and `pow(x + 1, k)`, are [declared](02-declared-operations.md).
 
 - **A power of a power, and of a product.** `pow(pow(x, a), b) = pow(x, a · b)` by induction on `b`, and `pow(x · y, a) = pow(x, a) · pow(y, a)` by induction on `a`, each step the declared law at a successor. Conversion takes neither, since the first gives the second and the second factors a literal base.
-- **The shift undone.** `shr(shl(x, k), k) = x`.
+- **A power of a positive base, under a hypothesis.** `0 < x` gives `0 < pow(x, k)`, by induction on `k`. A declared operation reads its base as a term and no hypothesis, so conversion holds the power positive only where it holds the base so, and the elaborator's linear search does not reach an induction.- **The shift undone.** `shr(shl(x, k), k) = x`.
 - **Trailing zeros.** `trailing_zeros(n)` counts the factors of two in a positive `n`, and `odd_part(n)` is what is left, with the reconstruction `n = shl(odd_part(n), trailing_zeros(n))`, the oddness of `odd_part(n)`, and uniqueness: an odd `m` and a count `k` with `n = shl(m, k)` are `odd_part(n)` and `trailing_zeros(n)`. Zero is excluded by a `Lt(0, n)` premise rather than given a conventional count.
 - **Comparing differently shifted magnitudes.** `shl(a, i)` against `shl(b, j)` is decided by aligning the smaller count, `shl(a, i - j)` against `b` when `j ≤ i`, with the order and equality it answers proved to be the unshifted comparison's.
 

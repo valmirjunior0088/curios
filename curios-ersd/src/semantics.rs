@@ -261,6 +261,7 @@ impl Semantics {
             | Operation::NatMin
             | Operation::NatMax
             | Operation::NatShl
+            | Operation::NatPow
             | Operation::NatShr
             | Operation::ByteToNat
             | Operation::NatToByte
@@ -458,6 +459,7 @@ impl Semantics {
                 Operation::NatMin => Constant::Nat(nat(0)?.min(nat(1)?).clone()),
                 Operation::NatMax => Constant::Nat(nat(0)?.max(nat(1)?).clone()),
                 Operation::NatShl => Constant::Nat(nat(0)?.shl_within(nat(1)?, allowance)?),
+                Operation::NatPow => Constant::Nat(nat(0)?.pow_within(nat(1)?, allowance)?),
                 Operation::NatShr => Constant::Nat(nat(0)? >> nat(1)?),
                 Operation::NatEql => Constant::Bool(nat(0)? == nat(1)?),
                 Operation::NatNeq => Constant::Bool(nat(0)? != nat(1)?),

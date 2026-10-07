@@ -924,6 +924,7 @@ fn operation_name(operation: Operation) -> String {
         Operation::NatMin => "Nat/min",
         Operation::NatMax => "Nat/max",
         Operation::NatShl => "Nat/shl",
+        Operation::NatPow => "Nat/pow",
         Operation::NatShr => "Nat/shr",
         Operation::ByteToNat => "Byte/to_nat",
         Operation::NatToByte => "Nat/to_byte",

@@ -59,7 +59,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Arithmetic
 
-- [ ] [Declared operations](roadmap/04-arithmetic/02-declared-operations.md) — `pow` is a library recursion conversion sees unfolded, which steps by no successor
+- [ ] [Declared operations](roadmap/04-arithmetic/02-declared-operations.md) — every operation is declared; the specification is left to retire
 - [ ] [Numeric laws](roadmap/04-arithmetic/03-numeric-laws.md) — `Divides` lacks its converse bridge, no `gcd` a type may mention exists, `Int` lacks multiplicative cancellation and its signed scale, and `Flt`'s `ord` is not proved a total order
 - [ ] [Exact rationals and their laws](roadmap/04-arithmetic/04-exact-rationals.md) — no canonical rational library, executable binary64 conversions, exact decimals or library proofs
 - [ ] [Alternate floating-point exception handling](roadmap/04-arithmetic/05-flt-exception-handling.md) — IEEE 754's remaining §8 policies, and per-operation substitution and recording

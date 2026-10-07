@@ -15,7 +15,7 @@ It builds on the algebra's law families and generated grid, and is independently
   - a semiring embedding, `Nat/to_int`, pushed through a sum and a product by `int_of_nat` and read back by `int_preimage`;
   - inversion pairs, a conversion reducing back through the one that inverts it (`round_trip`);
   - a fold into another operation: `Int`'s difference into the sum's normal form, a shift by a literal count into a coefficient.
-- **A shift by a symbolic count is a product by powers.** `then_power` reads `shl(v, k)` as `v` times one atom `shl(1, m)` for each monomial `m` of the count, repeated by the monomial's literal coefficient, the count's literal floor peeled into the coefficient, at `Nat` and at `Int`, whose atom is `Nat`'s widened. A power is at least one (`Operation::lower_bound`), which the comparison reads beside a side's floor.
+- **A shift by a symbolic count is a product by powers.** `then_power` reads `shl(v, k)` as `v` times one atom `pow(2, m)` for each monomial `m` of the count, repeated by the monomial's literal coefficient, the count's literal floor peeled into the coefficient, at `Nat` and at `Int`, whose atom is `Nat`'s widened. A power is at least one (`Operation::lower_bound`), which the comparison reads beside a side's floor.
 - **[A term is one where conversion says so](../../design/arithmetic/a-term-is-one-where-conversion-says-so.md).** A pair's atoms are classed by each checker's own conversion and a stuck fold is taken again over them (`curios-core`'s `classed`), so a fold that pairs atoms by identity registers its nodes there.
 - **The level algebra.** `Level` (`curios-core`'s `universe`) is a maximum of a constant and atoms with offsets: duplicates coalesce at the greatest offset, a constant an offset reaches is dropped, and a successor distributes. It is the normal form `max` takes here, and `min` its mirror.
 - **The binary64 model.** Every one of the 2⁶⁴ bit patterns is a distinct value under one symmetric NaN rule ([`Flt` is specified by a model](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md)), which is what makes commutativity hold of the carrier rather than of numbers alone.
@@ -24,9 +24,7 @@ It builds on the algebra's law families and generated grid, and is independently
 
 ## The gap
 
-`pow` is a library recursion by squaring, which conversion sees unfolded and which steps by no successor: `pow(x, y + 1)` against `pow(x, y) * x` is refused, and `shl(1, k)` against `pow(2, k)`.
-
-What the library definition decides today is kept: `pow(x + 1, 2)` is `x * x + 2 * x + 1`.
+None is left. Every operation below is a `/sys` operation declared with the theory it is decided in, and what the library definitions decided holds still: `abs(Nat/to_int(n))` is `n`, `sign(Nat/to_int(n) + 1)` is `+1`, and `pow(x + 1, 2)` is `x * x + 2 * x + 1`.
 
 ## An operation is declared with the theory it is decided in
 
@@ -65,16 +63,16 @@ Lemmas: `abs(a * b) = abs(a) * abs(b)` and `sign(a * b) = sign(a) * sign(b)`, wh
 
 ## Powers
 
-`pow` is promoted at `Nat` and declared a morphism from `(ℕ, +)` into `(ℕ, ·)` at a fixed base:
+A `/sys` operation at `Nat`, with nothing of this section left to land, declared a morphism from `(ℕ, +)` into `(ℕ, ·)` at a fixed base:
 
 - `pow(x, 0) = 1` and `pow(x, 1) = x`;
 - a sum in the exponent is a product, `pow(x, a + b) = pow(x, a) * pow(x, b)`, so a literal floor is so many factors, `pow(x, a + 2) = x * x * pow(x, a)`, and a literal coefficient repeats a factor, `pow(x, 2 * a) = pow(x, a) * pow(x, a)`;
 - a closed power folds, `pow(2, 10) = 1024`, and `pow(1, a) = 1`;
-- a power of a positive base is positive: `0 < pow(2, k)`, and `0 < shl(x + 1, k)`.
+- a power of a base the comparison holds at least one is at least one: `0 < pow(2, k)`, `0 < pow(x + 1, k)`, and `0 < shl(x + 1, k)`.
 
-The normal form is the one Mathlib's `ring` keeps for a variable exponent ([`Mathlib.Tactic.Ring`](https://florisvandoorn.com/LeanCourse25/docs/Mathlib/Tactic/Ring/Basic.html)): the exponent is normalized, and a monomial of it under a base is an atom of the product, the base an atom up to conversion. Each factor is charged before it is built, so a literal exponent no budget covers is refused.
+The normal form is the one Mathlib's `ring` keeps for a variable exponent ([`Mathlib.Tactic.Ring`](https://florisvandoorn.com/LeanCourse25/docs/Mathlib/Tactic/Ring/Basic.html)): the exponent is normalized, and a monomial of it under a base is an atom of the product, the base an atom up to conversion and read no further than a literal, whose power to the exponent's floor is one coefficient. Each factor is charged before it is built, so a literal exponent no budget covers is refused.
 
-The left shift is read through it, `shl(x, k) = x * pow(2, k)`, so `shl(1, k)` and `pow(2, k)` are one atom and `shl(shl(x, a), b) = shl(x, a + b)` holds at a symbolic count. At `Int` the atom is the widened power, so a comparison over it pulls back to `Nat` through `int_preimage`. The exponent law at base two and its positivity are held already, over the atom `shl(1, k)`, which the promotion respells as `pow(2, k)`.
+The left shift is read through it, `shl(x, k) = x * pow(2, k)`, so `shl(1, k)` and `pow(2, k)` are one atom and `shl(shl(x, a), b) = shl(x, a + b)` holds at a symbolic count. At `Int` the atom is the widened power, so a comparison over it pulls back to `Nat` through `int_preimage`, and a widened power of a literal base at least two leaves an `abs` as a factor and a `sign` unchanged.
 
 Lemmas: `pow(pow(x, a), b) = pow(x, a * b)` and `pow(x * y, a) = pow(x, a) * pow(y, a)`. Beside `pow(x, 2) = x * x`, the first gives the second by one chain, and the second at two literals is `pow(6, a)` against `pow(2, a) * pow(3, a)`, a base to factor; no finite set of identities is complete for exponentiation over the naturals ([Tarski's high school algebra problem](https://en.wikipedia.org/wiki/Tarski%27s_high_school_algebra_problem), Wilkie 1980 and Gurevič 1988). `shr(shl(x, k), k) = x` stays a lemma.
 
@@ -97,15 +95,11 @@ What is not a law stays a control, refused with its counterexample: associativit
 
 ## Promotion
 
-`min` and `max` at both carriers and `abs` and `sign` at `Int` are `/sys` operations, and `pow` becomes one. Each is new arithmetic on a numeric carrier and takes everything `.claude/rules/checking.md`'s routing names for one: its `/sys` row and `Intrinsic::signature` entry, which the prelude build checks against each other; its literal fold in every constant folder sharing `scalar` — `curios-core`'s, `curios-ersd`'s and `curios-cont`'s; the emitter's lowering with its i31 fast path and its `big_emitter` library; its declaration; its nodes in `classed`; and the procedure's reading of its definition. Each folds as it executes, at both signs and past the i31, since `Nat` and `Int` are unbounded at every layer ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)). The library function a promotion replaces becomes a re-export under its existing name, and the rows it held by reduction are stated before it lands and hold after.
+`min` and `max` at both carriers, `abs` and `sign` at `Int` and `pow` at `Nat` are `/sys` operations. Each is new arithmetic on a numeric carrier and takes everything `.claude/rules/checking.md`'s routing names for one: its `/sys` row and `Intrinsic::signature` entry, which the prelude build checks against each other; its literal fold in every constant folder sharing `scalar` — `curios-core`'s, `curios-ersd`'s and `curios-cont`'s; the emitter's lowering with its i31 fast path and its `big_emitter` library; its declaration; its nodes in `classed`; and the procedure's reading of its definition. Each folds as it executes, at both signs and past the i31, since `Nat` and `Int` are unbounded at every layer ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)). The library function a promotion replaced is a re-export under its existing name, and the rows it held by reduction hold still.
 
 ## Stages
 
-Every law above, every row the library definitions hold today and every control stands in the grid (`curios`'s `tests::laws::written`), each refused row commented with the stage that moves it, and the audit puts each declared law to a product of two sums.
-
-1. **`pow`**, the power atom becoming `pow(2, k)`.
-
-The stage moves its rows from refused to held, extends the grid's audit to the kind it declares, and adds its operation's rows to `curios`'s `tests::bounds`.
+None is left. Every law above, every row the library definitions held and every control stands in the grid, generated from its declaration or written in `curios`'s `tests::laws::written`, the audit puts each declared law to a product of two sums, and `curios`'s `tests::bounds` fills a bound over each promoted operation.
 
 ## Verification
 

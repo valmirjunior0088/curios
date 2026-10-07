@@ -93,10 +93,10 @@ pub fn normalize_bool(
     ))
 }
 
-/// The power atom over one monomial of a shift's count: `shl(1, m)` on `Nat`, which `Int` widens.
+/// The power atom over one monomial of a shift's count: `pow(2, m)` on `Nat`, which `Int` widens.
 fn nat_power(monomial: Term) -> Term {
-    Term::intrinsic(Intrinsic::NatShl(
-        Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+    Term::intrinsic(Intrinsic::NatPow(
+        Term::intrinsic(Intrinsic::Nat(Nat::new(2usize))),
         monomial,
     ))
 }
@@ -592,6 +592,8 @@ pub fn reduce_intrinsic(
                 Extremum::of(intrinsic).expect("a `min` or a `max` over `Nat` or `Int`");
             reduce_extremum(reducer, extremum, left, right)
         }
+        // `pow`: its exponent a morphism from `(ℕ, +)` into `(ℕ, ·)` at its base (`reduce_nat_pow`).
+        Intrinsic::NatPow(left, right) => reduce_nat_pow(reducer, left, right),
         Intrinsic::NatShl(left, right) => {
             let shifted = then_laws(reduce_nat_shl(reducer, left, right)?, |l, r| {
                 shift_laws(l, r, intrinsic)
@@ -602,21 +604,15 @@ pub fn reduce_intrinsic(
                     value,
                 ))
             })?;
-            then_power(
-                reducer,
-                shifted,
-                Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-                nat_power,
-                |coefficient, value, powers| {
-                    let scaled = Term::intrinsic(Intrinsic::nat_mul(
-                        Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
-                        value,
-                    ));
-                    powers.into_iter().fold(scaled, |product, power| {
-                        Term::intrinsic(Intrinsic::nat_mul(product, power))
-                    })
-                },
-            )
+            then_power(reducer, shifted, nat_power, |coefficient, value, powers| {
+                let scaled = Term::intrinsic(Intrinsic::nat_mul(
+                    Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
+                    value,
+                ));
+                powers.into_iter().fold(scaled, |product, power| {
+                    Term::intrinsic(Intrinsic::nat_mul(product, power))
+                })
+            })
         }
         Intrinsic::NatShr(left, right) => {
             let shifted = then_laws(
@@ -795,7 +791,6 @@ pub fn reduce_intrinsic(
             then_power(
                 reducer,
                 shifted,
-                Term::intrinsic(Intrinsic::Int(Integer::from(1i32))),
                 |monomial| Term::intrinsic(Intrinsic::NatToInt(nat_power(monomial))),
                 |coefficient, value, powers| {
                     let scaled = Term::intrinsic(Intrinsic::IntMul(
@@ -2227,6 +2222,8 @@ mod laws_tests;
 mod magnitude_tests;
 #[cfg(test)]
 mod nat_tests;
+#[cfg(test)]
+mod power_tests;
 
 #[cfg(test)]
 mod shift_tests;

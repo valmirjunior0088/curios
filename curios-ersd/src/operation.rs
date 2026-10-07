@@ -28,6 +28,7 @@ pub enum Operation {
     NatMin,
     NatMax,
     NatShl,
+    NatPow,
     NatShr,
     ByteToNat,
     NatToByte,
@@ -120,6 +121,7 @@ impl Operation {
             | Self::NatMin
             | Self::NatMax
             | Self::NatShl
+            | Self::NatPow
             | Self::NatShr
             | Self::IntEql
             | Self::IntNeq

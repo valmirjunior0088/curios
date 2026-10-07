@@ -192,7 +192,7 @@ fn inside() -> Vec<Term> {
     ];
     rows.extend(bool_binary.map(|row| row(truth(true), truth(false))));
 
-    let nat_binary: [fn(Term, Term) -> Intrinsic; 14] = [
+    let nat_binary: [fn(Term, Term) -> Intrinsic; 15] = [
         Intrinsic::NatMin,
         Intrinsic::NatMax,
         Intrinsic::NatEql,
@@ -207,6 +207,7 @@ fn inside() -> Vec<Term> {
         Intrinsic::NatXor,
         Intrinsic::NatShl,
         Intrinsic::NatShr,
+        Intrinsic::NatPow,
     ];
     rows.extend(nat_binary.map(|row| row(nat(7), nat(2))));
 
@@ -675,6 +676,7 @@ fn an_operation_is_declared_to_the_algebra_at_the_carrier_its_row_types() {
             | curios_algebra::Operation::And
             | curios_algebra::Operation::Or
             | curios_algebra::Operation::Xor
+            | curios_algebra::Operation::Power
             | curios_algebra::Operation::RoundedSum(_)
             | curios_algebra::Operation::RoundedProduct(_)
             | curios_algebra::Operation::Min
@@ -693,7 +695,7 @@ fn an_operation_is_declared_to_the_algebra_at_the_carrier_its_row_types() {
         assert_eq!((operands, result), stated, "{application:?}");
     }
 
-    assert_eq!(declared, 54);
+    assert_eq!(declared, 55);
 }
 
 /// The rows no fold answers are the effect carrier's: its two constructors, and the cell and channel operations. Nothing computes against them, and the one thing a wrong row among them could do to admit is hand out what a description yields — `Io` has no eliminator only while no row is one, and a host call that diverges inhabits `Io` at any type. So each is typed at an `Io`, and reduction leaves each the node it was: `bind(pure(x), f)` is not `f(x)`.

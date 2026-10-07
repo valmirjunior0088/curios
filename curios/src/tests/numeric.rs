@@ -8,6 +8,7 @@ mod domain_tests;
 mod flt_tests;
 mod grid_tests;
 mod packed_word_tests;
+mod power_tests;
 mod rounding_tests;
 mod shift_tests;
 mod test_support;

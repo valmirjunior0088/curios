@@ -1543,6 +1543,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::NatMin(l, r) => print_call("Nat/min", vec![], vec![l, r], frame),
         Intrinsic::NatMax(l, r) => print_call("Nat/max", vec![], vec![l, r], frame),
         Intrinsic::NatShl(l, r) => print_call("Nat/shl", vec![], vec![l, r], frame),
+        Intrinsic::NatPow(l, r) => print_call("Nat/pow", vec![], vec![l, r], frame),
         Intrinsic::NatShr(l, r) => print_call("Nat/shr", vec![], vec![l, r], frame),
         Intrinsic::ByteType => pure(frame.spelling.intrinsic_symbol("Byte")),
         Intrinsic::Byte(value) => pure(format!("0x{value:02X}")),

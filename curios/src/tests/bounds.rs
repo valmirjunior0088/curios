@@ -284,6 +284,15 @@ const ROWS: &[Row] = &[
         "i: Int, k: Nat, p: Holds(+0 < i)",
         "Holds(+0 < Int/shl(i, k))",
     ),
+    // And a power of a base conversion holds at least one, read beside what the scope says of what it multiplies.
+    claim(
+        "d: Nat, k: Nat, p: Holds(0 < d)",
+        "Holds(0 < d * Nat/pow(2, k))",
+    ),
+    claim(
+        "d: Nat, x: Nat, k: Nat, p: Holds(3 <= d)",
+        "Holds(3 <= d * Nat/pow(x + 1, k))",
+    ),
     // A `min` and a `max` are read through the two cases their operands' order makes, conversion deciding one from its operands as terms and reading no fact: a bound on both operands bounds a `min` from below and a `max` from above, a bound on one bounds a `min` from above, the two of one pair sum to the pair through one split, and the same over `Int`.
     claim(
         "a: Nat, b: Nat, c: Nat, p: Holds(c <= a), q: Holds(c <= b)",
@@ -383,6 +392,11 @@ const CONTROLS: &[Row] = &[
     claim("x: Nat, p: Holds(x * x * x <= 7)", "Holds(x <= 1)"),
     // A shifted value nothing in scope says is positive: zero shifted is zero.
     claim("d: Nat, k: Nat", "Holds(0 < Nat/shl(d, k))"),
+    // A power of a base nothing says is positive: `pow(0, 1)` is zero.
+    claim(
+        "d: Nat, x: Nat, k: Nat, p: Holds(0 < d)",
+        "Holds(0 < d * Nat/pow(x, k))",
+    ),
     // A `min` bounded from below by a bound on one operand alone, and a `max` from above by one.
     claim(
         "a: Nat, b: Nat, c: Nat, p: Holds(c <= a)",

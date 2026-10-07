@@ -61,6 +61,8 @@ pub enum Family {
     Homomorphism,
     /// A conversion undoes the conversion back: `this(back(x)) = x`.
     InversePair,
+    /// An exponent onto the operation named, from `(ℕ, +, 0)`: `x ⋆ 0` is that operation's unit, `x ⋆ (y + z) = (x ⋆ y) ⊗ (x ⋆ z)`, and so `x ⋆ (y + 1) = (x ⋆ y) ⊗ x`.
+    Exponent(Operation),
 }
 
 /// A term a law states: a variable of one carrier, a constant, or an operation at a carrier applied to operands.
@@ -195,6 +197,15 @@ pub const TABLE: &[Declared] = &[
         families: &[
             Family::Unit(Position::Right, Constant::Zero),
             Family::Absorber(Position::Left, Constant::Zero),
+        ],
+    },
+    Declared {
+        carrier: Carrier::Natural,
+        operation: Operation::Power,
+        families: &[
+            Family::Unit(Position::Right, Constant::One),
+            Family::Absorber(Position::Left, Constant::One),
+            Family::Exponent(Operation::Product),
         ],
     },
     Declared {
@@ -777,6 +788,30 @@ impl Family {
                     law(
                         length(word(Operation::Append, vec![x.clone(), element])),
                         sum(length(x), constant(Constant::One, Carrier::Natural)),
+                    ),
+                ]
+            }
+            Family::Exponent(onto) => {
+                let sum = |left, right| apply(Operation::Sum, vec![left, right]);
+                let one = constant(Constant::One, second);
+                vec![
+                    law(
+                        apply(operation, vec![x.clone(), constant(Constant::Zero, second)]),
+                        constant(Constant::One, result),
+                    ),
+                    law(
+                        apply(operation, vec![x.clone(), sum(y.clone(), z.clone())]),
+                        apply(
+                            onto,
+                            vec![
+                                apply(operation, vec![x.clone(), y.clone()]),
+                                apply(operation, vec![x.clone(), z]),
+                            ],
+                        ),
+                    ),
+                    law(
+                        apply(operation, vec![x.clone(), sum(y.clone(), one)]),
+                        apply(onto, vec![apply(operation, vec![x.clone(), y]), x]),
                     ),
                 ]
             }

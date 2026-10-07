@@ -21,6 +21,8 @@ pub(crate) enum BigHelper {
     NatSub,
     /// `(anyref, anyref, i32 flip) -> (ref any)`: the sum, or with `flip` the difference.
     Add,
+    /// `(anyref, i64 count) -> (ref any)`: a natural raised to `count`.
+    Pow,
     /// `(anyref, anyref) -> (ref any)`: the product.
     Mul,
     /// `(anyref, anyref) -> (ref any)`: the quotient, truncated toward zero.
@@ -75,9 +77,10 @@ pub(crate) enum BigHelper {
 
 impl BigHelper {
     /// Every helper, callers before callees: the order the module emitter visits them in, so that a helper is looked at only after every body that could call it has been built.
-    pub(crate) const ALL: [BigHelper; 27] = [
+    pub(crate) const ALL: [BigHelper; 28] = [
         BigHelper::NatSub,
         BigHelper::Add,
+        BigHelper::Pow,
         BigHelper::Mul,
         BigHelper::Div,
         BigHelper::Rem,
@@ -117,6 +120,7 @@ impl BigHelper {
         curios_wasm::FuncName::from(match self {
             BigHelper::NatSub => "nat/sub",
             BigHelper::Add => "big/add",
+            BigHelper::Pow => "big/pow",
             BigHelper::Mul => "big/mul",
             BigHelper::Div => "big/div",
             BigHelper::Rem => "big/rem",
@@ -241,6 +245,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         match helper {
             BigHelper::NatSub => self.emit_nat_sub(),
             BigHelper::Add => self.emit_big_add(),
+            BigHelper::Pow => self.emit_big_pow(),
             BigHelper::Mul => self.emit_big_mul(),
             BigHelper::Div => self.emit_big_div(false),
             BigHelper::Rem => self.emit_big_div(true),
@@ -530,6 +535,83 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         ];
 
         self.add_helper(BigHelper::Add, scope, Table::top_type(false), instrs);
+    }
+
+    /// `big/pow`: a natural raised to `count` by squaring, so a count costs its bit width in products and never itself. A count of zero answers one, and a base of zero or one answers itself, before a count could size anything; any other base is at least two, so its power holds more than `count` bits, and a count that leaves no limb for the bit past it is refused as a shift's is.
+    fn emit_big_pow(&mut self) {
+        let mut scope = Scope::default();
+        let x = scope.param("x", Table::top_type(true));
+        let count = scope.param("count", i64_type());
+        let a = scope.local("a", self.big_type());
+        let m = scope.local("m", self.words_type());
+        let base = scope.local("base", Table::top_type(true));
+        let power = scope.local("power", Table::top_type(true));
+        let one = || vec![i32_const(1), curios_wasm::Instr::RefI31];
+        let instrs = wasm![
+            return_if(wasm![get(&count), curios_wasm::Instr::I64Eqz], one()),
+            get(&x),
+            self.helper(BigHelper::Widen),
+            set(&a),
+            self.magnitude(&a),
+            set(&m),
+            return_if(wasm![len(&m), curios_wasm::Instr::I32Eqz], zero()),
+            return_if(
+                wasm![
+                    len(&m),
+                    i32_const(1),
+                    curios_wasm::Instr::I32Eq,
+                    self.limb(&m, vec![i32_const(0)]),
+                    i32_const(1),
+                    curios_wasm::Instr::I32Eq,
+                    curios_wasm::Instr::I32And,
+                ],
+                one(),
+            ),
+            get(&count),
+            i64_const(5),
+            curios_wasm::Instr::I64ShrU,
+            i64_const(u32::MAX.into()),
+            curios_wasm::Instr::I64GeU,
+            when(self.table.refuse_instrs(curios_cont::Panic::Capacity)),
+            get(&x),
+            set(&base),
+            one(),
+            set(&power),
+            block(
+                "pow_done",
+                vec![repeat(
+                    "pow",
+                    wasm![
+                        get(&count),
+                        curios_wasm::Instr::I32WrapI64,
+                        i32_const(1),
+                        curios_wasm::Instr::I32And,
+                        when(wasm![
+                            get(&power),
+                            get(&base),
+                            self.helper(BigHelper::Mul),
+                            set(&power),
+                        ]),
+                        get(&count),
+                        i64_const(1),
+                        curios_wasm::Instr::I64ShrU,
+                        set(&count),
+                        get(&count),
+                        curios_wasm::Instr::I64Eqz,
+                        br_if("pow_done"),
+                        get(&base),
+                        get(&base),
+                        self.helper(BigHelper::Mul),
+                        set(&base),
+                        br("pow"),
+                    ],
+                )],
+            ),
+            get(&power),
+            curios_wasm::Instr::RefAsNonNull,
+        ];
+
+        self.add_helper(BigHelper::Pow, scope, Table::top_type(false), instrs);
     }
 
     /// `big/mul`: the magnitudes' product under the signs' agreement.

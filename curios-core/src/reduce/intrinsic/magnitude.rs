@@ -1,6 +1,6 @@
 //! The folds of `Int`'s `abs` and `sign`, and what leaves each.
 //!
-//! **An operand is read through what no substitution undoes.** A literal factor of every coefficient and the sign of the one that leads (`curios-algebra`'s `Scale`), and a power every monomial holds, each leave an absolute value as a factor of it and a sign unchanged or flipped: `abs(8 * n)` is `8 * abs(n)`, `abs(+0 - n)` is `abs(n)`, `sign(shl(n, k))` is `sign(n)`. What is left shares no literal factor, leads with a coefficient above zero and holds no power in every monomial, so it is read once and reading it again changes nothing.
+//! **An operand is read through what no substitution undoes.** A literal factor of every coefficient and the sign of the one that leads (`curios-algebra`'s `Scale`), and a power of a literal base at least two that every monomial holds, each leave an absolute value as a factor of it and a sign unchanged or flipped: `abs(8 * n)` is `8 * abs(n)`, `abs(+0 - n)` is `abs(n)`, `sign(shl(n, k))` is `sign(n)`. What is left shares no literal factor, leads with a coefficient above zero and holds no power in every monomial, so it is read once and reading it again changes nothing.
 //!
 //! **A combination is read from one end.** Its monomials are put in one order, by their factors' ranks as a product orders its factors, and the first of them leads: so `i - j` and `j - i` leave one operand under opposite signs, `abs` of either is one term, and `sign(+0 - n)` is `+0 - sign(n)` at every `n`, a difference among them.
 //!
@@ -36,16 +36,16 @@ impl Reading {
     }
 }
 
-/// The `Nat` a factor widens, where the factor is a widened power `shl(1, m)`.
+/// The `Nat` a factor widens, where the factor is a widened power of a literal base at least two: at least one whatever its exponent, and a product of such powers and a literal whatever is put for its exponent, which a power of a symbolic base is not.
 fn power(factor: &Term) -> Option<&Term> {
     let Subterm::Intrinsic(Intrinsic::NatToInt(natural)) = &**factor else {
         return None;
     };
-    let Subterm::Intrinsic(Intrinsic::NatShl(shifted, _)) = &**natural else {
+    let Subterm::Intrinsic(Intrinsic::NatPow(base, _)) = &**natural else {
         return None;
     };
-    (shifted.as_nat().and_then(|value| value.to_natural()))
-        .is_some_and(|value| value.is_one())
+    (base.as_nat().and_then(|value| value.to_natural()))
+        .is_some_and(|value| !value.is_zero() && !value.is_one())
         .then_some(natural)
 }
 

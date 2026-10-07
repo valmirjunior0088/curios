@@ -23,6 +23,7 @@ pub enum Intrinsic {
     NatMin,
     NatMax,
     NatShl,
+    NatPow,
     NatShr,
     NatEqz,
     NatToInt,
@@ -195,6 +196,7 @@ impl Intrinsic {
                 | Self::NatMin
                 | Self::NatMax
                 | Self::NatShl
+                | Self::NatPow
                 | Self::NatShr
                 | Self::NatEqz
                 | Self::NatToInt
@@ -311,6 +313,7 @@ impl Intrinsic {
             | Self::NatMin
             | Self::NatMax
             | Self::NatShl
+            | Self::NatPow
             | Self::NatShr
             | Self::IntToNat
             | Self::FltToNat
@@ -433,6 +436,7 @@ impl Intrinsic {
             | Self::NatMin
             | Self::NatMax
             | Self::NatShl
+            | Self::NatPow
             | Self::NatShr
             | Self::IntEql
             | Self::IntNeq
@@ -529,6 +533,7 @@ impl Intrinsic {
             | Self::NatSub
             | Self::NatMul
             | Self::NatShl
+            | Self::NatPow
             | Self::NatToInt
             | Self::IntAbs
             | Self::IntSign

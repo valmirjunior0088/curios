@@ -1032,6 +1032,7 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
         })
     };
     let widen = |nat: Term| Term::intrinsic(Intrinsic::NatToInt(nat));
+    let nat_pow = |base: Term, exponent: Term| Term::intrinsic(Intrinsic::NatPow(base, exponent));
     let nat_min = |left: Term, right: Term| Term::intrinsic(Intrinsic::NatMin(left, right));
     let nat_max = |left: Term, right: Term| Term::intrinsic(Intrinsic::NatMax(left, right));
     let int_min = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntMin(left, right));
@@ -1988,7 +1989,7 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
                 vec![(&nat_x, lit(4)), (&nat_y, lit(3))],
             ],
         ),
-        // A shift by a symbolic count: a left shift is its value times the power `shl(1, k)`, the count's literal floor peeled into the coefficient, and a right shift takes a floored count in two steps — at both carriers, and below zero for `Int`.
+        // A shift by a symbolic count: a left shift is its value times the power `pow(2, k)`, the count's literal floor peeled into the coefficient, and a right shift takes a floored count in two steps — at both carriers, and below zero for `Int`.
         (
             "shl(y, x + 1) = 2 * shl(y, x)",
             Term::intrinsic(Intrinsic::NatShl(y.clone(), plus(x.clone(), lit(1)))),
@@ -2100,6 +2101,89 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             vec![
                 vec![(&nat_x, lit(0)), (&nat_z, lit(5))],
                 vec![(&nat_x, lit(3)), (&nat_z, lit(7))],
+            ],
+        ),
+        // `pow`, its exponent a morphism from `(ℕ, +)` into `(ℕ, ·)` at a fixed base: a floor is so many factors, a literal base's one coefficient, a sum splits into one power to a monomial, a literal coefficient repeats its power, a product of sums in the exponent is distributed first, and a base of one answers one. A shift is read through it, `shl(1, x)` and `pow(2, x)` one atom.
+        ("pow(x, 0) = 1", nat_pow(x.clone(), lit(0)), lit(1), nats()),
+        (
+            "pow(x, 1) = x",
+            nat_pow(x.clone(), lit(1)),
+            x.clone(),
+            nats(),
+        ),
+        (
+            "pow(x, 3) = x * x * x",
+            nat_pow(x.clone(), lit(3)),
+            mul(mul(x.clone(), x.clone()), x.clone()),
+            nats(),
+        ),
+        (
+            "pow(x, y + 1) = x * pow(x, y)",
+            nat_pow(x.clone(), plus(y.clone(), lit(1))),
+            mul(x.clone(), nat_pow(x.clone(), y.clone())),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(0)), (&nat_y, lit(2))],
+                vec![(&nat_x, lit(3)), (&nat_y, lit(4))],
+            ],
+        ),
+        (
+            "pow(2, x + 3) = 8 * pow(2, x)",
+            nat_pow(lit(2), plus(x.clone(), lit(3))),
+            mul(lit(8), nat_pow(lit(2), x.clone())),
+            nats(),
+        ),
+        (
+            "pow(z, x + y) = pow(z, x) * pow(z, y)",
+            nat_pow(z.clone(), plus(x.clone(), y.clone())),
+            mul(nat_pow(z.clone(), x.clone()), nat_pow(z.clone(), y.clone())),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0)), (&nat_z, lit(0))],
+                vec![(&nat_x, lit(3)), (&nat_y, lit(0)), (&nat_z, lit(5))],
+                vec![(&nat_x, lit(2)), (&nat_y, lit(5)), (&nat_z, lit(3))],
+            ],
+        ),
+        (
+            "pow(y, 2 * x) = pow(y, x) * pow(y, x)",
+            nat_pow(y.clone(), mul(lit(2), x.clone())),
+            mul(nat_pow(y.clone(), x.clone()), nat_pow(y.clone(), x.clone())),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(3)), (&nat_y, lit(7))],
+            ],
+        ),
+        (
+            "pow(z, x * (y + 1)) = pow(z, x * y) * pow(z, x)",
+            nat_pow(z.clone(), mul(x.clone(), plus(y.clone(), lit(1)))),
+            mul(
+                nat_pow(z.clone(), mul(x.clone(), y.clone())),
+                nat_pow(z.clone(), x.clone()),
+            ),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(4)), (&nat_z, lit(3))],
+                vec![(&nat_x, lit(2)), (&nat_y, lit(1)), (&nat_z, lit(5))],
+            ],
+        ),
+        ("pow(1, x) = 1", nat_pow(lit(1), x.clone()), lit(1), nats()),
+        (
+            "pow(0, x + 1) = 0",
+            nat_pow(lit(0), plus(x.clone(), lit(1))),
+            lit(0),
+            nats(),
+        ),
+        (
+            "shl(1, x) = pow(2, x)",
+            Term::intrinsic(Intrinsic::NatShl(lit(1), x.clone())),
+            nat_pow(lit(2), x.clone()),
+            nats(),
+        ),
+        (
+            "shl(y, x) = y * pow(2, x)",
+            Term::intrinsic(Intrinsic::NatShl(y.clone(), x.clone())),
+            mul(y.clone(), nat_pow(lit(2), x.clone())),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(3))],
+                vec![(&nat_x, lit(5)), (&nat_y, lit(7))],
             ],
         ),
         // `min` and `max` as a semilattice with a successor: an operand the comparison holds at most the other answers for both, a literal every operand carries stands outside, and a nested node is read through, on `Nat` and on `Int`, whose least constant may be below zero.

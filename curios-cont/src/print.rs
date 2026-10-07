@@ -685,6 +685,7 @@ fn intrinsic_name(op: &Intrinsic) -> String {
         Intrinsic::NatMin => "Nat/min",
         Intrinsic::NatMax => "Nat/max",
         Intrinsic::NatShl => "Nat/shl",
+        Intrinsic::NatPow => "Nat/pow",
         Intrinsic::NatShr => "Nat/shr",
         Intrinsic::NatEqz => "Nat/eqz",
         Intrinsic::NatToInt => "Nat/to_int",

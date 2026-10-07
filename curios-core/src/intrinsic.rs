@@ -136,6 +136,8 @@ pub enum Intrinsic<T = Term> {
     NatMin(T, T),
     /// The greater of two naturals.
     NatMax(T, T),
+    /// A natural raised to a natural.
+    NatPow(T, T),
     NatShl(T, T),
     NatShr(T, T),
     ByteType,
@@ -842,6 +844,7 @@ impl Intrinsic {
             | Intrinsic::NatMin(a, b)
             | Intrinsic::NatMax(a, b)
             | Intrinsic::NatShl(a, b)
+            | Intrinsic::NatPow(a, b)
             | Intrinsic::NatShr(a, b)
             | Intrinsic::BoolAnd(a, b)
             | Intrinsic::BoolOr(a, b)
@@ -1208,6 +1211,7 @@ impl Intrinsic {
             Intrinsic::NatMin(l, r) => traverse_binary(l, r, visit, Intrinsic::NatMin),
             Intrinsic::NatMax(l, r) => traverse_binary(l, r, visit, Intrinsic::NatMax),
             Intrinsic::NatShl(l, r) => traverse_binary(l, r, visit, Intrinsic::NatShl),
+            Intrinsic::NatPow(l, r) => traverse_binary(l, r, visit, Intrinsic::NatPow),
             Intrinsic::NatShr(l, r) => traverse_binary(l, r, visit, Intrinsic::NatShr),
             Intrinsic::ByteType => Intrinsic::ByteType,
             Intrinsic::Byte(value) => Intrinsic::Byte(*value),
@@ -1645,6 +1649,7 @@ impl<T> Intrinsic<T> {
             Intrinsic::NatMin(l, r) => try_binary(l, r, operand, Intrinsic::NatMin)?,
             Intrinsic::NatMax(l, r) => try_binary(l, r, operand, Intrinsic::NatMax)?,
             Intrinsic::NatShl(l, r) => try_binary(l, r, operand, Intrinsic::NatShl)?,
+            Intrinsic::NatPow(l, r) => try_binary(l, r, operand, Intrinsic::NatPow)?,
             Intrinsic::NatShr(l, r) => try_binary(l, r, operand, Intrinsic::NatShr)?,
             Intrinsic::ByteType => Intrinsic::ByteType,
             Intrinsic::Byte(value) => Intrinsic::Byte(*value),

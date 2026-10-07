@@ -6,7 +6,7 @@
 //! - A proof field of a tuple- or struct-typed hypothesis, one level down, where the item may open the representation: `v.counted`, `hi.ok`.
 //! - A hypothesis or a field whose statement the arm's refinements reduce to an empty proposition — `in_range(n, 128, 191)` where a guard holds `n <= 127` — which refutes the scope by itself: read as `1 <= 0`, proved by its own zero-arm match.
 //! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
-//! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, an `abs`'s and a `sign`'s, and that a power `shl(1, m)` is at least one ([`Reader::definitions`]).
+//! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, an `abs`'s and a `sign`'s, and that a power of a base conversion holds at least one is at least one ([`Reader::definitions`]).
 //! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs.
 //! - That every monomial over naturals is at least zero, which conversion decides.
 //!
@@ -849,23 +849,25 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// That each power among the atoms read so far is at least one: `1 <= shl(1, m)`, which conversion decides at every count, so `qed` proves it. Whether it read one.
+    /// That each power among the atoms read so far is at least one, where conversion decides it: `1 <= pow(b, m)` at a base it holds at least one, as every `pow(2, m)` is, so `qed` proves it. Whether it read one.
     ///
-    /// A shift by a symbolic count reads as its value times such a power, so this is the fact a bound over one needs beside what the scope says of the value: `0 < d` gives `0 < shl(d, k)` as the product of two positives.
+    /// A shift by a symbolic count reads as its value times a power of two, so this is the fact a bound over one needs beside what the scope says of the value: `0 < d` gives `0 < shl(d, k)` as the product of two positives.
     fn powers(&mut self, context: &mut Context, target: Option<&Target>) -> Result<bool, Error> {
         let one = literal(Carrier::Natural, 1u32);
         let mut read = false;
         for atom in self.atoms(target) {
             let power = self.views.term(atom).clone();
-            let Subterm::Intrinsic(Intrinsic::NatShl(shifted, _)) = &*power else {
-                continue;
-            };
-            if *shifted != one || self.powered.contains(&power) {
+            let powered = matches!(&*power, Subterm::Intrinsic(Intrinsic::NatPow(..)));
+            if !powered || self.powered.contains(&power) {
                 continue;
             }
             self.powered.push(power.clone());
-            read = true;
             let at_least = Intrinsic::NatLe(one.clone(), power);
+            let decided = reduce_with(context, &Term::intrinsic(at_least.clone()))?;
+            if !matches!(&*decided, Subterm::Intrinsic(Intrinsic::Bool(true))) {
+                continue;
+            }
+            read = true;
             self.admit(context, at_least, qed(context), Origin::Definition)?;
         }
         Ok(read)

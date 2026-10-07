@@ -189,6 +189,7 @@ fn apply(carrier: Carrier, operation: Operation, operands: &[Value]) -> Option<V
             Operation::Xor => Value::Natural(a.clone() ^ b),
             Operation::ShiftLeft => Value::Natural(a.shl_within(b, 1 << 20)?),
             Operation::ShiftRight => Value::Natural(a >> b),
+            Operation::Power => Value::Natural(a.pow_within(b, 1 << 20)?),
             Operation::Min => Value::Natural(a.min(b).clone()),
             Operation::Max => Value::Natural(a.max(b).clone()),
             Operation::Equal => Value::Boolean(a == b),

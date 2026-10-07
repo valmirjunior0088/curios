@@ -243,6 +243,7 @@ impl Sort {
                 | Intrinsic::NatMul(..)
                 | Intrinsic::NatNeq(..)
                 | Intrinsic::NatOr(..)
+                | Intrinsic::NatPow(..)
                 | Intrinsic::NatRem { .. }
                 | Intrinsic::NatShl(..)
                 | Intrinsic::NatShr(..)

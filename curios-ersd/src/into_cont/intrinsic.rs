@@ -27,6 +27,7 @@ pub(super) fn operation_intrinsic(operation: Operation) -> curios_cont::Intrinsi
         Operation::NatMin => curios_cont::Intrinsic::NatMin,
         Operation::NatMax => curios_cont::Intrinsic::NatMax,
         Operation::NatShl => curios_cont::Intrinsic::NatShl,
+        Operation::NatPow => curios_cont::Intrinsic::NatPow,
         Operation::NatShr => curios_cont::Intrinsic::NatShr,
         Operation::IntEql => curios_cont::Intrinsic::IntEql,
         Operation::IntNeq => curios_cont::Intrinsic::IntNeq,

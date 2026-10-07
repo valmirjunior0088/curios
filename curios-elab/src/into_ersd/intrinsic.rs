@@ -250,6 +250,7 @@ pub(super) fn erase_intrinsic(
         Intrinsic::NatMin(l, r) => op!(curios_ersd::Operation::NatMin, nat_type, l, r),
         Intrinsic::NatMax(l, r) => op!(curios_ersd::Operation::NatMax, nat_type, l, r),
         Intrinsic::NatShl(l, r) => op!(curios_ersd::Operation::NatShl, nat_type, l, r),
+        Intrinsic::NatPow(l, r) => op!(curios_ersd::Operation::NatPow, nat_type, l, r),
         Intrinsic::NatShr(l, r) => op!(curios_ersd::Operation::NatShr, nat_type, l, r),
 
         Intrinsic::Int(value) => Ok(lowering.constant(curios_ersd::Constant::Int(value.clone()))),

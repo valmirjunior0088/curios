@@ -76,6 +76,17 @@ fn folded_and_executed_scalar_ops_agree() {
         "Int/to_str(Int/max(Int/sub(i, 1180591620717411303424), -3))",
         "Int/to_str(Int/min(Int/sub(i, 1180591620717411303424), Int/sub(i, 1180591620717411303425)))",
         "Int/to_str(Int/max(Int/sub(i, 1180591620717411303424), Int/sub(i, 1180591620717411303425)))",
+        // A power by squaring: an i31 result, one past the i31 and one past 64 bits from a small base, a boxed base, the bases and the exponent that decide a power alone, and a boxed exponent under each of those bases.
+        "Nat/to_str(Nat/pow(3 + n, 4))",
+        "Nat/to_str(Nat/pow(2 + n, 31))",
+        "Nat/to_str(Nat/pow(7 + n, 60))",
+        "Nat/to_str(Nat/pow(18446744073709551616 + n, 3))",
+        "Nat/to_str(Nat/pow(5 + n, 0))",
+        "Nat/to_str(Nat/pow(n, 0))",
+        "Nat/to_str(Nat/pow(n, 5))",
+        "Nat/to_str(Nat/pow(1 + n, 18446744073709551616))",
+        "Nat/to_str(Nat/pow(n, 18446744073709551616))",
+        "Nat/to_str(Nat/pow(3, 5 + n))",
         "Flt/to_str(Nat/to_flt(Nat/shl(9007199254740993 + n, 40)))",
         "Flt/to_str(Int/to_flt(Int/sub(i, 1180591620717411303424)))",
         // Guarded on `>= +0`, the comparison `Int/to_nat`'s precondition is decided on: `i` is runtime-tainted, so nothing settles the sign statically and the narrowing demands evidence. Both arms fold identically at the literal `i`, so the differential still compares the conversion rather than the guard.

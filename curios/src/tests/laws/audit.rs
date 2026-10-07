@@ -248,11 +248,11 @@ fn a_metavariable_is_solved_through_every_law_that_can_solve_it() {
     assert!(misplaced.is_empty(), "{}", misplaced.join("\n\n"));
 }
 
-/// Whether a metavariable standing for one of `row`'s atoms is solved through the law. A commutativity solves at every carrier: one operand of each side pairs by identity, in either position, and the two left over are compared, which is where the metavariable meets its partner (`peel_commutative`, and `peel_comparison` and the cancellations before it). A distribution at `Nat` or `Int` solves though no operand pairs, the metavariable standing in both of two summands: the equation is linear in it, and the elaborator solves it to the quotient. A Boolean distribution does not: the truth table reads a metavariable as one more atom, so it decides an equation between known atoms and proposes no solution for an unknown one, which is incompleteness in the refusing direction.
+/// Whether a metavariable standing for one of `row`'s atoms is solved through the law. A commutativity solves at every carrier: one operand of each side pairs by identity, in either position, and the two left over are compared, which is where the metavariable meets its partner (`peel_commutative`, and `peel_comparison` and the cancellations before it). A distribution at `Nat` or `Int` solves though no operand pairs, the metavariable standing in both of two summands: the equation is linear in it, and the elaborator solves it to the quotient. A Boolean distribution does not: the truth table reads a metavariable as one more atom, so it decides an equation between known atoms and proposes no solution for an unknown one, which is incompleteness in the refusing direction. Nor does an exponent law: its metavariable is the base of two powers, atoms of a product no factor of which pairs by identity, and the equation is not linear in it, so nothing proposes a solution.
 fn solves(row: &Row) -> bool {
     !matches!(
         (row.carrier, row.law.family),
-        (Carrier::Boolean, Family::Distribution(_))
+        (Carrier::Boolean, Family::Distribution(_)) | (_, Family::Exponent(_))
     )
 }
 

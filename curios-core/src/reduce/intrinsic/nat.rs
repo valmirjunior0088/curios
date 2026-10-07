@@ -112,7 +112,7 @@ pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
 
 /// A statically known lower bound on every value a reduced term takes: its floor over what its symbolic part is at least, and an operation's from what its operands are at least (`curios-algebra`'s `Operation::lower_bound`). Zero where nothing is known, which is no claim.
 ///
-/// The mirror of [`nat_bound`], and held the mirrored way: an *over*-report is a false definitional equation, the direction `least_lower_bounds_every_closed_instantiation` asserts. What it buys is positivity: a power `shl(1, k)` is at least one, so a sum or a product over one is, and `0 < shl(x + 1, k)` reduces.
+/// The mirror of [`nat_bound`], and held the mirrored way: an *over*-report is a false definitional equation, the direction `least_lower_bounds_every_closed_instantiation` asserts. What it buys is positivity: a power `pow(2, k)` is at least one, so a sum or a product over one is, and `0 < shl(x + 1, k)` reduces.
 pub(super) fn nat_least(term: &Term) -> Natural {
     let Subterm::Intrinsic(intrinsic) = &**term else {
         return Natural::zero();
@@ -359,32 +359,124 @@ pub(super) fn then_coefficient(
     }
 }
 
-/// A left shift by a *symbolic* count, read as the product it is where [`then_coefficient`] reads a literal one: `shl(v, k) = v · 2ᵏ`, with the exponent a morphism from `(ℕ, +)` into `(ℕ, ·)`. The count's literal floor is peeled into the coefficient and each monomial of its symbolic part is a power of its own, the atom `shl(1, m)`, repeated as many times as the monomial's literal coefficient: `shl(v, a + 2 · b + f) = 2ᶠ · v · shl(1, a) · shl(1, b) · shl(1, b)`, on `Nat` and on `Int`, where it holds below zero too.
+/// A symbolic exponent as the monomials it is a sum of, each with its literal coefficient: `a + 2 · b` as `a` once and `b` twice. The exponent is normalized first, a product of sums in it distributed by name, so two spellings of one exponent split alike. Empty where the exponent has no symbolic part.
+fn exponent_monomials(
+    reducer: &mut impl Reducer,
+    inner: &Term,
+) -> Result<Vec<(Natural, Term)>, ReduceError> {
+    if Nat::is_zero(inner) {
+        return Ok(Vec::new());
+    }
+    let normalized = Nat::normalize(reducer, inner.clone())?;
+    Ok(Nat::linear(Nat::summands(&normalized)))
+}
+
+/// One `power` to each monomial of an exponent, repeated as many times as the monomial's literal coefficient, every factor charged before it is built. `None` where a coefficient is past what a machine counts.
+fn repeated_powers(
+    reducer: &mut impl Reducer,
+    monomials: Vec<(Natural, Term)>,
+    power: impl Fn(Term) -> Term,
+) -> Result<Option<Vec<Term>>, ReduceError> {
+    let factors = monomials
+        .iter()
+        .fold(Natural::zero(), |factors, (repeated, _)| factors + repeated);
+    reducer.spend(Cost::collection(
+        u64::try_from(&factors).unwrap_or(u64::MAX),
+    ))?;
+    let mut powers = Vec::new();
+    for (repeated, monomial) in monomials {
+        let Ok(repeated) = usize::try_from(&repeated) else {
+            return Ok(None);
+        };
+        powers.extend(iter::repeat_n(power(monomial), repeated));
+    }
+    Ok(Some(powers))
+}
+
+/// `Nat/pow`, its exponent a morphism from `(ℕ, +)` into `(ℕ, ·)` at a fixed base: `pow(x, a + 2 · b + f) = xᶠ · pow(x, a) · pow(x, b) · pow(x, b)`. The exponent's literal floor is so many factors of the base — one literal, charged by the bits it holds before it is built, where the base is one — and each monomial of its symbolic part is a power of its own, the atom `pow(x, m)`, repeated as many times as the monomial's literal coefficient. So `pow(x, 0)` is `1`, `pow(x, 1)` is `x`, a closed power folds, and a proof about a power recurses on its exponent's successor as a proof about any `Nat` does.
 ///
-/// **The floor is what makes a count inductive, and the split what makes it additive.** `shl(v, k + 1) = 2 · shl(v, k)` is this rule at `f = 1`, so a proof about a shift recurses on its count's successor as a proof about any `Nat` does; and `shl(shl(v, a), b) = shl(v, a + b)` holds at symbolic counts because both are `v` times the same two atoms. The value leaves the shift with its literal factors, so `shl(2, x)` and `shl(1, x + 1)` are one monomial. A product in the count is one monomial and one atom, never a product of powers: `shl(1, x · y)` is not `shl(1, x) · shl(1, y)`.
+/// **A base of one answers one whatever the exponent, and a base of zero answers zero over a floor above zero**, neither reading how large the exponent is, so the answer is no host's: `pow(0, a + 1)` is zero, and `pow(0, a)` is the atom it is, one at `a = 0`.
 ///
-/// **The count is normalized first**, a product of sums in it distributed by name, so two spellings of one count split alike. `power` spells the atom over one monomial at the carrier the shift is at — at `Int` the widened `Nat` atom, which is what lets a comparison over it pull back to `Nat` and read it positive. The coefficient is charged before it is built, under the same [`shift_bound`], and every factor before the product is, so a literal coefficient no budget covers is refused; the atom itself — `Nat`'s `shl(1, m)` over one bare monomial — is its own normal form, which is what keeps the rule from re-entering.
+/// **Nothing is read of the base but a literal.** A power of a power and a power of a product stay atoms, their laws lemmas: beside `pow(x, 2) = x · x` the first gives the second, which at two literals factors a base, and no finite set of identities is complete for exponentiation over the naturals. A product in the exponent is one monomial and one atom, never a product of powers.
+///
+/// **The exponent is normalized first** ([`exponent_monomials`]), and the atom — a base that is not one over one bare monomial — is its own normal form, which is what keeps the rule from re-entering. An exponent past what a machine counts leaves the node standing.
+pub(super) fn reduce_nat_pow(
+    reducer: &mut impl Reducer,
+    base: &Term,
+    exponent: &Term,
+) -> Result<Subterm, ReduceError> {
+    let base = reducer.reduce_forced(base.clone())?;
+    let exponent = reducer.reduce_forced(exponent.clone())?;
+    let literal = base.as_nat().and_then(|base| base.to_natural());
+    if literal.as_ref().is_some_and(Natural::is_one) {
+        return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))));
+    }
+
+    let (floor, inner) = Nat::decompose(&exponent);
+    // Zero to a floor above zero is zero, at a floor past what a machine counts as at one.
+    if literal.as_ref().is_some_and(Natural::is_zero) && !floor.is_zero() {
+        return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)));
+    }
+    let monomials = exponent_monomials(reducer, &inner)?;
+    let atom = matches!(monomials.as_slice(), [(repeated, _)] if repeated.is_one());
+    let stuck = |base: Term, exponent: Term| Subterm::Intrinsic(Intrinsic::NatPow(base, exponent));
+    if atom && floor.is_zero() {
+        return Ok(stuck(base, exponent));
+    }
+    let Ok(amount) = u64::try_from(&floor) else {
+        return Ok(stuck(base, exponent));
+    };
+
+    // The base to the floor: a literal's power, or so many factors of a symbolic one.
+    let (coefficient, factors) = match &literal {
+        Some(value) => {
+            reducer.spend(Cost::big_number(value.bits().saturating_mul(amount)))?;
+            match value.pow_within(&floor, u64::MAX) {
+                Some(power) => (power, 0),
+                None => return Ok(stuck(base, exponent)),
+            }
+        }
+        None => {
+            reducer.spend(Cost::collection(amount))?;
+            match usize::try_from(amount) {
+                Ok(factors) => (Natural::one(), factors),
+                Err(_) => return Ok(stuck(base, exponent)),
+            }
+        }
+    };
+    let power = |monomial| Term::intrinsic(Intrinsic::NatPow(base.clone(), monomial));
+    let Some(powers) = repeated_powers(reducer, monomials, power)? else {
+        return Ok(stuck(base, exponent));
+    };
+
+    let product = iter::repeat_n(base.clone(), factors).chain(powers).fold(
+        Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
+        |product, factor| Term::intrinsic(Intrinsic::nat_mul(product, factor)),
+    );
+    Ok(Term::unwrap_or_clone(reducer.reduce_forced(product)?))
+}
+
+/// A left shift by a *symbolic* count, read as the product it is where [`then_coefficient`] reads a literal one: `shl(v, k) = v · 2ᵏ`, the power [`reduce_nat_pow`] folds. The count's literal floor is peeled into the coefficient and each monomial of its symbolic part is a power of two of its own, the atom `pow(2, m)`, repeated as many times as the monomial's literal coefficient: `shl(v, a + 2 · b + f) = 2ᶠ · v · pow(2, a) · pow(2, b) · pow(2, b)`, on `Nat` and on `Int`, where it holds below zero too.
+///
+/// **The floor is what makes a count inductive, and the split what makes it additive.** `shl(v, k + 1) = 2 · shl(v, k)` is this rule at `f = 1`, so a proof about a shift recurses on its count's successor as a proof about any `Nat` does; and `shl(shl(v, a), b) = shl(v, a + b)` holds at symbolic counts because both are `v` times the same two atoms. The value leaves the shift with its literal factors, so `shl(2, x)` and `shl(1, x + 1)` are one monomial, and `shl(1, x)` is `pow(2, x)`, one atom for the two spellings. A product in the count is one monomial and one atom, never a product of powers: `shl(1, x · y)` is not `shl(1, x) · shl(1, y)`.
+///
+/// **The count is normalized first** ([`exponent_monomials`]). `power` spells the atom over one monomial at the carrier the shift is at — at `Int` the widened `Nat` atom, which is what lets a comparison over it pull back to `Nat` and read it positive. The coefficient is charged before it is built, under the same [`shift_bound`], and every factor before the product is, so a literal coefficient no budget covers is refused. What the rule builds holds no shift, so it does not re-enter.
 pub(super) fn then_power(
     reducer: &mut impl Reducer,
     result: Subterm,
-    one: Term,
     power: impl Fn(Term) -> Term,
     product: impl FnOnce(Natural, Term, Vec<Term>) -> Term,
 ) -> Result<Subterm, ReduceError> {
-    let (value, count, natural) = match &result {
-        Subterm::Intrinsic(Intrinsic::NatShl(value, count)) => (value, count, true),
-        Subterm::Intrinsic(Intrinsic::IntShl(value, count)) => (value, count, false),
-        _ => return Ok(result),
+    let (Subterm::Intrinsic(Intrinsic::NatShl(value, count))
+    | Subterm::Intrinsic(Intrinsic::IntShl(value, count))) = &result
+    else {
+        return Ok(result);
     };
     let (floor, inner) = Nat::decompose(count);
     if Nat::is_zero(&inner) {
         return Ok(result);
     }
-    let exponents = Nat::linear(Nat::summands(&Nat::normalize(reducer, inner)?));
-    let atom = matches!(exponents.as_slice(), [(repeated, _)] if repeated.is_one());
-    if natural && atom && floor.is_zero() && *value == one {
-        return Ok(result);
-    }
+    let exponents = exponent_monomials(reducer, &inner)?;
     let Some(amount) = u64::try_from(&floor).ok() else {
         return Ok(result);
     };
@@ -392,20 +484,9 @@ pub(super) fn then_power(
     let Some(coefficient) = power_of_two(&floor) else {
         return Ok(result);
     };
-
-    let factors = exponents
-        .iter()
-        .fold(Natural::zero(), |factors, (repeated, _)| factors + repeated);
-    reducer.spend(Cost::collection(
-        u64::try_from(&factors).unwrap_or(u64::MAX),
-    ))?;
-    let mut powers = Vec::new();
-    for (repeated, monomial) in exponents {
-        let Ok(repeated) = usize::try_from(&repeated) else {
-            return Ok(result);
-        };
-        powers.extend(iter::repeat_n(power(monomial), repeated));
-    }
+    let Some(powers) = repeated_powers(reducer, exponents, power)? else {
+        return Ok(result);
+    };
     Ok(Term::unwrap_or_clone(reducer.reduce_forced(product(
         coefficient,
         value.clone(),

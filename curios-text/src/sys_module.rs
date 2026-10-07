@@ -237,6 +237,19 @@ fn nat_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
             binary("shl", syntax, Intrinsic::NatShl),
         ),
         documented(
+            &[
+                "`base` to the power `exp`, and `1` where `exp` is zero.",
+                "",
+                "Conversion decides it as a morphism of its exponent: a sum there is a product of powers, a literal so many factors of `base`, and `shl(1, exp)` is `pow(2, exp)`. It reads nothing of `base` but a literal, so a power of a power and a power of a product are lemmas.",
+            ],
+            operation(
+                "pow",
+                &["base", "exp"],
+                syntax,
+                Intrinsic::NatPow(name("base"), name("exp")),
+            ),
+        ),
+        documented(
             &["`a` halved `b` times, rounded down each time."],
             binary("shr", syntax, Intrinsic::NatShr),
         ),

@@ -38,6 +38,8 @@ pub enum Operation {
     Xor,
     ShiftLeft,
     ShiftRight,
+    /// A base raised to an exponent, both naturals.
+    Power,
     Equal,
     Unequal,
     Less,
@@ -141,13 +143,19 @@ impl Operation {
 
     /// A lower bound on every value this operation takes over ℕ, from a lower bound on each of its operands, by position; zero where it has none.
     ///
-    /// Every arm is unconditional, as [`Operation::upper_bound`]'s are, and for the mirrored reason: an under-report only withholds a verdict, and an over-report is a false one. A sum is at least the sum of what its operands are at least, a product their product, a left shift what it shifts, a power of two being at least one — which is what makes `shl(1, k)` positive at every `k` — and a `min` or a `max` the lesser or the greater of what its operands are. No other operation is read: a difference, a quotient and a right shift reach zero whatever their first operand is at least, and `and` and `xor` reach zero between two operands that do not.
+    /// Every arm is unconditional, as [`Operation::upper_bound`]'s are, and for the mirrored reason: an under-report only withholds a verdict, and an over-report is a false one. A sum is at least the sum of what its operands are at least, a product their product, a left shift what it shifts, a power of a base at least one that base's bound or one — which is what makes `pow(2, k)` positive at every `k` — and a `min` or a `max` the lesser or the greater of what its operands are. No other operation is read: a difference, a quotient and a right shift reach zero whatever their first operand is at least, and `and` and `xor` reach zero between two operands that do not.
     pub fn lower_bound(self, least: &[Natural]) -> Natural {
         let at = |position: usize| least.get(position).cloned().unwrap_or_else(Natural::zero);
         match self {
             Operation::Sum => at(0) + &at(1),
             Operation::Product => at(0) * &at(1),
             Operation::ShiftLeft => at(0),
+            // A base at least one stays at least one at every exponent, and at an exponent at least one is at least itself. A base that may be zero has a power that may be: `pow(0, 1)`.
+            Operation::Power => match (at(0).is_zero(), at(1).is_zero()) {
+                (true, _) => Natural::zero(),
+                (false, true) => Natural::one(),
+                (false, false) => at(0),
+            },
             Operation::Min => at(0).min(at(1)),
             Operation::Max => at(0).max(at(1)),
             _ => Natural::zero(),

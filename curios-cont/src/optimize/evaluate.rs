@@ -61,6 +61,9 @@ pub(crate) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         Intrinsic::NatShl => Some(Literal::Nat(
             nat(0)?.shl_within(nat(1)?, FOLD_ALLOWANCE_BITS)?,
         )),
+        Intrinsic::NatPow => Some(Literal::Nat(
+            nat(0)?.pow_within(nat(1)?, FOLD_ALLOWANCE_BITS)?,
+        )),
         Intrinsic::NatShr => Some(Literal::Nat(nat(0)? >> nat(1)?)),
         Intrinsic::NatEqz => bool_(nat(0)?.is_zero()),
         Intrinsic::NatToInt => Some(Literal::Int(Integer::from(nat(0)?.clone()))),

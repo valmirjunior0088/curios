@@ -384,7 +384,7 @@ fn a_bounded_operand_decides_a_comparison_against_a_literal() {
 
 // Soundness gate for the lower bound, the mirror of the gates above: `nat_least` must never over-report, because the comparison turns what a side is at least into a verdict. Each shape is taken as its fold leaves it, is at least what the gate states of it, and is held to that at every sample: a shape that holds a power is at least one past its floor, a factor nothing is known of takes its product to zero, and a difference or a right shift is at least nothing whatever it is taken from.
 //
-// Mutation-checked: a lower bound that takes a right shift for what it shifts states `4` of `shr(x + 4, y)`, which is `0` at `x = 0, y = 9`.
+// Mutation-checked: a lower bound that takes a right shift for what it shifts states `4` of `shr(x + 4, y)`, which is `0` at `x = 0, y = 9`; and one that takes every power for at least one states `1` of `pow(y, x)`, which is `0` at `x = 1, y = 0`.
 #[test]
 fn least_lower_bounds_every_closed_instantiation() {
     let x = Free::local(0, Some("x"));
@@ -443,9 +443,27 @@ fn least_lower_bounds_every_closed_instantiation() {
         0,
     );
     above(
-        Term::intrinsic(Intrinsic::nat_sub(plus(count.clone(), lit(4)), other)),
+        Term::intrinsic(Intrinsic::nat_sub(
+            plus(count.clone(), lit(4)),
+            other.clone(),
+        )),
         "(x + 4) - y",
         0,
     );
+    // A power of a base at least one is at least one, and at least its base where its exponent is at least one; a base nothing is known of may be zero, and so may its power.
+    let pow = |base: Term, exponent: Term| Term::intrinsic(Intrinsic::NatPow(base, exponent));
+    above(pow(lit(2), count.clone()), "pow(2, x)", 1);
+    above(
+        pow(plus(other.clone(), lit(3)), count.clone()),
+        "pow(y + 3, x)",
+        1,
+    );
+    above(
+        pow(plus(other.clone(), lit(3)), pow(lit(2), count.clone())),
+        "pow(y + 3, pow(2, x))",
+        3,
+    );
+    above(pow(other.clone(), count.clone()), "pow(y, x)", 0);
+    above(pow(lit(0), count.clone()), "pow(0, x)", 0);
     above(plus(count, lit(4)), "x + 4", 4);
 }

@@ -754,6 +754,7 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::NatMin(..)
             | Intrinsic::NatMax(..)
             | Intrinsic::NatShl(..)
+            | Intrinsic::NatPow(..)
             | Intrinsic::NatShr(..)
             | Intrinsic::Byte(_)
             | Intrinsic::ByteToNat(..)

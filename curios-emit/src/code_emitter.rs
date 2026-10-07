@@ -784,6 +784,26 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_store(dest, &curios_cont::Repr::Ref);
     }
 
+    /// Lower a power: `big/pow` over the base as a reference and the exponent as a 64-bit count, at every size. Squaring has no fast path worth a test of its operands, and the helper answers an i31 where the power is one.
+    fn emit_power(
+        &mut self,
+        dest: &Dest<'_>,
+        base: &EmissionValueName,
+        exponent: &EmissionValueName,
+    ) {
+        let base = self.operand(base);
+        let exponent = self.operand(exponent);
+        let power: Vec<_> = base
+            .reference()
+            .into_iter()
+            .chain(self.shift_count(&exponent))
+            .chain([self.big(BigHelper::Pow)])
+            .collect();
+
+        self.emit_instrs(power);
+        self.emit_store(dest, &curios_cont::Repr::Ref);
+    }
+
     /// Lower a right shift, the floor of the value over a power of two. On an i31 the count clamps to 31 — any i31 shifted that far is already its sign — so one `i32.shr_s` decides every count.
     fn emit_shift_right(
         &mut self,
@@ -1903,6 +1923,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             curios_cont::Intrinsic::NatShl | curios_cont::Intrinsic::IntShl => {
                 self.emit_shift_left(dest, &args[0], &args[1])
             }
+            curios_cont::Intrinsic::NatPow => self.emit_power(dest, &args[0], &args[1]),
             curios_cont::Intrinsic::NatShr | curios_cont::Intrinsic::IntShr => {
                 self.emit_shift_right(dest, &args[0], &args[1])
             }

@@ -205,6 +205,7 @@ impl Spelling {
             (Carrier::Natural, Operation::Xor) => call("Nat/xor"),
             (Carrier::Natural, Operation::ShiftLeft) => call("Nat/shl"),
             (Carrier::Natural, Operation::ShiftRight) => call("Nat/shr"),
+            (Carrier::Natural, Operation::Power) => call("Nat/pow"),
             (Carrier::Integer, Operation::And) => call("Int/and"),
             (Carrier::Integer, Operation::Or) => call("Int/or"),
             (Carrier::Integer, Operation::Xor) => call("Int/xor"),

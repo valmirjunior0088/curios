@@ -1,6 +1,6 @@
 pub use /sys/{Nat};
-pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, gt, ge, and, or, xor, shl, shr, to_int,
-    to_flt, to_byte};
+pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, gt, ge, and, or, xor, shl, shr, pow,
+    to_int, to_flt, to_byte};
 use /std/{Str, Option, Char, Bool, Ordering, Show, Spell, Ord, Eq};
 use /std/Bool/{Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
@@ -93,18 +93,6 @@ pub let of_str(s: Str) -> Option(Nat) =
 --- `a - 1`, and `0` at zero.
 pub let pred(a: Nat) -> Nat =
     a - 1;
-
---- `base` to the power `exp`.
----
---- By squaring, so the cost is the exponent's bit width rather than the exponent, where a spine would multiply `exp` times.
-pub let pow(base: Nat, exp: Nat) -> Nat =
-    match exp == 0
-    | true => 1
-    | false =>
-        let half = pow(base, exp / 2);
-        let square = half * half;
-        match exp % 2 == 1 | true => square * base | false => square end
-    end;
 
 --- The greatest common divisor, with `gcd(a, 0)` as `a`. General recursion, so a type may not mention it.
 pub let gcd(a: Nat, b: Nat) -> Nat =

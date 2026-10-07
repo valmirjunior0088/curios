@@ -137,6 +137,11 @@ impl Intrinsic {
                 Operation::Max,
                 Operands::Two([left, right]),
             ),
+            Intrinsic::NatPow(left, right) => declared(
+                Carrier::Natural,
+                Operation::Power,
+                Operands::Two([left, right]),
+            ),
             Intrinsic::NatShl(left, right) => declared(
                 Carrier::Natural,
                 Operation::ShiftLeft,

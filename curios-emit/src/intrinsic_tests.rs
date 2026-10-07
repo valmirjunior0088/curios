@@ -95,6 +95,22 @@ fn a_min_and_a_max_select_an_operand_by_a_signed_comparison_and_big_cmp_past_the
     }
 }
 
+// A power is `big/pow` at every size, its exponent crossing as a 64-bit count: the helper squares and multiplies through `big/mul`, and refuses only a count past every limb array.
+#[test]
+fn a_power_is_squared_and_multiplied_by_big_pow_under_a_wide_count() {
+    let wat = wat(&intrinsic_main(
+        curios_cont::Intrinsic::NatPow,
+        vec![nat(3), nat(4)],
+    ));
+    assert_contains(&wat, "call $big/pow");
+    assert_contains(&wat, "call $big/mul");
+    assert_contains(&wat, "i64.shr_u");
+    assert_eq!(
+        refusals_besides_the_exit(&wat),
+        count(&wat, "call $refuse/capacity")
+    );
+}
+
 #[test]
 fn nat_and_combines_i31s_as_words_and_boxed_values_in_twos_complement() {
     let wat = wat(&intrinsic_main(

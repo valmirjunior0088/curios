@@ -117,6 +117,23 @@ impl Natural {
         })
     }
 
+    /// `self` raised to `exponent`, declining past `allowance` bits. A base of zero or one is answered before the exponent is looked at, since its power is zero or one at every exponent and a decline there would leave a fold undone for nothing; any other power is held to the bits its base has times the exponent, which it never exceeds.
+    pub fn pow_within(&self, exponent: &Self, allowance: u64) -> Option<Self> {
+        if exponent.is_zero() || self.is_one() {
+            return Some(Self::one());
+        }
+        if self.is_zero() {
+            return Some(Self::zero());
+        }
+
+        let amount = u32::try_from(u64::try_from(exponent).ok()?).ok()?;
+
+        match within(self.bits().checked_mul(amount.into()), allowance) {
+            true => Some(self.pow(amount)),
+            false => None,
+        }
+    }
+
     /// `self · 2^shift`, declining past `allowance` bits. Zero is answered before the count is looked at, since `0 · 2^k` is zero at every count and a decline there would leave a fold undone for nothing. The right shift has no such case: it is the total `>>` below.
     pub fn shl_within(&self, shift: &Self, allowance: u64) -> Option<Self> {
         if self.is_zero() {
