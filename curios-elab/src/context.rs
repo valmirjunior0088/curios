@@ -2683,6 +2683,32 @@ impl Context {
         self.solutions.take_parked()
     }
 
+    /// How many metavariables are awaited: the mark a term takes before it awaits any ([`Context::settle_bounds`]).
+    pub(crate) fn awaited_mark(&self) -> usize {
+        self.solutions.awaited_mark()
+    }
+
+    /// Await bounds for `id` until the term that minted it has read its parts: met at `Prop` from below meanwhile, it waits.
+    pub(crate) fn await_bounds(&mut self, id: MetavarId) {
+        self.solutions.await_bounds(id);
+    }
+
+    /// Whether some term is still reading its parts for `id`.
+    pub(crate) fn awaits(&self, id: MetavarId) -> bool {
+        self.solutions.awaits(id)
+    }
+
+    /// Stop awaiting everything awaited since `mark`, and hand it back.
+    pub(crate) fn stop_awaiting(&mut self, mark: usize) -> Vec<MetavarId> {
+        self.solutions.stop_awaiting(mark)
+    }
+
+    /// Take the problems parked at below that watch one of `ids`.
+    pub(crate) fn take_bounds_on(&mut self, ids: &[MetavarId]) -> Vec<ParkedProblem> {
+        self.caches.note_write();
+        self.solutions.take_bounds_on(ids)
+    }
+
     pub(crate) fn parked_len(&self) -> usize {
         self.solutions.parked_len()
     }

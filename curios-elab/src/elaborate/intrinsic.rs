@@ -175,11 +175,22 @@ pub(crate) fn elaborate_intrinsic(
         ));
     }
 
-    let (intrinsic, type_) = synth_intrinsic(context, intrinsic)?;
-
-    if let Mode::Check(expected) = &mode {
-        expect(context, term, &type_, expected)?;
+    // A list literal's element type is the hole every element is checked against where no expectation gave it one, and the literal awaits bounds for it until its elements are read and its own expectation met ([`Context::settle_bounds`]): a proposition one element is holds no later element to it.
+    let awaited = context.awaited_mark();
+    if let Intrinsic::List { element, .. } | Intrinsic::ListConcat { element, .. } = intrinsic
+        && let Subterm::Metavar(metavar) = &**element
+    {
+        context.await_bounds(metavar.id);
     }
+    let synthesized = synth_intrinsic(context, intrinsic).and_then(|(intrinsic, type_)| {
+        if let Mode::Check(expected) = &mode {
+            expect(context, term, &type_, expected)?;
+        }
+        context.settle_bounds(awaited)?;
 
-    Ok((Term::intrinsic(intrinsic), type_))
+        Ok((Term::intrinsic(intrinsic), type_))
+    });
+    context.stop_awaiting(awaited);
+
+    synthesized
 }

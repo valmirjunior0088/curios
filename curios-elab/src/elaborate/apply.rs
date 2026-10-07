@@ -323,6 +323,24 @@ pub(super) fn binder_name(hint: Option<&str>) -> String {
     hint.unwrap_or("_").to_string()
 }
 
+/// The metavariables a call's head still leaves open: the unsolved ones standing bare among its spine's arguments, through each call the head is itself the result of — `Eq()` in `Eq()(x, y)`, whose implicit the arguments of the second call are what decides.
+fn open_holes(context: &Context, head: &Term) -> Vec<MetavarId> {
+    let mut holes = Vec::new();
+    let mut term = head;
+    while let Subterm::Apply(apply) = &**term {
+        for argument in apply.params() {
+            if let Subterm::Metavar(metavar) = &**argument
+                && context.metavar_solution(metavar.id).is_none()
+            {
+                holes.push(metavar.id);
+            }
+        }
+        term = &apply.head;
+    }
+
+    holes
+}
+
 pub(super) fn elaborate_apply(
     context: &mut Context,
     apply: &Apply,
@@ -330,6 +348,22 @@ pub(super) fn elaborate_apply(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     curios_profile::profile!("apply::elaborate_apply");
+    // What the call awaits bounds for is given up however it is left: decided where its parts are read, and dropped where an error leaves first.
+    let awaited = context.awaited_mark();
+    let elaborated = elaborate_apply_awaiting(context, apply, term, mode, awaited);
+    context.stop_awaiting(awaited);
+
+    elaborated
+}
+
+/// [`elaborate_apply`], awaiting bounds since `awaited` for the implicits the call inserts and those its head's spine still leaves open ([`open_holes`]): one met at `Prop` from below waits for the arguments after it and for the call's own expectation ([`Context::settle_bounds`]).
+fn elaborate_apply_awaiting(
+    context: &mut Context,
+    apply: &Apply,
+    term: &Term,
+    mode: Mode,
+    awaited: usize,
+) -> Result<(Term, Term), Error> {
     let Apply { head, arguments } = apply;
 
     // Insertion provenance: name the applied function in the uninferred-implicit report.
@@ -350,6 +384,9 @@ pub(super) fn elaborate_apply(
 
     let (head, written_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &written_type)?;
+    for hole in open_holes(context, &head) {
+        context.await_bounds(hole);
+    }
 
     // One call fills exactly one parameter list: the head's own. A function returning a function is called once per list — `f(a)(b)` — and a list of hidden parameters alone is no exception, so `Eq()(x, y)` is how an all-implicit list is passed on to the one after it. See documentation/design/theory/a-call-fills-one-parameter-group.md.
     let ft = match &*head_type {
@@ -452,7 +489,21 @@ pub(super) fn elaborate_apply(
                 }
             }
             None => {
-                insert_auto_argument(context, *plicity, &ty, hint, &func_label, term, position)?
+                let inserted = insert_auto_argument(
+                    context,
+                    *plicity,
+                    &ty,
+                    hint,
+                    &func_label,
+                    term,
+                    position,
+                )?;
+                if *plicity == Plicity::Implicit
+                    && let Subterm::Metavar(metavar) = &*inserted
+                {
+                    context.await_bounds(metavar.id);
+                }
+                inserted
             }
         };
         cursor.advance(arg.clone());
@@ -464,6 +515,9 @@ pub(super) fn elaborate_apply(
         // The output carries any pending's placeholder, which *blocks* rather than manufacturing a raw substitution's false mismatches — so this turnaround runs unbracketed, a mismatch propagates as genuine, and its pins wake parked checks through the ordinary retry machinery with every discharged obligation's solutions kept.
         expect(context, term, &output, expected)?;
     }
+
+    // The call's parts are read and its expectation met: what still waits on one of its implicits is decided now, ahead of the arguments the force tier checks, which read them.
+    context.settle_bounds(awaited)?;
 
     if !pendings.is_empty() {
         // The force tier: a pending still undischarged after the turnaround above is checked now, under whatever it pinned. A lambda whose domain only its own body can ground is grounded by that body here; the placeholder takes the checked term, so no pending outlives its apply undischarged. The parked copy of the obligation reconciles against this solution when its retry fires. A bracketed best-effort expect over the *raw* spellings before this tier would add nothing: measured across the corpus, it discharges no pending the wake machinery and this tier do not.

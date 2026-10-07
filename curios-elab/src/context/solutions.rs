@@ -4,7 +4,7 @@
 
 use {
     super::{FrozenFrame, SharedRefinements, SharedTelescope},
-    crate::{Mode, Problem, Refusal},
+    crate::{Mode, Problem, Refusal, Relation},
     curios_core::{
         Bound, Field, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, Subterm, Term,
         WitnessOrigin,
@@ -120,6 +120,8 @@ pub(crate) struct Solutions {
     solved_log: Vec<MetavarId>,
     /// `Some` inside an oracle, where work may not park: elaboration is being asked a question (re-validation, a candidate's fit) and provisional success would leak into the answer. The flag is whether a site inside it wanted to park and was refused, which makes that oracle's refusal no verdict on the term it was asked about.
     oracle: Option<bool>,
+    /// The metavariables some term is still reading its parts for, innermost last: one met at `Prop` from below while it stands here waits for what those parts say. A stack, since the terms nest: each adds what it mints, and takes back everything since its own mark once its parts are read or an error leaves it.
+    awaited: Vec<MetavarId>,
 }
 
 impl Solutions {
@@ -131,6 +133,7 @@ impl Solutions {
             newly_solved: Vec::new(),
             solved_log: Vec::new(),
             oracle: None,
+            awaited: Vec::new(),
         }
     }
 
@@ -384,6 +387,37 @@ impl Solutions {
         self.parked = kept;
 
         woken
+    }
+
+    /// How many metavariables are awaited: the mark a term takes before it awaits any.
+    pub(crate) fn awaited_mark(&self) -> usize {
+        self.awaited.len()
+    }
+
+    /// Await bounds for `id` until the term that minted it has read its parts.
+    pub(crate) fn await_bounds(&mut self, id: MetavarId) {
+        self.awaited.push(id);
+    }
+
+    /// Whether some term is still reading its parts for `id`.
+    pub(crate) fn awaits(&self, id: MetavarId) -> bool {
+        self.awaited.contains(&id)
+    }
+
+    /// Stop awaiting everything awaited since `mark`, and hand it back.
+    pub(crate) fn stop_awaiting(&mut self, mark: usize) -> Vec<MetavarId> {
+        self.awaited.split_off(mark.min(self.awaited.len()))
+    }
+
+    /// Take the problems parked at below that watch one of `ids`: what a term that has read its parts retries.
+    pub(crate) fn take_bounds_on(&mut self, ids: &[MetavarId]) -> Vec<ParkedProblem> {
+        let (taken, kept) = mem::take(&mut self.parked).into_iter().partition(|parked| {
+            matches!(&parked.work, ParkedWork::Conversion(goal) if goal.relation == Relation::Below)
+                && parked.watching.iter().any(|id| ids.contains(id))
+        });
+        self.parked = kept;
+
+        taken
     }
 
     /// Take every parked goal — the drain's final sweep.

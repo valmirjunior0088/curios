@@ -139,15 +139,22 @@ pub(super) fn check_dependent_fields(
     // One walk, each field type opened once at every field before it: reopening the rest after each field would rewrite every later type, whose metavariable spines name every earlier field, and make a long literal cubic.
     let (fields, ()) = tele.walk_producing(|index, _, ty| match &sources[index] {
         FieldSource::Written(field) => check(context, field, ty),
-        FieldSource::Infer { func, label } => insert_auto_argument(
-            context,
-            Plicity::Implicit,
-            &ty,
-            (!label.is_empty()).then_some(label.as_str()),
-            func,
-            origin,
-            0,
-        ),
+        FieldSource::Infer { func, label } => {
+            let inserted = insert_auto_argument(
+                context,
+                Plicity::Implicit,
+                &ty,
+                (!label.is_empty()).then_some(label.as_str()),
+                func,
+                origin,
+                0,
+            )?;
+            if let Subterm::Metavar(metavar) = &*inserted {
+                context.await_bounds(metavar.id);
+            }
+
+            Ok(inserted)
+        }
         FieldSource::Resolve { func, edge } => {
             let provenance = WitnessOrigin {
                 func: func.clone(),
@@ -166,6 +173,25 @@ pub(super) fn check_dependent_fields(
 
 /// Type a struct literal against its registry entry. The struct's `name` makes it self-describing, so this synthesizes (like `elaborate_variant`, not the purely-checked `elaborate_tuple`): the parameters come from the written head — a bare-name head mints one fresh metavariable per parameter, solved by the field checks (and, in `Check` mode, the `expect` turnaround unifying the result `StructType` against the expected type) — and the fields are checked in declaration order through the (dependent) field telescope.
 pub(super) fn elaborate_struct(
+    context: &mut Context,
+    s: &Struct,
+    term: &Term,
+    mode: &Mode,
+) -> Result<(Term, Term), Error> {
+    // The parameters and hidden fields the literal leaves out are awaited until its fields are read ([`Context::settle_bounds`]), and given up however it is left.
+    let awaited = context.awaited_mark();
+    let literal = elaborate_struct_literal(context, s, term, mode).and_then(|literal| {
+        context.settle_bounds(awaited)?;
+
+        Ok(literal)
+    });
+    context.stop_awaiting(awaited);
+
+    literal
+}
+
+/// [`elaborate_struct`], awaiting bounds for what the literal leaves out.
+fn elaborate_struct_literal(
     context: &mut Context,
     s: &Struct,
     term: &Term,
@@ -223,6 +249,13 @@ pub(super) fn elaborate_struct(
     }
 
     let resolved = resolve_struct_params(context, name, &struct_decl, params, term)?;
+    for parameter in &resolved {
+        if let Subterm::Metavar(metavar) = &**parameter
+            && context.metavar_solution(metavar.id).is_none()
+        {
+            context.await_bounds(metavar.id);
+        }
+    }
     seed_struct_expectation(context, name, &universes, &resolved, term, mode)?;
 
     // Instantiate the field telescope at the resolved parameters.

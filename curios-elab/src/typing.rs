@@ -396,6 +396,22 @@ impl Context {
         }
     }
 
+    /// The term that awaited bounds since `mark` has read its parts: stop awaiting them, and decide what still waits on one.
+    ///
+    /// A metavariable met at `Prop` from below has two solutions, the proposition and any `Type` over it, and the sorts met after it are what tells them apart, so while the term that minted it reads its parts the problem waits at below. A part that is a `Type` solves the metavariable and the wake finds `Prop` below it; an equation solves it outright. What is left when the parts are read is retried here, and with its metavariable awaited no longer it is the equation the same problem is where nothing awaits: `Prop`, where no part raised it. See `documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`.
+    pub(crate) fn settle_bounds(&mut self, mark: usize) -> Result<(), Error> {
+        let awaited = self.stop_awaiting(mark);
+        // Nothing parks inside an oracle, so nothing waits there.
+        if awaited.is_empty() || self.parking_suppressed() {
+            return Ok(());
+        }
+        for parked in self.take_bounds_on(&awaited) {
+            retry_one(self, parked)?;
+        }
+
+        self.retry_parked()
+    }
+
     /// Retry every currently parked problem once without requiring the store to become empty. Declaration finalization uses this to settle work that is already decidable before closing universe metas, while witness goals that genuinely depend on a later declaration remain parked.
     pub(crate) fn sweep_parked(&mut self) -> Result<(), Error> {
         let parked = self.take_parked();

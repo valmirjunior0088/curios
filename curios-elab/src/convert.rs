@@ -1858,6 +1858,10 @@ impl Convert {
             return Ok(None);
         };
 
+        if Self::waits_at_prop(context, &metavar, rigid, standing)? {
+            return Ok(Some(Solved::Postponed));
+        }
+
         // The body at levels of its own where the pair is asked at below, as a bare metavariable's candidate is ([`Self::sorts_of_its_own`]), minted in the transaction that offers it.
         let mark = context.solution_mark();
         let own = match standing {
@@ -2105,6 +2109,45 @@ impl Convert {
         }
         context.end_solutions(mark);
         solved
+    }
+
+    /// Whether a problem at below that has `metavar` over `rigid` waits: `rigid` ends in `Prop`, and some term is still reading its parts for `metavar` ([`Context::settle_bounds`](crate::Context::settle_bounds)).
+    ///
+    /// `Prop ≤ ?m` has two solutions, the proposition and any `Type` over it, and the first thing `?m` meets cannot tell them apart: solved to `Prop` there, a `Type` met after it is refused, and a call, a list literal or a match is admitted by the order of its parts. A `Type` has a level to leave open ([`Self::sorts_of_its_own`]); `Prop` is no level, so the problem itself waits, at below, for the parts still to be read.
+    fn waits_at_prop(
+        context: &mut Context,
+        metavar: &Metavar,
+        rigid: &Term,
+        standing: Option<Standing>,
+    ) -> Result<bool, ReduceError> {
+        if standing != Some(Standing::Over) || !context.awaits(metavar.id) {
+            return Ok(false);
+        }
+        let waits = Self::ends_in_prop(context, rigid)?;
+        if waits {
+            // How often a term's parts are read past a proposition its metavariable met first.
+            curios_profile::sample!("convert::waits_at_prop", 1);
+        }
+
+        Ok(waits)
+    }
+
+    /// Whether `term` ends in `Prop`: the sort, or a function type whose codomain does, each read forced as the relation reads it.
+    fn ends_in_prop(context: &mut Context, term: &Term) -> Result<bool, ReduceError> {
+        let forced = reduce_forced(context, term.clone())?;
+        match &*forced {
+            Subterm::Prop => Ok(true),
+            Subterm::FuncType(FuncType { telescope }) => {
+                let mut cursor = telescope.cursor();
+                while cursor.entry().is_some() {
+                    cursor.advance_fresh(|hint| context.fresh(hint));
+                }
+                let codomain = cursor.body().expect("a cursor past every entry");
+
+                Self::ends_in_prop(context, &codomain)
+            }
+            _ => Ok(false),
+        }
     }
 
     /// `term` with each `Type` it ends in at a level of its own, where it ends in one: a sort, or a function type whose codomain ends in one, each read forced as the relation reads it. `None` where it ends in anything else, and the candidate is then the term as it stands.
@@ -2481,6 +2524,11 @@ impl Convert {
                         continue;
                     }
                     let standing = (relation == Relation::Below).then_some(Standing::Over);
+                    // `Prop ≤ ?m` has two solutions, and what tells them apart is still to be read: it waits for the term that minted `?m` ([`Self::waits_at_prop`]).
+                    if Self::waits_at_prop(context, &metavar, &this, standing)? {
+                        self.blocked.push(raw_problem(&type_));
+                        continue;
+                    }
                     match self.solve_at_birth(context, &metavar, &this, &this_raw, standing)? {
                         Solved::Done => continue,
                         Solved::Postponed => {

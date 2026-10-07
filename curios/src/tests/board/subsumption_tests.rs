@@ -229,3 +229,120 @@ fn a_declaration_keeps_no_argument_order_in_its_scheme() {
 
     assert_eq!(run(source), b"ok");
 }
+
+// A proposition met first decides nothing a type met after it would have decided: in a call, a two-group call, a list literal, a match's arms, and against the expectation.
+#[test]
+fn a_proposition_met_first_holds_no_later_type_to_it() {
+    let source = r#"
+        use /std/{Bool, Nat, List, Option, Eq, print};
+
+        let both(@S: Type, f: (Bool) -> S, g: (Bool) -> S) -> Nat = 0;
+        let is(b: Bool) -> Prop = Bool/Holds(b);
+        let fam(b: Bool) -> Type = Nat;
+
+        let prop_first: Nat = both(is, fam);
+        let type_first: Nat = both(fam, is);
+
+        let grouped_prop_first: Prop = Eq()(Bool/Holds(true), Nat);
+        let grouped_type_first: Prop = Eq()(Nat, Bool/Holds(true));
+
+        let listed_prop_first = [Bool/Holds(true), Nat];
+        let listed_type_first = [Nat, Bool/Holds(true)];
+
+        let expected: Option(Type) = Option/some(Bool/Holds(true));
+
+        let arms(b: Bool) -> Nat =
+            let prop_arm_first = match b | true => Nat | false => Bool/Holds(b) end;
+            let type_arm_first = match b | true => Bool/Holds(b) | false => Nat end;
+            0;
+
+        let _ = prop_first + type_first + arms(true);
+        let _ = listed_prop_first;
+        let _ = listed_type_first;
+        let _ = expected;
+        print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
+// Where nothing raises it, a proposition met first is the proposition: a call whose every argument is one answers at `Prop`, and stands where a `Prop` is wanted.
+#[test]
+fn a_proposition_nothing_raises_stays_a_proposition() {
+    let source = r#"
+        use /std/{Bool, Nat, print};
+
+        let pick(@S: Type, x: S, y: S) -> S = x;
+        let id(@A: Type, a: A) -> A = a;
+
+        let both_props: Prop = pick(Bool/Holds(true), Bool/Holds(false));
+        let through: Prop = id(Bool/Holds(true));
+        let inferred = pick(Bool/Holds(true), Bool/Holds(false));
+        let held: Prop = inferred;
+
+        let _ = 0;
+        print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
+// Each term awaits what it minted and no longer. A structure literal reads its fields past a proposition a parameter or a hidden field it left out met first; a call inside a list literal settles its own implicit before the list reads its next element; and a lambda argument that needs the implicit's sort is checked once the call has settled it.
+#[test]
+fn a_term_awaits_what_it_minted_until_its_parts_are_read() {
+    let source = r#"
+        use /std/{Bool, Nat, List, print};
+
+        struct Twin(S: Type): pub Type { a: S, b: S }
+        struct Pack: pub Type { @S: Type, a: S, b: S }
+        let id(@A: Type, a: A) -> A = a;
+        let through(@S: Type, x: S, k: (S) -> Nat) -> Nat = k(x);
+
+        let twin_prop_first = Twin { a = Bool/Holds(true), b = Nat };
+        let twin_type_first = Twin { a = Nat, b = Bool/Holds(true) };
+        let twin_of_props: Twin(Prop) = Twin { a = Bool/Holds(true), b = Bool/Holds(false) };
+        let pack_prop_first = Pack { a = Bool/Holds(true), b = Nat };
+        let nested_first = [id(Bool/Holds(true)), Nat];
+        let nested_last = [Nat, id(Bool/Holds(true))];
+
+        let _ = twin_prop_first;
+        let _ = twin_type_first;
+        let _ = twin_of_props;
+        let _ = pack_prop_first;
+        let _ = nested_first;
+        let _ = nested_last;
+        let _ = through(Bool/Holds(true), (p) => 0);
+        print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
+// What waited decides nothing the parts did not: a `Type` among them makes the implicit a `Type`, so the call does not stand where the proposition's sort is wanted invariantly, and a part that is no sort at all is refused as it was.
+#[test]
+fn a_metavariable_that_waited_is_what_its_parts_made_it() {
+    let invariant = r#"
+        use /std/{Bool, Nat, Option, print};
+
+        let pick(@S: Type, x: S, y: S) -> Option(S) = Option/some(x);
+        let _bad: Option(Prop) = pick(Bool/Holds(true), Nat);
+        print("")
+        "#;
+    let report = error(invariant);
+    assert!(
+        report.contains("type mismatch")
+            && report.contains("inferred: Option(Type)")
+            && report.contains("expected: Option(Prop)"),
+        "{report}"
+    );
+
+    let no_sort = r#"
+        use /std/{Bool, Nat, print};
+
+        let same(@S: Type, x: S, y: S) -> Nat = 0;
+        let _bad: Nat = same(Bool/Holds(true), 5);
+        print("")
+        "#;
+    let report = error(no_sort);
+    assert!(report.contains("type mismatch"), "{report}");
+}

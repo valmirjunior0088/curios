@@ -1359,3 +1359,77 @@ fn a_function_type_met_from_below_takes_its_codomain_at_a_level_of_its_own() {
     ));
     assert!(context.universes_mut().finalize([], [], []).is_ok());
 }
+
+// A metavariable met at `Prop` from below waits while a term still reads its parts for it.
+#[test]
+fn an_awaited_metavariable_met_at_a_proposition_waits() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(1)));
+    context.await_bounds(MetavarId(0));
+
+    let outcome = subsume_outcome(&mut context, &Term::prop(), &Term::hole(0), None);
+    assert!(matches!(outcome, Ok(Outcome::Blocked(_))), "{outcome:?}");
+    assert_eq!(context.metavar_solution(MetavarId(0)), None);
+}
+
+// Control: one nothing awaits is the proposition it met, as it was.
+#[test]
+fn a_metavariable_nothing_awaits_is_the_proposition_it_met() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(1)));
+
+    let outcome = subsume_outcome(&mut context, &Term::prop(), &Term::hole(0), None);
+    assert!(matches!(outcome, Ok(Outcome::Converts)), "{outcome:?}");
+    assert_eq!(context.metavar_solution(MetavarId(0)), Some(&Term::prop()));
+}
+
+// A `Type` met after the proposition solves the metavariable, and the proposition that waited is below it.
+#[test]
+fn a_type_met_after_a_proposition_raises_the_awaited_metavariable() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(1)));
+    context.await_bounds(MetavarId(0));
+
+    let Ok(Outcome::Blocked(goals)) =
+        subsume_outcome(&mut context, &Term::prop(), &Term::hole(0), None)
+    else {
+        panic!("a proposition under an awaited metavariable waits");
+    };
+    for goal in goals {
+        context.park(ParkedWork::Conversion(goal), Term::hole(0));
+    }
+    assert!(matches!(
+        subsume_outcome(&mut context, &Term::type_ground(), &Term::hole(0), None),
+        Ok(Outcome::Converts)
+    ));
+    assert!(matches!(
+        context
+            .metavar_solution(MetavarId(0))
+            .map(|solution| &**solution),
+        Some(Subterm::Type(_))
+    ));
+
+    assert!(context.settle_bounds(0).is_ok());
+    assert!(context.drain_parked().is_ok());
+}
+
+// Where nothing raised it, the term that stops awaiting it takes the proposition, the answer an unawaited one is given at once.
+#[test]
+fn an_awaited_metavariable_nothing_raised_settles_at_the_proposition() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(1)));
+    context.await_bounds(MetavarId(0));
+
+    let Ok(Outcome::Blocked(goals)) =
+        subsume_outcome(&mut context, &Term::prop(), &Term::hole(0), None)
+    else {
+        panic!("a proposition under an awaited metavariable waits");
+    };
+    for goal in goals {
+        context.park(ParkedWork::Conversion(goal), Term::hole(0));
+    }
+
+    assert!(context.settle_bounds(0).is_ok());
+    assert_eq!(context.metavar_solution(MetavarId(0)), Some(&Term::prop()));
+    assert!(context.drain_parked().is_ok());
+}
