@@ -321,7 +321,7 @@ fn differences(whole: &Module, replayed: &Module, names: &BTreeSet<Global>) -> V
 /// How many unrelated definitions the replay elaborates ahead of a declaration, one pass each.
 const PADDINGS: [usize; 2] = [0, 1];
 
-/// What each declaration of the standard library elaborates to alone: the declaration as its sources lower it, against the archived unit holding every other, compared with what the archive holds for it — and again with unrelated authored definitions elaborated ahead of it, which nothing it reads distinguishes. A declaration is a function of what it reads exactly when this reports nothing ([the specification](../../../documentation/roadmap/05-compilation/02-a-declaration-is-a-function-of-what-it-reads.md)). A measurement, so it reports rather than asserts.
+/// What each declaration of the standard library elaborates to alone: the declaration as its sources lower it, against the archived unit holding every other, compared with what the archive holds for it — and again with unrelated authored definitions elaborated ahead of it, which nothing it reads distinguishes. A declaration is a function of what it reads exactly when this reports nothing (`documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md`). A measurement, so it reports rather than asserts.
 #[test]
 #[ignore = "measurement: lowers the standard library and elaborates each of its declarations alone over the archive, reporting the ones that come out different"]
 fn std_replay_census() {

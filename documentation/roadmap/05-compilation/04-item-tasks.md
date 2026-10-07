@@ -1,13 +1,14 @@
 # A compilation is a graph of item tasks
 
-Working specification for multithreaded compilation, the payoff of [a declaration being a function of what it reads](02-a-declaration-is-a-function-of-what-it-reads.md). Once that holds, no artifact carries a minted identity ([a unit carries none another compilation could mint](../../../curios-unit/README.md#a-unit-carries-no-identity-another-compilation-could-mint)) and no verdict depends on history ([no memo outlives its declaration](../../design/soundness/a-reduction-step-costs-what-it-builds.md)), the items of a compilation can run on as many workers as the product supplies, in any order, and the determinism that property gives is what the gate holds them to. The compiler is single-threaded today by omission rather than by decision, and every design statement to the contrary is listed under what this overturns.
+Working specification for multithreaded compilation, the payoff of [a declaration being a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md). Once that holds, no artifact carries a minted identity ([a unit carries none another compilation could mint](../../../curios-unit/README.md#a-unit-carries-no-identity-another-compilation-could-mint)) and no verdict depends on history ([no memo outlives its declaration](../../design/soundness/a-reduction-step-costs-what-it-builds.md)), the items of a compilation can run on as many workers as the product supplies, in any order, and the determinism that property gives is what the gate holds them to. The compiler is single-threaded today by omission rather than by decision, and every design statement to the contrary is listed under what this overturns.
 
-It needs [that specification](02-a-declaration-is-a-function-of-what-it-reads.md) whole, [A compile costs what it reads](03-a-compile-costs-what-it-reads.md) for the one environment its workers share, and what they build on; [Cranelift's parallel compilation](../../../curios-runtime/README.md#compilation-runs-across-threads-and-only-where-compilation-exists) is already its first parallelism.
+It needs that decision to hold, [A compile costs what it reads](03-a-compile-costs-what-it-reads.md) for the one environment its workers share, and what they build on; [Cranelift's parallel compilation](../../../curios-runtime/README.md#compilation-runs-across-threads-and-only-where-compilation-exists) is already its first parallelism.
 
 ## What this builds on
 
 - **What already runs beside the compiler**: `wonder server`'s protocol thread, Binaryen behind its process lock, and the prelude images validated once per process.
-- **The one environment** ([A compile costs what it reads](03-a-compile-costs-what-it-reads.md)), whose recorded reads say which items may run together, and the throughput [A declaration is a function of what it reads](02-a-declaration-is-a-function-of-what-it-reads.md) measures the graph to admit.
+- **The one environment** ([A compile costs what it reads](03-a-compile-costs-what-it-reads.md)), whose recorded reads say which items may run together.
+- **The throughput the graph admits.** A declaration's signature is published with its body. Publishing a signature earlier is a refinement for declarations whose signature provably fixes its own universe context: over `/sys` and `/std` the graph admits 6.2 times one worker's throughput on 8 workers with it and 7.4 times without, and 8.0 against 11.8 on 16, counted in allocations at `87189c97d` as *Verification* states.
 - **Peers.** Lean 4.19 elaborates theorem bodies in parallel (lean4#7084). rustc parallelizes type checking per item under one build that selects serial or parallel synchronization at run time (`rustc_data_structures::sync`, `DynSend`/`DynSync`). Kontroli, a Rust checker for the λΠ-calculus modulo rewriting (Färber, CPP 2022), measured `Arc` terms 28.2% slower than `Rc` on one thread, won already at two threads, and reached 6.6× at eight. Rocq checks opaque proofs in worker processes (Barras, Tankink and Tassi, ITP 2015); GHC compiles modules in parallel under `-j`.
 
 ## The gap
@@ -18,7 +19,7 @@ It needs [that specification](02-a-declaration-is-a-function-of-what-it-reads.md
 
 ## Permanent decisions
 
-**The determinism contract.** A compilation's units, verdicts, diagnostics and emitted bytes are the same for every number of workers: [a declaration is a function of what it reads](02-a-declaration-is-a-function-of-what-it-reads.md), held under a schedule. The schedule is never an input: not to a verdict, not to a minted identity, not to the order anything is reported in. That is also what keeps the worker count out of a stored unit's address.
+**The determinism contract.** A compilation's units, verdicts, diagnostics and emitted bytes are the same for every number of workers: [a declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md), held under a schedule. The schedule is never an input: not to a verdict, not to a minted identity, not to the order anything is reported in. That is also what keeps the worker count out of a stored unit's address.
 
 **The execution strategy is the product's.** `curios-pipeline` declares an executor seam, as it declares `Cache`: `curios` supplies a work-stealing pool, and `curios-js` and the fixtures supply one worker. One worker is the same code, not a second path.
 
@@ -47,6 +48,7 @@ Each lands alone, on its own check.
 ## Verification
 
 - At every stage, every verdict over `/std` and the corpus in `programs/` is compared with the compiler before the stage; a difference is a finding, never a fixture update.
+- **The graph's throughput.** The nodes are `/std`'s declarations, an item with the items generated from it, and an edge is a name `Module::reaches` gives for an item of one, declared by another, over the restored prelude's module. A declaration's weight is the allocations its `declaration` span made in `curios-prelude-archive`'s build under `profile`, and throughput on n workers is the summed weight over the finishing time of a list schedule that hands the lowest-positioned ready item to a free worker; with the signature first, an item is two tasks, its signature waiting on the signatures its interface reaches and its body on those and on the bodies it reads. Counted.
 - The differential compiles `/std` and the corpus with one worker and with many and requires identical stored units, diagnostics and emitted bytes.
 - A genuine cycle between two items is reported with the same text under one worker and many.
 - Each stage reports the time it moved, named by the stage.
