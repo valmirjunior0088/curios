@@ -5,11 +5,10 @@
 use {
     super::{Projection, host_fn, intrinsic, name, projection},
     crate::{
-        Doc, FuncSugarParam, GroupItem, LetSignature, Module, Name, Pattern, Term, TopItem, TopLet,
-        TopMod, TopUse, UseGroup,
+        Doc, FuncSugarParam, GroupItem, Intrinsic, LetSignature, Module, Name, Pattern, Term,
+        TopItem, TopLet, TopMod, TopUse, UseGroup,
     },
     curios_abi::ForeignStore,
-    curios_core::Intrinsic,
     curios_utilities::{Plicity, SyntaxRegistry},
 };
 
@@ -162,7 +161,7 @@ pub(super) fn operation(
     label: &str,
     params: &[&str],
     syntax: &SyntaxRegistry,
-    node: Intrinsic<Term>,
+    node: Intrinsic,
 ) -> Decl {
     let Some(Projection {
         params: telescope,
@@ -191,7 +190,7 @@ pub(super) fn operation(
 pub(super) fn unary(
     label: &str,
     syntax: &SyntaxRegistry,
-    ctor: impl FnOnce(Term) -> Intrinsic<Term>,
+    ctor: impl FnOnce(Term) -> Intrinsic,
 ) -> Decl {
     operation(label, &["a"], syntax, ctor(name("a")))
 }
@@ -199,7 +198,7 @@ pub(super) fn unary(
 pub(super) fn binary(
     label: &str,
     syntax: &SyntaxRegistry,
-    ctor: impl FnOnce(Term, Term) -> Intrinsic<Term>,
+    ctor: impl FnOnce(Term, Term) -> Intrinsic,
 ) -> Decl {
     operation(label, &["a", "b"], syntax, ctor(name("a"), name("b")))
 }
@@ -207,7 +206,7 @@ pub(super) fn binary(
 pub(super) fn ternary(
     label: &str,
     syntax: &SyntaxRegistry,
-    ctor: impl FnOnce(Term, Term, Term) -> Intrinsic<Term>,
+    ctor: impl FnOnce(Term, Term, Term) -> Intrinsic,
 ) -> Decl {
     operation(
         label,
@@ -221,7 +220,7 @@ pub(super) fn ternary(
 pub(super) fn guarded_unary(
     label: &str,
     syntax: &SyntaxRegistry,
-    ctor: fn(Term, Term) -> Intrinsic<Term>,
+    ctor: fn(Term, Term) -> Intrinsic,
 ) -> Decl {
     operation(label, &["a", "ok"], syntax, ctor(name("a"), name("ok")))
 }
@@ -229,7 +228,7 @@ pub(super) fn guarded_unary(
 pub(super) fn guarded_binary(
     label: &str,
     syntax: &SyntaxRegistry,
-    ctor: fn(Term, Term, Term) -> Intrinsic<Term>,
+    ctor: fn(Term, Term, Term) -> Intrinsic,
 ) -> Decl {
     operation(
         label,

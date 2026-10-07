@@ -1,12 +1,12 @@
 //! The roster of `/sys`: every intrinsic type and operation the language provides, built directly as `text` AST and compiled as the prelude's `/sys` unit, so intrinsics participate in the module system like any other binding.
 //!
-//! Bodies bake the `text::Intrinsic::*` nodes in directly, so the roster needs no internal name resolution — with one exception, the propositions an operation states as its precondition, which are `/sys`'s own and are named absolutely so a declaration resolves wherever the roster puts it.
+//! Bodies bake `Intrinsic` nodes in directly, so the roster needs no internal name resolution — with one exception, the propositions a bound is stated in and the outcomes an operation answers with, which are `/sys`'s own and are named absolutely so a declaration resolves wherever the roster puts it.
 //!
 //! Ordinary polymorphic inductives are parsed from declarations so a repeated lowering of each written `Type` retains its universe identity. Intrinsic bodies have no surface spelling and are built structurally; their declarations are assembled beside them.
 //!
-//! **These declarations are a second statement of `Intrinsic::signature`, not a projection of it.** The table is `curios-core`'s; this roster is what a caller actually names, and elaborating a body here checks its operands against that table and unifies its result with the declared one. A declaration disagreeing with the operation its body constructs does not compile, and the prelude build is where that is enforced — so deriving either from the other would make the check compare the roster with itself.
+//! **An entry states its name, its parameters' names and its node; its types are `Intrinsic::signature`'s.** The table is `curios-core`'s and both checkers type a node by it, and a declaration here is that row read into a signature (`projected.rs`), so the roster cannot disagree with the checkers and there is no second statement to keep in step. What is the roster's own is which node a name builds: `gt` is `lt` with its operands the other way round, and `Nat/to_flt` rounds ties to even.
 //!
-//! This file holds the roster alone. How a declaration is built is `constructors.rs`, how a term is built is `helpers.rs`, and how a host store's wire row becomes one is `host_rows.rs`.
+//! This file holds the roster alone. How a declaration is built is `constructors.rs`, how a node's row is read into its types is `projected.rs`, how a term is built is `helpers.rs`, and how a host store's wire row becomes a declaration is `host_rows.rs`.
 
 mod constructors;
 use constructors::*;
@@ -25,12 +25,14 @@ use projected::*;
 mod tests;
 
 use {
-    super::{Doc, Match, MatchPattern, MatrixArm, Module, Subterm, TopCase, TopInduct, TopItem},
+    super::{
+        Doc, Intrinsic, Match, MatchPattern, MatrixArm, Module, Subterm, TopCase, TopInduct,
+        TopItem,
+    },
     curios_abi::{
         ForeignStore, errno, event, file_kind, open_mode, serial_flow, serial_op, serial_parity,
         status, stdio, stdio_mode,
     },
-    curios_core::Intrinsic,
     curios_num::{Grain, Natural, Rounding},
     curios_utilities::SyntaxRegistry,
 };

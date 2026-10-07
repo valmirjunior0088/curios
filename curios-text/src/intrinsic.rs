@@ -18,11 +18,16 @@ pub enum BinSegment {
     Spread(Term),
 }
 
-/// The literals the parser writes down: the two truth values, a decimal, and the packed and list literals with their segments and spreads as written. Every other intrinsic — a type former, an operation, a literal no source spells — is core's own [`curios_core::Intrinsic`] over surface operands, [`Subterm::Operation`](super::Subterm::Operation), which only the `/sys` roster builds.
+/// A literal as the parser writes it down: the two truth values, a decimal, and the packed and list literals with their segments and spreads as written, so each prints back as it was spelled. Lowering folds a packed literal's constant atoms into runs and splices its spreads; a numeral is a [`NumLit`](super::NumLit), whose carrier elaboration chooses.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Intrinsic {
+pub enum Literal {
     Bool(bool),
     Flt(Floating),
     Bin(Grain, Vec<BinSegment>),
     List(Vec<ListEntry>),
 }
+
+/// One of core's intrinsics over surface operands: a type former, an operation, or a literal no source spells. The same enum the rest of the pipeline holds, at this stage's term — so no variant is restated here, and lowering one is lowering its operands.
+///
+/// Never parsed. The `/sys` roster plants one in a declaration's body, and reads the types core's table gives it into the declaration's signature, so a program reaches every intrinsic as an ordinary named binding rather than as syntax.
+pub type Intrinsic = curios_core::Intrinsic<Term>;

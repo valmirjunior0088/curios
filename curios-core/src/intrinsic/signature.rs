@@ -1,14 +1,12 @@
 //! What every intrinsic demands of its operands, and what it produces.
 //!
-//! An intrinsic's signature is fixed by the language, so it is a table, and the table is the specification. A table written as a checking procedure can be *executed* by one caller and read by none, which would leave each consumer its own copy — `/sys`'s declarations (`curios-text`'s `sys_module`), the kernel's rules, elaboration's — in three crates, with nothing checking the three agree.
+//! An intrinsic's signature is fixed by the language, so it is a table, and the table is the specification. A table written as a checking procedure can be *executed* by one caller and read by none, which would leave each consumer its own copy — the kernel's rules, elaboration's, `/sys`'s declarations — in three crates, with nothing checking the three agree.
 //!
 //! This is the one statement. The kernel walks it to check, elaboration walks it to elaborate, and congruence walks it to compare each operand *at its own type* rather than at a flat `Type` — which is what lets proof irrelevance fire on a bound through the ordinary gate instead of through a rule about bounds.
 //!
 //! A host call is stated in the same vocabulary. `foreign_signature` reads its demands off the row — the roster's for a builtin, the declaration's own otherwise — so both checkers type a foreign call with the walk they run for an intrinsic, and neither keeps a rule of its own for one.
 //!
-//! **`/sys`'s copy is checked rather than removed, and that is enough.** `/sys` states every one of these types a second time, as the declarations a user actually calls — and it cannot drift, because elaborating a `/sys` body checks its operands against this table and unifies its result with the declared one. A declaration disagreeing with the operation its body constructs does not compile, and the prelude build is where that is enforced.
-//!
-//! Checked rather than argued: declaring `Nat/div`'s operands `Int` while its body still builds `NatDiv` fails the build with `while elaborating /sys/Nat/div: type mismatch, inferred: Int, expected: Nat`. Reproduce by changing the first `nat()` in `sys_module`'s `guarded_binary("div", …)` to `int()`.
+//! **`/sys` reads it too.** The declarations a program actually calls take each parameter's type and plicity, every bound and the result from the row of the node their body builds (`curios-text`'s `sys_module`), so the roster states no type of its own and has none to drift. A row is therefore what everything above it believes, and nothing spells it a second time to catch a slip in it: what a bound *means* is held by a program on each side of its edge, `curios/src/tests/numeric/domain_tests.rs`, where a new bounded row takes a pair.
 //!
 //! **Preconditions belong here.** A window is a start and a *count*, so `spine.rs`'s window fusion has no ordering bound to compose — building a fused window's `Le(s, e)` from its two halves would be transitivity of `<=`, an implication no equality procedure supplies, and a reducer that constructs proofs is a defect. The one bound a window keeps is carried from window₂ to the fused window unchanged: `spine`'s `push` moves a proof it was handed, and the reassociation that makes the two propositions one is `peel_nat_terms`'s to decide.
 //!

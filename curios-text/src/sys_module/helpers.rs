@@ -4,11 +4,10 @@
 
 use {
     crate::{
-        Apply, Argument, Field, Func, FuncParam, FuncType, FuncTypeParam, Label, Match,
+        Apply, Argument, Field, Func, FuncParam, FuncType, FuncTypeParam, Intrinsic, Label, Match,
         MatchPattern, MatrixArm, Name, Pattern, Proj, Subterm, Term, Tuple, TupleField, TupleType,
         TupleTypeParam,
     },
-    curios_core::Intrinsic,
     curios_num::{Grain, Natural},
     curios_utilities::{Plicity, SyntaxName},
 };
@@ -41,8 +40,8 @@ pub(super) fn applied(head: Term, args: Vec<Term>) -> Term {
     .into()
 }
 
-pub(super) fn intrinsic(p: Intrinsic<Term>) -> Term {
-    Subterm::Operation(p).into()
+pub(super) fn intrinsic(p: Intrinsic) -> Term {
+    Subterm::Intrinsic(p).into()
 }
 
 pub(super) fn nat() -> Term {

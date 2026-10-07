@@ -5,7 +5,7 @@ use {
     super::{
         Apply, Argument, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Doc,
         Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix,
-        Intrinsic, Label, Let, LetSignature, ListEntry, ListPattern, Match, MatchPattern,
+        Intrinsic, Label, Let, LetSignature, ListEntry, ListPattern, Literal, Match, MatchPattern,
         MatchPatternField, NatPattern, NumLit, Pattern, PatternField, Proj, ProofLiteral, Radix,
         StructField, StructLit, StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign,
         TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple,
@@ -151,7 +151,7 @@ fn is_atom(term: &Term) -> bool {
         Subterm::Name(_)
         | Subterm::NumLit(_)
         | Subterm::ProofLiteral(ProofLiteral::Char(_))
-        | Subterm::Intrinsic(Intrinsic::Flt(_)) => true,
+        | Subterm::Literal(Literal::Flt(_)) => true,
         Subterm::ProofLiteral(ProofLiteral::Str(literal)) => !literal.block,
         Subterm::Proj(Proj { head, .. }) => is_atom(head),
         _ => false,
@@ -161,8 +161,8 @@ fn is_atom(term: &Term) -> bool {
 /// Whether a term carries a break of its own that a call can hand its layout to — a list, a packed literal or a tuple of two or more fields, whose group breaks inside the brackets, or a lambda, whose body rides its arrow and breaks below it: see [`riding_call`].
 fn carries_its_own_break(term: &Term) -> bool {
     match term.as_subterm() {
-        Subterm::Intrinsic(Intrinsic::List(entries)) => !entries.is_empty(),
-        Subterm::Intrinsic(Intrinsic::Bin(_, segments)) => !segments.is_empty(),
+        Subterm::Literal(Literal::List(entries)) => !entries.is_empty(),
+        Subterm::Literal(Literal::Bin(_, segments)) => !segments.is_empty(),
         Subterm::Tuple(Tuple { fields }) => fields.len() >= 2,
         Subterm::Func(_) => true,
         _ => false,
@@ -611,13 +611,13 @@ fn print_intrinsic_call(
 
 /// An intrinsic operation as the surface calls it: its `/sys` path applied, `Nat/shl(a, b)`, with the type arguments it takes implicitly marked `@` as the application of that declaration marks them. A `/sys` body is the only place a text-stage intrinsic node exists, and its reading spells the operation the way the `/std` re-export a reader writes does.
 /// A written literal, as written.
-fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
-    match intrinsic {
-        Intrinsic::Bool(false) => pure("false"),
-        Intrinsic::Bool(true) => pure("true"),
-        Intrinsic::Flt(value) => print_flt(value),
+fn print_literal(literal: Literal) -> Printer {
+    match literal {
+        Literal::Bool(false) => pure("false"),
+        Literal::Bool(true) => pure("true"),
+        Literal::Flt(value) => print_flt(value),
         // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization — a constant atom is a numeral term and prints as written. An empty segment list prints `b[]`/`x[]` on its own.
-        Intrinsic::Bin(grain, segments) => {
+        Literal::Bin(grain, segments) => {
             let open = match grain {
                 Grain::B => "b[",
                 Grain::X => "x[",
@@ -637,7 +637,7 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
                 false => listed(open, entries, "]"),
             }
         }
-        Intrinsic::List(entries) => listed(
+        Literal::List(entries) => listed(
             "[",
             entries
                 .into_iter()
@@ -651,32 +651,32 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
     }
 }
 
-fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
+fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
     match intrinsic {
-        curios_core::Intrinsic::BoolType => pure("Bool"),
-        curios_core::Intrinsic::Bool(false) => pure("false"),
-        curios_core::Intrinsic::Bool(true) => pure("true"),
-        curios_core::Intrinsic::BoolAnd(left, right) => {
+        Intrinsic::BoolType => pure("Bool"),
+        Intrinsic::Bool(false) => pure("false"),
+        Intrinsic::Bool(true) => pure("true"),
+        Intrinsic::BoolAnd(left, right) => {
             print_intrinsic_call("Bool/and", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::BoolOr(left, right) => {
+        Intrinsic::BoolOr(left, right) => {
             print_intrinsic_call("Bool/or", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::BoolXor(left, right) => {
+        Intrinsic::BoolXor(left, right) => {
             print_intrinsic_call("Bool/xor", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::BoolEql(left, right) => {
+        Intrinsic::BoolEql(left, right) => {
             print_intrinsic_call("Bool/eql", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::BoolNeq(left, right) => {
+        Intrinsic::BoolNeq(left, right) => {
             print_intrinsic_call("Bool/neq", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::NatType => pure("Nat"),
-        curios_core::Intrinsic::Nat(curios_core::Nat::Zero) => pure("0"),
-        curios_core::Intrinsic::Nat(curios_core::Nat::Succ(floor, inner)) => {
+        Intrinsic::NatType => pure("Nat"),
+        Intrinsic::Nat(curios_core::Nat::Zero) => pure("0"),
+        Intrinsic::Nat(curios_core::Nat::Succ(floor, inner)) => {
             if matches!(
                 inner.as_subterm(),
-                Subterm::Operation(curios_core::Intrinsic::Nat(curios_core::Nat::Zero))
+                Subterm::Intrinsic(Intrinsic::Nat(curios_core::Nat::Zero))
             ) {
                 pure(floor.to_string())
             } else if floor.is_one() {
@@ -689,206 +689,180 @@ fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
                 ])
             }
         }
-        curios_core::Intrinsic::NatEql(left, right) => {
+        Intrinsic::NatEql(left, right) => {
             print_intrinsic_call("Nat/eql", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::NatNeq(left, right) => {
+        Intrinsic::NatNeq(left, right) => {
             print_intrinsic_call("Nat/neq", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::NatAdd(left, right) => {
+        Intrinsic::NatAdd(left, right) => {
             print_intrinsic_call("Nat/add", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::NatSub(left, right) => {
+        Intrinsic::NatSub(left, right) => {
             print_intrinsic_call("Nat/sub", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::NatMul(left, right) => {
+        Intrinsic::NatMul(left, right) => {
             print_intrinsic_call("Nat/mul", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::NatLt(left, right) => {
-            print_intrinsic_call("Nat/lt", vec![], vec![left, right])
-        }
-        curios_core::Intrinsic::NatDiv {
+        Intrinsic::NatLt(left, right) => print_intrinsic_call("Nat/lt", vec![], vec![left, right]),
+        Intrinsic::NatDiv {
             dividend: left,
             divisor: right,
             ..
         } => print_intrinsic_call("Nat/div", vec![], vec![left, right]),
-        curios_core::Intrinsic::NatRem {
+        Intrinsic::NatRem {
             dividend: left,
             divisor: right,
             ..
         } => print_intrinsic_call("Nat/rem", vec![], vec![left, right]),
-        curios_core::Intrinsic::NatLe(left, right) => {
-            print_intrinsic_call("Nat/le", vec![], vec![left, right])
-        }
-        curios_core::Intrinsic::NatAnd(left, right) => {
+        Intrinsic::NatLe(left, right) => print_intrinsic_call("Nat/le", vec![], vec![left, right]),
+        Intrinsic::NatAnd(left, right) => {
             print_intrinsic_call("Nat/and", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::NatOr(left, right) => {
-            print_intrinsic_call("Nat/or", vec![], vec![left, right])
-        }
-        curios_core::Intrinsic::NatXor(left, right) => {
+        Intrinsic::NatOr(left, right) => print_intrinsic_call("Nat/or", vec![], vec![left, right]),
+        Intrinsic::NatXor(left, right) => {
             print_intrinsic_call("Nat/xor", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::NatShl(left, right) => {
+        Intrinsic::NatShl(left, right) => {
             print_intrinsic_call("Nat/shl", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::NatShr(left, right) => {
+        Intrinsic::NatShr(left, right) => {
             print_intrinsic_call("Nat/shr", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::IntType => pure("Int"),
-        curios_core::Intrinsic::Int(value) => pure(format!("{value:+}")),
-        curios_core::Intrinsic::IntEql(left, right) => {
+        Intrinsic::IntType => pure("Int"),
+        Intrinsic::Int(value) => pure(format!("{value:+}")),
+        Intrinsic::IntEql(left, right) => {
             print_intrinsic_call("Int/eql", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::IntNeq(left, right) => {
+        Intrinsic::IntNeq(left, right) => {
             print_intrinsic_call("Int/neq", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::IntAdd(left, right) => {
+        Intrinsic::IntAdd(left, right) => {
             print_intrinsic_call("Int/add", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::IntSub(left, right) => {
+        Intrinsic::IntSub(left, right) => {
             print_intrinsic_call("Int/sub", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::IntMul(left, right) => {
+        Intrinsic::IntMul(left, right) => {
             print_intrinsic_call("Int/mul", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::IntDiv {
+        Intrinsic::IntDiv {
             dividend: left,
             divisor: right,
             ..
         } => print_intrinsic_call("Int/div", vec![], vec![left, right]),
-        curios_core::Intrinsic::IntRem {
+        Intrinsic::IntRem {
             dividend: left,
             divisor: right,
             ..
         } => print_intrinsic_call("Int/rem", vec![], vec![left, right]),
-        curios_core::Intrinsic::IntLt(left, right) => {
-            print_intrinsic_call("Int/lt", vec![], vec![left, right])
-        }
-        curios_core::Intrinsic::IntLe(left, right) => {
-            print_intrinsic_call("Int/le", vec![], vec![left, right])
-        }
-        curios_core::Intrinsic::IntAnd(left, right) => {
+        Intrinsic::IntLt(left, right) => print_intrinsic_call("Int/lt", vec![], vec![left, right]),
+        Intrinsic::IntLe(left, right) => print_intrinsic_call("Int/le", vec![], vec![left, right]),
+        Intrinsic::IntAnd(left, right) => {
             print_intrinsic_call("Int/and", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::IntOr(left, right) => {
-            print_intrinsic_call("Int/or", vec![], vec![left, right])
-        }
-        curios_core::Intrinsic::IntXor(left, right) => {
+        Intrinsic::IntOr(left, right) => print_intrinsic_call("Int/or", vec![], vec![left, right]),
+        Intrinsic::IntXor(left, right) => {
             print_intrinsic_call("Int/xor", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::IntShl(left, right) => {
+        Intrinsic::IntShl(left, right) => {
             print_intrinsic_call("Int/shl", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::IntShr(left, right) => {
+        Intrinsic::IntShr(left, right) => {
             print_intrinsic_call("Int/shr", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::FltType => pure("Flt"),
-        curios_core::Intrinsic::Flt(value) => print_flt(value),
-        curios_core::Intrinsic::FltAdd(rounding, left, right) => {
+        Intrinsic::FltType => pure("Flt"),
+        Intrinsic::Flt(value) => print_flt(value),
+        Intrinsic::FltAdd(rounding, left, right) => {
             print_intrinsic_call(flt_rounded(rounding, "add"), vec![], vec![left, right])
         }
-        curios_core::Intrinsic::FltSub(rounding, left, right) => {
+        Intrinsic::FltSub(rounding, left, right) => {
             print_intrinsic_call(flt_rounded(rounding, "sub"), vec![], vec![left, right])
         }
-        curios_core::Intrinsic::FltMul(rounding, left, right) => {
+        Intrinsic::FltMul(rounding, left, right) => {
             print_intrinsic_call(flt_rounded(rounding, "mul"), vec![], vec![left, right])
         }
-        curios_core::Intrinsic::FltDiv(rounding, left, right) => {
+        Intrinsic::FltDiv(rounding, left, right) => {
             print_intrinsic_call(flt_rounded(rounding, "div"), vec![], vec![left, right])
         }
-        curios_core::Intrinsic::FltRem(left, right) => {
+        Intrinsic::FltRem(left, right) => {
             print_intrinsic_call("Flt/rem", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::FltEql(left, right) => {
+        Intrinsic::FltEql(left, right) => {
             print_intrinsic_call("Flt/eql", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::FltNeq(left, right) => {
+        Intrinsic::FltNeq(left, right) => {
             print_intrinsic_call("Flt/neq", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::FltLt(left, right) => {
-            print_intrinsic_call("Flt/lt", vec![], vec![left, right])
-        }
-        curios_core::Intrinsic::FltLe(left, right) => {
-            print_intrinsic_call("Flt/le", vec![], vec![left, right])
-        }
-        curios_core::Intrinsic::FltMin(left, right) => {
+        Intrinsic::FltLt(left, right) => print_intrinsic_call("Flt/lt", vec![], vec![left, right]),
+        Intrinsic::FltLe(left, right) => print_intrinsic_call("Flt/le", vec![], vec![left, right]),
+        Intrinsic::FltMin(left, right) => {
             print_intrinsic_call("Flt/min", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::FltMax(left, right) => {
+        Intrinsic::FltMax(left, right) => {
             print_intrinsic_call("Flt/max", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::FltNeg(operand) => {
-            print_intrinsic_call("Flt/neg", vec![], vec![operand])
-        }
-        curios_core::Intrinsic::FltAbs(operand) => {
-            print_intrinsic_call("Flt/abs", vec![], vec![operand])
-        }
-        curios_core::Intrinsic::FltFma(rounding, a, b, c) => {
+        Intrinsic::FltNeg(operand) => print_intrinsic_call("Flt/neg", vec![], vec![operand]),
+        Intrinsic::FltAbs(operand) => print_intrinsic_call("Flt/abs", vec![], vec![operand]),
+        Intrinsic::FltFma(rounding, a, b, c) => {
             print_intrinsic_call(flt_rounded(rounding, "fma"), vec![], vec![a, b, c])
         }
-        curios_core::Intrinsic::FltSqrt(rounding, operand) => {
+        Intrinsic::FltSqrt(rounding, operand) => {
             print_intrinsic_call(flt_rounded(rounding, "sqrt"), vec![], vec![operand])
         }
-        curios_core::Intrinsic::FltRoundIntegral(rounding, operand) => print_intrinsic_call(
+        Intrinsic::FltRoundIntegral(rounding, operand) => print_intrinsic_call(
             format!("Flt/{}", rounding.integral_label()),
             vec![],
             vec![operand],
         ),
-        curios_core::Intrinsic::FltCopysign(left, right) => {
+        Intrinsic::FltCopysign(left, right) => {
             print_intrinsic_call("Flt/copysign", vec![], vec![left, right])
         }
-        curios_core::Intrinsic::FltToLeBytes(operand) => {
+        Intrinsic::FltToLeBytes(operand) => {
             print_intrinsic_call("Flt/to_le_bytes", vec![], vec![operand])
         }
-        curios_core::Intrinsic::FltOfLeBytes { bin: operand, .. } => {
+        Intrinsic::FltOfLeBytes { bin: operand, .. } => {
             print_intrinsic_call("Flt/of_le_bytes", vec![], vec![operand])
         }
-        curios_core::Intrinsic::NatToInt(operand) => {
-            print_intrinsic_call("Nat/to_int", vec![], vec![operand])
-        }
-        curios_core::Intrinsic::NatToFlt(Rounding::TiesToEven, operand) => {
+        Intrinsic::NatToInt(operand) => print_intrinsic_call("Nat/to_int", vec![], vec![operand]),
+        Intrinsic::NatToFlt(Rounding::TiesToEven, operand) => {
             print_intrinsic_call("Nat/to_flt", vec![], vec![operand])
         }
-        curios_core::Intrinsic::NatToFlt(rounding, operand) => {
+        Intrinsic::NatToFlt(rounding, operand) => {
             print_intrinsic_call(flt_rounded(rounding, "of_nat"), vec![], vec![operand])
         }
-        curios_core::Intrinsic::ByteType => pure("Byte"),
-        curios_core::Intrinsic::Byte(value) => pure(format!("0x{value:02X}")),
-        curios_core::Intrinsic::ByteToNat(operand) => {
-            print_intrinsic_call("Byte/to_nat", vec![], vec![operand])
-        }
-        curios_core::Intrinsic::NatToByte { nat, .. } => {
-            print_intrinsic_call("Nat/to_byte", vec![], vec![nat])
-        }
-        curios_core::Intrinsic::IntToNat { int: operand, .. } => {
+        Intrinsic::ByteType => pure("Byte"),
+        Intrinsic::Byte(value) => pure(format!("0x{value:02X}")),
+        Intrinsic::ByteToNat(operand) => print_intrinsic_call("Byte/to_nat", vec![], vec![operand]),
+        Intrinsic::NatToByte { nat, .. } => print_intrinsic_call("Nat/to_byte", vec![], vec![nat]),
+        Intrinsic::IntToNat { int: operand, .. } => {
             print_intrinsic_call("Int/to_nat", vec![], vec![operand])
         }
-        curios_core::Intrinsic::IntToFlt(Rounding::TiesToEven, operand) => {
+        Intrinsic::IntToFlt(Rounding::TiesToEven, operand) => {
             print_intrinsic_call("Int/to_flt", vec![], vec![operand])
         }
-        curios_core::Intrinsic::IntToFlt(rounding, operand) => {
+        Intrinsic::IntToFlt(rounding, operand) => {
             print_intrinsic_call(flt_rounded(rounding, "of_int"), vec![], vec![operand])
         }
-        curios_core::Intrinsic::FltToNat { flt: operand, .. } => {
+        Intrinsic::FltToNat { flt: operand, .. } => {
             print_intrinsic_call("Flt/to_nat", vec![], vec![operand])
         }
-        curios_core::Intrinsic::FltToInt { flt: operand, .. } => {
+        Intrinsic::FltToInt { flt: operand, .. } => {
             print_intrinsic_call("Flt/to_int", vec![], vec![operand])
         }
-        curios_core::Intrinsic::FltMantissa { flt: operand, .. } => {
+        Intrinsic::FltMantissa { flt: operand, .. } => {
             print_intrinsic_call("Flt/mantissa", vec![], vec![operand])
         }
-        curios_core::Intrinsic::FltExponent { flt: operand, .. } => {
+        Intrinsic::FltExponent { flt: operand, .. } => {
             print_intrinsic_call("Flt/exponent", vec![], vec![operand])
         }
-        curios_core::Intrinsic::BinType(grain) => pure(match grain {
+        Intrinsic::BinType(grain) => pure(match grain {
             Grain::B => "Bits",
             Grain::X => "Bytes",
         }),
         // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization — a constant atom is a numeral term and prints as written. An empty segment list prints `b[]`/`x[]` on its own.
         // A packed value no source wrote: its atoms, in the grain it is read at.
-        curios_core::Intrinsic::Bin(grain, value) => {
+        Intrinsic::Bin(grain, value) => {
             let (open, atoms) = match grain {
                 Grain::B => (
                     "b[",
@@ -908,7 +882,7 @@ fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
 
             listed(open, atoms, "]")
         }
-        curios_core::Intrinsic::BinLen(grain, operand) => print_intrinsic_call(
+        Intrinsic::BinLen(grain, operand) => print_intrinsic_call(
             format!(
                 "{}/len",
                 match grain {
@@ -919,7 +893,7 @@ fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
             vec![],
             vec![operand],
         ),
-        curios_core::Intrinsic::BinEql(grain, left, right) => print_intrinsic_call(
+        Intrinsic::BinEql(grain, left, right) => print_intrinsic_call(
             format!(
                 "{}/eql",
                 match grain {
@@ -930,7 +904,7 @@ fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
             vec![],
             vec![left, right],
         ),
-        curios_core::Intrinsic::BinGet {
+        Intrinsic::BinGet {
             grain,
             bin,
             index,
@@ -946,7 +920,7 @@ fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
             vec![],
             vec![bin, index],
         ),
-        curios_core::Intrinsic::BinSlice {
+        Intrinsic::BinSlice {
             grain,
             bin,
             start,
@@ -963,7 +937,7 @@ fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
             vec![],
             vec![bin, start, length],
         ),
-        curios_core::Intrinsic::BinAppend {
+        Intrinsic::BinAppend {
             grain,
             bin,
             element: atom,
@@ -978,7 +952,7 @@ fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
             vec![],
             vec![bin, atom],
         ),
-        curios_core::Intrinsic::BinReinterp {
+        Intrinsic::BinReinterp {
             grain,
             bin,
             aligned: _,
@@ -990,7 +964,7 @@ fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
             vec![],
             vec![bin],
         ),
-        curios_core::Intrinsic::BinReplicate { grain, count, atom } => print_intrinsic_call(
+        Intrinsic::BinReplicate { grain, count, atom } => print_intrinsic_call(
             format!(
                 "{}/replicate",
                 match grain {
@@ -1001,7 +975,7 @@ fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
             vec![],
             vec![count, atom],
         ),
-        curios_core::Intrinsic::BinAnd {
+        Intrinsic::BinAnd {
             grain,
             left,
             right,
@@ -1017,7 +991,7 @@ fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
             vec![],
             vec![left, right],
         ),
-        curios_core::Intrinsic::BinOr {
+        Intrinsic::BinOr {
             grain,
             left,
             right,
@@ -1033,7 +1007,7 @@ fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
             vec![],
             vec![left, right],
         ),
-        curios_core::Intrinsic::BinXor {
+        Intrinsic::BinXor {
             grain,
             left,
             right,
@@ -1049,7 +1023,7 @@ fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
             vec![],
             vec![left, right],
         ),
-        curios_core::Intrinsic::BinConcat { grain, operands } => print_intrinsic_call(
+        Intrinsic::BinConcat { grain, operands } => print_intrinsic_call(
             format!(
                 "{}/concat",
                 match grain {
@@ -1060,43 +1034,43 @@ fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
             vec![],
             operands,
         ),
-        curios_core::Intrinsic::ListType(elem) => print_intrinsic_call("List", vec![], vec![elem]),
-        curios_core::Intrinsic::List { items, .. } => {
+        Intrinsic::ListType(elem) => print_intrinsic_call("List", vec![], vec![elem]),
+        Intrinsic::List { items, .. } => {
             listed("[", items.into_iter().map(print_term).collect(), "]")
         }
-        curios_core::Intrinsic::ListLen {
+        Intrinsic::ListLen {
             element: ty,
             list: operand,
         } => print_intrinsic_call("List/len", vec![ty], vec![operand]),
-        curios_core::Intrinsic::ListGet {
+        Intrinsic::ListGet {
             element: ty,
             list,
             index,
             in_range: _,
         } => print_intrinsic_call("List/get", vec![ty], vec![list, index]),
-        curios_core::Intrinsic::ListSlice {
+        Intrinsic::ListSlice {
             element: ty,
             list,
             start,
             length,
             within: _,
         } => print_intrinsic_call("List/slice", vec![ty], vec![list, start, length]),
-        curios_core::Intrinsic::ListAppend {
+        Intrinsic::ListAppend {
             element: ty,
             list,
             item: elem,
         } => print_intrinsic_call("List/append", vec![ty], vec![list, elem]),
-        curios_core::Intrinsic::ListConcat {
+        Intrinsic::ListConcat {
             element: ty,
             operands,
         } => print_intrinsic_call("List/concat", vec![ty], operands),
-        curios_core::Intrinsic::ListMap {
+        Intrinsic::ListMap {
             from: a,
             to: b,
             list,
             function: f,
         } => print_intrinsic_call("List/map", vec![a, b], vec![list, f]),
-        curios_core::Intrinsic::ListFold {
+        Intrinsic::ListFold {
             element,
             result,
             list,
@@ -1107,58 +1081,54 @@ fn print_operation(intrinsic: curios_core::Intrinsic<Term>) -> Printer {
             vec![element, result],
             vec![list, init, function],
         ),
-        curios_core::Intrinsic::HandleType => pure("Handle"),
+        Intrinsic::HandleType => pure("Handle"),
         // The three `/sys/Handle` constants are the only handles a `/sys` body plants; the last arm spells a token no source can write rather than fail the print.
-        curios_core::Intrinsic::Handle(stdio::STDIN) => pure("Handle/stdin"),
-        curios_core::Intrinsic::Handle(stdio::STDOUT) => pure("Handle/stdout"),
-        curios_core::Intrinsic::Handle(stdio::STDERR) => pure("Handle/stderr"),
-        curios_core::Intrinsic::Handle(token) => pure(format!("Handle({token})")),
-        curios_core::Intrinsic::CellType(elem) => print_intrinsic_call("Cell", vec![], vec![elem]),
-        curios_core::Intrinsic::ChannelType(elem) => {
-            print_intrinsic_call("Channel", vec![], vec![elem])
-        }
-        curios_core::Intrinsic::Cell { element } => {
-            print_intrinsic_call("Cell/new", vec![element], vec![])
-        }
-        curios_core::Intrinsic::CellFill {
+        Intrinsic::Handle(stdio::STDIN) => pure("Handle/stdin"),
+        Intrinsic::Handle(stdio::STDOUT) => pure("Handle/stdout"),
+        Intrinsic::Handle(stdio::STDERR) => pure("Handle/stderr"),
+        Intrinsic::Handle(token) => pure(format!("Handle({token})")),
+        Intrinsic::CellType(elem) => print_intrinsic_call("Cell", vec![], vec![elem]),
+        Intrinsic::ChannelType(elem) => print_intrinsic_call("Channel", vec![], vec![elem]),
+        Intrinsic::Cell { element } => print_intrinsic_call("Cell/new", vec![element], vec![]),
+        Intrinsic::CellFill {
             element,
             cell,
             value,
         } => print_intrinsic_call("Cell/fill", vec![element], vec![cell, value]),
-        curios_core::Intrinsic::CellPoll { element, cell, .. } => {
+        Intrinsic::CellPoll { element, cell, .. } => {
             print_intrinsic_call("Cell/poll", vec![element], vec![cell])
         }
-        curios_core::Intrinsic::Channel {
+        Intrinsic::Channel {
             element,
             capacity,
             positive,
         } => print_intrinsic_call("Channel/new", vec![element], vec![capacity, positive]),
-        curios_core::Intrinsic::ChannelPush {
+        Intrinsic::ChannelPush {
             element,
             channel,
             value,
         } => print_intrinsic_call("Channel/push", vec![element], vec![channel, value]),
-        curios_core::Intrinsic::ChannelTake {
+        Intrinsic::ChannelTake {
             element, channel, ..
         } => print_intrinsic_call("Channel/take", vec![element], vec![channel]),
-        curios_core::Intrinsic::ChannelClose { element, channel } => {
+        Intrinsic::ChannelClose { element, channel } => {
             print_intrinsic_call("Channel/close", vec![element], vec![channel])
         }
-        curios_core::Intrinsic::ChannelClosed { element, channel } => {
+        Intrinsic::ChannelClosed { element, channel } => {
             print_intrinsic_call("Channel/closed", vec![element], vec![channel])
         }
-        curios_core::Intrinsic::ChannelCount { element, channel } => {
+        Intrinsic::ChannelCount { element, channel } => {
             print_intrinsic_call("Channel/count", vec![element], vec![channel])
         }
-        curios_core::Intrinsic::ChannelCapacity { element, channel } => {
+        Intrinsic::ChannelCapacity { element, channel } => {
             print_intrinsic_call("Channel/capacity", vec![element], vec![channel])
         }
-        curios_core::Intrinsic::IoType(result) => print_intrinsic_call("Io", vec![], vec![result]),
-        curios_core::Intrinsic::IoPure {
+        Intrinsic::IoType(result) => print_intrinsic_call("Io", vec![], vec![result]),
+        Intrinsic::IoPure {
             result: type_,
             value,
         } => print_intrinsic_call("Io/pure", vec![type_], vec![value]),
-        curios_core::Intrinsic::IoBind {
+        Intrinsic::IoBind {
             from,
             to,
             action,
@@ -1291,7 +1261,7 @@ fn print_operand(term: Term, min_prec: u8) -> Printer {
 /// [`print_operand`] for the head of an application, projection, or bang — a position above every operator, so any infix parenthesizes. A numeric literal parenthesizes too: `(1).0` must not reprint as the float literal `1.0`.
 fn print_suffix_head(term: Term) -> Printer {
     match term.as_subterm() {
-        Subterm::NumLit(_) | Subterm::Intrinsic(Intrinsic::Flt(_)) => {
+        Subterm::NumLit(_) | Subterm::Literal(Literal::Flt(_)) => {
             flat([pure("("), print_term(term), pure(")")])
         }
         _ => print_operand(term, u8::MAX),
@@ -1302,8 +1272,8 @@ fn print_term_inner(term: Term) -> Printer {
     match term.into_subterm() {
         Subterm::Type => pure("Type"),
         Subterm::Prop => pure("Prop"),
+        Subterm::Literal(literal) => print_literal(literal),
         Subterm::Intrinsic(intrinsic) => print_intrinsic(intrinsic),
-        Subterm::Operation(intrinsic) => print_operation(intrinsic),
         // A builtin row surfaces under its `/sys` subject (`Handle/write`); a user's `foreign` declaration under the name they gave it.
         Subterm::Foreign(function, args) => {
             let name = match function.subject() {

@@ -15,15 +15,15 @@ fn integer_literals_are_polymorphic_num_lits() {
     assert_eq!("-42".parse::<Term>().unwrap(), num_lit(42, Sign::Negative));
     assert_eq!(
         "42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(42.0))))
+        Term::from(Subterm::Literal(Literal::Flt(Floating::from(42.0))))
     );
     assert_eq!(
         "+42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(42.0))))
+        Term::from(Subterm::Literal(Literal::Flt(Floating::from(42.0))))
     );
     assert_eq!(
         "-42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(-42.0))))
+        Term::from(Subterm::Literal(Literal::Flt(Floating::from(-42.0))))
     );
 }
 
@@ -68,28 +68,28 @@ fn rejects_a_float_literal_that_overflows_to_infinity() {
     // The largest finite magnitudes still parse, and the pair below brackets the rounding threshold — `2^1024 − 2^970`, which sits *above* the largest finite value. A numeral under it narrows to that value; one over it is an overflow. Both were taken from the model's own oracle table against `str::parse::<f64>`, not from arithmetic done in prose.
     assert_eq!(
         "1.7e308".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(1.7e308))))
+        Term::from(Subterm::Literal(Literal::Flt(Floating::from(1.7e308))))
     );
     assert_eq!(
         "1.7976931348623157e308".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(f64::MAX))))
+        Term::from(Subterm::Literal(Literal::Flt(Floating::from(f64::MAX))))
     );
     assert!("1.7976931348623159e308".parse::<Term>().is_err());
     // A subnormal narrows on the `2^-1074` grid rather than flushing to zero, and one below half that grid step rounds away.
     assert_eq!(
         "5.0e-324".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(5.0e-324))))
+        Term::from(Subterm::Literal(Literal::Flt(Floating::from(5.0e-324))))
     );
     assert_eq!(
         "1.0e-324".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(0.0))))
+        Term::from(Subterm::Literal(Literal::Flt(Floating::from(0.0))))
     );
 }
 
 /// The values no decimal spells have signed literals of their own: the infinities, and the default NaN with its sign clear and set. Unsigned, `inf.0` is a projection of a binder named `inf`, and nothing may be glued after the `.0`.
 #[test]
 fn the_non_finite_values_are_signed_literals() {
-    let flt = |value: Floating| Term::from(Subterm::Intrinsic(Intrinsic::Flt(value)));
+    let flt = |value: Floating| Term::from(Subterm::Literal(Literal::Flt(value)));
     let negative = |value: Floating| value.copysign(Floating::infinite(true));
 
     assert_eq!(
@@ -108,7 +108,7 @@ fn the_non_finite_values_are_signed_literals() {
 
     assert!(!matches!(
         &*"inf.0".parse::<Term>().unwrap(),
-        Subterm::Intrinsic(Intrinsic::Flt(_))
+        Subterm::Literal(Literal::Flt(_))
     ));
     assert!("+inf.05".parse::<Term>().is_err());
     assert!("+nan.0x".parse::<Term>().is_err());
@@ -394,7 +394,7 @@ fn list_literal_spread_entries() {
     // Spreads splice anywhere, any count; plain elements stay `Elem`.
     assert_eq!(
         "[1, ..xs, 2]".parse::<Term>().unwrap(),
-        Subterm::Intrinsic(Intrinsic::List(vec![
+        Subterm::Literal(Literal::List(vec![
             ListEntry::Elem(nat(1)),
             ListEntry::Spread(name("xs")),
             ListEntry::Elem(nat(2)),
@@ -403,7 +403,7 @@ fn list_literal_spread_entries() {
     );
     assert_eq!(
         "[..xs, ..ys]".parse::<Term>().unwrap(),
-        Subterm::Intrinsic(Intrinsic::List(vec![
+        Subterm::Literal(Literal::List(vec![
             ListEntry::Spread(name("xs")),
             ListEntry::Spread(name("ys")),
         ]))
@@ -424,7 +424,7 @@ fn bin_literal_spread_segments() {
     // Constant atoms are ordinary numeral terms around the spread segments: the surface keeps what was written, and lowering folds adjacent constants into packed runs.
     assert_eq!(
         r"x[0, ..xs, 1]".parse::<Term>().unwrap(),
-        Subterm::Intrinsic(Intrinsic::Bin(
+        Subterm::Literal(Literal::Bin(
             Grain::X,
             vec![
                 BinSegment::Atom(num_lit(0, Sign::Unmarked)),
@@ -436,7 +436,7 @@ fn bin_literal_spread_segments() {
     );
     assert_eq!(
         r"x[0, 1, ..x, 2, 3]".parse::<Term>().unwrap(),
-        Subterm::Intrinsic(Intrinsic::Bin(
+        Subterm::Literal(Literal::Bin(
             Grain::X,
             vec![
                 BinSegment::Atom(num_lit(0, Sign::Unmarked)),
@@ -452,7 +452,7 @@ fn bin_literal_spread_segments() {
     // A spread operand is an ordinary term: projections and absolute paths need no special grammar.
     assert_eq!(
         r"x[..hdr.bytes]".parse::<Term>().unwrap(),
-        Subterm::Intrinsic(Intrinsic::Bin(
+        Subterm::Literal(Literal::Bin(
             Grain::X,
             vec![BinSegment::Spread(
                 Subterm::Proj(Proj {
@@ -465,7 +465,7 @@ fn bin_literal_spread_segments() {
         .into()
     );
     let term = r"x[../std/x]".parse::<Term>().unwrap();
-    let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Literal(Literal::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     let BinSegment::Spread(operand) = &segments[0] else {
@@ -475,7 +475,7 @@ fn bin_literal_spread_segments() {
 
     // Commas delimit, so an operand that a tight grammar could only take parenthesized — an infix chain — is written bare.
     let term = r"x[..x + y, 0x01]".parse::<Term>().unwrap();
-    let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Literal(Literal::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
@@ -485,7 +485,7 @@ fn bin_literal_spread_segments() {
         matches!(&segments[1], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
     );
     let term = r"x[..read()!, 0x01]".parse::<Term>().unwrap();
-    let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Literal(Literal::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
@@ -495,11 +495,11 @@ fn bin_literal_spread_segments() {
     // Each grain has an empty literal, spelled like `[]` behind its grain letter.
     assert_eq!(
         "x[]".parse::<Term>().unwrap(),
-        Subterm::Intrinsic(Intrinsic::Bin(Grain::X, vec![])).into()
+        Subterm::Literal(Literal::Bin(Grain::X, vec![])).into()
     );
     assert_eq!(
         "b[]".parse::<Term>().unwrap(),
-        Subterm::Intrinsic(Intrinsic::Bin(Grain::B, vec![])).into()
+        Subterm::Literal(Literal::Bin(Grain::B, vec![])).into()
     );
 
     // Past the `[` the literal lexes like any other bracketed list: interior whitespace is invisible and one trailing comma is admitted.
@@ -551,7 +551,7 @@ fn bin_literal_atom_segments() {
     // A bare term entry splices one generator; constant and non-constant atoms alike stay entries, in either grain.
     assert_eq!(
         r"x[72, b, 0]".parse::<Term>().unwrap(),
-        Subterm::Intrinsic(Intrinsic::Bin(
+        Subterm::Literal(Literal::Bin(
             Grain::X,
             vec![
                 BinSegment::Atom(num_lit(72, Sign::Unmarked)),
@@ -563,7 +563,7 @@ fn bin_literal_atom_segments() {
     );
     assert_eq!(
         r"b[1, flag, 0]".parse::<Term>().unwrap(),
-        Subterm::Intrinsic(Intrinsic::Bin(
+        Subterm::Literal(Literal::Bin(
             Grain::B,
             vec![
                 BinSegment::Atom(num_lit(1, Sign::Unmarked)),
@@ -575,13 +575,13 @@ fn bin_literal_atom_segments() {
     );
     assert_eq!(
         r"x[b]".parse::<Term>().unwrap(),
-        Subterm::Intrinsic(Intrinsic::Bin(Grain::X, vec![BinSegment::Atom(name("b"))])).into()
+        Subterm::Literal(Literal::Bin(Grain::X, vec![BinSegment::Atom(name("b"))])).into()
     );
 
     // `..` marks the spread; without it the same operand contributes a single atom.
     assert_eq!(
         r"x[..xs, b]".parse::<Term>().unwrap(),
-        Subterm::Intrinsic(Intrinsic::Bin(
+        Subterm::Literal(Literal::Bin(
             Grain::X,
             vec![BinSegment::Spread(name("xs")), BinSegment::Atom(name("b")),]
         ))
@@ -590,7 +590,7 @@ fn bin_literal_atom_segments() {
 
     // An atom operand is an ordinary term, exactly as a spread operand is.
     let term = r"x[hdr.byte, 0x01]".parse::<Term>().unwrap();
-    let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Literal(Literal::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
@@ -600,7 +600,7 @@ fn bin_literal_atom_segments() {
         matches!(&segments[1], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
     );
     let term = r"x[f( x , y ), 0x01]".parse::<Term>().unwrap();
-    let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Literal(Literal::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
@@ -609,7 +609,7 @@ fn bin_literal_atom_segments() {
 
     // A numeral is the only constant spelling, and it stays an `Atom` here: the surface keeps what was written — radix included — and `into_core` folds constants into packed runs.
     let term = r"x[0x48, 0x69]".parse::<Term>().unwrap();
-    let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Literal(Literal::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(

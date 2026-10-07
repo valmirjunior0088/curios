@@ -2,9 +2,9 @@ use {
     super::{Context, MatchCompiler},
     crate::{
         Apply, BinSegment, Choose, ChooseTest, Error, Field, FuncParam, FuncTypeParam, Intrinsic,
-        Label, Let, LetBinding, LetGroup, LetSignature, Lint, LintedBinder, ListEntry, Name,
-        NumLit, Pattern, PatternField, ProofLiteral, StructLit, StructLitEntry, Subterm, Term,
-        func_sugar_params, func_sugar_type_params,
+        Label, Let, LetBinding, LetGroup, LetSignature, Lint, LintedBinder, ListEntry, Literal,
+        Name, NumLit, Pattern, PatternField, ProofLiteral, StructLit, StructLitEntry, Subterm,
+        Term, func_sugar_params, func_sugar_type_params,
     },
     curios_num::{Binary, Grain},
     curios_utilities::{Plicity, Span, recurse},
@@ -356,10 +356,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Derive => curios_core::Term::derive(),
             // A registry-synthesized literal (string or list) desugars via the meta-emitter to a proof-carrying construction (see `proof_literal`), never a core intrinsic.
             Subterm::ProofLiteral(literal) => self.proof_literal(literal)?,
+            Subterm::Literal(literal) => curios_core::Term::intrinsic(self.literal(literal)?),
             Subterm::Intrinsic(intrinsic) => {
-                curios_core::Term::intrinsic(self.intrinsic(intrinsic)?)
-            }
-            Subterm::Operation(intrinsic) => {
                 curios_core::Term::intrinsic(intrinsic.try_map(&mut |operand| self.term(operand))?)
             }
             Subterm::Foreign(function, args) => curios_core::Term::foreign(
@@ -815,11 +813,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 self.collect(&infix.right, binds)?,
             ),
             // An `List` literal's elements and spread operands hoist their bangs into this region, like an application's arguments.
-            Subterm::Intrinsic(Intrinsic::List(entries)) => curios_core::Term::intrinsic(
+            Subterm::Literal(Literal::List(entries)) => curios_core::Term::intrinsic(
                 self.lower_list_literal(entries, |term| self.collect(term, binds))?,
             ),
             // A `Bits`/`Bytes` literal's spread operands hoist likewise (a spread-free literal has no subterms and lowers unchanged).
-            Subterm::Intrinsic(Intrinsic::Bin(grain, segments)) => {
+            Subterm::Literal(Literal::Bin(grain, segments)) => {
                 curios_core::Term::intrinsic(Self::lower_bin_literal(*grain, segments, |term| {
                     self.collect(term, binds)
                 })?)
@@ -1172,7 +1170,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// A written sign excludes `Byte` (see `syntax.md`), and a magnitude past `255` is a type error elaboration should report against the expected element type rather than one this fold silently truncates; both stay atoms.
     fn bin_constant_atom(grain: Grain, term: &Term) -> Option<u8> {
         match (grain, term.as_subterm()) {
-            (Grain::B, Subterm::Intrinsic(Intrinsic::Bool(bit))) => Some(u8::from(*bit)),
+            (Grain::B, Subterm::Literal(Literal::Bool(bit))) => Some(u8::from(*bit)),
             // Only `0` and `1` are bits; anything else stays an atom term, so elaboration owns the range refusal exactly as it does for an out-of-range byte below.
             (
                 Grain::B,
@@ -1183,7 +1181,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 true => None,
                 false => u8::try_from(magnitude).ok().filter(|bit| *bit <= 1),
             },
-            (Grain::X, Subterm::Operation(curios_core::Intrinsic::Byte(byte))) => Some(*byte),
+            (Grain::X, Subterm::Intrinsic(Intrinsic::Byte(byte))) => Some(*byte),
             (
                 Grain::X,
                 Subterm::NumLit(NumLit {
@@ -1273,15 +1271,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         Ok(curios_core::Intrinsic::BinConcat { grain, operands })
     }
 
-    pub(super) fn intrinsic(&self, intrinsic: &Intrinsic) -> Result<curios_core::Intrinsic, Error> {
-        Ok(match intrinsic {
-            Intrinsic::Bool(b) => curios_core::Intrinsic::Bool(*b),
-            Intrinsic::Flt(flt) => curios_core::Intrinsic::Flt(*flt),
+    pub(super) fn literal(&self, literal: &Literal) -> Result<curios_core::Intrinsic, Error> {
+        Ok(match literal {
+            Literal::Bool(b) => curios_core::Intrinsic::Bool(*b),
+            Literal::Flt(flt) => curios_core::Intrinsic::Flt(*flt),
             // `\hex` is a raw byte sequence; `\..` segments splice other `Bin`s.
-            Intrinsic::Bin(grain, segments) => {
+            Literal::Bin(grain, segments) => {
                 Self::lower_bin_literal(*grain, segments, |term| self.term(term))?
             }
-            Intrinsic::List(entries) => self.lower_list_literal(entries, |term| self.term(term))?,
+            Literal::List(entries) => self.lower_list_literal(entries, |term| self.term(term))?,
         })
     }
 }

@@ -1,5 +1,5 @@
 use {
-    super::{Intrinsic, Label, Name, Radix, parse_term, parse_whitespace, print_term},
+    super::{Intrinsic, Label, Literal, Name, Radix, parse_term, parse_whitespace, print_term},
     curios_abi::ForeignFunction,
     curios_num::{Grain, Natural},
     curios_parse::{ParserError, run_parser, take_eof},
@@ -496,7 +496,7 @@ pub struct Infix {
     pub right: Term,
 }
 
-/// A surface polymorphic numeric literal: an integer `magnitude` with an optional written sign. Its concrete type (`Nat`/`Int`/`Flt`) is chosen during elaboration. The `radix` is retained only so the printer round-trips the written form (`0xC2` back to `0xC2`); lowering to core drops it. Decimal literals are not `NumLit`; they parse to `Intrinsic::Flt`.
+/// A surface polymorphic numeric literal: an integer `magnitude` with an optional written sign. Its concrete type (`Nat`/`Int`/`Flt`) is chosen during elaboration. The `radix` is retained only so the printer round-trips the written form (`0xC2` back to `0xC2`); lowering to core drops it. Decimal literals are not `NumLit`; they parse to `Literal::Flt`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumLit {
     pub magnitude: Natural,
@@ -509,9 +509,10 @@ pub struct NumLit {
 pub enum Subterm {
     Type,
     Prop,
+    /// A literal as written (see [`Literal`]).
+    Literal(Literal),
+    /// One of core's intrinsics over surface operands (see [`Intrinsic`]). Never parsed — the `/sys` roster plants it — and lowered by lowering its operands.
     Intrinsic(Intrinsic),
-    /// One of core's intrinsics over surface operands: a type former, an operation or a literal no source spells. Never parsed — the `/sys` roster plants it in a declaration's body or type — and lowered by mapping its operands.
-    Operation(curios_core::Intrinsic<Term>),
     /// A store-described host call; the prelude bakes it into the `/sys` declaration whose parameters the argument terms name. A term former rather than an [`Intrinsic`] variant, mirroring `curios_core::Subterm::Foreign` — its signature comes from the ABI row it carries, not from a roster this crate spells.
     Foreign(Arc<ForeignFunction>, Vec<Term>),
     /// A store-described row taken as the function of its operands: what a `foreign` declaration binds. Its operands have no names for a call to write, so the lowering opens one binder for each, by position in the row.

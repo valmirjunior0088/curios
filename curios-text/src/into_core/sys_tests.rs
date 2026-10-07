@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{LetSignature, Subterm, Term, TopItem, sys_module},
+    crate::{Intrinsic, LetSignature, Subterm, Term, TopItem, sys_module},
     curios_abi::host_ops,
 };
 
@@ -174,10 +174,7 @@ fn allows_pub_root_module_via_absolute_path() {
 fn the_sys_io_roster_offers_no_eliminator() {
     /// Whether a signature's type is headed by `Io`, which is the only shape that matters here: `/sys` states its effect types directly rather than behind an alias, so a domain that is an `Io` is written as one.
     fn is_io(term: &Term) -> bool {
-        matches!(
-            &**term,
-            Subterm::Operation(curios_core::Intrinsic::IoType(_))
-        )
+        matches!(&**term, Subterm::Intrinsic(Intrinsic::IoType(_)))
     }
 
     /// Every `let` in the module tree, flattened — a nested module is walked rather than skipped, so a later `/sys` submodule cannot host an eliminator out of view.

@@ -1,7 +1,7 @@
 use {
     super::{parse_keyword, parse_literal},
     crate::{
-        BinSegment, Intrinsic, ListEntry, NatLiteral, NumLit, ProofLiteral, Radix, StrLit, Subterm,
+        BinSegment, ListEntry, Literal, NatLiteral, NumLit, ProofLiteral, Radix, StrLit, Subterm,
         Term, parse_term, parse_whitespace,
     },
     curios_num::{Floating, Grain, Natural},
@@ -120,7 +120,7 @@ pub(super) fn parse_nat_digits<'a>() -> Parser<'a, NatLiteral> {
 pub(super) fn parse_flt_value<'a>() -> Parser<'a, Term> {
     parse_non_finite_flt()
         .or(parse_decimal_flt())
-        .map(|value| Subterm::Intrinsic(Intrinsic::Flt(value)))
+        .map(|value| Subterm::Literal(Literal::Flt(value)))
         .map(Into::into)
 }
 
@@ -484,7 +484,7 @@ fn parse_bin_literal_grain<'a>(grain: Grain, prefix: &'static str) -> Parser<'a,
         .and_keep(commit(
             sep_by0_trailing(parse_bin_entry, || parse_literal(",")).and_drop(parse_literal("]")),
         ))
-        .map(move |segments| Subterm::Intrinsic(Intrinsic::Bin(grain, segments)))
+        .map(move |segments| Subterm::Literal(Literal::Bin(grain, segments)))
         .map(Into::into)
 }
 
@@ -496,19 +496,19 @@ pub(super) fn parse_list_entry<'a>() -> Parser<'a, ListEntry> {
         .or(lazy(parse_term).map(ListEntry::Elem))
 }
 
-// An `List` literal `[e0, ..rest, e1, …]` (empty `[]`) — the native contiguous-sequence sibling of the packed binary literals. Builds an `Intrinsic::List` directly (the element type is an implicit the literal cannot name; core elaboration infers it); spreads splice in place, any position and count.
+// An `List` literal `[e0, ..rest, e1, …]` (empty `[]`) — the native contiguous-sequence sibling of the packed binary literals. Builds a `Literal::List` directly (the element type is an implicit the literal cannot name; core elaboration infers it); spreads splice in place, any position and count.
 pub(super) fn parse_list_literal<'a>() -> Parser<'a, Term> {
     parse_literal("[")
         .and_keep(sep_by0_trailing(parse_list_entry, || parse_literal(",")))
         .and_drop(parse_literal("]"))
-        .map(|entries| Subterm::Intrinsic(Intrinsic::List(entries)))
+        .map(|entries| Subterm::Literal(Literal::List(entries)))
         .map(Into::into)
 }
 
 pub(super) fn parse_bool_intrinsic<'a>() -> Parser<'a, Term> {
     parse_keyword("false")
-        .map(|()| Subterm::Intrinsic(Intrinsic::Bool(false)))
-        .or(parse_keyword("true").map(|()| Subterm::Intrinsic(Intrinsic::Bool(true))))
+        .map(|()| Subterm::Literal(Literal::Bool(false)))
+        .or(parse_keyword("true").map(|()| Subterm::Literal(Literal::Bool(true))))
         .map(Into::into)
 }
 

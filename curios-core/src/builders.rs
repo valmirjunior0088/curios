@@ -99,15 +99,6 @@ impl Intrinsic {
         Self::IntMul(left.into(), right.into())
     }
 
-    /// An `IntNeq` node from anything term-shaped.
-    pub fn int_neq<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntNeq(left.into(), right.into())
-    }
-
     /// An `IntDiv` node from anything term-shaped.
     pub fn int_div<F, S, P>(left: F, right: S, non_zero: P) -> Self
     where
@@ -136,42 +127,6 @@ impl Intrinsic {
         }
     }
 
-    /// An `IntLt` node from anything term-shaped.
-    pub fn int_lt<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntLt(left.into(), right.into())
-    }
-
-    /// An `IntLe` node from anything term-shaped.
-    pub fn int_lte<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntLe(left.into(), right.into())
-    }
-
-    /// A `FltAdd` node rounded in `rounding`, from anything term-shaped.
-    pub fn flt_add<F, S>(rounding: Rounding, left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltAdd(rounding, left.into(), right.into())
-    }
-
-    /// A `FltSub` node rounded in `rounding`, from anything term-shaped.
-    pub fn flt_sub<F, S>(rounding: Rounding, left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltSub(rounding, left.into(), right.into())
-    }
-
     /// A `FltMul` node rounded in `rounding`, from anything term-shaped.
     pub fn flt_mul<F, S>(rounding: Rounding, left: F, right: S) -> Self
     where
@@ -187,22 +142,6 @@ impl Intrinsic {
         T: Into<Term>,
     {
         Self::FltNeg(inner.into())
-    }
-
-    /// A `FltAbs` node from anything term-shaped.
-    pub fn flt_abs<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltAbs(inner.into())
-    }
-
-    /// A `FltSqrt` node rounded in `rounding`, from anything term-shaped.
-    pub fn flt_sqrt<T>(rounding: Rounding, inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltSqrt(rounding, inner.into())
     }
 
     /// A `FltFma` node, `a · b + c` rounded once in `rounding`, from anything term-shaped.
@@ -232,78 +171,12 @@ impl Intrinsic {
         Self::FltDiv(rounding, left.into(), right.into())
     }
 
-    /// A `FltMin` node from anything term-shaped.
-    pub fn flt_min<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltMin(left.into(), right.into())
-    }
-
-    /// A `FltMax` node from anything term-shaped.
-    pub fn flt_max<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltMax(left.into(), right.into())
-    }
-
-    /// A `FltEql` node from anything term-shaped.
-    pub fn flt_eql<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltEql(left.into(), right.into())
-    }
-
-    /// A `FltNeq` node from anything term-shaped.
-    pub fn flt_neq<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltNeq(left.into(), right.into())
-    }
-
-    /// A `FltLt` node from anything term-shaped.
-    pub fn flt_lt<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltLt(left.into(), right.into())
-    }
-
-    /// A `FltLe` node from anything term-shaped.
-    pub fn flt_lte<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltLe(left.into(), right.into())
-    }
-
     /// A `NatToInt` conversion node from anything term-shaped.
     pub fn nat_to_int<T>(inner: T) -> Self
     where
         T: Into<Term>,
     {
         Self::NatToInt(inner.into())
-    }
-
-    /// An `IntToNat` conversion node from anything term-shaped, with the proof that its operand is non-negative.
-    pub fn int_to_nat<T, P>(int: T, non_neg: P) -> Self
-    where
-        T: Into<Term>,
-        P: Into<Term>,
-    {
-        Self::IntToNat {
-            int: int.into(),
-            non_neg: non_neg.into(),
-        }
     }
 
     /// A `NatToByte` conversion node from anything term-shaped, with the proof that its operand is below `256`.
@@ -315,119 +188,6 @@ impl Intrinsic {
         Self::NatToByte {
             nat: nat.into(),
             below: below.into(),
-        }
-    }
-
-    /// An `IntToFlt` conversion node rounded in `rounding`, from anything term-shaped.
-    pub fn int_to_flt<T>(rounding: Rounding, inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::IntToFlt(rounding, inner.into())
-    }
-
-    /// A `NatToFlt` conversion node rounded in `rounding`, from anything term-shaped.
-    pub fn nat_to_flt<T>(rounding: Rounding, inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::NatToFlt(rounding, inner.into())
-    }
-
-    /// A `FltToInt` conversion node from anything term-shaped.
-    pub fn flt_to_int<T, P>(flt: T, finite: P) -> Self
-    where
-        T: Into<Term>,
-        P: Into<Term>,
-    {
-        Self::FltToInt {
-            flt: flt.into(),
-            finite: finite.into(),
-        }
-    }
-
-    /// A `FltMantissa` node from anything term-shaped, with the proof that its operand is a number.
-    pub fn flt_mantissa<T, P>(flt: T, finite: P) -> Self
-    where
-        T: Into<Term>,
-        P: Into<Term>,
-    {
-        Self::FltMantissa {
-            flt: flt.into(),
-            finite: finite.into(),
-        }
-    }
-
-    /// A `FltExponent` node from anything term-shaped, with the proof that its operand is a number.
-    pub fn flt_exponent<T, P>(flt: T, finite: P) -> Self
-    where
-        T: Into<Term>,
-        P: Into<Term>,
-    {
-        Self::FltExponent {
-            flt: flt.into(),
-            finite: finite.into(),
-        }
-    }
-
-    /// A `FltToNat` conversion node from anything term-shaped, with the proof that its operand is a non-negative number.
-    pub fn flt_to_nat<T, P>(flt: T, non_neg: P) -> Self
-    where
-        T: Into<Term>,
-        P: Into<Term>,
-    {
-        Self::FltToNat {
-            flt: flt.into(),
-            non_neg: non_neg.into(),
-        }
-    }
-
-    /// A `FltToLeBytes` node (a float's eight little-endian bytes as a `Bin`) from anything term-shaped.
-    pub fn flt_to_le_bytes<T>(inner: T) -> Self
-    where
-        T: Into<Term>,
-    {
-        Self::FltToLeBytes(inner.into())
-    }
-
-    /// A `FltOfLeBytes` node (a float assembled from its four little-endian bytes) from anything term-shaped.
-    pub fn flt_of_le_bytes<T, P>(bin: T, eight_bytes: P) -> Self
-    where
-        T: Into<Term>,
-        P: Into<Term>,
-    {
-        Self::FltOfLeBytes {
-            bin: bin.into(),
-            eight_bytes: eight_bytes.into(),
-        }
-    }
-
-    /// An empty public cell allocation from its element type.
-    pub fn cell_new(type_: impl Into<Term>) -> Self {
-        Self::Cell {
-            element: type_.into(),
-        }
-    }
-
-    /// A first-write-wins fill from its element type, cell, and value.
-    pub fn cell_fill(
-        type_: impl Into<Term>,
-        cell: impl Into<Term>,
-        value: impl Into<Term>,
-    ) -> Self {
-        Self::CellFill {
-            element: type_.into(),
-            cell: cell.into(),
-            value: value.into(),
-        }
-    }
-
-    /// A public poll before elaboration supplies its ordinary `Option` universe instance.
-    pub fn cell_poll(type_: impl Into<Term>, cell: impl Into<Term>) -> Self {
-        Self::CellPoll {
-            element: type_.into(),
-            cell: cell.into(),
-            universes: Vec::new(),
         }
     }
 }

@@ -59,15 +59,15 @@ fn parse_intrinsic() {
     assert_eq!("42".parse::<Term>().unwrap(), num_lit(42, Sign::Unmarked));
     assert_eq!(
         "1.5".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from(1.5))))
+        Term::from(Subterm::Literal(Literal::Flt(Floating::from(1.5))))
     );
     assert_eq!(
         "false".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Bool(false)))
+        Term::from(Subterm::Literal(Literal::Bool(false)))
     );
     assert_eq!(
         "true".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Bool(true)))
+        Term::from(Subterm::Literal(Literal::Bool(true)))
     );
 }
 

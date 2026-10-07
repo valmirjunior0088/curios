@@ -1,11 +1,15 @@
-//! Spike: a `/sys` declaration's types read off core's table rather than restated.
+//! A `/sys` declaration's types, read off core's table.
 //!
-//! [`projection`] builds an entry's node over core variables, one per parameter, asks `Intrinsic::signature` what it demands and produces, and reads the answer back as surface terms. Nothing here knows an operation: the walk is the table's, and the read-back is one rule per term former a signature uses.
+//! [`projection`] builds an entry's node over core variables, one per parameter, asks `Intrinsic::signature` what the node demands and produces, and reads the answer back as surface terms. Nothing here knows an operation: the walk is the table's, and the read-back is one rule per term former a signature states a type in.
+//!
+//! **Plicity is read off the row as well.** A type operand is one a call leaves to be inferred, a proof is one the elaborator discharges, and every other operand is written — except in a former, whose type operand is the one thing a reader writes, `List(Nat)`.
+//!
+//! A bound is read back over the nodes the row states it in, `Holds(Nat/lt(i, Bytes/len(b)))`, and not through the `/sys` wrappers a caller's guard is written with. A case equation answers its scrutinee's reduct, which is those nodes (`documentation/design/soundness/case-equations-and-their-key.md`), so a guard discharges the bound either way.
 
 use {
     super::{applied, fn_over, intrinsic, name, type_, unit},
-    crate::{Name, Subterm, Term},
-    curios_core::{Intrinsic, Operand, Produced},
+    crate::{Intrinsic, Name, Subterm, Term},
+    curios_core::{Operand, Produced},
     curios_utilities::{Plicity, Qualifier, SyntaxRegistry},
 };
 
@@ -78,7 +82,7 @@ fn read(params: &[&str], term: &curios_core::Term) -> Option<Term> {
 /// What core's table says of `node`, whose operands are the parameters `params` names. `None` where an operand is not a bare parameter, or where the table states a type this reads no rule for.
 pub(super) fn projection(
     params: &[&str],
-    node: &Intrinsic<Term>,
+    node: &Intrinsic,
     syntax: &SyntaxRegistry,
 ) -> Option<Projection> {
     // The node over core variables: one local per parameter, at the parameter's position.

@@ -1,9 +1,9 @@
 use {
     super::{
-        Argument, FuncSugarParam, FuncType, FuncTypeParam, Label, LetSignature, LoadError, Name,
-        RootSource, Subterm, Term, Tuple, TupleType, TupleTypeParam, clear_comments,
-        parse_optional_term, parse_program_end, parse_term, parse_top_item, parse_whitespace,
-        print_module_items, print_term, take_comments,
+        Argument, FuncSugarParam, FuncType, FuncTypeParam, Intrinsic, Label, LetSignature,
+        LoadError, Name, RootSource, Subterm, Term, Tuple, TupleType, TupleTypeParam,
+        clear_comments, parse_optional_term, parse_program_end, parse_term, parse_top_item,
+        parse_whitespace, print_module_items, print_term, take_comments,
     },
     curios_abi::WireSignature,
     curios_parse::{
@@ -555,7 +555,7 @@ impl Entrypoint {
     pub fn trivial() -> Self {
         Self {
             module: Module { items: Vec::new() },
-            tail: Term::from(Subterm::Operation(curios_core::Intrinsic::IoPure {
+            tail: Term::from(Subterm::Intrinsic(Intrinsic::IoPure {
                 result: Term::from(Subterm::TupleType(TupleType { fields: Vec::new() })),
                 value: Term::from(Subterm::Tuple(Tuple { fields: Vec::new() })),
             })),

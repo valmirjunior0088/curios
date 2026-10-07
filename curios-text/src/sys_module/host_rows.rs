@@ -9,12 +9,11 @@ use {
         Decl, applied, bin, bool_, branch, byte, flt, handle, int, intrinsic, io_of, lambda,
         list_of, name, nat, nat_lit, project, record, sys_op, tuple, type_, unit,
     },
-    crate::{Doc, FuncType, FuncTypeParam, LetSignature, Subterm, Term, TopForeign},
+    crate::{Doc, FuncType, FuncTypeParam, Intrinsic, LetSignature, Subterm, Term, TopForeign},
     curios_abi::{
         Check, DeclaredForeign, ForeignFunction, ForeignStore, Outcome, ResultShape, WireType,
         status, stdio_mode,
     },
-    curios_core::Intrinsic,
     curios_num::Grain,
     curios_utilities::Plicity,
     std::sync::Arc,
