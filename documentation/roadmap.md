@@ -28,7 +28,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Theory
 
-- [ ] [A subsumption blocked on a metavariable waits as a subsumption](roadmap/02-theory/03-blocked-subsumption.md) — the elaborator hands a pair blocked on a metavariable to conversion as an equation, solves a metavariable met in one by equality and leaves a family applied to its binder unsolved, so a call, a list literal or a match is admitted or refused by the order of its parts, and a declaration keeps that order in its scheme
+- [x] [A subsumption is decided as one wherever a metavariable stands](design/theory/subsumption-is-a-relation-not-a-traversal-order.md): a conversion problem carries the relation it is asked at through its park and its retry, a metavariable met at a `Type` takes a level of its own and one met at `Prop` waits for the term that minted it, so a call, a list literal or a match is admitted whichever of its parts is read first and a declaration keeps no such order in its scheme; a goal is offered what checks at it
 - [ ] [Flex–flex problems with distinct heads](roadmap/02-theory/04-flex-flex-intersection.md) — not refined yet; `?0(x) ~ ?1(x)` parks undecided, with no intersection
 - [ ] [Strict positivity through a type-former parameter](roadmap/02-theory/05-positivity-through-type-formers.md) — not refined yet; `induct Mu(F : (Type) -> Type)` is refused, since its body cannot say how `F` uses its argument
 - [ ] [K-like reduction](roadmap/02-theory/06-k-reduction.md) — not refined yet; a relevant match on a stuck `Eq` proof does not reduce; waits for a program that needs it
@@ -40,7 +40,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 - [x] [Subsumption as a relation](design/theory/subsumption-is-a-relation-not-a-traversal-order.md), decided structurally in both checkers
 - [x] Inductive families: constructor registry and dependent eliminators, indexed families, [coverage by index inversion](design/theory/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md), the large-elimination guard, and [strict positivity modulo polarity](design/theory/strict-positivity-modulo-polarity.md)
 - [x] [A motive is a term](design/theory/a-motive-is-a-term-not-a-grammar.md), and an omitted one is the expected type, specialized per arm with no convoy
-- [x] Bidirectional elaboration: pattern unification over metavariable spines, re-validation in checking mode, postponement on a blocked conversion, right-biased imitation for flex-apply, and projections and matches that wait on a stuck head's metavariable
+- [x] Bidirectional elaboration: pattern unification over metavariable spines and over a metavariable applied to bound variables, re-validation in checking mode, postponement on a blocked conversion, right-biased imitation for flex-apply, and projections and matches that wait on a stuck head's metavariable
 - [x] [Effects are descriptions, and the carrier has no eliminator](design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md): `Io` built by `pure` and `bind`, forced once by the entry point
 
 ## Surface
