@@ -87,6 +87,14 @@ pub fn normalize_bool(
     ))
 }
 
+/// The power atom over one monomial of a shift's count: `shl(1, m)` on `Nat`, which `Int` widens.
+fn nat_power(monomial: Term) -> Term {
+    Term::intrinsic(Intrinsic::NatShl(
+        Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+        monomial,
+    ))
+}
+
 /// Whether a function is the identity: one binder, whose body is that binder once it is weak-head reduced, so `(v) => v + 0` and `(v) => ((w) => w)(v)` are the identity as `(v) => v` is. This is beta and the folds under the binder, never extensionality: a function that is the identity only *pointwise* — `(v) => match v | 0 => 0 | k + 1 => k + 1 end` — has a stuck match for a body, and stays a function nothing here recognises.
 ///
 /// The body is read as conversion would read it, which is what makes the test agree with what both checkers already say of the function itself: `(v) => v + 0` converts with `(v) => v`, so a `map` by one that stayed stuck while a `map` by the other collapsed was a test of the *spelling* where the value was meant. The lambda as written is asked first, since it costs nothing; past it the binder is opened on a fresh identity, charged as the closed machine's eta probe charges the same opening, and the body reduced to weak-head form and not forced — a body whose head is a recursive call is no binder, and unfolding it to find that out would be paid at every `map`. The reduction is a [`Probe`]: a body with no value at the type level is no identity the law can read.
@@ -583,15 +591,15 @@ pub fn reduce_intrinsic(
                 reducer,
                 shifted,
                 Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-                Intrinsic::NatShl,
-                |coefficient, value, power| {
-                    Term::intrinsic(Intrinsic::nat_mul(
-                        Term::intrinsic(Intrinsic::nat_mul(
-                            Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
-                            value,
-                        )),
-                        power,
-                    ))
+                nat_power,
+                |coefficient, value, powers| {
+                    let scaled = Term::intrinsic(Intrinsic::nat_mul(
+                        Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
+                        value,
+                    ));
+                    powers.into_iter().fold(scaled, |product, power| {
+                        Term::intrinsic(Intrinsic::nat_mul(product, power))
+                    })
                 },
             )
         }
@@ -770,15 +778,15 @@ pub fn reduce_intrinsic(
                 reducer,
                 shifted,
                 Term::intrinsic(Intrinsic::Int(Integer::from(1i32))),
-                Intrinsic::IntShl,
-                |coefficient, value, power| {
-                    Term::intrinsic(Intrinsic::IntMul(
-                        Term::intrinsic(Intrinsic::IntMul(
-                            Term::intrinsic(Intrinsic::Int(Integer::from(coefficient))),
-                            value,
-                        )),
-                        power,
-                    ))
+                |monomial| Term::intrinsic(Intrinsic::NatToInt(nat_power(monomial))),
+                |coefficient, value, powers| {
+                    let scaled = Term::intrinsic(Intrinsic::IntMul(
+                        Term::intrinsic(Intrinsic::Int(Integer::from(coefficient))),
+                        value,
+                    ));
+                    powers.into_iter().fold(scaled, |product, power| {
+                        Term::intrinsic(Intrinsic::IntMul(product, power))
+                    })
                 },
             )
         }

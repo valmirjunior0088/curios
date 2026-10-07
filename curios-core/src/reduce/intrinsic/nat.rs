@@ -4,12 +4,14 @@
 
 use {
     super::{operand_bound, shift_bound},
-    crate::{Declaration, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term},
+    crate::{Cost, Declaration, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term},
     curios_algebra::{
         Carrier, Divided, FloorSplit, Half, Observed, Operation, cofactor, euclid_split, floor_law,
         power_of_two,
     },
     curios_num::Natural,
+    curios_utilities::recurse,
+    std::iter,
 };
 
 /// Which half of a Euclidean division a fold computes. One enum rather than the pair of closures the other families take: the symbolic laws below build the quotient and the remainder out of the *same* split, so the two halves cannot be parameterized independently.
@@ -104,6 +106,34 @@ pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
                 operation.upper_bound(&observed)
             }
             _ => None,
+        },
+    }
+}
+
+/// A statically known lower bound on every value a reduced term takes: its floor over what its symbolic part is at least, and an operation's from what its operands are at least (`curios-algebra`'s `Operation::lower_bound`). Zero where nothing is known, which is no claim.
+///
+/// The mirror of [`nat_bound`], and held the mirrored way: an *over*-report is a false definitional equation, the direction `least_lower_bounds_every_closed_instantiation` asserts. What it buys is positivity: a power `shl(1, k)` is at least one, so a sum or a product over one is, and `0 < shl(x + 1, k)` reduces.
+pub(super) fn nat_least(term: &Term) -> Natural {
+    let Subterm::Intrinsic(intrinsic) = &**term else {
+        return Natural::zero();
+    };
+    match intrinsic {
+        Intrinsic::Nat(Nat::Zero) => Natural::zero(),
+        Intrinsic::Nat(Nat::Succ(floor, inner)) => floor.clone() + &recurse(|| nat_least(inner)),
+        _ => match intrinsic.algebra() {
+            Declaration::Operation {
+                carrier: Carrier::Natural,
+                operation,
+                operands,
+            } => {
+                let least = operands
+                    .as_slice()
+                    .iter()
+                    .map(|operand| recurse(|| nat_least(operand)))
+                    .collect::<Vec<_>>();
+                operation.lower_bound(&least)
+            }
+            _ => Natural::zero(),
         },
     }
 }
@@ -329,41 +359,58 @@ pub(super) fn then_coefficient(
     }
 }
 
-/// A left shift by a *symbolic* count, read as the product it is where [`then_coefficient`] reads a literal one: `shl(v, k) = v · 2ᵏ`, the power spelled as the atom `shl(1, k₀)` over the count's symbolic part and the count's literal floor peeled into the coefficient — `shl(v, k₀ + f) = 2ᶠ · v · shl(1, k₀)` — on `Nat` and on `Int`, where it holds below zero too.
+/// A left shift by a *symbolic* count, read as the product it is where [`then_coefficient`] reads a literal one: `shl(v, k) = v · 2ᵏ`, with the exponent a morphism from `(ℕ, +)` into `(ℕ, ·)`. The count's literal floor is peeled into the coefficient and each monomial of its symbolic part is a power of its own, the atom `shl(1, m)`, repeated as many times as the monomial's literal coefficient: `shl(v, a + 2 · b + f) = 2ᶠ · v · shl(1, a) · shl(1, b) · shl(1, b)`, on `Nat` and on `Int`, where it holds below zero too.
 ///
-/// **The floor is what makes a count inductive.** `shl(v, k + 1) = 2 · shl(v, k)` is this rule at `f = 1`, so a proof about a shift recurses on its count's successor as a proof about any `Nat` does, and the fast shift is the one reasoned about rather than a library power standing in for it. The value leaves the shift with its literal factors, so `shl(2, x)` and `shl(1, x + 1)` are one monomial. The coefficient is charged before it is built, under the same [`shift_bound`]; the atom itself — `shl(1, k₀)` over a floorless count — is its own normal form, which is what keeps the rule from re-entering.
+/// **The floor is what makes a count inductive, and the split what makes it additive.** `shl(v, k + 1) = 2 · shl(v, k)` is this rule at `f = 1`, so a proof about a shift recurses on its count's successor as a proof about any `Nat` does; and `shl(shl(v, a), b) = shl(v, a + b)` holds at symbolic counts because both are `v` times the same two atoms. The value leaves the shift with its literal factors, so `shl(2, x)` and `shl(1, x + 1)` are one monomial. A product in the count is one monomial and one atom, never a product of powers: `shl(1, x · y)` is not `shl(1, x) · shl(1, y)`.
+///
+/// **The count is normalized first**, a product of sums in it distributed by name, so two spellings of one count split alike. `power` spells the atom over one monomial at the carrier the shift is at — at `Int` the widened `Nat` atom, which is what lets a comparison over it pull back to `Nat` and read it positive. The coefficient is charged before it is built, under the same [`shift_bound`], and every factor before the product is, so a literal coefficient no budget covers is refused; the atom itself — `Nat`'s `shl(1, m)` over one bare monomial — is its own normal form, which is what keeps the rule from re-entering.
 pub(super) fn then_power(
     reducer: &mut impl Reducer,
     result: Subterm,
     one: Term,
-    rebuild: fn(Term, Term) -> Intrinsic,
-    product: impl FnOnce(Natural, Term, Term) -> Term,
+    power: impl Fn(Term) -> Term,
+    product: impl FnOnce(Natural, Term, Vec<Term>) -> Term,
 ) -> Result<Subterm, ReduceError> {
-    let (Subterm::Intrinsic(Intrinsic::NatShl(value, count))
-    | Subterm::Intrinsic(Intrinsic::IntShl(value, count))) = &result
-    else {
-        return Ok(result);
+    let (value, count, natural) = match &result {
+        Subterm::Intrinsic(Intrinsic::NatShl(value, count)) => (value, count, true),
+        Subterm::Intrinsic(Intrinsic::IntShl(value, count)) => (value, count, false),
+        _ => return Ok(result),
     };
     let (floor, inner) = Nat::decompose(count);
-    if Nat::is_zero(&inner) || (floor.is_zero() && *value == one) {
+    if Nat::is_zero(&inner) {
+        return Ok(result);
+    }
+    let exponents = Nat::linear(Nat::summands(&Nat::normalize(reducer, inner)?));
+    let atom = matches!(exponents.as_slice(), [(repeated, _)] if repeated.is_one());
+    if natural && atom && floor.is_zero() && *value == one {
         return Ok(result);
     }
     let Some(amount) = u64::try_from(&floor).ok() else {
         return Ok(result);
     };
     reducer.spend(shift_bound(1, Some(amount)))?;
+    let Some(coefficient) = power_of_two(&floor) else {
+        return Ok(result);
+    };
 
-    match power_of_two(&floor) {
-        Some(coefficient) => {
-            let power = Term::intrinsic(rebuild(one, inner));
-            Ok(Term::unwrap_or_clone(reducer.reduce_forced(product(
-                coefficient,
-                value.clone(),
-                power,
-            ))?))
-        }
-        None => Ok(result),
+    let factors = exponents
+        .iter()
+        .fold(Natural::zero(), |factors, (repeated, _)| factors + repeated);
+    reducer.spend(Cost::collection(
+        u64::try_from(&factors).unwrap_or(u64::MAX),
+    ))?;
+    let mut powers = Vec::new();
+    for (repeated, monomial) in exponents {
+        let Ok(repeated) = usize::try_from(&repeated) else {
+            return Ok(result);
+        };
+        powers.extend(iter::repeat_n(power(monomial), repeated));
     }
+    Ok(Term::unwrap_or_clone(reducer.reduce_forced(product(
+        coefficient,
+        value.clone(),
+        powers,
+    ))?))
 }
 
 /// A right shift whose count carries a literal floor over a symbolic part, taken in two steps — `shr(v, k₀ + f) = shr(shr(v, k₀), f)` — on `Nat` and on `Int`, since a floored quotient by `2ᵏ⁰` and then by `2ᶠ` is the floored quotient by their product, below zero as above it. The twin of [`then_power`] for the one direction a coefficient cannot carry: `shr(v, k₀ + 1)` is `shr(v, k₀) / 2`, and spelling it so would build a division node, which carries a proof that its divisor is nonzero that a reducer may not invent.

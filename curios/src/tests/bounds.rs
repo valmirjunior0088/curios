@@ -270,6 +270,20 @@ const ROWS: &[Row] = &[
         "a: Int, b: Int, p: Holds(+0 <= a), q: Holds(+0 <= b)",
         "Holds(+0 <= a * b)",
     ),
+    // A power is at least one, which conversion decides, so a shift by a symbolic count — its value times a power — is bounded by what the scope says of the value: a positive value shifted is positive, a value is at most itself shifted, and the same over `Int`, whose power is `Nat`'s widened.
+    claim(
+        "d: Nat, k: Nat, p: Holds(0 < d)",
+        "Holds(0 < Nat/shl(d, k))",
+    ),
+    claim(
+        "d: Nat, k: Nat, p: Holds(3 <= d)",
+        "Holds(3 <= Nat/shl(d, k))",
+    ),
+    claim("d: Nat, k: Nat", "Holds(d <= Nat/shl(d, k))"),
+    claim(
+        "i: Int, k: Nat, p: Holds(+0 < i)",
+        "Holds(+0 < Int/shl(i, k))",
+    ),
     // A bound two guards imply through a product, `(n - i - 1) * k >= 0`, which the refinement seam leaves stuck.
     body(
         "n: Nat, k: Nat, l: List(Nat), i: Nat",
@@ -307,6 +321,8 @@ const CONTROLS: &[Row] = &[
     ),
     // A product of three facts.
     claim("x: Nat, p: Holds(x * x * x <= 7)", "Holds(x <= 1)"),
+    // A shifted value nothing in scope says is positive: zero shifted is zero.
+    claim("d: Nat, k: Nat", "Holds(0 < Nat/shl(d, k))"),
     // A remainder by a literal at `Int`, whose bounds conversion does not decide there.
     claim("x: Int", "Holds(x % +3 < +3)"),
     // Rewriting under a function by an equation, which is congruence rather than arithmetic.

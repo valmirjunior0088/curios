@@ -6,7 +6,7 @@
 //! - A proof field of a tuple- or struct-typed hypothesis, one level down, where the item may open the representation: `v.counted`, `hi.ok`.
 //! - A hypothesis or a field whose statement the arm's refinements reduce to an empty proposition — `in_range(n, 128, 191)` where a guard holds `n <= 127` — which refutes the scope by itself: read as `1 <= 0`, proved by its own zero-arm match.
 //! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
-//! - What an operation a fact or the goal is read over defines: a quotient's bounds, and a truncated subtraction's cases ([`Reader::definitions`]).
+//! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, and that a power `shl(1, m)` is at least one ([`Reader::definitions`]).
 //! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs.
 //! - That every monomial over naturals is at least zero, which conversion decides.
 //!
@@ -44,7 +44,7 @@ pub enum Origin {
     Guard(Term, bool),
     /// That a monomial over naturals is at least zero.
     Natural,
-    /// What an operation defines: a quotient's bound, or a case of a truncated subtraction.
+    /// What an operation defines: a quotient's bound, a case of a truncated subtraction, or that a power is at least one.
     Definition,
     /// The product of two facts, from where each came.
     Product(Box<Origin>, Box<Origin>),
@@ -173,6 +173,7 @@ pub(super) struct Reader<'a> {
     read: Facts,
     divided: Vec<Division>,
     subtracted: Vec<(Term, Term)>,
+    powered: Vec<Term>,
 }
 
 impl<'a> Reader<'a> {
@@ -188,6 +189,7 @@ impl<'a> Reader<'a> {
             },
             divided: Vec::new(),
             subtracted: Vec::new(),
+            powered: Vec::new(),
         }
     }
 
@@ -547,15 +549,38 @@ impl<'a> Reader<'a> {
         )
     }
 
-    /// What the operations the facts and the goal are read over define, until a reading meets no new one: a quotient's bounds hold its dividend, which may be a truncated subtraction, and a subtraction's cases hold its operands, which may be quotients.
+    /// What the operations the facts and the goal are read over define, until a reading meets no new one: a quotient's bounds hold its dividend, which may be a truncated subtraction, a subtraction's cases hold its operands, which may be quotients, and either may hold a power.
     fn definitions(&mut self, context: &mut Context, target: Option<&Target>) -> Result<(), Error> {
         loop {
             let divided = self.quotients(context, target)?;
             let subtracted = self.subtractions(context, target)?;
-            if !divided && !subtracted {
+            let powered = self.powers(context, target)?;
+            if !divided && !subtracted && !powered {
                 return Ok(());
             }
         }
+    }
+
+    /// That each power among the atoms read so far is at least one: `1 <= shl(1, m)`, which conversion decides at every count, so `qed` proves it. Whether it read one.
+    ///
+    /// A shift by a symbolic count reads as its value times such a power, so this is the fact a bound over one needs beside what the scope says of the value: `0 < d` gives `0 < shl(d, k)` as the product of two positives.
+    fn powers(&mut self, context: &mut Context, target: Option<&Target>) -> Result<bool, Error> {
+        let one = literal(Carrier::Natural, 1u32);
+        let mut read = false;
+        for atom in self.atoms(target) {
+            let power = self.views.term(atom).clone();
+            let Subterm::Intrinsic(Intrinsic::NatShl(shifted, _)) = &*power else {
+                continue;
+            };
+            if *shifted != one || self.powered.contains(&power) {
+                continue;
+            }
+            self.powered.push(power.clone());
+            read = true;
+            let at_least = Intrinsic::NatLe(one.clone(), power);
+            self.admit(context, at_least, qed(context), Origin::Definition)?;
+        }
+        Ok(read)
     }
 
     /// The bounds of each quotient and remainder among the atoms read so far — `d * (x / d) <= x` and `x < d * (x / d) + d` — with the remainder lifted out of every fact ([`Lift`]). Whether it read one.

@@ -2,7 +2,8 @@
 
 use {
     super::{
-        Comparison, compare_nat, nat_bound, nat_dominators, nat_euclid_split, test_support::*,
+        Comparison, compare_nat, nat_bound, nat_dominators, nat_euclid_split, nat_least,
+        test_support::*,
     },
     crate::{Free, Intrinsic, Subterm, Term, peel_nat_terms},
     curios_algebra::Deduction,
@@ -379,4 +380,72 @@ fn a_bounded_operand_decides_a_comparison_against_a_literal() {
             .0,
         Comparison::Stuck,
     );
+}
+
+// Soundness gate for the lower bound, the mirror of the gates above: `nat_least` must never over-report, because the comparison turns what a side is at least into a verdict. Each shape is taken as its fold leaves it, is at least what the gate states of it, and is held to that at every sample: a shape that holds a power is at least one past its floor, a factor nothing is known of takes its product to zero, and a difference or a right shift is at least nothing whatever it is taken from.
+//
+// Mutation-checked: a lower bound that takes a right shift for what it shifts states `4` of `shr(x + 4, y)`, which is `0` at `x = 0, y = 9`.
+#[test]
+fn least_lower_bounds_every_closed_instantiation() {
+    let x = Free::local(0, Some("x"));
+    let y = Free::local(1, Some("y"));
+    let (count, other) = (Term::free_var(&x), Term::free_var(&y));
+    let samples = [(0u32, 0u32), (1, 1), (5, 3), (3, 5), (0, 9), (9, 0)];
+    let shl = |value: Term, count: Term| Term::intrinsic(Intrinsic::NatShl(value, count));
+    let mul = |left: Term, right: Term| Term::intrinsic(Intrinsic::nat_mul(left, right));
+
+    let above = |shape: Term, name: &str, stated: u32| {
+        let reduced = fold(shape);
+        let least = nat_least(&reduced);
+        assert_eq!(least, Natural::from(stated), "what {name} is at least");
+        for (left, right) in samples {
+            let closed = at(reduced.clone(), &x, lit(left));
+            let value = fold(at(closed, &y, lit(right)))
+                .as_nat()
+                .expect("closed")
+                .to_natural()
+                .expect("literal");
+            assert!(
+                least <= value,
+                "{name} fell below its bound at x = {left}, y = {right}"
+            );
+        }
+    };
+
+    above(shl(lit(1), count.clone()), "shl(1, x)", 1);
+    above(
+        shl(plus(other.clone(), lit(1)), count.clone()),
+        "shl(y + 1, x)",
+        1,
+    );
+    above(
+        shl(lit(3), plus(count.clone(), other.clone())),
+        "shl(3, x + y)",
+        3,
+    );
+    above(plus(shl(lit(1), count.clone()), lit(2)), "shl(1, x) + 2", 3);
+    above(
+        mul(shl(lit(1), count.clone()), shl(lit(1), other.clone())),
+        "shl(1, x) * shl(1, y)",
+        1,
+    );
+    above(
+        mul(other.clone(), shl(lit(1), count.clone())),
+        "y * shl(1, x)",
+        0,
+    );
+    above(
+        Term::intrinsic(Intrinsic::NatShr(
+            plus(count.clone(), lit(4)),
+            other.clone(),
+        )),
+        "shr(x + 4, y)",
+        0,
+    );
+    above(
+        Term::intrinsic(Intrinsic::nat_sub(plus(count.clone(), lit(4)), other)),
+        "(x + 4) - y",
+        0,
+    );
+    above(plus(count, lit(4)), "x + 4", 4);
 }

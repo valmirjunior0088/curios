@@ -3,33 +3,37 @@
 //! [`compare_nat`] cancels what the two sides share before it looks at what is left, so `x + a < x + b` decides on `a` and `b` rather than stalling on the whole spine. `curios-algebra`'s `Comparison` is the verdict — which of the three orderings the operands may still take, so an undecided answer is carried back rather than guessed — and every fact that narrows it is the algebra's: the floors, a bound against a literal, a dominator, divisibility. What is decided here is what to observe and in what order: which terms to normalize, which side is bare, which operand bounds which.
 
 use {
-    super::{nat_bound, nat_dominators},
+    super::{nat_bound, nat_dominators, nat_least},
     crate::{Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, project_erased_universes},
     curios_algebra::{Comparison, Side, apart_modulo},
     curios_num::Natural,
 };
 
-/// One side of a comparison once cancellation has run: its floor, the symbolic part above it, and the whole side.
+/// One side of a comparison once cancellation has run: its floor, the symbolic part above it, what the side is at least, and the whole side.
 struct Operand {
     floor: Natural,
     inner: Term,
+    /// The floor over what the symbolic part is at least ([`nat_least`]): the floor itself under a part nothing is known of, and past it under one that holds a power.
+    least: Natural,
     whole: Term,
 }
 
 impl Operand {
     fn of(whole: Term) -> Self {
         let (floor, inner) = Nat::decompose(&whole);
+        let least = floor.clone() + &nat_least(&inner);
         Operand {
             floor,
             inner,
+            least,
             whole,
         }
     }
 
-    /// This side as the algebra reads it for the floor comparison.
+    /// This side as the algebra reads it for the floor comparison: at least `least` where it is symbolic, and exactly it where it is bare, the two being one number there. Two sides over one symbolic part are each raised by what that part is at least, so their order is their floors'.
     fn side(&self) -> Side<'_> {
         Side {
-            floor: &self.floor,
+            floor: &self.least,
             symbolic: !Nat::is_zero(&self.inner),
         }
     }
@@ -89,10 +93,10 @@ pub(super) fn compare_nat(
     Ok((outcome, left.whole, right.whole))
 }
 
-/// The verdict `bounded`'s literal bound forces against `other`'s floor, or `Stuck` where its inner has no bound or the bound passes the floor: `bounded` is at most its floor and its inner's bound, and `other` at least its own floor.
+/// The verdict `bounded`'s literal bound forces against what `other` is at least, or `Stuck` where its inner has no bound or the bound passes it: `bounded` is at most its floor and its inner's bound, and `other` at least its own floor and what its inner is at least.
 fn bounded(bounded: &Operand, other: &Operand) -> Comparison {
     match nat_bound(&bounded.inner) {
-        Some(bound) => Comparison::below(&(bound + &bounded.floor), &other.floor),
+        Some(bound) => Comparison::below(&(bound + &bounded.floor), &other.least),
         None => Comparison::Stuck,
     }
 }

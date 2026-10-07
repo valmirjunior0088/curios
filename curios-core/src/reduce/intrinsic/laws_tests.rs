@@ -1994,6 +1994,101 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             Term::intrinsic(Intrinsic::NatShl(lit(1), plus(x.clone(), lit(1)))),
             nats(),
         ),
+        // The exponent is a morphism from `(ℕ, +)` into `(ℕ, ·)`: each monomial of a count is a power of its own, a literal coefficient that power repeated, and a product of sums in the count distributed first, so a shift of a shift is the shift by the sum, on `Nat` and on `Int`, whose power is `Nat`'s widened.
+        (
+            "shl(1, x + y) = shl(1, x) * shl(1, y)",
+            Term::intrinsic(Intrinsic::NatShl(lit(1), plus(x.clone(), y.clone()))),
+            mul(
+                Term::intrinsic(Intrinsic::NatShl(lit(1), x.clone())),
+                Term::intrinsic(Intrinsic::NatShl(lit(1), y.clone())),
+            ),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(3)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(2)), (&nat_y, lit(5))],
+            ],
+        ),
+        (
+            "shl(1, 2 * x) = shl(1, x) * shl(1, x)",
+            Term::intrinsic(Intrinsic::NatShl(lit(1), mul(lit(2), x.clone()))),
+            mul(
+                Term::intrinsic(Intrinsic::NatShl(lit(1), x.clone())),
+                Term::intrinsic(Intrinsic::NatShl(lit(1), x.clone())),
+            ),
+            nats(),
+        ),
+        (
+            "shl(shl(z, y), x) = shl(z, y + x)",
+            Term::intrinsic(Intrinsic::NatShl(
+                Term::intrinsic(Intrinsic::NatShl(z.clone(), y.clone())),
+                x.clone(),
+            )),
+            Term::intrinsic(Intrinsic::NatShl(z.clone(), plus(y.clone(), x.clone()))),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0)), (&nat_z, lit(5))],
+                vec![(&nat_x, lit(3)), (&nat_y, lit(2)), (&nat_z, lit(7))],
+            ],
+        ),
+        (
+            "shl(1, x * (y + 1)) = shl(1, x * y) * shl(1, x)",
+            Term::intrinsic(Intrinsic::NatShl(
+                lit(1),
+                mul(x.clone(), plus(y.clone(), lit(1))),
+            )),
+            mul(
+                Term::intrinsic(Intrinsic::NatShl(lit(1), mul(x.clone(), y.clone()))),
+                Term::intrinsic(Intrinsic::NatShl(lit(1), x.clone())),
+            ),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(3))],
+                vec![(&nat_x, lit(2)), (&nat_y, lit(1))],
+            ],
+        ),
+        (
+            "shl(1, (x + 1) * (y + 2)) = 4 * shl(1, x * y) * shl(1, x) * shl(1, x) * shl(1, y)",
+            Term::intrinsic(Intrinsic::NatShl(
+                lit(1),
+                mul(plus(x.clone(), lit(1)), plus(y.clone(), lit(2))),
+            )),
+            mul(
+                mul(
+                    mul(
+                        mul(
+                            lit(4),
+                            Term::intrinsic(Intrinsic::NatShl(lit(1), mul(x.clone(), y.clone()))),
+                        ),
+                        Term::intrinsic(Intrinsic::NatShl(lit(1), x.clone())),
+                    ),
+                    Term::intrinsic(Intrinsic::NatShl(lit(1), x.clone())),
+                ),
+                Term::intrinsic(Intrinsic::NatShl(lit(1), y.clone())),
+            ),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(3))],
+                vec![(&nat_x, lit(2)), (&nat_y, lit(1))],
+            ],
+        ),
+        (
+            "shl(shl(i, x), y) = shl(i, x + y)",
+            Term::intrinsic(Intrinsic::IntShl(
+                Term::intrinsic(Intrinsic::IntShl(i.clone(), x.clone())),
+                y.clone(),
+            )),
+            Term::intrinsic(Intrinsic::IntShl(i.clone(), plus(x.clone(), y.clone()))),
+            vec![
+                vec![(&int_i, integer(-3)), (&nat_x, lit(0)), (&nat_y, lit(2))],
+                vec![(&int_i, integer(5)), (&nat_x, lit(3)), (&nat_y, lit(1))],
+            ],
+        ),
+        (
+            "to_int(shl(z, x)) = shl(to_int(z), x)",
+            widen(Term::intrinsic(Intrinsic::NatShl(z.clone(), x.clone()))),
+            Term::intrinsic(Intrinsic::IntShl(widen(z.clone()), x.clone())),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_z, lit(5))],
+                vec![(&nat_x, lit(3)), (&nat_z, lit(7))],
+            ],
+        ),
         (
             "shr(y, x + 1) = shr(shr(y, x), 1)",
             Term::intrinsic(Intrinsic::NatShr(y.clone(), plus(x.clone(), lit(1)))),

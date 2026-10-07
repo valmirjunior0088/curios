@@ -257,6 +257,8 @@ fn the_order_nat_decides_is_transitive() {
             non_zero: qed(),
         })
     };
+    // A power is at least one, so what holds one is at least one past its floor.
+    let power = Term::intrinsic(Intrinsic::NatShl(lit(1), y.clone()));
     let shapes = [
         ("0", lit(0)),
         ("7", lit(7)),
@@ -300,6 +302,14 @@ fn the_order_nat_decides_is_transitive() {
         (
             "Byte/to_nat(b)",
             Term::intrinsic(Intrinsic::ByteToNat(sym(2, "b"))),
+        ),
+        ("1", lit(1)),
+        ("Nat/shl(1, y)", power.clone()),
+        ("Nat/shl(1, y) + 7", above(7, &power)),
+        ("x + Nat/shl(1, y)", add(x.clone(), power.clone())),
+        (
+            "x * Nat/shl(1, y)",
+            Term::intrinsic(Intrinsic::nat_mul(x.clone(), power.clone())),
         ),
     ];
 
@@ -351,6 +361,8 @@ fn the_order_int_decides_is_transitive() {
         divisor: lit(8),
         non_zero: qed(),
     });
+    // `Nat`'s power widened, which a comparison pulls back to `Nat` and reads at least one.
+    let power = Term::intrinsic(Intrinsic::NatShl(lit(1), n.clone()));
     let shapes = [
         ("-1", integer(-1)),
         ("+0", integer(0)),
@@ -372,6 +384,12 @@ fn the_order_int_decides_is_transitive() {
         ),
         ("Nat/to_int(n % 8)", widened(low.clone())),
         ("Nat/to_int(n % 8) + 1", plus(&widened(low), integer(1))),
+        ("+1", integer(1)),
+        ("Nat/to_int(Nat/shl(1, n))", widened(power.clone())),
+        (
+            "Nat/to_int(Nat/shl(1, n)) + 7",
+            plus(&widened(power), integer(7)),
+        ),
     ];
 
     let at_most = shapes
@@ -503,4 +521,47 @@ fn two_comparisons_whose_views_differ_are_respelled_alike() {
         }
         _ => panic!("two views that differ are respelled"),
     }
+}
+
+// A power of two is at least one, so it is positive at every count, and so is what a sum or a product puts over one: `0 < shl(1, x)`, `shl(1, x) != 0`, `1 <= x + shl(1, y)` and `3 < shl(1, x) + 3`. A product by a factor nothing is known of is at least zero and no more, so `0 < x * shl(1, y)` stays undecided.
+//
+// Mutation-checked: a comparison that reads a side's floor for what it is at least leaves `0 < shl(1, x)` at `Le`.
+#[test]
+fn nat_decides_a_power_positive() {
+    let (x, y) = (sym(0, "x"), sym(1, "y"));
+    let power = |count: &Term| Term::intrinsic(Intrinsic::NatShl(lit(1), count.clone()));
+    let verdict = |left: Term, right: Term| {
+        let (verdict, _, _) = compare_nat(&mut Inert, left, right).expect("reduces");
+        verdict
+    };
+
+    assert_eq!(verdict(lit(0), power(&x)), Comparison::Lt);
+    assert_eq!(verdict(power(&x), lit(0)), Comparison::Gt);
+    assert_eq!(verdict(lit(1), power(&x)), Comparison::Le);
+    assert_eq!(
+        verdict(lit(1), add(x.clone(), power(&y))),
+        Comparison::Le,
+        "a sum over a power is at least one"
+    );
+    assert_eq!(
+        verdict(lit(3), Nat::rebuild(3u32.into(), power(&x))),
+        Comparison::Lt,
+        "the floor stands under what the power is at least"
+    );
+    assert_eq!(
+        verdict(
+            lit(0),
+            Term::intrinsic(Intrinsic::nat_mul(power(&x), power(&y)))
+        ),
+        Comparison::Lt,
+        "a product of two powers is at least one"
+    );
+    assert_eq!(
+        verdict(
+            lit(0),
+            Term::intrinsic(Intrinsic::nat_mul(x.clone(), power(&y)))
+        ),
+        Comparison::Le,
+        "a factor nothing is known of may be zero"
+    );
 }

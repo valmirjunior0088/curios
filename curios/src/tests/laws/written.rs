@@ -361,7 +361,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Nat bitwise and shifts",
-        binders: "x: Nat, y: Nat",
+        binders: "x: Nat, y: Nat, z: Nat",
         held: &[
             // A left shift by a literal count is the coefficient `2ᵏ`, on the unbounded ℕ the type level folds and at run time alike, since the running program grows a shifted value into a boxed magnitude rather than truncating it. The coefficient is charged before it is built, and the product then distributes as any other does.
             "Eq()(Nat/shl(x, 1), x * 2)",
@@ -374,21 +374,25 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Nat/shl(2, x), Nat/shl(1, x + 1))",
             "Eq()(Nat/shl(y + 1, x), Nat/shl(y, x) + Nat/shl(1, x))",
             "Eq()(Nat/shr(y, x + 1), Nat/shr(Nat/shr(y, x), 1))",
-        ],
-        refused: &[
-            // Candidates `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with the shift's exponent law: a count's symbolic summands stay one atom, where each is a power of its own, a literal coefficient that power repeated, and a product of sums in the count distributed first.
+            // The exponent is a morphism from `(ℕ, +)` into `(ℕ, ·)`: each monomial of a count is a power of its own, a literal coefficient that power repeated, and a product of sums in the count distributed first, so a shift of a shift is the shift by the sum, whichever count comes first.
             "Eq()(Nat/shl(1, x + y), Nat/shl(1, x) * Nat/shl(1, y))",
             "Eq()(Nat/shl(1, 2 * x), Nat/shl(1, x) * Nat/shl(1, x))",
             "Eq()(Nat/shl(Nat/shl(x, y), x), Nat/shl(x, y + x))",
+            "Eq()(Nat/shl(Nat/shl(z, x), y), Nat/shl(Nat/shl(z, y), x))",
             "Eq()(Nat/shl(1, x * (y + 1)), Nat/shl(1, x * y) * Nat/shl(1, x))",
-            // And with it, a power is at least one.
+            "Eq()(Nat/shl(1, (x + 1) * (y + 2)), 4 * Nat/shl(1, x * y) * Nat/shl(1, x) * Nat/shl(1, x) * Nat/shl(1, y))",
+            // A power is at least one, so it is positive, and so is what a sum or a product puts over one.
             "Eq()(0 < Nat/shl(1, x), true)",
             "Eq()(Nat/shl(1, x) == 0, false)",
             "Eq()(0 < Nat/shl(x + 1, y), true)",
+            "Eq()(1 <= Nat/shl(1, x) * Nat/shl(1, y), true)",
+        ],
+        refused: &[
             // A candidate no stage moves: a value is at most itself shifted, a product by a factor that is at least one.
             "Eq()(x <= Nat/shl(x, y), true)",
-            // The control, and not a law: a product in the count is no product of powers, `2¹` against `2 · 2` at `x = y = 1`.
+            // The controls, and neither is a law: a product in the count is no product of powers, `2¹` against `2 · 2` at `x = y = 1`; and a factor nothing is known of takes a product over a power to zero.
             "Eq()(Nat/shl(1, x * y), Nat/shl(1, x) * Nat/shl(1, y))",
+            "Eq()(0 < x * Nat/shl(1, y), true)",
             // A right shift by a literal count is a quotient by `2ᵏ` and could join the division family through the Euclidean split. It may not do so by building a division node, which carries a proof that the divisor is nonzero, and a reducer may not invent one.
             "Eq()(Nat/shr(x * 4, 2), x)",
         ],
@@ -489,18 +493,19 @@ const CARRIERS: &[Carrier] = &[
             // And across the `<`/`<=` seam, since the two are read through one linear view: ℕ → ℤ preserves and reflects order, and `a + 1 <= b` is `a < b` over ℤ.
             "Eq()(Nat/to_int(m) + 1 <= Nat/to_int(n), m < n)",
             "Eq()(Nat/to_int(m) < Nat/to_int(n) + 1, m <= n)",
+            // The shift's exponent law, as on `Nat`: a count's sum splits, the embedding goes through a shift, and the signed power is `Nat`'s widened, so it is positive.
+            "Eq()(Int/shl(i, n + m), Int/shl(Int/shl(i, n), m))",
+            "Eq()(Int/shl(+1, n + m), Int/shl(+1, n) * Int/shl(+1, m))",
+            "Eq()(Nat/to_int(Nat/shl(m, n)), Int/shl(Nat/to_int(m), n))",
+            "Eq()(Int/shl(+1, n), Nat/to_int(Nat/shl(1, n)))",
+            "Eq()(+0 < Int/shl(+1, n), true)",
+            "Eq()(+0 <= Int/shl(Nat/to_int(m), n), true)",
         ],
         refused: &[
             // Controls, and none is a law: a widened natural against an integer that may be negative, truncated subtraction as though it were the group's, and a difference of widened naturals as though it were one.
             "Eq()(Nat/to_int(n) <= i, true)",
             "Eq()(Nat/to_int(m - n), Nat/to_int(m) - Nat/to_int(n))",
             "Eq()(Nat/to_int(m) - Nat/to_int(n) >= +0, true)",
-            // Candidates `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with the shift's exponent law, as on `Nat`: a count's sum splits, the embedding goes through a shift, and the signed power is the widened one, so it is positive.
-            "Eq()(Int/shl(i, n + m), Int/shl(Int/shl(i, n), m))",
-            "Eq()(Int/shl(+1, n + m), Int/shl(+1, n) * Int/shl(+1, m))",
-            "Eq()(Nat/to_int(Nat/shl(m, n)), Int/shl(Nat/to_int(m), n))",
-            "Eq()(+0 < Int/shl(+1, n), true)",
-            "Eq()(+0 <= Int/shl(Nat/to_int(m), n), true)",
         ],
     },
     Carrier {
@@ -604,6 +609,9 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Nat/to_int(Int/abs(Nat/to_int(n) - Nat/to_int(n - m))), Nat/to_int(n) - Nat/to_int(n - m))",
             "Eq()(Int/sign(Nat/to_int(n) + 1), +1)",
             "Eq()(Int/sign(+0 - Nat/to_int(n) - 1), -1)",
+            // And a widened power is positive at every count, a power being at least one.
+            "Eq()(Int/sign(Nat/to_int(Nat/shl(1, n))), +1)",
+            "Eq()(Int/sign(Int/shl(+1, n)), +1)",
             "Eq()(Int/abs(-3), 3)",
             "Eq()(Int/sign(-3), -1)",
             "Eq()(Int/sign(+0), +0)",
@@ -622,7 +630,6 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Int/sign(-8 * i), +0 - Int/sign(i))",
             "Eq()(Int/abs(Int/shl(i, n)), Nat/shl(Int/abs(i), n))",
             "Eq()(Int/sign(Int/shl(i, n)), Int/sign(i))",
-            "Eq()(Int/sign(Nat/to_int(Nat/shl(1, n))), +1)",
             // Lemmas, which no stage moves: a product reaches either operation distributed, so deciding these takes factoring it; the decomposition is a product of the two; and a comparison of an `abs` with zero is a case split.
             "Eq()(Int/abs(i * j), Int/abs(i) * Int/abs(j))",
             "Eq()(Int/sign(i * j), Int/sign(i) * Int/sign(j))",

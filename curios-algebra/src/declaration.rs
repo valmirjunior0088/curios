@@ -131,6 +131,19 @@ impl Operation {
         }
     }
 
+    /// A lower bound on every value this operation takes over ℕ, from a lower bound on each of its operands, by position; zero where it has none.
+    ///
+    /// Every arm is unconditional, as [`Operation::upper_bound`]'s are, and for the mirrored reason: an under-report only withholds a verdict, and an over-report is a false one. A sum is at least the sum of what its operands are at least, a product their product, and a left shift what it shifts, a power of two being at least one — which is what makes `shl(1, k)` positive at every `k`. No other operation is read: a difference, a quotient and a right shift reach zero whatever their first operand is at least, and `and` and `xor` reach zero between two operands that do not.
+    pub fn lower_bound(self, least: &[Natural]) -> Natural {
+        let at = |position: usize| least.get(position).cloned().unwrap_or_else(Natural::zero);
+        match self {
+            Operation::Sum => at(0) + &at(1),
+            Operation::Product => at(0) * &at(1),
+            Operation::ShiftLeft => at(0),
+            _ => Natural::zero(),
+        }
+    }
+
     /// Whether this operation denotes one value with its operands in either order, as far as the reasoning that reads it goes: the equalities and inequalities, `and`, `or` and `xor`, `min` and `max`, and a binary64 sum or product in one rounding direction. The exact sum and product commute too, and their cancellation already reads them as combinations, so they are not listed here.
     pub fn commutes(self) -> bool {
         matches!(

@@ -14,7 +14,7 @@ It builds on the algebra's law families and generated grid, and is independently
   - a semiring embedding, `Nat/to_int`, pushed through a sum and a product by `int_of_nat` and read back by `int_preimage`;
   - inversion pairs, a conversion reducing back through the one that inverts it (`round_trip`);
   - a fold into another operation: `Int`'s difference into the sum's normal form, a shift by a literal count into a coefficient.
-- **A shift by a symbolic count is a product by a power.** `then_power` reads `shl(v, k)` as `v` times the atom `shl(1, k)`, the count's literal floor peeled into the coefficient, at `Nat` and at `Int`. The count's symbolic summands stay one atom.
+- **A shift by a symbolic count is a product by powers.** `then_power` reads `shl(v, k)` as `v` times one atom `shl(1, m)` for each monomial `m` of the count, repeated by the monomial's literal coefficient, the count's literal floor peeled into the coefficient, at `Nat` and at `Int`, whose atom is `Nat`'s widened. A power is at least one (`Operation::lower_bound`), which the comparison reads beside a side's floor.
 - **[A term is one where conversion says so](../../design/arithmetic/a-term-is-one-where-conversion-says-so.md).** A pair's atoms are classed by each checker's own conversion and a stuck fold is taken again over them (`curios-core`'s `classed`), so a fold that pairs atoms by identity registers its nodes there.
 - **The level algebra.** `Level` (`curios-core`'s `universe`) is a maximum of a constant and atoms with offsets: duplicates coalesce at the greatest offset, a constant an offset reaches is dropped, and a successor distributes. It is the normal form `max` takes here, and `min` its mirror.
 - **The binary64 model.** Every one of the 2⁶⁴ bit patterns is a distinct value under one symmetric NaN rule ([`Flt` is specified by a model](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md)), which is what makes commutativity hold of the carrier rather than of numbers alone.
@@ -23,7 +23,7 @@ It builds on the algebra's law families and generated grid, and is independently
 
 ## The gap
 
-`min` and `max` at both carriers, and `abs` and `sign` at `Int`, are library functions, so conversion sees their unfolded matches: `min(a, b)` against `min(b, a)`, `min(a, b) <= a`, `abs(+0 - a)` against `abs(a)` and `sign(+0 - a)` against `+0 - sign(a)` are refused. `pow` is a library recursion by squaring, so `pow(x, y + 1)` against `pow(x, y) * x` is refused, and a count's sum does not split: `shl(1, x + y)` against `shl(1, x) * shl(1, y)`. No power is known positive: `0 < shl(1, x)` does not reduce.
+`min` and `max` at both carriers, and `abs` and `sign` at `Int`, are library functions, so conversion sees their unfolded matches: `min(a, b)` against `min(b, a)`, `min(a, b) <= a`, `abs(+0 - a)` against `abs(a)` and `sign(+0 - a)` against `+0 - sign(a)` are refused. `pow` is a library recursion by squaring, so `pow(x, y + 1)` against `pow(x, y) * x` is refused, and `shl(1, k)` against `pow(2, k)`.
 
 What the library definitions decide today is kept: `min(x, x + 1)` is `x`, `max(x, 0)` is `x`, `min(x % 8, 8)` is `x % 8`, `abs(Nat/to_int(n))` is `n`, `abs(+0 - Nat/to_int(n) - 1)` is `n + 1`, `sign(Nat/to_int(n) + 1)` is `+1`, and `pow(x + 1, 2)` is `x * x + 2 * x + 1`.
 
@@ -73,7 +73,7 @@ Lemmas: `abs(a * b) = abs(a) * abs(b)` and `sign(a * b) = sign(a) * sign(b)`, wh
 
 The normal form is the one Mathlib's `ring` keeps for a variable exponent ([`Mathlib.Tactic.Ring`](https://florisvandoorn.com/LeanCourse25/docs/Mathlib/Tactic/Ring/Basic.html)): the exponent is normalized, and a monomial of it under a base is an atom of the product, the base an atom up to conversion. Each factor is charged before it is built, so a literal exponent no budget covers is refused.
 
-The left shift is read through it, `shl(x, k) = x * pow(2, k)`, so `shl(1, k)` and `pow(2, k)` are one atom and `shl(shl(x, a), b) = shl(x, a + b)` holds at a symbolic count. At `Int` the atom is the widened power, so a comparison over it pulls back to `Nat` through `int_preimage`. The exponent law at base two lands before the promotion, over the atom `shl(1, k)`.
+The left shift is read through it, `shl(x, k) = x * pow(2, k)`, so `shl(1, k)` and `pow(2, k)` are one atom and `shl(shl(x, a), b) = shl(x, a + b)` holds at a symbolic count. At `Int` the atom is the widened power, so a comparison over it pulls back to `Nat` through `int_preimage`. The exponent law at base two and its positivity are held already, over the atom `shl(1, k)`, which the promotion respells as `pow(2, k)`.
 
 Lemmas: `pow(pow(x, a), b) = pow(x, a * b)` and `pow(x * y, a) = pow(x, a) * pow(y, a)`. Beside `pow(x, 2) = x * x`, the first gives the second by one chain, and the second at two literals is `pow(6, a)` against `pow(2, a) * pow(3, a)`, a base to factor; no finite set of identities is complete for exponentiation over the naturals ([Tarski's high school algebra problem](https://en.wikipedia.org/wiki/Tarski%27s_high_school_algebra_problem), Wilkie 1980 and Gurevič 1988). `shr(shl(x, k), k) = x` stays a lemma.
 
@@ -102,10 +102,9 @@ What is not a law stays a control, refused with its counterexample: associativit
 
 Every law above, every row the library definitions hold today and every control stands in the grid (`curios`'s `tests::laws::written`), each refused row commented with the stage that moves it, and the audit puts each declared law to a product of two sums.
 
-1. **The shift's exponent law, and positivity.** No promotion: the count's summands split over the atom `shl(1, k)`, and a lower bound beside the upper one.
-2. **`min` and `max`**, at both carriers, with the domination mirror.
-3. **`abs` and `sign`**, with the two lemmas `/std/Map` consumes.
-4. **`pow`**, the power atom becoming `pow(2, k)`.
+1. **`min` and `max`**, at both carriers, with the domination mirror.
+2. **`abs` and `sign`**, with the two lemmas `/std/Map` consumes.
+3. **`pow`**, the power atom becoming `pow(2, k)`.
 
 Each stage moves its rows from refused to held, extends the grid's audit to the kind it declares, and adds its operation's rows to `curios`'s `tests::bounds`.
 

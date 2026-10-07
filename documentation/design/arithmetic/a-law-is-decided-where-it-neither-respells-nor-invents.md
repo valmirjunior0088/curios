@@ -2,7 +2,7 @@
 
 **Decision.** An equation over the intrinsic carriers is taken at one of three places, chosen by what the law would have to do there, and each answers `Equal` or declines, never a disequality it did not already have:
 
-- a **fold**, when the reduct is a term the fold can build outright, charged before it is built — `shl(x, k) = 2ᵏ · x` at a literal `k`, a comparison whose sides are apart modulo the gcd of their coefficients folding to `false`, `map(xs, f) = xs` where `f`'s body reduces to its binder;
+- a **fold**, when the reduct is a term the fold can build outright, charged before it is built — `shl(x, k) = 2ᵏ · x` at a literal `k` and, at a symbolic one, `x` times a power `shl(1, m)` to each monomial `m` of the count, a comparison whose sides are apart modulo the gcd of their coefficients folding to `false`, `map(xs, f) = xs` where `f`'s body reduces to its binder;
 - the **peel**, when it equates two stuck values no rewrite could state without deriving a proof — two `get`s reading one position of one root through any windows, a window of a window against the window it names;
 - a **probe-side** decision both converters ask for by name, when deciding needs a reducer and rewriting would respell a term a guard was keyed on — two `Bool` terms that agree at every assignment of their atoms, up to eight atoms.
 
