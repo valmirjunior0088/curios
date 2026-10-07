@@ -129,7 +129,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Standard library
 
-- [ ] [HTTP messages as RFC 9110 and RFC 9112 frame them](roadmap/08-standard-library/01-http-framing.md) — every stage has landed, and its retirement is what is left
+- [x] [An HTTP message is read through one framing core, and made as one a wire can carry](../curios-std/README.md#an-http-message-is-read-through-one-framing-core-and-made-as-one-a-wire-can-carry)
 - [ ] [Text read as text, and numbers by each format's grammar](roadmap/08-standard-library/02-text-read-as-text.md) — `Json` accepts `01` and writes infinity as `null`, the text formats walk the bytes of input that began as text, and `Flt`'s readers cut text where a grammar belongs
 - [x] `Map(K, V)` and `Set(K)`: keys held and handed back at their own type, each built and read under the `Key(K)` dictionary its type names
 - [x] [`sort` is a merge sort, proved under its comparator's laws](../curios-std/README.md#sort-is-a-merge-sort-proved-under-its-comparators-laws): its answer the input rearranged under no law, and in order by the comparator and then by the order the input had among what it ties, under the comparator's flip; a permutation, membership and a decided order in `/std/List`, and the flip stated of `Nat`, `Bytes` and `Str`

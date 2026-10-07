@@ -229,9 +229,9 @@ pub use Toml/{let Toml};
 pub mod Html;
 pub use Html/{let Html};
 
---- HTTP/1.1 over `tcp`: the vocabulary of an exchange as data, and a client that performs one.
+--- HTTP/1.1 over `tcp`: the vocabulary of an exchange as data, a client that performs one and a server that answers one.
 ---
---- The client takes one connection per request and whole bodies, under a deadline and a redirect limit.
+--- A message is read as RFC 9112 frames it, through pieces that hold no stream, and made as one a wire can carry: a field's name is a token, its value holds no control octet, and the renderers write the framing fields themselves. Each end takes one message per connection and whole bodies, within bounds it states: the client under a deadline and a redirect limit, the server answering a refused request with its status and closing only once its peer has had the reply.
 pub mod http;
 
 --- A command-line interface as a value: the arguments a program declares, and the record a line parses into, whose type the declaration decides.
