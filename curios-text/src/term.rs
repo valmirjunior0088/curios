@@ -510,6 +510,8 @@ pub enum Subterm {
     Type,
     Prop,
     Intrinsic(Intrinsic),
+    /// One of core's intrinsics over surface operands: a type former, an operation or a literal no source spells. Never parsed — the `/sys` roster plants it in a declaration's body or type — and lowered by mapping its operands.
+    Operation(curios_core::Intrinsic<Term>),
     /// A store-described host call; the prelude bakes it into the `/sys` declaration whose parameters the argument terms name. A term former rather than an [`Intrinsic`] variant, mirroring `curios_core::Subterm::Foreign` — its signature comes from the ABI row it carries, not from a roster this crate spells.
     Foreign(Arc<ForeignFunction>, Vec<Term>),
     /// A store-described row taken as the function of its operands: what a `foreign` declaration binds. Its operands have no names for a call to write, so the lowering opens one binder for each, by position in the row.

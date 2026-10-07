@@ -5,10 +5,11 @@
 use {
     super::{host_fn, intrinsic, name},
     crate::{
-        Doc, FuncSugarParam, GroupItem, Intrinsic, LetSignature, Module, Name, Pattern, Term,
-        TopItem, TopLet, TopMod, TopUse, UseGroup,
+        Doc, FuncSugarParam, GroupItem, LetSignature, Module, Name, Pattern, Term, TopItem, TopLet,
+        TopMod, TopUse, UseGroup,
     },
     curios_abi::ForeignStore,
+    curios_core::Intrinsic,
     curios_utilities::Plicity,
 };
 
@@ -156,7 +157,7 @@ pub(super) fn binary(
     label: &str,
     operand: Term,
     output: Term,
-    ctor: impl FnOnce(Term, Term) -> Intrinsic,
+    ctor: impl FnOnce(Term, Term) -> Intrinsic<Term>,
 ) -> Decl {
     pub_fn(
         label,
@@ -172,7 +173,7 @@ pub(super) fn guarded_binary(
     operand: Term,
     output: Term,
     bound: Term,
-    ctor: fn(Term, Term, Term) -> Intrinsic,
+    ctor: fn(Term, Term, Term) -> Intrinsic<Term>,
 ) -> Decl {
     pub_fn_marked(
         label,
@@ -192,7 +193,7 @@ pub(super) fn guarded_unary(
     input: Term,
     output: Term,
     bound: Term,
-    ctor: fn(Term, Term) -> Intrinsic,
+    ctor: fn(Term, Term) -> Intrinsic<Term>,
 ) -> Decl {
     pub_fn_marked(
         label,
@@ -209,7 +210,7 @@ pub(super) fn unary(
     label: &str,
     input: Term,
     output: Term,
-    ctor: impl FnOnce(Term) -> Intrinsic,
+    ctor: impl FnOnce(Term) -> Intrinsic<Term>,
 ) -> Decl {
     pub_fn(
         label,
@@ -223,7 +224,7 @@ pub(super) fn ternary(
     label: &str,
     operand: Term,
     output: Term,
-    ctor: impl FnOnce(Term, Term, Term) -> Intrinsic,
+    ctor: impl FnOnce(Term, Term, Term) -> Intrinsic<Term>,
 ) -> Decl {
     pub_fn(
         label,

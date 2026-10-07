@@ -125,3 +125,28 @@ fn a_subject_nothing_declared_keeps_the_order_its_first_row_appears_in() {
     assert_eq!(order, ["socket", "file"]);
     assert_eq!(labels(&modules[0]), ["bind", "listen"]);
 }
+
+// Every roster entry that is one node over its own parameters states the types core's table gives that node. Where the two differ it is a bound, which the roster spells through `/sys`'s wrappers and the table over the nodes they unfold to; and what the table is not asked about is a constant holding a literal, which has no parameter to type.
+#[test]
+fn the_table_restates_every_entry_but_the_spelling_of_a_bound() {
+    let module = written(&curios_abi::host_ops(), &crate::SYNTAX);
+
+    for entry in compare(&module, &crate::SYNTAX) {
+        match &entry.differences {
+            None => assert_eq!(
+                entry.parameters, 0,
+                "{} is an operation the table was not asked about",
+                entry.path
+            ),
+            Some(differences) => {
+                for difference in differences {
+                    assert!(
+                        difference.bound,
+                        "{}: {} is written `{}` and the table gives `{}`",
+                        entry.path, difference.subject, difference.written, difference.table
+                    );
+                }
+            }
+        }
+    }
+}

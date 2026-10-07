@@ -99,186 +99,186 @@ pub fn foreign_signature(
 /// The `impl` block's constructor helpers (`nat_add`, `bin_slice`, …) take `impl Into<Term>` operands, sparing builder call sites — reduction's neutral rebuilds and curios-text's lowering — the `.into()` noise.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
-pub enum Intrinsic {
+pub enum Intrinsic<T = Term> {
     BoolType,
     Bool(bool),
-    BoolAnd(Term, Term),
-    BoolOr(Term, Term),
-    BoolXor(Term, Term),
-    BoolEql(Term, Term),
-    BoolNeq(Term, Term),
+    BoolAnd(T, T),
+    BoolOr(T, T),
+    BoolXor(T, T),
+    BoolEql(T, T),
+    BoolNeq(T, T),
     NatType,
-    Nat(Nat),
-    NatEql(Term, Term),
-    NatNeq(Term, Term),
-    NatAdd(Term, Term),
-    NatSub(Term, Term),
-    NatMul(Term, Term),
-    NatLt(Term, Term),
+    Nat(Nat<T>),
+    NatEql(T, T),
+    NatNeq(T, T),
+    NatAdd(T, T),
+    NatSub(T, T),
+    NatMul(T, T),
+    NatLt(T, T),
     /// `non_zero` proves `0 < divisor`. Carried as a field rather than left to `/sys`'s declaration so the obligation survives into Core, where the kernel re-checks it; [`Intrinsic::signature`] states the proposition it must inhabit.
     NatDiv {
-        dividend: Term,
-        divisor: Term,
-        non_zero: Term,
+        dividend: T,
+        divisor: T,
+        non_zero: T,
     },
     NatRem {
-        dividend: Term,
-        divisor: Term,
-        non_zero: Term,
+        dividend: T,
+        divisor: T,
+        non_zero: T,
     },
-    NatLe(Term, Term),
-    NatAnd(Term, Term),
-    NatOr(Term, Term),
-    NatXor(Term, Term),
-    NatShl(Term, Term),
-    NatShr(Term, Term),
+    NatLe(T, T),
+    NatAnd(T, T),
+    NatOr(T, T),
+    NatXor(T, T),
+    NatShl(T, T),
+    NatShr(T, T),
     ByteType,
     Byte(u8),
-    ByteToNat(Term),
+    ByteToNat(T),
     /// `below` proves `nat < 256`, the domain the narrowing to `Byte` has. Carried for the reason [`Intrinsic::NatDiv`]'s bound is: a bound stated only on `/sys`'s wrapper stops constraining anything the moment that wrapper unfolds, leaving the kernel a bare narrowing to admit.
     ///
     /// Masking instead would make the operation total by changing a value, which `documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md` forbids. Stating the domain is also what makes the constructor invertible, so `Byte/to_nat` can see back through it and a bound established in `Nat` survives the round trip.
     NatToByte {
-        nat: Term,
-        below: Term,
+        nat: T,
+        below: T,
     },
     IntType,
     Int(Integer),
-    IntEql(Term, Term),
-    IntNeq(Term, Term),
-    IntAdd(Term, Term),
-    IntSub(Term, Term),
-    IntMul(Term, Term),
+    IntEql(T, T),
+    IntNeq(T, T),
+    IntAdd(T, T),
+    IntSub(T, T),
+    IntMul(T, T),
     /// The `Int` twin of [`Intrinsic::NatDiv`]'s bound, stated as `divisor != 0` — a negative divisor is fine, so `0 <` will not serve.
     IntDiv {
-        dividend: Term,
-        divisor: Term,
-        non_zero: Term,
+        dividend: T,
+        divisor: T,
+        non_zero: T,
     },
     IntRem {
-        dividend: Term,
-        divisor: Term,
-        non_zero: Term,
+        dividend: T,
+        divisor: T,
+        non_zero: T,
     },
-    IntLt(Term, Term),
-    IntLe(Term, Term),
-    IntAnd(Term, Term),
-    IntOr(Term, Term),
-    IntXor(Term, Term),
-    IntShl(Term, Term),
-    IntShr(Term, Term),
+    IntLt(T, T),
+    IntLe(T, T),
+    IntAnd(T, T),
+    IntOr(T, T),
+    IntXor(T, T),
+    IntShl(T, T),
+    IntShr(T, T),
     FltType,
     Flt(Floating),
     /// The rounded operations carry their IEEE rounding direction as static data, as a packed operation carries its [`Grain`]: the direction is fixed where the operation is written, so every folder and the emitter read the same one.
-    FltAdd(Rounding, Term, Term),
-    FltSub(Rounding, Term, Term),
-    FltMul(Rounding, Term, Term),
-    FltDiv(Rounding, Term, Term),
+    FltAdd(Rounding, T, T),
+    FltSub(Rounding, T, T),
+    FltMul(Rounding, T, T),
+    FltDiv(Rounding, T, T),
     /// `a · b + c`, rounded once.
-    FltFma(Rounding, Term, Term, Term),
-    FltRem(Term, Term),
-    FltEql(Term, Term),
-    FltNeq(Term, Term),
-    FltLt(Term, Term),
-    FltLe(Term, Term),
-    FltMin(Term, Term),
-    FltMax(Term, Term),
-    FltNeg(Term),
-    FltAbs(Term),
-    FltSqrt(Rounding, Term),
+    FltFma(Rounding, T, T, T),
+    FltRem(T, T),
+    FltEql(T, T),
+    FltNeq(T, T),
+    FltLt(T, T),
+    FltLe(T, T),
+    FltMin(T, T),
+    FltMax(T, T),
+    FltNeg(T),
+    FltAbs(T),
+    FltSqrt(Rounding, T),
     /// The integral value the operand rounds to in the direction named: `floor` is toward negative, `ceil` toward positive, `trunc` toward zero, `nearest` ties to even and `round` ties away.
-    FltRoundIntegral(Rounding, Term),
-    FltCopysign(Term, Term),
-    NatToInt(Term),
-    NatToFlt(Rounding, Term),
+    FltRoundIntegral(Rounding, T),
+    FltCopysign(T, T),
+    NatToInt(T),
+    NatToFlt(Rounding, T),
     /// `non_neg` proves `0 <= int`, the domain the narrowing to `Nat` has. Carried for the reason [`Intrinsic::NatDiv`]'s bound is: a bound stated only on `/sys`'s wrapper stops constraining anything the moment that wrapper unfolds, leaving the kernel a bare narrowing to admit.
     IntToNat {
-        int: Term,
-        non_neg: Term,
+        int: T,
+        non_neg: T,
     },
-    IntToFlt(Rounding, Term),
+    IntToFlt(Rounding, T),
     /// `non_neg` proves the operand is a non-negative *number*, which is what excludes `+inf` and every NaN alongside every negative. Carried for the reason [`Intrinsic::NatDiv`]'s bound is.
     FltToNat {
-        flt: Term,
-        non_neg: Term,
+        flt: T,
+        non_neg: T,
     },
-    FltToLeBytes(Term),
+    FltToLeBytes(T),
     /// `eight_bytes` proves `len(bin) = 8`, which is the whole of what reinterpreting a binary64 needs.
     FltOfLeBytes {
-        bin: Term,
-        eight_bytes: Term,
+        bin: T,
+        eight_bytes: T,
     },
     /// `finite` proves the operand is a number — neither infinity, and not a NaN — which is the whole of what truncating toward zero needs.
     FltToInt {
-        flt: Term,
-        finite: Term,
+        flt: T,
+        finite: T,
     },
     /// The signed mantissa of the operand's exact value `mantissa · 2^exponent`, under the same `finite` proof truncation needs. It and [`Intrinsic::FltExponent`] are two operations shaped like [`Intrinsic::FltToInt`] rather than one whose result is a pair, so no stage carries a compound intrinsic result.
     FltMantissa {
-        flt: Term,
-        finite: Term,
+        flt: T,
+        finite: T,
     },
     /// The exponent of the operand's exact value, the other half of [`Intrinsic::FltMantissa`].
     FltExponent {
-        flt: Term,
-        finite: Term,
+        flt: T,
+        finite: T,
     },
     BinType(Grain),
     Bin(Grain, Binary),
-    BinLen(Grain, Term),
-    BinEql(Grain, Term, Term),
+    BinLen(Grain, T),
+    BinEql(Grain, T, T),
     /// `in_range` proves `index < len(bin)`, carried for the reason [`Intrinsic::NatDiv`]'s bound is.
     BinGet {
         grain: Grain,
-        bin: Term,
-        index: Term,
-        in_range: Term,
+        bin: T,
+        index: T,
+        in_range: T,
     },
     /// `within` proves `start + length <= len(bin)` — the one bound a window has, since a count cannot spell a reversed range.
     BinSlice {
         grain: Grain,
-        bin: Term,
-        start: Term,
-        length: Term,
-        within: Term,
+        bin: T,
+        start: T,
+        length: T,
+        within: T,
     },
     BinAppend {
         grain: Grain,
-        bin: Term,
-        element: Term,
+        bin: T,
+        element: T,
     },
     BinConcat {
         grain: Grain,
-        operands: Vec<Term>,
+        operands: Vec<T>,
     },
     /// `count` copies of one generator — the only way to build a run of a length a program computes without one node per element.
     BinReplicate {
         grain: Grain,
-        count: Term,
-        atom: Term,
+        count: T,
+        atom: T,
     },
     /// `same_length` proves `len(left) == len(right)`, which is the one bound a pointwise operation has.
     ///
     /// Stated rather than extended, because no extension is forced: truncating to the shorter and padding to the longer are both total, and they disagree — a padded bit is absorbing for `and` where it is transparent for `or`, so the structure picks neither and a choice would be the author's. That is the test `documentation/design/arithmetic/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md` sets, and the same one that put `NatToByte`'s bound in its type rather than masking to eight bits.
     BinAnd {
         grain: Grain,
-        left: Term,
-        right: Term,
-        same_length: Term,
+        left: T,
+        right: T,
+        same_length: T,
     },
     /// See [`Intrinsic::BinAnd`] for why the length is a stated bound.
     BinOr {
         grain: Grain,
-        left: Term,
-        right: Term,
-        same_length: Term,
+        left: T,
+        right: T,
+        same_length: T,
     },
     /// See [`Intrinsic::BinAnd`] for why the length is a stated bound.
     BinXor {
         grain: Grain,
-        left: Term,
-        right: Term,
-        same_length: Term,
+        left: T,
+        right: T,
+        same_length: T,
     },
     /// One packed run read at the other grain — eight bits to the byte, least significant first, which is the order the payload holds them in either way. `grain` is the operand's, as it is in every other `Bin` row, so the result is the one it is not.
     ///
@@ -289,121 +289,121 @@ pub enum Intrinsic {
     /// The payload is not rebuilt, but this is not free: a rope carries its length in the grain's own units at every node, so the conversion is one force and one leaf at the scaled length.
     BinReinterp {
         grain: Grain,
-        bin: Term,
-        aligned: Term,
+        bin: T,
+        aligned: T,
     },
-    ListType(Term),
+    ListType(T),
     // A list literal, carrying its element type: the one value form whose elements alone cannot name it — `[]` has nothing to read a type from.
     List {
-        element: Term,
-        items: Vec<Term>,
+        element: T,
+        items: Vec<T>,
     },
     ListLen {
-        element: Term,
-        list: Term,
+        element: T,
+        list: T,
     },
     ListGet {
-        element: Term,
-        list: Term,
-        index: Term,
-        in_range: Term,
+        element: T,
+        list: T,
+        index: T,
+        in_range: T,
     },
     ListSlice {
-        element: Term,
-        list: Term,
-        start: Term,
-        length: Term,
-        within: Term,
+        element: T,
+        list: T,
+        start: T,
+        length: T,
+        within: T,
     },
     ListAppend {
-        element: Term,
-        list: Term,
-        item: Term,
+        element: T,
+        list: T,
+        item: T,
     },
     ListConcat {
-        element: Term,
-        operands: Vec<Term>,
+        element: T,
+        operands: Vec<T>,
     },
     // (@A, @B, list : List(A), f : (A) -> B) -> List(B): a structural map. Opaque under reduction on a symbolic operand, so it never unfolds a variable during type-checking. Erases to a single O(n) fill loop.
     ListMap {
-        from: Term,
-        to: Term,
-        list: Term,
-        function: Term,
+        from: T,
+        to: T,
+        list: T,
+        function: T,
     },
     // (@T, @A, list : List(T), init : A, f : (T, A) -> A) -> A: a structural left fold, `f(x_n, … f(x_1, init))`. Reduces over the free-monoid shape — a literal run applies `f` element by element, a concatenation folds its operands in order threading the accumulator, an append folds its base and then applies `f` to the appended element — and stays neutral on a symbolic operand, so `fold([h, ..t], z, f) = fold(t, f(h, z), f)` is definitional. Erases to a bounded `Nat` fold over the list's length with one read per step.
     ListFold {
-        element: Term,
-        result: Term,
-        list: Term,
-        init: Term,
-        function: Term,
+        element: T,
+        result: T,
+        list: T,
+        init: T,
+        function: T,
     },
     HandleType,
     Handle(u32),
-    CellType(Term),
+    CellType(T),
     Cell {
-        element: Term,
+        element: T,
     },
     CellFill {
-        element: Term,
-        cell: Term,
-        value: Term,
+        element: T,
+        cell: T,
+        value: T,
     },
     CellPoll {
-        element: Term,
-        cell: Term,
+        element: T,
+        cell: T,
         universes: Vec<Level>,
     },
-    ChannelType(Term),
+    ChannelType(T),
     Channel {
-        element: Term,
-        capacity: Term,
-        positive: Term,
+        element: T,
+        capacity: T,
+        positive: T,
     },
     ChannelPush {
-        element: Term,
-        channel: Term,
-        value: Term,
+        element: T,
+        channel: T,
+        value: T,
     },
     ChannelTake {
-        element: Term,
-        channel: Term,
+        element: T,
+        channel: T,
         universes: Vec<Level>,
     },
     ChannelClose {
-        element: Term,
-        channel: Term,
+        element: T,
+        channel: T,
     },
     ChannelClosed {
-        element: Term,
-        channel: Term,
+        element: T,
+        channel: T,
     },
     ChannelCount {
-        element: Term,
-        channel: Term,
+        element: T,
+        channel: T,
     },
     ChannelCapacity {
-        element: Term,
-        channel: Term,
+        element: T,
+        channel: T,
     },
     // The opaque carrier of a host effect: `Io(T)` is a *description* of a computation that yields a `T`, never the `T` itself.
     //
     // There is deliberately no eliminator from `Io(T)` to `T`, and there never may be. That absence is the whole of the referential-transparency story: a closure that performs an effect can only be given an `Io`-returning type, so every term of non-`Io` type denotes one value, and a scrutinee's spelling fixes it. The only consumer of an `Io(A)` is `IoBind`, which returns an `Io(B)`; nothing lowers the carrier to its content but the emitted entrypoint boundary, which forces the program's whole description exactly once.
-    IoType(Term),
+    IoType(T),
     // (@T, x : T) -> Io(T): the description that performs nothing and yields `x`.
     IoPure {
-        result: Term,
-        value: Term,
+        result: T,
+        value: T,
     },
     // (@A, @B, m : Io(A), f : (A) -> Io(B)) -> Io(B): the description that performs `m`, then the description `f` computes from its result.
     //
     // Non-dependent in `B`, matching the `/std/Monad` field it satisfies. Inert like the other two: no monad law holds definitionally, since nothing can be proven about an `Io` for a law to be useful about.
     IoBind {
-        from: Term,
-        to: Term,
-        action: Term,
-        continuation: Term,
+        from: T,
+        to: T,
+        action: T,
+        continuation: T,
     },
 }
 
@@ -1580,6 +1580,446 @@ impl Intrinsic {
             },
         }
     }
+}
+
+impl<T> Intrinsic<T> {
+    /// This operation over another operand type: every operand through `operand`, in field order, and everything that is not an operand as it stands.
+    pub fn try_map<U, E>(
+        &self,
+        operand: &mut impl FnMut(&T) -> Result<U, E>,
+    ) -> Result<Intrinsic<U>, E> {
+        Ok(match self {
+            Intrinsic::BoolType => Intrinsic::BoolType,
+            Intrinsic::Bool(value) => Intrinsic::Bool(*value),
+            Intrinsic::NatType => Intrinsic::NatType,
+            Intrinsic::Nat(Nat::Zero) => Intrinsic::Nat(Nat::Zero),
+            Intrinsic::Nat(Nat::Succ(spine, inner)) => {
+                Intrinsic::Nat(Nat::Succ(spine.clone(), operand(inner)?))
+            }
+            Intrinsic::NatEql(l, r) => try_binary(l, r, operand, Intrinsic::NatEql)?,
+            Intrinsic::NatNeq(l, r) => try_binary(l, r, operand, Intrinsic::NatNeq)?,
+            Intrinsic::NatAdd(l, r) => try_binary(l, r, operand, Intrinsic::NatAdd)?,
+            Intrinsic::NatSub(l, r) => try_binary(l, r, operand, Intrinsic::NatSub)?,
+            Intrinsic::NatMul(l, r) => try_binary(l, r, operand, Intrinsic::NatMul)?,
+            Intrinsic::NatLt(l, r) => try_binary(l, r, operand, Intrinsic::NatLt)?,
+            Intrinsic::NatDiv {
+                dividend: a,
+                divisor: b,
+                non_zero: p,
+            } => Intrinsic::NatDiv {
+                dividend: operand(a)?,
+                divisor: operand(b)?,
+                non_zero: operand(p)?,
+            },
+            Intrinsic::NatRem {
+                dividend: a,
+                divisor: b,
+                non_zero: p,
+            } => Intrinsic::NatRem {
+                dividend: operand(a)?,
+                divisor: operand(b)?,
+                non_zero: operand(p)?,
+            },
+            Intrinsic::NatLe(l, r) => try_binary(l, r, operand, Intrinsic::NatLe)?,
+            Intrinsic::NatAnd(l, r) => try_binary(l, r, operand, Intrinsic::NatAnd)?,
+            Intrinsic::NatOr(l, r) => try_binary(l, r, operand, Intrinsic::NatOr)?,
+            Intrinsic::NatXor(l, r) => try_binary(l, r, operand, Intrinsic::NatXor)?,
+            Intrinsic::NatShl(l, r) => try_binary(l, r, operand, Intrinsic::NatShl)?,
+            Intrinsic::NatShr(l, r) => try_binary(l, r, operand, Intrinsic::NatShr)?,
+            Intrinsic::ByteType => Intrinsic::ByteType,
+            Intrinsic::Byte(value) => Intrinsic::Byte(*value),
+            Intrinsic::ByteToNat(inner) => Intrinsic::ByteToNat(operand(inner)?),
+            Intrinsic::NatToByte { nat, below } => Intrinsic::NatToByte {
+                nat: operand(nat)?,
+                below: operand(below)?,
+            },
+            Intrinsic::BoolAnd(l, r) => try_binary(l, r, operand, Intrinsic::BoolAnd)?,
+            Intrinsic::BoolOr(l, r) => try_binary(l, r, operand, Intrinsic::BoolOr)?,
+            Intrinsic::BoolXor(l, r) => try_binary(l, r, operand, Intrinsic::BoolXor)?,
+            Intrinsic::BoolEql(l, r) => try_binary(l, r, operand, Intrinsic::BoolEql)?,
+            Intrinsic::BoolNeq(l, r) => try_binary(l, r, operand, Intrinsic::BoolNeq)?,
+            Intrinsic::IntType => Intrinsic::IntType,
+            Intrinsic::Int(value) => Intrinsic::Int(value.clone()),
+            Intrinsic::IntEql(l, r) => try_binary(l, r, operand, Intrinsic::IntEql)?,
+            Intrinsic::IntNeq(l, r) => try_binary(l, r, operand, Intrinsic::IntNeq)?,
+            Intrinsic::IntAdd(l, r) => try_binary(l, r, operand, Intrinsic::IntAdd)?,
+            Intrinsic::IntSub(l, r) => try_binary(l, r, operand, Intrinsic::IntSub)?,
+            Intrinsic::IntMul(l, r) => try_binary(l, r, operand, Intrinsic::IntMul)?,
+            Intrinsic::IntDiv {
+                dividend: a,
+                divisor: b,
+                non_zero: p,
+            } => Intrinsic::IntDiv {
+                dividend: operand(a)?,
+                divisor: operand(b)?,
+                non_zero: operand(p)?,
+            },
+            Intrinsic::IntRem {
+                dividend: a,
+                divisor: b,
+                non_zero: p,
+            } => Intrinsic::IntRem {
+                dividend: operand(a)?,
+                divisor: operand(b)?,
+                non_zero: operand(p)?,
+            },
+            Intrinsic::IntLt(l, r) => try_binary(l, r, operand, Intrinsic::IntLt)?,
+            Intrinsic::IntLe(l, r) => try_binary(l, r, operand, Intrinsic::IntLe)?,
+            Intrinsic::IntAnd(l, r) => try_binary(l, r, operand, Intrinsic::IntAnd)?,
+            Intrinsic::IntOr(l, r) => try_binary(l, r, operand, Intrinsic::IntOr)?,
+            Intrinsic::IntXor(l, r) => try_binary(l, r, operand, Intrinsic::IntXor)?,
+            Intrinsic::IntShl(l, r) => try_binary(l, r, operand, Intrinsic::IntShl)?,
+            Intrinsic::IntShr(l, r) => try_binary(l, r, operand, Intrinsic::IntShr)?,
+            Intrinsic::FltType => Intrinsic::FltType,
+            Intrinsic::Flt(flt) => Intrinsic::Flt(*flt),
+            Intrinsic::FltAdd(rounding, l, r) => {
+                try_binary(l, r, operand, |l, r| Intrinsic::FltAdd(*rounding, l, r))?
+            }
+            Intrinsic::FltSub(rounding, l, r) => {
+                try_binary(l, r, operand, |l, r| Intrinsic::FltSub(*rounding, l, r))?
+            }
+            Intrinsic::FltMul(rounding, l, r) => {
+                try_binary(l, r, operand, |l, r| Intrinsic::FltMul(*rounding, l, r))?
+            }
+            Intrinsic::FltDiv(rounding, l, r) => {
+                try_binary(l, r, operand, |l, r| Intrinsic::FltDiv(*rounding, l, r))?
+            }
+            Intrinsic::FltRem(l, r) => try_binary(l, r, operand, Intrinsic::FltRem)?,
+            Intrinsic::FltEql(l, r) => try_binary(l, r, operand, Intrinsic::FltEql)?,
+            Intrinsic::FltNeq(l, r) => try_binary(l, r, operand, Intrinsic::FltNeq)?,
+            Intrinsic::FltLt(l, r) => try_binary(l, r, operand, Intrinsic::FltLt)?,
+            Intrinsic::FltLe(l, r) => try_binary(l, r, operand, Intrinsic::FltLe)?,
+            Intrinsic::FltMin(l, r) => try_binary(l, r, operand, Intrinsic::FltMin)?,
+            Intrinsic::FltMax(l, r) => try_binary(l, r, operand, Intrinsic::FltMax)?,
+            Intrinsic::FltCopysign(l, r) => try_binary(l, r, operand, Intrinsic::FltCopysign)?,
+            Intrinsic::FltNeg(inner) => Intrinsic::FltNeg(operand(inner)?),
+            Intrinsic::FltAbs(inner) => Intrinsic::FltAbs(operand(inner)?),
+            Intrinsic::FltSqrt(rounding, inner) => Intrinsic::FltSqrt(*rounding, operand(inner)?),
+            Intrinsic::FltRoundIntegral(rounding, inner) => {
+                Intrinsic::FltRoundIntegral(*rounding, operand(inner)?)
+            }
+            Intrinsic::FltFma(rounding, a, b, c) => {
+                Intrinsic::FltFma(*rounding, operand(a)?, operand(b)?, operand(c)?)
+            }
+            Intrinsic::FltToLeBytes(inner) => Intrinsic::FltToLeBytes(operand(inner)?),
+            Intrinsic::FltOfLeBytes { bin, eight_bytes } => Intrinsic::FltOfLeBytes {
+                bin: operand(bin)?,
+                eight_bytes: operand(eight_bytes)?,
+            },
+            Intrinsic::NatToInt(inner) => Intrinsic::NatToInt(operand(inner)?),
+            Intrinsic::NatToFlt(rounding, inner) => Intrinsic::NatToFlt(*rounding, operand(inner)?),
+            Intrinsic::IntToNat { int, non_neg } => Intrinsic::IntToNat {
+                int: operand(int)?,
+                non_neg: operand(non_neg)?,
+            },
+            Intrinsic::IntToFlt(rounding, inner) => Intrinsic::IntToFlt(*rounding, operand(inner)?),
+            Intrinsic::FltToNat { flt, non_neg } => Intrinsic::FltToNat {
+                flt: operand(flt)?,
+                non_neg: operand(non_neg)?,
+            },
+            Intrinsic::FltToInt { flt, finite } => Intrinsic::FltToInt {
+                flt: operand(flt)?,
+                finite: operand(finite)?,
+            },
+            Intrinsic::FltMantissa { flt, finite } => Intrinsic::FltMantissa {
+                flt: operand(flt)?,
+                finite: operand(finite)?,
+            },
+            Intrinsic::FltExponent { flt, finite } => Intrinsic::FltExponent {
+                flt: operand(flt)?,
+                finite: operand(finite)?,
+            },
+            Intrinsic::BinType(grain) => Intrinsic::BinType(*grain),
+            Intrinsic::Bin(grain, value) => Intrinsic::Bin(*grain, value.clone()),
+            Intrinsic::BinLen(grain, bin) => Intrinsic::BinLen(*grain, operand(bin)?),
+            Intrinsic::BinEql(grain, l, r) => {
+                try_binary(l, r, operand, |l, r| Intrinsic::BinEql(*grain, l, r))?
+            }
+            Intrinsic::BinGet {
+                grain,
+                bin,
+                index,
+                in_range,
+            } => Intrinsic::BinGet {
+                grain: *grain,
+                bin: operand(bin)?,
+                index: operand(index)?,
+                in_range: operand(in_range)?,
+            },
+            Intrinsic::BinSlice {
+                grain,
+                bin,
+                start,
+                length,
+                within,
+            } => Intrinsic::BinSlice {
+                grain: *grain,
+                bin: operand(bin)?,
+                start: operand(start)?,
+                length: operand(length)?,
+                within: operand(within)?,
+            },
+            Intrinsic::BinAppend {
+                grain,
+                bin: b,
+                element: atom,
+            } => try_binary(b, atom, operand, |b, atom| Intrinsic::BinAppend {
+                grain: *grain,
+                bin: b,
+                element: atom,
+            })?,
+            Intrinsic::BinConcat { grain, operands } => Intrinsic::BinConcat {
+                grain: *grain,
+                operands: operands
+                    .iter()
+                    .map(&mut *operand)
+                    .collect::<Result<_, _>>()?,
+            },
+            Intrinsic::BinReplicate { grain, count, atom } => {
+                try_binary(count, atom, operand, |count, atom| {
+                    Intrinsic::BinReplicate {
+                        grain: *grain,
+                        count,
+                        atom,
+                    }
+                })?
+            }
+            Intrinsic::BinReinterp {
+                grain,
+                bin,
+                aligned,
+            } => try_binary(bin, aligned, operand, |bin, aligned| {
+                Intrinsic::BinReinterp {
+                    grain: *grain,
+                    bin,
+                    aligned,
+                }
+            })?,
+            Intrinsic::BinAnd {
+                grain,
+                left,
+                right,
+                same_length,
+            } => Intrinsic::BinAnd {
+                grain: *grain,
+                left: operand(left)?,
+                right: operand(right)?,
+                same_length: operand(same_length)?,
+            },
+            Intrinsic::BinOr {
+                grain,
+                left,
+                right,
+                same_length,
+            } => Intrinsic::BinOr {
+                grain: *grain,
+                left: operand(left)?,
+                right: operand(right)?,
+                same_length: operand(same_length)?,
+            },
+            Intrinsic::BinXor {
+                grain,
+                left,
+                right,
+                same_length,
+            } => Intrinsic::BinXor {
+                grain: *grain,
+                left: operand(left)?,
+                right: operand(right)?,
+                same_length: operand(same_length)?,
+            },
+            Intrinsic::ListType(elem) => Intrinsic::ListType(operand(elem)?),
+            Intrinsic::List {
+                element: elem,
+                items: elems,
+            } => Intrinsic::List {
+                element: operand(elem)?,
+                items: elems.iter().map(&mut *operand).collect::<Result<_, _>>()?,
+            },
+            Intrinsic::ListLen { element: ty, list } => {
+                try_binary(ty, list, operand, |element, list| Intrinsic::ListLen {
+                    element,
+                    list,
+                })?
+            }
+            Intrinsic::ListGet {
+                element: ty,
+                list,
+                index,
+                in_range,
+            } => Intrinsic::ListGet {
+                element: operand(ty)?,
+                list: operand(list)?,
+                index: operand(index)?,
+                in_range: operand(in_range)?,
+            },
+            Intrinsic::ListSlice {
+                element: ty,
+                list,
+                start,
+                length,
+                within,
+            } => Intrinsic::ListSlice {
+                element: operand(ty)?,
+                list: operand(list)?,
+                start: operand(start)?,
+                length: operand(length)?,
+                within: operand(within)?,
+            },
+            Intrinsic::ListAppend {
+                element: ty,
+                list,
+                item: elem,
+            } => Intrinsic::ListAppend {
+                element: operand(ty)?,
+                list: operand(list)?,
+                item: operand(elem)?,
+            },
+            Intrinsic::ListConcat {
+                element: ty,
+                operands,
+            } => Intrinsic::ListConcat {
+                element: operand(ty)?,
+                operands: operands
+                    .iter()
+                    .map(&mut *operand)
+                    .collect::<Result<_, _>>()?,
+            },
+            Intrinsic::ListMap {
+                from: a,
+                to: b,
+                list,
+                function: f,
+            } => Intrinsic::ListMap {
+                from: operand(a)?,
+                to: operand(b)?,
+                list: operand(list)?,
+                function: operand(f)?,
+            },
+            Intrinsic::ListFold {
+                element,
+                result,
+                list,
+                init,
+                function,
+            } => Intrinsic::ListFold {
+                element: operand(element)?,
+                result: operand(result)?,
+                list: operand(list)?,
+                init: operand(init)?,
+                function: operand(function)?,
+            },
+            Intrinsic::HandleType => Intrinsic::HandleType,
+            Intrinsic::Handle(token) => Intrinsic::Handle(*token),
+            Intrinsic::CellType(a) => Intrinsic::CellType(operand(a)?),
+            Intrinsic::ChannelType(a) => Intrinsic::ChannelType(operand(a)?),
+            Intrinsic::Cell { element } => Intrinsic::Cell {
+                element: operand(element)?,
+            },
+            Intrinsic::CellFill {
+                element,
+                cell,
+                value,
+            } => Intrinsic::CellFill {
+                element: operand(element)?,
+                cell: operand(cell)?,
+                value: operand(value)?,
+            },
+            Intrinsic::CellPoll {
+                element,
+                cell,
+                universes,
+            } => Intrinsic::CellPoll {
+                element: operand(element)?,
+                cell: operand(cell)?,
+                universes: universes.clone(),
+            },
+            Intrinsic::Channel {
+                element,
+                capacity,
+                positive,
+            } => Intrinsic::Channel {
+                element: operand(element)?,
+                capacity: operand(capacity)?,
+                positive: operand(positive)?,
+            },
+            Intrinsic::ChannelPush {
+                element,
+                channel,
+                value,
+            } => Intrinsic::ChannelPush {
+                element: operand(element)?,
+                channel: operand(channel)?,
+                value: operand(value)?,
+            },
+            Intrinsic::ChannelTake {
+                element,
+                channel,
+                universes,
+            } => Intrinsic::ChannelTake {
+                element: operand(element)?,
+                channel: operand(channel)?,
+                universes: universes.clone(),
+            },
+            Intrinsic::ChannelClose { element, channel } => Intrinsic::ChannelClose {
+                element: operand(element)?,
+                channel: operand(channel)?,
+            },
+            Intrinsic::ChannelClosed { element, channel } => Intrinsic::ChannelClosed {
+                element: operand(element)?,
+                channel: operand(channel)?,
+            },
+            Intrinsic::ChannelCount { element, channel } => Intrinsic::ChannelCount {
+                element: operand(element)?,
+                channel: operand(channel)?,
+            },
+            Intrinsic::ChannelCapacity { element, channel } => Intrinsic::ChannelCapacity {
+                element: operand(element)?,
+                channel: operand(channel)?,
+            },
+            Intrinsic::IoType(a) => Intrinsic::IoType(operand(a)?),
+            Intrinsic::IoPure {
+                result: a,
+                value: b,
+            } => try_binary(a, b, operand, |result, value| Intrinsic::IoPure {
+                result,
+                value,
+            })?,
+            Intrinsic::IoBind {
+                from: a,
+                to: b,
+                action,
+                continuation: f,
+            } => Intrinsic::IoBind {
+                from: operand(a)?,
+                to: operand(b)?,
+                action: operand(action)?,
+                continuation: operand(f)?,
+            },
+        })
+    }
+
+    /// [`try_map`](Self::try_map) where no operand can fail.
+    pub fn map<U>(&self, mut operand: impl FnMut(&T) -> U) -> Intrinsic<U> {
+        let mapped = self.try_map(&mut |term| Ok::<U, std::convert::Infallible>(operand(term)));
+
+        match mapped {
+            Ok(mapped) => mapped,
+            Err(never) => match never {},
+        }
+    }
+}
+
+fn try_binary<T, U, E>(
+    left: &T,
+    right: &T,
+    operand: &mut impl FnMut(&T) -> Result<U, E>,
+    build: impl FnOnce(U, U) -> Intrinsic<U>,
+) -> Result<Intrinsic<U>, E> {
+    let left = operand(left)?;
+    let right = operand(right)?;
+
+    Ok(build(left, right))
 }
 
 /// Which intrinsic type a match scrutinee is required to have. The legal selectors for `curios-elab`'s `check_intrinsic_head`/`expect_intrinsic_head` — exactly the type-former `Intrinsic`s those helpers accept, as a closed set so an out-of-range selector is unrepresentable rather than an `unreachable!` panic.

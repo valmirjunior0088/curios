@@ -18,19 +18,22 @@ mod host_rows;
 // `pub(crate)` rather than plain, and the one place this module widens anything: `foreign_signature` answers `into_core`'s user-written `foreign`, and it reaches the crate root through here.
 pub(crate) use host_rows::*;
 
+mod projected;
+use projected::*;
+
 #[cfg(test)]
 mod tests;
 
 use {
     super::{
-        Doc, Intrinsic, Match, MatchPattern, MatrixArm, Module, Nat, NatLiteral, Subterm, Term,
-        TopCase, TopInduct, TopItem,
+        Doc, Match, MatchPattern, MatrixArm, Module, Subterm, Term, TopCase, TopInduct, TopItem,
     },
     curios_abi::{
         ForeignStore, errno, event, file_kind, open_mode, serial_flow, serial_op, serial_parity,
         status, stdio, stdio_mode,
     },
-    curios_num::{Grain, Integer, Rounding},
+    curios_core::Intrinsic,
+    curios_num::{Grain, Integer, Natural, Rounding},
     curios_utilities::{Plicity, SyntaxRegistry},
 };
 
@@ -168,8 +171,8 @@ fn nat_succ() -> Decl {
         "succ",
         vec![("a", nat())],
         nat(),
-        intrinsic(Intrinsic::Nat(Nat::Succ(
-            NatLiteral::number(1usize),
+        intrinsic(Intrinsic::Nat(curios_core::Nat::Succ(
+            Natural::from(1usize),
             name("a"),
         ))),
     )
@@ -181,7 +184,7 @@ fn nat_nonzero(syntax: &SyntaxRegistry) -> Term {
         syntax,
         applied(
             sys_op(&["sys", "Nat", "lt"]),
-            vec![intrinsic(Intrinsic::Nat(Nat::Zero)), name("b")],
+            vec![intrinsic(Intrinsic::Nat(curios_core::Nat::Zero)), name("b")],
         ),
     )
 }
@@ -870,8 +873,7 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
                 type_,
                 intrinsic(Intrinsic::BinConcat {
                     grain,
-                    left: name("a"),
-                    right: name("b"),
+                    operands: vec![name("a"), name("b")],
                 }),
             ),
         ),
@@ -1041,8 +1043,7 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
                 list_of(name("T")),
                 intrinsic(Intrinsic::ListConcat {
                     element: name("T"),
-                    left: name("a"),
-                    right: name("b"),
+                    operands: vec![name("a"), name("b")],
                 }),
             ),
         ),
@@ -1134,6 +1135,7 @@ fn cell_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
                 intrinsic(Intrinsic::CellPoll {
                     element: name("T"),
                     cell: name("c"),
+                    universes: Vec::new(),
                 }),
             ),
         ),
@@ -1180,7 +1182,7 @@ fn channel_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
         documented(&["Append if open and not full, reporting this attempt's outcome."], pub_fn_marked("push",
             vec![(Plicity::Implicit, "T", type_()), (Plicity::Explicit, "c", channel_of(name("T"))), (Plicity::Explicit, "value", name("T"))],
             io_of(registered(syntax.channel.push)), intrinsic(Intrinsic::ChannelPush { element: name("T"), channel: name("c"), value: name("value") }))),
-        query("take", "Remove the oldest item; empty while open, ended when closed and drained.", applied(registered(syntax.channel.take), vec![name("T")]), Intrinsic::ChannelTake { element: name("T"), channel: name("c") }),
+        query("take", "Remove the oldest item; empty while open, ended when closed and drained.", applied(registered(syntax.channel.take), vec![name("T")]), Intrinsic::ChannelTake { element: name("T"), channel: name("c"), universes: Vec::new() }),
         query("close", "Prevent later pushes, preserving queued items for draining. Repeated closes do nothing.", unit(), Intrinsic::ChannelClose { element: name("T"), channel: name("c") }),
         query("closed", "Whether the channel has been closed.", bool_(), Intrinsic::ChannelClosed { element: name("T"), channel: name("c") }),
         query("count", "The number of queued items. This observation reserves nothing.", nat(), Intrinsic::ChannelCount { element: name("T"), channel: name("c") }),
@@ -1459,6 +1461,15 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
 ///
 /// Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
 pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
+    let mut module = written(foreigns, syntax);
+    // Spike switch: the types of every one-node declaration come from core's table.
+    project_types(&mut module, syntax);
+
+    module
+}
+
+/// The roster as it is written, before any type is read off core's table.
+fn written(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
     let items = absorb_host_rows(declared(syntax), foreigns)
         .into_iter()
         .chain(code_modules())
