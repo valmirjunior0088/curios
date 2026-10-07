@@ -2,7 +2,7 @@
 
 Working specification for `/std/List`'s sort as a merge sort with its theorem, and for what the theorem is stated in: a permutation, an order decided over a list, and a comparator's laws named once. It replaces the insertion sort, which stops at five thousand elements. [A map in its keys' order](04-a-map-in-its-keys-order.md) is the other half of what this file once reserved.
 
-It waits on no other spec. Its last stage states `Str`'s order in a type, which the walk `Bytes/ord` is written as does not allow; that walk is rewritten first, as [its finding](00-findings.md) says.
+It waits on no other spec.
 
 ## What this builds on
 

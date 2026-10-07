@@ -1,5 +1,5 @@
 -- Packed atom splices, the folds that sum a sequence, and a packed value shown.
-use /std/{Str, Nat, Byte, Bytes, Bool, Bits, Eq, List, Option, Show, Test};
+use /std/{Str, Nat, Byte, Bytes, Bool, Bits, Eq, List, Option, Ordering, Show, Test};
 
 -- `..` splices one generator into a packed literal, between literal runs and adjacent to another atom. `i` and `bang` are bound rather than written, so the run is genuinely spliced rather than folded at parse time.
 test atom_splice_builds_the_written_sequence =
@@ -37,3 +37,33 @@ test bytes_fold_sums_bytes =
 -- Bytes show as two hexadecimal digits each, a leading zero kept, built from characters rather than decoded from bytes.
 test bytes_show_as_hexadecimal =
     Test/equal(Show/show(x[0x0F, 0xA0, 0x00]), "0fa000");
+
+-- The orders of `Bytes`, `Bits` and `Str` walk both runs' structure, so a type may name them: each is stated reflexive here, a statement an index walked upward under a guard is refused for.
+let _bytes_order_is_reflexive(a: Bytes) -> Eq()(Bytes/ord(a, a), Ordering/eq()) =
+    match a: (m) => Eq()(Bytes/ord(m, m), Ordering/eq())
+    | x[] => Eq/refl()
+    | x[_, .._]; ih => ih
+    end;
+
+let _bits_order_is_reflexive(a: Bits) -> Eq()(Bits/ord(a, a), Ordering/eq()) =
+    match a: (m) => Eq()(Bits/ord(m, m), Ordering/eq())
+    | b[] => Eq/refl()
+    | b[h, .._]; ih => match h | true => ih | false => ih end
+    end;
+
+let _str_order_is_reflexive(a: Str) -> Eq()(Str/ord(a, a), Ordering/eq()) =
+    _bytes_order_is_reflexive(Str/to_bytes(a));
+
+-- A proper prefix first, then the first place the two differ.
+test packed_orders_compare_by_prefix_then_by_atom =
+    Test/all([
+        Test/equal(Bytes/ord(x[], x[]), Ordering/eq()),
+        Test/equal(Bytes/ord(x[1], x[1, 0]), Ordering/lt()),
+        Test/equal(Bytes/ord(x[1, 0], x[1]), Ordering/gt()),
+        Test/equal(Bytes/ord(x[255], x[1, 0]), Ordering/gt()),
+        Test/equal(Bytes/ord(x[1, 2], x[1, 3]), Ordering/lt()),
+        Test/equal(Bits/ord(b[], b[0]), Ordering/lt()),
+        Test/equal(Bits/ord(b[1], b[0, 1]), Ordering/gt()),
+        Test/equal(Bits/ord(b[0, 1], b[0, 1]), Ordering/eq()),
+        Test/equal(Str/ord("ab", "b"), Ordering/lt()),
+        Test/equal(Str/ord("b", "ab"), Ordering/gt())]);

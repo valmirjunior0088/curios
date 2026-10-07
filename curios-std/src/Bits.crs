@@ -143,18 +143,19 @@ pub let join(sep: Bits, parts: List(Bits)) -> Bits =
 
 --- Bitwise from index zero, a proper prefix first.
 pub let ord(a: Bits, b: Bits) -> Ordering =
-    let go(i: Nat) -> Ordering =
-        match i < len(a)
-        | false => match i < len(b) | true => Ordering/lt() | false => Ordering/eq() end
-        | true =>
-            match i < len(b)
-            | false => Ordering/gt()
-            | true =>
-                let r = Bool/ord(get(a, i), get(b, i));
-                match r | eq() => go(i + 1) | _ => r end
+    match a
+    | b[] => match b | b[] => Ordering/eq() | _ => Ordering/lt() end
+    | b[h, ..t] =>
+        match b
+        | b[] => Ordering/gt()
+        | b[k, ..r] =>
+            match Bool/ord(h, k)
+            | eq() => ord(t, r)
+            | lt() => Ordering/lt()
+            | gt() => Ordering/gt()
             end
-        end;
-    go(0);
+        end
+    end;
 
 satisfy Eql(Bits) {
     eql = eql,
