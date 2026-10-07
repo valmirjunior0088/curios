@@ -33,7 +33,7 @@ Conversion decides a theory or it does not decide it: a law is held where its de
 
 **A promoted operation computes from its operands alone.** Its fold asks the plain comparison of its operands (`compare_nat`, `compare_int`) and reads no arm's equation, so what it reduces to is the same in every arm, and commutation, association and repetition hold there as they do outside. Under a guard, `min(a, b)` stays `min(a, b)`; a `/std` lemma takes a hypothesis to the equation, and the procedure that proves a bound reads the operation through its case split.
 
-**The comparison's order is transitive.** A `min` keeps the operands no other is at most, so two associations of one `min` agree only where `a <= b` and `b <= c` decided give `a <= c` decided. Stage 1 holds the plain comparison to that over a roster of shapes.
+**The comparison's order is transitive.** A `min` keeps the operands no other is at most, so two associations of one `min` agree only where `a <= b` and `b <= c` decided give `a <= c` decided. `curios-core`'s `the_order_nat_decides_is_transitive` and its `Int` twin hold the plain comparison to that over a roster of shapes, which each promoted operation joins.
 
 ## `min` and `max`
 
@@ -107,14 +107,13 @@ What is not a law stays a control, refused with its counterexample: associativit
 
 ## Stages
 
-1. **A defect that blocks.** The comparison reads a bound only against a bare literal, which leaves its order not transitive ([the findings](00-findings.md)). Check: the transitivity grid.
-2. **Rows first.** State every law above, every row the library definitions hold today and every control in the grid at every carrier and direction it applies to, each refused row commented with the stage that moves it; and put each law to the audit at a product of two sums.
-3. **`Flt`'s identities.** No promotion: the direction in an operation's identity, the symmetric declarations, the difference's fold, the idempotent roundings and the round trip, then the sign kind.
-4. **The families `Int` shares with `Nat`.** No promotion.
-5. **The shift's exponent law, and positivity.** No promotion: the count's summands split over the atom `shl(1, k)`, and a lower bound beside the upper one.
-6. **`min` and `max`**, at both carriers, with the domination mirror.
-7. **`abs` and `sign`**, with the two lemmas `/std/Map` consumes.
-8. **`pow`**, the power atom becoming `pow(2, k)`.
+1. **Rows first.** State every law above, every row the library definitions hold today and every control in the grid at every carrier and direction it applies to, each refused row commented with the stage that moves it; and put each law to the audit at a product of two sums.
+2. **`Flt`'s identities.** No promotion: the direction in an operation's identity, the symmetric declarations, the difference's fold, the idempotent roundings and the round trip, then the sign kind.
+3. **The families `Int` shares with `Nat`.** No promotion.
+4. **The shift's exponent law, and positivity.** No promotion: the count's summands split over the atom `shl(1, k)`, and a lower bound beside the upper one.
+5. **`min` and `max`**, at both carriers, with the domination mirror.
+6. **`abs` and `sign`**, with the two lemmas `/std/Map` consumes.
+7. **`pow`**, the power atom becoming `pow(2, k)`.
 
 Each stage moves its rows from refused to held, extends the grid's audit to the kind it declares, and adds its operation's rows to `curios`'s `tests::bounds`.
 

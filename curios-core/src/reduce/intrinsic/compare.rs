@@ -54,15 +54,13 @@ pub(super) fn compare_nat(
     let same = project_erased_universes(&left.inner) == project_erased_universes(&right.inner);
     let outcome = Comparison::of_floors(left.side(), right.side(), same);
 
-    // A statically bounded side decides against a bare one where the floors alone cannot: `bound(l) < r` forces `l < r` for every value `l` takes, and `bound(l) = r` forces `l <= r`. This is what reduces `x % n < n`, whose left inner is a stuck `NatRem` the structural body has nothing to say about. See `nat_bound` for why each bound holds unconditionally.
+    // A statically bounded side decides against the other side's floor where the floors alone cannot: `bound(l)` below `r`'s floor forces `l < r` for every value either takes, whatever stands above that floor, and `bound(l)` meeting it forces `l <= r`. This is what reduces `x % n < n`, whose left inner is a stuck `NatRem` the structural body has nothing to say about. See `nat_bound` for why each bound holds unconditionally.
+    //
+    // Read against the floor and not only against a bare literal, because the order this decides has to be transitive: `x % 8 <= 7` and `7 <= y + 7` are each decided, and an operation that keeps the least of its operands gives one answer for both associations only where `x % 8 <= y + 7` is decided too.
     let outcome = match outcome {
-        Comparison::Stuck if Nat::is_zero(&right.inner) => match nat_bound(&left.inner) {
-            Some(bound) => Comparison::below(&(bound + &left.floor), &right.floor),
-            None => Comparison::Stuck,
-        },
-        Comparison::Stuck if Nat::is_zero(&left.inner) => match nat_bound(&right.inner) {
-            Some(bound) => Comparison::below(&(bound + &right.floor), &left.floor).mirrored(),
-            None => Comparison::Stuck,
+        Comparison::Stuck => match bounded(&left, &right) {
+            Comparison::Stuck => bounded(&right, &left).mirrored(),
+            decided => decided,
         },
         decided => decided,
     };
@@ -91,30 +89,50 @@ pub(super) fn compare_nat(
     Ok((outcome, left.whole, right.whole))
 }
 
-/// The verdict a dominator forces, tried on the left inner and then the right, or `Stuck` when no listed operand compares: the dominator's verdict against the other side, read through `Comparison::through_dominator`.
+/// The verdict `bounded`'s literal bound forces against `other`'s floor, or `Stuck` where its inner has no bound or the bound passes the floor: `bounded` is at most its floor and its inner's bound, and `other` at least its own floor.
+fn bounded(bounded: &Operand, other: &Operand) -> Comparison {
+    match nat_bound(&bounded.inner) {
+        Some(bound) => Comparison::below(&(bound + &bounded.floor), &other.floor),
+        None => Comparison::Stuck,
+    }
+}
+
+/// The verdict a dominator forces, tried on the left inner and then the right, or `Stuck` when no listed operand compares: the dominator's verdict against the other side, read through `Comparison::through_dominator`, and a strict dominator's against the other side's successor, read through `Comparison::through_strict_dominator`.
 fn dominated(
     reducer: &mut impl Reducer,
     left: &Operand,
     right: &Operand,
 ) -> Result<Comparison, ReduceError> {
+    let successor = |operand: &Operand| {
+        Nat::rebuild(
+            operand.floor.clone() + Natural::one(),
+            operand.inner.clone(),
+        )
+    };
     for (bound, strict) in nat_dominators(&left.inner) {
-        let (verdict, _, _) = compare_nat(
-            reducer,
-            Nat::rebuild(left.floor.clone(), bound),
-            right.whole.clone(),
-        )?;
+        let dominator = Nat::rebuild(left.floor.clone(), bound);
+        let (verdict, _, _) = compare_nat(reducer, dominator.clone(), right.whole.clone())?;
         if let Some(verdict) = verdict.through_dominator(strict) {
             return Ok(verdict);
         }
+        if strict {
+            let (verdict, _, _) = compare_nat(reducer, dominator, successor(right))?;
+            if let Some(verdict) = verdict.through_strict_dominator() {
+                return Ok(verdict);
+            }
+        }
     }
     for (bound, strict) in nat_dominators(&right.inner) {
-        let (verdict, _, _) = compare_nat(
-            reducer,
-            left.whole.clone(),
-            Nat::rebuild(right.floor.clone(), bound),
-        )?;
+        let dominator = Nat::rebuild(right.floor.clone(), bound);
+        let (verdict, _, _) = compare_nat(reducer, left.whole.clone(), dominator.clone())?;
         if let Some(verdict) = verdict.mirrored().through_dominator(strict) {
             return Ok(verdict.mirrored());
+        }
+        if strict {
+            let (verdict, _, _) = compare_nat(reducer, successor(left), dominator)?;
+            if let Some(verdict) = verdict.mirrored().through_strict_dominator() {
+                return Ok(verdict.mirrored());
+            }
         }
     }
     Ok(Comparison::Stuck)

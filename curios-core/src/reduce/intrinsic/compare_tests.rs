@@ -159,7 +159,7 @@ fn nat_agrees_with_literal_ordering() {
     }
 }
 
-// A value compared to an operand it never exceeds: the minuend bounds a difference whatever is subtracted, and a divisor bounds a remainder strictly, `non_zero` having placed it at one or more. The control is the remainder against a value the divisor may equal: `x % (y + 1)` can be `y`, so nothing decides it.
+// A value compared to an operand it never exceeds: the minuend bounds a difference whatever is subtracted, and a divisor bounds a remainder strictly, `non_zero` having placed it at one or more. One short of the divisor the verdict stops at the non-strict one: `x % (y + 1)` can be `y`.
 #[test]
 fn nat_decides_a_value_against_an_operand_it_never_exceeds() {
     let (x, y) = (sym(0, "x"), sym(1, "y"));
@@ -177,11 +177,235 @@ fn nat_decides_a_value_against_an_operand_it_never_exceeds() {
     let (below, _, _) = compare_nat(&mut Inert, remainder.clone(), divisor).expect("reduces");
     assert_eq!(below, Comparison::Lt, "`x % (y + 1) < y + 1` for every `x`");
 
-    let (open, _, _) = compare_nat(&mut Inert, remainder, y).expect("reduces");
+    let (at_most, _, _) = compare_nat(&mut Inert, remainder, y).expect("reduces");
+    assert_eq!(
+        at_most,
+        Comparison::Le,
+        "`x % (y + 1) <= y`, and no more than that"
+    );
+}
+
+// A side with a literal bound decides against the floor under a symbolic side, as it does against a bare literal: the other side is at least its floor whatever stands above it. A byte's value has a bound and no operand it never exceeds, so nothing else decides these. The control is a floor one short of the bound.
+#[test]
+fn nat_decides_a_bounded_side_against_the_floor_under_a_symbolic_one() {
+    let (y, digit) = (
+        sym(1, "y"),
+        Term::intrinsic(Intrinsic::ByteToNat(sym(2, "b"))),
+    );
+    let above = |floor: u32| Nat::rebuild(floor.into(), y.clone());
+
+    let (met, _, _) = compare_nat(&mut Inert, digit.clone(), above(255)).expect("reduces");
+    assert_eq!(met, Comparison::Le, "`Byte/to_nat(b) <= y + 255`");
+    let (under, _, _) = compare_nat(&mut Inert, digit.clone(), above(256)).expect("reduces");
+    assert_eq!(under, Comparison::Lt, "`Byte/to_nat(b) < y + 256`");
+    let (mirrored, _, _) = compare_nat(&mut Inert, above(255), digit.clone()).expect("reduces");
+    assert_eq!(mirrored, Comparison::Ge, "`y + 255 >= Byte/to_nat(b)`");
+
+    let (open, _, _) = compare_nat(&mut Inert, digit, above(254)).expect("reduces");
     assert_eq!(
         open,
         Comparison::Stuck,
-        "`x % (y + 1)` against `y` is undecided"
+        "`b = 255` passes `y + 254` at zero"
+    );
+}
+
+// A remainder is strictly below its divisor, so it is at most whatever the divisor is at most one past: the two spellings of that fact across the `<`/`<=` seam decide alike, at a literal divisor and at a symbolic one. The control is two short of the divisor.
+#[test]
+fn nat_decides_a_remainder_at_most_one_short_of_its_divisor() {
+    let (x, y, z) = (sym(0, "x"), sym(1, "y"), sym(3, "z"));
+    let remainder = |divisor: Term| {
+        Term::intrinsic(Intrinsic::NatRem {
+            dividend: x.clone(),
+            divisor,
+            non_zero: qed(),
+        })
+    };
+    let above = |floor: u32| Nat::rebuild(floor.into(), y.clone());
+
+    let (strict, _, _) = compare_nat(&mut Inert, remainder(lit(8)), above(8)).expect("reduces");
+    assert_eq!(strict, Comparison::Lt, "`x % 8 < y + 8`");
+    let (at_most, _, _) = compare_nat(&mut Inert, remainder(lit(8)), above(7)).expect("reduces");
+    assert_eq!(at_most, Comparison::Le, "`x % 8 <= y + 7`");
+    let (mirrored, _, _) = compare_nat(&mut Inert, above(7), remainder(lit(8))).expect("reduces");
+    assert_eq!(mirrored, Comparison::Ge, "`y + 7 >= x % 8`");
+    let (open, _, _) = compare_nat(&mut Inert, remainder(lit(8)), above(6)).expect("reduces");
+    assert_eq!(
+        open,
+        Comparison::Stuck,
+        "`x % 8` can be `7`, past `y + 6` at zero"
+    );
+
+    // No literal bounds a remainder by a symbolic divisor: only the divisor itself does.
+    let divisor = Nat::rebuild(1u32.into(), z.clone());
+    let sum = add(y.clone(), z.clone());
+    let (symbolic, _, _) =
+        compare_nat(&mut Inert, remainder(divisor.clone()), sum.clone()).expect("reduces");
+    assert_eq!(symbolic, Comparison::Le, "`x % (z + 1) <= y + z`");
+    let (mirrored, _, _) = compare_nat(&mut Inert, sum, remainder(divisor)).expect("reduces");
+    assert_eq!(mirrored, Comparison::Ge, "`y + z >= x % (z + 1)`");
+}
+
+// The order the comparison decides is transitive over the shapes it reads: wherever `a <= b` and `b <= c` are each decided, so is `a <= c`. An operation that keeps the least of its operands gives one answer for both associations only on that, since the inner node may drop the operand that ordered the other two.
+#[test]
+fn the_order_nat_decides_is_transitive() {
+    let (x, y) = (sym(0, "x"), sym(1, "y"));
+    let above = |floor: u32, inner: &Term| Nat::rebuild(floor.into(), inner.clone());
+    let remainder = |divisor: Term| {
+        Term::intrinsic(Intrinsic::NatRem {
+            dividend: x.clone(),
+            divisor,
+            non_zero: qed(),
+        })
+    };
+    let shapes = [
+        ("0", lit(0)),
+        ("7", lit(7)),
+        ("8", lit(8)),
+        ("255", lit(255)),
+        ("x", x.clone()),
+        ("y", y.clone()),
+        ("x + 1", above(1, &x)),
+        ("y + 7", above(7, &y)),
+        ("y + 8", above(8, &y)),
+        ("y + 255", above(255, &y)),
+        ("x + y", add(x.clone(), y.clone())),
+        ("x + y + 1", above(1, &add(x.clone(), y.clone()))),
+        (
+            "x - y",
+            Term::intrinsic(Intrinsic::nat_sub(x.clone(), y.clone())),
+        ),
+        ("x % 8", remainder(lit(8))),
+        ("x % 8 + 1", above(1, &remainder(lit(8)))),
+        ("x % (y + 1)", remainder(above(1, &y))),
+        (
+            "Nat/and(x, 7)",
+            Term::intrinsic(Intrinsic::NatAnd(x.clone(), lit(7))),
+        ),
+        (
+            "Nat/and(x, y)",
+            Term::intrinsic(Intrinsic::NatAnd(x.clone(), y.clone())),
+        ),
+        (
+            "Nat/shr(x, y)",
+            Term::intrinsic(Intrinsic::NatShr(x.clone(), y.clone())),
+        ),
+        (
+            "x / 3",
+            Term::intrinsic(Intrinsic::NatDiv {
+                dividend: x.clone(),
+                divisor: lit(3),
+                non_zero: qed(),
+            }),
+        ),
+        (
+            "Byte/to_nat(b)",
+            Term::intrinsic(Intrinsic::ByteToNat(sym(2, "b"))),
+        ),
+    ];
+
+    let at_most = shapes
+        .iter()
+        .map(|(_, left)| {
+            shapes
+                .iter()
+                .map(|(_, right)| {
+                    let (verdict, _, _) =
+                        compare_nat(&mut Inert, left.clone(), right.clone()).expect("reduces");
+                    matches!(verdict, Comparison::Lt | Comparison::Le | Comparison::Eq)
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    // A grid that decided nothing would hold vacuously.
+    assert!(at_most.iter().flatten().filter(|decided| **decided).count() > shapes.len());
+
+    let mut apart = Vec::new();
+    for a in 0..shapes.len() {
+        for b in 0..shapes.len() {
+            for c in 0..shapes.len() {
+                if at_most[a][b] && at_most[b][c] && !at_most[a][c] {
+                    apart.push(format!(
+                        "`{}` <= `{}` <= `{}`",
+                        shapes[a].0, shapes[b].0, shapes[c].0
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        apart.is_empty(),
+        "decided at each step and not across:\n{}",
+        apart.join("\n")
+    );
+}
+
+// The signed comparison's order is transitive too, over a constant apart, a widened natural apart, and a widened natural's own floor and bound.
+#[test]
+fn the_order_int_decides_is_transitive() {
+    let (i, n, m) = (sym(0, "i"), sym(1, "n"), sym(2, "m"));
+    let integer = |value: i32| Term::intrinsic(Intrinsic::Int(Integer::from(value)));
+    let plus = |left: &Term, right: Term| Term::intrinsic(Intrinsic::IntAdd(left.clone(), right));
+    let widened = |natural: Term| Term::intrinsic(Intrinsic::NatToInt(natural));
+    let low = Term::intrinsic(Intrinsic::NatRem {
+        dividend: n.clone(),
+        divisor: lit(8),
+        non_zero: qed(),
+    });
+    let shapes = [
+        ("-1", integer(-1)),
+        ("+0", integer(0)),
+        ("+7", integer(7)),
+        ("+8", integer(8)),
+        ("i", i.clone()),
+        ("i - 1", plus(&i, integer(-1))),
+        ("i + 1", plus(&i, integer(1))),
+        ("Nat/to_int(n)", widened(n.clone())),
+        ("Nat/to_int(n) + 1", plus(&widened(n.clone()), integer(1))),
+        (
+            "Nat/to_int(n) + Nat/to_int(m)",
+            plus(&widened(n.clone()), widened(m)),
+        ),
+        ("i + Nat/to_int(n)", plus(&i, widened(n.clone()))),
+        (
+            "i + Nat/to_int(n) + 1",
+            plus(&plus(&i, widened(n)), integer(1)),
+        ),
+        ("Nat/to_int(n % 8)", widened(low.clone())),
+        ("Nat/to_int(n % 8) + 1", plus(&widened(low), integer(1))),
+    ];
+
+    let at_most = shapes
+        .iter()
+        .map(|(_, left)| {
+            shapes
+                .iter()
+                .map(|(_, right)| {
+                    let (verdict, _, _) =
+                        compare_int(&mut Inert, left.clone(), right.clone()).expect("reduces");
+                    matches!(verdict, Comparison::Lt | Comparison::Le | Comparison::Eq)
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    assert!(at_most.iter().flatten().filter(|decided| **decided).count() > shapes.len());
+
+    let mut apart = Vec::new();
+    for a in 0..shapes.len() {
+        for b in 0..shapes.len() {
+            for c in 0..shapes.len() {
+                if at_most[a][b] && at_most[b][c] && !at_most[a][c] {
+                    apart.push(format!(
+                        "`{}` <= `{}` <= `{}`",
+                        shapes[a].0, shapes[b].0, shapes[c].0
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        apart.is_empty(),
+        "decided at each step and not across:\n{}",
+        apart.join("\n")
     );
 }
 

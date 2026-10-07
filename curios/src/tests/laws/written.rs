@@ -288,6 +288,10 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Nat/shr(x, y) <= x, true)",
             "Eq()(x < x - y, false)",
             "Eq()(x - y <= x + 3, true)",
+            // A remainder is strictly below its divisor, so at most whatever the divisor is at most one past: the two spellings of that across the `<`/`<=` seam decide alike, under whatever stands above a floor.
+            "Eq()(x % (y + 1) <= y, true)",
+            "Eq()(x % 8 <= y + 7, true)",
+            "Eq()(x % 8 <= y + 7, x % 8 < y + 8)",
             // Divisibility: every symbolic summand is a multiple of the gcd of the coefficients, so two floors apart modulo it meet at no value. Equality and its negation decide; the order stays open.
             "Eq()(x * 2 + 1 == y * 2, false)",
             "Eq()(x * 2 + 1 != y * 2, true)",
@@ -300,6 +304,8 @@ const CARRIERS: &[Carrier] = &[
             // Controls for the seam, and neither is a law: a floor of two is one step past the successor, and `x + 1 <= y` against `x <= y` differs at `x = y`.
             "Eq()(x + 2 <= y, x < y)",
             "Eq()(x + 1 <= y, x <= y)",
+            // The control for a bound against a floor, and not a law: `x % 8` is `7` at `x = 7`, past `y + 6` at zero.
+            "Eq()(x % 8 <= y + 6, true)",
         ],
     },
     Carrier {
@@ -366,6 +372,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Byte/to_nat(b) + 1 <= 256, true)",
             "Eq()(Byte/to_nat(b) > 255, false)",
             "Eq()(256 >= Byte/to_nat(b) + 1, true)",
+            // And against the floor under a symbol, where nothing but the bound decides: a byte's value has no operand it never exceeds.
+            "Eq()(Byte/to_nat(b) <= q + 255, true)",
             "Eq()(Nat/to_byte(Byte/to_nat(b)), b)",
             // Euclid's seam, which is what `Key(Nat)`'s recombination rests on: a residual carried in a `Byte` divides out of a scaled symbol, and the remainder twin recovers it.
             "Eq()((256 * q + Byte/to_nat(b)) / 256, q)",

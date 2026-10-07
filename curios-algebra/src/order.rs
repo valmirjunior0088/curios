@@ -66,7 +66,7 @@ impl Comparison {
         }
     }
 
-    /// A side bounded by `bound` against a literal `limit`: a bound below the limit forces `<` for every value the side takes, and a bound met exactly forces `<=`, the non-strict verdict `<=` reads and `<` cannot — so `x % 7 <= 6` decides as `x % 7 < 7` does.
+    /// A side bounded by `bound` against a `limit` the other side is at least — a literal, or the floor under whatever stands above it: a bound below the limit forces `<` for every value the two sides take, and a bound met exactly forces `<=`, the non-strict verdict `<=` reads and `<` cannot — so `x % 7 <= 6` decides as `x % 7 < 7` does, and `x % 8 <= y + 7` as `x % 8 <= 7` does.
     pub fn below(bound: &Natural, limit: &Natural) -> Self {
         match bound.cmp(limit) {
             Ordering::Less => Comparison::Lt,
@@ -80,6 +80,16 @@ impl Comparison {
         match (self, strict) {
             (Comparison::Lt, _) | (Comparison::Le | Comparison::Eq, true) => Some(Comparison::Lt),
             (Comparison::Le | Comparison::Eq, false) => Some(Comparison::Le),
+            _ => None,
+        }
+    }
+
+    /// The verdict a side forces through an operand it stays strictly below, given this verdict of that operand against the *successor* of the other side: strictly below an operand that is at most one past the other side is at most the other side, so `x % 8 <= y + 7` decides by `8 <= y + 8`. `None` where the operand's verdict forces nothing.
+    ///
+    /// What [`Comparison::through_dominator`] leaves a strict dominator: there the operand is compared with the other side itself, which decides `<` and misses the `<=` one step short of it, so the two spellings of one order fact across the `<`/`<=` seam would part.
+    pub fn through_strict_dominator(self) -> Option<Self> {
+        match self {
+            Comparison::Lt | Comparison::Le | Comparison::Eq => Some(Comparison::Le),
             _ => None,
         }
     }
