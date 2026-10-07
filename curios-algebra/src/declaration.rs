@@ -2,7 +2,7 @@
 //!
 //! A caller maps each of its concrete operations to an [`Operation`] over a [`Carrier`] — or to nothing, which is opaque — and reads what it needs from the mapping: which operands bound the result, which operands the result never exceeds, which conversion undoes which. The mapping is the caller's; what each kind means is this module's, stated once for every operation of that kind.
 
-use curios_num::{Grain, Natural};
+use curios_num::{Grain, Natural, Rounding};
 
 /// The carrier an operation is over.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -48,6 +48,16 @@ pub enum Operation {
     Length,
     /// A word with one element after it.
     Append,
+    /// A binary64 sum rounded in one direction. The direction is part of the operation, so two sums in two directions are two operations to every reader that keys on one.
+    RoundedSum(Rounding),
+    /// A binary64 product rounded in one direction.
+    RoundedProduct(Rounding),
+    /// A fused multiply-add rounded in one direction: two factors, then the addend.
+    Fused(Rounding),
+    /// The lesser of two operands.
+    Min,
+    /// The greater of two operands.
+    Max,
     /// A value of `from` as a value of the carrier the operation is declared at — a byte's value as a natural, `0..=255` by its carrier; a natural as an integer, ℕ → ℤ; a run regrouped at the other grain. Which conversions undo which is [`Operation::undoes`].
     Conversion {
         from: Carrier,
@@ -121,11 +131,19 @@ impl Operation {
         }
     }
 
-    /// Whether this operation denotes one value with its operands in either order, as far as the reasoning that reads it goes: the equalities and inequalities, and `and`, `or` and `xor`. Sum and product commute too, and their cancellation already reads them as combinations, so they are not listed here.
+    /// Whether this operation denotes one value with its operands in either order, as far as the reasoning that reads it goes: the equalities and inequalities, `and`, `or` and `xor`, `min` and `max`, and a binary64 sum or product in one rounding direction. The exact sum and product commute too, and their cancellation already reads them as combinations, so they are not listed here.
     pub fn commutes(self) -> bool {
         matches!(
             self,
-            Operation::Equal | Operation::Unequal | Operation::And | Operation::Or | Operation::Xor
+            Operation::Equal
+                | Operation::Unequal
+                | Operation::And
+                | Operation::Or
+                | Operation::Xor
+                | Operation::Min
+                | Operation::Max
+                | Operation::RoundedSum(_)
+                | Operation::RoundedProduct(_)
         )
     }
 
@@ -182,13 +200,14 @@ impl Operation {
 /// - **`Nat` and `Byte`, both ways.** A byte's value is a natural below 256, and the narrowing states `n < 256` of the natural it is handed, so each direction is the other's inverse on what it accepts.
 /// - **`Nat` and `Int`, both ways.** ℕ embeds in ℤ, and the narrowing states `0 <= i`.
 /// - **A run and its regrouping at the other grain, both ways.** Regrouping moves no bit, and the alignment the inner regrouping demanded is what makes the composite well formed.
-/// - **`Flt` through its eight little-endian bytes, one way.** Every one of the 2⁶⁴ bit patterns is a distinct float, so decoding what encoding wrote is the float it was given, NaNs and both zeros included. The other direction holds of the model as well, since no pattern is merged; it is not taken, and a symbolic eight-byte run is not inverted.
+/// - **`Flt` and its eight little-endian bytes, both ways.** Every one of the 2⁶⁴ bit patterns is a distinct float and no NaN is canonicalized, so decoding what encoding wrote is the float it was given, NaNs and both zeros included, and encoding what decoding read is the run it was handed, the decoding stating its eight bytes.
 pub fn round_trip(source: Carrier, target: Carrier) -> bool {
     match (source, target) {
         (Carrier::Natural, Carrier::Byte) | (Carrier::Byte, Carrier::Natural) => true,
         (Carrier::Natural, Carrier::Integer) | (Carrier::Integer, Carrier::Natural) => true,
         (Carrier::Packed(grain), Carrier::Packed(other)) => grain != other,
-        (Carrier::Float, Carrier::Packed(Grain::X)) => true,
+        (Carrier::Float, Carrier::Packed(Grain::X))
+        | (Carrier::Packed(Grain::X), Carrier::Float) => true,
         _ => false,
     }
 }

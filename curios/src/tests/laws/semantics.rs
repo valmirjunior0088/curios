@@ -53,10 +53,17 @@ fn samples(carrier: Carrier) -> Vec<Value> {
             .iter()
             .map(|bits| Value::Float(Floating::from_bits(*bits)))
             .collect(),
-        Carrier::Packed(Grain::X) => [&[][..], &[0], &[1, 2], &[255, 0, 7]]
-            .into_iter()
-            .map(|bytes| Value::Packed(Grain::X, Binary::from_bytes(bytes.to_vec())))
-            .collect(),
+        // The last is eight bytes, a signaling NaN's pattern, so a law that decodes a float is held at a run it can decode.
+        Carrier::Packed(Grain::X) => [
+            &[][..],
+            &[0],
+            &[1, 2],
+            &[255, 0, 7],
+            &[1, 0, 0, 0, 0, 0, 0xF0, 0x7F],
+        ]
+        .into_iter()
+        .map(|bytes| Value::Packed(Grain::X, Binary::from_bytes(bytes.to_vec())))
+        .collect(),
         Carrier::Packed(Grain::B) => [&[][..], &[true], &[true, false, true], &[false; 8]]
             .into_iter()
             .map(|bits| Value::Packed(Grain::B, Binary::from_bits(bits.iter().copied())))
@@ -208,6 +215,20 @@ fn apply(carrier: Carrier, operation: Operation, operands: &[Value]) -> Option<V
         }
         (Carrier::Float, Operation::Equal, [Value::Float(a), Value::Float(b)]) => {
             Value::Boolean(a.eql(*b))
+        }
+        (Carrier::Float, Operation::RoundedSum(rounding), [Value::Float(a), Value::Float(b)]) => {
+            Value::Float(a.sum(*b, rounding))
+        }
+        (
+            Carrier::Float,
+            Operation::RoundedProduct(rounding),
+            [Value::Float(a), Value::Float(b)],
+        ) => Value::Float(a.product(*b, rounding)),
+        (Carrier::Float, Operation::Min, [Value::Float(a), Value::Float(b)]) => {
+            Value::Float(a.min(*b))
+        }
+        (Carrier::Float, Operation::Max, [Value::Float(a), Value::Float(b)]) => {
+            Value::Float(a.max(*b))
         }
         (Carrier::Float, Operation::Unequal, [Value::Float(a), Value::Float(b)]) => {
             Value::Boolean(a.neq(*b))

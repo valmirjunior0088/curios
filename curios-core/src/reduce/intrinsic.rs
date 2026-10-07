@@ -794,13 +794,24 @@ pub fn reduce_intrinsic(
             |l, r| Intrinsic::Flt(l.sum(r, *rounding)),
             |l, r| Intrinsic::FltAdd(*rounding, l, r),
         ),
-        Intrinsic::FltSub(rounding, left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |l, r| Intrinsic::Flt(l.difference(r, *rounding)),
-            |l, r| Intrinsic::FltSub(*rounding, l, r),
-        ),
+        // A difference is the sum with its subtrahend negated, in every direction, as the model defines it: a stuck one is spelled as that sum, so a difference and the sum it is are one term, as `Int`'s difference lands in its sum's normal form. The two nodes are charged before they are built.
+        Intrinsic::FltSub(rounding, left, right) => {
+            let difference = reduce_flt_binary(
+                reducer,
+                left,
+                right,
+                |l, r| Intrinsic::Flt(l.difference(r, *rounding)),
+                |l, r| Intrinsic::FltSub(*rounding, l, r),
+            )?;
+            match difference {
+                Subterm::Intrinsic(Intrinsic::FltSub(rounding, minuend, subtrahend)) => {
+                    reducer.spend(Cost::term(2))?;
+                    let negated = Term::intrinsic(Intrinsic::FltNeg(subtrahend));
+                    reduce_intrinsic(reducer, &Intrinsic::FltAdd(rounding, minuend, negated))
+                }
+                folded => Ok(folded),
+            }
+        }
         Intrinsic::FltMul(rounding, left, right) => reduce_flt_binary(
             reducer,
             left,
@@ -890,29 +901,45 @@ pub fn reduce_intrinsic(
             |v| Some(Intrinsic::Flt(v.sqrt(*rounding))),
             |inner| Intrinsic::FltSqrt(*rounding, inner),
         ),
-        Intrinsic::FltRoundIntegral(rounding, inner) => reduce_flt_unary(
-            reducer,
-            inner,
-            |v| Some(Intrinsic::Flt(v.round_integral(*rounding))),
-            |inner| Intrinsic::FltRoundIntegral(*rounding, inner),
-        ),
+        // A rounding to an integral value is fixed by every direction: an integral value is one each of them leaves where it is, a NaN is quieted once, and a zero or an infinity is its own integral part. So a rounding of a stuck rounding is the inner one, whichever two directions they are.
+        Intrinsic::FltRoundIntegral(rounding, inner) => {
+            let rounded = reduce_flt_unary(
+                reducer,
+                inner,
+                |v| Some(Intrinsic::Flt(v.round_integral(*rounding))),
+                |inner| Intrinsic::FltRoundIntegral(*rounding, inner),
+            )?;
+            match rounded {
+                Subterm::Intrinsic(Intrinsic::FltRoundIntegral(_, inner))
+                    if matches!(&*inner, Subterm::Intrinsic(Intrinsic::FltRoundIntegral(..))) =>
+                {
+                    Ok(Term::unwrap_or_clone(inner))
+                }
+                rounded => Ok(rounded),
+            }
+        }
         Intrinsic::FltFma(rounding, a, b, c) => reduce_flt_ternary(
             reducer,
             (a, b, c),
             |a, b, c| Intrinsic::Flt(a.fma(b, c, *rounding)),
             |a, b, c| Intrinsic::FltFma(*rounding, a, b, c),
         ),
-        // The two reinterpretations, whose round-trip laws are theorems of the model rather than a postulate: every one of the 2⁶⁴ bit patterns is a distinct float, so `of_le_bytes(to_le_bytes(x))` is `x` for every `x` and `to_le_bytes(of_le_bytes(b))` is `b` for every eight-byte `b`.
-        Intrinsic::FltToLeBytes(inner) => reduce_flt_unary(
-            reducer,
-            inner,
-            |v| Some(Intrinsic::Bin(Grain::X, v.to_le_bytes())),
-            Intrinsic::FltToLeBytes,
-        ),
+        // The two reinterpretations, whose round-trip laws are theorems of the model rather than a postulate: every one of the 2⁶⁴ bit patterns is a distinct float, so `of_le_bytes(to_le_bytes(x))` is `x` for every `x` and `to_le_bytes(of_le_bytes(b))` is `b` for every eight-byte `b`. Each reduces back through the other — `Intrinsic::undone` — the decoding's own bound stating the eight bytes.
+        Intrinsic::FltToLeBytes(inner) => {
+            let inner = reducer.reduce_forced(inner.clone())?;
+            if let Some(operand) = intrinsic.undone(&inner) {
+                return reducer.reduce(operand.clone()).map(Term::unwrap_or_clone);
+            }
+
+            Ok(Subterm::Intrinsic(match inner.as_flt() {
+                Some(value) => Intrinsic::Bin(Grain::X, value.to_le_bytes()),
+                None => Intrinsic::FltToLeBytes(inner),
+            }))
+        }
         Intrinsic::FltOfLeBytes { bin, eight_bytes } => {
             let bin = reducer.reduce_forced(bin.clone())?;
 
-            // Decoding what `Flt/to_le_bytes` wrote is the float it was given — `Intrinsic::undone`. The other direction holds of the model as well and folds on a literal; a symbolic one is not inverted.
+            // Decoding what `Flt/to_le_bytes` wrote is the float it was given — `Intrinsic::undone`.
             if let Some(operand) = intrinsic.undone(&bin) {
                 return reducer.reduce(operand.clone()).map(Term::unwrap_or_clone);
             }
@@ -2131,6 +2158,8 @@ mod classed_tests;
 mod compare_tests;
 #[cfg(test)]
 mod cost_tests;
+#[cfg(test)]
+mod flt_tests;
 #[cfg(test)]
 mod free_monoid_tests;
 #[cfg(test)]

@@ -125,6 +125,16 @@ const ATOM_BINDERS: &[Binder] = &[
         type_: "((Nat) -> Nat) -> Nat",
         needs: &[],
     },
+    Binder {
+        name: "r",
+        type_: "(Nat) -> Flt",
+        needs: &[],
+    },
+    Binder {
+        name: "s",
+        type_: "(Nat) -> Flt",
+        needs: &[],
+    },
 ];
 
 /// How many orders of [`ATOM_BINDERS`] the atom rows are stated at.
@@ -177,6 +187,14 @@ const ATOMS_HELD: &[&str] = &[
     "Eq()(u((x) => x + a) - u((x) => a + x), 0)",
     "Eq()(h(i + j) == h(j + i), true)",
     "Eq()(match f(a + b) == f(b + a) | true => 0 | false => 1 end, 0)",
+    // A float's sum, product, `min` and `max`, and a fused multiply-add's two factors with its addend in place, pair their operands by identity as every symmetric reader does; a difference is the sum it is spelled as.
+    "Eq()(r(a + b) + s(c + d), s(d + c) + r(b + a))",
+    "Eq()(r(a + b) * s(c + d), s(d + c) * r(b + a))",
+    "Eq()(Flt/min(r(a + b), s(c + d)), Flt/min(s(d + c), r(b + a)))",
+    "Eq()(Flt/max(r(a + b), s(c + d)), Flt/max(s(d + c), r(b + a)))",
+    "Eq()(Flt/fma(r(a + b), s(c + d), r(n)), Flt/fma(s(d + c), r(b + a), r(n)))",
+    "Eq()(Flt/fma(r(a + b), s(c + d), r(n + a)), Flt/fma(r(b + a), s(d + c), r(a + n)))",
+    "Eq()(r(a + b) - s(c + d), Flt/neg(s(d + c)) + r(b + a))",
 ];
 
 const CARRIERS: &[Carrier] = &[
@@ -988,38 +1006,26 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Flt against Bytes",
-        binders: "f: Flt, b: Bytes, e: Holds(Nat/eql(Bytes/len(b), 8))",
+        binders: "f: Flt",
         held: &[
-            // Decoding what `to_le_bytes` wrote is the float it was given. The decoding owes an eight-byte bound, discharged by the length the second row states.
+            // Decoding what `to_le_bytes` wrote is the float it was given. The decoding owes an eight-byte bound, discharged by the length the second row states; the law table's rows state each direction under a bound handed in.
             "Eq()(Flt/of_le_bytes(Flt/to_le_bytes(f)), f)",
             "Eq()(Bytes/len(Flt/to_le_bytes(f)), 8)",
         ],
-        // A candidate law, refused because nothing decides it: true of the model, in which every bit pattern is a distinct float, a NaN's payload included, but no arm inverts a symbolic decoding, so the pair reduces back only from the float's side. `documentation/roadmap/04-arithmetic/02-declared-operations.md` states it among the decided laws to land.
-        refused: &["Eq()(Flt/to_le_bytes(Flt/of_le_bytes(b, @e)), b)"],
+        refused: &[],
     },
     Carrier {
-        name: "Flt, commutative",
+        name: "Flt, a fused multiply-add",
         binders: "a: Flt, b: Flt, c: Flt",
-        held: &[],
-        // Candidate laws, each true of every bit pattern under the model, NaNs included: the NaN rule reads no operand's position, so no operation's answer does. `documentation/roadmap/04-arithmetic/02-declared-operations.md` declares them symmetric, decided by operand order in the judgment rather than by sorting in a fold, which would respell a term a guard's refinement is keyed on.
-        refused: &[
-            "Eq()(Flt/rounded/add(Flt/Rounding/ties_to_even(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_even(), b, a))",
-            "Eq()(Flt/rounded/add(Flt/Rounding/ties_to_away(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_away(), b, a))",
-            "Eq()(Flt/rounded/add(Flt/Rounding/toward_zero(), a, b), Flt/rounded/add(Flt/Rounding/toward_zero(), b, a))",
-            "Eq()(Flt/rounded/add(Flt/Rounding/toward_positive(), a, b), Flt/rounded/add(Flt/Rounding/toward_positive(), b, a))",
-            "Eq()(Flt/rounded/add(Flt/Rounding/toward_negative(), a, b), Flt/rounded/add(Flt/Rounding/toward_negative(), b, a))",
-            "Eq()(Flt/rounded/mul(Flt/Rounding/ties_to_even(), a, b), Flt/rounded/mul(Flt/Rounding/ties_to_even(), b, a))",
-            "Eq()(Flt/rounded/mul(Flt/Rounding/ties_to_away(), a, b), Flt/rounded/mul(Flt/Rounding/ties_to_away(), b, a))",
-            "Eq()(Flt/rounded/mul(Flt/Rounding/toward_zero(), a, b), Flt/rounded/mul(Flt/Rounding/toward_zero(), b, a))",
-            "Eq()(Flt/rounded/mul(Flt/Rounding/toward_positive(), a, b), Flt/rounded/mul(Flt/Rounding/toward_positive(), b, a))",
-            "Eq()(Flt/rounded/mul(Flt/Rounding/toward_negative(), a, b), Flt/rounded/mul(Flt/Rounding/toward_negative(), b, a))",
+        // True of every bit pattern under the model, NaNs included: the NaN rule reads no operand's position, so the two factors stand in either order, in every rounding direction. Decided by pairing the factors in the judgment rather than by sorting them in a fold, which would respell a term a guard's refinement is keyed on. The sums, the products, `min` and `max` are the law table's rows.
+        held: &[
             "Eq()(Flt/rounded/fma(Flt/Rounding/ties_to_even(), a, b, c), Flt/rounded/fma(Flt/Rounding/ties_to_even(), b, a, c))",
             "Eq()(Flt/rounded/fma(Flt/Rounding/ties_to_away(), a, b, c), Flt/rounded/fma(Flt/Rounding/ties_to_away(), b, a, c))",
             "Eq()(Flt/rounded/fma(Flt/Rounding/toward_zero(), a, b, c), Flt/rounded/fma(Flt/Rounding/toward_zero(), b, a, c))",
             "Eq()(Flt/rounded/fma(Flt/Rounding/toward_positive(), a, b, c), Flt/rounded/fma(Flt/Rounding/toward_positive(), b, a, c))",
             "Eq()(Flt/rounded/fma(Flt/Rounding/toward_negative(), a, b, c), Flt/rounded/fma(Flt/Rounding/toward_negative(), b, a, c))",
-            "Eq()(Flt/min(a, b), Flt/min(b, a))",
-            "Eq()(Flt/max(a, b), Flt/max(b, a))",
+        ],
+        refused: &[
             // Candidates no stage moves: `min` and `max` are associative on every pattern, the greatest quieted NaN being the one either association meets, and a law over a multiset of leaves nothing consumes.
             "Eq()(Flt/min(Flt/min(a, b), c), Flt/min(a, Flt/min(b, c)))",
             "Eq()(Flt/max(Flt/max(a, b), c), Flt/max(a, Flt/max(b, c)))",
@@ -1028,19 +1034,21 @@ const CARRIERS: &[Carrier] = &[
     Carrier {
         name: "Flt, sign operations and the difference",
         binders: "a: Flt, b: Flt, c: Flt",
-        held: &[],
-        // Candidate laws, each a declaration `documentation/roadmap/04-arithmetic/02-declared-operations.md` states: the sign operations are bit operations, so each holds of every pattern, and the model defines a difference as the sum with its subtrahend negated.
+        held: &[
+            // The model defines a difference as the sum with its subtrahend negated, so a stuck one is that sum, in every direction.
+            "Eq()(Flt/rounded/sub(Flt/Rounding/ties_to_even(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_even(), a, Flt/neg(b)))",
+            "Eq()(Flt/rounded/sub(Flt/Rounding/ties_to_away(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_away(), a, Flt/neg(b)))",
+            "Eq()(Flt/rounded/sub(Flt/Rounding/toward_zero(), a, b), Flt/rounded/add(Flt/Rounding/toward_zero(), a, Flt/neg(b)))",
+            "Eq()(Flt/rounded/sub(Flt/Rounding/toward_positive(), a, b), Flt/rounded/add(Flt/Rounding/toward_positive(), a, Flt/neg(b)))",
+            "Eq()(Flt/rounded/sub(Flt/Rounding/toward_negative(), a, b), Flt/rounded/add(Flt/Rounding/toward_negative(), a, Flt/neg(b)))",
+        ],
+        // Candidate laws `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with the float's sign and magnitude: the sign operations are bit operations, so each holds of every pattern.
         refused: &[
             "Eq()(Flt/neg(Flt/neg(a)), a)",
             "Eq()(Flt/abs(Flt/abs(a)), Flt/abs(a))",
             "Eq()(Flt/abs(Flt/neg(a)), Flt/abs(a))",
             "Eq()(Flt/copysign(Flt/copysign(a, b), c), Flt/copysign(a, c))",
             "Eq()(Flt/neg(Flt/copysign(a, b)), Flt/copysign(a, Flt/neg(b)))",
-            "Eq()(Flt/rounded/sub(Flt/Rounding/ties_to_even(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_even(), a, Flt/neg(b)))",
-            "Eq()(Flt/rounded/sub(Flt/Rounding/ties_to_away(), a, b), Flt/rounded/add(Flt/Rounding/ties_to_away(), a, Flt/neg(b)))",
-            "Eq()(Flt/rounded/sub(Flt/Rounding/toward_zero(), a, b), Flt/rounded/add(Flt/Rounding/toward_zero(), a, Flt/neg(b)))",
-            "Eq()(Flt/rounded/sub(Flt/Rounding/toward_positive(), a, b), Flt/rounded/add(Flt/Rounding/toward_positive(), a, Flt/neg(b)))",
-            "Eq()(Flt/rounded/sub(Flt/Rounding/toward_negative(), a, b), Flt/rounded/add(Flt/Rounding/toward_negative(), a, Flt/neg(b)))",
             // Every composition of the three sign operations has one normal form, a magnitude under a sign that is positive, negative, another value's, or that negated; a literal's sign is its own.
             "Eq()(Flt/abs(Flt/copysign(a, b)), Flt/abs(a))",
             "Eq()(Flt/copysign(a, a), a)",
@@ -1204,7 +1212,7 @@ const DIRECTIONS: [&str; 5] = [
 
 #[test]
 fn a_rounding_to_an_integral_value_is_fixed_by_every_direction() {
-    // A candidate `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with the float identities, at every pair of directions: an integral value is one every direction leaves where it is, so the outer rounding reads nothing of which direction the inner one took. Refused today, each a rounding of a stuck rounding.
+    // At every pair of directions: an integral value is one every direction leaves where it is, so the outer rounding reads nothing of which direction the inner one took, and a rounding of a stuck rounding is the inner one.
     let name = "Flt, a rounding of a rounding";
     let rounded = |direction: &str, operand: &str| {
         format!("Flt/rounded/to_integral(Flt/Rounding/{direction}(), {operand})")
@@ -1221,8 +1229,11 @@ fn a_rounding_to_an_integral_value_is_fixed_by_every_direction() {
             })
         })
         .collect::<Vec<_>>();
-    let mut found = misplaced(IMPORTS, name, &rows, 0);
-    found.extend(misplaced_by_the_kernel(IMPORTS, name, &rows, 0));
+    if let Err(failures) = closes(IMPORTS, &rows) {
+        panic!("{}", failures.join("\n"));
+    }
+    let mut found = misplaced(IMPORTS, name, &rows, rows.len());
+    found.extend(misplaced_by_the_kernel(IMPORTS, name, &rows, rows.len()));
     assert!(found.is_empty(), "{}", found.join("\n"));
 }
 

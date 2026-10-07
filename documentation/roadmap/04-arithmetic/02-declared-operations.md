@@ -90,14 +90,9 @@ Controls, refused with their counterexamples, each at `i = -1`: `(i * 2 + 1) % 2
 
 ## `Flt`
 
-These hold for every bit pattern under the model, NaNs included, and each is held to the model over the grid's patterns. No `Flt` declaration inherits a ring or order law.
+Held of every bit pattern under the model, NaNs included, each through its declaration and held to the model over the grid's patterns ([`Flt` is specified by a model](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md)): an operation's rounding direction is part of what it is; `add`, `mul`, `min` and `max` commute, and `fma`'s two factors; a difference is the sum with its subtrahend negated; a rounding to an integral value is fixed by every direction; and the byte conversions undo each other both ways. No `Flt` declaration inherits a ring or order law.
 
-- **An operation's rounding direction is part of what it is.** A rounded sum in one direction and in another are two operations, so no reader that keys on an operation pairs them.
-- **Commutativity** of `add`, `mul`, `min` and `max` in every rounding direction, and of `fma`'s two factors, its addend compared in place. `eql` and `neq` are held already.
-- **The sign operations.** `neg(neg(x)) = x`, `abs(abs(x)) = abs(x)`, `abs(neg(x)) = abs(x)`, `copysign(copysign(x, y), z) = copysign(x, z)` and `neg(copysign(x, y)) = copysign(x, neg(y))`, each a bit operation holding of every pattern. A value is read as a magnitude and a sign — positive, negative, another value's, or that negated — so every composition of the three has one normal form. This is the one new kind in the float half.
-- **Subtraction** is addition of the negation, `sub(r, a, b) = add(r, a, neg(b))`, in every direction, as the model defines it: a stuck difference folds to the sum, as `Int`'s does.
-- **The roundings to an integral value are idempotent**, across directions: `round_integral(r, round_integral(s, x)) = round_integral(s, x)`.
-- **The byte round trip, both ways.** `of_le_bytes(to_le_bytes(f)) = f` is held today; `to_le_bytes(of_le_bytes(b, @e)) = b` becomes held, since every pattern is a value and no NaN is canonicalized.
+What is left is **the sign operations**: `neg(neg(x)) = x`, `abs(abs(x)) = abs(x)`, `abs(neg(x)) = abs(x)`, `copysign(copysign(x, y), z) = copysign(x, z)` and `neg(copysign(x, y)) = copysign(x, neg(y))`, each a bit operation holding of every pattern. A value is read as a magnitude and a sign — positive, negative, another value's, or that negated — so every composition of the three has one normal form. This is the one new kind in the float half.
 
 What is not a law stays a control, refused with its counterexample: associativity of `add` and `mul`, and distributivity, by rounding; `f + 0.0 = f`, false at `-0.0`; `f * 1.0 = f`, since a signaling NaN is quieted; `f - f = 0.0`, at an infinity or a NaN; `f * 0.0 = 0.0`, at an infinity, a NaN, or a negative `f`; `f == f`, at a NaN; `lt(a, b) = not(ge(a, b))`, with a NaN on either side; a sum in one direction against the swapped sum in another; `fma(a, b, c)` against `fma(a, c, b)`; and `min(a, a) = a`, since a signaling NaN is quieted. The associativity of `min` and `max` holds of the model and is a refused candidate, a law over a multiset of leaves that nothing consumes.
 
@@ -109,7 +104,7 @@ What is not a law stays a control, refused with its counterexample: associativit
 
 Every law above, every row the library definitions hold today and every control stands in the grid (`curios`'s `tests::laws::written`), each refused row commented with the stage that moves it, and the audit puts each declared law to a product of two sums.
 
-1. **`Flt`'s identities.** No promotion: the direction in an operation's identity, the symmetric declarations, the difference's fold, the idempotent roundings and the round trip, then the sign kind.
+1. **`Flt`'s sign and magnitude.** No promotion: the three sign operations folded through one normal form.
 2. **The families `Int` shares with `Nat`.** No promotion.
 3. **The shift's exponent law, and positivity.** No promotion: the count's summands split over the atom `shl(1, k)`, and a lower bound beside the upper one.
 4. **`min` and `max`**, at both carriers, with the domination mirror.

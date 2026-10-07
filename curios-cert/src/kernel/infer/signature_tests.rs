@@ -615,7 +615,7 @@ fn a_bounded_row_is_refused_one_step_past_its_folds_domain() {
     }
 }
 
-/// The carriers are written a second time inside the trusted base: `Intrinsic::algebra` declares each operation a law reads at a carrier, and a law is stated per operation of a carrier — a bound over the naturals, a negation over a total order — so an operation declared at a carrier its row does not type is a law applied to values it was never true of. Each declaration is read against its row: a conversion from its source into the carrier, a comparison over the carrier into `Bool`, a shift of the carrier by a natural, and every other operation closed on the carrier.
+/// The carriers are written a second time inside the trusted base: `Intrinsic::algebra` declares each operation a law reads at a carrier, and a law is stated per operation of a carrier — a bound over the naturals, a negation over a total order — so an operation declared at a carrier its row does not type is a law applied to values it was never true of. Each declaration is read against its row: a conversion from its source into the carrier, a comparison over the carrier into `Bool`, a shift of the carrier by a natural, and every other operation closed on the carrier, a fused multiply-add over its three operands.
 ///
 /// The tally is every declaration `algebra` makes today, the two packed ones at both grains, so a grid that stopped reaching them fails. A declaration added there owes [`inside`] its row, and nothing fails until it has one.
 ///
@@ -667,7 +667,15 @@ fn an_operation_is_declared_to_the_algebra_at_the_carrier_its_row_types() {
             | curios_algebra::Operation::Remainder
             | curios_algebra::Operation::And
             | curios_algebra::Operation::Or
-            | curios_algebra::Operation::Xor => (vec![carrier.clone(), carrier.clone()], carrier),
+            | curios_algebra::Operation::Xor
+            | curios_algebra::Operation::RoundedSum(_)
+            | curios_algebra::Operation::RoundedProduct(_)
+            | curios_algebra::Operation::Min
+            | curios_algebra::Operation::Max => (vec![carrier.clone(), carrier.clone()], carrier),
+            curios_algebra::Operation::Fused(_) => (
+                vec![carrier.clone(), carrier.clone(), carrier.clone()],
+                carrier,
+            ),
             curios_algebra::Operation::Concat
             | curios_algebra::Operation::Length
             | curios_algebra::Operation::Append => {
@@ -678,7 +686,7 @@ fn an_operation_is_declared_to_the_algebra_at_the_carrier_its_row_types() {
         assert_eq!((operands, result), stated, "{application:?}");
     }
 
-    assert_eq!(declared, 42);
+    assert_eq!(declared, 47);
 }
 
 /// The rows no fold answers are the effect carrier's: its two constructors, and the cell and channel operations. Nothing computes against them, and the one thing a wrong row among them could do to admit is hand out what a description yields — `Io` has no eliminator only while no row is one, and a host call that diverges inhabits `Io` at any type. So each is typed at an `Io`, and reduction leaves each the node it was: `bind(pure(x), f)` is not `f(x)`.

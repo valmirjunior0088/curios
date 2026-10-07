@@ -5,7 +5,7 @@
 use {
     super::{IMPORTS, closes, holds, misplaced, misplaced_by_the_kernel},
     curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation, TABLE},
-    curios_num::Grain,
+    curios_num::{Grain, Rounding},
 };
 
 /// Every family the table declares, at the operation and carrier declaring it.
@@ -179,6 +179,13 @@ impl Spelling {
         let infix = |symbol: &str| format!("({} {symbol} {})", operands[0], operands[1]);
         let call = |function: &str| format!("{function}({})", operands.join(", "));
         let concat = |open: &str| format!("{open}..{}, ..{}]", operands[0], operands[1]);
+        let rounded = |function: &str, rounding: Rounding| {
+            format!(
+                "Flt/rounded/{function}(Flt/Rounding/{}(), {})",
+                direction(rounding),
+                operands.join(", ")
+            )
+        };
         let append = |open: &str| format!("{open}..{}, {}]", operands[0], operands[1]);
         match (carrier, operation) {
             (_, Operation::Sum) => infix("+"),
@@ -198,6 +205,10 @@ impl Spelling {
             (Carrier::Natural, Operation::Xor) => call("Nat/xor"),
             (Carrier::Natural, Operation::ShiftLeft) => call("Nat/shl"),
             (Carrier::Natural, Operation::ShiftRight) => call("Nat/shr"),
+            (Carrier::Float, Operation::RoundedSum(rounding)) => rounded("add", rounding),
+            (Carrier::Float, Operation::RoundedProduct(rounding)) => rounded("mul", rounding),
+            (Carrier::Float, Operation::Min) => call("Flt/min"),
+            (Carrier::Float, Operation::Max) => call("Flt/max"),
             (Carrier::Packed(Grain::X), Operation::Concat) => concat("x["),
             (Carrier::Packed(Grain::B), Operation::Concat) => concat("b["),
             (Carrier::List, Operation::Concat) => concat("["),
@@ -280,6 +291,17 @@ impl Spelling {
         let proof = format!("ok{}", self.proofs.len());
         self.proofs.push(format!("{proof}: Holds({holds})"));
         format!("{function}({operand}, @{proof})")
+    }
+}
+
+/// A rounding direction as `/std/Flt/Rounding` spells it.
+pub(super) fn direction(rounding: Rounding) -> &'static str {
+    match rounding {
+        Rounding::TiesToEven => "ties_to_even",
+        Rounding::TiesToAway => "ties_to_away",
+        Rounding::TowardZero => "toward_zero",
+        Rounding::TowardPositive => "toward_positive",
+        Rounding::TowardNegative => "toward_negative",
     }
 }
 

@@ -253,7 +253,7 @@ impl<R: Reducer> Reducer for Standing<'_, R> {
     }
 }
 
-/// Whether the readers read through `intrinsic` to its operands: a sum, a product, a connective or a comparison of the carriers the algebra decides, a `Nat`'s successor floor, and every operation the law table declares commutative, whose operands a symmetric reader pairs.
+/// Whether the readers read through `intrinsic` to its operands: a sum, a product, a connective or a comparison of the carriers the algebra decides, a `Nat`'s successor floor, every operation the law table declares commutative, whose operands a symmetric reader pairs, and a fused multiply-add, whose two factors one does.
 fn read_through(intrinsic: &Intrinsic) -> bool {
     if matches!(intrinsic, Intrinsic::Nat(Nat::Succ(..))) {
         return true;
@@ -276,7 +276,7 @@ fn read_through(intrinsic: &Intrinsic) -> bool {
                             | Operation::Unequal
                             | Operation::Less
                             | Operation::AtMost
-                    )
+                    ) | (Carrier::Float, Operation::Fused(_))
                 )
         }
         Declaration::Opaque => false,

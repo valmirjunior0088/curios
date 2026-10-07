@@ -2,11 +2,11 @@
 //!
 //! A [`Family`] states its laws over abstract operands, as [`Law`]s between [`Expr`]s. [`TABLE`] names, for each operation at each carrier, exactly the families conversion decides for it — `And` at `Bool` has the unit `true` and the absorber `false`, `And` at ℕ the absorber `0` and no unit — so a family is stated wherever it holds and nowhere it does not. A caller instantiates the laws, spells them at its own syntax, and holds each against the procedure that decides it and against the carrier's semantics at closed values.
 //!
-//! **The table is a claim about the implementation, not about mathematics.** A law true of a carrier and not decided — the associativity of `and` at ℕ, a floating-point sum's commutativity — has no row here: declaring it would state a law conversion refuses. The families a checker decides by rules reading `Intrinsic::algebra`'s declarations and those it decides by rules of its own sit in one table, since what the table records is what holds, whichever rule makes it hold.
+//! **The table is a claim about the implementation, not about mathematics.** A law true of a carrier and not decided — the associativity of `and` at ℕ, a floating-point `min`'s associativity — has no row here: declaring it would state a law conversion refuses. The families a checker decides by rules reading `Intrinsic::algebra`'s declarations and those it decides by rules of its own sit in one table, since what the table records is what holds, whichever rule makes it hold.
 
 use {
     crate::{Carrier, Operation},
-    curios_num::Grain,
+    curios_num::{Grain, Rounding},
 };
 
 /// A constant a family is stated with, read at the carrier its operand has.
@@ -371,8 +371,75 @@ pub const TABLE: &[Declared] = &[
     },
     Declared {
         carrier: Carrier::Float,
+        operation: Operation::RoundedSum(Rounding::TiesToEven),
+        families: &[Family::Commutativity],
+    },
+    Declared {
+        carrier: Carrier::Float,
+        operation: Operation::RoundedSum(Rounding::TiesToAway),
+        families: &[Family::Commutativity],
+    },
+    Declared {
+        carrier: Carrier::Float,
+        operation: Operation::RoundedSum(Rounding::TowardZero),
+        families: &[Family::Commutativity],
+    },
+    Declared {
+        carrier: Carrier::Float,
+        operation: Operation::RoundedSum(Rounding::TowardPositive),
+        families: &[Family::Commutativity],
+    },
+    Declared {
+        carrier: Carrier::Float,
+        operation: Operation::RoundedSum(Rounding::TowardNegative),
+        families: &[Family::Commutativity],
+    },
+    Declared {
+        carrier: Carrier::Float,
+        operation: Operation::RoundedProduct(Rounding::TiesToEven),
+        families: &[Family::Commutativity],
+    },
+    Declared {
+        carrier: Carrier::Float,
+        operation: Operation::RoundedProduct(Rounding::TiesToAway),
+        families: &[Family::Commutativity],
+    },
+    Declared {
+        carrier: Carrier::Float,
+        operation: Operation::RoundedProduct(Rounding::TowardZero),
+        families: &[Family::Commutativity],
+    },
+    Declared {
+        carrier: Carrier::Float,
+        operation: Operation::RoundedProduct(Rounding::TowardPositive),
+        families: &[Family::Commutativity],
+    },
+    Declared {
+        carrier: Carrier::Float,
+        operation: Operation::RoundedProduct(Rounding::TowardNegative),
+        families: &[Family::Commutativity],
+    },
+    Declared {
+        carrier: Carrier::Float,
+        operation: Operation::Min,
+        families: &[Family::Commutativity],
+    },
+    Declared {
+        carrier: Carrier::Float,
+        operation: Operation::Max,
+        families: &[Family::Commutativity],
+    },
+    Declared {
+        carrier: Carrier::Float,
         operation: Operation::Conversion {
             from: Carrier::Packed(Grain::X),
+        },
+        families: &[Family::InversePair],
+    },
+    Declared {
+        carrier: Carrier::Packed(Grain::X),
+        operation: Operation::Conversion {
+            from: Carrier::Float,
         },
         families: &[Family::InversePair],
     },

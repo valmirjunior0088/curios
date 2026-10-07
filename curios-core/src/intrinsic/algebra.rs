@@ -6,7 +6,7 @@ use {
     super::Intrinsic,
     crate::{Subterm, Term},
     curios_algebra::{Carrier, Family, Operation, declares},
-    curios_num::Grain,
+    curios_num::{Grain, Rounding},
 };
 
 /// An intrinsic as the algebra reads it.
@@ -25,6 +25,7 @@ pub enum Declaration<'a> {
 pub enum Operands<'a> {
     One([&'a Term; 1]),
     Two([&'a Term; 2]),
+    Three([&'a Term; 3]),
 }
 
 impl<'a> Operands<'a> {
@@ -33,6 +34,7 @@ impl<'a> Operands<'a> {
         match self {
             Operands::One(operands) => operands,
             Operands::Two(operands) => operands,
+            Operands::Three(operands) => operands,
         }
     }
 }
@@ -201,6 +203,27 @@ impl Intrinsic {
                 },
                 Operands::One([bin]),
             ),
+            Intrinsic::FltAdd(rounding, left, right) => declared(
+                Carrier::Float,
+                Operation::RoundedSum(*rounding),
+                Operands::Two([left, right]),
+            ),
+            Intrinsic::FltMul(rounding, left, right) => declared(
+                Carrier::Float,
+                Operation::RoundedProduct(*rounding),
+                Operands::Two([left, right]),
+            ),
+            Intrinsic::FltFma(rounding, left, right, addend) => declared(
+                Carrier::Float,
+                Operation::Fused(*rounding),
+                Operands::Three([left, right, addend]),
+            ),
+            Intrinsic::FltMin(left, right) => {
+                declared(Carrier::Float, Operation::Min, Operands::Two([left, right]))
+            }
+            Intrinsic::FltMax(left, right) => {
+                declared(Carrier::Float, Operation::Max, Operands::Two([left, right]))
+            }
             Intrinsic::FltEql(left, right) => declared(
                 Carrier::Float,
                 Operation::Equal,
@@ -288,16 +311,11 @@ impl Intrinsic {
             | Intrinsic::Int { .. }
             | Intrinsic::FltType
             | Intrinsic::Flt { .. }
-            | Intrinsic::FltAdd { .. }
             | Intrinsic::FltSub { .. }
-            | Intrinsic::FltMul { .. }
             | Intrinsic::FltDiv { .. }
-            | Intrinsic::FltFma { .. }
             | Intrinsic::FltRem { .. }
             | Intrinsic::FltLt { .. }
             | Intrinsic::FltLe { .. }
-            | Intrinsic::FltMin { .. }
-            | Intrinsic::FltMax { .. }
             | Intrinsic::FltNeg { .. }
             | Intrinsic::FltAbs { .. }
             | Intrinsic::FltSqrt { .. }
@@ -382,6 +400,18 @@ impl Intrinsic {
             } if declares(carrier, operation, Family::Commutativity) => {
                 Some(((carrier, operation), left, right))
             }
+            _ => None,
+        }
+    }
+
+    /// The rounding direction, the two factors and the addend of this intrinsic, where it is a fused multiply-add: the factors pair in either order, as a commutative operation's operands do, and the addend stands in place.
+    pub fn fused(&self) -> Option<(Rounding, [&Term; 3])> {
+        match self.algebra() {
+            Declaration::Operation {
+                carrier: Carrier::Float,
+                operation: Operation::Fused(rounding),
+                operands: Operands::Three(operands),
+            } => Some((rounding, operands)),
             _ => None,
         }
     }

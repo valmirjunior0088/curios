@@ -21,7 +21,7 @@ use {
         Scope, Struct, StructDecl, StructEntry, StructType, Subterm, Telescope, Term, Three,
         Totality, Transient, Tuple, Two, UniverseContext, Var, Variant,
     },
-    curios_num::{Grain, Natural},
+    curios_num::{Grain, Natural, Rounding},
     curios_utilities::{InfixOp, Plicity, Qualifier},
     std::{collections::BTreeMap, rc::Rc, slice, sync::Arc},
 };
@@ -1485,6 +1485,58 @@ fn atoms_equal_up_to_their_arguments_convert_in_whichever_order_their_sum_holds_
             "h at {h_index}, e at {e_index}"
         );
     }
+}
+
+/// A fused multiply-add's two factors pair in either order, as a commutative operation's operands do, and its addends are compared in place. The factors here convert without being identical, so nothing pairs until a classing spells them alike; then one factor of each side is one term, and what is left is the other two factors and the two addends. An addend is no factor, and two rounding directions are two operations.
+#[test]
+fn a_fused_multiply_add_pairs_its_factors_and_keeps_its_addend_in_place() {
+    let flt = || Term::intrinsic(Intrinsic::FltType);
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let mut kernel = kernel();
+    let [x, y] = [1, 2].map(|index| Free::local(index, None));
+    let [b, c] = [3, 4].map(|index| Free::local(index, None));
+    let h = Free::local(10, Some("h"));
+    for name in [x, y] {
+        kernel.assume(&name, &nat());
+    }
+    for name in [b, c] {
+        kernel.assume(&name, &flt());
+    }
+    kernel.assume(
+        &h,
+        &Term::func_type([(Free::local(99, None), nat())], flt()),
+    );
+    let at = |left: &Free, right: &Free| {
+        let sum = Term::intrinsic(Intrinsic::NatAdd(
+            Term::free_var(left),
+            Term::free_var(right),
+        ));
+        Term::apply(Term::free_var(&h), [sum])
+    };
+    let fused = |rounding: Rounding, left: Term, right: Term, addend: &Free| {
+        Term::intrinsic(Intrinsic::FltFma(
+            rounding,
+            left,
+            right,
+            Term::free_var(addend),
+        ))
+    };
+    let toward_zero = Rounding::TowardZero;
+
+    let this = fused(toward_zero, at(&x, &y), Term::free_var(&b), &c);
+    let swapped = fused(toward_zero, Term::free_var(&b), at(&y, &x), &c);
+    assert_eq!(kernel.convert_at(&flt(), &this, &swapped), Ok(true));
+
+    let addend_for_factor = fused(toward_zero, Term::free_var(&c), at(&y, &x), &b);
+    assert_eq!(
+        kernel.convert_at(&flt(), &this, &addend_for_factor),
+        Ok(false)
+    );
+    let another_direction = fused(Rounding::TowardPositive, Term::free_var(&b), at(&y, &x), &c);
+    assert_eq!(
+        kernel.convert_at(&flt(), &this, &another_direction),
+        Ok(false)
+    );
 }
 
 /// One rule says which terms an arm's equation answers, and both reducers ask it: the key itself, a term the carriers' readers hold equal to the key, and — where the equation assumes a `Bool` — a term they hold equal to the key negated, the value negated on the way.

@@ -1,6 +1,9 @@
 //! Peels that decide a value up to the order of its operands: a conjunction's leaf set, the symmetric comparisons and bitwise operations, and two comparisons' sides paired by identity.
 
-use super::{test_support::*, *};
+use {
+    super::{test_support::*, *},
+    curios_num::Rounding,
+};
 
 fn and(left: Term, right: Term) -> Intrinsic {
     Intrinsic::BoolAnd(left, right)
@@ -102,6 +105,57 @@ fn peel_symmetric_decides_a_swapped_bitwise_operation_equal() {
         peel_symmetric(&shifted, &reversed).is_none(),
         "a shift is not symmetric and is not this peel's"
     );
+}
+
+// A binary64 sum, a product, `min` and `max` commute on every bit pattern, the model's NaN rule reading no operand's position, and a sum or a product commutes in the one direction it is rounded in: the direction is part of the operation, so a sum toward zero against the swapped sum toward positive is two operations, which the peel does not read and the congruence then tells apart.
+//
+// Mutation-checked: an `Intrinsic::algebra` that declares every direction's sum one operation decides the last pair `Equal`.
+#[test]
+fn peel_symmetric_decides_a_swapped_float_operation_equal_in_one_direction_alone() {
+    let (a, b) = (sym(0, "a"), sym(1, "b"));
+    let toward_zero = Rounding::TowardZero;
+
+    for (this, that) in [
+        (
+            Intrinsic::FltAdd(toward_zero, a.clone(), b.clone()),
+            Intrinsic::FltAdd(toward_zero, b.clone(), a.clone()),
+        ),
+        (
+            Intrinsic::FltMul(toward_zero, a.clone(), b.clone()),
+            Intrinsic::FltMul(toward_zero, b.clone(), a.clone()),
+        ),
+        (
+            Intrinsic::FltMin(a.clone(), b.clone()),
+            Intrinsic::FltMin(b.clone(), a.clone()),
+        ),
+        (
+            Intrinsic::FltMax(a.clone(), b.clone()),
+            Intrinsic::FltMax(b.clone(), a.clone()),
+        ),
+    ] {
+        assert!(
+            matches!(peel_symmetric(&this, &that), Some(Deduction::Equal)),
+            "a float operation is one value with its operands swapped"
+        );
+    }
+
+    let toward_positive = Rounding::TowardPositive;
+    for (this, that) in [
+        (
+            Intrinsic::FltAdd(toward_zero, a.clone(), b.clone()),
+            Intrinsic::FltAdd(toward_positive, b.clone(), a.clone()),
+        ),
+        (
+            Intrinsic::FltMul(toward_zero, a.clone(), b.clone()),
+            Intrinsic::FltMul(toward_positive, b.clone(), a.clone()),
+        ),
+    ] {
+        assert!(
+            peel_symmetric(&this, &that).is_none(),
+            "two rounding directions are two operations"
+        );
+        assert!(peel_commutative(&this, &that).is_none());
+    }
 }
 
 // Two comparisons' sides are paired by identity, not by the positions the linear views' rank order put them in: `y != w` against `x != y` leaves `w` against `x`, which is what solves a metavariable standing for `w` wherever its number sorts it.

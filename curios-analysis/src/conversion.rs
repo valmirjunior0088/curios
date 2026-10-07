@@ -167,7 +167,7 @@ fn chain(
                 return Ok(Pass::Settled(Outcome::Equal));
             }
             // A commutative operation's operands are paired by the readers above, never compared by position: the order a term holds them in is a spelling or a hash, and a verdict or a solution that followed it would move with either. What reaches here has no operand paired.
-            if this.commutative().is_some() {
+            if this.commutative().is_some() || this.fused().is_some() {
                 return Ok(Pass::Settled(Outcome::Unpaired));
             }
             Some(
@@ -339,7 +339,42 @@ fn read(driver: &mut impl Driver, this: Intrinsic, that: Intrinsic) -> Result<Re
         return Ok(Read::Decided(Outcome::Residual(left, right)));
     }
 
+    // A fused multiply-add's two factors pair as a commutative operation's operands do, and its addends are compared in place: what is left is two pairs, where a commutative operation leaves one.
+    if let Some(operands) = pair_fused(&this, &that) {
+        return Ok(Read::Decided(Outcome::Congruence(Congruence {
+            this_levels: Vec::new(),
+            that_levels: Vec::new(),
+            operands: Some(operands),
+        })));
+    }
+
     Ok(Read::Undecided(Box::new((this, that))))
+}
+
+/// The pairs two fused multiply-adds in one rounding direction leave once one factor of each is paired by identity, in either order: the other two factors, and the two addends, each a sufficient condition and no more. `None` for any other pair, and where no factor of one is a factor of the other, which the congruence then leaves unpaired rather than compare by position.
+fn pair_fused(this: &Intrinsic, that: &Intrinsic) -> Option<Vec<Obligation>> {
+    let (rounding, [a, b, c]) = this.fused()?;
+    let (direction, [d, e, f]) = that.fused()?;
+    if rounding != direction {
+        return None;
+    }
+    let (left, right) = if a == d {
+        (b, e)
+    } else if a == e {
+        (b, d)
+    } else if b == d {
+        (a, e)
+    } else if b == e {
+        (a, d)
+    } else {
+        return None;
+    };
+    let pair = |this: &Term, that: &Term| Obligation {
+        type_: None,
+        this: this.clone(),
+        that: that.clone(),
+    };
+    Some(vec![pair(left, right), pair(c, f)])
 }
 
 /// Step 7: `this` and `that` read once more with each atom spelled as its class's representative — `None` where the partition moved neither side, or the classed pair decided nothing either.
