@@ -1,7 +1,7 @@
 --- The concepts the infix operators dispatch through, each supplying the method its operator calls.
 pub mod ops;
 
---- A total order, over an `Eql` superclass: what sorting and ordered collections ask for, and the three-way answer it gives.
+--- A total order, over an `Eql` superclass: what sorting and ordered collections ask for, the three-way answer it gives, and the laws a theorem may ask of a comparator, each named once.
 pub mod Ord;
 pub use Ord/{let Ord, Ordering};
 
@@ -72,7 +72,7 @@ pub use Str/{let Str};
 
 --- A run of values of one type, written `[...]` with `..` spreads.
 ---
---- `fold` walks left to right with `f(elem, acc)`; the right fold is the language's `; ih` binding on a list arm.
+--- `fold` walks left to right with `f(elem, acc)`; the right fold is the language's `; ih` binding on a list arm. `sort` and `sort_by` are stable merge sorts with their theorem beneath them, stated in `Permutation`, `Member`, `ordered` and `Pairwise`.
 pub mod List;
 pub use List/{let List};
 
