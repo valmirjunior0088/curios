@@ -12,6 +12,14 @@ pub use Member/{let Member};
 pub mod Permutation;
 pub use Permutation/{let Permutation};
 
+--- Whether each element of a list stands in a relation to the one after it, with what builds that at a cons and what a cons gives back.
+pub mod ordered;
+pub use ordered/{let ordered};
+
+--- That each element of a list stands in a relation to every one after it.
+pub mod Pairwise;
+pub use Pairwise/{let Pairwise};
+
 --- The element at `i`, or `none` past the end.
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
     match i < len(a) | true => Option/some(get(a, i)) | false => Option/none() end;

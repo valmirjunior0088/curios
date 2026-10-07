@@ -1,0 +1,108 @@
+use /std/{List, Bool, Eq, Ord};
+use /std/Bool/{True, Holds};
+use /std/List/{Member, ordered};
+
+--- Every element of a list stands in `le` to every element after it.
+---
+--- What `ordered` says of adjacent elements, said of every pair: the two agree where `le` is transitive, by `of_ordered`, and this is the one a proof reads an element and a later one off.
+pub induct Pairwise(@T: Type, le: (T, T) -> Bool): (List(T)) -> pub Prop
+--- The empty list.
+| empty(): ([])
+--- An element in `le` to everything after it, ahead of a list that is pairwise.
+| cons(
+    @x: T,
+    @l: List(T),
+    head: (y: T, Member()(y, l)) -> Holds(le(x, y)),
+    rest: Pairwise(le)(l)): ([x, ..l])
+end
+
+pub use Pairwise/*;
+
+--- The first element stands in `le` to every later one.
+pub let head(
+    @T: Type,
+    @le: (T, T) -> Bool,
+    @h: T,
+    @t: List(T),
+    whole: Pairwise(le)([h, ..t]),
+) -> (y: T, Member()(y, t)) -> Holds(le(h, y)) =
+    match whole: (s, _) =>
+        match s: (_) => Prop
+        | [] => True
+        | [k, ..r] => (y: T, Member()(y, r)) -> Holds(le(k, y))
+        end
+    | empty() => True/qed()
+    | cons(head, _) => head
+    end;
+
+--- The tail of a pairwise list is pairwise.
+pub let tail(
+    @T: Type,
+    @le: (T, T) -> Bool,
+    @h: T,
+    @t: List(T),
+    whole: Pairwise(le)([h, ..t]),
+) -> Pairwise(le)(t) =
+    match whole: (s, _) => match s: (_) => Prop | [] => True | [_, ..r] => Pairwise(le)(r) end
+    | empty() => True/qed()
+    | cons(_, rest) => rest
+    end;
+
+-- An element that leads a list in order stands in a transitive `le` to each of its members.
+let below(
+    @T: Type,
+    le: (T, T) -> Bool,
+    transitive: Ord/Transitive(le),
+    l: List(T),
+    a: T,
+    lead: Holds(ordered/leads(le, a, l)),
+    given: Holds(ordered(l, le)),
+    y: T,
+    i: Member()(y, l),
+) -> Holds(le(a, y)) =
+    match l: (m) =>
+        (
+            a: T,
+            lead: Holds(ordered/leads(le, a, m)),
+            given: Holds(ordered(m, le)),
+            i: Member()(y, m)) -> Holds(le(a, y))
+    | [] => (_, _, _, i) => match Member/absent(i) end
+    | [k, ..r]; ih =>
+        (a, lead, given, i) =>
+            Member/uncons(
+                i,
+                (e) => Eq/subst((z: T) => Holds(le(a, z)), Eq/sym(e), lead),
+                (rest) =>
+                    transitive(
+                        a,
+                        k,
+                        y,
+                        lead,
+                        ih(k, ordered/head(le, k, r, given), ordered/tail(le, k, r, given), rest)))
+    end(a, lead, given, i);
+
+--- A list in order by a transitive `le` at adjacent elements is in order at every pair.
+pub let of_ordered(
+    @T: Type,
+    le: (T, T) -> Bool,
+    transitive: Ord/Transitive(le),
+    l: List(T),
+    given: Holds(ordered(l, le)),
+) -> Pairwise(le)(l) =
+    match l: (m) => (given: Holds(ordered(m, le))) -> Pairwise(le)(m)
+    | [] => (_) => Pairwise/empty()
+    | [h, ..t]; ih =>
+        (given) =>
+            Pairwise/cons(
+                (y, i) =>
+                    below(
+                        le,
+                        transitive,
+                        t,
+                        h,
+                        ordered/head(le, h, t, given),
+                        ordered/tail(le, h, t, given),
+                        y,
+                        i),
+                ih(ordered/tail(le, h, t, given)))
+    end(given);

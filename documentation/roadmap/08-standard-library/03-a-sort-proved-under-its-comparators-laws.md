@@ -18,7 +18,6 @@ It waits on no other spec.
 - **`List/sort` stops at five thousand elements and costs the square of its input.** `insert_by` (`curios-std/src/List.crs`) recurses under a cons as deep as the place it inserts at: counted at `bf21a9065`, under the stack a program then ran on, 4,500 descending elements sort and 5,000 stop on `wasm trap: call stack exhausted`. Each insertion peels the list the one before it extended, the rope's quadratic alternation, so a list already in order costs what any other does. `sort` has no caller outside `curios-std`'s `tests/`.
 - **What the sort promises is held by eight examples**, four in `tests/aggregates/list.crs` and four in `tests/flt.crs`. Nothing states that its answer is its input rearranged, that it is in order, or that elements the comparator ties keep their order, which its documentation promises.
 - **No comparator in `/std` has a stated law.** That `Nat/ord` answers `gt` one way exactly where it answers `lt` the other is provable and unstated, and [the numeric laws](../04-arithmetic/03-numeric-laws.md) state it at `Nat` and `Int`.
-- **`/std` has no decision that a list is in order**, in which a sort's answer could be stated beside `/std/List/Permutation`.
 
 ## Prior art
 
@@ -40,29 +39,7 @@ It waits on no other spec.
 
 ## Stages
 
-Each lands alone and is one commit. `/std/List/Permutation` and `/std/List/Member` have landed, with their laws.
-
-**Stage 2 — order as a decision.**
-
-```crs
---- Whether each element stands in `le` to the one after it.
-pub let ordered(@T: Type, l: List(T), le: (T, T) -> Bool) -> Bool
-
-pub induct Pairwise(@T: Type, le: (T, T) -> Bool): (List(T)) -> pub Prop
-| empty(): ([])
-| cons(
-    @x: T,
-    @l: List(T),
-    head: (y: T, Member()(y, l)) -> Holds(le(x, y)),
-    rest: Pairwise(le)(l),
-): ([x, ..l])
-end
-```
-
-- `/std/List/ordered` with what builds it at a cons and what a cons gives back, and `/std/List/Pairwise` with its two projections and `of_ordered`, by which a list in order at adjacent pairs is in order at every pair under `Ord/Transitive(le)`.
-- `/std/Ord` gains `Flips(ord)`, the proposition that `ord(b, a)` is `Ordering/flip(ord(a, b))`; `Transitive(le)`; `le(ord)`, the relation `ord` does not answer `gt` at; and `then(ord, second)`, which holds where `ord` answers `lt`, and where it answers `eq` and `second` holds.
-
-Check: `/std` builds, and rows of the `aggregates` unit hold `ordered` at closed lists in and out of order.
+Each lands alone and is one commit. What the theorem is stated in has landed: `/std/List/Permutation` and `/std/List/Member`, `/std/List/ordered` and `/std/List/Pairwise`, and `/std/Ord`'s `Flips`, `Transitive`, `le` and `then`.
 
 **Stage 3 — the sort.** `/std/List/sort_by` holds the function and its theorem, and `/std/List/sort` its reading at `Ord/ord`.
 

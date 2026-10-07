@@ -1,6 +1,7 @@
 -- The `List` functions every peer ships: structural predicates and searches, the fold-shaped builders, `traverse` over a monad, and the stable sort.
-use /std/{Nat, Str, Bool, List, Option, Eq, Test};
-use /std/List/{Member, Permutation};
+use /std/{Nat, Str, Bool, List, Option, Eq, Ord, Ordering, Test};
+use /std/Bool/{Holds};
+use /std/List/{Member, Permutation, Pairwise};
 
 test predicates_and_searches_answer_over_the_elements =
     let l = [3, 1, 4, 1, 5];
@@ -84,3 +85,26 @@ let _a_rotation_is_a_permutation: Permutation()([1, 2, 3], [3, 1, 2]) =
 
 let _a_member_is_carried_across_a_permutation: Member()(1, [3, 1, 2]) =
     Permutation/member(_a_rotation_is_a_permutation, Member/here());
+
+-- `ordered` decides a relation at each adjacent pair, and a comparator is read as one: by `Ord/le` alone, and by `Ord/then` with a second relation among what the comparator ties.
+test ordered_decides_each_adjacent_pair =
+    let empty: List(Nat) = [];
+    let by_number(p: {Nat, Str}, q: {Nat, Str}) -> Ordering = Nat/ord(p.0, q.0);
+    let by_text(p: {Nat, Str}, q: {Nat, Str}) -> Ordering = Str/ord(p.1, q.1);
+    let tied = [(1, "b"), (1, "a"), (2, "a")];
+    Test/all([
+        Test/assert(List/ordered(empty, Ord/le(Nat/ord))),
+        Test/assert(List/ordered([1, 2, 2, 5], Ord/le(Nat/ord))),
+        Test/assert(Bool/not(List/ordered([1, 3, 2], Ord/le(Nat/ord)))),
+        Test/assert(List/ordered(tied, Ord/le(by_number))),
+        Test/assert(Bool/not(List/ordered(tied, Ord/then(by_number, Ord/le(by_text)))))]);
+
+-- A list in order at adjacent pairs is in order at every pair, where the relation carries across a middle element: stated over any relation and its law.
+let _adjacent_order_reaches_every_pair(
+    @T: Type,
+    le: (T, T) -> Bool,
+    carries: Ord/Transitive(le),
+    l: List(T),
+    given: Holds(List/ordered(l, le)),
+) -> Pairwise(le)(l) =
+    Pairwise/of_ordered(le, carries, l, given);

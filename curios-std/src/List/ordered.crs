@@ -1,0 +1,55 @@
+use /std/{List, Bool};
+use /std/Bool/{True, Holds};
+
+--- Whether `a` stands in `le` to the first element of `l`, as it does to an empty list's.
+pub let leads(@T: Type, le: (T, T) -> Bool, a: T, l: List(T)) -> Bool =
+    match l | [] => true | [k, .._] => le(a, k) end;
+
+--- Whether each element of `l` stands in `le` to the one after it.
+---
+--- A decision, so `Holds(ordered(l, le))` is discharged by reduction over a closed list and the same function answers for a list met at run time. `le` is any relation: a comparator is read as one through `Ord/le` and `Ord/then`.
+pub let ordered(@T: Type, l: List(T), le: (T, T) -> Bool) -> Bool =
+    match l
+    | [] => true
+    | [h, ..t] => match leads(le, h, t) | true => ordered(t, le) | false => false end
+    end;
+
+--- An element that leads a list in order makes a list in order.
+pub let cons(
+    @T: Type,
+    le: (T, T) -> Bool,
+    h: T,
+    t: List(T),
+    lead: Holds(leads(le, h, t)),
+    rest: Holds(ordered(t, le)),
+) -> Holds(ordered([h, ..t], le)) =
+    match leads(le, h, t)
+    | true => rest
+    | false => match lead end
+    end;
+
+--- The head of a list in order leads its tail.
+pub let head(
+    @T: Type,
+    le: (T, T) -> Bool,
+    h: T,
+    t: List(T),
+    whole: Holds(ordered([h, ..t], le)),
+) -> Holds(leads(le, h, t)) =
+    match leads(le, h, t)
+    | true => True/qed()
+    | false => match whole end
+    end;
+
+--- The tail of a list in order is in order.
+pub let tail(
+    @T: Type,
+    le: (T, T) -> Bool,
+    h: T,
+    t: List(T),
+    whole: Holds(ordered([h, ..t], le)),
+) -> Holds(ordered(t, le)) =
+    match leads(le, h, t)
+    | true => whole
+    | false => match whole end
+    end;
