@@ -33,9 +33,10 @@ use {
     },
     curios_analysis::Invert,
     curios_core::{
-        Atom, Bound, Free, InductArm, InductType, MatchResult, ReduceError, Subterm, Telescope,
-        Term, Variant,
+        Atom, Bound, Free, InductArm, InductType, Intrinsic, MatchResult, Nat, ReduceError,
+        Subterm, Telescope, Term, Variant,
     },
+    std::slice,
 };
 
 /// Check every arm of an elimination of `scrutinee_type` at `result`.
@@ -135,6 +136,10 @@ fn check_arm(
             })
             .into();
 
+            if never_taken(kernel, scrutinee, &value, binders)? {
+                return Ok(());
+            }
+
             assume_case_value(kernel, scrutinee, &value, &mut solutions)?;
             // What the call recorder grades under within the arm: the equations just put in force, and the payload binders — an application of one reads as the payload it came from.
             kernel.assume_arm(scrutinee, &value, &solutions)?;
@@ -152,6 +157,47 @@ fn check_arm(
             check(kernel, &body, &expected)
         })
     })
+}
+
+/// Whether the arm of a case split at `value` is one reduction never takes: the scrutinee already is a literal or a constructed value, and the unifier that excuses an absent arm ([`invert_indices`]) finds it in a definite clash with `value`. Such an arm is not typed.
+///
+/// **Nothing reads it.** A value is its case under every substitution, so a case split over one is its one arm wherever it stands: reduction opens no other, and conversion compares none, since the elimination is never stuck. Typing the arm would establish a term no rule reads, and would refuse one that was typed already: an arm is typed under the equation between its scrutinee and its case, an equation between two values is recorded nowhere ([`records_case_equation`](curios_analysis::records_case_equation)), and the result an arm is checked at puts a case in its scrutinee's place through the goal ([`MatchResult::at`]), an elimination of that scrutinee inside the goal among it. A proof that stood under that elimination's other arm, resting on its guard, then stands under a literal.
+///
+/// **A fold is never asked.** Its reduct holds the fold at the tail, so a value of either case takes the identity arm in the end: `match 3 : (_) => P | 0 => … | k + 1; ih => ih end` is its identity arm, which skipped would inhabit any `P` untyped. The callers ask for an elimination no arm of which reads a hypothesis.
+///
+/// **The scrutinee is read as it stands and never computed.** Computing it would decide more — an elimination over `0 < 0` is its `false` arm — and typing must not evaluate a term that runs, which may be the whole program. [`stands_as_a_case`] is that gate and no part of the answer.
+pub(super) fn never_taken(
+    kernel: &mut Kernel,
+    scrutinee: &Term,
+    value: &Term,
+    binders: &[Free],
+) -> Result<bool, Error> {
+    let scrutinee = kernel.by_value(scrutinee);
+    if !stands_as_a_case(&scrutinee) {
+        return Ok(false);
+    }
+
+    Ok(matches!(
+        invert_indices(
+            kernel,
+            slice::from_ref(&scrutinee),
+            slice::from_ref(value),
+            binders
+        )?,
+        Invert::Impossible
+    ))
+}
+
+/// Whether `term` already is a value that names its case: a constructed value, or a literal of a carrier an elimination reads.
+fn stands_as_a_case(term: &Term) -> bool {
+    match &**term {
+        Subterm::Variant(_) => true,
+        Subterm::Intrinsic(Intrinsic::Bool(_) | Intrinsic::Bin(..) | Intrinsic::List { .. }) => {
+            true
+        }
+        Subterm::Intrinsic(Intrinsic::Nat(_)) => Nat::is_zero(&Nat::decompose(term).1),
+        _ => false,
+    }
 }
 
 /// Teach an arm that its scrutinee **is** this case's value, which is what specializes the context the body is checked in.

@@ -528,7 +528,10 @@ fn check_motive(
 fn motive_sort(kernel: &mut Kernel, stated: &Term) -> Result<Sort, Error> {
     let refusal = |error| match error {
         error @ Error::Reduce(_) => error,
-        _ => Error::NotAMotive(stated.clone()),
+        refusal => Error::NotAMotive {
+            stated: stated.clone(),
+            refusal: Box::new(refusal),
+        },
     };
 
     let type_ = infer(kernel, stated).map_err(refusal)?;
@@ -548,7 +551,7 @@ fn check_cases(
 ) -> Result<(), Error> {
     let motive_sort = check_motive(kernel, family, result, scrutinee_type)?;
 
-    let at = |kernel: &mut Kernel, value: Term, body: &Term| {
+    let typed = |kernel: &mut Kernel, value: Term, body: &Term| {
         let expected = result.at(scrutinee, &[], &[], &value);
 
         kernel.scoped(|kernel| {
@@ -564,6 +567,16 @@ fn check_cases(
                 &expected.substitute(&solutions),
             )
         })
+    };
+    // An arm of a case split, which a scrutinee that already is another case never takes.
+    let at = |kernel: &mut Kernel, value: Term, body: &Term| match eliminate::never_taken(
+        kernel,
+        scrutinee,
+        &value,
+        &[],
+    )? {
+        true => Ok(()),
+        false => typed(kernel, value, body),
     };
 
     match cases {
@@ -626,9 +639,11 @@ fn check_cases(
             })
         }
 
-        Cases::FreeMonoid { carrier } => {
-            check_free_monoid(kernel, result, scrutinee, scrutinee_type, carrier, &at)
-        }
+        // A fold is no case split: its reduct holds the fold at the tail, so a value of either case takes the identity arm in the end, and every arm of one is typed.
+        Cases::FreeMonoid { carrier } => match reads_hypothesis(carrier) {
+            true => check_free_monoid(kernel, result, scrutinee, scrutinee_type, carrier, &typed),
+            false => check_free_monoid(kernel, result, scrutinee, scrutinee_type, carrier, &at),
+        },
     }
 }
 
@@ -680,6 +695,13 @@ fn check_free_monoid(
         kernel.scoped(|kernel| {
             for (binder, type_) in &binders {
                 kernel.assume(binder, type_);
+            }
+            let names = binders
+                .iter()
+                .map(|(binder, _)| **binder)
+                .collect::<Vec<_>>();
+            if motive.is_none() && eliminate::never_taken(kernel, scrutinee, &cons_value, &names)? {
+                return Ok(());
             }
 
             let expected = result.at(scrutinee, &[], &[], &cons_value);

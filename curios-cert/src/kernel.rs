@@ -121,7 +121,11 @@ pub enum Error {
     /// A term used as a universe that is neither `Type` nor `Prop`.
     NotASort(Term),
     /// An elimination's motive is not a well-typed function landing in a sort. The motive is a claim the term makes about its own result — `infer` reads the elimination's type off it and `Sort::of` classifies a type-valued `match` by it — so a motive stating one sort while its arms inhabit another would be believed by both.
-    NotAMotive(Term),
+    NotAMotive {
+        stated: Term,
+        /// What typing the motive, or reading its type as a sort, met.
+        refusal: Box<Error>,
+    },
     /// A free-monoid fold whose arm reads its induction hypothesis, at an ambient goal. The hypothesis is the fold itself at the tail, and its type is the goal at the tail — an instance only a family can state once the head has been substituted away. A case split, whose arm reads none, takes an ambient goal as any other elimination does.
     AmbientFold(Term),
     /// A free-monoid fold whose arm reads its induction hypothesis, under a motive that mentions its scrutinee other than through the binder. The hypothesis is typed at the motive opened at the tail, and the arm is checked with the scrutinee specialized to the cons value — so a captured occurrence is specialized too, and the hypothesis is assumed at the goal of the arm instead of at the tail's, which proves the goal from itself.
@@ -276,12 +280,13 @@ impl fmt::Display for Displayed<'_> {
                 let term = term.spelled(spelling);
                 write!(formatter, "`{term}` is not a universe")
             }
-            Error::NotAMotive(term) => {
-                let term = term.spelled(spelling);
+            Error::NotAMotive { stated, refusal } => {
+                let stated = stated.spelled(spelling);
                 write!(
                     formatter,
-                    "`{term}` is not a valid motive: it must be well-typed and land in a sort",
-                )
+                    "`{stated}` is not a valid motive, which is well typed and lands in a sort: ",
+                )?;
+                Displayed(refusal, Rc::clone(spelling)).fmt(formatter)
             }
             Error::AmbientFold(goal) => {
                 let goal = goal.spelled(spelling);

@@ -119,7 +119,7 @@ fn a_motive_that_misreports_its_sort_does_not_skip_the_large_elimination_guard()
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, Error::NotAMotive(_))),
+            .any(|verdict| matches!(verdict.error, Error::NotAMotive { .. })),
         "the kernel eliminated a two-constructor proposition into `Nat`: {verdicts:?}",
     );
 }
@@ -245,7 +245,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
     assert!(
         verdicts
             .iter()
-            .any(|verdict| matches!(verdict.error, Error::NotAMotive(_))),
+            .any(|verdict| matches!(verdict.error, Error::NotAMotive { .. })),
         "a vacuous elimination carried a motive nothing validated: {verdicts:?}",
     );
 }

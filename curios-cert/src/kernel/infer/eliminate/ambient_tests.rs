@@ -128,7 +128,10 @@ fn a_goal_over_a_hypothesis_typed_by_the_scrutinee_needs_no_family() {
         None,
     );
     assert!(
-        matches!(infer(&mut kernel, &family_form), Err(Error::NotAMotive(_))),
+        matches!(
+            infer(&mut kernel, &family_form),
+            Err(Error::NotAMotive { .. })
+        ),
         "the family stating the same goal typed under its own binders",
     );
 }
@@ -325,4 +328,88 @@ fn a_result_whose_sort_the_budget_cannot_reach_is_refused_for_the_budget() {
             panic!("ambient = {ambient}: a budget that affords the count refused: {error:?}")
         });
     }
+}
+
+/// An arm reduction never takes is not typed: over the literal `false` an elimination is its `false` arm wherever it stands, and nothing reads the other. Here the other holds a `Bool` where the result is `Nat`, as the result an arm is checked at leaves a proof standing under a guard that is no longer one.
+///
+/// Mutation-checked: with every arm typed, the elimination is refused.
+#[test]
+fn an_arm_under_a_scrutinee_that_is_another_case_is_not_typed() {
+    let mut kernel = kernel();
+    let never = Term::intrinsic(Intrinsic::Bool(true));
+    let term = Term::bool_match(
+        Term::intrinsic(Intrinsic::Bool(false)),
+        None,
+        nat_type(),
+        nat(0),
+        never,
+    );
+
+    assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
+}
+
+/// The arm a literal scrutinee does take is typed as every arm is: over `true`, a `Bool` in the `true` arm of a `Nat` result is refused.
+#[test]
+fn the_arm_a_literal_scrutinee_takes_is_typed() {
+    let mut kernel = kernel();
+    let taken = Term::intrinsic(Intrinsic::Bool(true));
+    let term = Term::bool_match(
+        Term::intrinsic(Intrinsic::Bool(true)),
+        None,
+        nat_type(),
+        nat(0),
+        taken,
+    );
+
+    assert!(infer(&mut kernel, &term).is_err());
+}
+
+/// A scrutinee that is no case yet has every arm typed, a call over a literal among them: `not(false)` computes to `true`, and typing computes no scrutinee, which may be the program.
+#[test]
+fn an_arm_under_a_scrutinee_that_is_no_case_as_it_stands_is_typed() {
+    let mut kernel = kernel();
+    let c = binder(80, "c");
+    let bool_type = Term::intrinsic(Intrinsic::BoolType);
+    let wrong = Term::intrinsic(Intrinsic::Bool(true));
+    let over =
+        |scrutinee: Term| Term::bool_match(scrutinee, None, nat_type(), nat(0), wrong.clone());
+
+    let stuck = kernel.scoped(|kernel| {
+        kernel.assume(&c, &bool_type);
+        infer(kernel, &over(Term::free_var(&c)))
+    });
+    assert!(stuck.is_err());
+
+    let not = Term::func(
+        [(c, bool_type.clone())],
+        Term::bool_match(
+            Term::free_var(&c),
+            None,
+            bool_type,
+            Term::intrinsic(Intrinsic::Bool(true)),
+            Term::intrinsic(Intrinsic::Bool(false)),
+        ),
+    );
+    let computed = Term::apply(not, [Term::intrinsic(Intrinsic::Bool(true))]);
+    assert!(infer(&mut kernel, &over(computed)).is_err());
+}
+
+/// A fold is no case split: its reduct holds the fold at the tail, so over the literal `3` it takes its identity arm in the end, and that arm is typed though `3` is another case. Here it holds a `Bool` where the motive is `Nat`.
+///
+/// Mutation-checked: with a fold's arms asked as a case split's are, the fold is accepted.
+#[test]
+fn every_arm_of_a_fold_over_a_literal_is_typed() {
+    let mut kernel = kernel();
+    let ih = binder(82, "ih");
+    let fold = Term::nat_match(
+        nat(3),
+        None,
+        nat_type(),
+        Term::intrinsic(Intrinsic::Bool(true)),
+        &binder(81, "pred"),
+        &ih,
+        Term::free_var(&ih),
+    );
+
+    assert!(infer(&mut kernel, &fold).is_err());
 }
