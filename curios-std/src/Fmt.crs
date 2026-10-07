@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Nat, Show, Spell, Io};
+use /std/{Str, Char, Bool, Show, Spell, Io};
 
 --- A parsed format string: literal pieces, and the places an argument goes — shown at a `%`, spelled at a `#`.
 pub induct Fmt: pub Type
@@ -21,66 +21,48 @@ pub let format_type_with(T: Type, f: Fmt) -> Type =
     | spell(rest) => (@A: Type, use Spell(A), a: A) -> format_type_with(T, rest)
     end;
 
-let flush(bytes: Bytes, start: Nat, count: Nat, rest: Fmt) -> Fmt =
-    match Nat/le/try(start + count, Bytes/len(bytes))
-    | none() => Fmt/nil()
-    | some(within) =>
-        match Str/of_bytes(Bytes/slice(bytes, start, count, @within))
-        | success(piece) => Fmt/lit(piece, rest)
-        | failure(_) => Fmt/nil()
+--- Where a walk over a format stands: the tree read so far, last piece first; the literal run it is in; and whether a backslash waits for the character it may escape.
+let Walk: Type =
+    {Fmt, Str, Bool};
+
+--- `c` read where no backslash waits: a place closes the run before it, a backslash waits for what follows, and any other character joins the run.
+let plain(c: Char, read: Fmt, run: Str) -> Walk =
+    match Char/to_nat(c)
+    | '%' => (Fmt/show(Fmt/lit(run, read)), "", false)
+    | '#' => (Fmt/spell(Fmt/lit(run, read)), "", false)
+    | '\\' => (read, run, true)
+    | _ => (read, Str/concat(run, Str/of_char(c)), false)
+    end;
+
+--- The walk one character on. After a backslash a place's character is the literal one, and any other character leaves the backslash a character of the run and is read as it stands.
+let step(c: Char, walk: Walk) -> Walk =
+    let (read, run, escaped) = walk;
+    match escaped
+    | false => plain(c, read, run)
+    | true =>
+        match Char/to_nat(c)
+        | '%' => (read, Str/concat(run, "%"), false)
+        | '#' => (read, Str/concat(run, "#"), false)
+        | _ => plain(c, read, Str/concat(run, "\\"))
         end
     end;
 
-let parse_at(bytes: Bytes, pos: Nat, fuel: Nat) -> Fmt =
-    match fuel
-    | 0 => Fmt/nil()
-    | rest + 1 =>
-        match Nat/lt/try(pos, Bytes/len(bytes))
-        | none() => Fmt/nil()
-        | some(ok) =>
-            match Byte/to_nat(Bytes/get(bytes, pos, @ok))
-            | '%' => Fmt/show(parse_at(bytes, pos + 1, rest))
-            | '#' => Fmt/spell(parse_at(bytes, pos + 1, rest))
-            | _ => parse_lit_at(bytes, pos, 0, rest)
-            end
-        end
-    end
-and parse_lit_at(bytes: Bytes, start: Nat, taken: Nat, fuel: Nat) -> Fmt =
-    match fuel
-    | 0 => flush(bytes, start, taken, Fmt/nil())
-    | rest + 1 =>
-        match Nat/lt/try(start + taken, Bytes/len(bytes))
-        | none() => flush(bytes, start, taken, Fmt/nil())
-        | some(ok) =>
-            match Byte/to_nat(Bytes/get(bytes, start + taken, @ok))
-            | '%' => flush(bytes, start, taken, Fmt/show(parse_at(bytes, start + taken + 1, rest)))
-            | '#' => flush(bytes, start, taken, Fmt/spell(parse_at(bytes, start + taken + 1, rest)))
-            | '\\' => parse_esc_at(bytes, start, taken, rest)
-            | _ => parse_lit_at(bytes, start, taken + 1, rest)
-            end
-        end
-    end
-and parse_esc_at(bytes: Bytes, start: Nat, taken: Nat, fuel: Nat) -> Fmt =
-    match fuel
-    | 0 => flush(bytes, start, taken, Fmt/nil())
-    | rest + 1 =>
-        match Nat/lt/try(start + taken + 1, Bytes/len(bytes))
-        | none() => parse_lit_at(bytes, start, taken + 1, rest)
-        | some(ok) =>
-            match Byte/to_nat(Bytes/get(bytes, start + taken + 1, @ok))
-            | '%' =>
-                flush(bytes, start, taken, Fmt/lit("%", parse_at(bytes, start + taken + 2, rest)))
-            | '#' =>
-                flush(bytes, start, taken, Fmt/lit("#", parse_at(bytes, start + taken + 2, rest)))
-            | _ => parse_lit_at(bytes, start, taken + 1, rest)
-            end
-        end
+--- `read`, a tree whose last piece comes first, turned around onto `rest`.
+let turned(read: Fmt, rest: Fmt) -> Fmt =
+    match read
+    | nil() => rest
+    | lit(piece, before) => turned(before, Fmt/lit(piece, rest))
+    | show(before) => turned(before, Fmt/show(rest))
+    | spell(before) => turned(before, Fmt/spell(rest))
     end;
 
---- The format `s` spells: `%` is a place an argument is shown at and `#` one it is spelled at; `\%` and `\#` are the literal characters.
+--- The format `s` spells: `%` is a place an argument is shown at and `#` one it is spelled at; `\%` and `\#` are the literal characters, and a backslash before anything else is itself. A fold over the characters, so every piece is text because every character it is built from is, and the walk ends where the string does.
 pub let parse(s: Str) -> Fmt =
-    let bytes = Str/to_bytes(s);
-    parse_at(bytes, 0, 3 * Bytes/len(bytes) + 3);
+    let start: Walk = (Fmt/nil(), "", false);
+    let (read, run, escaped) = Str/fold(s, start, step);
+    turned(
+        Fmt/lit(match escaped | true => Str/concat(run, "\\") | false => run end, read),
+        Fmt/nil());
 
 let go_with(T: Type, finish: (Str) -> T, f: Fmt, acc: Str) -> format_type_with(T, f) =
     match f
