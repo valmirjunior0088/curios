@@ -25,8 +25,7 @@ use {
         Aligned, Classes, Intrinsic, Level, Nat, Operand, Probe, Produced, ReduceError, Reducer,
         Subterm, Term, Var, Visit, align_comparisons, atoms_of, classable, classed, decide_bool,
         int_has_stuck_product, int_normalize, int_same, is_bool_connective, normalize_bool,
-        peel_bin, peel_bool, peel_commutative, peel_comparison, peel_int_pair, peel_list,
-        peel_monomial, peel_nat_pair, peel_position, peel_symmetric,
+        peel_commutative, peel_comparison, peel_monomial, peel_spine,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -320,18 +319,10 @@ fn read(driver: &mut impl Driver, this: Intrinsic, that: Intrinsic) -> Result<Re
     };
 
     // `Nat`, `Bin` and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off; `&&` and `||` are semilattices, so two of one are equal when they hold one set of leaves; and two stuck `get`s are one element when they read one position of one root. This decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than two opaque literals. `Undecided` falls through to the congruence, which still compares like-shaped operands, so a peel can only strengthen conversion. A sufficient residual is compared exactly as an equivalent one is: conversion establishes the equation by establishing it, and a residual that fails leaves the pair to the refusal it would have met anyway.
+    // The two sufficient pairings are asked before the list because a peel of it answers undecided for a pair they take apart, and an answer ends the asking: `Int`'s reads a product as one summand, and a symmetric operation's reads a comparison's sides in the order they are held.
     if let Some(conclusion) = peel_monomial(&this, &that)
         .or_else(|| peel_comparison(&this, &that))
-        .or_else(|| {
-            peel_nat_pair(&this, &that)
-                .or_else(|| peel_int_pair(&this, &that))
-                .or_else(|| peel_bin(&this, &that))
-                .or_else(|| peel_list(&this, &that))
-                .or_else(|| peel_bool(&this, &that))
-                .or_else(|| peel_symmetric(&this, &that))
-                .or_else(|| peel_position(&this, &that))
-                .map(Conclusion::from)
-        })
+        .or_else(|| peel_spine(&this, &that).map(Conclusion::from))
     {
         match conclusion {
             Conclusion::Equal => return Ok(Read::Decided(Outcome::Equal)),

@@ -22,14 +22,52 @@ pub fn peel_intrinsic(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
         // Finite scalars are the degenerate (zero-generator) spines: no tail.
         (Intrinsic::Bool(actual), Intrinsic::Bool(target)) => Some(decide(actual == target)),
         (Intrinsic::Int(actual), Intrinsic::Int(target)) => Some(decide(actual == target)),
-        // `Nat` is the free commutative monoid on its summands, `Bin`/`List` the free monoids on their bytes/elements (each returns `None` for the other's shapes), and `&&`/`||` the semilattices on their leaves.
-        _ => peel_nat_pair(left, right)
-            .or_else(|| peel_int_pair(left, right))
-            .or_else(|| peel_bin(left, right))
-            .or_else(|| peel_list(left, right))
-            .or_else(|| peel_bool(left, right))
-            .or_else(|| peel_symmetric(left, right))
-            .or_else(|| peel_position(left, right)),
+        _ => peel_spine(left, right),
+    }
+}
+
+/// The peels at [`Deduction`]'s strength, in the order they are asked: `Nat` the free commutative monoid on its summands, `Int` the group, `Bin` and `List` the free monoids on their bytes and elements, `&&` and `||` the semilattices on their leaves, a symmetric operation's two orders, and two reads of one position. Each answers `None` for a pair that is not its shape, so the seven are one set of alternatives.
+const PEELS: [fn(&Intrinsic, &Intrinsic) -> Option<Verdict>; 7] = [
+    peel_nat_pair,
+    peel_int_pair,
+    peel_bin,
+    peel_list,
+    peel_bool,
+    peel_symmetric,
+    peel_position,
+];
+
+/// What the first of `PEELS` to answer concludes of a pair, or `None` where the pair is no peel's shape: the one statement of the list, which inversion reads through [`peel_intrinsic`] and conversion between its own sufficient pairings.
+///
+/// **The order decides what an answer costs, never what it is.** Every peel here is exact, so two that answer one pair cannot honestly part. One concluding the pair equal where another concludes it impossible is a peel that is wrong; and one concluding more than the peel asked before it is a peel shadowed by its place — a pair left undecided, or handed on as a residual, by where a rule stands in a list. A debug build asks all seven of every pair and holds the first answer to the rest, so the suite and both halves of the prelude's build put the question to every pair conversion and inversion meet. A release build stops at the first.
+pub fn peel_spine(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
+    let first = PEELS.iter().find_map(|peel| peel(left, right));
+
+    debug_assert!(
+        PEELS
+            .iter()
+            .filter_map(|peel| peel(left, right))
+            .all(|answer| stands_behind(first.as_ref(), &answer)),
+        "two peels part over `{left:?}` and `{right:?}`",
+    );
+
+    first
+}
+
+/// Whether `answer` may stand behind `first` in the list: it neither contradicts it nor concludes more.
+fn stands_behind(first: Option<&Verdict>, answer: &Verdict) -> bool {
+    let strength = |verdict: &Verdict| match verdict {
+        Deduction::Equal | Deduction::Impossible => 2,
+        Deduction::Equivalent(_) => 1,
+        Deduction::Undecided => 0,
+    };
+
+    match (first, answer) {
+        (Some(Deduction::Equal), Deduction::Impossible)
+        | (Some(Deduction::Impossible), Deduction::Equal) => false,
+        (Some(first), answer) => strength(answer) <= strength(first),
+        // An answer exists only where a first one does.
+        (None, _) => false,
     }
 }
 

@@ -187,3 +187,51 @@ fn peel_commutative_declines_where_no_operand_is_paired_or_the_operation_does_no
     );
     assert!(peel_commutative(&and(x.clone(), y), &Intrinsic::BoolOr(x, z)).is_none());
 }
+
+// The one pair two peels of the list both read: a commuted, reassociated conjunction is one set of leaves to `peel_bool` and two operands out of order to `peel_symmetric`. The list answers as the stronger of the two does, and a debug build holds the weaker behind it. Mutation-checked against the list's order: `peel_symmetric` asked before `peel_bool` fails the list's assertion here.
+#[test]
+fn the_list_answers_a_pair_two_peels_read_as_the_stronger_does() {
+    let (x, y, z) = (sym(0, "x"), sym(1, "y"), sym(2, "z"));
+
+    let nested = and(Term::intrinsic(and(x.clone(), y.clone())), z.clone());
+    let commuted = and(z, Term::intrinsic(and(y, x)));
+    assert!(
+        matches!(
+            peel_symmetric(&nested, &commuted),
+            Some(Deduction::Undecided)
+        ),
+        "two operands that are not one pair swapped"
+    );
+    assert!(
+        matches!(peel_spine(&nested, &commuted), Some(Deduction::Equal)),
+        "and one set of leaves"
+    );
+}
+
+// Why conversion asks its two sufficient pairings before the list: the list answers the pairs they take apart, undecided, and an answer ends the asking. A comparison's sides out of order are `peel_symmetric`'s to decline, and an `Int` product is one summand to `peel_int_pair`.
+#[test]
+fn the_list_declines_a_pair_a_sufficient_pairing_takes_apart() {
+    let (w, x, y) = (sym(0, "w"), sym(1, "x"), sym(2, "y"));
+
+    let this = Intrinsic::NatNeq(y.clone(), w.clone());
+    let that = Intrinsic::NatNeq(x.clone(), y.clone());
+    assert_eq!(
+        peel_comparison(&this, &that),
+        Some(Conclusion::Sufficient((w.clone(), x.clone()))),
+    );
+    assert!(matches!(
+        peel_spine(&this, &that),
+        Some(Deduction::Undecided)
+    ));
+
+    let this = Intrinsic::IntMul(y.clone(), w.clone());
+    let that = Intrinsic::IntMul(y, x.clone());
+    assert!(matches!(
+        peel_monomial(&this, &that),
+        Some(Conclusion::Sufficient((left, right))) if left == w && right == x
+    ));
+    assert!(matches!(
+        peel_spine(&this, &that),
+        Some(Deduction::Undecided)
+    ));
+}
