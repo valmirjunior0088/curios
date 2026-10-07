@@ -68,25 +68,51 @@ pub(super) fn identify_universe_levels(
     Ok(Identification::Identified)
 }
 
-/// Whether two spellings of one term disagree on a level that is already *decided* on both sides.
+/// Hold two spellings of one refinement key to one universe instance, answering whether they can be: every level the two differ in is committed equal, as [`identify_universe_levels`] commits two sides apart in levels alone. Two unequal ground levels, a pair under a universe binder, which the ambient solver has no hold on, and two sides apart in more than levels decline the key with nothing inserted.
 ///
-/// The refusing half of [`align_universe_levels`], and the one a *store* can use. Conversion answers its question by committing the differing pairs equal, which is licensed because a goal asked it; a refinement probe is a search over candidate keys, and committing a universe equality on the strength of a speculative match would constrain the declaration from a lookup. This commits nothing and only ever declines, so it is safe to ask wherever a key has already matched.
+/// A key erases its universes, every occurrence of a polymorphic scrutinee minting an instance of its own and the key being compared while they are open (`reduce`'s `shallow_scrutinee`). A hit then rests on the two instances being one: what it hands back is the arm's value for the scrutinee as the arm recorded it, and `Type u` embeds a level in a term, so two instances of one stuck call can be two values. Left unsaid, the two close wherever their own bounds put them, and where that is apart the elaborator has refined a term the kernel's key, which keeps its levels, does not answer. Committed, they close together, or the declaration is refused where its levels close.
 ///
-/// `false` for everything that is not a decided disagreement — sides differing in more than levels, a pair under a universe binder, a pair either of whose sides is still undecided. That is deliberate and is what keeps the answer the *refusing* direction only: an undecided level may yet be solved either way, and collapsing those is exactly what the refinement key is for.
+/// It reads no family's variance: the kernel's key is the scrutinee compared with every level, so a key let through on an irrelevant one would answer a term the kernel reduces before it answers. Past a key the guard is [`levels_clash_to_conversion`].
 ///
-/// It reads no family's variance: it guards a key, and the kernel's key is the scrutinee compared with every level, so a key this let through on an irrelevant one would answer a term the kernel reduces before it answers. Past a key the guard is [`levels_clash_to_conversion`].
-pub(crate) fn levels_clash_on_a_decided_instance(
-    context: &Context,
+/// This is the one write a reduction makes to the solver, so a hit that makes it is noted as a question put to conversion is ([`Context::note_question`]): a scope rolled back past it withdraws the equations, and with them every reduct taken meanwhile. A question asked with nothing committed that meets one answers no, as it does wherever answering yes would commit (`same_uncommitted`).
+pub(crate) fn hold_at_one_instance(
+    context: &mut Context,
     this: &Term,
     that: &Term,
 ) -> Result<bool, ReduceError> {
-    Ok(matches!(
-        align_universe_levels(context, this, that, &())?,
-        Alignment::GroundUnequal
-    ))
+    let Alignment::Pending { compared, .. } = align_universe_levels(context, this, that, &())?
+    else {
+        return Ok(false);
+    };
+    if compared.is_empty() {
+        return Ok(true);
+    }
+
+    // How many pairs a key's hit commits, per hit that commits any.
+    curios_profile::sample!("identify::key", compared.len());
+    let mark = context.solution_mark();
+    let held = compared.into_iter().all(|(this_level, that_level)| {
+        context
+            .universes_mut()
+            .add_eq(
+                this_level,
+                that_level,
+                UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+            )
+            .is_ok()
+    });
+    if !held {
+        context.rollback_solutions(mark);
+    }
+    context.end_solutions(mark);
+    if held {
+        context.note_question();
+    }
+
+    Ok(held)
 }
 
-/// [`levels_clash_on_a_decided_instance`] as conversion reads the pair: a level a nominal family or a definition applied in full is irrelevant in is no disagreement, two instances apart in it alone being one term. The guard past a key, where a stuck form is put to an equation's reduced spelling and both checkers answer by what conversion holds one — the kernel by asking its own, so a pair this lets through is one the kernel answers as well. A curried head apart in two decided levels is a clash here, no type being at hand to say otherwise.
+/// Whether two spellings disagree on a level decided on both sides, as conversion reads the pair: a level a nominal family or a definition applied in full is irrelevant in is no disagreement, two instances apart in it alone being one term. It commits nothing and only ever declines. The guard past a key, where a stuck form is put to an equation's reduced spelling and both checkers answer by what conversion holds one — the kernel by asking its own, so a pair this lets through is one the kernel answers as well. A curried head apart in two decided levels is a clash here, no type being at hand to say otherwise.
 pub(crate) fn levels_clash_to_conversion(
     context: &Context,
     this: &Term,

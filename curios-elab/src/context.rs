@@ -19,7 +19,7 @@ use {
         WitnessKey, zonk_universe_levels_scoped,
     },
     crate::{
-        Published, Refusal, Sort, levels_clash_on_a_decided_instance, shallow_scrutinee, zonk,
+        Published, Refusal, Sort, hold_at_one_instance, key_spelling, shallow_scrutinee, zonk,
         zonk_solved_term_metas,
     },
     curios_analysis::{Unfolding, records_case_equation},
@@ -1521,16 +1521,16 @@ impl Context {
         reduct
     }
 
-    /// [`Frames::projection_entry`]'s value, declined where `base` and the base the arm scrutinized disagree on a universe instance both sides have already decided.
+    /// [`Frames::projection_entry`]'s value, with `base` and the base the arm scrutinized held to one universe instance, and declined where they cannot be ([`hold_at_one_instance`]).
     ///
-    /// The guard sits in the accessor for the reason [`Context::scrutinee_reduct`] states, and this store needs one more thing to carry it: its key erases the base, so the unerased spelling is kept beside the value rather than recovered.
-    pub(crate) fn proj_reduct(&self, base: &Term, index: usize) -> Option<&Term> {
+    /// The commitment sits in the accessor for the reason [`Context::scrutinee_reduct`] states, and this store needs one more thing to carry it: its key erases the base, so the unerased spelling is kept beside the value rather than recovered.
+    pub(crate) fn proj_reduct(&mut self, base: &Term, index: usize) -> Option<Term> {
         let entry = self.frames.projection_entry(base, index)?;
+        let (original, value) = (entry.original.clone(), entry.value.clone());
 
-        match levels_clash_on_a_decided_instance(self, base, &entry.original) {
-            Ok(false) => Some(&entry.value),
-            Ok(true) | Err(_) => None,
-        }
+        hold_at_one_instance(self, base, &original)
+            .unwrap_or(false)
+            .then_some(value)
     }
 
     /// Record one guard's equation under every spelling it is met by — each `(canonical, original, alias)` — with the refinement cache protocol run once for all of them rather than once per spelling.
@@ -1561,21 +1561,22 @@ impl Context {
         self.frames.scrutinee_head_refined(head)
     }
 
-    /// [`Frames::scrutinee_entry`]'s value, declined where `probe` and the spelling the equation was registered on disagree on a universe instance both sides have already decided.
+    /// [`Frames::scrutinee_entry`]'s value, with `probe` and the spelling the equation was registered on held to one universe instance, and declined where they cannot be ([`hold_at_one_instance`]). The two are read as their key spells them ([`key_spelling`]), so they differ in levels alone.
     ///
-    /// **The guard is in the accessor, so no unguarded read of the store exists.** The key cannot carry this test: it is computed when an arm is entered, which is before the levels in it are solved, and it is then compared for as long as the arm stands. `documentation/design/soundness/case-equations-and-their-key.md`'s "concrete levels kept apart, undecided ones collapsed" therefore describes a *comparison* rather than a key, and this is the one step that happens after solving. The kernel needs none of it because it is handed a zonked module, where every instance is already ground and keying on the scrutinee itself is exact.
+    /// **The commitment is in the accessor, so no read of the store rests on an instance it has not held.** The key cannot carry this: it is computed when an arm is entered, which is before the levels in it are solved, and it is then compared for as long as the arm stands. The kernel needs none of it because it is handed a zonked module, where every instance is already ground and keying on the scrutinee itself is exact ([Case equations and their key](../../documentation/design/soundness/case-equations-and-their-key.md)).
     ///
-    /// A universe error declines too. That is the same direction the whole guard moves in — fewer refinements fire, never more — so it can cost a reduction and never admit one.
-    pub(crate) fn scrutinee_reduct(&self, canonical: &Term, probe: &Term) -> Option<&Term> {
+    /// A universe error declines. That is the direction the whole read moves in — fewer refinements fire, never more — so it can cost a reduction and never admit one.
+    pub(crate) fn scrutinee_reduct(&mut self, canonical: &Term, probe: &Term) -> Option<Term> {
         let entry = self.frames.scrutinee_entry(canonical)?;
         if entry.withheld {
             return None;
         }
+        let (original, value) = (entry.original.clone(), entry.value.clone());
+        let (probe, original) = (key_spelling(self, probe), key_spelling(self, &original));
 
-        match levels_clash_on_a_decided_instance(self, probe, &entry.original) {
-            Ok(false) => Some(&entry.value),
-            Ok(true) | Err(_) => None,
-        }
+        hold_at_one_instance(self, &probe, &original)
+            .unwrap_or(false)
+            .then_some(value)
     }
 
     /// Every equation in force with the key it is held under, aliases among them, innermost frame first.

@@ -772,31 +772,60 @@ fn define_invalidates_cached_reduction() {
     assert_eq!(reduce(&mut context, x), Ok(nat(3)));
 }
 
+/// Two occurrences of one scrutinee mint an instance each, and the key meets them while both are open. The hit holds the two to one instance, since the arm's value is the scrutinee's as the arm recorded it: left apart, they close wherever their own bounds put them, and the kernel's key, which keeps its levels, answers no term at another.
 #[test]
-fn scrutinee_refinement_ignores_fresh_universe_instances() {
+fn scrutinee_refinement_holds_fresh_universe_instances_to_one() {
     let mut context = context();
     let classify = context.fresh(Some("classify"));
+    let (registered_at, probed_at) = fresh_instances(&mut context);
     let registered = Term::apply(
-        Term::instance_of(&classify, vec![Level::meta(UniverseMetaId(0))]),
+        Term::instance_of(&classify, vec![Level::meta(registered_at)]),
         [nat(0)],
     );
     let probe = Term::apply(
-        Term::instance_of(&classify, vec![Level::meta(UniverseMetaId(1))]),
+        Term::instance_of(&classify, vec![Level::meta(probed_at)]),
         [nat(0)],
     );
     let canonical = shallow_scrutinee(&context, &registered);
     context.refine_scrutinee_spellings(vec![(canonical, registered, false)], &nat(1));
+    assert_ne!(
+        instance(&context, registered_at),
+        instance(&context, probed_at)
+    );
 
     assert_eq!(reduce(&mut context, probe), Ok(nat(1)));
+    assert_eq!(
+        instance(&context, registered_at),
+        instance(&context, probed_at)
+    );
+}
+
+/// Two levels still open, as two occurrences of one polymorphic name mint them.
+fn fresh_instances(context: &mut Context) -> (UniverseMetaId, UniverseMetaId) {
+    let mut fresh = || {
+        context
+            .universes_mut()
+            .fresh(UniverseRole::Generalizable, None)
+    };
+
+    (fresh(), fresh())
+}
+
+/// The level `meta` stands for now.
+fn instance(context: &Context, meta: UniverseMetaId) -> Level {
+    context
+        .universes()
+        .zonk(&Level::meta(meta))
+        .expect("a level the test minted")
 }
 
 /// The pair the key must keep apart, and the one it does not: two occurrences of one definition at *ground* instances.
 ///
-/// A fresh instance is undecided and collapses — the test above is that rule, and it is what the prelude needs — but `Type u` embeds a level in a *term*, so a definition carrying its parameter into a constructor payload reduces to genuinely different values at two ground instances. Erasing the instance identifies them, and the arm's equation then refines a stuck term it was never shown to be about. The kernel refuses the coercion this forges (`curios-cert`'s `recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance`, over the whole module); this is the elaborator's own store, asked directly.
+/// A fresh instance is undecided and is held to the recorded one — the test above is that rule, and it is what the prelude needs — but `Type u` embeds a level in a *term*, so a definition carrying its parameter into a constructor payload reduces to genuinely different values at two ground instances. Erasing the instance identifies them, and the arm's equation then refines a stuck term it was never shown to be about. The kernel refuses the coercion this forges (`curios-cert`'s `recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance`, over the whole module); this is the elaborator's own store, asked directly.
 ///
 /// The probe is checker-level rather than a source program on purpose: the surface has no spelling for an instance, so a program arranges two ground instances only through what bounds them, where this states them.
 ///
-/// Mutation-checked: removing the guard fails these two and leaves both `ignores_fresh_universe_instances` tests green, so the forgery pair and the collapse pair are not testing one thing twice — which is the whole of what the guard is claimed to do.
+/// Mutation-checked: removing the guard fails these two and leaves both `holds_fresh_universe_instances_to_one` tests green, so the forgery pair and the collapse pair are not testing one thing twice — which is the whole of what the guard is claimed to do.
 #[test]
 fn scrutinee_refinement_does_not_fire_at_another_ground_universe_instance() {
     let mut context = context();
@@ -919,21 +948,27 @@ fn projection_refinement_does_not_fire_at_another_ground_universe_instance() {
     assert_eq!(reduce(&mut context, probe.clone()), Ok(probe));
 }
 
+/// [`scrutinee_refinement_holds_fresh_universe_instances_to_one`] over the projection store.
 #[test]
-fn projection_refinement_ignores_fresh_universe_instances() {
+fn projection_refinement_holds_fresh_universe_instances_to_one() {
     let mut context = context();
     let record_binder = context.fresh(Some("record"));
+    let (registered_at, probed_at) = fresh_instances(&mut context);
     let registered = Term::apply(
-        Term::instance_of(&record_binder, vec![Level::meta(UniverseMetaId(0))]),
+        Term::instance_of(&record_binder, vec![Level::meta(registered_at)]),
         [nat(0)],
     );
     let probe = Term::apply(
-        Term::instance_of(&record_binder, vec![Level::meta(UniverseMetaId(1))]),
+        Term::instance_of(&record_binder, vec![Level::meta(probed_at)]),
         [nat(0)],
     );
     context.refine_projection(registered, 0, nat(1));
 
     assert_eq!(reduce(&mut context, Term::proj(probe, 0)), Ok(nat(1)));
+    assert_eq!(
+        instance(&context, registered_at),
+        instance(&context, probed_at)
+    );
 }
 
 #[test]

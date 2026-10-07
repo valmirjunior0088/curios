@@ -13,8 +13,7 @@ pub(crate) mod test_support;
 
 use {
     super::{
-        Context, Settled, levels_clash_on_a_decided_instance, levels_clash_to_conversion,
-        zonk_solved_term_metas,
+        Context, Settled, hold_at_one_instance, levels_clash_to_conversion, zonk_solved_term_metas,
     },
     crate::{Error, classing, convert_at, is_prop, reduce_with, same_uncommitted},
     curios_analysis::{Answered, Driver, answers, answers_classed, could_reduce_to},
@@ -302,11 +301,16 @@ pub(crate) fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, R
 ///
 /// **The universe erasure is deliberate, and the exactness it gives up is recovered at the read rather than here.** `Type u` embeds a level in a term, so two instances of one applied definition can reduce to different values and erasing identifies them — which is why `curios-cert`'s key keeps its universes (`Scope::refine`, with `recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance` as the fixture). Keeping them *here* would not be the repair: every polymorphic occurrence mints fresh universe metavariables (`UniverseSolver::instantiate`) and this walk materializes *term* metas only, so a verbatim key would split two occurrences of one scrutinee and the prelude would stop elaborating at `/std/List.crs`'s `match i < len(a)`, whose `true` arm supplies `/sys/List/get`'s implicit `ok` by exactly this refinement.
 ///
-/// The asymmetry with the kernel is *when*, not what. The rule is not in dispute — identify only terms already definitionally equal — and the kernel states it exactly because it judges a module whose levels are settled. This key is computed while they are still being solved: an arm records it on entry and it is then probed for as long as the arm stands, with metavariables solved in between. So "concrete levels kept apart, undecided ones collapsed" cannot be a property of a key at all; it is a property of a *comparison*, and the only step that happens after solving is the read. `Context::scrutinee_reduct` and `Context::proj_reduct` make it there, by declining a hit whose two unerased spellings disagree on an instance both sides have decided — the refusing direction, so a coarse key costs reductions and never admits one.
+/// The asymmetry with the kernel is *when*, not what. The rule is not in dispute — identify only terms already definitionally equal — and the kernel states it exactly because it judges a module whose levels are settled. This key is computed while they are still being solved: an arm records it on entry and it is then probed for as long as the arm stands, with metavariables solved in between. So "concrete levels kept apart, open ones held together" cannot be a property of a key at all; it is a property of a *comparison*, and the only step that happens after solving is the read. `Context::scrutinee_reduct` and `Context::proj_reduct` make it there, by committing a hit's two unerased spellings to one instance and declining the hit where they cannot be: the two then close together or the declaration is refused where its levels close, and a term the elaborator refined is one the kernel's key answers.
 ///
 /// **Spelled as the arm spells it.** A variable an arm in force refined is read as its value ([`Context::spelled_as_refined`]), at a registration and at a probe alike: the kernel substitutes a case's solution through its arm, an equation the arm restates is keyed at that instance ([`Context::restate_equations`]), and a term here may still name the variable.
 pub(crate) fn shallow_scrutinee(context: &Context, term: &Term) -> Term {
-    project_erased_universes(&context.spelled_as_refined(&zonk_solved_term_metas(context, term)))
+    project_erased_universes(&key_spelling(context, term))
+}
+
+/// `term` as its key spells it, its universes kept: what a hit's two sides are compared in where their instances are held to one.
+pub(crate) fn key_spelling(context: &Context, term: &Term) -> Term {
+    context.spelled_as_refined(&zonk_solved_term_metas(context, term))
 }
 
 /// `intrinsic` with each operand in weak-head normal form, each a [`Probe`]: an operand that cannot reduce at the type level — a runtime-only intrinsic's result, an out-of-range access — is kept as written rather than forced.
@@ -368,8 +372,8 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
         }))));
     };
 
-    if let Some(v) = context.proj_reduct(&head, index) {
-        return Ok(Reduce::Continue(v.clone()));
+    if let Some(value) = context.proj_reduct(&head, index) {
+        return Ok(Reduce::Continue(value));
     }
 
     match Term::unwrap_or_clone(reduce_forced(context, head)?) {
@@ -395,7 +399,7 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
         head => {
             let head: Term = head.into();
             match context.proj_reduct(&head, index) {
-                Some(v) => Ok(Reduce::Continue(v.clone())),
+                Some(value) => Ok(Reduce::Continue(value)),
                 None => Ok(Reduce::Break(Term::proj(head, index))),
             }
         }
@@ -625,7 +629,7 @@ fn reduce_instance(context: &Context, instance: Instance) -> Result<Reduce, Redu
 const SETTLEMENT_ALLOWANCE: u64 = 100_000;
 
 /// A stuck comparison under a guard recorded on another spelling of it, asked at the shallow key under each of [`probe_spellings`] in turn. The false arm of `n < m` refines `n < m` and nothing else, and `m <= n` is that fact read the other way, so the dual answers with the literal negated. A bound reaches the probe as `i + 1 <= len(l)` while the guard that decided it was written `i < len(l)`, one fact on `Nat` and on `Int`, so the successor spelling answers with the literal carried across — these are the same proposition, where a dual's are opposite ones. And the two compose: the false arm of `x <= 4` is the fact `5 <= x`, which the dual of the successor spelling answers. Lookup only — the store keeps every key as written, which is what the comparison record protects and what keeps this the kernel's rule too.
-fn refined_spelling(context: &Context, term: &Term) -> Option<Term> {
+fn refined_spelling(context: &mut Context, term: &Term) -> Option<Term> {
     let Subterm::Intrinsic(intrinsic) = &**term else {
         return None;
     };
@@ -635,13 +639,12 @@ fn refined_spelling(context: &Context, term: &Term) -> Option<Term> {
 }
 
 /// What the shallow key of `spelling` holds, as the answer for the probe it spells: the guard's literal, negated where `spelling` is a dual of the probe.
-fn shallow_answer(context: &Context, spelling: &Term, negated: bool) -> Option<Term> {
+fn shallow_answer(context: &mut Context, spelling: &Term, negated: bool) -> Option<Term> {
     if !context.scrutinee_head_refined(spelling.head_key()?) {
         return None;
     }
-    let literal = context
-        .scrutinee_reduct(&shallow_scrutinee(context, spelling), spelling)?
-        .as_bool()?;
+    let shallow = shallow_scrutinee(context, spelling);
+    let literal = context.scrutinee_reduct(&shallow, spelling)?.as_bool()?;
     Some(Term::intrinsic(Intrinsic::Bool(literal != negated)))
 }
 
@@ -652,7 +655,7 @@ fn shallow_answer(context: &Context, spelling: &Term, negated: bool) -> Option<T
 /// **The written keys alone, under the folded form's own spelling and its dual and successor spellings.** A guard is recorded as written (`shallow_scrutinee`), so `10 <= Bytes/len(b)` registers `10 <= /sys/Bytes/len(b)`, and a fold that turns the term into that spelling is answered here for one hash. Where the fold leaves another spelling of the guard — its `/sys` global unfolded to an intrinsic, a sum cancelled — nothing here reduces a key to find out: the stuck form goes on to [`refined_reduct`], which compares it with each entry's reduced spelling as the kernel does.
 ///
 /// Suppression needs no arm: `scrutinee_reduct` withholds under it, and breaking on the folded term leaves standing the neutral a suppressed key wants.
-fn refined_after_fold(context: &Context, folded: &Term) -> Option<Term> {
+fn refined_after_fold(context: &mut Context, folded: &Term) -> Option<Term> {
     if !context.has_scrutinee_refinements() {
         return None;
     }
@@ -661,7 +664,7 @@ fn refined_after_fold(context: &Context, folded: &Term) -> Option<Term> {
     if context.scrutinee_head_refined(head) {
         let shallow = shallow_scrutinee(context, folded);
         if let Some(value) = context.scrutinee_reduct(&shallow, folded) {
-            return Some(value.clone());
+            return Some(value);
         }
     }
 
@@ -694,7 +697,7 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
     let mut consulted = Vec::new();
 
     loop {
-        let unsettled = match scan_settled(context, value, &probe, &compared, &proofs)? {
+        let unsettled = match scan_settled(context, &probe, &compared, &proofs)? {
             Scan::Answer(answer) => return Ok(Some(answer)),
             Scan::Settle {
                 frame,
@@ -924,23 +927,21 @@ enum Scan {
     Miss,
 }
 
-/// One pass, innermost first, `compared` being the probe with its universes erased: a settled spelling that answers wins outright, and only where none does is the first eligible unsettled entry handed back to be settled — the kernel's order, which asks every settled spelling before it pays for a settlement. Every comparison is a cached hash until two terms are equal.
+/// One pass, innermost first, `compared` being the probe with its universes erased: a settled spelling that answers wins outright, and only where none does is the first eligible unsettled entry handed back to be settled — the kernel's order, which asks every settled spelling before it pays for a settlement. Every comparison is a cached hash until two terms are equal, and a spelling the probe's is, its universes erased, answers with the two held to one instance ([`hold_at_one_instance`]).
 fn scan_settled(
-    context: &Context,
-    value: &Term,
+    context: &mut Context,
     probe: &Term,
     compared: &Term,
     proofs: &[Free],
 ) -> Result<Scan, ReduceError> {
     let mut unsettled = None;
+    let mut spelled = Vec::new();
 
     for (frame, key, entry) in context.visible_scrutinee_entries() {
         match context.settled_key(frame, key) {
             Some(Some(settled)) => {
-                if settled.compared == *compared
-                    && !levels_clash_on_a_decided_instance(context, value, &settled.unerased)?
-                {
-                    return Ok(Scan::Answer(entry.value.clone()));
+                if settled.compared == *compared {
+                    spelled.push((settled.unerased.clone(), entry.value.clone()));
                 }
             }
             Some(None) => {}
@@ -949,6 +950,11 @@ fn scan_settled(
                     unsettled = Some((frame, key.clone(), entry.original.clone()));
                 }
             }
+        }
+    }
+    for (unerased, value) in spelled {
+        if hold_at_one_instance(context, probe, &unerased)? {
+            return Ok(Scan::Answer(value));
         }
     }
 
@@ -1072,7 +1078,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
 
                 if let Some(value) = context.scrutinee_reduct(&shallow, &term) {
                     // A key a suppressed frame withholds answers `None` here, so this serves only what is live — the caller's own arm outside a re-validation, and the validated term's own arms within one.
-                    break 'step Reduce::Continue(value.clone());
+                    break 'step Reduce::Continue(value);
                 } else if context.refinements_suppressed() && context.is_scrutinee_key(&shallow) {
                     // Withhold the value, but keep an application key neutral — as a `Var` key already is — so `solve_at_birth`'s committed spelling stays a term the live refinement can fire on (the registered form, never the unfolded body). What stays neutral is the probe as spelled, never the key: the key erases universe instances, and a solution committed from it would hold a bare occurrence of a universe scheme, which the kernel refuses.
                     break 'step Reduce::Break(term.clone());

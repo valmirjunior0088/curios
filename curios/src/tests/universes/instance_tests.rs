@@ -233,3 +233,32 @@ fn a_definition_carries_the_levels_its_value_holds() {
         "a lambda left in the reduct is read with its binder, and its parameter without: {vectors:?}",
     );
 }
+
+// **A case equation read at another instance holds the two to one.** `even_at(U, n)` is stuck on `n`, and each `U` written mints an instance of its own: the scrutinee's closes at zero and the arm's, which holds a `Type`, at one. The arm's proof rests on the equation the scrutinee recorded, so the two are one instance or the arm proves nothing. The elaborator commits them equal where it reads the equation, and the kernel's key, which keeps its levels, answers the term it is handed. With `Nat` for the inhabitant the two close together unasked, which is the control.
+#[test]
+fn a_case_equation_read_at_another_instance_holds_the_two_to_one() {
+    let program = |inhabitant: &str| {
+        format!(
+            r#"
+            use /std/{{Nat, Bool, Eq}};
+            let U: Type = Type;
+            let even_at(A: Type, n: Nat) -> Bool =
+                match n
+                | 0 => true
+                | m + 1 => Bool/not(even_at(A, m))
+                end;
+            let needs(T: Type, inhabitant: T, n: Nat, proof: Eq()(even_at(T, n), true)) -> Nat = n;
+            pub let apart(n: Nat) -> Nat =
+                match even_at(U, n)
+                | true => needs(U, {inhabitant}, n, Eq/refl())
+                | false => 0
+                end;
+            /std/print(Nat/to_str(apart(4)))
+            "#
+        )
+    };
+
+    for inhabitant in ["Nat", "Type"] {
+        assert_eq!(run(&program(inhabitant)), b"4", "{inhabitant}");
+    }
+}

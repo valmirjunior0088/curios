@@ -893,7 +893,10 @@ fn an_equation_a_refinement_closes_is_withheld_for_the_arm() {
             ],
             &truth,
         );
-        assert_eq!(context.scrutinee_reduct(&closing, &closing), Some(&truth));
+        assert_eq!(
+            context.scrutinee_reduct(&closing, &closing),
+            Some(truth.clone())
+        );
 
         context.with_frame(|context| {
             context.refine(&n, &literal(5));
@@ -906,7 +909,7 @@ fn an_equation_a_refinement_closes_is_withheld_for_the_arm() {
             let instance = Term::intrinsic(Intrinsic::nat_lt(literal(5), Term::free_var(&m)));
             assert_eq!(
                 context.scrutinee_reduct(&instance, &instance),
-                Some(&truth),
+                Some(truth.clone()),
                 "an equation that still names a local stands, at the instance the arm is checked at"
             );
             assert_eq!(
@@ -925,13 +928,13 @@ fn an_equation_a_refinement_closes_is_withheld_for_the_arm() {
 
         assert_eq!(
             context.scrutinee_reduct(&open, &open),
-            Some(&truth),
+            Some(truth.clone()),
             "which answers again once the arm is left"
         );
 
         assert_eq!(
             context.scrutinee_reduct(&closing, &closing),
-            Some(&truth),
+            Some(truth.clone()),
             "and the guard answers again once the arm is left"
         );
     });
@@ -960,16 +963,12 @@ fn a_withheld_equation_stays_withheld_where_its_refinements_are_installed_again(
     });
 
     assert_eq!(
-        context.with_refinements(&outside, |context| context
-            .scrutinee_reduct(&guard, &guard)
-            .cloned()),
+        context.with_refinements(&outside, |context| context.scrutinee_reduct(&guard, &guard)),
         Some(truth),
         "the guard's own arm answers"
     );
     assert_eq!(
-        context.with_refinements(&inside, |context| context
-            .scrutinee_reduct(&guard, &guard)
-            .cloned()),
+        context.with_refinements(&inside, |context| context.scrutinee_reduct(&guard, &guard)),
         None,
         "the arm that closed it does not"
     );

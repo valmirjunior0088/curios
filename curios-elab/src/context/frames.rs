@@ -73,7 +73,7 @@ struct Spelling {
 
 /// One projection refinement: the base as *written* (unerased, so a probe at another universe instance can be told apart from the spelling the arm actually scrutinized), and the arm's value.
 ///
-/// The key beside it is universes-erased, which is what lets two occurrences of one polymorphic base merge while their instances are still undecided. Erasure cannot tell a decided disagreement from an undecided one, so the base is kept whole and [`Context::proj_reduct`](crate::Context) compares it at the read.
+/// The key beside it is universes-erased, which is what lets two occurrences of one polymorphic base merge while their instances are still undecided. Erasure cannot tell one instance from another, so the base is kept whole and [`Context::proj_reduct`](crate::Context) holds the two to one instance at the read.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ProjectionEntry {
     pub(crate) original: Term,
@@ -724,7 +724,7 @@ impl Frames {
 
     /// The entry registered under the key `canonical`, from the frames suppression does not withhold (re-validation) — the innermost, so one an arm inside withholds is answered by the entry withholding it.
     ///
-    /// The whole entry rather than its value, because the read above this one needs the `original` beside it: the key is universes-erased and cannot decide an instance, so [`Context::scrutinee_reduct`](crate::Context) compares the unerased spellings and declines where they disagree on one both sides have decided.
+    /// The whole entry rather than its value, because the read above this one needs the `original` beside it: the key is universes-erased and cannot decide an instance, so [`Context::scrutinee_reduct`](crate::Context) holds the unerased spellings to one instance and declines where they cannot be.
     pub(crate) fn scrutinee_entry(&self, canonical: &Term) -> Option<&ScrutineeEntry> {
         self.refinement_scrutinees[self.refinement_window()]
             .iter()
