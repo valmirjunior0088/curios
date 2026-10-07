@@ -1,111 +1,143 @@
-# Numeric laws: the Euclidean layer, the binary scales, the integer order, and the float bits
+# Numeric laws: Euclid's layer, the binary scale, the integers through their sign, and the float's bits
 
-Working specification for the theorems and certified functions `/std/Nat`, `/std/Int` and `/std/Flt` still lack, proved in the library over what conversion decides. [`/std/Rat`](04-exact-rationals.md) is the consumer that asks for the `Nat` and `Int` layers and names which layer each of its stages needs; each layer is also an independent capability of its module that stands without any consumer.
+Working specification for the certified functions and theorems `/std/Nat`, `/std/Int` and `/std/Flt` lack, proved in the library over what conversion decides. [Exact rationals](04-exact-rationals.md) is the first consumer and [the binary64 conversion proofs](07-binary64-conversion-proofs.md) the second; each stage below names which of their stages it serves, so that neither writes number theory of its own.
 
-The operations these laws are about — `pow`, `min`, `max`, `abs` and `sign` — are [declared to conversion](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) with every law it decides about them. The linear steps inside the proofs below are the elaborator's to fill ([A bound that follows from the facts in scope is proved by the elaborator](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)), so a proof here states its nonlinear or inductive step and leaves the arithmetic around it to the elaborator.
+Its stage 0 is a finding of [this area](00-findings.md), taken first because every later stage meets it. It waits on no other spec.
 
 ## What this builds on
 
-`Nat` and `Int` are unbounded at every layer, the running program included ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)), so a law stated over them holds of the compiled program, and nothing below needs a second, library-defined number. Their arithmetic is reasoned about by the kernel rather than beside it: what conversion decides — the commutative-semiring and ring laws through the sum normal form, Euclid's identity and the remainder's bound, a comparison through its difference split by sign, and `Nat/to_int` as an ordered-semiring embedding — is stated once, in `curios-algebra` ([A law is decided where it neither respells nor invents](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md)), with what is declared of `min`, `max`, `abs`, `sign` and `pow`.
+- **`Nat` and `Int` are unbounded at every layer** ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)), so a law stated over them holds of the compiled program.
+- **Conversion decides the carriers' algebra** ([A law is decided where it neither respells nor invents](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md)): the sum normal form, Euclid's identity and the remainder's bound, a comparison through its difference, `Nat/to_int` as an ordered-semiring embedding, `shl(x, k)` as `x * pow(2, k)`, a sum in an exponent as a product, a power of a base at least one as at least one, and what is declared of `min`, `max`, `abs` and `sign`.
+- **The elaborator proves a linear step from the facts in scope** ([A bound that follows from the facts in scope is proved by the elaborator](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)), a quotient's bounds, a product of two facts and the cases of `min`, `max`, `abs` and `sign` among them. Its goal is a `<` or a `<=`, so an equation is `le/antisym` over two of them.
+- **Totality reads an arithmetic descent from a guard** ([Totality of the erased program](../../design/soundness/totality-of-the-erased-program.md)): `n / k` is below `n` where an enclosing arm rules `n`'s zero out, and a hypothesis is no such arm.
+- **The library** has `/std/Nat/DivMod/of`, which hands back `/`'s quotient and `%`'s remainder with Euclid's identity and the bound; `/std/Nat/Divides` with `refl`, `trans`, `zero`, `one`, `add`, `mul` and `of_rem`; `/std/WellFounded/recurse` over `WellFounded/lt`; `/std/Int`'s `Sign` view with `trichotomy` and `eq_of_eql`; and the laws a hypothesis decides `min`, `max`, `abs` and `sign` by.
 
-The library carries what reduction does not state:
+## The gap
 
-- `/std/Nat/DivMod/of` hands back the quotient and remainder `/` and `%` compute, with Euclid's identity (`joined`) and the bound (`bounded`) as its proofs;
-- `/std/Nat/Divides(d, n)` is a multiple witness, with `refl`, `trans`, `zero`, `one`, `add`, `mul`, and `of_rem`, which turns a zero remainder into divisibility with the quotient as the witness;
-- `/std/Nat/lt` and `/std/Nat/le` carry the order laws, and `/std/WellFounded/recurse` over `WellFounded/lt` is strong induction along `<` — the measure a Euclidean recursion recurses on;
-- `/std/Int`'s indexed `Sign` view — every `Int` is `nonneg(n)`, the embedding of `n`, or `neg(n)`, which is `-1 - Nat/to_int(n)` — with `view`, `trichotomy` and `eq_of_eql`;
-- `/std/Int/lt` and `/std/Int/le`, each law proved by carrying the `Nat` law along the embedding through the sign view, which the `Int` lemmas below follow too: a statement about `Int` is split by the view of its operands, and each case is a `Nat` law read through `Nat/to_int`.
+- **`Divides(d, n)` does not give a zero remainder.** `(k * d) % d` at a symbolic `d` is neither conversion's nor the elaborator's, so `of_rem` has no converse and a quotient under `Divides` has no law.
+- **No type may mention a greatest common divisor.** `/std/Nat/gcd` recurses on a remainder, which totality does not grade, so a type that reaches it is refused as not known to terminate (`curios`'s `tests::numeric::arithmetic_tests`). No proposition says two numbers are coprime or a fraction reduced.
+- **Nothing strips a number's factors of two with a proof.** `/std/Dyadic/normalized` does it with `Nat/and`, `Nat/xor`, `Nat/log2` and `Int/shr`, none of which the logic reads, so the odd mantissa it answers is a fact no type states. `Nat/log2` carries no bound, and a power of a power or of a product has no lemma.
+- **`ord` carries no law** at `Nat` or at `Int`: that it answers `eq` exactly at an equation, and `lt` and `gt` exactly at their comparisons, is unstated.
+- **`Int` has no multiplicative cancellation**, and `abs` and `sign` of a product are refused rows of the law grid with no lemma beside them.
+- **`Flt`'s identity as bits is unstated**: that `to_le_bytes` is injective, and that the natural `ord` falls back on tells every pattern apart.
 
-**Declared or proved.** Every law below is a lemma. A law conversion decides is [declared](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md), and a fact inside the fragment conversion decides, or [the elaborator proves from the facts in scope](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md), that neither reaches is a gap there, recorded there — in the law grid or in `curios`'s `tests::bounds`. A fact outside it is proved here, and a refused row in the law grid records why conversion does not take it.
+## Prior art
 
-## `Nat`: the Euclidean remainder
+- **A greatest common divisor is total by well-founded recursion or by a checker that sees the descent.** Lean 4 defines `Nat.gcd` by recursion on its first operand with `decreasing_by` over `mod_lt` ([`Init/Data/Nat/Gcd.lean`](https://github.com/leanprover/lean4/blob/master/src/Init/Data/Nat/Gcd.lean)), and Agda's standard library threads an accessibility proof through `gcd′` ([`Data.Nat.GCD`](https://github.com/agda/agda-stdlib/blob/master/src/Data/Nat/GCD.agda)). Rocq writes it as a structural `Fixpoint`, accepted because "behind modulo there is a subtraction, which now preserves being a subterm" ([`Corelib.Init.Nat`](https://rocq-prover.org/doc/v9.0/corelib/Corelib.Init.Nat.html)). Lean's reference says of the first route that such a definition typically does not reduce definitionally and its unfoldings hold as propositional equations ([Recursive definitions](https://lean-lang.org/doc/reference/latest/Definitions/Recursive-Definitions/)).
+- **A canonical rational carries its coprimality as a field**: Lean's `Rat` holds `reduced : num.natAbs.Coprime den` ([`Init.Data.Rat.Basic`](https://lean-lang.org/doc/api/Init/Data/Rat/Basic.html)), and Rocq's `Qc` holds `canon : Qred this = this` ([`QArith.Qcanon`](https://rocq-prover.org/doc/v8.9/stdlib/Coq.QArith.Qcanon.html)).
+- **A dyadic's normal form is an odd mantissa found by counting trailing zeros.** Lean's `Dyadic` is `zero` or `ofOdd (n k : Int) (hn : n % 2 = 1)`, built by `i >>> i.trailingZeros`, where `Int.trailingZeros` halves until it meets an odd number ([`Init.Data.Dyadic.Basic`](https://lean-lang.org/doc/api/Init/Data/Dyadic/Basic.html)). It is provable there because Lean's right shift is defined through `/ 2` and its `Int` remainder is Euclidean, the two things [the carriers' algebra leaves undecided](09-left-undecided-by-the-carriers-algebra.md) here.
+- **A comparator's laws are stated beside it and taken by what needs them.** Lean's `Std` keeps `OrientedCmp`, `TransCmp` and `LawfulEqCmp` as classes of their own, which its tree maps require ([`Init.Data.Order.Ord`](https://lean-lang.org/doc/api/Init/Data/Order/Ord.html)).
+- **A float's total order is the order of its bits with the sign folded in.** Rust's `f64::total_cmp` compares the two patterns as integers after flipping a negative one's magnitude bits ([`core::f64`](https://doc.rust-lang.org/src/core/num/f64.rs.html)).
 
-**The converse bridge.** `Divides(d, n)` implies `n % d == 0` for a positive `d`. `of_rem` is the other direction. The converse needs `(k · d) % d = 0` for a symbolic `k`, which it takes from `div_mod`'s uniqueness below. With a literal divisor the remainder is a defined operation, and the equation holds by conversion.
+## Decisions
 
-**Uniqueness of division.** Two pairs `(q, r)` and `(q′, r′)` with `n = q · d + r`, `r < d` and the same for the primed pair are equal. This is the fact every Euclidean argument ends in, and it is what lets `div_mod(k · d, d)` be read as `(k, 0)`.
+- **A certified function hands back its result with its proofs, in a structure.** `Gcd(a, b)` and `Scale(n)` follow `DivMod(n, d)`: one recursion builds the value and what is true of it, the proofs erase, and a law is read off a field or follows from the structure's uniqueness, with no second induction over the function's recursion.
+- **`gcd` recurses on well-founded `<`**, through `WellFounded/recurse` on its second operand, the step's progress being the remainder's bound, which conversion decides. It is the one `gcd`: the partial definition is replaced.
+- **The binary scale is stated over `shl`, `pow` and halving.** A positive `n` is `shl(2 * half + 1, count)` for one `count` and one `half`, so oddness is a shape and no proposition, and nothing here reads a right shift.
+- **No second spelling of division.** A quotient under `Divides` is `/`'s, with a law, and no `exact_div` stands beside it.
+- **A lemma is listed where it has a proof step or a consumer needs its name.** A fact conversion decides, or the elaborator proves where it is used, is no lemma; [Closed where it is used](#closed-where-it-is-used) records each one the law grid lists as a lemma.
+- **An order's laws are stated beside it**, as lemmas over `ord`, and a consumer that needs a lawful comparator takes them as hypotheses. `Ord` stays a concept of one function.
+- **`Int` goes through its sign view.** A statement about `Int` is split by `Int/view` of its operands and each case is a `Nat` law read through `Nat/to_int`; a shared step is added beside the view once.
 
-**Exact division.** `exact_div(n, d, @ok: Lt(0, d), p: Divides(d, n)) -> Nat` returns the quotient, with `Eq()(n, exact_div(n, d, p) · d)` beside it. It is `n / d` in its computation; the law is what the divisibility evidence buys.
+## Stages
 
-**A certified greatest common divisor.** `/std/Nat/gcd` exists as general recursion and a type may not mention it. The certified one recurses on `Lt(b % a, a)` through `WellFounded/recurse` over `WellFounded/lt`, so it is total and may appear in a type; whether it replaces the existing `gcd` or stands beside it is decided when it lands, preferring one `gcd`. The other way to a total `gcd` is a size-change rule for `NatRem` in the totality analysis, which would accept the existing definition as written; its divisor is the pattern `bp + 1`, so the rule would have to read a remainder as below its divisor's shape rather than below a nonzero variable. The certified `gcd`'s laws:
+Each lands alone and is one commit.
 
-- it divides both operands;
-- every common divisor divides it;
-- symmetry, `gcd(a, 0) = a`, `gcd(a, 1) = 1`.
+**Stage 0 — the procedure that proves a bound reads one call as one atom.** Its [finding](00-findings.md): a hypothesis over `f(n / 2)` does not reach a bound over `2 * f(n / 2)`, the shape every proof by recursion below has. Solved metavariables are substituted in the bound and in each fact before their atoms are read, as the elaborator does before the conversion chain reads a pair. Check: the finding's statements, at `+`, `/` and `%` and from a recursive call, as rows of `curios`'s `tests::bounds`; `/std` elaborates and certifies unchanged.
 
-**Coprimality.** `Coprime(a, b)` is `Eq()(gcd(a, b), 1)`, with `is_coprime` as its decision and the bridge to common-divisor reasoning: two numbers are coprime exactly when every common divisor is one. Then:
+**Stage 1 — Euclid on `Nat`.** Serves [exact rationals](04-exact-rationals.md)' stages 1 and 4.
 
-- the quotients of two numbers by their gcd are coprime;
-- coprime cancellation — `Coprime(a, b)` and `Divides(a, b · c)` give `Divides(a, c)` — which is Euclid's lemma;
-- the reduced-fraction prerequisites: two fractions in lowest terms with equal cross products have equal numerators and denominators.
+- `DivMod/unique`: a `q` and an `r` with `n = q * d + r` and `r < d` are `n / d` and `n % d`. It is what every Euclidean argument ends in.
+- `Divides/to_rem`, the converse of `of_rem`, and `Divides/exact`: under `Divides(d, n)` and a positive `d`, `n` is `(n / d) * d`.
+- `Divides/sub`, a divisor of a sum and of one summand divides the other; `Divides/rem`, a common divisor of a dividend and its divisor divides the remainder; and `Divides/antisym`.
 
-## `Nat`: the unsigned binary scale
+Check: each law at its boundaries as type-level rows of `curios-std`'s `numeric` unit, a zero dividend, a divisor of one, a dividend below its divisor and an exact multiple with its neighbours.
 
-The dyadic `Rat` normalizes by stripping powers of two and compares values held at different binary exponents; both are unsigned facts about a magnitude and belong here. `shl(x, k) = x · pow(2, k)`, a sum in an exponent being a product, and a power being positive where the comparison holds its base at least one, as `pow(2, k)` and `pow(x + 1, k)`, are [declared](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md).
+**Stage 2 — `Gcd` and `Coprime`.** Serves [exact rationals](04-exact-rationals.md)' stages 1 and 4.
 
-- **A power of a power, and of a product.** `pow(pow(x, a), b) = pow(x, a · b)` by induction on `b`, and `pow(x · y, a) = pow(x, a) · pow(y, a)` by induction on `a`, each step the declared law at a successor. Conversion takes neither, since the first gives the second and the second factors a literal base.
-- **A power of a positive base, under a hypothesis.** `0 < x` gives `0 < pow(x, k)`, by induction on `k`. A declared operation reads its base as a term and no hypothesis, so conversion holds the power positive only where it holds the base so, and the elaborator's linear search does not reach an induction.- **The shift undone.** `shr(shl(x, k), k) = x`.
-- **Trailing zeros.** `trailing_zeros(n)` counts the factors of two in a positive `n`, and `odd_part(n)` is what is left, with the reconstruction `n = shl(odd_part(n), trailing_zeros(n))`, the oddness of `odd_part(n)`, and uniqueness: an odd `m` and a count `k` with `n = shl(m, k)` are `odd_part(n)` and `trailing_zeros(n)`. Zero is excluded by a `Lt(0, n)` premise rather than given a conventional count.
-- **Comparing differently shifted magnitudes.** `shl(a, i)` against `shl(b, j)` is decided by aligning the smaller count, `shl(a, i - j)` against `b` when `j ≤ i`, with the order and equality it answers proved to be the unshifted comparison's.
+```crs
+pub struct Gcd(a: Nat, b: Nat): pub Type {
+    value: Nat,
+    left: Divides(value, a),
+    right: Divides(value, b),
+    greatest: (d: Nat, p: Divides(d, a), q: Divides(d, b)) -> Divides(d, value),
+}
+```
 
-## `Nat`: `min` and `max`
+- `Gcd/of(a, b)` builds it, and `gcd(a, b)` is its `value`, which a type may mention and which computes there on closed operands. `lcm` stands over it.
+- `Gcd/unique`: any value with the three properties is `gcd(a, b)`. Symmetry and the values at a zero and at a one follow from it with no unfolding.
+- `gcd(a * c, b * c)` is `gcd(a, b) * c`, by the one recursion that follows `of`'s, through an unfolding lemma `/std/WellFounded` gains for `recurse`.
+- `Coprime(a, b)` is `Eq()(gcd(a, b), 1)`, with its decision and its reading as every common divisor being one. The quotients of two numbers by their `gcd` are coprime; `Coprime(a, b)` and `Divides(a, b * c)` give `Divides(a, c)`, Euclid's lemma; and two reduced fractions with equal cross products have equal numerators and equal denominators.
 
-Their order facts and semilattice equations hold by conversion through their [declarations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md), and so does a literal added to both operands. A declared operation reads no arm, so a hypothesis reaches one through `/std`'s `min/of_le`, `min/of_ge`, `max/of_le` and `max/of_ge` at each carrier, which the procedure that proves a bound reads `min` and `max` through. These are lemmas here:
+Check: the laws at a zero, a one and equal operands as rows of the `numeric` unit; `gcd` against `curios_num::Natural::gcd` in `curios`'s `tests::numeric::grid_tests`; and `tests::numeric::arithmetic_tests` holding `gcd` accepted in a type, with `Nat/sqrt` as its partial specimen.
 
-- `min(a, b) + max(a, b) = a + b`;
-- `(a - b) + b = max(a, b)`, truncated subtraction read through the same definitions;
-- a symbolic summand shared by both operands, `min(a + c, b + c) = min(a, b) + c`.
+**Stage 3 — the binary scale on `Nat`.** Serves [exact rationals](04-exact-rationals.md)' stages 1, 2 and 4, and the rounding [the binary64 conversion proofs](07-binary64-conversion-proofs.md) reason about.
 
-## `Int`: order
+```crs
+pub struct Scale(n: Nat): pub Type {
+    count: Nat,
+    half: Nat,
+    joined: Eq()(n, Nat/shl(2 * half + 1, count)),
+}
+```
 
-Two laws a proof might expect to state are already conversion's and are not lemmas: order reversal under negation, `a <= b` being `+0 - b <= +0 - a`, and additive cancellation in its order form, `a + n <= b + n` being `a <= b`.
+- `Scale/of(n, @ok: Holds(0 < n))` builds it by halving, and `Scale/unique` says a `count` and a `half` that rebuild `n` are its own. `trailing_zeros` and `odd_part` are its `count` and `2 * half + 1`. Zero is excluded by the premise and given no conventional count.
+- `pow(pow(x, a), b)` is `pow(x, a * b)`, `pow(x * y, a)` is `pow(x, a) * pow(y, a)`, and `0 < x` gives `0 < pow(x, k)`: each an induction whose step is the declared law at a successor.
+- `log2`'s bounds: for a positive `n`, `pow(2, log2(n)) <= n` and `n < 2 * pow(2, log2(n))`.
+- Two magnitudes at two counts compare as the one shifted by the difference against the other. The lemma is named only where the elaborator does not prove the comparison where it is used.
 
-- **Totality**, as a disjunction: `Le(a, b)` or `Le(b, a)`, from `trichotomy`. Its `Bool` form holding by conversion would take [the relational layer](08-relational-layer.md), reserved until a consumer needs it.
-- **The executable relations agree with the propositions**: `ord`, `==`, `<`, `<=`, `>` and `>=` each decide the proposition their spelling names, and `ord(a, b)` is `eq` exactly when `Eq()(a, b)`.
-- **Flip symmetry**: `ord(b, a)` is `ord(a, b)` reversed.
-- **Multiplication monotonicity under a non-positive factor**: `Le(a, b)` and `Le(k, +0)` give `Le(b · k, a · k)`, the twin of `le/mul_mono_r`.
+Check: rows of the `numeric` unit at counts across the i31 and past 64 bits; `trailing_zeros` and `odd_part` against `curios_num` in `tests::numeric::grid_tests`.
 
-## `Int`: cancellation
+**Stage 4 — `Int` through its sign view.** Serves [exact rationals](04-exact-rationals.md)' stage 4.
 
-- **Multiplicative cancellation under a nonzero premise**: `Eq()(a · c, b · c)` and `NonZero(c)` give `Eq()(a, b)`, on both sides of the product. This is the integral-domain fact both `Rat` normalizations use in place of an inverse. Conversion never takes it, since without the premise `a · c = b · c` does not give `a = b`.
+- `ord`'s laws at `Nat` and at `Int`: reflexive, `eq` exactly at an equation, `lt` and `gt` exactly at their comparisons, the flip, and transitivity.
+- Multiplicative cancellation under `NonZero`, on both sides of the product.
+- `abs(a * b)` is `abs(a) * abs(b)`, `sign(a * b)` is `sign(a) * sign(b)`, `sign` is idempotent, and `n` is `sign(n) * Nat/to_int(abs(n))`.
+- The signed scale: two integers of odd magnitude at two counts that denote one value are one integer at one count, `Scale/unique` carried through the `abs` and the `sign` of a shift, which are declared.
+- `/std/Dyadic/normalized` is rebuilt over `Scale/of` on the mantissa's magnitude, so its odd mantissa is a fact of its construction.
 
-## `Int`: `abs`, `sign`, `min` and `max`
+Check: rows of the `numeric` unit at zero, both signs and equal magnitudes of opposite sign; `curios-std`'s `flt` unit, which holds `normalized` at a type.
 
-What holds by conversion is [declared](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md): a negation leaving `abs` and flipping `sign`, a literal or a power factor leaving either, `abs` inverting the embedding, and two `abs` of opposite operands being one, which is the symmetry of `abs(a - b)`. A declared operation reads no arm, so a hypothesis reaches one through `/std/Int/abs`'s `of_non_neg` and `of_neg`, which `/std/Map`'s `Key(Int)` consumes, and `/std/Int/sign`'s `of_pos`, `of_neg`, `of_not_pos` and `of_not_neg`, which the procedure that proves a bound reads `abs` and `sign` through. These are lemmas here, each a case split on the operand's sign with linear arithmetic in each case:
+**Stage 5 — `Flt`'s bits.** No stage of exact rationals needs it; it is where [the binary64 conversion proofs](07-binary64-conversion-proofs.md) and a decision on `Key(Flt)` start.
 
-- **a product**: `abs(a · b) = abs(a) · abs(b)` and `sign(a · b) = sign(a) · sign(b)`, which conversion does not take, a product reaching either operation distributed;
-- **the order facts**: `abs(n)` is zero exactly when `n` is, `Le(+0, n)` exactly when `sign(n)` is not `-1`, and `Le(-Nat/to_int(abs(n)), n)` and `Le(n, Nat/to_int(abs(n)))`;
-- **the absolute difference**: the triangle inequality `Le(abs(a - c), abs(a - b) + abs(b - c))` in `Nat` — the form a rounding error is compared in;
-- **decomposition**, `Eq()(n, sign(n) · Nat/to_int(abs(n)))`: a product of two defined operations, which linear arithmetic reads as one opaque atom;
-- **`abs(a - b)` is zero exactly when `Eq()(a, b)`**: `abs(a - b) == 0` against `a == b` by the sign view, and its `Prop` half through `eq_of_eql`;
-- `min` and `max`'s equations, as `Nat`'s.
+- `/std/Bytes/to_nat` is injective on runs of one length, and below `pow(256, len)`.
+- `Flt/to_le_bytes` is injective.
+- `Flt/total_key` is public and injective, so the order `Nat/ord` reads through it is total and agrees with `Eq` by stage 4's laws. `ord`'s documentation names it as the order `ord` computes.
 
-## `Int`: the signed scale
+Check: `curios-std`'s `flt` unit holds `ord` to the key's order at the zeros, the infinities and NaNs of both signs and kinds.
 
-The dyadic `Rat` holds a signed mantissa at a binary exponent, so the unsigned binary-scale layer has to reach through a sign. That a shift keeps the sign is [declared](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md).
+## Closed where it is used
 
-- **A right shift is a floor**: `shr(n, k)` is `⌊n / 2ᵏ⌋`, so for a negative `n` it is `-shr(abs(n) - 1, k) - 1`, and it agrees with the `Nat` shift on a non-negative `n`.
-- **Parity through the sign**: `n` is odd exactly when `abs(n)` is, so the odd-mantissa invariant is stated once on the magnitude. A lemma by the sign view: `Int`'s remainder takes its dividend's sign, so conversion relates neither side to the other.
-- **Odd-mantissa uniqueness**: two odd mantissas at two exponents denoting one value are equal, and so are their exponents — the unsigned uniqueness of `odd_part` and `trailing_zeros`, carried through the sign.
+Each is a fact a proof might expect a lemma for, most of them rows `curios`'s `tests::laws::written` refuses as lemmas, and none is a lemma here.
 
-## `Flt`: theorems over the bits
-
-Provable in `/std` without further trust, over the model the [float declarations](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md) are validated against:
-
-- `ord` is reflexive, transitive and total, antisymmetric to `Eq`, and `ord(a, b) = eq` exactly when `Eq()(a, b)` — so `Ord(Flt)` is IEEE's `totalOrder` in fact as well as in intent.
-- A `Key(Flt)` over `to_le_bytes` is a congruence, since the byte round trip is injective. Whether to give one is a separate decision: `/std/Map` withholds it because `/std/ops/Eql`'s witness is IEEE `==`, which calls `+0.0` and `-0.0` equal and a NaN equal to nothing, and a map keyed on propositional equality would disagree with it at both ends. The theorem lands whichever way that goes.
+- `min(a, b) + max(a, b) = a + b` and `(a - b) + b = max(a, b)`, at `Nat` and at `Int`: `le/antisym` over two `True/proved()`. `+0 - min(i, j) = max(+0 - i, +0 - j)` the same way.
+- `min(a + c, b + c) = min(a, b) + c`: a match on `a <= b` naming `min/of_le` and `min/of_ge` in its arms, since one direction meets [a finding](00-findings.md) of the procedure that proves a bound.
+- `pow(2, y) <= pow(2, y + z)`, `x <= shl(x, y)`, and `shl(x, k) / pow(2, k) = x`: `True/proved()`, the last under `le/antisym`.
+- At `Int`: a bound's reversal under negation and its additive cancellation are conversion's; monotonicity under a factor at most zero, the triangle inequality of `abs` and `abs`'s two bounds are `True/proved()`; and `abs(n) == 0` gives `n = +0` by `le/antisym`.
 
 ## Verification
 
-- Each law elaborates over symbolic operands and is exercised at the boundaries it states: a zero dividend, divisor one, a dividend below its divisor, exact multiples and their neighbours, `gcd` with a zero or a one, zero and both signs, equal magnitudes of opposite sign, a cancellation premise's boundary, and shifts across the i31 and past 64 bits.
-- The executable `exact_div`, `gcd`, `trailing_zeros` and `odd_part` agree with `curios-num` over a generated grid, since the running program computes them over the same unbounded `Nat`.
-- No `Int` proof opens a case analysis the sign view already performs; a missing shared step is added to the view's neighbourhood once rather than re-derived per law.
-- No lemma writes a linear step [the elaborator proves from the facts in scope](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md), and no lemma leans on a fact conversion does not decide without a refused row recording why.
+- Each law elaborates over symbolic operands and is certified, which `cargo xtask clippy` holds for all of `/std`.
+- Each stage's rows are stated in `curios-std`'s corpus units, at the boundaries its statement names.
+- The executable `gcd`, `trailing_zeros` and `odd_part` agree with `curios-num` over the differential grid, folded and executed.
+- No `Int` proof opens a case analysis the sign view performs.
 
-## Completion criteria
+## Rejected
 
-- `Divides` has both bridges to the remainder, and `exact_div`, the certified `gcd` and `Coprime` exist with the laws above.
-- The binary-scale helpers exist with reconstruction, uniqueness and aligned comparison, beside `shr(shl(x, k), k) = x`.
-- The `Int` order bridges, multiplicative cancellation, the `abs` and `sign` lemmas and the signed-scale lemmas exist under `/std/Int` with operation-first names.
-- `Ord(Flt)` is proved a total order agreeing with `Eq`, and the `Key(Flt)` congruence is proved.
-- The `Rat` specifications need no private division, gcd, bit-stripping or sign reasoning of their own.
-- Before this specification is deleted, the contracts are recorded in `/std/Nat`'s, `/std/Int`'s and `/std/Flt`'s documentation and their modules' signatures, the roadmap entry is a checked summary, and no reference to this filename remains.
+- **A totality rule that grades a remainder below its divisor**, which would accept `gcd` as it is written and is how Rocq takes it. It is a rule of the trusted grading for one function, and [`curios-std`'s README](../../../curios-std/README.md#std-invents-no-value-where-a-proof-belongs-and-text-is-addressed-by-position) already declines a totality rule where the recursion principle states the progress beside its proof.
+- **A certified `gcd` beside the partial one**, two spellings of one function; **an `exact_div`**, a second spelling of `/`.
+- **The scale over `shr` and the bit operations**, as `/std/Dyadic/normalized` computes it: [the carriers' algebra](09-left-undecided-by-the-carriers-algebra.md) ties a right shift to no quotient, so nothing about it is provable.
+- **`Flt/ord` redefined as the key's order alone**, which every law above would then reach: each comparison would build a `Bytes` and a boxed `Nat` where the comparison it leads with reads two floats.
+- **A disjunction for an order's totality**: `/std` has none, and `Int/Trichotomy` carries the three cases with their evidence.
+- **A lemma for each row the law grid refuses**, where the elaborator proves the row at the use site: a name that stands for one `True/proved()`.
+
+## Left to other specifications
+
+- **A right shift undone, a right shift as a floor, and `Int`'s shift agreeing with `Nat`'s** wait on the shift's law, and **parity through `Int`'s remainder** on the remainder's bound: both are rows of [what the carriers' algebra leaves undecided](09-left-undecided-by-the-carriers-algebra.md).
+- **`Flt/ord` being the key's order**, and so a total order agreeing with `Eq`, needs a comparison tied to the bits: [the binary64 conversion proofs](07-binary64-conversion-proofs.md).
+- **An order's totality holding by conversion** is [the relational layer](08-relational-layer.md)'s.
+
+## Completion and retirement
+
+- Every stage's declarations exist under `/std/Nat`, `/std/Int`, `/std/Bytes` and `/std/Flt` with operation-first names, and [exact rationals](04-exact-rationals.md) needs no private division, `gcd`, bit-stripping or sign reasoning.
+- Before this specification is deleted, each contract is its declaration's documentation and signature, the decision that a certified function hands back its result with its proofs and what it rejects are in [`curios-std`'s README](../../../curios-std/README.md), the roadmap entry is a checked summary, and no reference to this filename remains.

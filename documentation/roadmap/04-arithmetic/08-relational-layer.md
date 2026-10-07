@@ -4,7 +4,7 @@
 
 ## The trigger
 
-A consumer states a fact of this kind that must hold by conversion, with the reason a proof does not serve it: `a <= b || b <= a` reducing to `true` where no proposition reaches, or `min(a, b) + max(a, b)` meeting `a + b` inside a type index. A bound over such a fact is not a trigger, since [the elaborator proves it from the facts in scope](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md) and [the declared operations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) decide the semilattice equations, a negation or a literal factor under `abs` and `sign`, and a sum in an exponent. The first example's disjunction is a lemma in [the numeric laws](03-numeric-laws.md), and no consumer needs it by conversion.
+A consumer states a fact of this kind that must hold by conversion, with the reason a proof does not serve it: `a <= b || b <= a` reducing to `true` where no proposition reaches, or `min(a, b) + max(a, b)` meeting `a + b` inside a type index. A bound over such a fact is not a trigger, since [the elaborator proves it from the facts in scope](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md) and [the declared operations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) decide the semilattice equations, a negation or a literal factor under `abs` and `sign`, and a sum in an exponent. The first example's disjunction is what `/std/Int/Trichotomy` hands back with its evidence, and no consumer needs it by conversion.
 
 ## The direction to preserve
 
