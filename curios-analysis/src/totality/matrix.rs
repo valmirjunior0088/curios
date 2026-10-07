@@ -9,7 +9,7 @@ use std::collections::HashSet;
 /// The largest transitive closure a group's call matrices may reach.
 ///
 /// Closure is worst-case exponential in the number of call sites. The prelude's largest group closes in tens of matrices; a group that blows past this is classified `Partial`, which is the conservative direction.
-const CLOSURE_LIMIT: usize = 4096;
+pub(super) const CLOSURE_LIMIT: usize = 4096;
 
 /// How a call argument's size compares to the caller parameter it is graded against.
 ///

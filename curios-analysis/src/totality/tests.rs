@@ -294,6 +294,23 @@ fn mutual_recursion_is_caught_only_by_the_closure() {
     assert!(cycles.iter().all(|call| call.matrix.descends()));
 }
 
+/// A ring of members, each calling the next on its one parameter with a strict descent: its closure holds one call for every ordered pair of them.
+fn ring(members: usize) -> Vec<Call> {
+    (0..members)
+        .map(|member| call(member, (member + 1) % members, matrix(&[&[LESS]])))
+        .collect()
+}
+
+// The closure's limit turns a verdict into a refusal and into nothing else: a group whose closure outgrows it is partial whatever it descends on, and the largest ring inside it is judged. Mutation-checked against the limit: answering total past it certifies the larger ring, and refusing at the limit rather than past it refuses the smaller.
+#[test]
+fn a_closure_past_its_limit_claims_nothing() {
+    // A ring of `side` members closes to `side * side` calls, so the largest ring inside the limit has its square root for a side.
+    let side = CLOSURE_LIMIT.isqrt();
+
+    assert_eq!(decide(ring(side)), Totality::Total);
+    assert_eq!(decide(ring(side + 1)), Totality::Partial);
+}
+
 #[test]
 fn a_peeled_prefix_keeps_its_binder_tail() {
     // The `/big_nat/add/raw_trimmed` pattern: `b[h, ..t]` rebuilt from arm binders peels its head and sticks on the binder `t`. The remainder must take the full `shape_of` dispatch — a binder reads as its atom — not a force, which cannot move a local and would file the tail as unread, losing the suffix agreement the descent grades by.

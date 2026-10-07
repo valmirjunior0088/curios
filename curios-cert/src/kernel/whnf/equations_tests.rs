@@ -2,8 +2,8 @@
 
 use {
     super::test_support::*,
-    crate::{Kernel, convert, whnf},
-    curios_analysis::{Env, test_support::SYNTAX},
+    crate::{Kernel, convert, resolved_spelling, whnf},
+    curios_analysis::{Env, RESOLVED_SPELLING_LAYERS, test_support::SYNTAX},
     curios_core::{Cost, Exhaustion, Free, Intrinsic, Reducer, Term},
     curios_utilities::Qualifier,
 };
@@ -611,6 +611,68 @@ fn a_resolved_spelling_that_drops_its_locals_is_never_recorded() {
     let true_ = Term::intrinsic(Intrinsic::Bool(true));
     assert_eq!(inside, Ok(true_.clone()), "the equation is not this term's");
     assert_eq!(outside, Ok(true_), "and nothing remembered says otherwise");
+}
+
+/// A guard over `subject` dispatched through `layers` functions, two or more: the innermost compares its two operands, and each one over it applies the one before it to its first operand twice. No layer is an eta-redex of the next, so `resolved_spelling` opens them one at a time, down to `subject <= subject`.
+fn dispatched_through(kernel: &mut Kernel, layers: usize, subject: &Free) -> Term {
+    let (first, second) = (binder(100, "first"), binder(101, "second"));
+    let signature = [(first, nat_type()), (second, nat_type())];
+    let type_ = Term::func_type(signature.clone(), Term::intrinsic(Intrinsic::BoolType));
+    let mut body = Term::intrinsic(Intrinsic::nat_lte(
+        Term::free_var(&first),
+        Term::free_var(&second),
+    ));
+    let mut head = None;
+
+    for layer in 0..layers {
+        let name = binder(102 + layer as u32, "layer");
+        kernel
+            .define(
+                &name,
+                &type_,
+                &Term::func(signature.clone(), body),
+                &monomorphic(),
+            )
+            .expect("a name is declared once");
+        body = Term::apply(
+            Term::free_var(&name),
+            [Term::free_var(&first), Term::free_var(&first)],
+        );
+        head = Some(name);
+    }
+
+    Term::apply(
+        Term::free_var(&head.expect("a dispatch has a layer")),
+        [Term::free_var(subject), nat(63)],
+    )
+}
+
+/// The layers a dispatch opens are bounded, and a spine that has not settled inside the bound resolves to nothing, never to however far it was opened: the arm then records its written spelling alone, which the equation still answers through the key's own reduct.
+///
+/// Mutation-checked against the bound: handing back what the last layer opened to once the layers run out resolves the deeper dispatch too.
+#[test]
+fn a_dispatch_deeper_than_the_layers_opened_resolves_to_nothing() {
+    let n = binder(1, "n");
+    let comparison = Term::intrinsic(Intrinsic::nat_lte(Term::free_var(&n), Term::free_var(&n)));
+    let resolved_through = |layers: usize| {
+        let mut kernel = kernel();
+        kernel.assume(&n, &nat_type());
+        let guard = dispatched_through(&mut kernel, layers, &n);
+
+        resolved_spelling(&mut kernel, &guard)
+    };
+
+    // A function is one layer, and seeing that what the last one opened to is no application is one more.
+    assert_eq!(
+        resolved_through(RESOLVED_SPELLING_LAYERS - 1),
+        Ok(Some(comparison)),
+        "inside the bound the dispatch resolves to the comparison it ends in",
+    );
+    assert_eq!(
+        resolved_through(RESOLVED_SPELLING_LAYERS),
+        Ok(None),
+        "past it the dispatch is not one",
+    );
 }
 
 /// Resolving a dispatched guard forces none of its operands, so entering the arm costs no evaluation of what the guard compares.
