@@ -204,7 +204,7 @@ fn seal_entry(
         module: builder
             .finalize()
             .map_err(|error| Error::refused_by_verifier(error, &spans))?,
-        environment,
+        environment: environment.sealed(),
     })
 }
 
@@ -595,7 +595,7 @@ fn erase_within(
                 .builder
                 .into_module()
                 .map_err(|error| Error::refused_by_verifier(error, &lowering.spans))?,
-            environment: lowering.environment,
+            environment: lowering.environment.sealed(),
         }),
     }
 }

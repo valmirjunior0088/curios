@@ -1,6 +1,6 @@
 //! The erasure environment: the maps from Core identities to the arena identities they lower to.
 //!
-//! Opened binders receive globally fresh Core labels and top-level names are module-unique, so one flat value map is unambiguous without scope save/restore. The schema maps memoize the arena identities Core declarations lower to — registered lazily on first use, when the dominance-ordered item chain guarantees the declaration's dependencies are already defined — so a type constructed or matched at many sites shares one schema.
+//! Opened binders receive globally fresh Core labels and top-level names are module-unique, so one flat value map is unambiguous without scope save/restore while an erasure runs; what it hands on keeps the top-level names alone ([`Environment::sealed`]). The schema maps memoize the arena identities Core declarations lower to — registered lazily on first use, when the dominance-ordered item chain guarantees the declaration's dependencies are already defined — so a type constructed or matched at many sites shares one schema.
 
 use {
     curios_core::{Free, Global},
@@ -91,6 +91,15 @@ impl Environment {
                 constant => constant,
             };
         }
+    }
+
+    /// This environment as an erasure hands it on: the top-level names' bindings, and no binder's.
+    ///
+    /// A binder is bound while the walk that opened it reads it and by nothing after, so every one is dead once the erasure ends. Kept, it would be an identity a later compilation could mint: a unit resuming over this arena counts its binders from zero, and one it read before binding would find another unit's operand. It would also make the arena follow how the erasure went rather than what it erased, a binder's identity counting the binders minted before it, reduction's among them.
+    pub(super) fn sealed(mut self) -> Self {
+        self.values.retain(|name, _| name.as_global().is_some());
+
+        self
     }
 
     pub(super) fn bind(&mut self, name: &Free, atom: curios_ersd::Atom) {

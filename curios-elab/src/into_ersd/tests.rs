@@ -482,6 +482,39 @@ fn erasure_is_deterministic() {
     assert_eq!(build(&mut context), build(&mut self::context()));
 }
 
+/// What an erasure hands on holds no binder it opened. A binder's identity counts the binders its context had minted before it, so two erasures of one program part on every binder they kept, and a later unit resuming over the arena would hold identities it mints again.
+#[test]
+fn an_arena_keeps_no_binder_its_erasure_opened() {
+    let arena = |context: &mut Context| {
+        let x = context.fresh(Some("x"));
+        let body = Term::let_(
+            &x,
+            Term::intrinsic(Intrinsic::NatType),
+            nat_lit(2),
+            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat_lit(3))),
+        );
+        let program = stating(
+            &module(Vec::new(), body),
+            Term::intrinsic(Intrinsic::NatType),
+        );
+
+        erase_program(
+            context,
+            Resumed::of(&[], ErasedArena::default()),
+            &zonked(&program),
+        )
+        .expect("the program erases")
+    };
+    let first = arena(&mut context());
+    let mut later = context();
+    for _ in 0..8 {
+        later.fresh(None);
+    }
+    let second = arena(&mut later);
+
+    assert_eq!(format!("{first:?}"), format!("{second:?}"));
+}
+
 #[test]
 fn universe_erasure_is_a_validated_structural_projection() {
     let parameter = Level::param(UniverseParam(0));
