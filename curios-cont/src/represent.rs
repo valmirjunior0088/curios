@@ -8,7 +8,9 @@
 //!
 //! **An edge argument's demand is the storage of the parameter it feeds**, which is what makes this a fixpoint rather than a scan. Without that rule a loop's back-edge values have no raw use of their own — the decremented counter and the folded accumulator are *only* ever passed back round — so they would settle boxed and the loop would coerce on every iteration, losing exactly what the analysis exists to win.
 //!
-//! **A word holds only what a word was handed.** A `Nat` is a reference whatever its size, and narrowing one to a word keeps every value below the i31 exactly but saturates the rest, so a continuation parameter coerced to a word loses what a bigger argument said. A parameter is therefore offered the word only when every argument reaching it is itself one — a small literal, a filler, a word-producing definition, or another such parameter — which [`word_params`] decides before any demand is read. A `Flt` parameter needs no such test: unboxing a float loses nothing.
+//! **A word holds only what a word was handed.** A `Nat` is a reference whatever its size, and narrowing one to a word keeps every value below the i31 exactly but saturates the rest, so a continuation parameter coerced to a word loses what a bigger argument said. A parameter is therefore offered the word only when every argument reaching it is itself one — a small literal, a filler, a word-producing definition, or another such parameter — which [`word_params`] decides before any demand is read.
+//!
+//! **A float register holds only what a float was handed.** A parameter has one type only where no type computes one. A variant's constructors share a payload slot, and scalar replacement makes that slot a parameter, `success`'s float and `failure`'s error in the one; and a value whose type is a match on another is a float on one edge and a string on the next. What its uses read under one tag or one branch says nothing of what arrives under another, and an edge coerces its argument to the parameter's carrier before anything is consulted, so a float register there casts the reference, and loses it where it does not trap. Nothing here says which reference is a float — a function parameter, a call's result and a field read are references of no stated shape — so a parameter is offered the float only when every argument reaching it is one already: a float literal, a filler, a definition producing a float, or another such parameter, which [`float_params`] decides beside the word. A loop seeded from a reference therefore carries its float behind one, and what would hand it the register is a shape stated of that reference.
 //!
 //! **A use can only take what the definition can give**, which is what [`Offer`] states. Demands alone would raise a function parameter the moment its body did arithmetic on it — and a function parameter arrives through a `func/N` signature that is uniformly `anyref`, with no store site the analysis controls. The same holds of a value returning from a call, a host import or a cell read. Coercing at the definition instead of excluding it was the alternative, and it buys nothing: the definition would coerce back to a register exactly what it had just been handed as a reference.
 
@@ -68,8 +70,8 @@ impl Lattice for Storage {
 enum Offer {
     /// The definition produces exactly this carrier, so a use demanding it reads the register directly and every other use coerces at its own site.
     Fixed(Repr),
-    /// A continuation parameter, which has no producer of its own: it holds whatever its uses agree on, and each incoming edge coerces its argument to match. This is the only offer a `Conflict` can arise from. `words` says whether the machine word is among what it may hold, which [`word_params`] decides from what reaches it.
-    Open { words: bool },
+    /// A continuation parameter, which has no producer of its own: it holds whatever its uses agree on among what reaches it, and each incoming edge coerces its argument to match. This is the only offer a `Conflict` can arise from. `words` and `floats` say whether the machine word and the float are among what it may hold, which [`word_params`] and [`float_params`] decide from what reaches it.
+    Open { words: bool, floats: bool },
     /// Nothing. Either the value arrives through a position that is uniformly a reference — a function parameter, a call, host or cell result, a recursive shell — or its definition builds a heap shape, which a register cannot hold in the first place.
     Never,
 }
@@ -78,7 +80,11 @@ impl Offer {
     /// Whether this definition can hand `carrier` to a register.
     fn admits(&self, carrier: Repr) -> bool {
         match self {
-            Offer::Open { words } => carrier != Repr::Nat || *words,
+            Offer::Open { words, floats } => match carrier {
+                Repr::Nat => *words,
+                Repr::Flt => *floats,
+                Repr::Number | Repr::Bin(_) | Repr::List | Repr::Ref => true,
+            },
             Offer::Fixed(fixed) => *fixed == carrier,
             Offer::Never => false,
         }
@@ -122,7 +128,13 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
     for (_, continuation) in module.live_continuations() {
         // A continuation parameter has no producer of its own, so it takes whatever its uses agree on.
         for &param in &continuation.params {
-            offers.insert(param, Offer::Open { words: true });
+            offers.insert(
+                param,
+                Offer::Open {
+                    words: true,
+                    floats: true,
+                },
+            );
         }
     }
 
@@ -204,9 +216,15 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
     }
 
     let words = word_params(module, &offers);
+    let floats = float_params(module, &offers);
     for (value, offer) in &mut offers {
-        if let Offer::Open { words: admitted } = offer {
-            *admitted = words.contains(value);
+        if let Offer::Open {
+            words: word,
+            floats: float,
+        } = offer
+        {
+            *word = words.contains(value);
+            *float = floats.contains(value);
         }
     }
 
@@ -214,11 +232,35 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
 }
 
 /// The continuation parameters a machine word may hold: those every argument reaching them is a word already — a small literal, a filler, a definition producing a word, or another such parameter.
+fn word_params(module: &Module, offers: &BTreeMap<ValueId, Offer>) -> BTreeSet<ValueId> {
+    fed_only_by(module, offers, |arg| match arg {
+        Atom::Value(value) => offers.get(value) == Some(&Offer::Fixed(Repr::Nat)),
+        Atom::Literal(literal) => literal_repr(literal) == Repr::Nat,
+        Atom::Filler => true,
+        Atom::Fun(_) => false,
+    })
+}
+
+/// The continuation parameters a float register may hold: those every argument reaching them is a float already — a float literal, a filler, a definition producing a float, or another such parameter.
+fn float_params(module: &Module, offers: &BTreeMap<ValueId, Offer>) -> BTreeSet<ValueId> {
+    fed_only_by(module, offers, |arg| match arg {
+        Atom::Value(value) => offers.get(value) == Some(&Offer::Fixed(Repr::Flt)),
+        Atom::Literal(literal) => literal_repr(literal) == Repr::Flt,
+        Atom::Filler => true,
+        Atom::Fun(_) => false,
+    })
+}
+
+/// The open parameters every argument reaching them either `feeds` or is another such parameter.
 ///
 /// A greatest fixpoint, because a loop parameter reaches itself around its back edge: every open parameter starts admitted, one reached by anything else is dropped, and each drop drops the parameters it reaches in turn.
-fn word_params(module: &Module, offers: &BTreeMap<ValueId, Offer>) -> BTreeSet<ValueId> {
+fn fed_only_by(
+    module: &Module,
+    offers: &BTreeMap<ValueId, Offer>,
+    feeds: impl Fn(&Atom) -> bool,
+) -> BTreeSet<ValueId> {
     let open = |value: &ValueId| matches!(offers.get(value), Some(Offer::Open { .. }));
-    let mut words = offers.keys().copied().filter(open).collect::<BTreeSet<_>>();
+    let mut admitted = offers.keys().copied().filter(open).collect::<BTreeSet<_>>();
     let mut reaches = BTreeMap::<ValueId, Vec<ValueId>>::new();
     let mut dropped = Vec::new();
 
@@ -230,10 +272,10 @@ fn word_params(module: &Module, offers: &BTreeMap<ValueId, Offer>) -> BTreeSet<V
         for (arg, &param) in edge.args.iter().zip(&target.params) {
             match arg {
                 Atom::Value(value) if open(value) => reaches.entry(*value).or_default().push(param),
-                Atom::Value(value) if offers.get(value) == Some(&Offer::Fixed(Repr::Nat)) => {}
-                Atom::Literal(literal) if literal_repr(literal) == Repr::Nat => {}
-                Atom::Filler => {}
-                Atom::Value(_) | Atom::Literal(_) | Atom::Fun(_) => dropped.push(param),
+                arg if feeds(arg) => {}
+                Atom::Value(_) | Atom::Literal(_) | Atom::Fun(_) | Atom::Filler => {
+                    dropped.push(param)
+                }
             }
         }
     };
@@ -263,12 +305,12 @@ fn word_params(module: &Module, offers: &BTreeMap<ValueId, Offer>) -> BTreeSet<V
     }
 
     while let Some(param) = dropped.pop() {
-        if words.remove(&param) {
+        if admitted.remove(&param) {
             dropped.extend(reaches.get(&param).into_iter().flatten().copied());
         }
     }
 
-    words
+    admitted
 }
 
 /// The raw carrier a representation demands, or `None` when it names a reference. A `Nat` or `Int` operand demands the word, which only a definition offering one can meet: everything else stays the reference the operand reads by default.

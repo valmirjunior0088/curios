@@ -122,6 +122,31 @@ fn a_variant_filler_is_built_at_its_destination_carrier() {
     );
 }
 
+/// Two constructors that share a payload slot each hand it what they hold. The float is read under one tag only, so the payload stays the reference both can hand it and the error arrives as it was sent, where a register would cast it and trap.
+#[test]
+fn a_payload_two_constructors_share_carries_what_each_holds() {
+    let args = ["prog", "a", "b", "c"];
+    assert_eq!(
+        run_raw(SHARED_PAYLOAD, &args),
+        b"odd 5 | +8.5 | odd 7".to_vec(),
+        "the `failure` edge must carry the error, and the `success` edge the float",
+    );
+}
+
+/// A float a parser binds and answers after a later step is `success`'s payload beside the refusal `failure` carries, and the program compiles and reads it.
+#[test]
+fn a_parser_answers_a_float_it_bound_before_a_later_step() {
+    let args = ["prog", "a", "b", "c"];
+    assert_eq!(run_raw(PARSED_FLOAT, &args), b"+2".to_vec());
+}
+
+/// A name whose type a match computes holds a float on one branch and a string on the other, and each arrives as it was sent: the parameter they join in is a reference, since a register would cast the string before the branch that reads a float is taken.
+#[test]
+fn a_value_of_a_computed_type_carries_what_each_branch_holds() {
+    let args = ["prog", "a", "b", "c"];
+    assert_eq!(run_raw(COMPUTED_TYPE, &args), b"+9.5 | text 7".to_vec());
+}
+
 /// The raw, pre-Binaryen wasm validates and executes without Binaryen repairing control flow. `run_raw` Cranelift-compiles the raw bytes directly (validation, including control-flow well-formedness, happens there) and runs them; its output must match the ordinary Binaryen path for the same input.
 #[test]
 fn raw_wasm_validates_and_executes_without_binaryen() {

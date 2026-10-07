@@ -218,6 +218,69 @@ pub(super) const VARIANT_FILLER: &str = r#"
     /std/print(Flt/to_str(spin(n, Option/none())))
     "#;
 
+/// A variant whose two constructors share a payload slot, joined from both: `success` hands the slot a float and `failure` an error. The join reads the payload as a float under one tag and as the error under the other.
+///
+/// **The error has to arrive from a call.** `judged` recurses, so it is not inlined and `doubled` forwards a `failure` whose payload no edge shows being built: the emitter has no aggregate to refuse, and a payload held in a float register casts the error where the `failure` edge is taken. `taint + 1` and `taint + 3` take it and `taint` does not, so both constructors reach the join.
+pub(super) const SHARED_PAYLOAD: &str = r#"
+    use /std/{Str, Flt, Nat, Result, List, proc};
+    let judged(n : Nat, depth : Nat) -> Result(Str, Flt) =
+        match depth
+        | 0 =>
+            match n % 2 == 0
+            | true => Result/success(Nat/to_flt(n))
+            | false => Result/failure(Str/concat("odd ", Nat/to_str(n)))
+            end
+        | d + 1 => judged(n, d)
+        end;
+    let doubled(n : Nat) -> Result(Str, Flt) =
+        match judged(n, 3)
+        | success(x) => Result/success(x * +2.0)
+        | failure(why) => Result/failure(why)
+        end;
+    let told(n : Nat) -> Str =
+        match doubled(n)
+        | success(f) => Flt/to_str(f + +0.5)
+        | failure(why) => why
+        end;
+    let taint = List/len(proc/args!);
+    /std/print(Str/join(" | ", [told(taint + 1), told(taint), told(taint + 3)]))
+    "#;
+
+/// The same slot met through a parser: `whole` binds a float and answers it after a later step, so the float is `success`'s payload beside the refusal `failure` carries, and here the refusal is built where the join can see it.
+pub(super) const PARSED_FLOAT: &str = r#"
+    use /std/{Str, Flt, Parse, Nat, Char, List, proc};
+    let digits : Parse(Str, Flt) =
+        let run = Parse/text/take_while(Char/is_digit)!;
+        Parse/pure(Nat/to_flt(Str/len(run)));
+    let whole : Parse(Str, Flt) =
+        let value = digits!;
+        let _ = Parse/eof()!;
+        Parse/pure(value);
+    let taint = List/len(proc/args!);
+    let text = Str/concat(Nat/to_str(taint + 10), match taint > 99 | true => "x" | false => "" end);
+    /std/print(match Parse/run(whole, text) | success(f) => Flt/to_str(f) | failure(_) => "none" end)
+    "#;
+
+/// A value whose type a match computes: `Held(b)` is a float where `b` holds and a string where it does not, so the one name `v` is joined from a float and from a string, and read as a float under one branch only. No variant is involved and no slot is shared: the parameter itself has two types.
+pub(super) const COMPUTED_TYPE: &str = r#"
+    use /std/{Str, Flt, Nat, Bool, List, proc};
+    let Held(b : Bool) -> Type =
+        match b | true => Flt | false => Str end;
+    let held(b : Bool, n : Nat) -> Held(b) =
+        match b : (c) => Held(c)
+        | true => Nat/to_flt(n) * +1.5
+        | false => Str/concat("text ", Nat/to_str(n))
+        end;
+    let told(b : Bool, n : Nat) -> Str =
+        let v = held(b, n);
+        (match b : (c) => (Held(c)) -> Str
+            | true => (x) => Flt/to_str(x + +0.5)
+            | false => (x) => x
+            end)(v);
+    let taint = List/len(proc/args!);
+    /std/print(Str/join(" | ", [told(taint % 2 == 0, taint + 2), told(taint % 2 == 1, taint + 3)]))
+    "#;
+
 /// An idiomatic string walk: `/std/Str/fold` over a string the program derives at runtime.
 ///
 /// The string comes from `Nat/to_str` rather than a literal or `Str/of_bytes`, and both choices are load-bearing. A literal would let partial evaluation unroll the walk over known bytes, so the fixture would assert nothing about a loop; `of_bytes` would drag in the scan `/std/Str/Valid/try` runs over every byte, whose allocations would swamp the claim. What is left is the walk itself.

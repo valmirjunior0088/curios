@@ -82,50 +82,32 @@ fn taking_a_channel_item_clears_the_slot_without_a_host_call() {
     assert_eq!(count(&wat, "(call "), 0, "{wat}");
 }
 
-/// A `Tuple` reaching a raw-carried continuation parameter is refused at compile time.
+/// A `Tuple` read where a float is, is refused at compile time.
 ///
-/// The positive control for `Context::refuse_raw_aggregate`, and the reason that guard is an assertion in the emitter rather than a remark in the door. A continuation parameter offers `Offer::Open`, so a raw demand from *any* of its uses settles it raw whatever flows in — the aggregate's own `Offer::Never` never enters the question, because the coercion happens on the edge rather than at the aggregate's definition. The edge then loads its argument at that carrier, and an aggregate argument becomes `ref.cast (ref i31)` over a `struct.new`: a module that verifies, emits, and traps.
+/// The positive control for `Context::refuse_raw_aggregate`, and the reason that guard is an assertion in the emitter rather than a remark in the door. The representation analysis keeps an aggregate out of every register it decides: the aggregate's own definition offers nothing, and a parameter it reaches is offered a word or a float only where every argument reaching it is one. What it does not decide is a read: an operand position loads its atom at the operation's carrier whatever the atom is held at, so an aggregate standing where a scalar's name should be is cast there, and traps in a function far from whatever put it there.
 ///
-/// This is that shape stated directly — a continuation whose parameter feeds `FltAdd`, entered with a tuple. The float is the carrier that can still reach it: a parameter a word would hold is offered one only when every argument reaching it is a word already, which a construction never is, so the analysis refuses the word before the emitter could. `curios-ersd`'s door does not produce it — an immediate arm's binder gets a definition of its own, `curios_cont::Intrinsic::ImmediateGet` — but the IR permits it, so the guard is what keeps the class from returning silently.
-///
-/// The tuple here is closed, so `hoist` lifts it to a module const: this covers the const half of the population. [`a_region_aggregate_reaching_a_raw_parameter_is_refused`] covers the other.
+/// This is that shape stated directly — a tuple handed to `FltAdd`. The tuple is closed, so `hoist` lifts it to a module const: this covers the const half of the population. [`a_region_aggregate_read_at_a_raw_carrier_is_refused`] covers the other.
 #[test]
 #[should_panic = "loaded at the raw carrier"]
-fn an_aggregate_reaching_a_raw_parameter_is_refused() {
+fn an_aggregate_read_at_a_raw_carrier_is_refused() {
     let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
 
-    let param = module.add_value(Some("param".into()));
     let sum = module.add_value(Some("sum".into()));
     let aggregate = module.add_value(Some("aggregate".into()));
 
-    // The parameter's one use demands a raw `Flt`, which is what raises it out of a reference.
     let exit = module.add_node(halt(vec![curios_cont::Atom::Value(sum)]));
     let add = module.add_node(curios_cont::Node::LetIntrinsic {
         result: sum,
         op: curios_cont::Intrinsic::FltAdd(Rounding::TiesToEven),
-        args: vec![curios_cont::Atom::Value(param), flt(1.0)],
+        args: vec![curios_cont::Atom::Value(aggregate), flt(1.0)],
         next: exit,
-    });
-    let raised = module.add_continuation(curios_cont::Continuation {
-        debug_name: Some("raised".into()),
-        params: vec![param],
-        body: add,
-    });
-
-    let enter = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
-        target: raised,
-        args: vec![curios_cont::Atom::Value(aggregate)],
-    }));
-    let scope = module.add_node(curios_cont::Node::LetCont {
-        continuations: vec![raised],
-        body: enter,
     });
     let body = module.add_node(curios_cont::Node::LetValue {
         result: aggregate,
         value: curios_cont::ValueExpr::Tuple(vec![nat(1), nat(2)]),
-        next: scope,
+        next: add,
     });
 
     module.define_function(
@@ -143,18 +125,17 @@ fn an_aggregate_reaching_a_raw_parameter_is_refused() {
     wat(&module);
 }
 
-/// The region half of [`an_aggregate_reaching_a_raw_parameter_is_refused`].
+/// The region half of [`an_aggregate_read_at_a_raw_carrier_is_refused`].
 ///
 /// Same shape, but one element of the tuple is a cell handle — a call-shaped result, so the tuple is not closed and stays a binding in the region instead of being hoisted to a global. This is the half an aliased immediate arm reaches: a cons cell built inside a loop.
 #[test]
 #[should_panic = "loaded at the raw carrier"]
-fn a_region_aggregate_reaching_a_raw_parameter_is_refused() {
+fn a_region_aggregate_read_at_a_raw_carrier_is_refused() {
     let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
 
     let cell = module.add_value(Some("cell".into()));
-    let param = module.add_value(Some("param".into()));
     let sum = module.add_value(Some("sum".into()));
     let aggregate = module.add_value(Some("aggregate".into()));
 
@@ -162,27 +143,13 @@ fn a_region_aggregate_reaching_a_raw_parameter_is_refused() {
     let add = module.add_node(curios_cont::Node::LetIntrinsic {
         result: sum,
         op: curios_cont::Intrinsic::FltAdd(Rounding::TiesToEven),
-        args: vec![curios_cont::Atom::Value(param), flt(1.0)],
+        args: vec![curios_cont::Atom::Value(aggregate), flt(1.0)],
         next: exit,
-    });
-    let raised = module.add_continuation(curios_cont::Continuation {
-        debug_name: Some("raised".into()),
-        params: vec![param],
-        body: add,
-    });
-
-    let enter = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
-        target: raised,
-        args: vec![curios_cont::Atom::Value(aggregate)],
-    }));
-    let scope = module.add_node(curios_cont::Node::LetCont {
-        continuations: vec![raised],
-        body: enter,
     });
     let built = module.add_node(curios_cont::Node::LetValue {
         result: aggregate,
         value: curios_cont::ValueExpr::Tuple(vec![curios_cont::Atom::Value(cell), nat(2)]),
-        next: scope,
+        next: add,
     });
     let made = module.add_continuation(curios_cont::Continuation {
         debug_name: Some("made".into()),
@@ -212,6 +179,71 @@ fn a_region_aggregate_reaching_a_raw_parameter_is_refused() {
     module.set_entry(main);
 
     wat(&module);
+}
+
+/// A `Tuple` reaching a continuation parameter something reads as a float leaves the parameter a reference, and the module is emitted.
+///
+/// The shape a variant's shared payload slot and a type a match computes both produce: a join entered with a float on one edge and with something else on another, read as a float under the one. The analysis offers the parameter no register, since not every argument reaching it is a float, so the edge hands the tuple over as the reference it is and only the read unboxes.
+#[test]
+fn an_aggregate_reaching_a_parameter_read_as_a_float_leaves_it_a_reference() {
+    let mut module = curios_cont::Module::new();
+    let main = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+
+    let param = module.add_value(Some("param".into()));
+    let sum = module.add_value(Some("sum".into()));
+    let aggregate = module.add_value(Some("aggregate".into()));
+
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(sum)]));
+    let add = module.add_node(curios_cont::Node::LetIntrinsic {
+        result: sum,
+        op: curios_cont::Intrinsic::FltAdd(Rounding::TiesToEven),
+        args: vec![curios_cont::Atom::Value(param), flt(1.0)],
+        next: exit,
+    });
+    let joined = module.add_continuation(curios_cont::Continuation {
+        debug_name: Some("joined".into()),
+        params: vec![param],
+        body: add,
+    });
+
+    let enter = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
+        target: joined,
+        args: vec![curios_cont::Atom::Value(aggregate)],
+    }));
+    let scope = module.add_node(curios_cont::Node::LetCont {
+        continuations: vec![joined],
+        body: enter,
+    });
+    let body = module.add_node(curios_cont::Node::LetValue {
+        result: aggregate,
+        value: curios_cont::ValueExpr::Tuple(vec![nat(1), nat(2)]),
+        next: scope,
+    });
+
+    module.define_function(
+        main,
+        curios_cont::Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(main);
+
+    let wat = wat(&module);
+    let locals = wat
+        .lines()
+        .find(|line| line.trim_start().starts_with("(local "))
+        .expect("the entry declares its locals");
+    assert_eq!(
+        count(locals, " f64)"),
+        1,
+        "the sum alone is held in a float register, and the parameter in none: {locals}"
+    );
+    assert_contains(&wat, "ref.cast (ref $flt)");
 }
 
 /// A variant is constructed at its row's own final type and read back with one exact cast — no roster cascade, because a row value's type is a fact of the row rather than of the constructor that built it.
