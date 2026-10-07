@@ -149,3 +149,73 @@ fn a_weak_equation_is_a_write_to_the_solver() {
     solver.add_weak_eq(Level::meta(u), Level::meta(v));
     assert_ne!(solver.state_token(), before);
 }
+
+// Two levels a declaration holds are its callers' to choose apart. A weak pair of them is dropped, and so is the second of two that would make them one through an occurrence: `u` goes with the one it met first.
+#[test]
+fn a_weak_equation_joins_no_two_levels_a_declaration_holds() {
+    for (held, parameters) in [(true, 2), (false, 1)] {
+        let mut solver = UniverseSolver::new(0);
+        let a = open(&mut solver);
+        let b = open(&mut solver);
+        solver.add_weak_eq(Level::meta(a), Level::meta(b));
+        let compared = if held { vec![a, b] } else { Vec::new() };
+        let context = solver.finalize([a, b], [], compared).unwrap();
+        assert_eq!(context.parameter_count, parameters, "held: {held}");
+        assert!(context.constraints.is_empty());
+
+        let mut solver = UniverseSolver::new(0);
+        let a = open(&mut solver);
+        let b = open(&mut solver);
+        let u = open(&mut solver);
+        solver.add_weak_eq(Level::meta(u), Level::meta(a));
+        solver.add_weak_eq(Level::meta(u), Level::meta(b));
+        let compared = if held { vec![a, b] } else { Vec::new() };
+        let context = solver.finalize([a, b, u], [], compared).unwrap();
+        assert_eq!(context.parameter_count, parameters, "held: {held}");
+        assert!(context.constraints.is_empty());
+        let level = |meta| solver.zonk(&Level::meta(meta)).unwrap();
+        assert_eq!(level(u), level(a));
+    }
+}
+
+// A join that keeps two held levels apart can still bound one by the other, or by a constant, through what the occurrence it joins already stood above. That bound is one a caller would have to meet for a position nothing reads, so the pair is dropped and the occurrence settles from its own bounds.
+#[test]
+fn a_weak_equation_puts_no_bound_on_a_level_a_declaration_holds() {
+    for bound_is_held in [true, false] {
+        let mut solver = UniverseSolver::new(0);
+        let a = open(&mut solver);
+        let b = open(&mut solver);
+        let u = open(&mut solver);
+        let below = match bound_is_held {
+            true => Level::meta(b),
+            false => Level::constant(1),
+        };
+        solver.add_leq(below, Level::meta(u), conversion()).unwrap();
+        solver.add_weak_eq(Level::meta(u), Level::meta(a));
+
+        let context = solver.finalize([a, b], [u], [a, b]).unwrap();
+        assert_eq!(context.parameter_count, 2, "{bound_is_held}");
+        assert!(context.constraints.is_empty(), "{bound_is_held}");
+    }
+}
+
+// A bound the store already holds between two held levels is no new one: the join that restates it is kept.
+#[test]
+fn a_weak_equation_joins_what_the_held_levels_already_bound() {
+    let mut solver = UniverseSolver::new(0);
+    let a = open(&mut solver);
+    let b = open(&mut solver);
+    let u = open(&mut solver);
+    let above = Level::meta(b).succ().unwrap();
+    solver
+        .add_leq(above.clone(), Level::meta(a), conversion())
+        .unwrap();
+    solver.add_leq(above, Level::meta(u), conversion()).unwrap();
+    solver.add_weak_eq(Level::meta(u), Level::meta(a));
+
+    let context = solver.finalize([a, b, u], [], [a, b]).unwrap();
+    assert_eq!(context.parameter_count, 2);
+    assert_eq!(context.constraints.len(), 1);
+    let level = |meta| solver.zonk(&Level::meta(meta)).unwrap();
+    assert_eq!(level(u), level(a));
+}

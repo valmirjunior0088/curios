@@ -420,6 +420,42 @@ fn the_command_line_parser_takes_a_spec_at_any_universe_instance() {
     assert_eq!(typecheck(&parsed), Ok(()));
 }
 
+// **A weak equation decides no level a signature holds.** Two instances of a family meet at a position it is irrelevant in wherever a small action is sequenced into a larger region or an arm answers at an instance of its own, and the pair is joined where the declaration closes. Joined to a level the signature holds, it would decide that level for every caller. `both`'s arms each answer at their own constructor's level: joined through the declared result they make `Kind`'s two levels one, which a caller holding a `Kind` at two cannot pass. `counted`'s region is a `State` at its payload's level and the action it sequences sits at zero: the two joined hold `A` to zero, and `counted` at a type is refused. Each such pair is dropped, and the occurrence it would have joined settles from its own bounds.
+#[test]
+fn a_weak_equation_decides_no_level_a_signature_holds() {
+    let arms = r#"
+        use /std/{Str, Result};
+        pub struct Value: pub Type { A: Type, read: (Str) -> Result(Str, A) }
+        pub induct Kind: pub Type
+        | one(v: Value)
+        | two(v: Value)
+        end
+        let Carrier(k: Kind) -> Type = match k | one(v) => v.A | two(v) => v.A end;
+        let read_hoisted(v: Value, s: Str) -> Result(Str, v.A) = v.read(s);
+        pub let both(k: Kind, s: Str) -> Result(Str, Carrier(k)) =
+            match k
+            | one(v) => read_hoisted(v, s)
+            | two(v) => read_hoisted(v, s)
+            end;
+        /std/print("arms")
+        "#;
+    let parameters = universe_parameters(arms);
+    assert_eq!(parameters.get("/both"), Some(&2), "{parameters:?}");
+
+    let region = r#"
+        use /std/{Nat, State};
+        let tick: State(Nat, {}) = State/modify((n) => n + 1);
+        pub let counted(@A: Type, a: A) -> State(Nat, A) =
+            let _ = tick!;
+            State/pure(a);
+        pub let at_type: State(Nat, Type) = counted(Nat);
+        /std/print("region")
+        "#;
+    assert_eq!(typecheck(region), Ok(()));
+    let parameters = universe_parameters(region);
+    assert_eq!(parameters.get("/counted"), Some(&1), "{parameters:?}");
+}
+
 // **A type former sits where its parts are typed, which is where the kernel types it.** A function type or a tuple type over a part whose written type is above its reduct's — a closed match typed by its motive, a call typed by its codomain, an associated type named through a witness at a level of its own — is sized from the part as typing read it. Sized from the part's reduct it sat a level short, and the kernel refused the sort the elaborator declared: `Over` at `Type` over a domain typed at its witness's level, and `listed`'s `List` at zero over a record of one.
 #[test]
 fn a_type_former_is_sized_by_its_parts_as_they_are_written() {

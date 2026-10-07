@@ -80,6 +80,9 @@ impl From<UniverseRole> for Provenance {
     }
 }
 
+/// How wide a gap between two held levels a join's check looks for. No declaration sets one level more than a few successors above another, and a consistent store entails no gap without end, so this bounds a search that ends before it.
+const GAP_CAP: u32 = 16;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum DifferenceNode {
     Zero,
@@ -732,14 +735,16 @@ impl UniverseSolver {
         }
     }
 
-    /// Join every weak equation the store can hold, and drop the rest.
+    /// Join every weak equation the store can hold that decides no level the declaration holds, and drop the rest.
     ///
-    /// Asked where a declaration's levels are about to settle, so every requirement its elaboration raised is in the store. A pair with no open level on either side names no level to choose and is dropped unread: two constants, or a constant and a parameter. The rest are tried together, one consistency check for the declaration; where that is refused they are retaken one at a time in the order they were met, each kept where the store stays consistent.
+    /// Asked where a declaration's levels are about to settle, so every requirement its elaboration raised is in the store. A pair with no open level on either side names no level to choose and is dropped unread: two constants, or a constant and a parameter. The rest are tried together, one check for the declaration; where that is refused they are retaken one at a time in the order they were met, each kept where the store stays consistent and says of the held levels what it said.
     ///
-    /// Where every pair can hold, the store that results is the one an equation at each of those positions would have given, so a declaration that elaborates with those equations required elaborates to the same levels with them weak. Where one cannot, dropping it refuses nothing and decides nothing a checker reads: the two instances it came from convert as they stand. What the order chooses, there alone, is which level an irrelevant occurrence lands on.
+    /// Where every pair is kept, the store that results is the one an equation at each of those positions would have given, so a declaration that elaborates with those equations required elaborates to the same levels with them weak. Where one is not, dropping it refuses nothing and decides nothing a checker reads: the two instances it came from convert as they stand. What the order chooses, there alone, is which level an irrelevant occurrence lands on.
     ///
     /// Rocq unifies a weak pair "when neither is smaller than the other and one is flexible". This joins a pair one side of which already bounds the other too: a former's level left above its argument's is slack a signature then generalizes.
-    fn join_weak_equations(&mut self) {
+    ///
+    /// **A join puts nothing between two levels the declaration holds.** `held` are the levels that stand where conversion compares them, and a pair is kept only where the store then says of them, one against another and each against zero, what it said before ([`Self::held_relations`]). A weak equation is met at a position nothing reads, so it has no standing to decide a level something does. Two arms answering a `Result` at their own constructors' levels would otherwise make those two levels one through the declared `Result`'s, which no caller could then tell apart, and a small action sequenced into a region would hold the region's payload to the action's level, zero. The occurrence it leaves unjoined settles from its own bounds, at the join of the held levels below it.
+    fn join_weak_equations(&mut self, held: &BTreeSet<UniverseMetaId>) {
         curios_profile::profile!("universe::join_weak_equations");
         let pairs = std::mem::take(&mut self.weak)
             .into_iter()
@@ -756,12 +761,13 @@ impl UniverseSolver {
         curios_profile::sample!("universe::weak_equations", pairs.len());
         let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion);
 
+        let before = self.held_relations(held);
         let mark = self.mark();
         let joined = pairs.iter().all(|(left, right)| {
             self.add_eq(left.clone(), right.clone(), origin.clone())
                 .is_ok()
         });
-        if joined && self.check_consistent().is_ok() {
+        if joined && self.check_consistent().is_ok() && self.held_relations(held) == before {
             self.release(mark);
             return;
         }
@@ -773,7 +779,8 @@ impl UniverseSolver {
             let joined = self
                 .add_eq(left.clone(), right.clone(), origin.clone())
                 .is_ok()
-                && self.check_consistent().is_ok();
+                && self.check_consistent().is_ok()
+                && self.held_relations(held) == before;
             if !joined {
                 self.rollback(mark);
                 curios_profile::note!(
@@ -785,6 +792,58 @@ impl UniverseSolver {
             }
             self.release(mark);
         }
+    }
+
+    /// What the store says of the levels a declaration holds, one against another and each against zero: for each ordered pair, the widest gap it entails between them ([`Self::gap`]). Two stores that answer alike here leave a caller the same choice of those levels.
+    fn held_relations(&mut self, held: &BTreeSet<UniverseMetaId>) -> Vec<Option<u32>> {
+        if held.is_empty() {
+            return Vec::new();
+        }
+        curios_profile::profile!("universe::held_relations");
+        let levels = std::iter::once(Level::zero())
+            .chain(held.iter().map(|meta| Level::meta(*meta)))
+            .collect::<Vec<_>>();
+        let mut relations = Vec::with_capacity(levels.len() * (levels.len() - 1));
+        for (below, lower) in levels.iter().enumerate() {
+            for (above, upper) in levels.iter().enumerate() {
+                if below != above {
+                    relations.push(self.gap(lower, upper));
+                }
+            }
+        }
+
+        relations
+    }
+
+    /// The widest gap the store entails between two levels: the greatest `k` with `lower + k ≤ upper`, and none where it entails no order between them. A consistent store entails only a finite one, so the search ends where the next step is not entailed; [`GAP_CAP`] bounds it all the same.
+    fn gap(&mut self, lower: &Level, upper: &Level) -> Option<u32> {
+        let mut widest = None;
+        for step in 0..=GAP_CAP {
+            let Ok(raised) = lower.checked_add(step) else {
+                break;
+            };
+            if !self.entails(&raised, upper) {
+                break;
+            }
+            widest = Some(step);
+        }
+
+        widest
+    }
+
+    /// Whether the store entails `lower ≤ upper`: its negation, `upper + 1 ≤ lower`, is one the store refuses.
+    fn entails(&mut self, lower: &Level, upper: &Level) -> bool {
+        let Ok(above) = upper.succ() else {
+            return false;
+        };
+        let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion);
+        let mark = self.mark();
+        let refused =
+            self.add_leq(above, lower.clone(), origin).is_err() || self.check_consistent().is_err();
+        self.rollback(mark);
+        self.release(mark);
+
+        refused
     }
 
     /// Default an equation whose zonked sides differ at exactly one meta atom with a shared offset: `max(s, α+k) = max(s, β+k)` pins one meta to the other instead of parking two inequalities the bound propagators cannot decompose. Without this, independently instantiated spellings of one written annotation meet only here, both metas survive to declaration finalization, and the scheme generalizes two parameters where the program wrote one universe.
@@ -1585,10 +1644,12 @@ impl UniverseSolver {
         compared: impl IntoIterator<Item = UniverseMetaId>,
     ) -> Result<UniverseContext, UniverseError> {
         curios_profile::profile!("universe::finalize");
-        // First, while every level elaboration left open is still open: a weak equation joins two of them, and what follows settles the classes that leaves.
-        self.join_weak_equations();
-        // A held level is no classifier to minimize, whatever wrote it: a `Type` written in a result is an occurrence's from here on, which keeps it its class's representative over an invented one.
+        // A held level is no classifier to minimize, whatever wrote it: a `Type` written in a result is an occurrence's from here on, which keeps it its class's representative over an invented one. Read first, while every level elaboration left open is still open, since the join that follows is told which levels it may not decide.
         let held = self.hold(compared);
+        // A weak equation joins two open levels, and what follows settles the classes that leaves.
+        self.join_weak_equations(&held);
+        // A join can have aliased a held level onto another, which is then held with it.
+        let held = self.hold(held);
         // Follow each interface level to the metas that actually carry it. Conversion aliases one meta onto another whenever two spellings of a level are forced equal — keeping the member of greater provenance, but not by the signature's choice — so the set the caller computed from the declaration's type can name metas that were solved away, several links back from the ones still standing. Those representatives are then reached by `universe_metas_in(&body)` instead and land on the internal side, where `minimize` takes least solutions for them; the declaration comes back at a ground level rather than generalized over a level its own signature mentions, and every polymorphic caller is refused by the kernel for supplying a parameter where it demands a constant.
         let interface = self.representatives(interface);
         // An internal level is followed as an interface one is. A weak equation aliases a body's level onto one the body never spells, and that one is the level to minimize: left out, it is no level of the body's and none of the signature's until an occurrence of the signature settles at it as its lower bound, which makes it a parameter nothing reads.
@@ -1661,7 +1722,9 @@ impl UniverseSolver {
         parameter_count: usize,
     ) -> Result<(), UniverseError> {
         curios_profile::profile!("universe::finalize_at_instance");
-        self.join_weak_equations();
+        // The instance's levels are the concept's parameters, each its own: a join that made two of them one would leave the second no parameter to be.
+        let held = self.representatives(instance.iter().flat_map(Level::metas));
+        self.join_weak_equations(&held);
         if instance.len() != parameter_count {
             return Err(UniverseError::InstanceArity {
                 expected: parameter_count,
@@ -1703,7 +1766,7 @@ impl UniverseSolver {
     ) -> Result<(), UniverseError> {
         self.pin_instance(instance, determined)?;
         // The declaration that would have joined them has closed, so what this resolution met is joined here, after the goal has fixed what it fixes.
-        self.join_weak_equations();
+        self.join_weak_equations(&BTreeSet::new());
 
         let open = minted
             .iter()
@@ -1768,7 +1831,7 @@ impl UniverseSolver {
         &mut self,
         metas: impl IntoIterator<Item = UniverseMetaId>,
     ) -> Result<(), UniverseError> {
-        self.join_weak_equations();
+        self.join_weak_equations(&BTreeSet::new());
         let relevant = self.connected_metas(metas);
         self.minimize(&relevant, &relevant)?;
         self.check_consistent()?;
