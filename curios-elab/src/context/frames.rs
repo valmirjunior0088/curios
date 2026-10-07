@@ -226,6 +226,8 @@ pub(crate) struct Frames {
     assumptions: Vec<HashMap<Free, Term>>,
     assumption_universes: Vec<HashMap<Free, UniverseContext>>,
     definitions: Vec<Recorded<Free, DefEntry>>,
+    /// Each top-level `rec` group the base frame defines a member of, beside the global each member is defined under, in member order: `definitions` read the other way, kept as each member is defined so that a reader holding a group asks for its names and scans nothing. A member not yet defined, or forgotten, is `None`. Asked by group and never read in order, which a hash map has none of.
+    members: HashMap<RecGroup, Vec<Option<Global>>>,
     /// Counterfactual match-arm refinements (`refine_head`), kept parallel to `definitions` but suppressible: re-validation of a metavariable solution must keep stable definitions yet ignore these.
     refinements: Vec<Recorded<Free, Term>>,
     refinement_projections: Vec<Recorded<(Term, usize), ProjectionEntry>>,
@@ -271,6 +273,7 @@ impl Frames {
             assumptions: vec![HashMap::new()],
             assumption_universes: vec![HashMap::new()],
             definitions: vec![Recorded::new()],
+            members: HashMap::new(),
             refinements: vec![Recorded::new()],
             refinement_projections: vec![Recorded::new()],
             refinement_scrutinees: vec![Recorded::new()],
@@ -448,6 +451,7 @@ impl Frames {
         self.locals_stamp.fresh();
         self.assumptions[0].remove(name);
         self.assumption_universes[0].remove(name);
+        self.unname_member(name);
         self.definitions[0].remove(name);
         self.local.retain(|(bound, _)| bound != name);
         self.witness_scope.retain(|(bound, _)| bound != name);
@@ -512,7 +516,44 @@ impl Frames {
 
     /// Insert `name`'s definition into the innermost frame. The façade decides the cache protocol from [`Frames::is_defined`] first.
     pub(crate) fn define(&mut self, name: Free, entry: DefEntry) {
+        if self.definitions.len() == 1 {
+            self.unname_member(&name);
+            if let (Free::Global(global), Some((group, index))) = (&name, entry.term.as_rec_proj())
+            {
+                let names = self
+                    .members
+                    .entry(group.clone())
+                    .or_insert_with(|| vec![None; group.length()]);
+                if let Some(slot) = names.get_mut(index) {
+                    *slot = Some(*global);
+                }
+            }
+        }
         self.definitions.last_mut().unwrap().insert(name, entry);
+    }
+
+    /// Take `name` out of the group the base frame defines it as a member of, where it defines it as one: before the name is defined again, or forgotten. A group left with no named member is dropped.
+    fn unname_member(&mut self, name: &Free) {
+        let Some((group, index)) = self.definitions[0]
+            .get(name)
+            .and_then(|entry| entry.term.as_rec_proj())
+        else {
+            return;
+        };
+        let Some(names) = self.members.get_mut(group) else {
+            return;
+        };
+        if let Some(slot) = names.get_mut(index) {
+            *slot = None;
+        }
+        if names.iter().all(Option::is_none) {
+            self.members.remove(group);
+        }
+    }
+
+    /// The globals the base frame defines `group`'s members under, in member order, where it defines every one.
+    pub(crate) fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {
+        self.members.get(group)?.iter().copied().collect()
     }
 
     /// The [`DefinitionKind`] of the module item that defined `label`, or `None` for a local binding or an undefined name.

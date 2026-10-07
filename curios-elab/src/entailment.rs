@@ -34,7 +34,8 @@ mod tests;
 
 use {
     crate::{
-        Context, Error, Mode, elaborate, reduce_with, same_uncommitted, zonk_solved_term_metas,
+        Context, Error, Mode, elaborate, named_members, reduce_with, same_uncommitted,
+        zonk_solved_term_metas,
     },
     curios_core::{Cases, Classes, Free, Global, LinearViews, Match, Probe, Subterm, Term, Var},
     curios_utilities::SyntaxName,
@@ -216,7 +217,10 @@ fn linear(
     );
     let candidate = match written {
         // In one spelling: the operands a proof names come from the bound and the hypotheses as stated, where an operator's witness may still stand as the metavariable its resolution solved, and from the reducts the facts were read through, where it is the witness. A fold pairs by identity — Euclid's recombination pairs a quotient with a remainder of one dividend — so a proof naming one call both ways would not check.
-        Written::Proof(candidate) => zonk_solved_term_metas(context, &facts.respell(&candidate)),
+        Written::Proof(candidate) => named_members(
+            context,
+            &zonk_solved_term_metas(context, &facts.respell(&candidate)),
+        ),
         Written::Unwritten => return refused(&views, SearchOutcome::Unwritten),
     };
     // What a written proof costs its checkers grows with its size: the nodes of each proof, as written and before either checks it.

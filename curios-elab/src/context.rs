@@ -1116,6 +1116,27 @@ impl Context {
         self.frames.rec_definitions()
     }
 
+    /// [`Frames::member_names`]: the globals `group`'s members are defined under, in member order.
+    pub(crate) fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {
+        self.frames.member_names(group)
+    }
+
+    /// Remember that `instance` is `group` opened at `levels`, for the declaration in progress: reduction's own record, read back by [`Context::instance_of`].
+    pub(crate) fn opened_instance(
+        &mut self,
+        instance: &RecGroup,
+        group: &RecGroup,
+        levels: &[Level],
+    ) {
+        self.caches
+            .instance_insert(instance.clone(), group.clone(), levels.to_vec());
+    }
+
+    /// The group `instance` was opened from and the levels it was opened at, where reduction opened it in the declaration in progress.
+    pub(crate) fn instance_of(&self, instance: &RecGroup) -> Option<&(RecGroup, Vec<Level>)> {
+        self.caches.instance_get(instance)
+    }
+
     /// Collect universe metas reachable through a term and through any solved term metavariables it names. Declaration finalization runs before the final term-zonk pass, so a level occurring only in a solved hole must still join the declaration's universe closure. Recursive slots may point back to themselves; `seen` keeps this analysis finite.
     pub(crate) fn universe_metas_in(&self, term: &Term) -> BTreeSet<UniverseMetaId> {
         let mut universes = BTreeSet::new();

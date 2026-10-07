@@ -2,7 +2,7 @@
 //!
 //! An implicit is inserted at its true domain and then has to be *solved* — against a reduction that unfolds a local definition, against an inductive's own parameter, against a motive that inserts one of its own, or right-biasedly for a higher-kinded family. Each row is a route by which the solution arrives.
 
-use crate::tests::{error, run, typecheck_within};
+use crate::tests::{core_elab, error, run, typecheck_within};
 
 #[test]
 fn an_implicit_solves_against_a_reduction_through_a_let() {
@@ -448,7 +448,40 @@ fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
     assert_eq!(output, b"1");
 }
 
-/// A solution that holds a call of a recursive function is that call, where the function's body holds a proof the elaborator wrote. `of` leaves the bound of `of(n / 2)` to the elaborator, whose proof splits on the bound's decision and eliminates a contradiction under an elided motive; `Eq/refl`'s implicit is solved to `of(n, @ok).count`, and re-validating that solution elaborates `of`'s body a second time. Each rebuilt match keeps the goal it holds, so the copy the solution commits is the member itself. Given the goal its arm specializes the second time, the copy is a second term to conversion, which unfolds the two side by side over arguments that grow until the budget is spent — so the budget here is one the program fits many times over and the regress does not.
+/// A solution that holds a call of a recursive function names the function: `Eq/refl`'s implicit is solved to `f(n).count`, as the row states it. A candidate arrives reduced, a stuck call headed by its member's group, and committed so the solution would hold a copy of the callee, which its re-validation elaborates again and the kernel checks again.
+#[test]
+fn a_solution_holding_a_call_of_a_recursive_function_names_the_function() {
+    let elaborated = core_elab(
+        r#"
+        use /std/{Nat, Eq, Io};
+
+        struct Q(n: Nat): Type {
+            count: Nat,
+        }
+
+        let f(n: Nat) -> Q(n) =
+            match 0 < n
+            | true =>
+                let inner = f(n / 2);
+                Q { count = inner.count + 1 }
+            | false => Q { count = 0 }
+            end;
+
+        pub let row(n: Nat) -> Eq()(f(n).count, f(n).count) = Eq/refl();
+
+        Io/pure(())
+        "#,
+    );
+    let row = elaborated
+        .split("let /row")
+        .nth(1)
+        .expect("the row is printed");
+
+    assert!(row.contains("refl.{0}(@Nat, @(f(n)).0)"), "{row}");
+    assert!(!row.contains("rec "), "{row}");
+}
+
+/// A solution that holds a call of a recursive function is that call, where the function's body holds a proof the elaborator wrote. `of` leaves the bound of `of(n / 2)` to the elaborator, whose proof splits on the bound's decision and eliminates a contradiction under an elided motive, and `Eq/refl`'s implicit is solved to `of(n, @ok).count`. Committed as the copy of `of`'s group its reduct holds, the solution was re-validated by elaborating that group again, an inner goal came back in another spelling, and conversion unfolded the two groups side by side over arguments that grow until the budget was spent — so the budget here is one the program fits many times over and the regress does not.
 #[test]
 fn a_solution_holding_a_call_whose_body_holds_a_proof_the_elaborator_wrote_is_that_call() {
     typecheck_within(
@@ -497,6 +530,56 @@ fn a_solution_holding_a_call_whose_body_holds_a_proof_the_elaborator_wrote_is_th
         "#,
     )
     .expect("the two sides are one call");
+}
+
+/// A local recursive function elaborated again is itself. A local group has no name a solution could take, so `Eq/refl`'s implicit holds a copy of `of`'s group, and re-validating it elaborates the group again: each rebuilt match keeps the goal it holds, where the type it is checked at converts with it. Given the goal its arm specializes the second time, the copy is a second term to conversion, which unfolds the two side by side over arguments that grow until the budget is spent.
+///
+/// Mutation-checked: with a rebuilt match taking the type it is checked at, the program runs out of steps.
+#[test]
+fn a_local_recursive_function_elaborated_again_is_itself() {
+    typecheck_within(
+        2_000_000,
+        r#"
+        use /std/{Nat, Eq, Io};
+        use /std/Bool/{True, Holds};
+
+        struct Scale(n: Nat): Type {
+            count: Nat,
+            half: Nat,
+            joined: Eq()(n, Nat/shl(2 * half + 1, count)),
+        }
+
+        pub let same(n: Nat, ok: Holds(0 < n)) -> Nat =
+            let of(n: Nat, @ok: Holds(0 < n)) -> Scale(n) =
+                match 0 < n
+                | true =>
+                    match 0 < n % 2
+                    | true =>
+                        Scale {
+                            count = 0,
+                            half = n / 2,
+                            joined =
+                                Nat/le/antisym(n, 2 * (n / 2) + 1, True/proved(), True/proved()),
+                        }
+                    | false =>
+                        let inner = of(n / 2);
+                        let even: Eq()(n, 2 * (n / 2)) =
+                            Nat/le/antisym(n, 2 * (n / 2), True/proved(), True/proved());
+                        Scale {
+                            count = inner.count + 1,
+                            half = inner.half,
+                            joined = Eq/subst((q: Nat) => Eq()(n, 2 * q), inner.joined, even),
+                        }
+                    end
+                | false => match ok end
+                end;
+            let commuted: Eq()(of(n, @ok).count + 1, 1 + of(n, @ok).count) = Eq/refl();
+            of(n, @ok).count;
+
+        Io/pure(())
+        "#,
+    )
+    .expect("the copy is the group");
 }
 
 /// An implicit born under an arm's binder is re-expressed over the match's own where it rides into the match's type: `Result/success(v)`'s error type is minted under `v` and embedded in the match's type at `success(v)`, so it becomes a stand-in applied to `success(v)`, the match's type is solved from the first arm, and the second solves the stand-in to `Io/Error`. Waiting for it would hold the match's type open until `read!` pinned it to the region's monad, refusing the first arm with `Async(Result(?, Bytes))`. Mutation-checked: refusing every binder the match's type lacks refuses the program.

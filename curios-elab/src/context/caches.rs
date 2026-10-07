@@ -9,7 +9,7 @@
 use {
     crate::Sort,
     curios_core::{
-        Free, Level, LevelHead, Term, UniverseMetaId, rewrite_universe_levels_scoped,
+        Free, Level, LevelHead, RecGroup, Term, UniverseMetaId, rewrite_universe_levels_scoped,
         rewrite_universe_levels_scoped_shared,
     },
     curios_utilities::Entropy,
@@ -57,6 +57,8 @@ pub(crate) struct Caches {
     sorts: HashMap<(Term, bool), Sort>,
     /// The stamps `sorts` was filled under.
     sorts_at: ElaborationStamp,
+    /// Each instance of a universe-polymorphic `rec` group reduction has opened in the declaration in progress, beside the group it instantiates and the levels it was opened at. An instance holds its levels substituted through every member, so the pair is what says which instance of which group a copy is without reading the levels back off it. It lives one declaration, as the levels' metavariables do.
+    instances: HashMap<RecGroup, (RecGroup, Vec<Level>)>,
     elaboration: HashMap<ElaborationKey, (Term, Term)>,
     /// Elaborations inside an oracle bracket (`Context::with_oracle`) that the table above must refuse, one table per live bracket, innermost last: see `Context::get_or_init_elaborated` for what they admit and why. Cleared wherever the table above is, and discarded with their bracket.
     oracle: Vec<HashMap<ElaborationKey, (Term, Term)>>,
@@ -184,8 +186,24 @@ impl Caches {
     /// A new declaration: every table is discarded — the reducts and the elaborations — so that what one declaration can afford is decided by nothing the declarations before it left behind.
     pub(crate) fn begin_declaration(&mut self) {
         self.proofs.clear();
+        self.instances.clear();
         self.clear_reductions();
         self.clear_elaborations();
+    }
+
+    /// Remember that `instance` is `group` opened at `levels`.
+    pub(crate) fn instance_insert(
+        &mut self,
+        instance: RecGroup,
+        group: RecGroup,
+        levels: Vec<Level>,
+    ) {
+        self.instances.insert(instance, (group, levels));
+    }
+
+    /// The group `instance` was opened from and the levels it was opened at, where reduction opened it in the declaration in progress.
+    pub(crate) fn instance_get(&self, instance: &RecGroup) -> Option<&(RecGroup, Vec<Level>)> {
+        self.instances.get(instance)
     }
 
     pub(crate) fn elaboration_get(

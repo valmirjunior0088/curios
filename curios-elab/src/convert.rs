@@ -36,7 +36,7 @@ use {
         Context, applied_head, check, infer, reduce, reduce_forced, stalled_unfolding, unfold_rec,
         unfold_rec_apply,
     },
-    crate::{Declined, metavar_origins, metavar_spines, zonk_solved_term_metas},
+    crate::{Declined, metavar_origins, metavar_spines, named_members, zonk_solved_term_metas},
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Classes, Cost, Cursor, Exhaustion, Families, Free,
         Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Level,
@@ -1361,7 +1361,8 @@ impl Convert {
         }
 
         // Materialize committed solutions in the candidate before any analysis. A solved metavariable's occurrence still spells the metavariable, and its spine names the frame it was born under — which may hold binders `id`'s frame lacks. Left unmaterialized, those spine names surface in `free_vars` and the scope check refuses a candidate whose *resolution* is perfectly scoped (a ground `Cell(Option(Nat))` refused for a continuation binder riding an already-solved metavariable's spine — `a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade` holds the case). Materializing also lets the occurs check see a cycle hidden behind a solved metavariable's solution, which the raw spelling conceals.
-        let t = &zonk_solved_term_metas(context, t);
+        // And spell the published recursive members it holds by their names: a candidate arrives reduced, a stuck call headed by its member's group, and committed so it would hold a copy of the callee for the re-validation below to elaborate again ([`named_members`]).
+        let t = &named_members(context, &zonk_solved_term_metas(context, t));
         let metavars = t.metavars();
 
         // Occurs check: a candidate mentioning `id` itself is an infinite solution.
