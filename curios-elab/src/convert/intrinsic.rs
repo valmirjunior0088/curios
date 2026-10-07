@@ -113,7 +113,7 @@ fn classes(context: &mut Context, atoms: &[Term]) -> Result<Classes, ReduceError
     classing(context, atoms, same_uncommitted)
 }
 
-/// The elaborator as the shared chain's driver: its context reduces, and its queue takes the packed-literal view's goals.
+/// The elaborator as the shared chain's driver: its context reduces, and its queue takes the solving views' goals.
 struct Elaborating<'a> {
     cmp: &'a mut Convert,
     context: &'a mut Context,
@@ -147,9 +147,9 @@ impl Driver for Elaborating<'_> {
         }
     }
 
-    /// Solving-side only: the view undoes exactly the constant folding that removed the spine spelling from the literal side — `append(b[], true)` folds to `b[1]`, and no shape congruence relates the folded form to `append(b[], ?h)`. The reducer's laws are untouched, and once the goals commit their solutions the folded spellings agree by plain reduction, so the kernel needs no matching rule.
-    fn packed_view(&mut self, this: &Intrinsic, that: &Intrinsic) -> Option<bool> {
-        packed_literal_view(self.cmp, this, that)
+    /// Solving-side only. The packed-literal view undoes exactly the constant folding that removed the spine spelling from the literal side — `append(b[], true)` folds to `b[1]`, and no shape congruence relates the folded form to `append(b[], ?h)` — and the list view pairs what two lists are written to lead with, where the congruence would compare a run of one length with a run of another. The reducer's laws are untouched, and once the goals commit their solutions the two spellings agree by plain reduction, so the kernel needs no matching rule.
+    fn solving_view(&mut self, this: &Intrinsic, that: &Intrinsic) -> Option<bool> {
+        packed_literal_view(self.cmp, this, that).or_else(|| list_view(self.cmp, this, that))
     }
 
     fn syntax(&self) -> SyntaxRegistry {
@@ -275,4 +275,92 @@ fn split_against(cmp: &mut Convert, grain: Grain, lit: &Binary, spine: &Intrinsi
         }
         _ => None,
     }
+}
+
+/// A list as the elements it is written to lead with and the operands that follow them: a literal is all leading, and a concatenation leads with its literal operands up to the first that is none.
+struct Led<'a> {
+    element: &'a Term,
+    leading: Vec<Term>,
+    rest: Vec<Term>,
+}
+
+impl Led<'_> {
+    fn of(intrinsic: &Intrinsic) -> Option<Led<'_>> {
+        match intrinsic {
+            Intrinsic::List { element, items } => Some(Led {
+                element,
+                leading: items.clone(),
+                rest: Vec::new(),
+            }),
+            Intrinsic::ListConcat { element, operands } => {
+                let mut leading = Vec::new();
+                let mut rest = Vec::new();
+
+                for operand in operands {
+                    match &**operand {
+                        Subterm::Intrinsic(Intrinsic::List { items, .. }) if rest.is_empty() => {
+                            leading.extend(items.iter().cloned());
+                        }
+                        _ => rest.push(operand.clone()),
+                    }
+                }
+
+                Some(Led {
+                    element,
+                    leading,
+                    rest,
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// The list's own type, which a remainder is compared at.
+    fn type_(&self) -> Term {
+        Term::intrinsic(Intrinsic::ListType(self.element.clone()))
+    }
+
+    /// What is left once `paired` leading elements are spoken for, as the list it spells: the other leading elements as a literal, then the operands, a lone operand as itself so that a bare metavariable is what the solver meets.
+    fn remainder(&self, paired: usize) -> Term {
+        let literal = |items: Vec<Term>| {
+            Term::intrinsic(Intrinsic::List {
+                element: self.element.clone(),
+                items,
+            })
+        };
+        let leading = self.leading[paired..].to_vec();
+
+        match (leading.is_empty(), self.rest.as_slice()) {
+            (true, []) => literal(Vec::new()),
+            (true, [only]) => only.clone(),
+            (false, []) => literal(leading),
+            (true, rest) => Term::intrinsic(Intrinsic::list_concat(
+                self.element.clone(),
+                rest.iter().cloned(),
+            )),
+            (false, rest) => Term::intrinsic(Intrinsic::list_concat(
+                self.element.clone(),
+                [literal(leading)].into_iter().chain(rest.iter().cloned()),
+            )),
+        }
+    }
+}
+
+/// Two lists that each lead with written elements, one of them going on past its own: the elements are paired as far as the shorter run goes, and what each side has left is one more goal. `[?h, ..?l]` against `[y, x, ..t]` pairs `?h` with `y` and leaves `?l` against `[x, ..t]`, where the congruence would compare the run `[?h]` with the run `[y, x]` and stop at their lengths.
+///
+/// A split and no guess, because a list is the free monoid on its elements: two lists that each begin with an element are equal exactly when those elements are and what follows them is. `None` where a side is no list or leads with no element, and where both are literals, which the congruence already compares element by element.
+fn list_view(cmp: &mut Convert, this: &Intrinsic, that: &Intrinsic) -> Option<bool> {
+    let (this, that) = (Led::of(this)?, Led::of(that)?);
+    let paired = this.leading.len().min(that.leading.len());
+
+    if paired == 0 || (this.rest.is_empty() && that.rest.is_empty()) {
+        return None;
+    }
+
+    for (left, right) in this.leading.iter().zip(&that.leading) {
+        cmp.enqueue(this.element.clone(), left.clone(), right.clone());
+    }
+    cmp.enqueue(this.type_(), this.remainder(paired), that.remainder(paired));
+
+    Some(true)
 }

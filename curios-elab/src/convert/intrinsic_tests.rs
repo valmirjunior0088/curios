@@ -2,7 +2,10 @@
 
 use {
     super::test_support::*,
-    curios_core::{Free, InstanceHead, Intrinsic, Level, Nat, ReduceError, Subterm, Term, Var},
+    curios_core::{
+        Free, InstanceHead, Intrinsic, Level, MetavarId, MetavarOrigin, Nat, ReduceError, Subterm,
+        Term, Var,
+    },
     curios_num::{Binary, Grain},
 };
 
@@ -383,4 +386,79 @@ fn two_polls_of_one_cell_at_two_ground_levels_do_not_convert() {
         Err(ReduceError::Universe(_))
     ));
     assert_eq!(conv(&mut context, &poll(0), &poll(0)), Ok(true));
+}
+
+/// The list view: `[?0, ..?1]` against a longer literal pairs the one written element and leaves the tail what the literal has left, where the congruence would compare a run of one element with a run of three and stop at their lengths.
+#[test]
+fn a_lists_unknown_tail_is_solved_to_what_a_longer_literal_has_left() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+    context.birth_metavar(
+        MetavarId(1),
+        Vec::new(),
+        Term::intrinsic(Intrinsic::ListType(nat_type())),
+    );
+
+    let literal = |items: Vec<Term>| {
+        Term::intrinsic(Intrinsic::List {
+            element: nat_type(),
+            items,
+        })
+    };
+    let cons = Term::intrinsic(Intrinsic::list_concat(
+        nat_type(),
+        [literal(vec![Term::hole(0)]), Term::hole(1)],
+    ));
+
+    assert_eq!(
+        conv(&mut context, &cons, &literal(vec![nat(1), nat(2), nat(3)])),
+        Ok(true)
+    );
+    assert_eq!(context.metavar_solution(MetavarId(0)), Some(&nat(1)));
+    assert_eq!(
+        context.metavar_solution(MetavarId(1)),
+        Some(&literal(vec![nat(2), nat(3)]))
+    );
+}
+
+/// The same split against a concatenation: the tail is everything past the first element, the literal's other element and the two operands behind it.
+#[test]
+fn a_lists_unknown_tail_is_solved_past_a_longer_prefix_and_a_concatenation() {
+    let mut context = context();
+    let a = context.fresh(Some("a"));
+    let b = context.fresh(Some("b"));
+    let list_type = Term::intrinsic(Intrinsic::ListType(nat_type()));
+    context.assume(&a, &list_type);
+    context.assume(&b, &list_type);
+    let scope = vec![(a, list_type.clone()), (b, list_type.clone())];
+    context.birth_metavar(MetavarId(0), scope.clone(), nat_type());
+    context.birth_metavar(MetavarId(1), scope, list_type);
+
+    let spine = vec![Term::free_var(&a), Term::free_var(&b)];
+    let literal = |items: Vec<Term>| {
+        Term::intrinsic(Intrinsic::List {
+            element: nat_type(),
+            items,
+        })
+    };
+    let cat = |operands: Vec<Term>| Term::intrinsic(Intrinsic::list_concat(nat_type(), operands));
+    let cons = cat(vec![
+        literal(vec![Term::metavar_birthed(
+            0,
+            MetavarOrigin::Hole,
+            spine.clone(),
+        )]),
+        Term::metavar_birthed(1, MetavarOrigin::Hole, spine),
+    ]);
+    let written = cat(vec![
+        literal(vec![nat(1), nat(2)]),
+        Term::free_var(&a),
+        Term::free_var(&b),
+    ]);
+
+    assert_eq!(conv(&mut context, &cons, &written), Ok(true));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+    assert!(context.metavar_solution(MetavarId(1)).is_some());
+    // What was solved makes the two spellings one, by reduction alone.
+    assert_eq!(conv(&mut context, &cons, &written), Ok(true));
 }

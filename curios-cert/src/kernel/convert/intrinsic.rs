@@ -102,13 +102,13 @@ fn in_progress(kernel: &Kernel, history: &mut History, this: &Term, that: &Term)
     }
 }
 
-/// The kernel is handed finished terms, so it prepares nothing, and it has no packed-literal view: the elaborator's view only proposes solutions, and once they are committed the two spellings agree by reduction.
+/// The kernel is handed finished terms, so it prepares nothing, and it has no solving view: the elaborator's views only propose solutions, and once they are committed the two spellings agree by reduction.
 impl Driver for Kernel {
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
         intrinsic
     }
 
-    fn packed_view(&mut self, _: &Intrinsic, _: &Intrinsic) -> Option<bool> {
+    fn solving_view(&mut self, _: &Intrinsic, _: &Intrinsic) -> Option<bool> {
         None
     }
 

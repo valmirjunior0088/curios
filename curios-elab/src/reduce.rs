@@ -901,7 +901,7 @@ impl Driver for Reading<'_> {
         }
     }
 
-    fn packed_view(&mut self, _: &Intrinsic, _: &Intrinsic) -> Option<bool> {
+    fn solving_view(&mut self, _: &Intrinsic, _: &Intrinsic) -> Option<bool> {
         None
     }
 

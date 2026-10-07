@@ -208,8 +208,8 @@ impl<D: Driver> Driver for Reduced<'_, D> {
         self.0.prepare(intrinsic)
     }
 
-    fn packed_view(&mut self, this: &Intrinsic, that: &Intrinsic) -> Option<bool> {
-        self.0.packed_view(this, that)
+    fn solving_view(&mut self, this: &Intrinsic, that: &Intrinsic) -> Option<bool> {
+        self.0.solving_view(this, that)
     }
 
     fn syntax(&self) -> SyntaxRegistry {

@@ -9,7 +9,7 @@
 //! 5. two comparisons read through their linear views — one proposition where the views agree, and otherwise both respelled alike;
 //! 6. the peels, the product-factor and comparison-side pairings first;
 //! 7. where steps 3 to 6 decided nothing, the pair's atoms handed back to be classed ([`Pass::Atoms`]), and steps 3 to 6 read once more with each atom spelled as its class's representative ([`convert_classed`]);
-//! 8. the elaborator's packed-literal view ([`Driver::packed_view`]);
+//! 8. the elaborator's solving views ([`Driver::solving_view`]);
 //! 9. two numbers of one operation compared as numbers;
 //! 10. the congruence, each operand at the type its operation declares.
 //!
@@ -35,8 +35,8 @@ pub trait Driver: Reducer {
     /// An intrinsic as this checker reads it before any peel does. The elaborator substitutes the metavariables it has solved, since two occurrences of one sum pair only once their witness metavariables are spliced; the kernel, handed finished terms, reads it as it is.
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic;
 
-    /// The elaborator's packed-literal view: a `Bin` literal against an `append` or `concat` spine, split at the spine's known lengths into goals the driver holds. `Some(true)` once those goals are the driver's, `Some(false)` on a length clash no solution can repair, and `None` where the view does not apply. The kernel has no such view, since it compares what the elaborator's solutions already made agree by reduction.
-    fn packed_view(&mut self, this: &Intrinsic, that: &Intrinsic) -> Option<bool>;
+    /// The elaborator's solving views, each splitting a pair no congruence relates into goals the driver holds: a `Bin` literal against an `append` or `concat` spine, at the spine's known lengths, and two lists that lead with written elements, one of them going on past its own, element by element. `Some(true)` once those goals are the driver's, `Some(false)` on a length clash no solution can repair, and `None` where no view applies. The kernel has none, since it compares what the elaborator's solutions already made agree by reduction.
+    fn solving_view(&mut self, this: &Intrinsic, that: &Intrinsic) -> Option<bool>;
 
     /// The registry an operation's signature is read through.
     fn syntax(&self) -> SyntaxRegistry;
@@ -141,7 +141,7 @@ fn chain(
         }
     };
 
-    if let Some(view) = driver.packed_view(&this, &that) {
+    if let Some(view) = driver.solving_view(&this, &that) {
         return Ok(Pass::Settled(match view {
             true => Outcome::Equal,
             false => Outcome::Unequal,

@@ -491,3 +491,68 @@ fn an_elided_element_type_is_restricted_like_an_implicit_to_type_the_match() {
 
     assert_eq!(output, b"none");
 }
+
+/// A list's unknown tail is solved to what the other side has left once the written elements are paired: against a longer prefix, a tail that is a concatenation, and a closed literal, each of which has one solution. A constructor whose index is a cons meets all three wherever a proof builds it.
+#[test]
+fn a_lists_unknown_tail_is_solved_to_what_the_other_side_has_left() {
+    let source = r#"
+        use /std/{Nat, List, Eq, Str, Io};
+
+        induct Swapped(@T : Type) : (List(T), List(T)) -> Prop
+        | swap(@x : T, @y : T, @l : List(T)) : ([y, x, ..l], [x, y, ..l])
+        end
+
+        let tail_of(@T : Type, @h : T, @l : List(T), p : Eq()([h, ..l], [h, ..l])) -> List(T) =
+            l;
+
+        let longer_prefix(x : Nat, y : Nat, t : List(Nat)) -> List(Nat) =
+            tail_of(Eq/refl(@_, @[y, x, ..t]));
+
+        let two_tails(x : Nat, a : List(Nat), b : List(Nat)) -> List(Nat) =
+            tail_of(Eq/refl(@_, @[x, ..a, ..b]));
+
+        let literal(x : Nat, y : Nat) -> List(Nat) =
+            tail_of(Eq/refl(@List(Nat), @[y, x]));
+
+        let _past_a_concatenation(
+            a : Nat,
+            b : Nat,
+            c : List(Nat),
+            d : List(Nat),
+        ) -> Swapped()([a, b, ..c, ..d], [b, a, ..c, ..d]) =
+            Swapped/swap();
+
+        let _of_a_closed_list : Swapped()([2, 1, 3], [1, 2, 3]) =
+            Swapped/swap();
+
+        let lengths =
+            List/map(
+                [longer_prefix(1, 2, [3]), two_tails(1, [2], [3]), literal(1, 2)],
+                (l : List(Nat)) => Nat/to_str(List/len(l)));
+        let _ = Io/write(Io/stdout, Str/to_bytes(Str/join(" ", lengths)))!;
+        /std/Io/pure(())
+        "#;
+
+    assert_eq!(run(source), b"2 2 1");
+}
+
+/// The split refuses what has no solution: a list of one element is no swap of two.
+#[test]
+fn a_list_shorter_than_its_constructors_index_is_refused() {
+    let refusal = error(
+        r#"
+        use /std/{Nat, List, Io};
+
+        induct Swapped(@T : Type) : (List(T), List(T)) -> Prop
+        | swap(@x : T, @y : T, @l : List(T)) : ([y, x, ..l], [x, y, ..l])
+        end
+
+        let wrong : Swapped()([1], [1]) =
+            Swapped/swap();
+
+        /std/Io/pure(())
+        "#,
+    );
+
+    assert!(refusal.contains("Swapped/swap"), "{refusal}");
+}
