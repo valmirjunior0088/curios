@@ -1,8 +1,8 @@
-//! The `Flt` folds that read more than two literals: a difference spelled as the sum it is, a rounding of a rounding, and the byte round trip, each held to `curios_num::Floating` over bit patterns.
+//! The `Flt` folds that read more than two literals: a difference spelled as the sum it is, a rounding of a rounding, the byte round trip, and a composition of sign operations written in its one form, each held to `curios_num::Floating` over bit patterns.
 
 use {
     super::test_support::*,
-    crate::{Intrinsic, Term},
+    crate::{Free, Intrinsic, Term},
     curios_num::{Floating, Rounding},
 };
 
@@ -118,5 +118,107 @@ fn the_byte_round_trip_reduces_from_both_sides() {
         let bytes = run_bytes(&bits.to_le_bytes());
         assert_eq!(fold(encoded(decoded(bytes.clone()))), bytes);
         assert_eq!(fold(decoded(encoded(flt(bits)))), flt(bits));
+    }
+}
+
+fn neg(operand: Term) -> Term {
+    Term::intrinsic(Intrinsic::FltNeg(operand))
+}
+
+fn abs(operand: Term) -> Term {
+    Term::intrinsic(Intrinsic::FltAbs(operand))
+}
+
+fn copysign(magnitude: Term, sign: Term) -> Term {
+    Term::intrinsic(Intrinsic::FltCopysign(magnitude, sign))
+}
+
+// A composition of the three sign operations is written one way: a value under its own sign is the value, under its own sign flipped its negation, under a clear or a set bit its absolute value or that negated, and under another value's sign a `copysign` whose magnitude carries no sign operation and whose sign carries at most a negation. A literal is its absolute value under the bit it has.
+//
+// Mutation-checked: a literal read under the opposite bit writes `copysign(a, 1.0)` as `neg(abs(a))`.
+#[test]
+fn a_composition_of_sign_operations_is_written_one_way() {
+    let (a, b, c) = (sym(0, "a"), sym(1, "b"), sym(2, "c"));
+    let (two, minus_two) = (flt(0x4000_0000_0000_0000), flt(0xC000_0000_0000_0000));
+    let minus_zero = flt(0x8000_0000_0000_0000);
+
+    for (composed, form) in [
+        (neg(neg(a.clone())), a.clone()),
+        (abs(abs(a.clone())), abs(a.clone())),
+        (abs(neg(a.clone())), abs(a.clone())),
+        (neg(abs(neg(a.clone()))), neg(abs(a.clone()))),
+        (
+            copysign(copysign(a.clone(), b.clone()), c.clone()),
+            copysign(a.clone(), c.clone()),
+        ),
+        (
+            neg(copysign(a.clone(), b.clone())),
+            copysign(a.clone(), neg(b.clone())),
+        ),
+        (
+            neg(copysign(a.clone(), neg(b.clone()))),
+            copysign(a.clone(), b.clone()),
+        ),
+        (abs(copysign(a.clone(), b.clone())), abs(a.clone())),
+        (copysign(a.clone(), a.clone()), a.clone()),
+        (copysign(neg(a.clone()), a.clone()), a.clone()),
+        (copysign(a.clone(), neg(a.clone())), neg(a.clone())),
+        (
+            copysign(abs(a.clone()), b.clone()),
+            copysign(a.clone(), b.clone()),
+        ),
+        (
+            copysign(neg(a.clone()), b.clone()),
+            copysign(a.clone(), b.clone()),
+        ),
+        (copysign(a.clone(), abs(b.clone())), abs(a.clone())),
+        (
+            copysign(a.clone(), neg(abs(b.clone()))),
+            neg(abs(a.clone())),
+        ),
+        (
+            copysign(a.clone(), copysign(b.clone(), c.clone())),
+            copysign(a.clone(), c.clone()),
+        ),
+        (copysign(a.clone(), two.clone()), abs(a.clone())),
+        (copysign(a.clone(), minus_zero), neg(abs(a.clone()))),
+        (
+            copysign(minus_two.clone(), b.clone()),
+            copysign(two.clone(), b.clone()),
+        ),
+        (
+            neg(copysign(minus_two, b.clone())),
+            copysign(two, neg(b.clone())),
+        ),
+    ] {
+        assert_eq!(fold(composed.clone()), form, "{composed:?}");
+    }
+}
+
+// The form a composition folds to is the composition at every pattern: with a literal for one operand and a symbol for the other, the form taken at a pattern for the symbol folds to what the composition does there, so a literal is read under the bit it has and a NaN keeps its payload under either sign.
+#[test]
+fn a_sign_form_over_a_literal_is_the_composition_at_every_pattern() {
+    let binder = Free::local(0, Some("a"));
+    let a = Term::free_var(&binder);
+
+    for bits in PATTERNS {
+        for composed in [
+            copysign(a.clone(), flt(bits)),
+            copysign(flt(bits), a.clone()),
+            neg(copysign(flt(bits), a.clone())),
+            copysign(flt(bits), neg(a.clone())),
+            abs(copysign(a.clone(), flt(bits))),
+            copysign(neg(a.clone()), copysign(flt(bits), a.clone())),
+            copysign(a.clone(), neg(copysign(a.clone(), flt(bits)))),
+        ] {
+            let form = fold(composed.clone());
+            for value in PATTERNS {
+                assert_eq!(
+                    fold(at(form.clone(), &binder, flt(value))),
+                    fold(at(composed.clone(), &binder, flt(value))),
+                    "{composed:?} at {value:#018x}"
+                );
+            }
+        }
     }
 }

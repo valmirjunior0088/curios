@@ -30,6 +30,14 @@ The carriers' algebra over abstract atoms: what conversion decides about the car
 
 **Rationale.** Stated per operation, the bound criterion — an operand is read where the result is not antitone in it — is a fact checked arm by arm without reading term plumbing, and an intrinsic joins a law by being declared an operation of that kind; declaring only what a rule reads keeps membership from enabling an identity nothing implements.
 
+### A float's sign operations are a magnitude under a sign
+
+**Decision.** `SignMagnitude` reads a composition of binary64's `neg`, `abs` and `copysign` over its caller's values as one value's bits below the sign, under a sign bit that is clear, set, some value's, or some value's flipped, and `form` writes each reading one way: the value, its negation, its absolute value, that negated, or a `copysign` whose magnitude carries no sign operation and whose sign carries at most a negation. It compares two values only for equality, which tells a value under its own sign from one under another's.
+
+**Rationale.** Each of the three moves one bit and reads no other, on every pattern, so the reading is complete: two compositions are one pattern at every assignment exactly when they are one form, and the module's tests hold both directions to `curios_num::Floating`. A form rather than a list of laws gives one verdict however a composition is nested.
+
+**Rejected.** A rule per pair of operations — `neg` of `neg`, `abs` of `neg`, `copysign` of `copysign` — which decides the pairs listed and leaves `copysign(a, abs(b))` to be found. Reading a sign through an operation that rounds: `neg(a + b)` and `neg(a) + neg(b)` differ where the sum is a zero and under a directed rounding, and a product of two NaNs answers the greater pattern, its sign included.
+
 ### A law is stated once per family, and declared per operation
 
 **Decision.** `Family` names each kind of law conversion decides — unit and absorber at either position, idempotence, self-cancellation, commutativity, associativity, complement, nested cancellation, distribution, dual, successor seam, cancellation, the length homomorphism and the inverse pair — and `laws` states each family's laws once, as equations between `Expr`s over variables and a carrier's `Constant`s. `TABLE` declares, for each operation at each carrier, exactly the families conversion decides for it, with its constants: `And` at `Bool` has the unit `true` and the absorber `false`, and at ℕ the absorber `0` and no unit. `curios`'s `tests::laws::generated` spells every instance as Curios source and holds it through both checkers and at closed values.

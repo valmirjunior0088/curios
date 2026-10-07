@@ -195,6 +195,9 @@ const ATOMS_HELD: &[&str] = &[
     "Eq()(Flt/fma(r(a + b), s(c + d), r(n)), Flt/fma(s(d + c), r(b + a), r(n)))",
     "Eq()(Flt/fma(r(a + b), s(c + d), r(n + a)), Flt/fma(r(b + a), s(d + c), r(a + n)))",
     "Eq()(r(a + b) - s(c + d), Flt/neg(s(d + c)) + r(b + a))",
+    // A sign copied from a value that converts with the magnitude is the magnitude's own, and from that value negated its own flipped: the negation is read through to the value under it.
+    "Eq()(Flt/copysign(r(a + b), r(b + a)), r(a + b))",
+    "Eq()(Flt/copysign(r(a + b), Flt/neg(r(b + a))), Flt/neg(r(a + b)))",
 ];
 
 const CARRIERS: &[Carrier] = &[
@@ -1041,15 +1044,13 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Flt/rounded/sub(Flt/Rounding/toward_zero(), a, b), Flt/rounded/add(Flt/Rounding/toward_zero(), a, Flt/neg(b)))",
             "Eq()(Flt/rounded/sub(Flt/Rounding/toward_positive(), a, b), Flt/rounded/add(Flt/Rounding/toward_positive(), a, Flt/neg(b)))",
             "Eq()(Flt/rounded/sub(Flt/Rounding/toward_negative(), a, b), Flt/rounded/add(Flt/Rounding/toward_negative(), a, Flt/neg(b)))",
-        ],
-        // Candidate laws `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with the float's sign and magnitude: the sign operations are bit operations, so each holds of every pattern.
-        refused: &[
+            // The sign operations move one bit and read no other, so each law holds of every pattern, a NaN's included.
             "Eq()(Flt/neg(Flt/neg(a)), a)",
             "Eq()(Flt/abs(Flt/abs(a)), Flt/abs(a))",
             "Eq()(Flt/abs(Flt/neg(a)), Flt/abs(a))",
             "Eq()(Flt/copysign(Flt/copysign(a, b), c), Flt/copysign(a, c))",
             "Eq()(Flt/neg(Flt/copysign(a, b)), Flt/copysign(a, Flt/neg(b)))",
-            // Every composition of the three sign operations has one normal form, a magnitude under a sign that is positive, negative, another value's, or that negated; a literal's sign is its own.
+            // Every composition of the three is written one way: a magnitude under a sign bit that is clear, set, another value's, or that flipped. A literal is its absolute value under the bit it has.
             "Eq()(Flt/abs(Flt/copysign(a, b)), Flt/abs(a))",
             "Eq()(Flt/copysign(a, a), a)",
             "Eq()(Flt/copysign(Flt/abs(a), b), Flt/copysign(a, b))",
@@ -1059,8 +1060,19 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Flt/copysign(a, 1.0), Flt/abs(a))",
             "Eq()(Flt/copysign(-2.0, b), Flt/copysign(2.0, b))",
             "Eq()(Flt/neg(Flt/abs(Flt/neg(a))), Flt/neg(Flt/abs(a)))",
+            "Eq()(Flt/copysign(Flt/neg(a), a), a)",
+            "Eq()(Flt/copysign(a, Flt/neg(a)), Flt/neg(a))",
+            "Eq()(Flt/neg(Flt/copysign(a, Flt/neg(b))), Flt/copysign(a, b))",
+            "Eq()(Flt/copysign(a, -0.0), Flt/neg(Flt/abs(a)))",
             // And a difference of a negation is the sum.
             "Eq()(a - Flt/neg(b), a + b)",
+        ],
+        refused: &[
+            // Controls: a sign is not read through an operation that rounds. `0.0 - 0.0` is `+0.0` where the negation is `-0.0`, and `1.0 + -1.0` is `+0.0` in either order where its negation is `-0.0`.
+            "Eq()(Flt/neg(a), 0.0 - a)",
+            "Eq()(Flt/neg(a + b), Flt/neg(a) + Flt/neg(b))",
+            // Of two NaNs a product answers the greater pattern, read with its sign, so clearing the signs first can change which payload it carries.
+            "Eq()(Flt/abs(a * b), Flt/abs(a) * Flt/abs(b))",
         ],
     },
     Carrier {

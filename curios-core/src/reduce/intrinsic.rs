@@ -19,6 +19,9 @@ use int::*;
 mod scalar;
 use scalar::*;
 
+mod sign;
+use sign::*;
+
 mod truth;
 pub use truth::*;
 
@@ -848,13 +851,17 @@ pub fn reduce_intrinsic(
             |l, r| Intrinsic::Flt(l.max(r)),
             Intrinsic::FltMax,
         ),
-        Intrinsic::FltCopysign(left, right) => reduce_flt_binary(
-            reducer,
-            left,
-            right,
-            |l, r| Intrinsic::Flt(l.copysign(r)),
-            Intrinsic::FltCopysign,
-        ),
+        // The three sign operations each move the sign bit and read no other, so a stuck composition of them is written in the one form its magnitude and sign have (`then_flt_sign_form`).
+        Intrinsic::FltCopysign(left, right) => {
+            let copied = reduce_flt_binary(
+                reducer,
+                left,
+                right,
+                |l, r| Intrinsic::Flt(l.copysign(r)),
+                Intrinsic::FltCopysign,
+            )?;
+            then_flt_sign_form(reducer, copied)
+        }
         Intrinsic::FltEql(left, right) => reduce_flt_binary(
             reducer,
             left,
@@ -883,18 +890,24 @@ pub fn reduce_intrinsic(
             |l, r| Intrinsic::Bool(l.le(r)),
             Intrinsic::FltLe,
         ),
-        Intrinsic::FltNeg(inner) => reduce_flt_unary(
-            reducer,
-            inner,
-            |v| Some(Intrinsic::Flt(-v)),
-            Intrinsic::FltNeg,
-        ),
-        Intrinsic::FltAbs(inner) => reduce_flt_unary(
-            reducer,
-            inner,
-            |v| Some(Intrinsic::Flt(v.abs())),
-            Intrinsic::FltAbs,
-        ),
+        Intrinsic::FltNeg(inner) => {
+            let negated = reduce_flt_unary(
+                reducer,
+                inner,
+                |v| Some(Intrinsic::Flt(-v)),
+                Intrinsic::FltNeg,
+            )?;
+            then_flt_sign_form(reducer, negated)
+        }
+        Intrinsic::FltAbs(inner) => {
+            let absolute = reduce_flt_unary(
+                reducer,
+                inner,
+                |v| Some(Intrinsic::Flt(v.abs())),
+                Intrinsic::FltAbs,
+            )?;
+            then_flt_sign_form(reducer, absolute)
+        }
         Intrinsic::FltSqrt(rounding, inner) => reduce_flt_unary(
             reducer,
             inner,

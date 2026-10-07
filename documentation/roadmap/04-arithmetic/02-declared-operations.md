@@ -90,9 +90,7 @@ Controls, refused with their counterexamples, each at `i = -1`: `(i * 2 + 1) % 2
 
 ## `Flt`
 
-Held of every bit pattern under the model, NaNs included, each through its declaration and held to the model over the grid's patterns ([`Flt` is specified by a model](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md)): an operation's rounding direction is part of what it is; `add`, `mul`, `min` and `max` commute, and `fma`'s two factors; a difference is the sum with its subtrahend negated; a rounding to an integral value is fixed by every direction; and the byte conversions undo each other both ways. No `Flt` declaration inherits a ring or order law.
-
-What is left is **the sign operations**: `neg(neg(x)) = x`, `abs(abs(x)) = abs(x)`, `abs(neg(x)) = abs(x)`, `copysign(copysign(x, y), z) = copysign(x, z)` and `neg(copysign(x, y)) = copysign(x, neg(y))`, each a bit operation holding of every pattern. A value is read as a magnitude and a sign — positive, negative, another value's, or that negated — so every composition of the three has one normal form. This is the one new kind in the float half.
+Held of every bit pattern under the model, NaNs included, each through its declaration and held to the model over the grid's patterns ([`Flt` is specified by a model](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md)): an operation's rounding direction is part of what it is; `add`, `mul`, `min` and `max` commute, and `fma`'s two factors; a difference is the sum with its subtrahend negated; a rounding to an integral value is fixed by every direction; the byte conversions undo each other both ways; and a composition of `neg`, `abs` and `copysign` is written one way, a magnitude under a sign bit that is clear, set, another value's, or that flipped, so `neg(neg(x))` is `x`, `abs(neg(x))` is `abs(x)` and `neg(copysign(x, y))` is `copysign(x, neg(y))`. No `Flt` declaration inherits a ring or order law, and nothing of the float half is left to land.
 
 What is not a law stays a control, refused with its counterexample: associativity of `add` and `mul`, and distributivity, by rounding; `f + 0.0 = f`, false at `-0.0`; `f * 1.0 = f`, since a signaling NaN is quieted; `f - f = 0.0`, at an infinity or a NaN; `f * 0.0 = 0.0`, at an infinity, a NaN, or a negative `f`; `f == f`, at a NaN; `lt(a, b) = not(ge(a, b))`, with a NaN on either side; a sum in one direction against the swapped sum in another; `fma(a, b, c)` against `fma(a, c, b)`; and `min(a, a) = a`, since a signaling NaN is quieted. The associativity of `min` and `max` holds of the model and is a refused candidate, a law over a multiset of leaves that nothing consumes.
 
@@ -104,12 +102,11 @@ What is not a law stays a control, refused with its counterexample: associativit
 
 Every law above, every row the library definitions hold today and every control stands in the grid (`curios`'s `tests::laws::written`), each refused row commented with the stage that moves it, and the audit puts each declared law to a product of two sums.
 
-1. **`Flt`'s sign and magnitude.** No promotion: the three sign operations folded through one normal form.
-2. **The families `Int` shares with `Nat`.** No promotion.
-3. **The shift's exponent law, and positivity.** No promotion: the count's summands split over the atom `shl(1, k)`, and a lower bound beside the upper one.
-4. **`min` and `max`**, at both carriers, with the domination mirror.
-5. **`abs` and `sign`**, with the two lemmas `/std/Map` consumes.
-6. **`pow`**, the power atom becoming `pow(2, k)`.
+1. **The families `Int` shares with `Nat`.** No promotion.
+2. **The shift's exponent law, and positivity.** No promotion: the count's summands split over the atom `shl(1, k)`, and a lower bound beside the upper one.
+3. **`min` and `max`**, at both carriers, with the domination mirror.
+4. **`abs` and `sign`**, with the two lemmas `/std/Map` consumes.
+5. **`pow`**, the power atom becoming `pow(2, k)`.
 
 Each stage moves its rows from refused to held, extends the grid's audit to the kind it declares, and adds its operation's rows to `curios`'s `tests::bounds`.
 

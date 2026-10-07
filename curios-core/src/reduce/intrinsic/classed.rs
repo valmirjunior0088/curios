@@ -253,9 +253,12 @@ impl<R: Reducer> Reducer for Standing<'_, R> {
     }
 }
 
-/// Whether the readers read through `intrinsic` to its operands: a sum, a product, a connective or a comparison of the carriers the algebra decides, a `Nat`'s successor floor, every operation the law table declares commutative, whose operands a symmetric reader pairs, and a fused multiply-add, whose two factors one does.
+/// Whether the readers read through `intrinsic` to its operands: a sum, a product, a connective or a comparison of the carriers the algebra decides, a `Nat`'s successor floor, every operation the law table declares commutative, whose operands a symmetric reader pairs, a fused multiply-add, whose two factors one does, and a float's `copysign` with the negation its sign operand may stand under, whose fold pairs a magnitude with the value its sign is taken from. A float's `abs` is not one: no form keeps it under a `copysign`, and alone it pairs nothing.
 fn read_through(intrinsic: &Intrinsic) -> bool {
-    if matches!(intrinsic, Intrinsic::Nat(Nat::Succ(..))) {
+    if matches!(
+        intrinsic,
+        Intrinsic::Nat(Nat::Succ(..)) | Intrinsic::FltCopysign(..) | Intrinsic::FltNeg(..)
+    ) {
         return true;
     }
     match intrinsic.algebra() {

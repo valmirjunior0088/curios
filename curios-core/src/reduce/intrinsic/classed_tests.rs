@@ -193,6 +193,24 @@ fn a_fold_over_atoms_classed_as_one_is_taken_again() {
     assert_eq!(taken_again(Intrinsic::nat_sub(this, that)), Some(lit(0)));
 }
 
+/// A sign copied from a value the judge holds one with the magnitude is the magnitude's own: `copysign(f(a + b), f(b + a))` is stuck to a fold that compares the two by identity, and is `f(a + b)` once the fold is taken again over one spelling, as `copysign(f(a + b), neg(f(b + a)))` is its negation. The negation is read through, so the atom under it is the call and not the negation of the call, which no judge is asked to hold one with a call.
+#[test]
+fn a_sign_copied_from_a_value_classed_with_its_magnitude_is_its_own() {
+    let (a, b) = (sym(1, "a"), sym(2, "b"));
+    let this = applied(10, "f", add(a.clone(), b.clone()));
+    let that = applied(10, "f", add(b, a));
+
+    assert_eq!(
+        taken_again(Intrinsic::FltCopysign(this.clone(), that.clone())),
+        Some(this.clone())
+    );
+    let negated = Term::intrinsic(Intrinsic::FltNeg(that));
+    assert_eq!(
+        taken_again(Intrinsic::FltCopysign(this.clone(), negated)),
+        Some(Term::intrinsic(Intrinsic::FltNeg(this)))
+    );
+}
+
 /// A fold that decides no more keeps the spelling it had: `f(a + b) < f(b + a) * c` classed is still a comparison, and the representative it would be spelled with was picked by the order a walk met the atoms in, which is no property of the term. So nothing is handed back, and the operation stands as it was written.
 ///
 /// Mutation-checked: a `refold` that keeps whatever the classed fold built hands back a comparison over one spelling of the call.
