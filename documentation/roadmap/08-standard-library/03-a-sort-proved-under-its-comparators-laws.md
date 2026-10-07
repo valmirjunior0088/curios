@@ -7,7 +7,7 @@ It waits on no other spec.
 ## What this builds on
 
 - **A `List` is a rope** (`curios-emit/src/types.rs`): an append is one node, a peel of the head and the tail is constant once the list is filled, and the first read of a list an append extended fills it whole. A list built whole and then read costs its length; an append and a read in alternation cost its square.
-- **A call that is no tail call takes a frame**, so a recursion under a cons is as deep as its list, and [the guest's stack](../06-runtime/00-findings.md) is what bounds it.
+- **A call that is no tail call takes a frame**, so a recursion under a cons is as deep as its list. [A module's stack](../../../curios-runtime/README.md#a-module-runs-on-a-stack-of-its-own) holds that depth, and a frame an element is still what such a recursion costs.
 - **Totality grades a recursion over two lists** where each call peels one and keeps the other ([Totality of the erased program](../../design/soundness/totality-of-the-erased-program.md)), so a merge is total as written and stands in a type.
 - **Conversion decides the free monoid on a list's elements** ([The carriers' algebra stays in conversion](../../design/arithmetic/the-carriers-algebra-stays-in-conversion.md)): a concatenation's associativity and its two identities, a cons through a spread, and the length of a concatenation each hold by `Eq/refl()`.
 - **A match on an expression refines it in the arm**, in the goal and in every hypothesis that mentions it ([A motive is a term](../../design/theory/a-motive-is-a-term-not-a-grammar.md)), which is how a `Holds` over a decision is taken apart and put together.
@@ -15,7 +15,7 @@ It waits on no other spec.
 
 ## The gap
 
-- **`List/sort` stops at five thousand elements and costs the square of its input.** `insert_by` (`curios-std/src/List.crs`) recurses under a cons as deep as the place it inserts at: counted at `bf21a9065`, 4,500 descending elements sort and 5,000 stop on `wasm trap: call stack exhausted`. Each insertion peels the list the one before it extended, the rope's quadratic alternation, so a list already in order costs what any other does. `sort` has no caller outside `curios-std`'s `tests/`.
+- **`List/sort` stops at five thousand elements and costs the square of its input.** `insert_by` (`curios-std/src/List.crs`) recurses under a cons as deep as the place it inserts at: counted at `bf21a9065`, under the stack a program then ran on, 4,500 descending elements sort and 5,000 stop on `wasm trap: call stack exhausted`. Each insertion peels the list the one before it extended, the rope's quadratic alternation, so a list already in order costs what any other does. `sort` has no caller outside `curios-std`'s `tests/`.
 - **What the sort promises is held by eight examples**, four in `tests/aggregates/list.crs` and four in `tests/flt.crs`. Nothing states that its answer is its input rearranged, that it is in order, or that elements the comparator ties keep their order, which its documentation promises.
 - **No comparator in `/std` has a stated law.** That `Nat/ord` answers `gt` one way exactly where it answers `lt` the other is provable and unstated, and [the numeric laws](../04-arithmetic/03-numeric-laws.md) state it at `Nat` and `Int`.
 - **`/std` has no proposition a list's order could be stated in**: no permutation, no membership as a proposition, no decision that a list is in order.

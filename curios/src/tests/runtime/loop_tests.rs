@@ -206,7 +206,7 @@ fn arena_pure_computation_hugs_a_host_effect() {
     );
 }
 
-/// The worker/wrapper gate: a monoid-deferred recursion (`count(t) + 1`) runs at a depth where an unrebased recursion overflows the runtime stack — the rebase threads the deferred addition into a tail accumulator.
+/// The worker/wrapper gate: a monoid-deferred recursion (`count(t) + 1`) is a loop — the rebase threads the deferred addition into a tail accumulator — so it runs at depth with no frame an element. The depth alone no longer tells it from a recursion left as written, which a program's stack now holds, so the worker is looked for by name in the optimized program.
 #[test]
 fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
     let program = |depth: u32| {
@@ -234,5 +234,51 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
         run(&program(60_000)),
         b"60000".to_vec(),
         "the rebased recursion must not overflow at depth"
+    );
+
+    let cont_optm = cont_optm(&program(60_000));
+    assert!(
+        cont_optm.contains("/count@w("),
+        "the deferred recursion must be the rebase's worker, a loop over an accumulator:\n{}",
+        &cont_optm[..cont_optm.len().min(4000)]
+    );
+}
+
+/// A recursion as deep as its data runs: a list built under a cons, which no rebase row makes a loop, and an `Io` walk that binds its tail, each a frame an element. `curios-runtime`'s README, "A module runs on a stack of its own", is the decision; under the engine's default stack each of these stopped near five thousand elements.
+#[test]
+fn a_recursion_as_deep_as_its_data_runs() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, List, Str, Io};
+        let numbers = List/range(0, 100000);
+        let pairs = List/zip(numbers, List/take(numbers, 100000));
+        let walked = List/traverse(numbers, (n: Nat) => Io/pure(n + 1))!;
+        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(List/len(pairs))))!;
+        let _ = Io/write(Io/stdout, Str/to_bytes(" "))!;
+        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(List/len(walked))))!;
+        /std/Io/pure(())
+        "#),
+        b"100000 100000".to_vec()
+    );
+}
+
+/// A recursion with no end still stops, on the engine's own trap, once the stack it was given is spent: the limit is a bound a program meets, never the thread's.
+#[test]
+fn a_recursion_with_no_end_stops_on_the_stack_it_was_given() {
+    let (system, _io) = MockHost::builder().build();
+    let refusal = run_text(
+        r#"
+        use /std/{Nat, List, Str, Io};
+        let forever(n : Nat) -> List(Nat) = [n, ..forever(n + 1)];
+        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(List/len(forever(0)))))!;
+        /std/Io/pure(())
+        "#,
+        system,
+    )
+    .expect_err("a recursion with no end cannot answer");
+
+    assert!(
+        refusal.contains("call stack exhausted"),
+        "the program must stop on the engine's trap: {refusal}"
     );
 }

@@ -10,8 +10,9 @@ use {
     std::{
         collections::HashMap,
         error::Error,
-        fmt,
+        fmt, panic,
         sync::{Arc, LazyLock},
+        thread,
     },
     wasmtime::{
         AnyRef, Caller, Config, Engine, FuncType, HeapType, Linker, Module, RefType, Rooted, Store,
@@ -31,6 +32,30 @@ pub fn validate(bytes: &[u8]) -> Result<(), String> {
     Module::validate(shared_engine(), bytes).map_err(|error| error.to_string())
 }
 
+/// The stack a module's calls nest on, in bytes.
+const GUEST_STACK: usize = 1 << 30;
+
+/// What a host operation still has to run in when a module calls it from its deepest frame. The engine checks its limit where a module is entered and where it calls, never inside a host operation, so one called from the last frame the limit allows runs past it, and the thread has this much there.
+const HOST_RESERVE: usize = 16 << 20;
+
+/// Run `enter` on a thread whose stack is a module's, and answer what it answers.
+///
+/// **Every entry into a module goes through here**, because the engine's limit bounds a stack and reserves none: where the thread's own stack ends first, the process aborts with no trap. So the limit [`shared_engine`] sets and the stack this thread is built with are one constant, and no caller's thread — a system's main thread, a test's two mebibytes — is what a module runs on. A panic on the thread reaches the caller as itself.
+pub(crate) fn on_guest_stack<T: Send>(enter: impl FnOnce() -> T + Send) -> Result<T, String> {
+    thread::scope(|scope| {
+        let guest = thread::Builder::new()
+            .name("guest".to_owned())
+            .stack_size(GUEST_STACK + HOST_RESERVE)
+            .spawn_scoped(scope, enter)
+            .map_err(|error| format!("cannot reserve the program's stack: {error}"))?;
+
+        match guest.join() {
+            Ok(answer) => Ok(answer),
+            Err(payload) => panic::resume_unwind(payload),
+        }
+    })
+}
+
 /// The one wasm engine for the whole process. Building an `Engine` stands up the Cranelift backend and is expensive, so it is created once and shared; `Engine` is `Send + Sync` (internally reference-counted), so a `static` is sound and a clone is cheap. Every module, store, and type below is created against it, so they stay engine-consistent.
 pub fn shared_engine() -> &'static Engine {
     static ENGINE: LazyLock<Engine> = LazyLock::new(|| {
@@ -43,6 +68,10 @@ pub fn shared_engine() -> &'static Engine {
 
         // Sixteen mebibytes: the decision and its reason are this crate's `README.md`, "The heap is sized ahead of its churn", and the figures and their retake recipe live with `chain_collection_decomposition` and `spines_collection_decomposition`.
         config.gc_heap_initial_size(16 * 1024 * 1024);
+
+        // One gibibyte: the decision and its reason are this crate's `README.md`, "A module runs on a stack of its own". The limit bounds a stack and reserves none, so [`on_guest_stack`] is where a thread that has it is built. The engine refuses a limit past the stack it would give an asynchronous call, which nothing here makes, so that size is stated as what the thread has.
+        config.max_wasm_stack(GUEST_STACK);
+        config.async_stack_size(GUEST_STACK + HOST_RESERVE);
 
         // Under the `profile` feature, symbolicate emitted code for a sampling profiler: wasmtime writes `/tmp/perf-<pid>.map`, which `samply` and `perf` read to attribute samples to the `$func/<N>$hint` names `curios-emit` emitted. Without it every sample landing in emitted wasm resolves to a bare address, or symbolicates into an unrelated host function's prologue.
         //
@@ -307,6 +336,16 @@ pub unsafe fn run_bytes<H: HostOps + Send + Sync + 'static>(
 
 /// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning the process exit code. `impls` supplies the `sys`-tier implementations, every builtin row's, and `bindings` the `ffi`-tier ones for the module's own `foreign` declarations (pass [`ForeignBindings::empty`] for a program that declares none). The deserialize/instantiate split [`run_bytes`] factors out.
 pub(crate) fn instantiate(
+    engine: &Engine,
+    module: &Module,
+    impls: ForeignBindings,
+    bindings: ForeignBindings,
+) -> Result<u8, String> {
+    on_guest_stack(move || entered(engine, module, impls, bindings))?
+}
+
+/// [`instantiate`], on the thread it is called on.
+fn entered(
     engine: &Engine,
     module: &Module,
     impls: ForeignBindings,

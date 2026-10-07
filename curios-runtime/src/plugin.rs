@@ -11,7 +11,7 @@
 //! The ABI is the raw one every wasm toolchain already emits: a scalar crosses as itself, a byte string as a `(ptr, len)` pair into the plugin's memory, and a byte-string result comes back as the same pair through wasm's multi-value return. The plugin exports its `memory` and an allocator; what it is called and what it takes are [`ALLOC`] and the conformance check below.
 
 use {
-    super::{ForeignBindings, Lift, Lower, shared_engine},
+    super::{ForeignBindings, Lift, Lower, on_guest_stack, shared_engine},
     curios_abi::{ForeignFunction, ForeignStore, ResultShape, WireType},
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -98,10 +98,15 @@ impl Plugin {
             ));
         }
 
-        let mut store = Store::new(engine, ());
-        let instance = Linker::new(engine)
-            .instantiate(&mut store, &compiled)
-            .map_err(|error| format!("{subject} could not be instantiated: {error}"))?;
+        // Instantiating runs the module's start function, an entry into it like any other; its exports are called from host operations, which are on the program's stack already.
+        let (mut store, instance) = on_guest_stack(|| {
+            let mut store = Store::new(engine, ());
+
+            Linker::new(engine)
+                .instantiate(&mut store, &compiled)
+                .map(|instance| (store, instance))
+                .map_err(|error| format!("{subject} could not be instantiated: {error}"))
+        })??;
 
         let Some(memory) = instance.get_memory(&mut store, MEMORY) else {
             return Err(format!(

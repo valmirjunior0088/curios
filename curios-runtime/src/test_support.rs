@@ -12,8 +12,8 @@
 
 use {
     super::{
-        ForeignBindings, HostOps, Lower, instantiate, lower_scalars, shared_engine, sys_impls,
-        words_array_type,
+        ForeignBindings, HostOps, Lower, instantiate, lower_scalars, on_guest_stack, shared_engine,
+        sys_impls, words_array_type,
     },
     curios_abi::HostOp,
     std::sync::Arc,
@@ -63,10 +63,14 @@ impl GuestInstance {
     pub fn instantiate(bytes: &[u8]) -> Result<Self, String> {
         let engine = shared_engine();
         let module = Module::new(engine, bytes).map_err(|error| error.to_string())?;
-        let mut store = Store::new(engine, ());
-        let instance = Linker::new(engine)
-            .instantiate(&mut store, &module)
-            .map_err(|error| error.to_string())?;
+        let (store, instance) = on_guest_stack(|| {
+            let mut store = Store::new(engine, ());
+
+            Linker::new(engine)
+                .instantiate(&mut store, &module)
+                .map(|instance| (store, instance))
+                .map_err(|error| error.to_string())
+        })??;
 
         Ok(Self { store, instance })
     }
@@ -84,9 +88,12 @@ impl GuestInstance {
         let args = args.iter().map(|value| value.0).collect::<Vec<_>>();
         let mut results = vec![Val::I32(0); arity];
 
-        function
-            .call(&mut self.store, &args, &mut results)
-            .map_err(|error| format!("calling `{export}`: {error}"))?;
+        let store = &mut self.store;
+        on_guest_stack(|| {
+            function
+                .call(store, &args, &mut results)
+                .map_err(|error| format!("calling `{export}`: {error}"))
+        })??;
 
         Ok(results.into_iter().map(GuestValue).collect())
     }
