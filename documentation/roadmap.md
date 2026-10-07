@@ -59,7 +59,6 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Arithmetic
 
-- [ ] [Numeric laws](roadmap/04-arithmetic/03-numeric-laws.md) — every stage has landed, and the specification stands until what cites it is moved to the modules
 - [ ] [Exact rationals and their laws](roadmap/04-arithmetic/04-exact-rationals.md) — no canonical rational library, executable binary64 conversions, exact decimals or library proofs
 - [ ] [Alternate floating-point exception handling](roadmap/04-arithmetic/05-flt-exception-handling.md) — IEEE 754's remaining §8 policies, and per-operation substitution and recording
 - [ ] [Correctly rounded elementary functions](roadmap/04-arithmetic/06-flt-elementary-functions.md) — the §9.2 functions are absent, and fuel and exhaustion need a contract
@@ -74,7 +73,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 - [x] [A term is one where conversion says so](design/arithmetic/a-term-is-one-where-conversion-says-so.md): a pair's atoms classed by each checker's own conversion, a commutative operation's operands paired and never compared by position, the one metavariable an equation is linear in solved by exact division, an implicit with two solutions refused, a mismatch saying what was not compared, an arm's equation answering the terms conversion holds equal to its scrutinee by one rule in both checkers and following the solution its arm is checked under, a stuck fold taken again over the atoms conversion holds one, and totality reading terms by a reduction that asks conversion nothing
 - [x] [A bound is a decided proposition discharged by reduction](design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md), filled on retry once its proposition is known
 - [x] [A bound that follows from the facts in scope is proved by the elaborator](design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md), by linear arithmetic with a quotient's bounds, subtraction's cases and products, in an ordinary term both checkers recheck
-- [x] Certified division with remainder and divisibility (`/std/Nat/DivMod`, `/std/Nat/Divides`), and `Int`'s order carried from `Nat` along the embedding
+- [x] Certified division with remainder and divisibility (`/std/Nat/DivMod`, `/std/Nat/Divides`), a greatest common divisor a type may mention with coprimality (`/std/Nat/Gcd`, `/std/Nat/Coprime`), the binary scale (`/std/Nat/Scale`), `ord`'s laws at `Nat` and at `Int`, `Int` through its sign view with multiplicative cancellation and the signed scale, `Int`'s order carried from `Nat` along the embedding, and `Flt`'s identity as its bits (`/std/Flt/total_key`, `/std/Bytes/to_nat`)
 
 ## Compilation
 

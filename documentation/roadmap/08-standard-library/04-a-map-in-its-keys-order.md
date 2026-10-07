@@ -32,7 +32,7 @@
 
 ## What it waits on
 
-- **The first direction** waits on [the numeric laws](../04-arithmetic/03-numeric-laws.md), whose last stage proves a run of bytes read as a number injective at one length and bounded by it, the two facts a length-prefixed encoding's order rests on; on the finding above; and on a quiet machine for `map_wall`.
+- **The first direction** has the two facts a length-prefixed encoding's order rests on, a run of bytes read as a number being injective at one length and bounded by it (`/std/Bytes/to_nat_injective`, `/std/Bytes/to_nat_below`); it waits on the finding above and on a quiet machine for `map_wall`.
 - **The second direction** waits on a consumer: a program whose key has an order and no encoding, or that needs an order no encoding gives.
 
 ## Retirement
