@@ -1,31 +1,88 @@
-use /std/{Str, Nat, Bool, Option, Try, Async};
+use /std/{Bytes, Str, Nat, Bool, Option, Result, Try, Async};
 use /std/time/{Duration};
 use /std/tcp/{Socket};
-use /std/http/{Error, Url, Request, Response, Limits};
+use /std/http/{Error, Method, Url, Request, Response, Limits, read, stream};
 use /std/http/Field/{Value};
 
---- How a client performs an exchange: how long the whole of one may take, and how many redirects it follows before refusing.
+--- How a client performs an exchange: how long the whole of one may take, how many redirects it follows before refusing, and how much of a reply it takes.
 pub struct Client: pub Type {
     timeout: Duration,
     redirects: Nat,
+    --- What a reply may hold: one past them is refused as it arrives, before the rest of it is read.
+    limits: Limits,
 }
 
---- Thirty seconds, three redirects.
+--- Thirty seconds, three redirects, and `Limits/client`'s bounds.
 pub let default: Client =
-    Client { timeout = Duration/of_secs(30), redirects = 3 };
+    Client { timeout = Duration/of_secs(30), redirects = 3, limits = Limits/client };
 
-let exchange(request: Request) -> Try(Async, Error, Response) =
+-- The reply `c` sends to a request of `method`, read after the bytes held as its framing delimits it: every 1xx reply ahead of the final one is passed over (RFC 9110 §15.2), and the reading stops where the reply ends, whether or not the peer closes.
+let reply(
+    limits: Limits,
+    method: Method,
+    c: Socket,
+    held: Bytes,
+) -> Async(Result(Error, Response)) =
+    let first =
+        stream/fetch(
+            c,
+            (searched: Nat, bytes: Bytes) => read/head(limits, false, searched, bytes),
+            0,
+            held)!;
+    match first
+    | failure(stop) =>
+        Async/pure(
+            Result/failure(
+                match stop
+                | refused(why) => Error/refused(why)
+                | ended(_) => Error/incomplete(Option/none())
+                | failed(e) => Error/net(e)
+                end))
+    | success((lines, rest)) =>
+        match Response/head_of(lines)
+        | failure(why) => Async/pure(Result/failure(Error/refused(why)))
+        | success(head) =>
+            match head.status.code < 200
+            | true => reply(limits, method, c, rest)
+            | false =>
+                match Response/framing(method, head)
+                | failure(why) => Async/pure(Result/failure(Error/refused(why)))
+                | success(framing) =>
+                    let content = stream/body(limits, c, framing, rest)!;
+                    Async/pure(
+                        match content
+                        | success((body, _)) =>
+                            Result/map_failure(
+                                Response/from_head(head, body),
+                                (why) => Error/refused(why))
+                        | failure(stop) =>
+                            Result/failure(
+                                match stop
+                                | refused(why) => Error/refused(why)
+                                | ended(arrived) => Error/incomplete(Option/some((head, arrived)))
+                                | failed(e) => Error/net(e)
+                                end)
+                        end)
+                end
+            end
+        end
+    end;
+
+let exchange(c: Client, request: Request) -> Try(Async, Error, Response) =
     let u = request.url;
     let open =
         match u.scheme
         | http() => Socket/connect(u.host, u.port)
         | https() => Socket/connect_tls(u.host, u.port)
         end;
-    let bytes = Try/map_error(Socket/call(open, Request/render(request)), (e) => Error/net(e))!;
-    match Response/of_bytes(Limits/client, request.method, bytes)
-    | success(response) => Try/pure(response)
-    | failure(why) => Try/raise(Error/malformed(why))
-    end;
+    let read =
+        Try/map_error(
+            Socket/with(open, (s) =>
+                let _ = Try/attempt(Socket/write(s, Request/render(request)))!;
+                let answered = reply(c.limits, request.method, s, x[])!;
+                Try/pure(answered)),
+            (e) => Error/net(e))!;
+    Try/attempt(Async/pure(read));
 
 let is_redirect(code: Nat) -> Bool =
     code == 301 || code == 302 || code == 303 || code == 307 || code == 308;
@@ -53,7 +110,7 @@ let redirect_of(request: Request, response: Response) -> Option(Url) =
     end;
 
 let follow(c: Client, request: Request, left: Nat) -> Try(Async, Error, Response) =
-    let response = exchange(request)!;
+    let response = exchange(c, request)!;
     match redirect_of(request, response)
     | none() => Try/pure(response)
     | some(target) =>
@@ -63,7 +120,7 @@ let follow(c: Client, request: Request, left: Nat) -> Try(Async, Error, Response
         end
     end;
 
---- One exchange: connect by the scheme, send the request whole, read the reply to the close, decode it, and follow a redirect while the limit allows — all under the deadline, which is reported as `timeout`.
+--- One exchange: connect by the scheme, send the request whole, read the reply as its framing delimits it and no further, and follow a redirect while the limit allows — all under the deadline, which is reported as `timeout`. A reply the peer closes on before it is whole is `incomplete` with what arrived of it, and one that is malformed or past `c.limits` is `refused`.
 pub let perform(c: Client, request: Request) -> Try(Async, Error, Response) =
     let outcome = Async/timeout(c.timeout, Try/run(follow(c, request, c.redirects)))!;
     match outcome

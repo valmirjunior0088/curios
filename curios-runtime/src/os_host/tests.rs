@@ -327,6 +327,33 @@ fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
     host.handle_close(listener);
 }
 
+/// A TLS stream whose peer ends its side with no closure alert has been cut, not ended: its read reports `TlsError` where a plain socket's reads the end of the stream, so what arrived is not taken for the whole of it. The peer here ends its sending half before the handshake has begun, which `rustls` reports as it does an end after it.
+#[test]
+fn a_tls_stream_ended_without_its_alert_reads_as_a_failure() {
+    let host = OsHost::with_args(vec![]);
+    let (listener, client, server) = loopback_pair(&host);
+
+    assert_eq!(
+        host.tls_start(client.clone(), b"localhost".to_vec()),
+        Ok(())
+    );
+    assert_eq!(host.handle_finish(server.clone()), Ok(()));
+
+    let ready = host
+        .handle_poll(
+            vec![client.clone()],
+            vec![Poll::from_bits(event::READ)],
+            5_000,
+        )
+        .unwrap();
+    assert_ne!(ready[0].bits() & event::READ, 0);
+    assert_eq!(host.handle_read(client.clone(), 8), Err(Failure::TlsError));
+
+    host.handle_close(server);
+    host.handle_close(client);
+    host.handle_close(listener);
+}
+
 /// A connect nobody listens for is refused — at once, or through `socket_finish_connect` once the pending connect has settled — and the socket is gone either way.
 #[test]
 fn a_refused_connect_reports_and_drops_the_socket() {

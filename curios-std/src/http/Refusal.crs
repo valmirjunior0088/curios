@@ -1,7 +1,7 @@
 use /std/{Str, Show, Spell};
 use /std/ops/{Eql};
 
---- Why a message is not read. Each is a reason a peer can be told: a server answers a refused request with the reply `Response/of_refusal` makes of it, and a client reports a refused reply as malformed.
+--- Why a message is not read. Each is a reason a peer can be told: a server answers a refused request with the reply `Response/of_refusal` makes of it, and a client raises a refused reply as `http/Error/refused`, the refusal with it.
 pub induct Refusal: pub Type
 --- The message is not one HTTP's grammar or its framing admits; what was wrong.
 | malformed(Str)

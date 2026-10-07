@@ -1472,6 +1472,22 @@ impl MockHostBuilder {
         self
     }
 
+    /// Script network endpoints as `net_chunks` does, whose peer never closes: a read past its chunks answers `WouldBlock` whatever the client has finished, so a client that reads to the close is refused its poll, or waits out its own deadline.
+    pub fn net_open<E, C, I>(mut self, endpoints: I) -> Self
+    where
+        E: AsRef<[u8]>,
+        C: AsRef<[u8]>,
+        I: IntoIterator<Item = (E, Vec<C>)>,
+    {
+        self.endpoints.extend(
+            endpoints.into_iter().map(|(endpoint, chunks)| {
+                (endpoint.as_ref().to_vec(), script(chunks, Ending::Open))
+            }),
+        );
+
+        self
+    }
+
     /// Script the serial devices `serial_list` names and `serial_open` finds: `(path, chunks)`, each port serving its chunks as `net_chunks` serves a response — the first arrived by the open, each later one once a `handle_poll` arms it. Opening an unscripted path is `NotFound`.
     pub fn serial<P, C, I>(mut self, devices: I) -> Self
     where

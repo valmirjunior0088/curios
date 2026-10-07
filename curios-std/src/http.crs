@@ -1,4 +1,4 @@
-use /std/{Nat, Try, Async, Io};
+use /std/{Bytes, Nat, Option, Try, Async, Io};
 
 --- The request's method.
 pub mod Method;
@@ -49,7 +49,7 @@ pub use Request/{let Request, get, post};
 pub mod Response;
 pub use Response/{let Response};
 
---- How an exchange is performed: the deadline and the redirect limit.
+--- How an exchange is performed: the deadline, the redirect limit and how much of a reply is taken.
 pub mod Client;
 pub use Client/{let Client};
 
@@ -60,12 +60,14 @@ mod stream;
 pub mod Server;
 pub use Server/{let Server};
 
---- Why an exchange failed: the wire, a reply that is not read, the deadline, or a redirect chain past the client's limit.
+--- Why an exchange failed: the wire, a reply that is not read, a reply cut short, the deadline, or a redirect chain past the client's limit.
 pub induct Error: pub Type
 --- The wire failed.
 | net(Io/Error)
---- The reply is not one a client reads; why.
-| malformed(Refusal)
+--- The reply is not one the client reads: it is malformed, past the client's bounds, or in a coding the client does not implement; which.
+| refused(Refusal)
+--- The peer closed before its reply was whole (RFC 9112 §8). What arrived comes with it: nothing where the head itself was cut short, and otherwise the head and the content received, the octets of a stated length or the whole chunks of a chunked body.
+| incomplete(Option({Response/Head, Bytes}))
 --- The deadline passed.
 | timeout()
 --- The redirect chain ran past the client's limit, after this many.

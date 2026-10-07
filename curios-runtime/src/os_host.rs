@@ -1081,13 +1081,13 @@ fn tls_failure(error: Error) -> Failure {
     failure_from_error(error)
 }
 
-/// A TLS read's outcome as the row's reply: a peer that closed without `close_notify` reads as the end of the stream, since a length-framed protocol notices a truncation itself, and the rest as [`tls_failure`] maps it.
+/// A TLS read's outcome as the row's reply: a peer that closed without `close_notify`, inside the handshake or after it, is `TlsError` and not the end of the stream, since only the alert says the stream ended where its sender meant it to and a reader that ends with the stream would take what arrived for the whole (RFC 9112 §9.8); the rest as [`tls_failure`] maps it.
 fn tls_read_outcome(
     result: io::Result<usize>,
     buffer: Vec<u8>,
 ) -> Result<Option<Vec<u8>>, Failure> {
     match result {
-        Err(error) if error.kind() == ErrorKind::UnexpectedEof => Ok(None),
+        Err(error) if error.kind() == ErrorKind::UnexpectedEof => Err(Failure::TlsError),
         Err(error) => Err(tls_failure(error)),
         Ok(_) => read_outcome(result, buffer),
     }

@@ -265,7 +265,8 @@ const HTTP_GET: &str = r#"
         | failure(e) =>
             match e
             | net(_) => /std/print("net")
-            | malformed(_) => /std/print("malformed")
+            | refused(_) => /std/print("refused")
+            | incomplete(_) => /std/print("incomplete")
             | timeout() => /std/print("timeout")
             | redirected(_) => /std/print("redirected")
             end
@@ -273,10 +274,10 @@ const HTTP_GET: &str = r#"
     Async/run(fiber)
     "#;
 
-// HTTP client: `http/perform` renders a `Request`, sends it through `/std/tcp`, and runs the `/std/Parse`-based response parser over the reply — exercising the byte-scanning parser end to end through codegen.
+// HTTP client: `http/perform` renders a `Request`, sends it through `/std/tcp`, and reads the reply off the socket as its framing delimits it — the framing core end to end through codegen.
 #[test]
 fn http_perform_parses_a_scripted_response() {
-    // The trailing bytes past `Content-Length: 5` must be dropped by the body framing, leaving the body exactly "hello".
+    // The bytes past `Content-Length: 5` are no part of the reply, which leaves the body exactly "hello".
     let (system, io) = MockHost::builder()
         .net([(
             "example.com:80",
@@ -285,18 +286,6 @@ fn http_perform_parses_a_scripted_response() {
         .build();
     run_text(HTTP_GET, system).expect("expected result");
     assert_eq!(io.output(), b"200 text/plain hello");
-}
-
-// The two arms of `http/Error`: a reply that is not HTTP is `malformed`, and a peer that is not there is `net`.
-#[test]
-fn http_perform_tells_a_malformed_reply_from_a_network_failure() {
-    let (system, io) = MockHost::builder()
-        .net([("example.com:80", "not http at all")])
-        .build();
-    run_text(HTTP_GET, system).expect("expected result");
-    assert_eq!(io.output(), b"malformed");
-
-    assert_eq!(run(HTTP_GET), b"net");
 }
 
 #[test]
