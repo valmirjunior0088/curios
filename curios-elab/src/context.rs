@@ -7,8 +7,14 @@ pub(crate) use attempt::*;
 mod caches;
 pub(crate) use caches::*;
 
+mod declared;
+pub(crate) use declared::*;
+
 mod frames;
 pub(crate) use frames::*;
+
+mod needs;
+pub(crate) use needs::*;
 
 mod posture;
 pub(crate) use posture::*;
@@ -45,7 +51,6 @@ use {
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, Span, SyntaxRegistry},
     std::{
-        cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap},
         mem,
         ops::{Deref, DerefMut},
@@ -164,12 +169,10 @@ pub struct Context {
     order: BTreeMap<Global, usize>,
     /// Whether the lemmas the unit being elaborated declares are on offer to the proofs the elaborator writes: not while its walk elaborates the prover's vocabulary, and from then on ([`Context::offer_lemmas`]). A context no unit was begun in offers whatever is in scope.
     offering: bool,
-    /// The names of the unit's declarations that have not finished elaborating.
-    unfinished: BTreeSet<Global>,
-    /// The names the attempt under way declares, which it reads as its own.
-    attempting: BTreeSet<Global>,
-    /// The declarations the attempt under way read before they finished, each by a name it declares ([`Context::need`]). A `RefCell` because a lookup records through a shared borrow.
-    needs: RefCell<BTreeSet<Global>>,
+    // Which of the unit's declarations have not finished, and what the attempt under way read of them; see [`Needs`].
+    needs: Needs,
+    // The witnesses the unit declares, as they are known before they elaborate; see [`DeclaredWitnesses`].
+    witnesses: DeclaredWitnesses,
     /// What the unit's lowering minted, declaration by declaration: what each declaration's state starts above ([`Context::begin_state`]).
     minted: Rc<Minted>,
     /// Whether the declaration being elaborated can still settle a universe level: from [`Context::enter_item`] until its levels are finalized. A witness resolved while this holds leaves the levels its scheme minted to that finalization; one resolved after has none left, and closes them where it resolves.
@@ -219,9 +222,8 @@ impl Context {
             checked_site: Rc::from("the entrypoint"),
             order: BTreeMap::new(),
             offering: true,
-            unfinished: BTreeSet::new(),
-            attempting: BTreeSet::new(),
-            needs: RefCell::new(BTreeSet::new()),
+            needs: Needs::default(),
+            witnesses: DeclaredWitnesses::default(),
             minted: Rc::default(),
             scheme_open: false,
             broken: BTreeSet::new(),
@@ -347,7 +349,7 @@ impl Context {
         declared: BTreeSet<Global>,
     ) {
         self.order = order;
-        self.unfinished = declared;
+        self.needs.begin(declared);
         self.offering = false;
     }
 
@@ -358,8 +360,7 @@ impl Context {
 
     /// Begin an attempt at the declaration declaring `names`, with nothing needed yet and in a state of its own ([`Context::begin_state`]).
     pub(crate) fn attempt(&mut self, names: &[&Global]) {
-        self.attempting = names.iter().map(|name| **name).collect();
-        self.needs.get_mut().clear();
+        self.needs.attempt(names);
         self.begin_state();
     }
 
@@ -367,7 +368,7 @@ impl Context {
     fn begin_state(&mut self) {
         let minted = Rc::clone(&self.minted);
         // The items of one declaration were lowered in one space, so any name the attempt declares says which; an attempt that declares none is the entry's.
-        let mints = match self.attempting.iter().next() {
+        let mints = match self.needs.attempted() {
             Some(name) => minted.of(name),
             None => &minted.entry,
         };
@@ -445,7 +446,7 @@ impl Context {
 
     /// Whether the attempt under way has read nothing unfinished so far.
     pub(crate) fn needs_nothing(&self) -> bool {
-        self.needs.borrow().is_empty()
+        self.needs.nothing()
     }
 
     /// Publish a finished item: bind each of its names to what it elaborated to and file the registry entries it declares, each zonked ([`zonk_published`](crate::zonk_published)), as a unit in scope is replayed ([`Established::replay_definitions`](crate::Established)). What another declaration reads of this one then holds no metavariable of the state it was elaborated in, which the next declaration replaces, and is what a recompile that reuses the item reads.
@@ -524,37 +525,29 @@ impl Context {
     /// The declaration declaring `names` has finished — kept, refused or withheld — and nothing waits on it any more: a witness among them is the table's to answer for, or no one's.
     pub(crate) fn finish(&mut self, names: &[&Global]) {
         for name in names {
-            self.unfinished.remove(name);
-            self.program.settle_witness(name);
+            self.witnesses.settle(name);
         }
-        self.attempting.clear();
+        self.needs.finish(names);
     }
 
     /// Record that the attempt under way read the declaration declaring `name` before it finished. The attempt is void whatever it goes on to conclude, and is made again once that declaration has elaborated: the record is what voids it, so no site that turns an error into a decision can make a void attempt count.
     pub(crate) fn need(&self, name: Global) {
-        self.needs.borrow_mut().insert(name);
+        self.needs.need(name);
     }
 
     /// What the attempt under way needed, taken: empty for an attempt that read nothing unfinished, the one whose outcome stands.
     pub(crate) fn take_needs(&mut self) -> BTreeSet<Global> {
-        mem::take(self.needs.get_mut())
+        self.needs.take()
     }
 
-    /// Record a need where `name` is declared by a declaration of the unit that has not finished, other than the one being attempted. Asked where a lookup of a global comes back empty, for its type or for its body: the answer is then not that the name means nothing or reduces no further, only that its declaration has not elaborated.
+    /// [`Needs::missed`].
     fn missed(&self, name: &Free) {
-        if let Free::Global(global) = name
-            && self.unfinished.contains(global)
-            && !self.attempting.contains(global)
-        {
-            self.need(*global);
-        }
+        self.needs.missed(name);
     }
 
-    /// Record a need where `name` keys a registry entry of a declaration of the unit that has not finished, other than the one being attempted. Every entry of a unit is registered as lowered before its first item, so one read before its declaration has elaborated is not the entry the declaration publishes: the read is answered, and the attempt that made it is void, as one that missed a name is ([`Context::missed`]).
+    /// [`Needs::reads`].
     fn reads_entry(&self, name: &Global) {
-        if self.unfinished.contains(name) && !self.attempting.contains(name) {
-            self.need(*name);
-        }
+        self.needs.reads(name);
     }
 
     /// Whether a proof the elaborator writes for the declaration being elaborated may apply `name`. A name another unit declares is applied wherever it is in scope. A name this unit declares is one of the prover's vocabulary, which the unit's walk elaborates before anything else, with every declaration it reads, and offers only from then on: so the vocabulary and what it reads are proved without it, every other declaration finds all of it elaborated, and what a declaration's proof is built from follows what the vocabulary reads, never where either is written or which of them was asked for first. A lemma that is on offer and not in scope was refused, and is applied by nothing.
@@ -1697,11 +1690,11 @@ impl Context {
     }
 
     pub(crate) fn mark_witness_declaration(&mut self, name: &Global) {
-        self.program.mark_witness_declaration(name);
+        self.witnesses.mark(name);
     }
 
     pub(crate) fn is_witness_declaration(&self, name: &Global) -> bool {
-        self.program.is_witness_declaration(name)
+        self.witnesses.is_marked(name)
     }
 
     pub(crate) fn witness_keyed_entries(
@@ -1714,33 +1707,32 @@ impl Context {
         self.program.witness(concept, key)
     }
 
-    /// [`Program::declare_witness`].
+    /// [`DeclaredWitnesses::declare`].
     pub(crate) fn declare_witness(&mut self, name: Global, declared: Declared) {
-        self.program.declare_witness(name, declared);
+        self.witnesses.declare(name, declared);
     }
 
-    /// [`Program::spelled_witness`].
+    /// [`DeclaredWitnesses::spelled`].
     pub(crate) fn spelled_witness(&self, name: &Global) -> Option<Option<&(Global, WitnessKey)>> {
-        self.program.spelled_witness(name)
+        self.witnesses.spelled(name)
     }
 
     /// Take the declared witness `name` out of what a question is answered by, poisoning the key it was spelled at: it was refused or withheld, and a goal keyed there is its dependent whether or not it had registered.
     pub(crate) fn withdraw_declared_witness(&mut self, name: &Global) {
-        if let Some((concept, key)) = self.program.settle_witness(name) {
-            self.program.poison_witness_key(concept, key);
+        if let Some((concept, key)) = self.witnesses.settle(name) {
+            self.witnesses.poison(concept, key);
         }
     }
 
     /// Whether a witness stands under `(concept, key)`: one registered, or one the unit declares there and has not elaborated. A question of membership, answered the same whichever witnesses have elaborated.
     pub(crate) fn witness_declared(&self, concept: &Global, key: &WitnessKey) -> bool {
-        self.program.witness(concept, key).is_some()
-            || self.program.declared_witness(concept, key).is_some()
+        self.program.witness(concept, key).is_some() || self.witnesses.at(concept, key).is_some()
     }
 
     /// Whether the table's miss at `(concept, key)` is a witness the unit declares there and has not elaborated: the attempt needs it, and is void. `false` is a miss no other declaration answers — the one being attempted registers on its signature, so a miss on its own key is its signature asking for itself.
     pub(crate) fn witness_unfinished(&self, concept: &Global, key: &WitnessKey) -> bool {
-        match self.program.declared_witness(concept, key) {
-            Some(name) if !self.attempting.contains(&name) => {
+        match self.witnesses.at(concept, key) {
+            Some(name) if !self.needs.attempts(&name) => {
                 self.need(name);
                 true
             }
@@ -1756,8 +1748,8 @@ impl Context {
             .filter(|(registered, _, _)| *registered == concept)
             .map(|(_, key, witness)| (*key, witness.module));
         let declared = self
-            .program
-            .declared_keys(concept)
+            .witnesses
+            .keys(concept)
             .filter(|(key, _)| self.program.witness(concept, key).is_none())
             .map(|(key, module)| (*key, *module));
 
@@ -1787,13 +1779,13 @@ impl Context {
         keys
     }
 
-    /// Mark `(concept, key)` as a slot a refused declaration's witness stood in — see [`Program::poison_witness_key`].
+    /// Mark `(concept, key)` as a slot a refused declaration's witness stood in — see [`DeclaredWitnesses::poison`].
     pub(crate) fn poison_witness_key(&mut self, concept: Global, key: WitnessKey) {
-        self.program.poison_witness_key(concept, key);
+        self.witnesses.poison(concept, key);
     }
 
     pub(crate) fn is_poisoned_witness(&self, concept: &Global, key: &WitnessKey) -> bool {
-        self.program.is_poisoned_witness(concept, key)
+        self.witnesses.is_poisoned(concept, key)
     }
 
     /// [`Program::update_witness_scheme`], stamping the write.

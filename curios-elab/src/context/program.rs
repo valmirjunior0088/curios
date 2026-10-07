@@ -9,19 +9,8 @@ use {
         Variance, WitnessKey,
     },
     curios_utilities::{Mount, Qualifier},
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeMap,
 };
-
-/// A witness the unit declares, as it is known before it elaborates.
-#[derive(Debug)]
-pub(crate) struct Declared {
-    /// The concept and the key its signature is spelled at ([`Keying`](curios_core::Keying)). `None` where the spelling decides neither: no question is answered by it, and its registration refuses it.
-    pub(crate) spelled: Option<(Global, WitnessKey)>,
-    /// The module declaring it, the coordinate a report names an anonymous witness by.
-    pub(crate) module: Qualifier,
-    /// Where its item sits in the unit's order, which says which of two witnesses spelled alike is the duplicate.
-    pub(crate) position: usize,
-}
 
 /// The declaration registries and the witness table. `Context` holds exactly one of these.
 #[derive(Debug, Default)]
@@ -32,20 +21,14 @@ pub(crate) struct Program {
     struct_decls: BTreeMap<Global, StructDecl>,
     /// Concept declarations, keyed by the concept's qualified name (`struct_decls` also holds each concept's record entry; this adds the resolution metadata).
     concepts: BTreeMap<Global, ConceptDecl>,
-    /// The definition names `into_core` marked as witness declarations; each registers into `witness_table` when its signature elaborates (`elaborate_module_let` → `register_witness`).
-    witness_declarations: BTreeSet<Global>,
     /// The program-wide witness table: one witness per (concept, parameter-head tuple) key — global coherence, checked at registration.
     witness_table: BTreeMap<(Global, WitnessKey), Witness>,
-    /// The witnesses the unit declares that have not finished elaborating, each under the key its signature is spelled at. With the table this is every witness a question about a concept is answered by, whichever of them has elaborated: the table alone holds the ones that have, and an answer read off it would follow the order items elaborate in.
-    declared: BTreeMap<Global, Declared>,
     /// Each definition's totality: recorded as it is defined, for the rest of its own declaration to read, and again over its final terms as its item is published, which is the verdict every other declaration reads and its stamp carries. Kept here so a type position can be refused *before* it is reduced, which is the only point at which a non-productive type-level loop can still be diagnosed rather than run.
     totality: BTreeMap<Global, Totality>,
     /// Each finished definition's variance vector with how many arguments one spine applies it in full by, kept for a definition irrelevant in some level: any other is compared level by level, which is what a name with no entry answers.
     variances: BTreeMap<Global, (Vec<Variance>, usize)>,
     /// Every prefix this compilation mounts — the scope's, then the unit's own. Accumulated as each module is seeded, from the `mounts` that module carries, so the elaborator answers a privilege question out of what was actually mounted rather than out of a stamp copied onto each declaration.
     mounts: Vec<Mount>,
-    /// The keys a refused declaration's witnesses stood under. A goal keyed here would have resolved through the refused witness, so it is the refusal's dependent and reports nothing of its own — where a plain miss would report `no witness` for a witness the reader can see.
-    poisoned_witnesses: BTreeSet<(Global, WitnessKey)>,
 }
 
 impl Program {
@@ -182,15 +165,6 @@ impl Program {
         }
     }
 
-    /// Mark a definition name as a witness declaration; when its signature elaborates, `elaborate_module_suffix` registers it into the witness table.
-    pub(crate) fn mark_witness_declaration(&mut self, name: &Global) {
-        self.witness_declarations.insert(*name);
-    }
-
-    pub(crate) fn is_witness_declaration(&self, name: &Global) -> bool {
-        self.witness_declarations.contains(name)
-    }
-
     /// The witness registered under `(concept, key)`, if any.
     pub(crate) fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<&Witness> {
         self.witness_table.get(&(*concept, *key))
@@ -234,57 +208,6 @@ impl Program {
         }
 
         keys
-    }
-
-    /// Record that the unit declares the witness `name` — once per witness declaration as a module is seeded, before any item elaborates.
-    pub(crate) fn declare_witness(&mut self, name: Global, declared: Declared) {
-        self.declared.insert(name, declared);
-    }
-
-    /// Forget the declared witness `name`, handing back the key it was spelled at: it has elaborated and the table answers for it, or it was refused and nothing does.
-    pub(crate) fn settle_witness(&mut self, name: &Global) -> Option<(Global, WitnessKey)> {
-        self.declared.remove(name)?.spelled
-    }
-
-    /// The key the declared witness `name` is spelled at — `Some(None)` where its spelling decides none, and `None` for a name the unit does not hold as a declared witness: one a unit in scope registered, or one that has finished.
-    pub(crate) fn spelled_witness(&self, name: &Global) -> Option<Option<&(Global, WitnessKey)>> {
-        self.declared
-            .get(name)
-            .map(|declared| declared.spelled.as_ref())
-    }
-
-    /// The declared witness spelled at `(concept, key)`: the one that registers there once it elaborates. Where two are spelled alike it is the first as written, so the second is the duplicate whichever of them a goal asks for first.
-    pub(crate) fn declared_witness(&self, concept: &Global, key: &WitnessKey) -> Option<Global> {
-        self.declared
-            .iter()
-            .filter(|(_, declared)| {
-                declared
-                    .spelled
-                    .as_ref()
-                    .is_some_and(|(spelled, at)| spelled == concept && at == key)
-            })
-            .min_by_key(|(_, declared)| declared.position)
-            .map(|(name, _)| *name)
-    }
-
-    /// Every key a declared witness of `concept` is spelled at, with the module declaring it.
-    pub(crate) fn declared_keys(
-        &self,
-        concept: &Global,
-    ) -> impl Iterator<Item = (&WitnessKey, &Qualifier)> {
-        self.declared.values().filter_map(move |declared| {
-            let (spelled, key) = declared.spelled.as_ref()?;
-            (spelled == concept).then_some((key, &declared.module))
-        })
-    }
-
-    /// Mark `(concept, key)` as a slot a refused witness stood in.
-    pub(crate) fn poison_witness_key(&mut self, concept: Global, key: WitnessKey) {
-        self.poisoned_witnesses.insert((concept, key));
-    }
-
-    pub(crate) fn is_poisoned_witness(&self, concept: &Global, key: &WitnessKey) -> bool {
-        self.poisoned_witnesses.contains(&(*concept, *key))
     }
 
     /// Rewrite a registered witness's generalized scheme once its signature finalizes. Panics if `name` was never registered. The façade stamps the write.
