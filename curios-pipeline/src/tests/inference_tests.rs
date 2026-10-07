@@ -330,3 +330,24 @@ fn typecheck_accepts_a_well_typed_program() {
     // The fast path stops after `elaborate → zonk`; a well-typed program passes without running erase/cont/optimize/wasm.
     assert!(typecheck("/std/print(/std/Nat/to_str(0))").is_ok());
 }
+
+// `?G(n)` against a term over the bound `n` is a pattern, and abstracting `n` is its one solution: the constant family for a type that does not mention it, a nominal one included, which imitation answers with a family over `n` and then holds `n` to its argument.
+#[test]
+fn a_family_applied_to_its_binder_is_solved_by_abstraction() {
+    let source = r#"
+        use /std/{Bool, Nat, Option, Io};
+
+        let fam_of(@G: (Nat) -> Type, g: (n: Nat) -> G(n)) -> Nat = 0;
+        let fam(b: Bool) -> Type = Nat;
+        let app(@F: (Nat) -> Type, f: (F(0)) -> Type, g: (n: Nat) -> F(n)) -> Nat = 0;
+
+        let a: Nat = fam_of((n) => Nat);
+        let b: Nat = fam_of((n) => n);
+        let c: Nat = fam_of((n) => Option/some(3));
+        let d: Nat = app(fam, (n) => true);
+
+        Io/pure(())
+    "#;
+
+    assert_eq!(typecheck(source), Ok(()));
+}

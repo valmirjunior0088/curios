@@ -1,8 +1,8 @@
 //! Reading a term for the shapes solving branches on: an abstraction of a subject's occurrences, and the three metavariable tests that decide whether a problem can be attempted at all.
 
 use {
-    crate::Context,
-    curios_core::{Bound, Free, Metavar, Subterm, Term, Visit},
+    crate::{Context, zonk_solved_term_metas},
+    curios_core::{Apply, Bound, Free, Metavar, Subterm, Term, Visit},
 };
 
 /// Replace every occurrence of a subject term in `t` — matched by the same term equality conversion uses, at any depth (binder names are entropy-fresh, so a free-named subject cannot be captured by an inner scope) — with its birth binder's name. Top-down: an outer match wins and is not descended into. Subjects are pairwise distinct by construction, so the match is unambiguous.
@@ -40,6 +40,33 @@ pub(super) fn flex_scrutinee(term: &Term) -> bool {
         Subterm::Apply(apply) => matches!(&*apply.head, Subterm::Metavar(_)),
         _ => false,
     }
+}
+
+/// The variables a metavariable is applied to, where the application is a pattern: each argument, read through the solutions already committed, is a local variable no other argument shares and no entry of the metavariable's own spine names. `None` otherwise: a repeated variable, or one the spine carries as well, leaves more than one abstraction, and a global is no binder to abstract.
+pub(super) fn pattern_variables(
+    context: &Context,
+    metavar: &Metavar,
+    apply: &Apply,
+) -> Option<Vec<Free>> {
+    let mut variables = Vec::with_capacity(apply.arguments.len());
+    for argument in apply.params() {
+        let argument = zonk_solved_term_metas(context, argument);
+        let Subterm::Var(var) = &*argument else {
+            return None;
+        };
+        let name = *var.as_free()?;
+        if !name.is_local() || context.is_top_level(&name) || variables.contains(&name) {
+            return None;
+        }
+        variables.push(name);
+    }
+
+    let carried = metavar.spine.iter().any(|entry| {
+        let entry = zonk_solved_term_metas(context, entry);
+        variables.iter().any(|name| entry.mentions_free(name))
+    });
+
+    (!variables.is_empty() && !carried).then_some(variables)
 }
 
 /// `true` iff `term` — already in weak-head normal form, so anything foldable has folded — is stuck on an unsolved metavariable: an intrinsic operation still carrying one, a match whose node mentions one (a metavariable in the scrutinee may fold the match once solved; one in an arm may make the arm compare equal), or an elimination — application, projection — headed by such a shape or by an unsolved metavariable itself. A structural mismatch against such a term is undecided rather than definite, so the drain parks it watching the metavariables instead of failing; a stuck comparison with *no* unsolved metavariable anywhere in these positions keeps its hard mismatch, since nothing could ever wake it.

@@ -72,6 +72,9 @@ enum Revalidated {
     Refused,
 }
 
+/// The binders a candidate lambda abstracts: each one's mark, its label and its domain.
+type CandidateBinders = Vec<(Plicity, Free, Term)>;
+
 fn instantiate_bound_at<B: Bound>(
     context: &mut Context,
     universe_context: &UniverseContext,
@@ -1658,12 +1661,104 @@ impl Convert {
         Ok(solved)
     }
 
-    /// Park a problem from inside a structural arm: remove it from `history` (so a retry after fresh progress is not skipped as already-handled) and push it to `blocked`. Returns `Ok(true)` — a blocked problem is undecided, never a mismatch.
-    fn block(&mut self, context: &mut Context, problem: Problem) -> Result<bool, ReduceError> {
-        let key = self.history_key(context, &problem);
-        self.history.remove(&key);
+    /// Park a problem from inside a structural arm: remove its key from `history` (so a retry after fresh progress is compared, not read as a recurrence) and push it to `blocked`. `key` is the one the drain recorded, under the reduced spelling, where the problem is parked as written. Returns `Ok(true)` — a blocked problem is undecided, never a mismatch.
+    fn block(&mut self, key: &Recurrence, problem: Problem) -> Result<bool, ReduceError> {
+        self.history.remove(key);
         self.blocked.push(problem);
         Ok(true)
+    }
+
+    /// The binders a candidate for `metavar` applied to `arity` arguments abstracts: those of its frozen birth type, each opened at a fresh label under the mark that type gives it — plicity is part of a function's identity (see `compare_func`), so a candidate convertible with that type copies them. `None` where there is no birth record, or the type does not reduce to a function type of that arity.
+    fn birth_binders(
+        context: &mut Context,
+        metavar: &Metavar,
+        arity: usize,
+    ) -> Result<Option<CandidateBinders>, ReduceError> {
+        let Some(entry) = context.metavar_entry(metavar.id) else {
+            return Ok(None);
+        };
+        let result = reduce(context, entry.result.clone())?;
+        let Subterm::FuncType(func_type) = &*result else {
+            return Ok(None);
+        };
+        let plicities = func_type.plicities();
+        if plicities.len() != arity {
+            return Ok(None);
+        }
+
+        // Peeling opens each binder as a free variable of its own label (elaborated labels are entropy-fresh), so dependent domains stay well-scoped.
+        let mut domains = Vec::with_capacity(arity);
+        let mut cursor = func_type.telescope.cursor();
+        for plicity in plicities {
+            let (_, ty) = cursor.entry().expect("plicities parallel the telescope");
+            let binder = cursor.advance_fresh(|hint| context.fresh(hint));
+            domains.push((plicity, binder, ty));
+        }
+
+        Ok(Some(domains))
+    }
+
+    /// Whether `rigid`, reduced under the refinements in view, is a spelling `metavar` may be solved from: where those are not its birth's, the spelling its birth's alone give `rigid_raw` must be the same. The invariant [`Self::solve_at_birth`] protects, for a rule that builds its candidate from the rigid side where that one offers the side itself: a solution must not be derived from a spelling that holds only under refinements the metavariable was not born under.
+    fn spelled_at_birth(
+        context: &mut Context,
+        metavar: &Metavar,
+        rigid: &Term,
+        rigid_raw: &Term,
+    ) -> Result<bool, ReduceError> {
+        let Some(birth) = context
+            .metavar_entry(metavar.id)
+            .map(|entry| entry.refinements.clone())
+        else {
+            return Ok(true);
+        };
+        if context.refinements_are(&birth) {
+            return Ok(true);
+        }
+        let at_birth =
+            context.with_refinements(&birth, |context| reduce(context, rigid_raw.clone()))?;
+
+        Ok(at_birth == *rigid)
+    }
+
+    /// Flex-apply abstraction — the pattern rule under an application: for `?m(x₁ … xₖ) ≡ t` where each `xᵢ` is a distinct local variable `?m`'s own spine does not carry ([`pattern_variables`]), `?m := λx₁…xₖ. t` is the one solution, and it is offered to [`Self::solve`] over the binders of `?m`'s frozen birth type. `None` where `flex` is no such pattern, or no candidate can be built for it — no birth type of that arity, a spelling that holds only under refinements `?m` was not born under — and the pair then goes on to the rules that stood before this one.
+    ///
+    /// Ahead of [`Self::imitate_flex_apply`], which stays the rule for arguments that are no such variables. For a pattern the abstraction is what the equation states and imitation a guess at it: against `Option(Nat)`, `?m(n)` is imitated as `(n) => Option(n)`, which then holds `n` to `Nat`.
+    fn abstract_flex_apply(
+        &mut self,
+        context: &mut Context,
+        flex: &Term,
+        rigid: &Term,
+        rigid_raw: &Term,
+    ) -> Result<Option<Solved>, ReduceError> {
+        let Subterm::Apply(apply) = &**flex else {
+            return Ok(None);
+        };
+        let Some(metavar) = as_metavar(&apply.head).cloned() else {
+            return Ok(None);
+        };
+        if context.is_rec_slot(metavar.id) {
+            return Ok(None);
+        }
+        let Some(variables) = pattern_variables(context, &metavar, apply) else {
+            return Ok(None);
+        };
+        if !Self::spelled_at_birth(context, &metavar, rigid, rigid_raw)? {
+            return Ok(None);
+        }
+        let Some(domains) = Self::birth_binders(context, &metavar, variables.len())? else {
+            return Ok(None);
+        };
+
+        let binders = domains
+            .iter()
+            .map(|(_, binder, _)| Term::free_var(binder))
+            .collect::<Vec<_>>();
+        let body = rigid
+            .capture(&variables.iter().collect::<Vec<_>>())
+            .release(&binders.iter().collect::<Vec<_>>());
+        let candidate = Term::func_marked(domains, body);
+
+        self.solve(context, &metavar, &candidate).map(Some)
     }
 
     /// Flex-apply imitation — the restricted higher-order rule: for `?m(a₁ … aₖ) ≡ T(p̄ ++ ī)` where `T` is a nominal (inductive or struct) type constructor or a unary intrinsic type former (`List`, `Cell`), commit the *imitation* solution `?m := λx₁…xₖ. T(x₁, …, xₖ)` and equate arguments pairwise. This is what unifies `?M(?A) ≡ Option(Nat)` for higher-kinded concepts — the same commitment Lean's first-order approximation and Agda's constructor-headed unification make.
@@ -1683,6 +1778,7 @@ impl Convert {
         flex: Apply,
         rigid: Term,
         rigid_raw: &Term,
+        key: &Recurrence,
         problem: Problem,
     ) -> Result<bool, ReduceError> {
         let Some(metavar) = as_metavar(&flex.head).cloned() else {
@@ -1755,29 +1851,13 @@ impl Convert {
 
         // Right-biased: a spine shorter than the rigid argument list abstracts the *suffix*, with the prefix baked in from the rigid side; a longer spine has no imitation.
         if spine > arity {
-            return self.block(context, problem);
+            return self.block(key, problem);
         }
 
-        // The candidate's binders come from `?m`'s frozen birth type, which must itself reduce to a function type of the spine's arity. Peeling opens each binder as a free variable of its own label (elaborated labels are entropy-fresh), so dependent domains stay well-scoped.
-        let Some(entry) = context.metavar_entry(metavar.id) else {
-            return self.block(context, problem);
+        // The candidate's binders come from `?m`'s frozen birth type, which must itself reduce to a function type of the spine's arity.
+        let Some(domains) = Self::birth_binders(context, &metavar, spine)? else {
+            return self.block(key, problem);
         };
-        let result = reduce(context, entry.result.clone())?;
-        let Subterm::FuncType(func_type) = &*result else {
-            return self.block(context, problem);
-        };
-        if func_type.plicities().len() != spine {
-            return self.block(context, problem);
-        }
-
-        // The candidate copies `?m`'s birth function type's plicities so the imitation is convertible with that type (plicity is part of function identity — see `compare_func`).
-        let mut domains: Vec<(Plicity, Free, Term)> = Vec::with_capacity(arity);
-        let mut cursor = func_type.telescope.cursor();
-        for plicity in func_type.plicities().iter().copied() {
-            let (_, ty) = cursor.entry().expect("plicities parallel the telescope");
-            let binder = cursor.advance_fresh(|hint| context.fresh(hint));
-            domains.push((plicity, binder, ty));
-        }
 
         // The candidate body mirrors the rigid node's shape (for an inductive, its params/indices split — `elaborate_induct_type` re-checks the node against the full telescope during re-validation and rejects a wrong split).
         let binder_vars = domains
@@ -1786,17 +1866,9 @@ impl Convert {
             .collect::<Vec<_>>();
         let (rigid_prefix, rigid_suffix) = rigid_args.split_at(arity - spine);
 
-        // The invariant `solve_at_birth` protects, upheld here by hand (the committed solution is the built candidate, not the rigid side itself): a solution must not be derived from a spelling that holds only under refinements the metavariable was not born under. Where those are in view and the spelling at its birth differs, the nominal shape may be their doing — postpone rather than commit. Asked before the candidate's instance is minted, so every return past it has one transaction to close.
-        if let Some(birth) = context
-            .metavar_entry(metavar.id)
-            .map(|entry| entry.refinements.clone())
-            && !context.refinements_are(&birth)
-        {
-            let at_birth =
-                context.with_refinements(&birth, |context| reduce(context, rigid_raw.clone()))?;
-            if at_birth != rigid {
-                return self.block(context, problem);
-            }
+        // The invariant `solve_at_birth` protects, upheld here by hand ([`Self::spelled_at_birth`]): where the spelling at `?m`'s birth differs, the nominal shape may be the other refinements' doing — postpone rather than commit. Asked before the candidate's instance is minted, so every return past it has one transaction to close.
+        if !Self::spelled_at_birth(context, &metavar, &rigid, rigid_raw)? {
+            return self.block(key, problem);
         }
 
         // The instance is minted, paired with the rigid side's and offered to `solve` in one transaction: `solve` brackets its own re-validation alone, so a candidate it postpones or refuses before that would leave the occurrence and its equations standing with no term to hold them.
@@ -1823,7 +1895,7 @@ impl Convert {
         context.end_solutions(mark);
         match solved? {
             Solved::Done => {}
-            Solved::Postponed | Solved::Failed => return self.block(context, problem),
+            Solved::Postponed | Solved::Failed => return self.block(key, problem),
         }
 
         // Equal the spine against the rigid *suffix* pairwise, at the candidate telescope's domains (mirroring `compare_apply`'s recovered argument types). The baked-in prefix needs no equations: after substitution both sides carry it verbatim.
@@ -2283,6 +2355,28 @@ impl Convert {
                 continue;
             }
 
+            // A metavariable applied to distinct bound variables has one solution, the other side abstracted over them, and it is taken ahead of every rule that would guess at one. A candidate that cannot be committed yet waits, as a bare metavariable's does: no other rule's answer is this pair's.
+            let mut abstracted = None;
+            for (flex, rigid, rigid_raw) in [(&this, &that, &that_raw), (&that, &this, &this_raw)] {
+                match self.abstract_flex_apply(context, flex, rigid, rigid_raw)? {
+                    Some(Solved::Done) => {
+                        abstracted = Some(Solved::Done);
+                        break;
+                    }
+                    Some(Solved::Postponed) => abstracted = Some(Solved::Postponed),
+                    Some(Solved::Failed) | None => {}
+                }
+            }
+            match abstracted {
+                Some(Solved::Done) => continue,
+                Some(Solved::Postponed) => {
+                    self.history.remove(&key);
+                    self.blocked.push(raw_problem(&problem.type_));
+                    continue;
+                }
+                Some(Solved::Failed) | None => {}
+            }
+
             let ok = match (Term::unwrap_or_clone(this), Term::unwrap_or_clone(that)) {
                 (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => {
                     convert_intrinsic(self, context, this, that)?
@@ -2492,6 +2586,7 @@ impl Convert {
                         apply,
                         rigid,
                         &that_raw,
+                        &key,
                         raw_problem(&problem.type_),
                     )?
                 }
@@ -2502,6 +2597,7 @@ impl Convert {
                         apply,
                         rigid,
                         &this_raw,
+                        &key,
                         raw_problem(&problem.type_),
                     )?
                 }
@@ -2512,6 +2608,7 @@ impl Convert {
                         apply,
                         rigid,
                         &that_raw,
+                        &key,
                         raw_problem(&problem.type_),
                     )?
                 }
@@ -2522,6 +2619,7 @@ impl Convert {
                         apply,
                         rigid,
                         &this_raw,
+                        &key,
                         raw_problem(&problem.type_),
                     )?
                 }
@@ -2540,6 +2638,7 @@ impl Convert {
                         apply,
                         rigid,
                         &that_raw,
+                        &key,
                         raw_problem(&problem.type_),
                     )?
                 }
@@ -2558,6 +2657,7 @@ impl Convert {
                         apply,
                         rigid,
                         &this_raw,
+                        &key,
                         raw_problem(&problem.type_),
                     )?
                 }
