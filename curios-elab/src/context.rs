@@ -7,6 +7,12 @@ pub(crate) use attempt::*;
 mod caches;
 pub(crate) use caches::*;
 
+mod checked;
+pub(crate) use checked::*;
+
+mod credits;
+pub(crate) use credits::*;
+
 mod declared;
 pub(crate) use declared::*;
 
@@ -157,14 +163,10 @@ pub struct Context {
     asking: Asking,
     /// The declaration being elaborated ([`Context::enter_declaration`]); `None` for an entry's final term.
     declaration: Option<Global>,
-    /// The written binder each local was opened from, kept while one item elaborates: the declaration it was opened in, and the binder's place among that declaration's written binders. The declaration is read from here rather than from what is current when a proof reads the local, since a group's parked bounds are retried once every member has elaborated. The place is kept here rather than on the local, so a scope rebuilt over the local remembers none: a term that reaches another declaration is credited nothing there.
-    opened: BTreeMap<Free, (Option<Global>, u32)>,
-    /// The written binders a proof the elaborator wrote reads, each by its declaration and its place among that declaration's written binders, in the order they were credited ([`Context::credit`]): each is used though no written reference reaches it, so `unused-binder` does not report it. A list rather than a set so a rollback truncates it with the solutions it was credited beside.
-    credited: Vec<(Option<Global>, u32)>,
-    // Every term elaboration settled, with the type it settled at — the seed of obligation (V). Recorded here rather than reconstructed afterwards because "what type was this checked against" is a fact elaboration computes for every term and a later walk can only re-derive, incompletely (see `crate::totality`). The site travels as an `Rc<str>` so recording is three pointer bumps.
-    checked: Vec<(Term, Term, Rc<str>)>,
-    // The definition whose body is currently elaborating, for those sites.
-    checked_site: Rc<str>,
+    // The written binders the proofs the elaborator wrote read, which `unused-binder` does not report; see [`Credits`].
+    credits: Credits,
+    // Every term elaboration settled, with the type it settled at — the seed of the erasure obligations; see [`CheckedTerms`].
+    checked: CheckedTerms,
     /// Where each name the unit declares is written, as its place among the unit's items as the lowering hands them on — every item's, the ones a recompile reuses among them: which names are the unit's own ([`Context::proof_may_apply`]), and where a goal's report is placed ([`Context::written_at`]).
     order: BTreeMap<Global, usize>,
     /// Whether the lemmas the unit being elaborated declares are on offer to the proofs the elaborator writes: not while its walk elaborates the prover's vocabulary, and from then on ([`Context::offer_lemmas`]). A context no unit was begun in offers whatever is in scope.
@@ -216,10 +218,8 @@ impl Context {
             posture: Posture::default(),
             asking: Asking::default(),
             declaration: None,
-            opened: BTreeMap::new(),
-            credited: Vec::new(),
-            checked: Vec::new(),
-            checked_site: Rc::from("the entrypoint"),
+            credits: Credits::default(),
+            checked: CheckedTerms::default(),
             order: BTreeMap::new(),
             offering: true,
             needs: Needs::default(),
@@ -308,33 +308,32 @@ impl Context {
     ///
     /// Sort-hood is *not* decided here. The type may still carry unsolved metavariables, and deciding would both reduce on the hot path and risk an answer a later solution invalidates; the gate classifies post-zonk, memoized per distinct type.
     pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) {
-        self.checked
-            .push((term.clone(), type_.clone(), Rc::clone(&self.checked_site)));
+        self.checked.record(term, type_);
     }
 
     /// Name the definition whose body is elaborating, for (V)'s diagnostics. Returns the previous site so the caller can restore it.
     pub(crate) fn set_checked_site(&mut self, site: &str) -> Rc<str> {
-        mem::replace(&mut self.checked_site, Rc::from(site))
+        self.checked.set_site(Rc::from(site))
     }
 
     /// Restore a site saved by [`Context::set_checked_site`].
     pub(crate) fn restore_checked_site(&mut self, site: Rc<str>) {
-        self.checked_site = site;
+        self.checked.set_site(site);
     }
 
     /// The site being elaborated, as [`Context::set_checked_site`] last set it.
     pub(crate) fn checked_site(&self) -> Rc<str> {
-        Rc::clone(&self.checked_site)
+        self.checked.site()
     }
 
     /// Read the recorded terms without consuming them — obligation (T) reads them first, and (V) takes them afterwards.
     pub(crate) fn checked(&self) -> &[(Term, Term, Rc<str>)] {
-        &self.checked
+        self.checked.terms()
     }
 
     /// How many terms are recorded — where an item begins, so [`Context::truncate_checked`] can forget what a refused item recorded.
     pub(crate) fn checked_mark(&self) -> usize {
-        self.checked.len()
+        self.checked.mark()
     }
 
     /// Forget every term recorded since `mark`: a refused item's, which no obligation may read.
@@ -504,8 +503,8 @@ impl Context {
     /// Zonk every term recorded since `mark`, the finished item's, so the erasure obligations read them once the state they were recorded in is gone.
     pub(crate) fn settle_checked(&mut self, mark: usize) -> Result<(), Error> {
         let mut zonked = HashMap::<Term, Term>::new();
-        let mut settled = Vec::with_capacity(self.checked.len() - mark);
-        for (term, type_, site) in &self.checked[mark..] {
+        let mut settled = Vec::with_capacity(self.checked.mark() - mark);
+        for (term, type_, site) in &self.checked.terms()[mark..] {
             let mut settle = |term: &Term| match zonked.get(term) {
                 Some(done) => Ok(done.clone()),
                 None => {
@@ -516,8 +515,7 @@ impl Context {
             };
             settled.push((settle(term)?, settle(type_)?, Rc::clone(site)));
         }
-        self.checked.truncate(mark);
-        self.checked.extend(settled);
+        self.checked.replace_since(mark, settled);
 
         Ok(())
     }
@@ -610,14 +608,14 @@ impl Context {
 
         let local = Free::local(index, hint);
         if let Some(written) = written {
-            self.opened.insert(local, (self.declaration, written));
+            self.credits.open(local, self.declaration, written);
         }
         local
     }
 
     /// Elaborate the item `declaration` from here on — `None` for an entry's final term — forgetting where the previous item's locals were opened: a proof is written only while its bound's item elaborates. Its scheme is open until its universe levels are finalized.
     pub(crate) fn enter_item(&mut self, declaration: Option<Global>) {
-        self.opened.clear();
+        self.credits.begin_item();
         self.scheme_open = true;
         self.enter_declaration(declaration);
     }
@@ -627,19 +625,14 @@ impl Context {
         self.declaration = declaration;
     }
 
-    /// Credit every written binder `proof` reads: a proof the elaborator wrote, which the author did not, reads it where no written name reaches it.
+    /// [`Credits::credit`].
     pub(crate) fn credit(&mut self, proof: &Term) {
-        let read = proof
-            .free_vars_shared()
-            .iter()
-            .filter_map(|local| self.opened.get(local).copied())
-            .collect::<Vec<_>>();
-        self.credited.extend(read);
+        self.credits.credit(proof);
     }
 
     /// The written binders proofs the elaborator wrote read, each by its declaration and its place among that declaration's written binders — each used, though no written reference reaches it.
     pub fn credited(&self) -> BTreeSet<(Option<Global>, u32)> {
-        self.credited.iter().copied().collect()
+        self.credits.credited()
     }
 
     /// Take what a unit's lowering minted, declaration by declaration. Each attempt at a declaration begins its state above what that declaration's lowering minted, and the entry's above the entry's ([`Context::begin_state`]), so no identity either mints is one the other already holds.
@@ -2277,8 +2270,8 @@ impl Context {
         SolutionMark {
             term_solution_log_len: self.attempt.solutions.solved_len(),
             universe: self.attempt.universe_solver.mark(),
-            credited_len: self.credited.len(),
-            checked_len: self.checked.len(),
+            credited_len: self.credits.mark(),
+            checked_len: self.checked.mark(),
             questions: self.asking.questions(),
         }
     }
@@ -2315,7 +2308,7 @@ impl Context {
         self.attempt.solutions.unwind_to(mark.term_solution_log_len);
         self.attempt.universe_solver.rollback(mark.universe);
         // A proof written inside what is rolled back reads nothing that stands.
-        self.credited.truncate(mark.credited_len);
+        self.credits.truncate(mark.credited_len);
         // Nor does a term settled inside it settle anything. It belonged to a candidate that is discarded, and the type it settled at may be a metavariable whose solution has just been unwound: left recorded, the totality obligations would zonk it at the item's end and report an implicit argument of a call the program never kept.
         self.truncate_checked(mark.checked_len);
 
