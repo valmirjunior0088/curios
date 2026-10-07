@@ -1,19 +1,20 @@
 -- A moment as the calendar names it: the date and the time of day a timestamp is, and the form HTTP writes one in.
 use /std/{Str, Nat, List, Test};
-use /std/time/{Timestamp, Date};
-use /std/time/Date/{Month, Weekday};
+use /std/time/{Timestamp};
+use /std/time/Timestamp/{Utc};
+use /std/time/Timestamp/Utc/{Month, Weekday};
 
-let at(secs: Nat) -> Date =
-    Date/of_timestamp(Timestamp/of_unix(secs, 0));
+let at(secs: Nat) -> Utc =
+    Utc/of_timestamp(Timestamp/of_unix(secs, 0));
 
 let spelled(secs: Nat) -> Str =
-    Date/to_imf_fixdate(at(secs));
+    Utc/to_imf_fixdate(at(secs));
 
 -- The epoch is the first of January 1970, a Thursday, at midnight.
 test the_epoch_is_a_thursday =
     Test/equal(
         at(0),
-        Date {
+        Utc {
             year = 1970,
             month = Month/january(),
             day = 1,

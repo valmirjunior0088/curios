@@ -2,6 +2,10 @@ use /std/{Nat, Bool, Str, Io, Show};
 use /std/ops/{Eql};
 use /std/time/{Duration};
 
+--- The moment as the calendar and the clock name it in UTC, and as a protocol spells it.
+pub mod Utc;
+pub use Utc/{let Utc};
+
 --- A moment, as seconds since the Unix epoch.
 pub struct Timestamp: Type {
     secs: Nat,

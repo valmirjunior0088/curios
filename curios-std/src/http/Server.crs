@@ -1,5 +1,6 @@
 use /std/{Bytes, Str, Nat, Bool, List, Result, Try, Async, Io};
-use /std/time/{Duration, Timestamp, Date};
+use /std/time/{Duration, Timestamp};
+use /std/time/Timestamp/{Utc};
 use /std/tcp/{Socket, Listener};
 use /std/http/{Method, Url, Field, Status, Request, Response, Version, Limits, Refusal, Framing,
     read, stream};
@@ -155,7 +156,7 @@ let dated(reply: Response) -> Async(Response) =
     | none() =>
         let now = Timestamp/now()!;
         Async/pure(
-            match Field/read("Date", Str/to_bytes(Date/to_imf_fixdate(Date/of_timestamp(now))))
+            match Field/read("Date", Str/to_bytes(Utc/to_imf_fixdate(Utc/of_timestamp(now))))
             | some(date) =>
                 Response { ..reply, headers = [date, ..reply.headers], @bodied = reply.bodied }
             | none() => reply

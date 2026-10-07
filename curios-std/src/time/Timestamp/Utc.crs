@@ -46,7 +46,7 @@ satisfy Spell(Month) {
 }
 
 --- A moment as the calendar and the clock name it, in UTC by the Gregorian calendar: what a protocol that writes a date out spells.
-pub struct Date: pub Type {
+pub struct Utc: pub Type {
     year: Nat,
     month: Month,
     --- The day of the month, from 1.
@@ -58,11 +58,11 @@ pub struct Date: pub Type {
     second: Nat,
 }
 
-satisfy Eql(Date) {
+satisfy Eql(Utc) {
     ..
 }
 
-satisfy Spell(Date) {
+satisfy Spell(Utc) {
     ..
 }
 
@@ -96,7 +96,7 @@ let weekday_from_sunday(n: Nat) -> Weekday =
     end;
 
 --- The date and the time of day `t` is, to the second. The days since the epoch are counted in eras of 400 years, each of 146 097 days, and in years that begin on the first of March, so that a leap day is its year's last and a month's first day falls where a line through the months puts it; the first of January 1970 was a Thursday.
-pub let of_timestamp(t: Timestamp) -> Date =
+pub let of_timestamp(t: Timestamp) -> Utc =
     let secs = Timestamp/to_unix(t).secs;
     let days = secs / 86400;
     let within = secs % 86400;
@@ -106,7 +106,7 @@ pub let of_timestamp(t: Timestamp) -> Date =
         (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
     let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
     let months = (5 * day_of_year + 2) / 153;
-    Date {
+    Utc {
         year =
             year_of_era + shifted / 146097 * 400 + match months < 10 | true => 0 | false => 1 end,
         month = month_from_march(months),
@@ -148,7 +148,7 @@ let digits(n: Nat, width: Nat) -> Str =
     Str/pad_start(Nat/to_str(n), width, '0');
 
 --- The date as the Internet message format's fixed-length form spells it, `Sun, 06 Nov 1994 08:49:37 GMT`: the form HTTP sends a date in (RFC 9110 §5.6.7). A year past 9999 takes the digits it needs.
-pub let to_imf_fixdate(d: Date) -> Str =
+pub let to_imf_fixdate(d: Utc) -> Str =
     Str/flatten([
         weekday_name(d.weekday),
         ", ",
