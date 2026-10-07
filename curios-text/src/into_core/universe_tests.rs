@@ -263,9 +263,9 @@ fn a_concept_with_two_superclasses_lowers() {
          C");
 }
 
-/// The scheduler's witness edges (`witness_dep_nodes`): `probe`'s declared type only converts by unfolding `+` within `probe`'s own item, the row satisfying it is declared *last* and referenced by no name, and only the operator's soft edge can order the row first — the deferred-witness store retries between items, which is too late for a conversion the item drain must decide. Under name edges alone `probe` would elaborate first and fail.
+/// An operator in a dependent type asks for its witness row: `probe`'s declared type only converts by unfolding `+` within `probe`'s own item, and the row satisfying it is declared *last* and referenced by no name. The read of the row's key voids the attempt at `probe`, the row elaborates, and `probe` is attempted again; nothing orders the two before elaboration.
 #[test]
-fn an_operator_in_a_dependent_type_orders_after_its_witness_row() {
+fn an_operator_in_a_dependent_type_elaborates_after_its_witness_row() {
     elaborate_source(
         "mod std
              pub concept Add(A : Type) : pub Type {

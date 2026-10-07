@@ -1,7 +1,7 @@
 use {
     super::{PublicInterface, Reach, Scoped, visible_binding, visible_child},
     crate::{Error, Label, Lint, Name},
-    curios_utilities::{Entropy, InfixOp, Mount, Qualifier, Span, SyntaxRegistry},
+    curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -100,23 +100,6 @@ impl FlatItem {
                     .filter_map(|name| name.as_global().cloned())
                     .chain(let_.type_.construction_names())
                     .chain(let_.body.construction_names())
-            })
-            .collect()
-    }
-
-    /// Every infix operator this item's terms dispatch through — the operator half of `order_flat_items`' witness edges. The wrapper half rides on [`FlatItem::free_vars`], since a written `C/method` reference is an ordinary global.
-    pub(super) fn infix_ops(&self) -> HashSet<InfixOp> {
-        let lets = match self {
-            FlatItem::Let(let_) => std::slice::from_ref(let_),
-            FlatItem::Rec(lets) => lets.as_slice(),
-        };
-
-        lets.iter()
-            .flat_map(|let_| {
-                let_.type_
-                    .infix_ops()
-                    .into_iter()
-                    .chain(let_.body.infix_ops())
             })
             .collect()
     }

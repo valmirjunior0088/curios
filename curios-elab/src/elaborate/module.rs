@@ -1827,7 +1827,7 @@ fn report_written_goals(
     held: Vec<Holding>,
     sites: &[GoalSite],
 ) -> Vec<GoalReport> {
-    /// Where `item` sits in the unit's lowered order.
+    /// Where `item` is written among the unit's items.
     fn place(context: &Context, item: &Item) -> Option<usize> {
         item.declared_names()
             .first()

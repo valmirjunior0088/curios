@@ -477,7 +477,7 @@ impl TestSyntax {
 ///
 /// A struct of rows rather than a list of them, for the reason this whole registry is one — a row is a named slot, so a derivation added here is a compile error at every fill site until it is filled, where a list would have let a missing row pass every check. That is the drift the roster exists to end, and a list would have relocated it rather than removed it.
 ///
-/// The tag a body writer dispatches on and the vocabulary `curios-text`'s scheduler needs are the same value, so the two cannot disagree.
+/// The tag a body writer dispatches on and the vocabulary `curios-text`'s unused-declaration lint reads are the same value, so the two cannot disagree.
 #[derive(Debug, Clone, Copy)]
 pub struct DerivationSyntax {
     pub spell: SpellDerivation,
@@ -487,7 +487,7 @@ pub struct DerivationSyntax {
 }
 
 impl DerivationSyntax {
-    /// Every row, for the concept lookup and the scheduler's edges. Destructures `Self`, so a row added and not yielded here does not compile.
+    /// Every row, for the concept lookup and the references a derived witness makes. Destructures `Self`, so a row added and not yielded here does not compile.
     pub fn rows(self) -> impl Iterator<Item = Derivation> {
         let Self {
             spell,
@@ -516,7 +516,7 @@ impl DerivationSyntax {
 
 /// The names specific to a derived `Spell` witness body: the concept's `spell` method, applied to each payload and resolved like any written call; and the two renderers the body applies over the spelled pieces — `call` for a constructor over its explicit payloads, `record` for a struct over its labeled fields. The re-parse grammar is spelled once, in `/std/Spell`, where the kernel re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
 ///
-/// The body writer and [`Derivation::vocabulary`] both receive [`SyntaxRegistry::string`]: `curios_core::str_literal` names the scan certificate and constructs the carrier at every rendered piece, so the scheduler must order those shared names too. They have one registry entry, shared with ordinary string literals.
+/// The body writer and [`Derivation::vocabulary`] both receive [`SyntaxRegistry::string`]: `curios_core::str_literal` names the scan certificate and constructs the carrier at every rendered piece, so a derived witness references those shared names too. They have one registry entry, shared with ordinary string literals.
 #[derive(Debug, Clone, Copy)]
 pub struct SpellDerivation {
     pub spell: ConceptField,
@@ -570,7 +570,7 @@ impl Derivation {
         }
     }
 
-    /// Every name a body written by this derivation references, as the identity a lowered `Var` carries — the hard edges `curios-text`'s scheduler cannot read off the `Derive` transient, since the body naming them does not exist yet.
+    /// Every name a body written by this derivation references, as the identity a lowered `Var` carries — the references `curios-text`'s unused-declaration lint cannot read off the `Derive` transient, since the body naming them does not exist yet.
     ///
     /// A [`Qualifier`] rather than a [`SyntaxName`]: a concept *method* is its concept's path extended by a field label, which is built rather than spelled, so no `&'static` segment list for it exists or could be made.
     ///

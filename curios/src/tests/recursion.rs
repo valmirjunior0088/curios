@@ -1,6 +1,6 @@
 //! Recursion is implicit and a group is declared: a definition may mention itself, at the top level and locally, and definitions that mention one another are declared as one `let … and …;` group.
 //!
-//! The refusals carry the rule's weight. A cycle the source did not declare is refused by name with the way out; a value that reads itself while it is being computed is refused where the erased program is verified, since only there can a read be told from a knot forced by need; and a local binding that names itself must be a plain, typed name — which is what turns the shadowing idiom `let n = n + 1;` into an error that says so, since the new binding is in scope of its own value.
+//! The refusals carry the rule's weight. A cycle the source did not declare is refused by name with the way out, by the elaborator, which asks for each declaration when it is read and so is the one place that sees a cycle through a name, a registry entry or a witness alike; a value that reads itself while it is being computed is refused where the erased program is verified, since only there can a read be told from a knot forced by need; and a local binding that names itself must be a plain, typed name — which is what turns the shadowing idiom `let n = n + 1;` into an error that says so, since the new binding is in scope of its own value.
 
 use crate::tests::{error, run};
 
@@ -120,15 +120,48 @@ fn an_undeclared_cycle_is_refused_with_the_way_out() {
 
     let report = error(source);
     assert!(
-        report.contains("`/f` and `/g` reference each other")
-            && report.contains("join them with `and`"),
+        report.contains("'f' and 'g' need one another") && report.contains("'let ... and ...'"),
         "expected the cycle named with its way out:\n{report}"
     );
-    // Located at the first member's written name, in the sugar spelling whose synthesized type has no span of its own.
+    // Placed in the first member as written, in the sugar spelling whose synthesized type has no position of its own.
     assert!(
         report.contains("let f(n : Nat) -> Nat = g(n);"),
         "expected the snippet at `f`'s declaration:\n{report}"
     );
+    assert_eq!(
+        report.matches("need one another").count(),
+        1,
+        "expected the cycle reported once:\n{report}"
+    );
+}
+
+/// A cycle through a family's constructor and one through a record's field are cycles as one through two bodies is: a registry entry reaches what its payload and field types name, so each is refused by name, with the way out, by the one place that refuses any.
+#[test]
+fn a_cycle_through_a_registry_entry_is_refused_by_name() {
+    let through_a_family = r#"
+        induct Tree : pub Type | leaf() | node(Forest) end
+        let Forest : Type = Tree;
+        /std/print("unreachable")
+        "#;
+    let through_a_record = r#"
+        struct Tree : pub Type { held: Forest }
+        let Forest : Type = Tree;
+        /std/print("unreachable")
+        "#;
+
+    for source in [through_a_family, through_a_record] {
+        let report = error(source);
+        assert!(
+            report.contains("'Tree' and 'Forest' need one another")
+                && report.contains("'let ... and ...'"),
+            "expected the cycle named with its way out:\n{report}"
+        );
+        assert_eq!(
+            report.matches("need one another").count(),
+            1,
+            "expected the cycle reported once:\n{report}"
+        );
+    }
 }
 
 // Read outside every lambda, the self-reference is an initializer evaluating itself, which the erased verifier refuses. The refusal stays at the erase boundary on purpose: forcing on first use is what a recursive value means, and no syntactic net can tell this from the knots the language admits — a member read through a closure, a later member forced first, a self-knot nothing ever forces.

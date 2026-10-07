@@ -22,7 +22,7 @@ use {
 
 /// Compile one unit against `predecessors` over `baseline`: lower whole, diff, elaborate and judge the closure, erase whole.
 ///
-/// The result is a unit like [`compile_unit`](crate::compile_unit)'s — the same lowering, a core module holding every item in the lowering's order, the same erasure onto the predecessors' arena — differing in which items were elaborated and judged now and which were taken from the baseline. Erasure is whole because the arena is the fold's and appends.
+/// The result is a unit like [`compile_unit`](crate::compile_unit)'s — the same lowering, a core module holding every item in the order a module is stored in, the same erasure onto the predecessors' arena — differing in which items were elaborated and judged now and which were taken from the baseline. Erasure is whole because the arena is the fold's and appends.
 pub fn compile_unit_over(
     budget: u64,
     predecessors: Predecessors<'_>,

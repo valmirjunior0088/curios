@@ -5,21 +5,16 @@
 use {
     super::FreeVars,
     crate::{
-        Apply, Argument, Bound, Carrier, Cases, Free, Func, FuncType, Global, InductType, Infix,
-        Instance, InstanceHead, Intrinsic, Let, LetBinding, Level, Match, MatchResult, Metavar,
-        Nat, Proj, Rec, RecGroup, Spelling, Struct, StructType, Term, Transient, Tuple, TupleType,
+        Apply, Argument, Bound, Carrier, Cases, Free, Func, FuncType, Global, InductType, Instance,
+        InstanceHead, Intrinsic, Let, LetBinding, Level, Match, MatchResult, Metavar, Nat, Proj,
+        Rec, RecGroup, Spelling, Struct, StructType, Term, Transient, Tuple, TupleType,
         UniverseContext, UniverseMetaId, Var, Variant, Visit, print_term,
     },
     curios_abi::ForeignFunction,
     curios_num::{Floating, Integer},
     curios_print::run_printer,
-    curios_utilities::{InfixOp, SyntaxRegistry},
-    std::{
-        collections::{BTreeSet, HashSet},
-        fmt,
-        rc::Rc,
-        sync::Arc,
-    },
+    curios_utilities::SyntaxRegistry,
+    std::{collections::BTreeSet, fmt, rc::Rc, sync::Arc},
 };
 
 /// The actual node of the core term language — one variant per term former. [`Term`] wraps a `Subterm` in an `Rc` with cached hash/reach and an optional span, and `Deref`s here, so pattern matches are written against `Subterm` while construction goes through `Term`'s smart constructors. The final variant groups the elaboration-transient constructors under [`Transient`]: born in `into_core`, consumed by `elaborate`, never seen by reduce/convert/zonk/erase.
@@ -164,24 +159,7 @@ impl Subterm {
         <Subterm as Bound>::free_vars(self)
     }
 
-    /// Collect every infix operator occurring in this subterm. Like [`Subterm::construction_names`], this feeds `order_flat_items`' edges: an operator dispatches through an anonymous witness of its `/std/ops` concept, so no `Var` can spell the dependency, and the scheduler must learn it from the operator itself. `Infix` nodes are elaboration-transient — born in `into_core`, consumed by `elaborate` — so only lowered, pre-elaboration terms have any to collect, which is exactly where the scheduler walks.
-    pub fn infix_ops(&self) -> HashSet<InfixOp> {
-        let mut ops = HashSet::new();
-        self.collect_infix_ops(&mut ops);
-        ops
-    }
-
-    fn collect_infix_ops(&self, ops: &mut HashSet<InfixOp>) {
-        if let Subterm::Transient(Transient::Infix(Infix { op, .. })) = self {
-            ops.insert(*op);
-        }
-        self.any_child_term(&mut |child| {
-            child.collect_infix_ops(ops);
-            false
-        });
-    }
-
-    /// Collect the head name of every inductive/struct *construction* and *type-former normal form* occurring in this subterm. These names are not `Var`s (they live in the registry, not the variable graph), so they do not appear in `free_vars`; the reachability prune (`order_flat_items`) needs them as edges so a definition that *builds* a `Struct`/`Variant` (e.g. the string-literal meta-emitter's `/std/Str/Str`) keeps the backing type-former and field-type definitions alive even when no `Var` mentions them.
+    /// Collect the head name of every inductive/struct *construction* and *type-former normal form* occurring in this subterm. These names are not `Var`s (they live in the registry, not the variable graph), so they do not appear in `free_vars`; what follows a declaration's references, the lowering's unused-declaration lint, needs them as edges so a definition that *builds* a `Struct`/`Variant` (e.g. the string-literal meta-emitter's `/std/Str/Str`) keeps the backing type-former and field-type definitions alive even when no `Var` mentions them.
     pub fn construction_names(&self) -> BTreeSet<Global> {
         let mut names = BTreeSet::new();
         self.collect_construction_names(&mut names);
@@ -529,7 +507,7 @@ impl Subterm {
         }
     }
 
-    /// Whether a `Derive` transient occurs in this subterm: the mark of a derived witness body, which will reference its derivation's vocabulary without spelling it. Like [`Subterm::infix_ops`], this feeds `order_flat_items`' edges — the scheduler learns the dependency from the transient, since no `Var` carries it before elaboration writes the body.
+    /// Whether a `Derive` transient occurs in this subterm: the mark of a derived witness body, which will reference its derivation's vocabulary without spelling it. The lowering's unused-declaration lint learns the references from the transient, since no `Var` carries them before elaboration writes the body.
     pub fn has_derive(&self) -> bool {
         match self {
             Subterm::Transient(Transient::Derive) => true,

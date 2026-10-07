@@ -88,7 +88,7 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         test_type: registry_name(&["std", "Test", "Test"]),
         main: registry_name(&["std", "Test", "main"]),
     },
-    // These spellings are load-bearing for `ordering_tests`, which declares them as source and asserts the edges that follow: a row whose concept does not match what the source declares yields no vocabulary at all, and that suite is what says so.
+    // These spellings are load-bearing for `lint_tests`, which declares them as source and asserts the references that follow: a row whose concept does not match what the source declares yields no vocabulary at all, and that suite is what says so.
     derivations: DerivationSyntax {
         spell: SpellDerivation {
             spell: registry_field(&["std", "Spell", "Spell"], "spell"),
@@ -178,22 +178,6 @@ pub(super) fn lowered_module(src: &str) -> curios_core::Module {
     .unwrap();
 
     program.module
-}
-
-/// [`lowered_module`] over the fixture prelude, for what a unit's lowering reads off the units before it.
-pub(super) fn lowered_module_over_prelude(src: &str) -> curios_core::Module {
-    let modules = prelude_fixture();
-    let prepared = super::prepare_prelude(&modules, &[], syntax()).unwrap();
-
-    super::into_core_with_prelude(
-        &src.parse::<Entrypoint>().unwrap(),
-        &RootSource::none(),
-        std::slice::from_ref(&&prepared),
-        syntax(),
-    )
-    .unwrap()
-    .program
-    .module
 }
 
 pub(super) fn written_type(id: usize) -> curios_core::Term {

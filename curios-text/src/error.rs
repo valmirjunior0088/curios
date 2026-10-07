@@ -129,10 +129,6 @@ pub enum Error {
     RecursiveBangBinding {
         label: String,
     },
-    /// Top-level definitions that reference one another without being declared as one `let … and …;` group. A lone definition may name itself, but a cycle between two has no order to declare them in.
-    UndeclaredCycle {
-        names: Vec<String>,
-    },
     ModuleLoadFailed {
         label: String,
         cause: Box<LoadError>,
@@ -363,22 +359,6 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "`{label}` is bound by an action that mentions it; the action runs before the binding exists, so it cannot name the result it produces"
-                )
-            }
-            Error::UndeclaredCycle { names } => {
-                let quoted = names
-                    .iter()
-                    .map(|name| format!("`{name}`"))
-                    .collect::<Vec<_>>();
-                let listed = match quoted.split_last() {
-                    Some((last, rest)) if !rest.is_empty() => {
-                        format!("{} and {last}", rest.join(", "))
-                    }
-                    _ => quoted.join(", "),
-                };
-                write!(
-                    f,
-                    "{listed} reference each other; a definition may name itself, but definitions that name one another are declared as one group — join them with `and`"
                 )
             }
             Error::ModuleLoadFailed { label, cause } => {

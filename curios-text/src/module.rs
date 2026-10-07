@@ -343,7 +343,7 @@ fn into_items(recovered: Vec<Recovered<TopItem>>) -> Vec<TopItem> {
         .collect()
 }
 
-/// A parsed module body: its top-level items in source order — an order that matters, since `use` scoping is point-of-use and flat-item order is the downstream topological-sort tiebreak. Parsed via `FromStr`, loaded from disk through a [`RootSource`], or built synthetically (the embedded `sys` prelude).
+/// A parsed module body: its top-level items in source order — an order that matters, since `use` scoping is point-of-use and the flat items leave the lowering in it. Parsed via `FromStr`, loaded from disk through a [`RootSource`], or built synthetically (the embedded `sys` prelude).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
     pub items: Vec<TopItem>,

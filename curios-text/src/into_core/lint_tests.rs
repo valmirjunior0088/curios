@@ -729,3 +729,58 @@ fn a_witness_parameter_a_later_one_of_its_name_shadows_is_reported() {
         ["unused-binder: unused binder `A`; name it `_A` to keep it"]
     );
 }
+
+/// The declarations the lints of `src` report unused.
+fn unused(src: &str) -> Vec<String> {
+    lints(src)
+        .into_iter()
+        .filter(|lint| lint.starts_with("unused-declaration"))
+        .collect()
+}
+
+/// A unit declaring the `Spell` vocabulary of the fixture registry, its renderers private, around `rows`.
+fn spelling(rows: &str) -> String {
+    format!(
+        r#"
+        pub induct Colour : pub Type | red() end
+        {rows}
+        pub mod std
+            pub mod Spell
+                pub concept Spell(A : Type) : pub Type {{
+                    spell(A) -> Type,
+                }}
+                let call : Type = Type;
+                let record : Type = Type;
+            end
+            pub mod Str
+                pub let Str : Type = Type;
+            end
+            pub mod Bool
+                pub mod True
+                    pub let qed : Type = Type;
+                end
+            end
+        end
+        Type
+        "#
+    )
+}
+
+/// A derived witness lowers to a `Derive` transient, which carries no `Var`, so nothing in its body names the renderers the written body will apply: `derived_vocabulary` supplies them as references, and a renderer only a derived witness applies is used.
+///
+/// The names come from the fixture registry rather than from `/std`, so this is what makes those spellings load-bearing: a row whose concept does not match what the source declares yields no reference at all, and the control below is what says so.
+#[test]
+fn a_derived_witness_uses_the_vocabulary_its_body_will_name() {
+    assert_eq!(
+        unused(&spelling("satisfy /std/Spell/Spell(Colour) { .. }")),
+        Vec::<String>::new(),
+    );
+    assert_eq!(
+        unused(&spelling("")),
+        [
+            "unused-declaration: unused declaration `call`; name it `_call` or make it `pub` to keep it",
+            "unused-declaration: unused declaration `record`; name it `_record` or make it `pub` to keep it",
+        ],
+        "the control stopped holding: with no derived witness, nothing names the renderers",
+    );
+}

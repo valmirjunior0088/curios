@@ -2,7 +2,7 @@
 //!
 //! A witness declaration registers before its body elaborates, so a body may resolve the very entry it is defining. That makes the definition name itself, which no `let` can express: cross-definition value recursion exists only inside a `rec` item, so such a witness becomes a group of one and its self-reference is bound by that group rather than left free for the kernel to refuse.
 //!
-//! A cycle between *two* witnesses has no such binding unless the source declares it: one witness naming a later one is ordinary and works, because the lowerer orders a witness ahead of what dispatches through it; two naming each other are declared as one `satisfy … and …` group, whose members register before any body elaborates and are bound in one another, and an undeclared pair is refused here, in the language's own terms, rather than reaching the kernel as an unbound internal name.
+//! A cycle between *two* witnesses has no such binding unless the source declares it: one witness naming a later one is ordinary and works, because a declaration elaborates after what it reads, wherever each is written; two naming each other are declared as one `satisfy … and …` group, whose members register before any body elaborates and are bound in one another, and an undeclared pair is refused here, in the language's own terms, rather than reaching the kernel as an unbound internal name.
 
 use crate::tests::{error, run};
 
@@ -45,7 +45,7 @@ fn a_witness_recurses_through_another_formers_witness() {
     assert_eq!(run(source), b"1[[2[[]]]]");
 }
 
-// One witness naming another declared after it is not recursion and must keep working: the lowerer emits a witness ahead of whatever dispatches through its concept, so the reference points backwards by the time the kernel walks it.
+// One witness naming another declared after it is not recursion and must keep working: the read of the later witness asks for it, so it has elaborated by the time the first one is kept, and the module stores it first.
 #[test]
 fn a_witness_naming_a_later_witness_is_ordered_not_refused() {
     let source = r#"

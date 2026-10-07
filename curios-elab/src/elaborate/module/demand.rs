@@ -2,7 +2,7 @@
 //!
 //! **The declaration is the unit of work.** A declaration is an item with every item the lowering generated from it — a type former with its constructors, a concept with its method wrappers. Its items share what one written declaration shares: the universe levels of its written types, which the lowering mints once and copies, and the registry entry the former rebuilds and a constructor is finalized against. So they are attempted together, in item order, in one state, and are published together.
 //!
-//! **A declaration elaborates after what it reads, wherever each was written.** The walk asks for the declarations in their lowered order, and asking for one first asks for every declaration its items' lowered forms reach. What it turns out to read beyond that — the witness a goal resolves to, a registry entry no name it writes reaches — it meets while it elaborates: the read records the declaration it needed ([`Context::need`]), and an attempt that recorded one is void whatever it went on to conclude. A void attempt is undone as a refused item is, poisoning nothing; what it needed is elaborated; and the attempt is made again. No attempt is suspended to run another inside it, so one context serves them all.
+//! **A declaration elaborates after what it reads, wherever each was written.** The walk asks for the declarations in the order they are written, which is the order the lowering hands them on in, and asking for one first asks for every declaration its items' lowered forms reach. What it turns out to read beyond that — the witness a goal resolves to, a registry entry no name it writes reaches — it meets while it elaborates: the read records the declaration it needed ([`Context::need`]), and an attempt that recorded one is void whatever it went on to conclude. A void attempt is undone as a refused item is, poisoning nothing; what it needed is elaborated; and the attempt is made again. No attempt is suspended to run another inside it, so one context serves them all.
 //!
 //! **The prover's vocabulary is asked for first.** A proof the elaborator writes applies lemmas no declaration names, so nothing a declaration writes says it reads them. The walk therefore begins with the declarations of the vocabulary the unit declares, which brings in every declaration they read, with no lemma of the unit on offer — and, compiled over a baseline, with the declarations the vocabulary reads through an item the baseline holds, which no walk asks for; and only then offers them ([`Context::offer_lemmas`]) and asks for the rest. A declaration the vocabulary reads is thereby proved without it, every other finds all of it elaborated, and no proof makes one declaration wait on another.
 //!
@@ -14,9 +14,12 @@ use {
         withhold,
     },
     crate::{Context, Error, GoalSite},
-    curios_core::{DefinitionKind, Global, Item, Module},
-    curios_utilities::recurse,
-    std::collections::{BTreeMap, BTreeSet},
+    curios_core::{DefinitionKind, Enter, Global, Item, Module, Term},
+    curios_utilities::{Span, recurse},
+    std::{
+        collections::{BTreeMap, BTreeSet, HashSet},
+        ops::ControlFlow,
+    },
 };
 
 /// Where one declaration stands in the walk.
@@ -56,6 +59,26 @@ pub(super) struct Demand<'a> {
     pub(super) survivors: Survivors,
 }
 
+/// The first position written anywhere in `term`, outermost first, each node of its graph visited once.
+///
+/// Where a report about a declaration is placed: the position of a declaration's label does not reach Core, and a signature the lowering synthesized around what was written, a function sugar's, has none of its own.
+fn first_written(term: &Term) -> Option<Span> {
+    let found = term.try_walk(
+        &mut HashSet::new(),
+        |seen: &mut HashSet<Term>, term| match term.span() {
+            Some(span) => ControlFlow::Break(span),
+            None if seen.insert(term.clone()) => ControlFlow::Continue(Enter::Descend),
+            None => ControlFlow::Continue(Enter::Skip(())),
+        },
+        |_, _, _| (),
+    );
+
+    match found {
+        ControlFlow::Break(span) => Some(span),
+        ControlFlow::Continue(()) => None,
+    }
+}
+
 /// The kind the lowering stamped an item with: a group's is its first member's, every member of one being generated alike.
 fn introduced(item: &Item) -> &DefinitionKind {
     match item {
@@ -66,7 +89,7 @@ fn introduced(item: &Item) -> &DefinitionKind {
 
 impl<'a> Demand<'a> {
     pub(super) fn new(module: &'a Module, poison: Poison, survivors: Survivors) -> Self {
-        // A generated item names the declaration it was generated from, which is an item of the module wherever the lowering's order put the two.
+        // A generated item names the declaration it was generated from, which is an item of the module wherever the two sit.
         let written = module
             .items
             .iter()
@@ -199,10 +222,10 @@ impl<'a> Demand<'a> {
                         .map(|member| &module.items[member])
                         .collect::<Vec<_>>();
                     let item = &module.items[first(&declaration)];
-                    let site = item
-                        .definitions()
-                        .first()
-                        .and_then(|definition| definition.type_.span());
+                    // Placed in the first member as written: at its signature, or in it where the lowering synthesized the signature around what was written.
+                    let site = item.definitions().first().and_then(|definition| {
+                        first_written(&definition.type_).or_else(|| first_written(&definition.body))
+                    });
                     let error = Error::declaration_cycle(&members)
                         .at_opt(site)
                         .in_declaration(&item.describe(), item.declared_names().first().copied());

@@ -160,7 +160,7 @@ pub struct Context {
     checked: Vec<(Term, Term, Rc<str>)>,
     // The definition whose body is currently elaborating, for those sites.
     checked_site: Rc<str>,
-    /// Where each name the unit declares sits in its lowered order — every item's, the ones a recompile reuses among them: which names are the unit's own ([`Context::proof_may_apply`]), and where a goal's report is placed ([`Context::written_at`]).
+    /// Where each name the unit declares is written, as its place among the unit's items as the lowering hands them on — every item's, the ones a recompile reuses among them: which names are the unit's own ([`Context::proof_may_apply`]), and where a goal's report is placed ([`Context::written_at`]).
     order: BTreeMap<Global, usize>,
     /// Whether the lemmas the unit being elaborated declares are on offer to the proofs the elaborator writes: not while its walk elaborates the prover's vocabulary, and from then on ([`Context::offer_lemmas`]). A context no unit was begun in offers whatever is in scope.
     offering: bool,
@@ -406,7 +406,7 @@ impl Context {
         self.checked.truncate(mark);
     }
 
-    /// Begin a unit's items: where each of its names sits in the lowered order, and the names its own items declare, none finished yet. No lemma of the unit is on offer until its walk says so ([`Context::offer_lemmas`]).
+    /// Begin a unit's items: where each of its names is written, and the names its own items declare, none finished yet. No lemma of the unit is on offer until its walk says so ([`Context::offer_lemmas`]).
     pub(crate) fn begin_unit(
         &mut self,
         order: BTreeMap<Global, usize>,
@@ -473,7 +473,7 @@ impl Context {
         ran
     }
 
-    /// Where `name` sits in the unit's lowered order, where a declaration of the unit declares it.
+    /// Where `name` is written among the unit's items, where a declaration of the unit declares it.
     pub(crate) fn written_at(&self, name: &Global) -> Option<usize> {
         self.order.get(name).copied()
     }
