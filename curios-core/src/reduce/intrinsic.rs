@@ -36,7 +36,7 @@ use {
         int_of_nat, int_preimage, int_product, int_sum, int_terms, normalize_concat, peel_bin,
         peel_first_atom, peel_first_elem,
     },
-    curios_algebra::{Carrier, Comparison, Deduction, distribution_size},
+    curios_algebra::{Carrier, Comparison, Deduction, Half, distribution_size},
     curios_num::{Binary, Floating, Grain, Integer, Natural},
 };
 
@@ -547,7 +547,7 @@ pub fn reduce_intrinsic(
                 |l, r| l.checked_bitand(r).map(Intrinsic::Nat),
                 Intrinsic::NatAnd,
             )?,
-            |l, r| nat_bitwise_laws(l, r, intrinsic),
+            |l, r| bitwise_laws(l, r, intrinsic),
         )),
         Intrinsic::NatOr(left, right) => Ok(then_laws(
             reduce_nat_binary(
@@ -557,7 +557,7 @@ pub fn reduce_intrinsic(
                 |l, r| l.checked_bitor(r).map(Intrinsic::Nat),
                 Intrinsic::NatOr,
             )?,
-            |l, r| nat_bitwise_laws(l, r, intrinsic),
+            |l, r| bitwise_laws(l, r, intrinsic),
         )),
         Intrinsic::NatXor(left, right) => Ok(then_laws(
             reduce_nat_binary(
@@ -567,11 +567,11 @@ pub fn reduce_intrinsic(
                 |l, r| l.checked_bitxor(r).map(Intrinsic::Nat),
                 Intrinsic::NatXor,
             )?,
-            |l, r| nat_bitwise_laws(l, r, intrinsic),
+            |l, r| bitwise_laws(l, r, intrinsic),
         )),
         Intrinsic::NatShl(left, right) => {
             let shifted = then_laws(reduce_nat_shl(reducer, left, right)?, |l, r| {
-                nat_shift_laws(l, r, intrinsic)
+                shift_laws(l, r, intrinsic)
             });
             let shifted = then_coefficient(reducer, shifted, |coefficient, value| {
                 Term::intrinsic(Intrinsic::nat_mul(
@@ -604,7 +604,7 @@ pub fn reduce_intrinsic(
                     |l, r| l.checked_shr(r).map(Intrinsic::Nat),
                     Intrinsic::NatShr,
                 )?,
-                |l, r| nat_shift_laws(l, r, intrinsic),
+                |l, r| shift_laws(l, r, intrinsic),
             );
             then_split_shift(reducer, shifted, Intrinsic::NatShr)
         }
@@ -673,8 +673,7 @@ pub fn reduce_intrinsic(
             reducer,
             dividend,
             divisor,
-            "Int/div",
-            |dividend: Integer, divisor: Integer| dividend.div(&divisor).ok(),
+            Half::Quotient,
             |dividend, divisor| Intrinsic::IntDiv {
                 dividend,
                 divisor,
@@ -689,8 +688,7 @@ pub fn reduce_intrinsic(
             reducer,
             dividend,
             divisor,
-            "Int/rem",
-            |dividend: Integer, divisor: Integer| dividend.rem(&divisor).ok(),
+            Half::Remainder,
             |dividend, divisor| Intrinsic::IntRem {
                 dividend,
                 divisor,
@@ -720,36 +718,48 @@ pub fn reduce_intrinsic(
             Intrinsic::IntLe,
         ),
         // Bitwise ops fold on unbounded ℤ, which the running program computes too: `and`, `or`, `xor` on the infinite two's-complement expansion, `shl` as `· 2^n` and `shr` as the arithmetic `⌊·/2^n⌋`. The backend's signed i31 is a fast path that grows into a boxed magnitude, never a width that truncates.
-        Intrinsic::IntAnd(left, right) => reduce_int_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Some(Intrinsic::Int(left & right)),
-            Intrinsic::IntAnd,
-        ),
-        Intrinsic::IntOr(left, right) => reduce_int_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Some(Intrinsic::Int(left | right)),
-            Intrinsic::IntOr,
-        ),
-        Intrinsic::IntXor(left, right) => reduce_int_binary(
-            reducer,
-            left,
-            right,
-            |left, right| Some(Intrinsic::Int(left ^ right)),
-            Intrinsic::IntXor,
-        ),
-        Intrinsic::IntShl(left, right) => {
-            let shifted = reduce_int_shift(
+        Intrinsic::IntAnd(left, right) => Ok(then_laws(
+            reduce_int_binary(
                 reducer,
                 left,
                 right,
-                shift_bound,
-                |value, amount| value.shl_within(&amount, u64::MAX),
-                Intrinsic::IntShl,
-            )?;
+                |left, right| Some(Intrinsic::Int(left & right)),
+                Intrinsic::IntAnd,
+            )?,
+            |l, r| bitwise_laws(l, r, intrinsic),
+        )),
+        Intrinsic::IntOr(left, right) => Ok(then_laws(
+            reduce_int_binary(
+                reducer,
+                left,
+                right,
+                |left, right| Some(Intrinsic::Int(left | right)),
+                Intrinsic::IntOr,
+            )?,
+            |l, r| bitwise_laws(l, r, intrinsic),
+        )),
+        Intrinsic::IntXor(left, right) => Ok(then_laws(
+            reduce_int_binary(
+                reducer,
+                left,
+                right,
+                |left, right| Some(Intrinsic::Int(left ^ right)),
+                Intrinsic::IntXor,
+            )?,
+            |l, r| bitwise_laws(l, r, intrinsic),
+        )),
+        Intrinsic::IntShl(left, right) => {
+            let shifted = then_laws(
+                reduce_int_shift(
+                    reducer,
+                    left,
+                    right,
+                    shift_bound,
+                    |value, amount| value.shl_within(&amount, u64::MAX),
+                    Intrinsic::IntShl,
+                )?,
+                |l, r| shift_laws(l, r, intrinsic),
+            );
             let shifted = then_coefficient(reducer, shifted, |coefficient, value| {
                 Term::intrinsic(Intrinsic::IntMul(
                     Term::intrinsic(Intrinsic::Int(Integer::from(coefficient))),
@@ -773,19 +783,23 @@ pub fn reduce_intrinsic(
             )
         }
         Intrinsic::IntShr(left, right) => {
-            let shifted = reduce_int_shift(
-                reducer,
-                left,
-                right,
-                |value, amount| {
-                    operand_bound(
-                        value,
-                        amount.map_or(0, |amount| u64::from(u64::BITS - amount.leading_zeros())),
-                    )
-                },
-                |value, amount| Some(&value >> &amount),
-                Intrinsic::IntShr,
-            )?;
+            let shifted = then_laws(
+                reduce_int_shift(
+                    reducer,
+                    left,
+                    right,
+                    |value, amount| {
+                        operand_bound(
+                            value,
+                            amount
+                                .map_or(0, |amount| u64::from(u64::BITS - amount.leading_zeros())),
+                        )
+                    },
+                    |value, amount| Some(&value >> &amount),
+                    Intrinsic::IntShr,
+                )?,
+                |l, r| shift_laws(l, r, intrinsic),
+            );
             then_split_shift(reducer, shifted, Intrinsic::IntShr)
         }
         Intrinsic::FltType => Ok(Subterm::Intrinsic(Intrinsic::FltType)),

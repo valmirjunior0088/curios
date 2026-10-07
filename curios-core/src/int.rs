@@ -11,7 +11,7 @@ use {
     crate::project_erased_universes,
     curios_algebra::{
         Cancelled, Combination, Deduction, Progress, Recombination, Summand, Wanted, distribute,
-        distribution_size,
+        distribution_size, signed_cofactor,
     },
     curios_num::Integer,
     curios_utilities::recurse,
@@ -39,6 +39,11 @@ fn literal(value: Integer) -> Term {
 /// Whether a reduced term is the literal zero — the identity.
 pub fn int_is_zero(term: &Term) -> bool {
     term.as_int().is_some_and(|value| value.is_zero())
+}
+
+/// Whether a reduced term is the literal `-1`, every bit of its two's-complement expansion set.
+pub fn int_is_minus_one(term: &Term) -> bool {
+    term.as_int().is_some_and(|value| value == -one())
 }
 
 /// A reduced term read as its constant and its symbolic summands, the `IntAdd` spine flattened whatever its nesting and every literal summand folded into the constant.
@@ -306,6 +311,17 @@ pub fn int_preimage(term: &Term) -> Option<Term> {
         }
         Some(Nat::sum_over_floor(preimages, natural.constant))
     })
+}
+
+/// A reduced term divided by a nonzero literal that divides its constant and every coefficient, each divided in place: `(i * 4 + k * 6 + 8) / 2` is `i * 2 + k * 3 + 4`, and `i / -1` is `-i`. The quotient of an exact multiple is exact whichever way the division rounds (`curios-algebra`'s `signed_cofactor`), so this reads no sign, and the remainder of such a division is zero. `None` where the divisor leaves a remainder of the constant or of a coefficient: the truncated quotient of such a sum follows its sign.
+pub fn int_exact_quotient(term: &Term, divisor: &Integer) -> Option<Term> {
+    let (constant, summands) = int_terms(term);
+    let constant = signed_cofactor(&constant, divisor)?;
+    let monomials = int_linear(summands)
+        .into_iter()
+        .map(|(coefficient, factors)| Some((signed_cofactor(&coefficient, divisor)?, factors)))
+        .collect::<Option<Vec<_>>>()?;
+    Some(int_from_linear(constant, monomials))
 }
 
 /// `-term`, in normal form: every coefficient and the constant negated. What `IntSub` folds through, so no subtraction node survives reduction.

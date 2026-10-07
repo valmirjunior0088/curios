@@ -684,34 +684,10 @@ const CARRIERS: &[Carrier] = &[
         name: "Int, the families it shares with Nat",
         binders: "i: Int, j: Int, k: Int, n: Nat, p: Int/NonZero(j)",
         held: &[
-            // Decided today and declared by no family: the product's associativity, and a shifted zero.
-            "Eq()((i * j) * k, i * (j * k))",
-            "Eq()(Int/shl(+0, n), +0)",
-        ],
-        refused: &[
-            // Candidates `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with the families `Int` shares with `Nat`. The bitwise identities, `-1` the unit of `and` and the absorber of `or` where `Nat` has neither.
-            "Eq()(Int/and(i, j), Int/and(j, i))",
-            "Eq()(Int/or(i, j), Int/or(j, i))",
-            "Eq()(Int/xor(i, j), Int/xor(j, i))",
-            "Eq()(Int/and(i, i), i)",
-            "Eq()(Int/or(i, i), i)",
-            "Eq()(Int/xor(i, i), +0)",
-            "Eq()(Int/and(i, +0), +0)",
-            "Eq()(Int/and(+0, i), +0)",
-            "Eq()(Int/or(i, +0), i)",
-            "Eq()(Int/xor(i, +0), i)",
-            "Eq()(Int/and(i, -1), i)",
-            "Eq()(Int/and(-1, i), i)",
-            "Eq()(Int/or(i, -1), -1)",
-            "Eq()(Int/or(-1, i), -1)",
-            // A shift by zero, and a zero shifted right.
-            "Eq()(Int/shl(i, 0), i)",
-            "Eq()(Int/shr(i, 0), i)",
-            "Eq()(Int/shr(+0, n), +0)",
-            // The division's laws that read no sign: by one, of zero, of the divisor itself, and of an exact multiple, whatever the signs of the coefficient and the divisor.
-            "Eq()(i / +1, i)",
+            // The division's laws that read no sign, which no family of the law table states: of zero, of the divisor itself, by `-1`, and of an exact multiple, whatever the signs of the coefficient and the divisor. The bitwise identities with `-1` the unit of `and` and the absorber of `or`, the shifts' zero laws, the quotient by one and the product's associativity are the table's rows.
             "Eq()(i % +1, +0)",
             "Eq()(i / -1, +0 - i)",
+            "Eq()(i % -1, +0)",
             "Eq()(Int/div(+0, j, @p), +0)",
             "Eq()(Int/rem(+0, j, @p), +0)",
             "Eq()(Int/div(j, j, @p), +1)",
@@ -721,6 +697,9 @@ const CARRIERS: &[Carrier] = &[
             "Eq()((i * -6) / 2, i * -3)",
             "Eq()((i * 2) / -2, +0 - i)",
             "Eq()((i * 4 + k * 6 + 8) / 2, i * 2 + k * 3 + 4)",
+            "Eq()((i * 4 + k * 6 + 8) % -2, +0)",
+        ],
+        refused: &[
             // A candidate no stage moves: a remainder's magnitude is below its divisor's, a bound through `abs` nothing declares.
             "Eq()(i % 3 < +3, true)",
             // Controls, each a law of `Nat` and none of `Int`, failing at an operand below zero: a remainder takes its dividend's sign, so an odd number's is `-1`; the floor law and the Euclidean split count whole divisors, which a truncated quotient does not; and nothing dominates below zero, where a difference, a bitwise `and`, an arithmetic shift, a quotient and a remainder each pass their operand.

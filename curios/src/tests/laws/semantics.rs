@@ -166,6 +166,7 @@ fn constant(value: Constant, carrier: Carrier) -> Value {
         (Constant::One, Carrier::Natural) => Value::Natural(Natural::one()),
         (Constant::Zero, Carrier::Integer) => Value::Integer(Integer::from(0)),
         (Constant::One, Carrier::Integer) => Value::Integer(Integer::from(1)),
+        (Constant::MinusOne, Carrier::Integer) => Value::Integer(Integer::from(-1)),
         (Constant::True, Carrier::Boolean) => Value::Boolean(true),
         (Constant::False, Carrier::Boolean) => Value::Boolean(false),
         (Constant::Empty, Carrier::Packed(grain)) => Value::Packed(grain, Binary::empty()),
@@ -198,12 +199,23 @@ fn apply(carrier: Carrier, operation: Operation, operands: &[Value]) -> Option<V
             Operation::Sum => Value::Integer(a.clone() + b.clone()),
             Operation::Difference => Value::Integer(a.clone() - b.clone()),
             Operation::Product => Value::Integer(a.clone() * b.clone()),
+            Operation::Quotient => Value::Integer(a.div(b).ok()?),
+            Operation::Remainder => Value::Integer(a.rem(b).ok()?),
+            Operation::And => Value::Integer(a.clone() & b.clone()),
+            Operation::Or => Value::Integer(a.clone() | b.clone()),
+            Operation::Xor => Value::Integer(a.clone() ^ b.clone()),
             Operation::Equal => Value::Boolean(a == b),
             Operation::Unequal => Value::Boolean(a != b),
             Operation::Less => Value::Boolean(a < b),
             Operation::AtMost => Value::Boolean(a <= b),
             _ => return None,
         },
+        (Carrier::Integer, Operation::ShiftLeft, [Value::Integer(a), Value::Natural(b)]) => {
+            Value::Integer(a.shl_within(b, 1 << 20)?)
+        }
+        (Carrier::Integer, Operation::ShiftRight, [Value::Integer(a), Value::Natural(b)]) => {
+            Value::Integer(a >> b)
+        }
         (Carrier::Boolean, _, [Value::Boolean(a), Value::Boolean(b)]) => {
             Value::Boolean(match operation {
                 Operation::And => *a && *b,

@@ -4,8 +4,9 @@
 
 use {
     super::dual_comparison,
-    crate::{Declaration, Intrinsic, Nat, Subterm, Term},
+    crate::{Declaration, Intrinsic, Nat, Subterm, Term, int_is_minus_one, int_is_zero},
     curios_algebra::{BooleanPair, Carrier, Connected, Nested, Operation, Pair, Reduct},
+    curios_num::Integer,
 };
 
 /// A binary fold's laws beside its two-literal case, tried on what that case left neutral: a literal unit on one side yields the other operand, a literal absorbing element yields itself, and two structurally identical operands yield what idempotence or self-cancellation says. Every one is an equation on the carrier's values that holds for every value of its symbolic side, which is what makes it admissible in a fold both checkers share — see `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`. Run after the fold rather than inside it because every binary helper already rebuilds its neutral from the operands it reduced, so the laws read them back off the neutral and the helpers keep one signature; a fold that produced a literal has no operands to read and passes through. `reduce_bool_binary` leaves a connective's right operand as written under a stuck left — deliberately, see `a_stuck_left_operand_leaves_the_right_as_written` — so a `&&` or `||` law sees that operand unreduced; a literal or a repeated binder is visible either way, and a law missed on an unreduced operand is a neutral the next demand reduces, never a wrong answer. An equality, and the `xor` that `!=` lowers through, reads both, since its laws do.
@@ -119,36 +120,57 @@ fn complementary(left: &Term, right: &Term) -> bool {
         || negation(right).is_some_and(|negated| negated == *left)
 }
 
-/// The bitwise lattice on ℕ, as `curios-algebra`'s `Operation::bitwise_identity` states it: `and` has `0` absorbing and no unit, `or` and `xor` have `0` as unit; `and` and `or` are idempotent and `xor` self-cancels. What is read here is whether an operand is zero and whether the two are one term.
-pub(super) fn nat_bitwise_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Term> {
-    let reduct = match op.algebra() {
-        Declaration::Operation {
-            carrier: Carrier::Natural,
-            operation,
-            ..
-        } => operation.bitwise_identity(Pair {
+/// The bitwise lattice on ℕ and on ℤ, as `curios-algebra`'s `Operation::bitwise_identity` states it: `0` absorbs `and` and is the unit of `or` and `xor`; `-1` is the unit of `and` and absorbs `or`, at ℤ alone, no natural having every bit set; `and` and `or` are idempotent and `xor` self-cancels. What is read here is whether an operand is zero or `-1` and whether the two are one term.
+pub(super) fn bitwise_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Term> {
+    let Declaration::Operation {
+        carrier, operation, ..
+    } = op.algebra()
+    else {
+        return None;
+    };
+    let pair = match carrier {
+        Carrier::Natural => Pair {
             left_zero: Nat::is_zero(left),
             right_zero: Nat::is_zero(right),
             same: left == right,
-        }),
-        _ => None,
+            ..Pair::default()
+        },
+        Carrier::Integer => Pair {
+            left_zero: int_is_zero(left),
+            right_zero: int_is_zero(right),
+            left_ones: int_is_minus_one(left),
+            right_ones: int_is_minus_one(right),
+            same: left == right,
+        },
+        _ => return None,
     };
-    reduct.map(|reduct| match reduct {
-        Reduct::Left => left.clone(),
-        Reduct::Right => right.clone(),
-        Reduct::Zero => Term::intrinsic(Intrinsic::Nat(Nat::Zero)),
+    Some(match (operation.bitwise_identity(pair)?, carrier) {
+        (Reduct::Left, _) => left.clone(),
+        (Reduct::Right, _) => right.clone(),
+        (Reduct::Zero, Carrier::Natural) => Term::intrinsic(Intrinsic::Nat(Nat::Zero)),
+        (Reduct::Zero, _) => Term::intrinsic(Intrinsic::Int(Integer::from(0i32))),
+        (Reduct::Ones, Carrier::Integer) => Term::intrinsic(Intrinsic::Int(Integer::from(-1i32))),
+        // No natural has every bit set, so no pair of naturals is observed to hold one.
+        (Reduct::Ones, _) => return None,
     })
 }
 
-/// A shift by `0` is the value, and a shifted `0` is `0` — the two shift laws that build nothing, which is why they are the two stated here: a law beside a fold takes no reducer to charge. The one that builds, `shl(x, k) = 2ᵏ · x` for a literal `k`, is `then_coefficient`'s, which has the reducer in hand and charges the coefficient before it exists.
-pub(super) fn nat_shift_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Term> {
-    let Declaration::Operation { operation, .. } = op.algebra() else {
+/// A shift by `0` is the value, and a shifted `0` is `0`, on ℕ and on ℤ — the two shift laws that build nothing, which is why they are the two stated here: a law beside a fold takes no reducer to charge. The one that builds, `shl(x, k) = 2ᵏ · x` for a literal `k`, is `then_coefficient`'s, which has the reducer in hand and charges the coefficient before it exists. The count is a natural at both carriers.
+pub(super) fn shift_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Term> {
+    let Declaration::Operation {
+        carrier, operation, ..
+    } = op.algebra()
+    else {
         return None;
     };
     let pair = Pair {
-        left_zero: Nat::is_zero(left),
+        left_zero: match carrier {
+            Carrier::Natural => Nat::is_zero(left),
+            Carrier::Integer => int_is_zero(left),
+            _ => return None,
+        },
         right_zero: Nat::is_zero(right),
-        same: false,
+        ..Pair::default()
     };
     operation.shift_identity(pair).map(|_| left.clone())
 }

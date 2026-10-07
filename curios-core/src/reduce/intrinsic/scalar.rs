@@ -4,7 +4,11 @@
 
 use {
     super::operand_bound,
-    crate::{Cost, Intrinsic, ReduceError, Reducer, Subterm, Term},
+    crate::{
+        Cost, Intrinsic, ReduceError, Reducer, Subterm, Term, int_exact_quotient, int_is_zero,
+        int_terms,
+    },
+    curios_algebra::{Divided, Half},
     curios_num::{Floating, Integer, Natural},
 };
 
@@ -101,14 +105,19 @@ pub(super) fn reduce_int_binary(
 }
 
 /// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that reduces to literal zero is a reported error — mathematically undefined, following `BinGet`'s pattern. The fold itself is exact and total past that: the type level pretends ℤ (see `Int`).
+///
+/// Beside the two-literal fold stand the laws a truncated division shares with ℕ's, each reading no sign. The floor law and the Euclidean split are not among them: each is false at a dividend below zero, where truncation rounds the other way.
 pub(super) fn reduce_int_division(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,
-    kind: &'static str,
-    fold: impl FnOnce(Integer, Integer) -> Option<Integer>,
+    half: Half,
     rebuild: impl FnOnce(Term, Term) -> Intrinsic,
 ) -> Result<Subterm, ReduceError> {
+    let (kind, fold): (_, fn(&Integer, &Integer) -> Option<Integer>) = match half {
+        Half::Quotient => ("Int/div", |dividend, divisor| dividend.div(divisor).ok()),
+        Half::Remainder => ("Int/rem", |dividend, divisor| dividend.rem(divisor).ok()),
+    };
     let span = right.span().or_else(|| left.span());
     let left = reducer.reduce_forced(left.clone())?;
     let right = reducer.reduce_forced(right.clone())?;
@@ -117,15 +126,40 @@ pub(super) fn reduce_int_division(
         return Err(ReduceError::DivisionByZero { kind, span });
     }
 
-    let folded = match (left.as_int(), right.as_int()) {
-        (Some(l), Some(r)) => fold(l, r).map(Intrinsic::Int),
+    if let (Some(l), Some(r)) = (left.as_int(), right.as_int())
+        && let Some(folded) = fold(&l, &r)
+    {
+        return Ok(Subterm::Intrinsic(Intrinsic::Int(folded)));
+    }
+
+    // The laws that read no sign, the ones ℤ's truncated division shares with ℕ's: a zero dividend divides to `0` with remainder `0` by any divisor, a dividend divides by `1` to itself with remainder `0`, and a dividend that is its divisor to `1` with remainder `0`, on the division's own precondition that the divisor is nonzero.
+    let divided = match () {
+        _ if int_is_zero(&left) => Some(half.of_zero()),
+        _ if right.as_int() == Some(Integer::from(1i32)) => Some(half.by_one()),
+        _ if left == right => Some(half.by_itself()),
         _ => None,
     };
+    if let Some(divided) = divided {
+        return Ok(match divided {
+            Divided::Zero => Subterm::Intrinsic(Intrinsic::Int(Integer::from(0i32))),
+            Divided::Dividend => Term::unwrap_or_clone(left),
+            Divided::One => Subterm::Intrinsic(Intrinsic::Int(Integer::from(1i32))),
+        });
+    }
 
-    Ok(Subterm::Intrinsic(match folded {
-        Some(intrinsic) => intrinsic,
-        None => rebuild(left, right),
-    }))
+    // A literal divisor that divides the dividend's constant and every coefficient divides each in place and leaves no remainder, whatever the signs: `i / +1` is `i`, `i / -1` is `-i`, `(i * -6) / 2` is `i * -3`. The quotient has as many monomials as the dividend, charged before it is built.
+    if let Some(divisor) = right.as_int() {
+        let (_, summands) = int_terms(&left);
+        reducer.spend(Cost::collection(summands.len() as u64 + 1))?;
+        if let Some(quotient) = int_exact_quotient(&left, &divisor) {
+            return Ok(match half {
+                Half::Quotient => Term::unwrap_or_clone(quotient),
+                Half::Remainder => Subterm::Intrinsic(Intrinsic::Int(Integer::from(0i32))),
+            });
+        }
+    }
+
+    Ok(Subterm::Intrinsic(rebuild(left, right)))
 }
 
 /// `Flt` operations fold on literal operands by calling the model, `curios_num::Floating` — binary64 computed exactly over unbounded integers and rounded once, rather than whatever the compiler's host computes. There is no decline gate: the model pins every choice IEEE leaves open, which NaN an operation answers included, and the runtime is held to the same clauses, so `1.0 + 1.0` is `2.0`, `1.0 / 0.0` is `+inf`, `0.0 / 0.0` is the default NaN, and each is true of the running program. A symbolic operand rebuilds the neutral term.

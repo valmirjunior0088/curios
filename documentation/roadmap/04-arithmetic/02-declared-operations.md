@@ -23,7 +23,7 @@ It builds on the algebra's law families and generated grid, and is independently
 
 ## The gap
 
-`min` and `max` at both carriers, and `abs` and `sign` at `Int`, are library functions, so conversion sees their unfolded matches: `min(a, b)` against `min(b, a)`, `min(a, b) <= a`, `abs(+0 - a)` against `abs(a)` and `sign(+0 - a)` against `+0 - sign(a)` are refused. `pow` is a library recursion by squaring, so `pow(x, y + 1)` against `pow(x, y) * x` is refused, and a count's sum does not split: `shl(1, x + y)` against `shl(1, x) * shl(1, y)`. No power is known positive: `0 < shl(1, x)` does not reduce. `Flt`'s laws that hold of every bit pattern are refused, each a refused row. At `Int` the bitwise operations fold closed operands only, a shift by zero and a division by one stay stuck, and the law table declares no family for them.
+`min` and `max` at both carriers, and `abs` and `sign` at `Int`, are library functions, so conversion sees their unfolded matches: `min(a, b)` against `min(b, a)`, `min(a, b) <= a`, `abs(+0 - a)` against `abs(a)` and `sign(+0 - a)` against `+0 - sign(a)` are refused. `pow` is a library recursion by squaring, so `pow(x, y + 1)` against `pow(x, y) * x` is refused, and a count's sum does not split: `shl(1, x + y)` against `shl(1, x) * shl(1, y)`. No power is known positive: `0 < shl(1, x)` does not reduce.
 
 What the library definitions decide today is kept: `min(x, x + 1)` is `x`, `max(x, 0)` is `x`, `min(x % 8, 8)` is `x % 8`, `abs(Nat/to_int(n))` is `n`, `abs(+0 - Nat/to_int(n) - 1)` is `n + 1`, `sign(Nat/to_int(n) + 1)` is `+1`, and `pow(x + 1, 2)` is `x * x + 2 * x + 1`.
 
@@ -79,12 +79,12 @@ Lemmas: `pow(pow(x, a), b) = pow(x, a * b)` and `pow(x * y, a) = pow(x, a) * pow
 
 ## The families `Int` shares with `Nat`
 
-`Int` divides truncating toward zero and shifts right arithmetically, so some of what `Nat` declares is no law at `Int`. Declared at `Int`:
+`Int` divides truncating toward zero and shifts right arithmetically, so some of what `Nat` declares is no law at `Int`. Declared at `Int`, each held by its declaration or its written row, with nothing of this section left to land:
 
 - the bitwise identities: `and`, `or` and `xor` commute; `and` and `or` are idempotent and `xor` cancels itself; `0` absorbs `and` and is the unit of `or` and `xor`; `-1` is the unit of `and` and absorbs `or`;
 - a shift by zero is the value and a shifted zero is zero, at both shifts;
-- `i / +1 = i`, `i % +1 = +0`, a zero dividend, a dividend that is its divisor, and an exact multiple, `(i * 2) / 2 = i` and `(i * 2) % 2 = +0`;
-- the product's associativity, which conversion decides and the table does not state.
+- `i / +1 = i`, `i % +1 = +0`, a zero dividend, a dividend that is its divisor, and an exact multiple whatever the signs of its coefficients and its divisor, `(i * -6) / 2 = i * -3` and `(i * 2) % 2 = +0`, the quotient of an exact multiple being the same whichever way a division rounds;
+- the product's associativity.
 
 Controls, refused with their counterexamples, each at `i = -1`: `(i * 2 + 1) % 2 = +1`, where the remainder is `-1`; the floor law, `(i + 2) / 2` against `1 + i / 2`, which are `0` and `1`; and the Euclidean split, `(2 * i + 1) / 2` against `i`, which are `0` and `-1`. And every domination `Nat` reads — `i - j <= i`, `and(i, j) <= i`, `shr(i, n) <= i`, `i % d < d`, `i / d <= i` — each false at an operand below zero.
 
@@ -102,11 +102,10 @@ What is not a law stays a control, refused with its counterexample: associativit
 
 Every law above, every row the library definitions hold today and every control stands in the grid (`curios`'s `tests::laws::written`), each refused row commented with the stage that moves it, and the audit puts each declared law to a product of two sums.
 
-1. **The families `Int` shares with `Nat`.** No promotion.
-2. **The shift's exponent law, and positivity.** No promotion: the count's summands split over the atom `shl(1, k)`, and a lower bound beside the upper one.
-3. **`min` and `max`**, at both carriers, with the domination mirror.
-4. **`abs` and `sign`**, with the two lemmas `/std/Map` consumes.
-5. **`pow`**, the power atom becoming `pow(2, k)`.
+1. **The shift's exponent law, and positivity.** No promotion: the count's summands split over the atom `shl(1, k)`, and a lower bound beside the upper one.
+2. **`min` and `max`**, at both carriers, with the domination mirror.
+3. **`abs` and `sign`**, with the two lemmas `/std/Map` consumes.
+4. **`pow`**, the power atom becoming `pow(2, k)`.
 
 Each stage moves its rows from refused to held, extends the grid's audit to the kind it declares, and adds its operation's rows to `curios`'s `tests::bounds`.
 

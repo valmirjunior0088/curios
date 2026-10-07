@@ -1748,6 +1748,172 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             int_sub(integer(0), i.clone()),
             ints(),
         ),
+        // The laws ℤ's truncated division shares with ℕ's, each reading no sign: of zero, of the divisor itself, by a unit of either sign, and of an exact multiple whatever the signs of the coefficients and the divisor.
+        (
+            "0 / j = 0",
+            int_div(integer(0), j.clone()),
+            integer(0),
+            vec![vec![(&int_j, integer(-3))], vec![(&int_j, integer(5))]],
+        ),
+        (
+            "0 % j = 0",
+            int_rem(integer(0), j.clone()),
+            integer(0),
+            vec![vec![(&int_j, integer(-3))], vec![(&int_j, integer(5))]],
+        ),
+        (
+            "j / j = 1",
+            int_div(j.clone(), j.clone()),
+            integer(1),
+            vec![vec![(&int_j, integer(-3))], vec![(&int_j, integer(5))]],
+        ),
+        (
+            "j % j = 0",
+            int_rem(j.clone(), j.clone()),
+            integer(0),
+            vec![vec![(&int_j, integer(-3))], vec![(&int_j, integer(5))]],
+        ),
+        (
+            "i / 1 = i",
+            int_div(i.clone(), integer(1)),
+            i.clone(),
+            ints(),
+        ),
+        (
+            "i % 1 = 0",
+            int_rem(i.clone(), integer(1)),
+            integer(0),
+            ints(),
+        ),
+        (
+            "i / -1 = -i",
+            int_div(i.clone(), integer(-1)),
+            int_sub(integer(0), i.clone()),
+            ints(),
+        ),
+        (
+            "i % -1 = 0",
+            int_rem(i.clone(), integer(-1)),
+            integer(0),
+            ints(),
+        ),
+        (
+            "(i * -6) / 2 = i * -3",
+            int_div(int_mul(i.clone(), integer(-6)), integer(2)),
+            int_mul(i.clone(), integer(-3)),
+            ints(),
+        ),
+        (
+            "(i * 2) / -2 = -i",
+            int_div(int_mul(i.clone(), integer(2)), integer(-2)),
+            int_sub(integer(0), i.clone()),
+            ints(),
+        ),
+        (
+            "(i * 4 + j * 6 + 8) / 2 = i * 2 + j * 3 + 4",
+            int_div(
+                int_add(
+                    int_add(
+                        int_mul(i.clone(), integer(4)),
+                        int_mul(j.clone(), integer(6)),
+                    ),
+                    integer(8),
+                ),
+                integer(2),
+            ),
+            int_add(
+                int_add(
+                    int_mul(i.clone(), integer(2)),
+                    int_mul(j.clone(), integer(3)),
+                ),
+                integer(4),
+            ),
+            vec![
+                vec![(&int_i, integer(-3)), (&int_j, integer(5))],
+                vec![(&int_i, integer(0)), (&int_j, integer(-1))],
+                vec![(&int_i, integer(7)), (&int_j, integer(-4))],
+            ],
+        ),
+        (
+            "(i * 4 + j * 6 + 8) % -2 = 0",
+            int_rem(
+                int_add(
+                    int_add(
+                        int_mul(i.clone(), integer(4)),
+                        int_mul(j.clone(), integer(6)),
+                    ),
+                    integer(8),
+                ),
+                integer(-2),
+            ),
+            integer(0),
+            vec![
+                vec![(&int_i, integer(-3)), (&int_j, integer(5))],
+                vec![(&int_i, integer(0)), (&int_j, integer(-1))],
+                vec![(&int_i, integer(7)), (&int_j, integer(-4))],
+            ],
+        ),
+        // The bitwise lattice on ℤ's two's-complement expansion, where `-1` has every bit set: the unit of `and` and the absorber of `or`, beside the zero laws ℕ has; and the shifts' zero laws, the right shift arithmetic.
+        (
+            "and(i, -1) = i",
+            Term::intrinsic(Intrinsic::IntAnd(i.clone(), integer(-1))),
+            i.clone(),
+            ints(),
+        ),
+        (
+            "and(0, i) = 0",
+            Term::intrinsic(Intrinsic::IntAnd(integer(0), i.clone())),
+            integer(0),
+            ints(),
+        ),
+        (
+            "or(-1, i) = -1",
+            Term::intrinsic(Intrinsic::IntOr(integer(-1), i.clone())),
+            integer(-1),
+            ints(),
+        ),
+        (
+            "or(i, 0) = i",
+            Term::intrinsic(Intrinsic::IntOr(i.clone(), integer(0))),
+            i.clone(),
+            ints(),
+        ),
+        (
+            "and(i, i) = i",
+            Term::intrinsic(Intrinsic::IntAnd(i.clone(), i.clone())),
+            i.clone(),
+            ints(),
+        ),
+        (
+            "xor(i, i) = 0",
+            Term::intrinsic(Intrinsic::IntXor(i.clone(), i.clone())),
+            integer(0),
+            ints(),
+        ),
+        (
+            "xor(0, i) = i",
+            Term::intrinsic(Intrinsic::IntXor(integer(0), i.clone())),
+            i.clone(),
+            ints(),
+        ),
+        (
+            "shl(i, 0) = i",
+            Term::intrinsic(Intrinsic::IntShl(i.clone(), lit(0))),
+            i.clone(),
+            ints(),
+        ),
+        (
+            "shr(i, 0) = i",
+            Term::intrinsic(Intrinsic::IntShr(i.clone(), lit(0))),
+            i.clone(),
+            ints(),
+        ),
+        (
+            "shr(0, x) = 0",
+            Term::intrinsic(Intrinsic::IntShr(integer(0), x.clone())),
+            integer(0),
+            nats(),
+        ),
         // `Nat/to_int` as an ordered-semiring embedding: widening goes through a sum, a product and a floor; narrowing a non-negative combination of widened naturals reads its preimage back; and a comparison of two such combinations is decided by their preimages' — the floor `0 <= Nat/to_int(x)` being the one `Nat` already has.
         (
             "to_int(x + y) = to_int(x) + to_int(y)",

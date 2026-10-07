@@ -14,6 +14,8 @@ use {
 pub enum Constant {
     Zero,
     One,
+    /// `-1`, every bit of ℤ's two's-complement expansion set: no natural.
+    MinusOne,
     True,
     False,
     /// The empty word.
@@ -234,6 +236,7 @@ pub const TABLE: &[Declared] = &[
             Family::Unit(Position::Both, Constant::One),
             Family::Absorber(Position::Both, Constant::Zero),
             Family::Commutativity,
+            Family::Associativity,
             Family::Distribution(Operation::Sum),
         ],
     },
@@ -243,6 +246,56 @@ pub const TABLE: &[Declared] = &[
         families: &[
             Family::Unit(Position::Right, Constant::Zero),
             Family::SelfCancellation(Constant::Zero),
+        ],
+    },
+    Declared {
+        carrier: Carrier::Integer,
+        operation: Operation::Quotient,
+        families: &[Family::Unit(Position::Right, Constant::One)],
+    },
+    Declared {
+        carrier: Carrier::Integer,
+        operation: Operation::And,
+        families: &[
+            Family::Unit(Position::Both, Constant::MinusOne),
+            Family::Absorber(Position::Both, Constant::Zero),
+            Family::Idempotence,
+            Family::Commutativity,
+        ],
+    },
+    Declared {
+        carrier: Carrier::Integer,
+        operation: Operation::Or,
+        families: &[
+            Family::Unit(Position::Both, Constant::Zero),
+            Family::Absorber(Position::Both, Constant::MinusOne),
+            Family::Idempotence,
+            Family::Commutativity,
+        ],
+    },
+    Declared {
+        carrier: Carrier::Integer,
+        operation: Operation::Xor,
+        families: &[
+            Family::Unit(Position::Both, Constant::Zero),
+            Family::SelfCancellation(Constant::Zero),
+            Family::Commutativity,
+        ],
+    },
+    Declared {
+        carrier: Carrier::Integer,
+        operation: Operation::ShiftLeft,
+        families: &[
+            Family::Unit(Position::Right, Constant::Zero),
+            Family::Absorber(Position::Left, Constant::Zero),
+        ],
+    },
+    Declared {
+        carrier: Carrier::Integer,
+        operation: Operation::ShiftRight,
+        families: &[
+            Family::Unit(Position::Right, Constant::Zero),
+            Family::Absorber(Position::Left, Constant::Zero),
         ],
     },
     Declared {
@@ -518,6 +571,7 @@ impl Family {
     /// The laws this family states of `operation` at `carrier`, each over variables numbered from zero.
     pub fn laws(self, carrier: Carrier, operation: Operation) -> Vec<Law> {
         let operand = operand_carrier(carrier, operation);
+        let second = second_carrier(carrier, operation);
         let result = result_carrier(carrier, operation);
         let var = |index| Expr::Var {
             index,
@@ -535,20 +589,27 @@ impl Family {
             right,
         };
         let (x, y, z) = (var(0), var(1), var(2));
+        // The variable a one-sided law stands in the second position: a shift's count, a natural at both carriers.
+        let counted = Expr::Var {
+            index: 0,
+            carrier: second,
+        };
 
         match self {
-            Family::Unit(side, unit) => sided(side, |at_right| {
-                let unit = constant(unit, operand);
-                let operands = match at_right {
-                    true => vec![x.clone(), unit],
-                    false => vec![unit, x.clone()],
-                };
-                law(apply(operation, operands), x.clone())
+            Family::Unit(side, unit) => sided(side, |at_right| match at_right {
+                true => law(
+                    apply(operation, vec![x.clone(), constant(unit, second)]),
+                    x.clone(),
+                ),
+                false => law(
+                    apply(operation, vec![constant(unit, operand), counted.clone()]),
+                    counted.clone(),
+                ),
             }),
             Family::Absorber(side, absorber) => sided(side, |at_right| {
                 let operands = match at_right {
-                    true => vec![x.clone(), constant(absorber, operand)],
-                    false => vec![constant(absorber, operand), x.clone()],
+                    true => vec![x.clone(), constant(absorber, second)],
+                    false => vec![constant(absorber, operand), counted.clone()],
                 };
                 law(apply(operation, operands), constant(absorber, result))
             }),
@@ -723,6 +784,14 @@ fn operand_carrier(carrier: Carrier, operation: Operation) -> Carrier {
     match operation {
         Operation::Conversion { from } => from,
         _ => carrier,
+    }
+}
+
+/// The carrier an operation's second operand is of: a shift's count is a natural whatever is shifted, and every other operation's second operand is of its first's carrier.
+fn second_carrier(carrier: Carrier, operation: Operation) -> Carrier {
+    match operation {
+        Operation::ShiftLeft | Operation::ShiftRight => Carrier::Natural,
+        _ => operand_carrier(carrier, operation),
     }
 }
 

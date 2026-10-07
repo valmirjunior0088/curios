@@ -686,7 +686,7 @@ fn an_operation_is_declared_to_the_algebra_at_the_carrier_its_row_types() {
         assert_eq!((operands, result), stated, "{application:?}");
     }
 
-    assert_eq!(declared, 47);
+    assert_eq!(declared, 50);
 }
 
 /// The rows no fold answers are the effect carrier's: its two constructors, and the cell and channel operations. Nothing computes against them, and the one thing a wrong row among them could do to admit is hand out what a description yields — `Io` has no eliminator only while no row is one, and a host call that diverges inhabits `Io` at any type. So each is typed at an `Io`, and reduction leaves each the node it was: `bind(pure(x), f)` is not `f(x)`.

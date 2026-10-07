@@ -268,6 +268,21 @@ impl Intrinsic {
                 Operation::Remainder,
                 Operands::Two([dividend, divisor]),
             ),
+            Intrinsic::IntAnd(left, right) => declared(
+                Carrier::Integer,
+                Operation::And,
+                Operands::Two([left, right]),
+            ),
+            Intrinsic::IntOr(left, right) => declared(
+                Carrier::Integer,
+                Operation::Or,
+                Operands::Two([left, right]),
+            ),
+            Intrinsic::IntXor(left, right) => declared(
+                Carrier::Integer,
+                Operation::Xor,
+                Operands::Two([left, right]),
+            ),
             Intrinsic::IntShl(left, right) => declared(
                 Carrier::Integer,
                 Operation::ShiftLeft,
@@ -305,9 +320,6 @@ impl Intrinsic {
             | Intrinsic::ByteType
             | Intrinsic::Byte { .. }
             | Intrinsic::IntType
-            | Intrinsic::IntAnd { .. }
-            | Intrinsic::IntOr { .. }
-            | Intrinsic::IntXor { .. }
             | Intrinsic::Int { .. }
             | Intrinsic::FltType
             | Intrinsic::Flt { .. }
