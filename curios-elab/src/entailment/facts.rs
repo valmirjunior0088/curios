@@ -23,8 +23,8 @@
 use {
     super::{decision_of, global, in_scope, is_empty},
     crate::{
-        Context, Error, classing_among, distributed, open_layer, reduce_with, same_uncommitted,
-        zonk_solved_term_metas,
+        Context, Error, answered_guard, classing_among, distributed, open_layer, reduce_with,
+        same_uncommitted, zonk_solved_term_metas,
     },
     curios_algebra::{Carrier, Lattice, LinearForm, Monomial, Operation},
     curios_analysis::RESOLVED_SPELLING_LAYERS,
@@ -164,8 +164,8 @@ impl Facts {
 pub(super) struct Split {
     /// The comparison the proof splits on.
     pub(super) guard: Term,
-    /// The guard as the view reads it where it holds and where it fails, by which a second guard is told to be this one or its negation; `None` where the view does not read it.
-    read: Option<(LinearForm, LinearForm)>,
+    /// The guard as reduction leaves it, by which a second guard is told to be this one or its negation ([`Reader::open`]); `None` where it is no operation left standing.
+    asked: Option<Term>,
     /// Where it holds: the guard, and for a subtraction `b + (a - b) = a` by `le/add_sub_cancel`, for a `min` or a `max` the operand it is there.
     pub(super) holds: Vec<Fact>,
     /// Where it fails: the guard's strict dual, and for a subtraction `a - b <= 0` by `le/sub_zero`, which conversion does not decide there, for a `min` or a `max` the other operand.
@@ -1029,7 +1029,7 @@ impl<'a> Reader<'a> {
         self.admit(context, truncation, zero, Origin::Definition)
     }
 
-    /// The split on `guard`, with the facts each of its cases adds: opened, or joined to the split already open on the comparison the view reads `guard` as, its cases exchanged where the view reads `guard` as that comparison's negation.
+    /// The split on `guard`, with the facts each of its cases adds: opened, or joined to the split already open on a comparison whose arm decides `guard`, its cases exchanged where that arm decides it false ([`answered_guard`]).
     ///
     /// **Two guards that are one comparison to conversion are one split.** An arm of a split on `a + c <= b + c` decides `a <= b`: the equation the arm records answers every term conversion holds equal to its scrutinee, or to its negation. A second split opened inside it would have a case no value reaches, and there its guard's fact is not `qed`'s to prove, the outer equation answering the inner guard. So a `min` and a `max` over one pair, two over pairs one summand apart, and a truncated subtraction over the same operands share one split, and what the search opens for one it has for all.
     fn open(
@@ -1039,58 +1039,43 @@ impl<'a> Reader<'a> {
         holds: Vec<Fact>,
         fails: Vec<Fact>,
     ) -> Result<(), Error> {
-        let read = self.decided(context, &guard)?;
-        let joined = read.as_ref().and_then(|(held, failed)| {
-            self.read.splits.iter_mut().find_map(|split| {
-                let (known_held, known_failed) = split.read.as_ref()?;
-                if known_held == held && known_failed == failed {
-                    Some((split, false))
-                } else if known_held == failed && known_failed == held {
-                    Some((split, true))
-                } else {
-                    None
-                }
-            })
+        let asked = Some(solved(context, &guard)?).filter(|reduced| {
+            matches!(&**reduced, Subterm::Intrinsic(operation) if !matches!(operation, Intrinsic::Bool(_)))
         });
-        match joined {
-            Some((split, false)) => {
-                split.holds.extend(holds);
-                split.fails.extend(fails);
+        let mut joined = None;
+        if let Some(asked) = &asked {
+            for (at, split) in self.read.splits.iter().enumerate() {
+                let Some(key) = &split.asked else {
+                    continue;
+                };
+                let answer = answered_guard(context, asked, key).map_err(|error| {
+                    Error::from_reduce(error, |refusal| {
+                        Error::reduce_exhausted(guard.clone(), refusal)
+                    })
+                })?;
+                if let Some(holds_there) = answer {
+                    joined = Some((at, holds_there));
+                    break;
+                }
             }
-            Some((split, true)) => {
-                split.holds.extend(fails);
-                split.fails.extend(holds);
+        }
+        match joined {
+            Some((at, true)) => {
+                self.read.splits[at].holds.extend(holds);
+                self.read.splits[at].fails.extend(fails);
+            }
+            Some((at, false)) => {
+                self.read.splits[at].holds.extend(fails);
+                self.read.splits[at].fails.extend(holds);
             }
             None => self.read.splits.push(Split {
                 guard,
-                read,
+                asked,
                 holds,
                 fails,
             }),
         }
         Ok(())
-    }
-
-    /// `guard` as the view reads it where it holds and where it fails — a `<` or a `<=` and its dual with the operands exchanged — or `None` where it is no comparison the view reads.
-    fn decided(
-        &mut self,
-        context: &mut Context,
-        guard: &Term,
-    ) -> Result<Option<(LinearForm, LinearForm)>, Error> {
-        let Subterm::Intrinsic(comparison) = &**guard else {
-            return Ok(None);
-        };
-        let Some((carrier, relation, left, right)) = sides(comparison) else {
-            return Ok(None);
-        };
-        let dual = match relation {
-            Operation::Less => Operation::AtMost,
-            Operation::AtMost => Operation::Less,
-            _ => return Ok(None),
-        };
-        let held = self.form(context, carrier, relation, &left, &right)?;
-        let failed = self.form(context, carrier, dual, &right, &left)?;
-        Ok(held.zip(failed))
     }
 
     /// The facts `read` admits, kept apart from the scope's: one case of a split, lifted as every fact is.

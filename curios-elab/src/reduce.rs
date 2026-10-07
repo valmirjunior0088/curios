@@ -817,6 +817,24 @@ fn answered(
     Ok(None)
 }
 
+/// What an arm that assumes `key` holds says of `term`: `Some(true)` where `term` is `key` to the rule a stuck form is answered by (`curios_analysis::answers`, the pair's atoms classed where the rule hands them back), `Some(false)` where it is `key` negated, and `None` where the arm's equation says nothing of it. Both are read as reduction leaves a stuck form. What the procedure that proves a bound asks before it opens a case split, since a split inside an arm that decides its guard has a case no value reaches.
+pub(crate) fn answered_guard(
+    context: &mut Context,
+    term: &Term,
+    key: &Term,
+) -> Result<Option<bool>, ReduceError> {
+    let holds = Term::intrinsic(Intrinsic::Bool(true));
+    let answer = match answers(&mut Reading(&mut *context), term, key, &holds)? {
+        Answered::Value(answer) => Some(answer),
+        Answered::Silent | Answered::Whole => None,
+        Answered::Atoms(atoms) => {
+            let classes = asked_classes(context, &atoms)?;
+            answers_classed(&mut Reading(&mut *context), term, key, &holds, &classes)?
+        }
+    };
+    Ok(answer.and_then(|answer| answer.as_bool()))
+}
+
 /// Whether `probe` could be the term the scrutinee recorded as `original` reduces to (`curios_analysis::could_reduce_to`), read on the scrutinee as the kernel spells it ([`Context::kernel_spelling`]), whose key the kernel's own filter reads. A solved metavariable stands over a spine of every local in scope where it was born — a guard written through a concept holds its witness as one — so left standing it reads as naming them all, and the filter would pass what the kernel's does not. A local definition left named reads the other way: under `let n = m + 0`, a guard over `n` names no `m`, and a form over `m` would be put to no equation where the kernel, which holds the guard by value, answers it.
 fn could_settle(context: &Context, original: &Term, probe: &Term, proofs: &[Free]) -> bool {
     could_reduce_to(&context.kernel_spelled(original), probe, proofs)
