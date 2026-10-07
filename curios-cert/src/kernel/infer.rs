@@ -43,8 +43,8 @@ use {
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance,
         InstanceHead, Intrinsic, Let, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj,
-        Rec, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType,
-        Variant,
+        Rec, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple,
+        TupleType, Variant,
     },
     curios_num::{Binary, Grain, Natural},
     curios_utilities::recurse,
@@ -408,18 +408,21 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
         }
 
         // A recursive group, checked by the one rule that holds it — asked here rather than restated, so a `rec` in a term and a `rec` at the top level cannot come to disagree about what makes a group legal.
+        //
+        // **A member is bound in the tail, as a `let` binds.** The group's bodies are checked over members that stand for nothing, which is what keeps a body from re-entering its own check; the tail is what the group is in scope of, and there a member is its folded selection, the term a `rec` reduces its tail over ([`unfold_rec`](super::unfold_rec)) and the one a top-level member is defined as. Held opaque there, a member computes nowhere in the function that declares it: `f(4)` is no number, and a term that spells the member by value — the elaborator defines it so, and a solution commits what it reduced — never converts with its name.
         Subterm::Rec(Rec { group, tail }) => check_group(kernel, group, |kernel, names| {
+            let total = kernel.group_verdict(group) == Some(Totality::Total);
+            for (index, (name, member)) in names.iter().zip(group.members()).enumerate() {
+                let partial = !total || kernel.member_encloses_partial(group, index);
+                kernel.bind(name, &group.member_type(index), &member, partial);
+            }
             let members = names.iter().map(Term::free_var).collect::<Vec<_>>();
             let refs = members.iter().collect::<Vec<_>>();
 
             let type_ = infer(kernel, &tail.open(&refs))?;
 
-            // The tail's type may mention the members, and their binders retract with the group's scope. Re-fold the knot so what leaves this judgment is closed: the folded spelling denotes the same member and needs nothing in scope to do it.
-            let folded = group.members();
-            let folded = folded.iter().collect::<Vec<_>>();
-            let binders = names.iter().collect::<Vec<_>>();
-
-            Ok(Scope::close(Many(names.len()), &binders, type_).open(&folded))
+            // The tail's type may name the members, whose binders retract with the group's scope: it is stated by value, as a `let`'s is, and the folded spelling a member stands for needs nothing in scope.
+            Ok(kernel.by_value(&type_))
         }),
 
         // A polymorphic name at a stated instance: its scheme, substituted.

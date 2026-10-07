@@ -340,6 +340,78 @@ fn a_group_under_a_let_is_filed_by_value() {
     assert_eq!(kernel.group_verdict(group), Some(Totality::Total));
 }
 
+/// A member of a group that stands in a term is bound in the group's tail, as a `let` binds: `countdown(3)` computes there, so a type stated over it is the type it reduces to.
+///
+/// Mutation-checked: with the tail typed over members that stand for nothing, `countdown(3) == 0` is a `Bool` that never arrives, and the tail's `let` is refused.
+#[test]
+fn a_member_stands_for_its_group_in_the_groups_tail() {
+    let mut kernel = kernel();
+    let countdown = binder(0, "countdown");
+    let n = binder(1, "n");
+    let motive = binder(2, "m");
+    let pred = binder(3, "pred");
+    let hypothesis = binder(4, "ih");
+    let y = binder(5, "y");
+
+    let signature = Term::func_type([(n, nat_type())], nat_type());
+    let body = Term::func(
+        [(n, nat_type())],
+        Term::nat_match(
+            Term::free_var(&n),
+            Some(&motive),
+            nat_type(),
+            nat(0),
+            &pred,
+            &hypothesis,
+            Term::apply(Term::free_var(&countdown), [Term::free_var(&pred)]),
+        ),
+    );
+    let arrives = Term::intrinsic(Intrinsic::NatEql(
+        Term::apply(Term::free_var(&countdown), [nat(3)]),
+        nat(0),
+    ));
+    let term = Term::rec(
+        [(countdown, signature, body)],
+        Term::let_(&y, family(arrives), nat(7), Term::free_var(&y)),
+    );
+
+    let inferred = infer(&mut kernel, &term).expect("the member computes in the tail");
+    assert_eq!(whnf(&mut kernel, inferred).ok(), Some(nat_type()));
+}
+
+/// A position in a group's tail that reaches the group says whether the group descends, as one over a `let`-bound group does: the type stated over `stuck` holds the group once it is read by value.
+///
+/// Mutation-checked: with a member bound as enclosing no such group, the type over `stuck` is recorded as reaching none.
+#[test]
+fn a_position_over_a_member_of_a_partial_group_says_so() {
+    let mut kernel = kernel();
+    let stuck = binder(0, "stuck");
+    let alias = binder(1, "T");
+
+    let term = Term::rec(
+        [(stuck, bool_type(), Term::free_var(&stuck))],
+        Term::let_(
+            &alias,
+            Term::type_ground(),
+            family(Term::free_var(&stuck)),
+            nat(0),
+        ),
+    );
+    infer(&mut kernel, &term).expect("the group and its tail are typed");
+    let (positions, _) = kernel.take_checked();
+    let over_the_group = positions
+        .iter()
+        .filter(|position| position.term.has_group())
+        .collect::<Vec<_>>();
+
+    assert!(!over_the_group.is_empty());
+    assert!(
+        over_the_group
+            .iter()
+            .all(|position| position.encloses_partial)
+    );
+}
+
 /// Reduction reads by value where it is entered: a `let`-bound name gives way to what it stands for.
 ///
 /// Mutation-checked: with a reduction taking its term as it is handed, the name reaches the reducer, which has no value for it.

@@ -54,6 +54,27 @@ fn a_local_group_is_mutually_recursive() {
     assert_eq!(run(source), b"1");
 }
 
+/// A local recursive definition computes in a type stated in the function that declares it, as a top-level one does anywhere and a `let`-bound value does in its tail: both checkers read a member as its group there. `_held` leaves `Eq/refl`'s implicit to be solved, to a term that spells `halve` by value, and `_one_body` puts two definitions of one body to each other. The kernel typed a group's tail over members that stood for nothing, and refused each of the five where the elaborator accepted it.
+#[test]
+fn a_local_recursive_definition_computes_in_a_type_where_it_is_declared() {
+    let source = r#"
+        use /std/{Nat, Eq};
+        let through(n : Nat) -> Nat =
+            let go(k : Nat) -> Nat = match k | 0 => 0 | p + 1 => go(p) + 2 end;
+            let halve(k : Nat) -> Nat = match 0 < k | true => halve(k / 2) + 1 | false => 0 end;
+            let again(k : Nat) -> Nat = match 0 < k | true => again(k / 2) + 1 | false => 0 end;
+            let _closed : Eq()(go(3), 6) = Eq/refl();
+            let _one_step : Eq()(go(n + 1), go(n) + 2) = Eq/refl();
+            let _guarded : Eq()(halve(4), 3) = Eq/refl();
+            let _held : Eq()(halve(n) + 1, 1 + halve(n)) = Eq/refl();
+            let _one_body : Eq()(halve(n), again(n)) = Eq/refl();
+            go(n);
+        /std/print(Nat/to_str(through(3)))
+        "#;
+
+    assert_eq!(run(source), b"6");
+}
+
 /// A recursive definition whose result is a function computes when applied past its own parameters, at the top level, locally, and as the loop `WellFounded/recurse` runs when its motive is a function: `f(3)(1)` is the call `f(3)` applied to what is left, and a demand for its value unfolds that call rather than stopping at the outer application. A symbolic argument past the parameters rides along, so the last claim is a law rather than a sample.
 #[test]
 fn a_recursive_call_applied_past_its_parameters_computes_in_a_type() {
