@@ -861,6 +861,28 @@ fn a_packed_fold_costs_linearly_in_its_length() {
     );
 }
 
+/// A bytes walk is run once, however many walks follow it. The grammar reads a run and the comma that closes it, once per token, and the claim reduces it in a type, so the units count the walks: `Parse/bytes/take_while` counts the bytes it reads into a number, stops at the first one refused, and hands on a position at that number. An induction on the remaining length, whose count is its hypothesis read back, multiplies its cost with each token a grammar reads.
+#[test]
+fn a_bytes_walk_is_run_once_however_many_follow_it() {
+    let program = |tokens: usize| {
+        let literal = "ab,".repeat(tokens);
+        let total = 2 * tokens;
+        format!(
+            "use /std/{{Parse, Result, Eq, Byte, Bytes, Str, Nat}};\n\nlet token: Parse(Bytes, Nat) =\n    let run = Parse/bytes/take_while((b) => Byte/to_nat(b) != ',')!;\n    let _ = Parse/bytes/expect(',')!;\n    Parse/pure(Bytes/len(run));\n\nlet tokens(count: Nat, acc: Nat) -> Parse(Bytes, Nat) =\n    match count\n    | 0 => Parse/pure(acc)\n    | k + 1 =>\n        let n = token!;\n        tokens(k, acc + n)\n    end;\n\nlet walked: Eq()(Parse/run(tokens({tokens}, 0), Str/to_bytes(\"{literal}\")), Result/success({total})) = Eq/refl();\n\n/std/print(\"ok\")\n"
+        )
+    };
+
+    let (short, ..) = declaration_cost(&program(4));
+    let (long, ..) = declaration_cost(&program(8));
+
+    assert!(
+        long.units() < short.units() * 8,
+        "4 tokens cost {} units and 8 cost {}; a walk run once grows with its offsets, one run again by each walk after it multiplies with every token",
+        short.units(),
+        long.units()
+    );
+}
+
 /// What each claim of the type-level benchmark set costs each checker: an equality a type states and `Eq/refl()` proves, so that checking the program is reducing the claim's left side to its right. Six take a `Str` apart, one reads a `Flt`, one searches a `Str` and maps the position found.
 ///
 /// ```sh

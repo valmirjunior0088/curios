@@ -1,5 +1,5 @@
 use /std/{Result, Nat, Byte, Bytes, Str, Bool, Option, Parse};
-use /std/Bool/{True, Holds};
+use /std/Bool/{True, False, Holds};
 use /std/Parse/{Of, At, Pos, Input, Error};
 
 --- A bytes parser walks its input as it is, and its positions lie within it.
@@ -98,35 +98,41 @@ pub let literal(lit: Str) -> Parse(Bytes, {}) =
             end,
     };
 
+--- `taken` and how many bytes at the front of `rest` `pred` accepts: a walk over the bytes it reads, which stops at the first one refused.
+let leading(rest: Bytes, pred: (Byte) -> Bool, taken: Nat) -> Nat =
+    match rest
+    | x[] => taken
+    | x[h, ..t] => match pred(h) | true => leading(t, pred, taken + 1) | false => taken end
+    end;
+
+--- The bytes `leading` counts lie within what it read.
+let leading_within(
+    rest: Bytes,
+    pred: (Byte) -> Bool,
+    taken: Nat,
+) -> Holds(leading(rest, pred, taken) <= taken + Bytes/len(rest)) =
+    match rest
+    | x[] => True/proved()
+    | x[h, ..t] =>
+        match pred(h) | true => leading_within(t, pred, taken + 1) | false => True/proved() end
+    end;
+
 --- The longest run of bytes `pred` accepts, possibly empty.
 pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes, Bytes) =
     Of {
         run(input, at) =
-            let (taken, at_stop, _) =
-                match Bytes/len(input) - at.offset: (_) =>
-                    {
-                        taken: Nat,
-                        within: Holds(at.offset + taken <= Bytes/len(input)),
-                        stopped: Bool}
-                | 0 => (0, at.holds, false)
-                | _ + 1; ih =>
-                    let (taken, at_cur, stopped) = ih;
-                    match stopped
-                    | true => ih
-                    | false =>
-                        match Nat/lt/try(at.offset + taken, Bytes/len(input))
-                        | none() => (taken, at_cur, true)
-                        | some(ok) =>
-                            match pred(Bytes/get(input, at.offset + taken, @ok))
-                            | true => (taken + 1, ok, false)
-                            | false => (taken, at_cur, true)
-                            end
-                        end
-                    end
-                end;
-            Result/success((
-                At { offset = at.offset + taken, holds = at_stop },
-                Bytes/slice(input, at.offset, taken, @at_stop))),
+            let rest = Bytes/drop(input, at.offset, @at.holds);
+            let taken = leading(rest, pred, 0);
+            -- The bound is decided before it is argued, so a closed input takes the arm that holds no lemma.
+            match at.offset + taken <= Bytes/len(input)
+            | true =>
+                Result/success((
+                    At { offset = at.offset + taken, holds = True/qed() },
+                    Bytes/slice(input, at.offset, taken)))
+            | false =>
+                let fits = leading_within(rest, pred, 0);
+                match False/refuted() end
+            end,
     };
 
 --- Everything from the current position to the end of the input.

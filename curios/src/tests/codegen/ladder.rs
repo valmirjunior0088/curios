@@ -396,3 +396,110 @@ fn walk_mirror_attribution_measurements() {
         }
     }
 }
+
+// -- the doubling measurement ------------------------------------------------
+
+/// One decoder over an input its second line of standard input sizes, so nothing about the document is closed and no evaluation folds the walk away.
+const DECODER_DOUBLING: &str = r#"
+use /std/{Str, Nat, Byte, Bytes, Parse, Result, List, Option, Json, Html};
+
+let token_walk: Parse(Bytes, List(Bytes)) =
+    Parse/sep_by0(Parse/bytes/take_while((b) => Byte/to_nat(b) != ','), Parse/bytes/expect(','));
+
+let work(mode: Str, n: Nat) -> Nat =
+    choose
+    | Str/eql(mode, "json") =>
+        match Parse/run(Json/decode, Str/to_bytes(Str/flatten(["[", Str/repeat("1, ", n), "1]"])))
+        | success(value) => match value | arr(items) => List/len(items) | _ => 0 end
+        | failure(_) => 0
+        end
+    | Str/eql(mode, "html") =>
+        match Html/of_str(Str/repeat("<p>x</p>", n)) | success(_) => n | failure(_) => 0 end
+    | Str/eql(mode, "tokens") =>
+        match Parse/run(token_walk, Str/to_bytes(Str/repeat("abcdefgh,", n)))
+        | success(runs) => List/len(runs)
+        | failure(_) => 0
+        end
+    | _ => 0
+    end;
+
+let mode = /std/read()!;
+let size = /std/read()!;
+let answer: Str =
+    match mode
+    | none() => "0"
+    | some(m) =>
+        match size
+        | none() => "0"
+        | some(s) =>
+            match Str/of_bytes(m)
+            | none() => "0"
+            | some(decoder) =>
+                match Option/bind(Str/of_bytes(s), Nat/of_str)
+                | none() => "0"
+                | some(n) => Nat/to_str(work(decoder, n))
+                end
+            end
+        end
+    end;
+/std/print(answer)
+"#;
+
+/// What a decoder's time does when its document doubles: `Json/decode` over `[1, 1, …]`, `Html/of_str` over `<p>x</p>…` and a `take_while` and `expect` token walk over `abcdefgh,…`, each at three sizes that double, timed in process over the Binaryen path. A decoder that costs what it reads doubles; one whose walk reads what is left of its input at every token quadruples.
+///
+/// ```sh
+/// cargo test --package curios --lib --all-features -- --ignored --nocapture decoder_doubling_slope
+/// ```
+///
+/// It asserts nothing about time, which a busy machine moves: the ratio between neighbouring sizes is the reading, a median over interleaved rounds, and a size is only read against its neighbours in the same sitting.
+#[test]
+#[ignore = "measurement, timed: reports how each decoder's time grows as its input doubles rather than asserting"]
+fn decoder_doubling_slope() {
+    const WARMUP: usize = 1;
+    const ROUNDS: usize = 5;
+    const SIZES: [usize; 3] = [20_000, 40_000, 80_000];
+    const DECODERS: [&str; 3] = ["json", "html", "tokens"];
+
+    let module = compile_raw(DECODER_DOUBLING);
+    let cwasm = crate::to_cwasm(&module).expect("binaryen path precompiles");
+
+    let mut taken = vec![vec![Vec::new(); SIZES.len()]; DECODERS.len()];
+    for round in 0..WARMUP + ROUNDS {
+        // A round over every decoder and size, so a disturbance during the sitting reaches each alike.
+        for (decoder, mode) in DECODERS.iter().enumerate() {
+            for (index, size) in SIZES.iter().enumerate() {
+                let (system, io) = MockHost::builder()
+                    .stdin_lines([mode.to_string(), size.to_string()])
+                    .build();
+                let start = Instant::now();
+                // SAFETY: the payload was precompiled above, in this process.
+                unsafe { run_bytes(&cwasm, system, ForeignBindings::empty()) }
+                    .expect("the decoder executes");
+                let elapsed = start.elapsed().as_secs_f64();
+
+                if round >= WARMUP {
+                    taken[decoder][index].push(elapsed);
+                }
+
+                let printed = String::from_utf8_lossy(&io.output()).trim().to_string();
+                assert_ne!(printed, "0", "{mode} refused its input at {size}");
+            }
+        }
+    }
+
+    println!(
+        "\n{ROUNDS} rounds, interleaved; median of each size's rounds, and its ratio to the size below"
+    );
+    for (mode, sizes) in DECODERS.iter().zip(&taken) {
+        let mut below = None;
+        for (size, rounds) in SIZES.iter().zip(sizes) {
+            let mut times = rounds.clone();
+            times.sort_by(f64::total_cmp);
+            let middle = times[times.len() / 2];
+            let (least, most) = (times[0], times[times.len() - 1]);
+            let ratio = below.map_or(String::new(), |b: f64| format!("  x{:.2}", middle / b));
+            println!("{mode:8} {size:>7} {middle:.4}s  [{least:.4}-{most:.4}]{ratio}");
+            below = Some(middle);
+        }
+    }
+}
