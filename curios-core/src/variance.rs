@@ -1,16 +1,21 @@
-//! How a nominal type's instances compare in one universe level.
+//! How two instances of one name compare in one universe level: a nominal type's, and a definition's.
 //!
-//! Representation, not analysis, for the reason `polarity` gives: the vector this describes is stored on `InductDecl`/`StructDecl` and rides the prelude archive, so the type belongs with the registry entries that carry it, while what *computes* it stays in `curios-analysis`'s `variance`.
+//! Representation, not analysis, for the reason `polarity` gives: the vector this describes is stored on `InductDecl`/`StructDecl` and on `Definition` and rides the prelude archive, so the type belongs with the entries that carry it, while what *computes* it stays in `curios-analysis`'s `variance`.
 
 use super::{Global, InductDecl, StructDecl};
 
-/// What a walk aligning two terms' levels is told of the nominal families, by a caller that compares instances by variance. `()` tells it nothing, and every level is then aligned.
+/// What a walk aligning two terms' levels is told of the nominal families and of the definitions, by a caller that compares instances by variance. `()` tells it nothing, and every level is then aligned.
 ///
 /// The declarations are read where they live: a registry hands them over, and the walk reads a vector and an arity off each, with no second statement of either.
 pub trait Families {
     fn induct(&self, name: &Global) -> Option<&InductDecl>;
 
     fn struct_(&self, name: &Global) -> Option<&StructDecl>;
+
+    /// The vector of a definition that is no family's former, with how many arguments one spine applies it in full: `None` where this registry holds none for `name`, which is how a caller that reads no definition answers.
+    fn definition(&self, _: &Global) -> Option<(&[Variance], usize)> {
+        None
+    }
 
     /// `name`'s variance in its `index`th universe parameter: invariant for a name this registry does not hold.
     fn variance(&self, name: &Global, index: usize) -> Variance {
@@ -19,6 +24,10 @@ pub trait Families {
             .or_else(|| {
                 self.struct_(name)
                     .map(|declaration| declaration.variance(index))
+            })
+            .or_else(|| {
+                self.definition(name)
+                    .map(|(vector, _)| vector.get(index).copied().unwrap_or(Variance::Invariant))
             })
             .unwrap_or(Variance::Invariant)
     }
@@ -37,6 +46,11 @@ pub trait Families {
     fn reads_formers(&self) -> bool {
         true
     }
+
+    /// Whether the walk sets apart, as curried, a former or a definition short of its full application whose two instances are apart in a level its vector calls irrelevant. Two such are one term where they meet at their function type, eta applying both to the same binders, and are compared level by level where they meet at any other; so a reading that sets them apart leaves the pair to a caller that goes on to the type it stands at, and one that does not aligns every level of them.
+    fn sets_curried_apart(&self) -> bool {
+        true
+    }
 }
 
 impl Families for () {
@@ -49,6 +63,10 @@ impl Families for () {
     }
 
     fn reads_formers(&self) -> bool {
+        false
+    }
+
+    fn sets_curried_apart(&self) -> bool {
         false
     }
 }

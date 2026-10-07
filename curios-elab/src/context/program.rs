@@ -1,10 +1,12 @@
 //! The program-wide declaration stores: flat, monotonic facts about the module being elaborated.
 //!
-//! Everything here is registry state — inductive, struct, and concept declarations, the witness table, and per-definition totality verdicts. None of it is lexically scoped: `enter_frame`/`leave_frame` never touch these stores, and entries are only ever added or refined in place, never popped — except a refused declaration's, which the item loop takes out whole (`remove_induct` and its siblings, `remove_witness`) so nothing a later item reads was written by an item that failed. The writes that must reach the cache stamps (`insert_witness`, `update_witness_scheme`, the removals) are stamped by the `Context` façade, which alone holds the [`Caches`](super::Caches).
+//! Everything here is registry state — inductive, struct, and concept declarations, the witness table, and per-definition totality verdicts and variance vectors. None of it is lexically scoped: `enter_frame`/`leave_frame` never touch these stores, and entries are only ever added or refined in place, never popped — except a refused declaration's, which the item loop takes out whole (`remove_induct` and its siblings, `remove_witness`) so nothing a later item reads was written by an item that failed. The writes that must reach the cache stamps (`insert_witness`, `update_witness_scheme`, the removals) are stamped by the `Context` façade, which alone holds the [`Caches`](super::Caches).
 
 use {
     crate::{Error, HeadKey, Witness, WitnessKey},
-    curios_core::{ConceptDecl, Global, InductDecl, StructDecl, Term, Totality, UniverseContext},
+    curios_core::{
+        ConceptDecl, Global, InductDecl, StructDecl, Term, Totality, UniverseContext, Variance,
+    },
     curios_utilities::{Mount, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -37,6 +39,8 @@ pub(crate) struct Program {
     declared: BTreeMap<Global, Declared>,
     /// Each definition's totality: recorded as it is defined, for the rest of its own declaration to read, and again over its final terms as its item is published, which is the verdict every other declaration reads and its stamp carries. Kept here so a type position can be refused *before* it is reduced, which is the only point at which a non-productive type-level loop can still be diagnosed rather than run.
     totality: BTreeMap<Global, Totality>,
+    /// Each finished definition's variance vector with how many arguments one spine applies it in full by, kept for a definition irrelevant in some level: any other is compared level by level, which is what a name with no entry answers.
+    variances: BTreeMap<Global, (Vec<Variance>, usize)>,
     /// Every prefix this compilation mounts — the scope's, then the unit's own. Accumulated as each module is seeded, from the `mounts` that module carries, so the elaborator answers a privilege question out of what was actually mounted rather than out of a stamp copied onto each declaration.
     mounts: Vec<Mount>,
     /// The keys a refused declaration's witnesses stood under. A goal keyed here would have resolved through the refused witness, so it is the refusal's dependent and reports nothing of its own — where a plain miss would report `no witness` for a witness the reader can see.
@@ -303,6 +307,26 @@ impl Program {
     /// A declaration elaborates after what it reads, so everything a definition mentions outside its own group is already classified and one pass per definition suffices.
     pub(crate) fn record_definition_totality(&mut self, name: &Global, totality: Totality) {
         self.totality.insert(*name, totality);
+    }
+
+    /// File a finished definition's vector, replacing what an earlier elaboration of the name left.
+    pub(crate) fn record_definition_variances(
+        &mut self,
+        name: &Global,
+        variances: &[Variance],
+        arity: usize,
+    ) {
+        match variances.contains(&Variance::Irrelevant) {
+            true => self.variances.insert(*name, (variances.to_vec(), arity)),
+            false => self.variances.remove(name),
+        };
+    }
+
+    /// The vector of a definition irrelevant in some level, with its arity.
+    pub(crate) fn definition_variances(&self, name: &Global) -> Option<(&[Variance], usize)> {
+        self.variances
+            .get(name)
+            .map(|(variances, arity)| (variances.as_slice(), *arity))
     }
 
     /// A definition's recorded totality, or `None` for a name not yet classified — a member of the group currently elaborating, which `group_totality` settles for the group as a whole.

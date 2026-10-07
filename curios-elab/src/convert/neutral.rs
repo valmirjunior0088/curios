@@ -4,7 +4,7 @@
 
 use {
     super::instantiate_bound_at,
-    crate::{Context, reduce, reduce_forced},
+    crate::{Context, Structural, reduce, reduce_forced},
     curios_core::{
         Argument, Families, Field, Free, FuncType, InductType, Instance, InstanceHead, Level,
         Match, MatchResult, Proj, ReduceError, StructType, Subterm, Term, TupleType,
@@ -19,13 +19,20 @@ use {
 ///
 /// What it answers is one of [`Identification`]'s verdicts. Declines — answering anything but `Identified`, with **nothing inserted**, so the structural path below judges the problem instead — on a pair of unequal ground levels, where there is nothing to identify and the problem may still hold by value, and on a differing pair under a universe binder, whose bound parameters the ambient solver cannot constrain. Every pair is checked before any is committed, because a decline that had already inserted would not be a fall-through.
 ///
-/// A level a nominal family is irrelevant in is no difference to identify: the walk is handed the context's registries and sets such a pair apart, so two instances apart in it alone are identified with nothing committed. Where the sides are identified, each pair set apart is recorded as a weak equation ([`UniverseSolver::add_weak_eq`](crate::UniverseSolver::add_weak_eq)), which the declaration's closing joins where it can.
+/// A level a value does not hold is no difference to identify: the walk is handed the context's registries, a nominal family's vector and a definition's, and sets apart the pair at a position either calls irrelevant, so two instances apart in it alone are identified with nothing committed. Where the sides are identified, each pair set apart is recorded as a weak equation ([`UniverseSolver::add_weak_eq`](crate::UniverseSolver::add_weak_eq)), which the declaration's closing joins where it can.
+///
+/// A head short of its full application, apart in such a level, is one term where the pair meets at its function type and two at any other, which `curried` says how to read. [`Curried::Declined`] answers [`Identification::Curried`] with nothing inserted, for a caller that goes on to the pair's type: reduction and eta decide it there, as the kernel decides it, and the verdict hands back the pairs it left, which are a weak equation each once the caller holds the two sides one. [`Curried::Compared`] keeps every level of it, for a caller no type directs.
 pub(super) fn identify_universe_levels(
     context: &mut Context,
     this: &Term,
     that: &Term,
+    curried: Curried,
 ) -> Result<Identification, ReduceError> {
-    let (compared, irrelevant) = match align_universe_levels(context, this, that, &*context)? {
+    let alignment = match curried {
+        Curried::Declined => align_universe_levels(context, this, that, &*context)?,
+        Curried::Compared => align_universe_levels(context, this, that, &Structural(context))?,
+    };
+    let (compared, irrelevant) = match alignment {
         Alignment::Pending {
             compared,
             irrelevant,
@@ -33,9 +40,14 @@ pub(super) fn identify_universe_levels(
         Alignment::Distinct => return Ok(Identification::Distinct),
         Alignment::UnderBinder => return Ok(Identification::UnderBinder),
         Alignment::GroundUnequal => return Ok(Identification::GroundUnequal),
+        Alignment::Curried { apart, .. } => {
+            curios_profile::sample!("identify::curried", apart.len());
+
+            return Ok(Identification::Curried(apart));
+        }
     };
 
-    // How many pairs an identification equates and how many it records weak, per call that identifies: the magnitudes a change to what it commits moves.
+    // How many pairs an identification equates and how many it records weak, per call that identifies, and above how many it leaves to a curried head's type per call that declines for one: the magnitudes a change to what it commits moves.
     curios_profile::sample!("identify::equated", compared.len());
     curios_profile::sample!("identify::weak", irrelevant.len());
 
@@ -74,7 +86,7 @@ pub(crate) fn levels_clash_on_a_decided_instance(
     ))
 }
 
-/// [`levels_clash_on_a_decided_instance`] as conversion reads the pair: a level a nominal family is irrelevant in is no disagreement, two instances apart in it alone being one type. The guard past a key, where a stuck form is put to an equation's reduced spelling and both checkers answer by what conversion holds one — the kernel by asking its own, so a pair this lets through is one the kernel answers as well.
+/// [`levels_clash_on_a_decided_instance`] as conversion reads the pair: a level a nominal family or a definition applied in full is irrelevant in is no disagreement, two instances apart in it alone being one term. The guard past a key, where a stuck form is put to an equation's reduced spelling and both checkers answer by what conversion holds one — the kernel by asking its own, so a pair this lets through is one the kernel answers as well. A curried head apart in two decided levels is a clash here, no type being at hand to say otherwise.
 pub(crate) fn levels_clash_to_conversion(
     context: &Context,
     this: &Term,
@@ -82,7 +94,7 @@ pub(crate) fn levels_clash_to_conversion(
 ) -> Result<bool, ReduceError> {
     Ok(matches!(
         align_universe_levels(context, this, that, context)?,
-        Alignment::GroundUnequal
+        Alignment::GroundUnequal | Alignment::Curried { decided: true, .. }
     ))
 }
 
@@ -92,7 +104,9 @@ pub(crate) fn levels_clash_to_conversion(
 ///
 /// Every pair is checked before any verdict that would insert, because a decline that had already inserted would not be a fall-through — which is why the commitment lives in [`identify_universe_levels`] and the walk here hands back what it *would* commit.
 ///
-/// `families` is the caller's reading of the nominal families: conversion's, under which the pair at an irrelevant position is set apart, or `()`, under which every level is compared. A pair set apart under a universe binder is left out altogether, the ambient solver having no hold on a bound parameter.
+/// `families` is the caller's reading of the vectors: conversion's, under which the pair at an irrelevant position is set apart, the structural arms', under which a curried head keeps every level, or `()`, under which every level is compared. A pair set apart under a universe binder is left out altogether, the ambient solver having no hold on a bound parameter.
+///
+/// A curried pair that still differs once zonked outranks a pending commitment, never a refusal: nothing can be committed for a pair whose question is still open, while two unequal ground levels at a compared position decide against the fast path whatever a curried head turns out to be.
 fn align_universe_levels(
     context: &Context,
     this: &Term,
@@ -133,6 +147,33 @@ fn align_universe_levels(
         compared.push((this_level, that_level));
     }
 
+    let mut apart = Vec::new();
+    let mut under_binder = false;
+    let mut decided = false;
+    for (depth, this_level, that_level) in differences.curried {
+        if depth > 0 {
+            under_binder = true;
+            continue;
+        }
+
+        let this_level = context
+            .universes()
+            .zonk(&this_level)
+            .map_err(ReduceError::Universe)?;
+        let that_level = context
+            .universes()
+            .zonk(&that_level)
+            .map_err(ReduceError::Universe)?;
+        if this_level == that_level {
+            continue;
+        }
+        decided |= this_level.atoms.is_empty() && that_level.atoms.is_empty();
+        apart.push((this_level, that_level));
+    }
+    if under_binder || !apart.is_empty() {
+        return Ok(Alignment::Curried { apart, decided });
+    }
+
     Ok(Alignment::Pending {
         compared,
         irrelevant,
@@ -144,6 +185,11 @@ enum Alignment {
     Distinct,
     UnderBinder,
     GroundUnequal,
+    /// A head short of its full application is apart in levels that only its type can call a difference or none: the zonked pairs outside every universe binder, and `decided` where one of them is two unequal ground levels.
+    Curried {
+        apart: Vec<(Level, Level)>,
+        decided: bool,
+    },
     /// The sides differ in levels alone: the zonked pairs a commitment would have to join, and the pairs at irrelevant positions, which it may.
     Pending {
         compared: Vec<(Level, Level)>,
@@ -151,13 +197,23 @@ enum Alignment {
     },
 }
 
-/// What [`identify_universe_levels`] found: the sides are one term now that their levels are committed equal; they differ in more than levels; a differing pair is two unequal ground levels, which no commitment can join; or a differing pair sits under a universe binder, whose bound parameters the ambient solver cannot constrain.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// What [`identify_universe_levels`] found: the sides are one term now that their levels are committed equal; they differ in more than levels; a differing pair is two unequal ground levels, which no commitment can join; a differing pair sits under a universe binder, whose bound parameters the ambient solver cannot constrain; or a differing pair sits at a curried head, which the pair's type decides, and these are the pairs left to it.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Identification {
     Identified,
     Distinct,
     GroundUnequal,
     UnderBinder,
+    Curried(Vec<(Level, Level)>),
+}
+
+/// How [`identify_universe_levels`] reads a head short of its full application that is apart in a level its vector calls irrelevant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Curried {
+    /// Left to the pair's type, nothing committed: the caller goes on to reduce the pair and to apply eta at it.
+    Declined,
+    /// Compared level by level: no type directs the caller, and two instances reduction leaves standing are one where every level is.
+    Compared,
 }
 
 /// Binders opened locally by [`Sort::of`](super::Sort::of) while walking a telescope, innermost last.

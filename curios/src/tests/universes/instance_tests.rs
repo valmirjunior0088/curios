@@ -135,9 +135,9 @@ fn a_family_whose_payload_resolves_through_a_later_witness_reads_its_final_teles
     }
 }
 
-// **A bare former passed as a family is held at one instance.** `through(Io, …)` checks both arguments against `Io` at the instance it was passed at, and the refusal reads as that instance being committed before `Io` unfolds to a former that carries no level. Eta-expanded, `F(Nat)` is a redex and both sides are reduced, so the same program is accepted. `/sys/List` and an alias of `Io` are refused alike.
+// **A bare former passed as a family takes an instance at each payload.** `through(Io, …)` checks both arguments against `Io` at the instance it was passed at, a level above zero since `F` is applied to `Type` as well, and `small(n)` is `Io` at zero. `Io`'s value holds no level, so the two spellings are one term and nothing is required of the pair, which is what the eta-expanded family always was. `/sys/List` and an alias of `Io` read alike.
 #[test]
-fn a_bare_former_passed_as_a_family_is_held_at_one_instance() {
+fn a_bare_former_passed_as_a_family_takes_an_instance_at_each_payload() {
     let through = |declarations: &str, family: &str, small: &str, large: &str| {
         format!(
             r#"
@@ -155,26 +155,20 @@ fn a_bare_former_passed_as_a_family_is_held_at_one_instance() {
         let small(n: Nat) -> Act(Nat) = Io/pure(n);
         let large(n: Nat) -> Act(Type) = Io/pure(Nat);";
 
-    for bare in [
+    for family in [
         through(io, "Io", "small(n)", "Io/pure(Nat)"),
         through(list, "List", "small(n)", "[Nat]"),
         through(alias, "Act", "small(n)", "large(n)"),
-    ] {
-        let message = typecheck(&bare).expect_err("a bare former is held at one instance");
-        assert!(message.contains("strictly below itself"), "got: {message}");
-    }
-
-    for expanded in [
         through(io, "(A) => Io(A)", "small(n)", "Io/pure(Nat)"),
         through(list, "(A) => List(A)", "small(n)", "[Nat]"),
     ] {
-        assert_eq!(typecheck(&expanded), Ok(()));
+        assert_eq!(typecheck(&family), Ok(()), "{family}");
     }
 }
 
-// **An ordinary function passed bare is held at one instance, as a former is.** `through(const_nat, …)` states `p` over `G(Nat, 0)`, which is `const_nat(Nat, 0)` at the instance `G` was passed at, a level above zero since `G` is applied to `Type` as well. `witness()` proves it over `const_nat` at zero, and the two spellings, apart in a level alone, are committed equal before `const_nat` unfolds to a `0` that holds none. Eta-expanded, `G(Nat, 0)` is a redex and both sides are reduced. The roadmap's *A universe level settled before its evidence is in* owns the refusal.
+// **An ordinary function passed bare takes an instance at each argument, as a former does.** `through(const_nat, …)` states `p` over `G(Nat, 0)`, which is `const_nat(Nat, 0)` at the instance `G` was passed at, a level above zero since `G` is applied to `Type` as well. `witness()` proves it over `const_nat` at zero, and the two spellings are apart in a level `const_nat`'s value, a `0`, does not hold: one term, as the eta-expanded function's two redexes always were.
 #[test]
-fn an_ordinary_function_passed_bare_is_held_at_one_instance() {
+fn an_ordinary_function_passed_bare_takes_an_instance_at_each_argument() {
     let through = |function: &str| {
         format!(
             r#"
@@ -188,14 +182,11 @@ fn an_ordinary_function_passed_bare_is_held_at_one_instance() {
         )
     };
 
-    let message =
-        typecheck(&through("const_nat")).expect_err("a bare function is held at one instance");
-    assert!(message.contains("strictly below itself"), "got: {message}");
-
+    assert_eq!(typecheck(&through("const_nat")), Ok(()));
     assert_eq!(typecheck(&through("(A, x) => const_nat(A, x)")), Ok(()));
 }
 
-// **Both checkers hold the pair a bare former is refused on to be one type.** `first`'s body is `x.0`, at `Io` over `Nat` at the level `Both` passes its family at, one above zero since `Both` applies it to `Type` as well, and its declared type is `Io(Nat)` at zero. The body's type arrives as a projection's, a spelling apart from the declared one in more than levels, so both sides are reduced, nothing is committed, and the kernel certifies the definition by unfolding `Io` on both sides.
+// **Both checkers hold two instances of a former apart in its level to be one type.** `first`'s body is `x.0`, at `Io` over `Nat` at the level `Both` passes its family at, one above zero since `Both` applies it to `Type` as well, and its declared type is `Io(Nat)` at zero. The body's type arrives as a projection's, a spelling apart from the declared one in more than levels, so both sides are reduced, nothing is committed, and the kernel certifies the definition by unfolding `Io` on both sides.
 #[test]
 fn two_instances_of_a_former_convert_where_their_spellings_differ_in_more_than_levels() {
     let source = r#"

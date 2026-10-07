@@ -1491,7 +1491,9 @@ impl Term {
     ///
     /// A ground `Type 0` is a level position like any other, so `(Type 0, Type u)` against `(Type u, Type 0)` differs in two pairs rather than aligning `u` with itself. A pair is reported once however many paths reach it, which is all its readers need: each asks whether every pair can be identified, never how many times one occurs.
     ///
-    /// **A level a family is irrelevant in is not a difference.** `families` is the caller's reading of the nominal families, and under it the pair at each position a family's vector calls irrelevant is set apart ([`LevelDifferences::irrelevant`]), at a nominal node, at the family's name applied in full, and at an `induct`'s former applied in full by its group's projection: two instances apart in such a level alone are one type, so there is nothing to identify. A bare or partly applied former keeps every pair. Under `()` nothing is set apart and no former is read as its node.
+    /// **A level a family is irrelevant in is not a difference.** `families` is the caller's reading of the nominal families and of the definitions, and under it the pair at each position a vector calls irrelevant is set apart ([`LevelDifferences::irrelevant`]), at a nominal node, at a family's name or a definition applied in full, and at an `induct`'s former applied in full by its group's projection: two instances apart in such a level alone are one term, so there is nothing to identify. Under `()` nothing is set apart and no former is read as its node.
+    ///
+    /// **A function short of its application is neither.** Two instances of a former or of a definition that are not applied in full, apart in a level their vector calls irrelevant, two projections of one former that are not, and two lambdas apart in a binder's annotation, convert where they meet at their function type, eta applying both to the same binders before either is read, and are compared level by level at any other, which the walk cannot tell. Their pairs are set apart as curried ([`LevelDifferences::curried`]) for a caller that goes on to the type; a reading that asks for none of this ([`Families::sets_curried_apart`]) has them compared. A lambda is what a definition's bare instance unfolds to, so the two are read alike whichever of them a reduction left standing.
     pub fn level_differences(
         &self,
         other: &Term,
@@ -1506,17 +1508,52 @@ impl Term {
         };
 
         let mut differences = LevelDifferences::default();
-        let mut work = vec![(0, self.clone(), other.clone())];
-        let mut entered: HashSet<(*const Node, *const Node, usize)> = HashSet::new();
+        // Each pair with its universe-binder depth and whether it stands inside a curried former, whose every level is the caller's to decide.
+        let mut work = vec![(0, false, self.clone(), other.clone())];
+        let mut entered: HashSet<(*const Node, *const Node, usize, bool)> = HashSet::new();
 
-        while let Some((depth, this, that)) = work.pop() {
+        while let Some((depth, curried, this, that)) = work.pop() {
             if Rc::ptr_eq(&this.inner, &that.inner) || is_wildcard(&this) || is_wildcard(&that) {
                 continue;
             }
             if Rc::strong_count(&this.inner) > 1
                 && Rc::strong_count(&that.inner) > 1
-                && !entered.insert((Rc::as_ptr(&this.inner), Rc::as_ptr(&that.inner), depth))
+                && !entered.insert((
+                    Rc::as_ptr(&this.inner),
+                    Rc::as_ptr(&that.inner),
+                    depth,
+                    curried,
+                ))
             {
+                continue;
+            }
+
+            // Inside a curried former the two groups are aligned as written, and what they differ in is set apart whole.
+            if curried {
+                let (this_masked, this_children, this_levels) = mask(this.look());
+                let (that_masked, that_children, that_levels) = mask(that.look());
+                if this_masked != that_masked
+                    || this_children.len() != that_children.len()
+                    || this_levels.len() != that_levels.len()
+                {
+                    return None;
+                }
+                for ((below, this_level), (_, that_level)) in
+                    this_levels.into_iter().zip(that_levels)
+                {
+                    if this_level != that_level {
+                        differences
+                            .curried
+                            .push((depth + below, this_level, that_level));
+                    }
+                }
+                work.extend(
+                    this_children
+                        .into_iter()
+                        .zip(that_children)
+                        .rev()
+                        .map(|((below, this), (_, that))| (depth + below, true, this, that)),
+                );
                 continue;
             }
 
@@ -1525,11 +1562,17 @@ impl Term {
                 && let (Some(this_node), Some(that_node)) =
                     (this.applied_former(), that.applied_former())
             {
-                work.push((depth, this_node, that_node));
+                work.push((depth, false, this_node, that_node));
                 continue;
             }
 
-            // A family's name applied in full: its instance's levels at the invariant positions, then its arguments.
+            // Two projections of a former short of its full application: read level by level they differ in their binders' annotations too, which eta never compares, so the whole pair is the caller's.
+            if families.sets_curried_apart() && this.curried_former() && that.curried_former() {
+                work.push((depth, true, this, that));
+                continue;
+            }
+
+            // A family's name or a definition applied in full: its instance's levels at the invariant positions, then its arguments.
             if let (Some(this_applied), Some(that_applied)) =
                 (Applied::of(&this, families), Applied::of(&that, families))
             {
@@ -1559,7 +1602,7 @@ impl Term {
                         .into_iter()
                         .zip(that_applied.arguments)
                         .rev()
-                        .map(|(this, that)| (depth, this.clone(), that.clone())),
+                        .map(|(this, that)| (depth, false, this.clone(), that.clone())),
                 );
                 continue;
             }
@@ -1573,36 +1616,52 @@ impl Term {
                 return None;
             }
 
-            // A nominal node's own levels are its `universes`, in order, so a position there is a universe parameter.
+            // A nominal node's own levels are its `universes`, in order, so a position there is a universe parameter. So are an instance's of a name: one that reaches here is short of its full application, every one in full having been taken above.
             let family = this.look().nominal_name();
+            let partial = match families.sets_curried_apart() {
+                true => this.look().instance_name(),
+                false => None,
+            };
             for (position, ((below, this_level), (_, that_level))) in
                 this_levels.into_iter().zip(that_levels).enumerate()
             {
-                let irrelevant = family
-                    .is_some_and(|name| families.variance(name, position) == Variance::Irrelevant);
-                if this_level != that_level {
-                    let pair = (depth + below, this_level, that_level);
-                    match irrelevant {
-                        false => differences.compared.push(pair),
-                        true => differences.irrelevant.push(pair),
-                    }
+                if this_level == that_level {
+                    continue;
+                }
+                let irrelevant =
+                    |name: &Global| families.variance(name, position) == Variance::Irrelevant;
+                let pair = (depth + below, this_level, that_level);
+                if family.is_some_and(irrelevant) {
+                    differences.irrelevant.push(pair);
+                } else if partial.is_some_and(irrelevant) {
+                    differences.curried.push(pair);
+                } else {
+                    differences.compared.push(pair);
                 }
             }
+            // A lambda's children are its binders' annotations and then its body, and an annotation is read whole as a curried head's levels are.
+            let annotations = match (families.sets_curried_apart(), this.look()) {
+                (true, Subterm::Func(Func { telescope, .. })) => telescope.len(),
+                _ => 0,
+            };
             // Reversed onto the stack, so the first child is the next node taken: pre-order, so "the first decisive pair" is the first in reading order.
             work.extend(
                 this_children
                     .into_iter()
                     .zip(that_children)
+                    .enumerate()
                     .rev()
-                    .map(|((below, this), (_, that))| (depth + below, this, that)),
+                    .map(|(position, ((below, this), (_, that)))| {
+                        (depth + below, position < annotations, this, that)
+                    }),
             );
         }
 
         Some(differences)
     }
 
-    /// The family and the instance, where this term is that family's name applied in full: the one spelling of a nominal type a caller can meet before any reduction.
-    pub fn applied_family(&self, families: &impl Families) -> Option<(&Global, &[Level])> {
+    /// The name and the instance, where this term is a family's name or a definition applied in full: the one spelling of either a caller can meet before any reduction.
+    pub fn applied_in_full(&self, families: &impl Families) -> Option<(&Global, &[Level])> {
         Applied::of(self, families).map(|applied| (applied.name, applied.levels))
     }
 
@@ -1646,6 +1705,33 @@ impl Term {
 
         Some(opened)
     }
+
+    /// Whether this is a projection of a former short of its full application: bare, or applied to fewer spines than its member's body binds, which eta would supply before either side is read.
+    ///
+    /// The closed body is read for the shape, as [`applied_former`](Self::applied_former) reads it and for its reason.
+    pub fn curried_former(&self) -> bool {
+        let mut spines = 0;
+        let mut head = self;
+        while let Subterm::Apply(apply) = head.look() {
+            spines += 1;
+            head = &apply.head;
+        }
+        let Some((group, index)) = head.look().as_rec_proj() else {
+            return false;
+        };
+        let Some(member) = group.iter().nth(index) else {
+            return false;
+        };
+
+        let mut binds = 0;
+        let mut peeked = member.body.body();
+        while let Subterm::Func(Func { telescope, .. }) = peeked.look() {
+            binds += 1;
+            peeked = telescope.terminal();
+        }
+
+        matches!(peeked.look(), Subterm::InductType(_)) && spines < binds
+    }
 }
 
 /// The level pairs two terms that differ in nothing else differ in, each with its universe-binder depth, in traversal order: what [`Term::level_differences`] answers.
@@ -1653,13 +1739,15 @@ impl Term {
 pub struct LevelDifferences {
     /// The pairs at positions whose levels are part of the term: two terms are one only where every one of these is one level.
     pub compared: Vec<(usize, Level, Level)>,
-    /// The pairs at positions a nominal family is irrelevant in, under the reading the walk was handed. They are no difference between the two terms; a caller that would rather hold one instance than two may still join them.
+    /// The pairs at positions a vector calls irrelevant, a family's or a definition's applied in full, under the reading the walk was handed. They are no difference between the two terms; a caller that would rather hold one instance than two may still join them.
     pub irrelevant: Vec<(usize, Level, Level)>,
+    /// The pairs at a former or a definition short of its full application that its vector calls irrelevant, every pair of two curried projections of one former, and every pair inside a lambda's binder annotation. Whether they are a difference follows the type the two terms meet at, a function type or any other, which the walk does not know.
+    pub curried: Vec<(usize, Level, Level)>,
 }
 
-/// A family's name applied in full, as conversion's raw spellings hold it: the name, the instance's levels, and the arguments, parameters then indices.
+/// A family's name or a definition applied in full, as conversion's raw spellings hold it: the name, the instance's levels, and the arguments, a family's parameters then its indices.
 ///
-/// One spine supplies the parameters of a family with no index, or the indices of one with no parameter; a family with both is applied in two, `Fam.{u,v,w}(F)(N(F))`. A bare name is in full only for a family that takes neither. Anything short of that, a former passed as a family or one applied to its parameters and waiting for an index, is not this, and its levels are aligned every one.
+/// One spine supplies the parameters of a family with no index, or the indices of one with no parameter; a family with both is applied in two, `Fam.{u,v,w}(F)(N(F))`. A bare name is in full only for a family that takes neither. A definition is in full at the one spine its type's outer telescope asks for, and bare where it asks for none. Anything short of that, a former or a function passed as an argument or one waiting for an index, is not this.
 struct Applied<'a> {
     name: &'a Global,
     levels: &'a [Level],
@@ -1680,8 +1768,16 @@ impl<'a> Applied<'a> {
             Some((var.as_free()?.as_global()?, levels.as_slice()))
         }
 
+        // How many arguments one spine applies `name` in full by: a family's parameters or its indices where it takes only the one kind, and a definition's outer telescope.
+        let in_full = |name: &Global, supplied: usize| match families.shape(name) {
+            Some(shape) => shape == (supplied, 0) || shape == (0, supplied),
+            None => families
+                .definition(name)
+                .is_some_and(|(_, arity)| arity == supplied),
+        };
+
         if let Some((name, levels)) = named(term) {
-            return (families.shape(name)? == (0, 0)).then_some(Self {
+            return in_full(name, 0).then_some(Self {
                 name,
                 levels,
                 arguments: Vec::new(),
@@ -1692,9 +1788,8 @@ impl<'a> Applied<'a> {
         };
         if let Some((name, levels)) = named(&outer.head) {
             let supplied = outer.arguments.len();
-            let shape = families.shape(name)?;
 
-            return (shape == (supplied, 0) || shape == (0, supplied)).then(|| Self {
+            return (supplied > 0 && in_full(name, supplied)).then(|| Self {
                 name,
                 levels,
                 arguments: outer.params().collect(),

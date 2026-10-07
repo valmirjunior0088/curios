@@ -83,6 +83,17 @@ impl Subterm {
         }
     }
 
+    /// The global an instance node is of, where its head is a name: a family's, or a definition's.
+    pub(super) fn instance_name(&self) -> Option<&Global> {
+        match self {
+            Subterm::Instance(Instance {
+                head: InstanceHead::Var(var),
+                ..
+            }) => var.as_free()?.as_global(),
+            _ => None,
+        }
+    }
+
     pub(super) fn any_direct_universe_meta(
         &self,
         pred: &mut impl FnMut(UniverseMetaId) -> bool,

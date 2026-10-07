@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_utilities::{Source, Span},
-    std::{rc::Rc, sync::Arc},
+    std::{collections::BTreeMap, rc::Rc, sync::Arc},
 };
 
 #[test]
@@ -247,6 +247,7 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
     );
     let families = Registry {
         inducts: [(nominal("Wrap"), shaped(1, 0, &[Variance::Irrelevant]))].into(),
+        definitions: BTreeMap::new(),
     };
     let wrapped = |level: u32| {
         Term::induct_type_at(

@@ -62,7 +62,7 @@ impl<'a> Established<'a> {
 
     /// The definitions themselves, into the persistent base frame.
     ///
-    /// `define_assuming_scheme` reproduces exactly the state `elaborate_module_let`/`_rec` leave behind — assume the type, define the body — with no re-checking, because these terms are already elaborated. A witness additionally re-registers its already-elaborated signature, since the witness table is per-elaboration state and is not carried on a module.
+    /// `define_assuming_scheme` reproduces exactly the state `elaborate_module_let`/`_rec` leave behind — assume the type, define the body — with no re-checking, because these terms are already elaborated, and a definition's variance vector is filed as its publication files it. A witness additionally re-registers its already-elaborated signature, since the witness table is per-elaboration state and is not carried on a module.
     ///
     /// Registering reduces the signature to its key, so each registration spends a budget restored for it: what a scope costs to bring in is spent on no declaration's budget, and a unit elaborates under the same one whatever its scope holds.
     pub(crate) fn replay_definitions(&self, context: &mut Context) -> Result<(), Error> {
@@ -77,6 +77,7 @@ impl<'a> Established<'a> {
                             Some(&def.kind),
                             def.universe_context.clone(),
                         );
+                        context.record_definition_variances(def);
                         if module.witnesses.contains(&def.name) {
                             context.restore_budget();
                             register_witness(

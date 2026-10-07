@@ -203,6 +203,8 @@ pub(crate) struct Convert {
     placeholders: Vec<Term>,
     // The binders the problem in hand is posed under, and those this step has opened since: what a problem enqueued now is posed under.
     binders: Binders,
+    // The level pairs the levels-only shortcut left to a curried head's type, in the order it met them. Nothing compares the two levels of one where the run goes on to hold its sides one, so each is a weak equation then and nothing where it does not.
+    apart: Vec<(Level, Level)>,
 }
 
 impl Convert {
@@ -227,8 +229,8 @@ impl Convert {
         Ok(true)
     }
 
-    /// [`Self::compare_levels`] for two instances of the family `name`: one equation per level the family is invariant in, and a weak one where it is irrelevant, two instances apart in such a level alone being one type. The weak equation refuses nothing; it is what lets the declaration's closing hold the two occurrences at one instance where it can ([`UniverseSolver::add_weak_eq`](crate::UniverseSolver::add_weak_eq)).
-    fn compare_nominal_levels(
+    /// [`Self::compare_levels`] for two instances of `name`, a family or a definition applied in full: one equation per level its vector calls invariant, and a weak one where it is irrelevant, two instances apart in such a level alone being one term. The weak equation refuses nothing; it is what lets the declaration's closing hold the two occurrences at one instance where it can ([`UniverseSolver::add_weak_eq`](crate::UniverseSolver::add_weak_eq)).
+    fn compare_instance_levels(
         context: &mut Context,
         name: &Global,
         left: &[Level],
@@ -271,6 +273,7 @@ impl Convert {
             minted: HashMap::new(),
             placeholders: Vec::new(),
             binders,
+            apart: Vec::new(),
         }
     }
 
@@ -628,18 +631,18 @@ impl Convert {
             );
         }
         if polymorphic && converts {
-            // A family's name applied in full by one spine is the node it builds, and the two instances are identified as two nodes are. A curried head keeps the identification of the two heads whole: where that declines, the pair goes on to reduction and meets as two nodes.
+            // A family's name applied in full by one spine is the node it builds, and a definition's is its value at those arguments: the two instances are identified by the name's vector. A curried head is identified as two heads are, and where that declines, the pair goes on to reduction and meets as what it reduces to.
             let instances = this_term
-                .applied_family(&*context)
-                .zip(that_term.applied_family(&*context))
+                .applied_in_full(&*context)
+                .zip(that_term.applied_in_full(&*context))
                 .filter(|_| matches!(&*this.head, Subterm::Instance(_)))
                 .map(|((name, this), (_, that))| (*name, this.to_vec(), that.to_vec()));
             converts = match instances {
                 Some((name, this, that)) => {
-                    Self::compare_nominal_levels(context, &name, &this, &that)?
+                    Self::compare_instance_levels(context, &name, &this, &that)?
                 }
                 None => {
-                    identify_universe_levels(context, &this.head, &that.head)?
+                    identify_universe_levels(context, &this.head, &that.head, Curried::Declined)?
                         == Identification::Identified
                 }
             };
@@ -759,7 +762,7 @@ impl Convert {
         {
             return Ok(false);
         }
-        if !Self::compare_nominal_levels(context, &this.name, &this.universes, &that.universes)? {
+        if !Self::compare_instance_levels(context, &this.name, &this.universes, &that.universes)? {
             return Ok(false);
         }
 
@@ -846,7 +849,7 @@ impl Convert {
         {
             return Ok(false);
         }
-        if !Self::compare_nominal_levels(context, &this.name, &this.universes, &that.universes)? {
+        if !Self::compare_instance_levels(context, &this.name, &this.universes, &that.universes)? {
             return Ok(false);
         }
 
@@ -888,7 +891,7 @@ impl Convert {
         if this.name != that.name || this.params.len() != that.params.len() {
             return Ok(false);
         }
-        if !Self::compare_nominal_levels(context, &this.name, &this.universes, &that.universes)? {
+        if !Self::compare_instance_levels(context, &this.name, &this.universes, &that.universes)? {
             return Ok(false);
         }
 
@@ -911,7 +914,7 @@ impl Convert {
         {
             return Ok(false);
         }
-        if !Self::compare_nominal_levels(context, &this.name, &this.universes, &that.universes)? {
+        if !Self::compare_instance_levels(context, &this.name, &this.universes, &that.universes)? {
             return Ok(false);
         }
 
@@ -1850,7 +1853,7 @@ impl Convert {
             .universes_mut()
             .instantiate(&scheme)
             .map_err(ReduceError::Universe)?;
-        Self::compare_nominal_levels(context, name, &fresh, universes)?;
+        Self::compare_instance_levels(context, name, &fresh, universes)?;
 
         Ok(fresh)
     }
@@ -1923,6 +1926,11 @@ impl Convert {
             }
         }
 
+        // Nothing was found apart, so what the shortcut left to a curried head's type was no difference: one instance is what the declaration should hold where it can. A run that parks a problem records them too, a weak equation refusing nothing whatever the retry finds.
+        for (this_level, that_level) in mem::take(&mut self.apart) {
+            context.universes_mut().add_weak_eq(this_level, that_level);
+        }
+
         // A constraint still blocked at quiescence is undecided, not unequal: surrender it to the caller rather than conflating the two.
         Ok(match self.blocked.is_empty() {
             true => Outcome::Converts,
@@ -1947,11 +1955,21 @@ impl Convert {
                 continue;
             }
 
-            // Sides differing only in universe levels are decided by identifying the levels, never by erasing them — see `identify_universe_levels` for the rule, its license, and the refuted premise of a projection comparison. Sound at every problem type, universes included: `Type a ~ Type b` gets the same equality constraint the structural arm below would emit, without the descent.
-            if (this.has_universe_data() || that.has_universe_data())
-                && identify_universe_levels(context, &this, &that)? == Identification::Identified
-            {
-                continue;
+            // Sides differing only in universe levels are decided by identifying the levels, never by erasing them — see `identify_universe_levels` for the rule, its license, and the refuted premise of a projection comparison. Sound at every problem type, universes included: `Type a ~ Type b` gets the same equality constraint the structural arm below would emit, without the descent. A curried head apart in a level its value does not hold is declined, since what it is follows the type this problem goes on to read.
+            if this.has_universe_data() || that.has_universe_data() {
+                match identify_universe_levels(context, &this, &that, Curried::Declined)? {
+                    Identification::Identified => continue,
+                    Identification::Curried(apart) => {
+                        for pair in apart {
+                            if !self.apart.contains(&pair) {
+                                self.apart.push(pair);
+                            }
+                        }
+                    }
+                    Identification::Distinct
+                    | Identification::GroundUnequal
+                    | Identification::UnderBinder => {}
+                }
             }
 
             // Definitional proof irrelevance before either side is reduced, where neither side is flexible — the kernel's order, for the kernel's reason: reducing a proof to discover it equals another proof is work whose answer was already known. Here the work could be unbounded, too: under an arm's case equation a proof can reduce forever, and comparing it with another proof would spend the budget on a goal irrelevance decides outright. A side mentioning a metavariable still goes through the dispatch below, so it is solved against the other side rather than left dangling, and the check after that dispatch covers it.
@@ -2569,7 +2587,7 @@ enum LevelQuestion {
     Distinct,
 }
 
-/// Classify a pair whose levels no sibling problem will surface — two projections of one `rec` group at an applied head, or a problem the history already holds. The levels inside the two groups are decided here rather than by the walk: identified when the sides differ in nothing else, refused when two of them are unequal ground levels, parked when an unsolved metavariable is all that keeps the skeletons apart, and left to the caller only when the sides genuinely differ in structure — the cycle the coinductive rule is for, or two groups the delta step may still relate.
+/// Classify a pair whose levels no sibling problem will surface — two projections of one `rec` group at an applied head, or a problem the history already holds. The levels inside the two groups are decided here rather than by the walk: identified when the sides differ in nothing else, refused when two of them are unequal ground levels, parked when an unsolved metavariable is all that keeps the skeletons apart, and left to the caller only when the sides genuinely differ in structure — the cycle the coinductive rule is for, or two groups the delta step may still relate. No type directs the pair from here, so a curried head keeps every level ([`Curried::Compared`]).
 fn level_question(
     context: &mut Context,
     this: &Term,
@@ -2578,11 +2596,12 @@ fn level_question(
     let this = zonk_solved_term_metas(context, this);
     let that = zonk_solved_term_metas(context, that);
 
-    match identify_universe_levels(context, &this, &that)? {
+    match identify_universe_levels(context, &this, &that, Curried::Compared)? {
         Identification::Identified => return Ok(LevelQuestion::Identified),
         Identification::GroundUnequal => return Ok(LevelQuestion::GroundUnequal),
         Identification::UnderBinder => return Ok(LevelQuestion::UnderBinder),
-        Identification::Distinct => {}
+        // No curried pair is set apart under the reading asked for, so the second is never answered.
+        Identification::Distinct | Identification::Curried(_) => {}
     }
 
     if !this.any_metavar(&mut |_| true) && !that.any_metavar(&mut |_| true) {

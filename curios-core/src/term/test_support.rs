@@ -39,6 +39,8 @@ pub(super) const DEEP: u32 = 100_000;
 #[derive(Default)]
 pub(super) struct Registry {
     pub(super) inducts: BTreeMap<Global, InductDecl>,
+    /// Each definition's vector, with how many arguments one spine applies it in full by.
+    pub(super) definitions: BTreeMap<Global, (Vec<Variance>, usize)>,
 }
 
 impl Families for Registry {
@@ -48,6 +50,12 @@ impl Families for Registry {
 
     fn struct_(&self, _: &Global) -> Option<&StructDecl> {
         None
+    }
+
+    fn definition(&self, name: &Global) -> Option<(&[Variance], usize)> {
+        self.definitions
+            .get(name)
+            .map(|(variances, arity)| (variances.as_slice(), *arity))
     }
 }
 
@@ -81,8 +89,13 @@ pub(super) fn shaped(params: usize, indices: usize, variances: &[Variance]) -> I
     }
 }
 
-/// `path`'s former at `level` as its group's projection, applied in full to `Nat`: `rec W : (A: Type l) -> Type l = (A) => W.{l}(A); W`, the spelling reduction hands over for an instance of an `induct`'s name.
+/// `path`'s former at `level` as its group's projection, applied in full to `Nat`.
 pub(super) fn former_applied(path: &str, level: u32) -> Term {
+    Term::apply(former(path, level), [Term::intrinsic(Intrinsic::NatType)])
+}
+
+/// `path`'s former at `level` as its group's projection: `rec W : (A: Type l) -> Type l = (A) => W.{l}(A); W`, the spelling reduction hands over for an instance of an `induct`'s name.
+pub(super) fn former(path: &str, level: u32) -> Term {
     let member = Free::local(970, Some("W"));
     let carrier = Free::local(971, Some("A"));
     let sort = Term::type_at(Level::constant(level));
@@ -96,16 +109,13 @@ pub(super) fn former_applied(path: &str, level: u32) -> Term {
         ),
     );
 
-    Term::apply(
-        Term::rec(
-            [(
-                member,
-                Term::func_type([(carrier, sort.clone())], sort),
-                body,
-            )],
-            Term::free_var(&member),
-        ),
-        [Term::intrinsic(Intrinsic::NatType)],
+    Term::rec(
+        [(
+            member,
+            Term::func_type([(carrier, sort.clone())], sort),
+            body,
+        )],
+        Term::free_var(&member),
     )
 }
 

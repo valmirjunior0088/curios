@@ -453,7 +453,7 @@ pub struct UniverseSolver {
     floor_log: Vec<UniverseMetaId>,
     next_meta: usize,
     consistency: Option<ConsistencyCache>,
-    /// The pairs conversion met at positions a nominal family is irrelevant in, in the order it met them. None is a constraint, since no checker compares the two levels of one; each is tried where its declaration's levels settle ([`UniverseSolver::join_weak_equations`]).
+    /// The pairs conversion met at positions a nominal family or a definition is irrelevant in, in the order it met them. None is a constraint, since no checker compares the two levels of one; each is tried where its declaration's levels settle ([`UniverseSolver::join_weak_equations`]).
     weak: Vec<(Level, Level)>,
 }
 

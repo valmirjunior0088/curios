@@ -1,6 +1,6 @@
-//! The level alignment under a reading of the nominal families: which pairs it leaves out, and which spellings of a family it recognizes.
+//! The level alignment under a reading of the nominal families and of the definitions: which pairs it leaves out, which it leaves to a curried head's type, and which spellings of a name it recognizes.
 
-use {super::test_support::*, crate::*};
+use {super::test_support::*, crate::*, std::collections::BTreeMap};
 
 const STAR: Variance = Variance::Irrelevant;
 const EQUAL: Variance = Variance::Invariant;
@@ -10,6 +10,18 @@ fn registry(families: &[(&str, InductDecl)]) -> Registry {
         inducts: families
             .iter()
             .map(|(path, declaration)| (nominal(path), declaration.clone()))
+            .collect(),
+        definitions: BTreeMap::new(),
+    }
+}
+
+/// A registry of definitions alone, each with its vector and the arity one spine applies it in full by.
+fn defining(definitions: &[(&str, &[Variance], usize)]) -> Registry {
+    Registry {
+        inducts: BTreeMap::new(),
+        definitions: definitions
+            .iter()
+            .map(|(path, variances, arity)| (nominal(path), (variances.to_vec(), *arity)))
             .collect(),
     }
 }
@@ -38,7 +50,7 @@ fn pair(this: u32, that: u32) -> (usize, Level, Level) {
     (0, at(this), at(that))
 }
 
-/// What the walk answers for two terms that differ in levels alone: the pairs it compares, and the ones it sets apart as irrelevant.
+/// What the walk answers for two terms that differ in levels alone and hold no curried head: the pairs it compares, and the ones it sets apart as irrelevant.
 fn found(
     compared: Vec<(usize, Level, Level)>,
     irrelevant: Vec<(usize, Level, Level)>,
@@ -46,6 +58,15 @@ fn found(
     Some(LevelDifferences {
         compared,
         irrelevant,
+        curried: Vec::new(),
+    })
+}
+
+/// What the walk answers for two terms whose every differing pair sits at a curried head.
+fn left_to_the_type(curried: Vec<(usize, Level, Level)>) -> Option<LevelDifferences> {
+    Some(LevelDifferences {
+        curried,
+        ..LevelDifferences::default()
     })
 }
 
@@ -114,22 +135,125 @@ fn a_familys_name_applied_in_full_is_read_as_its_node() {
     }
 }
 
-// Variance applies to a family applied in full and to nothing short of it: a former passed as a family, or applied to its parameters and waiting for an index, keeps every pair.
+// A family's name short of its full application, passed as a family or applied to its parameters and waiting for an index, is a function. Apart in a level the family is irrelevant in, two of them are one where eta applies both and two where every level is compared, so the pair is neither a difference nor none: it is left to the type. A level the family is invariant in is compared either way, and under `()` every level is.
 #[test]
-fn a_bare_or_partly_applied_former_keeps_every_pair() {
+fn a_bare_or_partly_applied_family_name_is_left_to_its_type() {
     let families = registry(&[
         ("Wrap", shaped(1, 0, &[STAR])),
         ("Both", shaped(1, 1, &[STAR])),
+        ("Held", shaped(1, 0, &[EQUAL])),
     ]);
     let partly = |level| Term::apply(named("Both", &[level]), [nat()]);
 
     assert_eq!(
         named("Wrap", &[0]).level_differences(&named("Wrap", &[1]), |_| false, &families),
-        found(vec![pair(0, 1)], Vec::new())
+        left_to_the_type(vec![pair(0, 1)])
     );
     assert_eq!(
         partly(0).level_differences(&partly(1), |_| false, &families),
+        left_to_the_type(vec![pair(0, 1)])
+    );
+    assert_eq!(
+        named("Held", &[0]).level_differences(&named("Held", &[1]), |_| false, &families),
         found(vec![pair(0, 1)], Vec::new())
+    );
+    assert_eq!(
+        named("Wrap", &[0]).level_differences(&named("Wrap", &[1]), |_| false, &()),
+        found(vec![pair(0, 1)], Vec::new())
+    );
+}
+
+// A definition applied by the one spine its type asks for is its value at those arguments, so its instance's levels pair by its vector as a family's do, and its arguments are aligned after them. One that asks for no argument is in full as its bare name.
+#[test]
+fn a_definition_applied_in_full_is_read_by_its_vector() {
+    let definitions = defining(&[("pick", &[STAR, EQUAL], 1), ("unit", &[STAR], 0)]);
+    let pick = |levels: [u32; 2], inner: u32| {
+        Term::apply(named("pick", &levels), [Term::type_at(at(inner))])
+    };
+
+    assert_eq!(
+        pick([0, 0], 3).level_differences(&pick([1, 2], 4), |_| false, &definitions),
+        found(vec![pair(0, 2), pair(3, 4)], vec![pair(0, 1)])
+    );
+    assert_eq!(
+        named("unit", &[0]).level_differences(&named("unit", &[1]), |_| false, &definitions),
+        found(Vec::new(), vec![pair(0, 1)])
+    );
+    assert_eq!(
+        pick([0, 0], 3).level_differences(&pick([1, 0], 3), |_| false, &()),
+        found(vec![pair(0, 1)], Vec::new())
+    );
+}
+
+// A definition short of its one spine is a function, as a family's bare name is: the level its value does not hold is left to the type, and the one it holds is compared.
+#[test]
+fn a_definition_passed_bare_is_left_to_its_type() {
+    let definitions = defining(&[("pick", &[STAR, EQUAL], 1)]);
+
+    assert_eq!(
+        named("pick", &[0, 0]).level_differences(&named("pick", &[1, 0]), |_| false, &definitions),
+        left_to_the_type(vec![pair(0, 1)])
+    );
+    assert_eq!(
+        named("pick", &[0, 0]).level_differences(&named("pick", &[1, 2]), |_| false, &definitions),
+        Some(LevelDifferences {
+            compared: vec![pair(0, 2)],
+            irrelevant: Vec::new(),
+            curried: vec![pair(0, 1)],
+        })
+    );
+}
+
+// A lambda's binder is annotated at a level eta never reads: at a function type both sides are applied to one binder first. So the pair in an annotation is left to the type, where the body's levels are compared as anywhere. Under `()` the annotation is compared with the rest, in reading order.
+#[test]
+fn a_lambdas_binder_annotation_is_left_to_its_type() {
+    let families = registry(&[]);
+    let carrier = Free::local(980, Some("A"));
+    let lambda = |binder: u32, body: u32| {
+        Term::func(
+            [(carrier, Term::type_at(at(binder)))],
+            Term::type_at(at(body)),
+        )
+    };
+
+    assert_eq!(
+        lambda(0, 3).level_differences(&lambda(1, 3), |_| false, &families),
+        left_to_the_type(vec![pair(0, 1)])
+    );
+    assert_eq!(
+        lambda(0, 3).level_differences(&lambda(1, 4), |_| false, &families),
+        Some(LevelDifferences {
+            compared: vec![pair(3, 4)],
+            irrelevant: Vec::new(),
+            curried: vec![pair(0, 1)],
+        })
+    );
+    assert_eq!(
+        lambda(0, 3).level_differences(&lambda(1, 4), |_| false, &()),
+        found(vec![pair(0, 1), pair(3, 4)], Vec::new())
+    );
+}
+
+// Two bare projections of one former differ in the level of the node the member builds and in its binders' annotations, which eta never compares: every pair is left to the type, whatever the family's vector says of the node. Under `()` the two groups are aligned level by level.
+#[test]
+fn two_bare_projections_of_a_former_are_left_to_their_type_whole() {
+    for variance in [STAR, EQUAL] {
+        let families = registry(&[("Wrap", shaped(1, 0, &[variance]))]);
+        let differences = former("Wrap", 0)
+            .level_differences(&former("Wrap", 1), |_| false, &families)
+            .unwrap();
+
+        assert!(differences.compared.is_empty() && differences.irrelevant.is_empty());
+        assert!(
+            !differences.curried.is_empty()
+                && differences.curried.iter().all(|found| *found == pair(0, 1))
+        );
+    }
+
+    assert!(
+        former("Wrap", 0)
+            .level_differences(&former("Wrap", 1), |_| false, &())
+            .is_some_and(|found| !found.compared.is_empty() && found.curried.is_empty())
     );
 }
 

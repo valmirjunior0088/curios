@@ -24,11 +24,11 @@ use {
     },
     curios_analysis::{Unfolding, records_case_equation},
     curios_core::{
-        Advance, Bound, ConceptDecl, Consumption, Cost, DefinitionKind, Free, Global, HeadTag,
-        ImplicitOrigin, Imports, InductDecl, Item, Level, Metavar, MetavarId, MetavarOrigin,
-        Minted, Mints, Probe, RecGroup, ReduceError, StructDecl, Subterm, Term, Totality,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
-        UniverseMetaId, UniverseRole, WitnessOrigin, instantiate_universe_levels_scoped,
+        Advance, Bound, ConceptDecl, Consumption, Cost, Definition, DefinitionKind, Free, FuncType,
+        Global, HeadTag, ImplicitOrigin, Imports, InductDecl, Item, Level, Metavar, MetavarId,
+        MetavarOrigin, Minted, Mints, Probe, RecGroup, ReduceError, StructDecl, Subterm, Term,
+        Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
+        UniverseMetaId, UniverseRole, Variance, WitnessOrigin, instantiate_universe_levels_scoped,
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, Span, SyntaxRegistry},
     std::{
@@ -539,6 +539,7 @@ impl Context {
                 self.reassume(&name, &definition.type_);
                 self.define(&name, &definition.body, Some(&definition.kind));
                 self.set_assumption_universe_context(&name, definition.universe_context.clone());
+                self.record_definition_variances(definition);
                 if self.is_witness_declaration(&definition.name) {
                     self.update_witness_scheme(
                         &definition.name,
@@ -656,6 +657,20 @@ impl Context {
 
     pub(crate) fn seed_totality(&mut self, inherited: &BTreeMap<Global, Totality>) {
         self.program.seed_totality(inherited);
+    }
+
+    /// File the vector a finished definition carries, for conversion's level alignment: with the length of its type's outer telescope, which is the one spine that applies it in full.
+    pub(crate) fn record_definition_variances(&mut self, definition: &Definition) {
+        let arity = match &*definition.type_ {
+            Subterm::FuncType(FuncType { telescope, .. }) => telescope.len(),
+            _ => 0,
+        };
+        self.program
+            .record_definition_variances(&definition.name, &definition.variances, arity);
+    }
+
+    pub(crate) fn definition_variances(&self, name: &Global) -> Option<(&[Variance], usize)> {
+        self.program.definition_variances(name)
     }
 
     /// Take the terms recorded since `mark`: a published declaration's, or the entry's, which (V) reads last.
