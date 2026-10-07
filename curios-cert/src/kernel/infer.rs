@@ -1072,7 +1072,7 @@ fn check_fields(
 ///
 /// **Domains are invariant, codomains cumulative.** Comparing domains by conversion rather than contravariantly is the choice Coq makes, and it is the freely-revisable side of the fork: widening to contravariance later accepts strictly more, so it breaks nothing already accepted, while shipping contravariance and withdrawing it would break programs.
 ///
-/// The elaborator reaches the same verdicts by a different route — it is bidirectional, so checking a λ against a Π pushes the comparison down to the leaves, where both sides are sorts and the head rule suffices, and it never forms the Π being subsumed here. Deciding this structurally instead is what makes the rule readable, and what lets the two checkers disagree if elaboration's traversal order ever changes.
+/// The elaborator decides the same relation by the same rule, inside its conversion: each problem there carries the relation it is asked at, a function type's domains being equations and its codomain keeping the relation, so a pair that waits on a metavariable resumes as the subsumption it was. The kernel meets finished terms and has nothing to wait on. Stating the rule structurally in both is what makes it readable, and what lets the two checkers disagree where one of them drifts.
 fn subsumes(kernel: &mut Kernel, inferred: &Term, expected: &Term) -> Result<bool, Error> {
     kernel.spend(Cost::STEP)?;
 

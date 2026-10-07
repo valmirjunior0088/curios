@@ -818,6 +818,7 @@ fn parked_goals_retry_under_their_frozen_refinements() {
                 this: Term::free_var(&b),
                 that: nat_type(),
                 binders: Binders::default(),
+                relation: Relation::Equal,
             }),
             Term::free_var(&b),
         );
@@ -841,6 +842,7 @@ fn parked_goals_without_their_refinement_mismatch() {
                 this: Term::free_var(&b),
                 that: nat_type(),
                 binders: Binders::default(),
+                relation: Relation::Equal,
             }),
             Term::free_var(&b),
         );
@@ -1021,21 +1023,35 @@ fn two_goals_distinct_under_their_binder_types_share_one_history_key() {
     };
 
     let mut cmp = Convert::new(
-        Binders::default(),
-        Term::type_ground(),
-        Term::type_ground(),
-        Term::type_ground(),
+        Problem {
+            type_: Term::type_ground(),
+            this: Term::type_ground(),
+            that: Term::type_ground(),
+            binders: Binders::default(),
+            relation: Relation::Equal,
+        },
+        None,
     );
     cmp.pending.clear();
 
     let nat = Term::intrinsic(Intrinsic::NatType);
     let bool_ = Term::intrinsic(Intrinsic::BoolType);
     assert_eq!(
-        cmp.compare_func_type(&mut context, arrow(nat.clone(), &f), arrow(nat, &g)),
+        cmp.compare_func_type(
+            &mut context,
+            arrow(nat.clone(), &f),
+            arrow(nat, &g),
+            Relation::Equal
+        ),
         Ok(true)
     );
     assert_eq!(
-        cmp.compare_func_type(&mut context, arrow(bool_.clone(), &f), arrow(bool_, &g)),
+        cmp.compare_func_type(
+            &mut context,
+            arrow(bool_.clone(), &f),
+            arrow(bool_, &g),
+            Relation::Equal
+        ),
         Ok(true)
     );
 
@@ -1220,4 +1236,44 @@ fn a_goal_surrendered_under_a_binder_is_retried_under_it() {
         convert_outcome(&mut context, &goal.type_, &goal.this, &goal.that),
         Ok(Outcome::Mismatch(_))
     ));
+}
+
+// A goal parked at below resumes at below. `Prop ≤ ?0` waits on `?0`; solved to `Type`, the retry finds `Prop` below it, where an equation would compare `Prop` with `Type` and refuse.
+#[test]
+fn a_goal_parked_at_below_resumes_at_below() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(1)));
+    context.park(
+        ParkedWork::Conversion(Problem {
+            type_: Term::type_ground(),
+            this: Term::prop(),
+            that: Term::hole(0),
+            binders: Binders::default(),
+            relation: Relation::Below,
+        }),
+        Term::hole(0),
+    );
+    context.solve_metavar(MetavarId(0), Term::type_ground());
+
+    assert!(context.drain_parked().is_ok());
+}
+
+// Control: the same goal parked as an equation is refused once `?0` is `Type`.
+#[test]
+fn a_goal_parked_at_equal_resumes_at_equal() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(1)));
+    context.park(
+        ParkedWork::Conversion(Problem {
+            type_: Term::type_ground(),
+            this: Term::prop(),
+            that: Term::hole(0),
+            binders: Binders::default(),
+            relation: Relation::Equal,
+        }),
+        Term::hole(0),
+    );
+    context.solve_metavar(MetavarId(0), Term::type_ground());
+
+    assert!(context.drain_parked().is_err());
 }

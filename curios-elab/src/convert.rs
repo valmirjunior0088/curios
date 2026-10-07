@@ -45,7 +45,7 @@ use {
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, Variance, Variant,
         past_bool_cap,
     },
-    curios_utilities::{Plicity, recurse},
+    curios_utilities::{Plicity, Span, recurse},
     std::{
         collections::{HashMap, HashSet, VecDeque},
         mem,
@@ -161,7 +161,7 @@ pub(crate) fn convert_outcome(
     convert_under(context, &Binders::default(), type_, this, that)
 }
 
-/// [`convert_outcome`] for a pair posed under `binders`: a comparison conversion makes of its own while it is under binders it opened, and the retry of a goal it surrendered.
+/// [`convert_outcome`] for a pair posed under `binders`: a comparison conversion makes of its own while it is under binders it opened.
 pub(crate) fn convert_under(
     context: &mut Context,
     binders: &Binders,
@@ -169,8 +169,43 @@ pub(crate) fn convert_under(
     this: &Term,
     that: &Term,
 ) -> Result<Outcome, ReduceError> {
+    let problem = Problem {
+        type_: type_.clone(),
+        this: this.clone(),
+        that: that.clone(),
+        binders: binders.clone(),
+        relation: Relation::Equal,
+    };
+
+    problem_outcome(context, problem, None)
+}
+
+/// Whether a term of type `lower` may stand where `upper` is wanted: the two types posed at [`Relation::Below`], under no binder. `span` is the term's, which a level bound raised on the way reports.
+pub(crate) fn subsume_outcome(
+    context: &mut Context,
+    lower: &Term,
+    upper: &Term,
+    span: Option<Span>,
+) -> Result<Outcome, ReduceError> {
+    let problem = Problem {
+        type_: Term::type_ground(),
+        this: lower.clone(),
+        that: upper.clone(),
+        binders: Binders::default(),
+        relation: Relation::Below,
+    };
+
+    problem_outcome(context, problem, span)
+}
+
+/// Decide `problem` at the relation it carries: a question asked afresh, and the retry of a goal an earlier run surrendered, which resumes as what it was asked.
+pub(crate) fn problem_outcome(
+    context: &mut Context,
+    problem: Problem,
+    span: Option<Span>,
+) -> Result<Outcome, ReduceError> {
     curios_profile::profile!("convert::outcome");
-    Convert::new(binders.clone(), type_.clone(), this.clone(), that.clone()).outcome(context)
+    Convert::new(problem, span).outcome(context)
 }
 
 /// The verdict of a conversion run, distinguishing "provably unequal" from "not yet decidable".
@@ -184,7 +219,16 @@ pub(crate) enum Outcome {
     Blocked(Vec<Problem>),
 }
 
-/// One conversion constraint, `this ≡ that : type_` (comparison is type-directed: the type drives η-expansion and proof irrelevance). Public because a [`Outcome::Blocked`] verdict surrenders its still-blocked problems to the caller, which parks them on the [`Context`] (as `ParkedWork::Conversion`) for retry once a watched metavariable is solved.
+/// The relation a conversion problem is asked at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum Relation {
+    /// `this ≡ that`.
+    Equal,
+    /// `this ≤ that`, subsumption: a term of type `this` may stand where `that` is wanted. It differs from equal between two sorts and in a function type's codomain, and is conversion everywhere else (`documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`).
+    Below,
+}
+
+/// One conversion constraint, `this ≡ that : type_`, or `this ≤ that` between two types (comparison is type-directed: the type drives η-expansion and proof irrelevance). Public because a [`Outcome::Blocked`] verdict surrenders its still-blocked problems to the caller, which parks them on the [`Context`] (as `ParkedWork::Conversion`) for retry once a watched metavariable is solved.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct Problem {
     pub type_: Term,
@@ -192,14 +236,17 @@ pub(crate) struct Problem {
     pub that: Term,
     /// The binders this problem is posed under, which a retry of it is posed under too.
     pub binders: Binders,
+    /// The relation it is asked at, which a problem that waits keeps: one parked at below resumes at below.
+    pub relation: Relation,
 }
 
-/// A problem as the recurrence rule keys it: its type and its sides, every label this conversion minted renamed to a placeholder ([`Convert::history_key`]). The binders it is posed under are no part of it — a label's type is fixed where the label is minted, so two problems equal up to their labels are one problem.
+/// A problem as the recurrence rule keys it: its type, its sides and the relation it is asked at, every label this conversion minted renamed to a placeholder ([`Convert::history_key`]). The binders it is posed under are no part of it — a label's type is fixed where the label is minted, so two problems equal up to their labels are one problem.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Recurrence {
     type_: Term,
     this: Term,
     that: Term,
+    relation: Relation,
 }
 
 #[derive(Debug)]
@@ -220,6 +267,8 @@ pub(crate) struct Convert {
     binders: Binders,
     // The level pairs the levels-only shortcut left to a curried head's type, in the order it met them. Nothing compares the two levels of one where the run goes on to hold its sides one, so each is a weak equation then and nothing where it does not.
     apart: Vec<(Level, Level)>,
+    // The span of the term this run was asked for, where it was asked for one: what a level bound raised at below reports.
+    span: Option<Span>,
 }
 
 impl Convert {
@@ -273,22 +322,18 @@ impl Convert {
         Ok(true)
     }
 
-    fn new(binders: Binders, type_: Term, this: Term, that: Term) -> Self {
+    fn new(problem: Problem, span: Option<Span>) -> Self {
         Self {
             history: HashSet::new(),
-            pending: VecDeque::from([Problem {
-                type_,
-                this,
-                that,
-                binders: binders.clone(),
-            }]),
+            binders: problem.binders.clone(),
+            pending: VecDeque::from([problem]),
             blocked: Vec::new(),
             progress: false,
             declined: None,
             minted: HashMap::new(),
             placeholders: Vec::new(),
-            binders,
             apart: Vec::new(),
+            span,
         }
     }
 
@@ -397,6 +442,7 @@ impl Convert {
             type_: problem.type_.clone(),
             this: problem.this.clone(),
             that: problem.that.clone(),
+            relation: problem.relation,
         };
         if self.minted.is_empty() {
             return as_written();
@@ -427,15 +473,22 @@ impl Convert {
             type_: problem.type_.capture(&labels).release(&refs),
             this: problem.this.capture(&labels).release(&refs),
             that: problem.that.capture(&labels).release(&refs),
+            relation: problem.relation,
         }
     }
 
     pub(crate) fn enqueue(&mut self, type_: Term, this: Term, that: Term) {
+        self.enqueue_at(Relation::Equal, type_, this, that);
+    }
+
+    /// [`Self::enqueue`] at `relation`.
+    fn enqueue_at(&mut self, relation: Relation, type_: Term, this: Term, that: Term) {
         self.pending.push_back(Problem {
             type_,
             this,
             that,
             binders: self.binders.clone(),
+            relation,
         });
     }
 
@@ -462,11 +515,13 @@ impl Convert {
         Ok(self.pending.pop_front())
     }
 
+    /// Two function types, the domains as equations whatever is asked of the types, and the codomains at `codomain`: below where the two types are, which is what makes subsumption a relation over the function type and no property of who walks it.
     fn compare_func_type(
         &mut self,
         context: &mut Context,
         this: FuncType,
         that: FuncType,
+        codomain: Relation,
     ) -> Result<bool, ReduceError> {
         // Plicity is part of a function type's identity and calling convention: an explicit slot and an implicit/witness slot are *not* convertible even when their domains and results are, so that a convertible annotation or alias can never reinterpret which binders elaboration inserts. Compare the whole plicity vector (arity included) up front — the telescope walk below then compares the dependent domains.
         if !this.telescope.same_marks(&that.telescope) {
@@ -482,7 +537,7 @@ impl Convert {
                     walk.advance_fresh(|hint| self.opening(context, hint, Some(domain.clone())));
                 }
                 Step::Bodies(left, right) => {
-                    self.enqueue(Term::type_ground(), left, right);
+                    self.enqueue_at(codomain, Term::type_ground(), left, right);
                     return Ok(true);
                 }
                 Step::Mismatch => return Ok(false),
@@ -523,6 +578,50 @@ impl Convert {
         self.enqueue(output_type, this_body, that.telescope.open(&y_refs));
 
         Ok(true)
+    }
+
+    /// The relation's own rules, for a problem at below, both sides read forced as the kernel's `subsumes` reads them: two sorts add `lower ≤ upper`, `Prop` below any `Type`, and two function types of one plicity vector pose each domain as an equation and their codomains at below. Answers whether they decided the problem.
+    ///
+    /// Any other pair is the equation it is, taken from its written spelling through every step an equation takes: that is sufficient for a subsumption, and it is the whole of one wherever neither side can come to a sort or a function type. A problem those steps leave waiting on a metavariable keeps the relation it was asked at, so it resumes here.
+    fn decide_below(
+        &mut self,
+        context: &mut Context,
+        this: &Term,
+        that: &Term,
+    ) -> Result<bool, ReduceError> {
+        let lower = reduce_forced(context, this.clone())?;
+        let upper = reduce_forced(context, that.clone())?;
+
+        match (&*lower, &*upper) {
+            (Subterm::Prop | Subterm::Type(_), Subterm::Type(upper)) => {
+                let lower = match &*lower {
+                    Subterm::Type(lower) => lower.clone(),
+                    _ => Level::zero(),
+                };
+                context
+                    .universes_mut()
+                    .add_leq(
+                        lower,
+                        upper.clone(),
+                        UniverseConstraintOrigin {
+                            span: self.span.clone(),
+                            kind: UniverseConstraintKind::Cumulativity,
+                            declaration: None,
+                            binder: None,
+                        },
+                    )
+                    .map_err(ReduceError::Universe)?;
+
+                Ok(true)
+            }
+            // Plicity is part of a function type's identity, so two of different marks are no codomain question: they go on as the equation, which refuses them.
+            (Subterm::FuncType(lower), Subterm::FuncType(upper))
+                if lower.telescope.same_marks(&upper.telescope) =>
+            {
+                self.compare_func_type(context, lower.clone(), upper.clone(), Relation::Below)
+            }
+            _ => Ok(false),
+        }
     }
 
     /// The value a folded recursive application forces to, or the one-step unfolding when forcing reaches no value — `None` only when neither moves.
@@ -2159,12 +2258,18 @@ impl Convert {
             this,
             that,
             binders: posed,
+            relation,
         }) = self.dequeue(context)?
         {
             self.declined = None;
             self.binders = posed.clone();
             // Reflexivity needs no evaluation. In particular, do not force an identical folded recursive computation merely because it sits under a strict intrinsic operation.
             if this == that {
+                continue;
+            }
+
+            // A subsumption is its own rules first; what they do not decide is the equation below, and waits as the subsumption it was asked as.
+            if relation == Relation::Below && self.decide_below(context, &this, &that)? {
                 continue;
             }
 
@@ -2220,6 +2325,7 @@ impl Convert {
                 this: this_raw.clone(),
                 that: that_raw.clone(),
                 binders: posed.clone(),
+                relation,
             };
 
             // Flexible heads are dispatched before history and before the structural/η fallthrough — a flexible head must never be η-expanded into a spine.
@@ -2305,6 +2411,7 @@ impl Convert {
                 this: this.clone(),
                 that: that.clone(),
                 binders: posed.clone(),
+                relation,
             };
 
             let key = self.history_key(context, &problem);
@@ -2409,7 +2516,7 @@ impl Convert {
                     self.compare_match(context, this, that)?
                 }
                 (Subterm::FuncType(this), Subterm::FuncType(that)) => {
-                    self.compare_func_type(context, this, that)?
+                    self.compare_func_type(context, this, that, Relation::Equal)?
                 }
                 (Subterm::Func(this), Subterm::Func(that)) => {
                     self.compare_func(context, this, that, type_.clone())?

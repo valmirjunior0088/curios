@@ -379,3 +379,18 @@ fn a_goal_in_an_arm_is_offered_what_fits_under_its_guard() {
         "unexpected error: {error}"
     );
 }
+
+#[test]
+fn a_candidate_that_fits_by_subsumption_is_suggested() {
+    // A goal's candidates are what `check` admits there, and `check` admits by subsumption: a predicate stands where a family into `Type` is wanted, and a proposition where a type is.
+    let source = r#"
+        use /std/{Bool};
+        let pick(is: (b: Bool) -> Prop, p: Prop) -> {(Bool) -> Type, Type} = (?, ?);
+        /std/Io/pure(())
+    "#;
+
+    let error = compile(source).unwrap_err();
+
+    assert!(error.contains("? \u{2248} is"), "unexpected error: {error}");
+    assert!(error.contains("? \u{2248} p"), "unexpected error: {error}");
+}

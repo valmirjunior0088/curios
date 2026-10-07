@@ -4,8 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_core::{
-        Atom, Cases, Exhaustion, Free, Global, InductDecl, InductParam, Intrinsic, Many, Match,
-        MatchResult, MetavarId, Scope, StructDecl, StructType, Subterm, Telescope, Term,
+        Atom, Cases, Exhaustion, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many,
+        Match, MatchResult, MetavarId, Scope, StructDecl, StructType, Subterm, Telescope, Term,
         UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
@@ -1560,4 +1560,60 @@ fn a_family_the_budget_cannot_read_at_its_scrutinee_propagates_the_refusal() {
     let read = super::family_at_head(&mut context, &motive, &Term::free_var(&head));
 
     assert!(read.is_err_and(|spent| spent.is_exhausted()));
+}
+
+// A function type's codomain is decided at below past a domain that waits. `(x: ?0(0)) -> Prop ≤ (x: Bool) -> Type`: the domain is an equation that waits on `?0` and is all the run surrenders, the codomain being `Prop` below `Type`. As an equation the pair is refused outright.
+#[test]
+fn a_codomain_is_decided_at_below_past_a_domain_that_waits() {
+    let mut context = context();
+    let kind = Term::func_type(
+        [(context.fresh(Some("n")), nat_type())],
+        Term::type_ground(),
+    );
+    context.birth_metavar(MetavarId(0), Vec::new(), kind);
+    let lower = Term::func_type(
+        [(
+            context.fresh(Some("x")),
+            Term::apply(Term::hole(0), [nat(0)]),
+        )],
+        Term::prop(),
+    );
+    let upper = Term::func_type(
+        [(
+            context.fresh(Some("x")),
+            Term::intrinsic(Intrinsic::BoolType),
+        )],
+        Term::type_ground(),
+    );
+
+    let below = subsume_outcome(&mut context, &lower, &upper, None);
+    let Ok(Outcome::Blocked(goals)) = below else {
+        panic!("{below:?}");
+    };
+    assert_eq!(goals.len(), 1);
+    assert_eq!(goals[0].relation, Relation::Equal);
+
+    let equal = convert_outcome(&mut context, &Term::type_ground(), &lower, &upper);
+    assert!(matches!(equal, Ok(Outcome::Mismatch(_))), "{equal:?}");
+}
+
+// Two sorts at below are the level bound and at equal the level equation: `Type 0 ≤ Type 1` holds, and `Type 1 ≤ Type 0` is refused where the levels close.
+#[test]
+fn two_sorts_at_below_are_a_level_bound() {
+    let mut context = context();
+    let small = Term::type_ground();
+    let large = Term::type_at(Level::constant(1));
+
+    assert!(matches!(
+        subsume_outcome(&mut context, &small, &large, None),
+        Ok(Outcome::Converts)
+    ));
+    assert!(matches!(
+        subsume_outcome(&mut context, &Term::prop(), &small, None),
+        Ok(Outcome::Converts)
+    ));
+    assert!(matches!(
+        subsume_outcome(&mut context, &small, &Term::prop(), None),
+        Ok(Outcome::Mismatch(_))
+    ));
 }

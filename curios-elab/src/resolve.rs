@@ -316,7 +316,7 @@ pub(crate) enum Probe {
     Undecided,
 }
 
-/// Whether `candidate` converts with `goal`, *without* committing: solutions the comparison lands are rolled back regardless of the verdict. Used to test every same-depth superclass projection before committing the unique match, and by the goal-suggestion pass to test scope binders against a goal type.
+/// Whether `candidate` converts with `goal`, *without* committing: solutions the comparison lands are rolled back regardless of the verdict. Used to test every same-depth superclass projection before committing the unique match.
 pub(crate) fn probe_match(
     context: &mut Context,
     candidate: &Term,

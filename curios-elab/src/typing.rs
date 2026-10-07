@@ -4,18 +4,19 @@ mod tests;
 use {
     super::{
         Context, Error, FrozenFrame, Mode, Outcome, ParkedProblem, ParkedWork, Problem, Sort,
-        callee, convert, convert_outcome, convert_under, diagnose_embedding, diagnose_shape,
-        elaborate, elaborate_func_settle, embeds, is_monad, monad_shape, normalize, reduce_forced,
-        refold_recs, refused_scrutinee, retry_discharge, retry_match, retry_projection,
-        retry_witness, shallow_scrutinee, zonk_solved_term_metas,
+        callee, convert, convert_outcome, diagnose_embedding, diagnose_shape, elaborate,
+        elaborate_func_settle, embeds, is_monad, monad_shape, normalize, problem_outcome,
+        reduce_forced, refold_recs, refused_scrutinee, retry_discharge, retry_match,
+        retry_projection, retry_witness, shallow_scrutinee, subsume_outcome,
+        zonk_solved_term_metas,
     },
     curios_analysis::{
         RESOLVED_SPELLING_LAYERS, Unfolding, records_case_equation, scrutinee_solution,
     },
     curios_core::{
         Advance, Apply, Bound, Field, Free, Func, FuncType, Global, ImplicitOrigin, Intrinsic,
-        IntrinsicHead, Level, Lockstep, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError,
-        Scope, Spelling, Step, Subterm, Telescope, Term, Transient, UniverseConstraintKind,
+        IntrinsicHead, Level, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError, Scope,
+        Spelling, Subterm, Telescope, Term, Transient, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseRole, Visit,
     },
     curios_utilities::Span,
@@ -194,110 +195,11 @@ fn required_region_type(context: &mut Context, sequenced: &Term) -> Option<Term>
     Some(sequenced.traverse(&mut visit))
 }
 
-/// Whether `inferred` is admissible where `expected` is wanted: the subsumption relation `A ≤ B`, decided structurally as `curios_cert`'s `subsumes` decides it — `Prop ≤ Type v`, `Type u ≤ Type v` under the level algebra, and `Π(x:A).B ≤ Π(x:A').B'` when `A ≡ A'` and `B ≤ B'` — falling through to conversion otherwise.
+/// Hold `term`, of type `inferred`, to the type `expected`: the subsumption relation `A ≤ B`, as `curios_cert`'s `subsumes` decides it — `Prop ≤ Type v`, `Type u ≤ Type v` under the level algebra, `Π(x:A).B ≤ Π(x:A').B'` when `A ≡ A'` and `B ≤ B'`, and conversion otherwise. See `documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`.
 ///
-/// **The function-type case is what makes this a relation rather than a traversal artifact.** Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices; checking a *name* against one does not, and the Π is formed and compared whole. Left to conversion, `(b: Bool) -> Prop` would be refused where `(Bool) -> Type` is wanted — a program the kernel's relation admits, repairable only by an η-expansion the report never names. See `documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`.
+/// **The function-type case is what makes this a relation rather than a traversal artifact.** Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices; checking a *name* against one does not, and the Π is formed and compared whole. Domains stay invariant, as they do in the kernel: reading one covariantly would hand a function that takes only small arguments a large one.
 ///
-/// Domains stay invariant, as they do in the kernel: reading one covariantly would hand a function that takes only small arguments a large one.
-fn subsume(
-    context: &mut Context,
-    term: &Term,
-    inferred: &Term,
-    expected: &Term,
-) -> Result<Outcome, Error> {
-    let lower_type = reduce_with(context, inferred)?;
-    let upper_type = reduce_with(context, expected)?;
-
-    if let Subterm::Type(upper) = &*upper_type {
-        let lower = match &*lower_type {
-            Subterm::Prop => Some(Level::zero()),
-            Subterm::Type(lower) => Some(lower.clone()),
-            _ => None,
-        };
-        if let Some(lower) = lower {
-            context
-                .universes_mut()
-                .add_leq(
-                    lower,
-                    upper.clone(),
-                    UniverseConstraintOrigin {
-                        span: term.span(),
-                        kind: UniverseConstraintKind::Cumulativity,
-                        declaration: None,
-                        binder: None,
-                    },
-                )
-                .map_err(Error::from)?;
-            return Ok(Outcome::Converts);
-        }
-    }
-
-    // Both sides rigid function types of one calling convention. A side still stuck on an unsolved metavariable has no shape to decompose — conversion parks it instead, which is what lets a later solution decide it.
-    if let (Subterm::FuncType(lower), Subterm::FuncType(upper)) = (&*lower_type, &*upper_type)
-        && lower.telescope.same_marks(&upper.telescope)
-        && !stuck_on_metavar(context, &lower_type)
-        && !stuck_on_metavar(context, &upper_type)
-    {
-        let (lower, upper) = (lower.telescope.clone(), upper.telescope.clone());
-        let decided =
-            context.with_frame(|context| subsume_telescope(context, term, lower, upper))?;
-
-        if let Some(outcome) = decided {
-            return Ok(outcome);
-        }
-    }
-
-    convert_outcome(context, &Term::type_ground(), inferred, expected).map_err(|error| {
-        Error::from_reduce(error, |refusal| {
-            Error::convert_exhausted(inferred.clone(), expected.clone(), refusal)
-        })
-    })
-}
-
-/// [`subsume`] through a function type's telescope: each domain by conversion, the terminal codomains by subsumption, under one shared set of binders. `None` when the walk could not decide, which is the caller's cue to hand the whole pair to conversion instead.
-///
-/// Opening both sides at the *same* occurrence is what makes the codomain comparison meaningful — the domains have just been compared, so a single binder stands for both.
-///
-/// **A blocked rung abandons the walk rather than surrendering its goals.** Both of the things that would have to be true to park one are false here: `Context::park` freezes the *live* frame, so a goal naming a binder this walk minted would be retried under a frame that no longer assumes it; and a parked conversion is discharged by `retry_one` through `convert_outcome`, which decides a codomain by equality — the very rule this relation exists to widen. Conversion's own goals have neither problem, so the fallback is to let it park the pair. The cost is that a subsumption blocked on a metavariable is decided by conversion, refusing some programs the relation admits; lifting it wants a `ParkedWork` that carries the relation.
-fn subsume_telescope(
-    context: &mut Context,
-    term: &Term,
-    this: Telescope<Term>,
-    that: Telescope<Term>,
-) -> Result<Option<Outcome>, Error> {
-    let mut walk = Lockstep::new(&this, &that);
-
-    loop {
-        match walk.step() {
-            Step::Entries { left, right, .. } => {
-                let outcome = convert_outcome(context, &Term::type_ground(), &left, &right)
-                    .map_err(|error| {
-                        Error::from_reduce(error, |refusal| {
-                            Error::convert_exhausted(left.clone(), right.clone(), refusal)
-                        })
-                    })?;
-
-                match outcome {
-                    Outcome::Converts => {}
-                    Outcome::Mismatch(declined) => {
-                        return Ok(Some(Outcome::Mismatch(declined)));
-                    }
-                    Outcome::Blocked(_) => return Ok(None),
-                }
-                context.advance_assumed(&mut walk, &left);
-            }
-            Step::Bodies(left, right) => {
-                return Ok(match subsume(context, term, &left, &right)? {
-                    Outcome::Blocked(_) => None,
-                    decided => Some(decided),
-                });
-            }
-            // Different arities. A function type is not curried in this representation, so this is a real mismatch rather than a shape to normalize.
-            Step::Mismatch => return Ok(Some(Outcome::Mismatch(None))),
-        }
-    }
-}
-
+/// It is asked of conversion at [`Relation::Below`](crate::Relation::Below), so the relation is the problem's and no property of a walk made here: a function type's domains are equations and its codomain keeps the relation, a pair that waits on a metavariable is parked as the subsumption it is, and its retry resumes as one.
 pub(crate) fn expect(
     context: &mut Context,
     term: &Term,
@@ -305,7 +207,11 @@ pub(crate) fn expect(
     expected: &Term,
 ) -> Result<(), Error> {
     curios_profile::profile!("typing::expect");
-    let outcome = subsume(context, term, inferred, expected)?;
+    let outcome = subsume_outcome(context, inferred, expected, term.span()).map_err(|error| {
+        Error::from_reduce(error, |refusal| {
+            Error::convert_exhausted(inferred.clone(), expected.clone(), refusal)
+        })
+    })?;
 
     match outcome {
         Outcome::Converts => context.retry_parked(),
@@ -828,7 +734,7 @@ fn retry_one(context: &mut Context, parked: ParkedProblem) -> Result<(), Error> 
 
     let outcome = context.with_retry_frame(&frame, |context| {
         Ok(
-            match convert_under(context, &goal.binders, &goal.type_, &goal.this, &goal.that)? {
+            match problem_outcome(context, goal.clone(), origin.span())? {
                 Outcome::Converts => Retry::Converts,
                 // Built here, inside the restored frame, rather than at the report below: `display_mismatch` reads the sides through whatever solutions have landed, so they name the actual disagreement rather than the metavariables it arrived wrapped in (see `resolved_for_display`). A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
                 Outcome::Mismatch(declined) => Retry::Mismatch(

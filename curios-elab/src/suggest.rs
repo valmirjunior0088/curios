@@ -1,6 +1,6 @@
 //! Candidate suggestions for unsolved written goals — the `? ≈` lines of a goal report.
 //!
-//! Two families, both computed by machinery elaboration already runs. *Local fits*: a scope binder whose type converts to the goal type (the sandboxed `probe_match` witness resolution uses), and a constructor the goal's indices admit (the shared `invert_indices` unifier match elaboration runs for omitted arms, here for the opposite verdict). *Application fits*: a function from the goal's scope, the entry module's definitions, the globals the module already references, or the bindings its `use` declarations imported, whose instantiated output type converts to the goal — the witness-table instantiation generalized to an arbitrary candidate, so arguments the unification pins display filled (`mk(3)`). An explicit slot the output leaves unpinned is then offered each scope binder in turn, and the first whose type fits is taken — `Eq/sym(h)` for `Eq()(7, k)` from `h : Eq()(k, 7)` — since a lemma's proof argument is never determined by the goal and almost always *is* a hypothesis in scope. Suggestions are observation-only text the compiler re-checks when the author pastes them, so a wrong candidate costs nothing and checking semantics are untouched.
+//! Two families, both computed by machinery elaboration already runs. *Local fits*: a scope binder whose type may stand at the goal type, asked as `check` asks it and with nothing committed, and a constructor the goal's indices admit (the shared `invert_indices` unifier match elaboration runs for omitted arms, here for the opposite verdict). *Application fits*: a function from the goal's scope, the entry module's definitions, the globals the module already references, or the bindings its `use` declarations imported, whose instantiated output type may stand at the goal — the witness-table instantiation generalized to an arbitrary candidate, so arguments the unification pins display filled (`mk(3)`). An explicit slot the output leaves unpinned is then offered each scope binder in turn, and the first whose type fits is taken — `Eq/sym(h)` for `Eq()(7, k)` from `h : Eq()(k, 7)` — since a lemma's proof argument is never determined by the goal and almost always *is* a hypothesis in scope. Suggestions are observation-only text the compiler re-checks when the author pastes them, so a wrong candidate costs nothing and checking semantics are untouched.
 //!
 //! A fit is kept only when it says something: a candidate whose head has explicit parameters, none of which the goal pinned or the scope filled, is `Eq/sym(?)` — true of every equation, and an arity rather than a suggestion — so it is dropped. And a fit whose output conversion is undecided is kept when its blockers are exactly the explicit slots still open: `Eq/cong(?, ih)` has its hypothesis placed and its function genuinely unknown, which is the refinement a reader wants, where the same hole-free candidate would have had to convert outright. Pool 1 admits a holed constructor on the same reasoning.
 //!
@@ -14,8 +14,8 @@
 
 use {
     super::{
-        Context, Entailed, Outcome, Probe, Refinements, Refusal, check, convert_outcome, entail,
-        probe_match, reduce_with, zonk_solved_term_metas,
+        Context, Entailed, Outcome, Refinements, Refusal, check, convert_outcome, entail,
+        reduce_with, subsume_outcome, zonk_solved_term_metas,
     },
     curios_analysis::{Invert, case_target_indices, invert_indices},
     curios_core::{
@@ -97,12 +97,12 @@ fn suggest_in_scope(
     let hole_name = context.fresh(Some("?"));
     let hole = Term::free_var(&hole_name);
 
-    // Pool 0 — scope fits: a binder whose type converts to the goal type is itself a candidate. An unnameable binder is skipped: the paste-and-recheck promise needs a spelling the author can write.
+    // Pool 0 — scope fits: a binder whose type may stand at the goal type is itself a candidate. An unnameable binder is skipped: the paste-and-recheck promise needs a spelling the author can write.
     for (name, type_) in telescope {
         if !name.nameable() {
             continue;
         }
-        if matches!(probe_match(context, type_, goal_type), Ok(Probe::Yes)) {
+        if fits(context, type_, goal_type) {
             candidates.push(Candidate {
                 term: Term::free_var(name),
                 holes: 0,
@@ -257,6 +257,16 @@ fn module_pool(
     pool
 }
 
+/// Whether a term of type `type_` may stand where `goal_type` is wanted, with nothing committed: what `check` would say of it, so a candidate that fits by subsumption — a predicate where a family into `Type` is wanted — is offered.
+fn fits(context: &mut Context, type_: &Term, goal_type: &Term) -> bool {
+    let mark = context.solution_mark();
+    let outcome = subsume_outcome(context, type_, goal_type, None);
+    context.rollback_solutions(mark);
+    context.end_solutions(mark);
+
+    matches!(outcome, Ok(Outcome::Converts))
+}
+
 /// One application attempt: when `head_type` reduces to a function type, instantiate its telescope with fresh metavariables, probe the instantiated output against the goal, offer each explicit slot the output left unpinned to the scope's binders, and hand back the applied candidate with its hole count when the fit is definite, or undecided on exactly the holes — materialized before rollback, so pinned arguments display filled. Hidden slots are omitted from the spelling (they re-infer on paste); an unsolved explicit slot spells the shared hole.
 ///
 /// The output is probed *before* any slot is filled, so a slot the goal determines keeps the goal's value (`mk(3)` against `Eq()(3, 3)` with a `k : Nat` in scope stays `mk(3)`, not `mk(k)`), and a binder is offered only to what the goal left open. The first binder whose type fits a slot is taken, in binding order; a later hypothesis that would also have fit is not a second candidate, since the cap is three lines and the reader can see the scope. Every trial is its own transaction inside the attempt's, so a rejected binder leaves no solution behind for the next.
@@ -323,7 +333,7 @@ fn apply_fit_within(
         .any(|id| args.iter().any(|(arg, _)| arg.metavars().contains(&id)));
 
     // The goal first: what it pins, it pins.
-    let mut outcome = convert_outcome(context, &Term::type_ground(), output, goal_type).ok()?;
+    let mut outcome = subsume_outcome(context, output, goal_type, None).ok()?;
     if matches!(outcome, Outcome::Mismatch(_)) {
         return None;
     }
@@ -346,7 +356,7 @@ fn apply_fit_within(
             let domain = zonk_solved_term_metas(context, domain);
             let binder = Term::free_var(name);
             let fits = matches!(
-                convert_outcome(context, &Term::type_ground(), type_, &domain),
+                subsume_outcome(context, type_, &domain, None),
                 Ok(Outcome::Converts)
             ) && matches!(
                 convert_outcome(context, &domain, arg, &binder),
@@ -362,7 +372,7 @@ fn apply_fit_within(
         }
     }
     if filled || matches!(outcome, Outcome::Blocked(_)) {
-        outcome = convert_outcome(context, &Term::type_ground(), output, goal_type).ok()?;
+        outcome = subsume_outcome(context, output, goal_type, None).ok()?;
     }
 
     let mut holes = 0usize;
