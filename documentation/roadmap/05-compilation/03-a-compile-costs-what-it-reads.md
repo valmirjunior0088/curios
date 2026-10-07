@@ -2,7 +2,7 @@
 
 Working specification for making what a compilation does follow what its declarations read, at every stage it runs: an edit redoes, stage by stage, the declarations that read what it changed and no other, and a compile pays for the declarations of its scope it reads, not for the scope. The first is the minimality of a build, with early cutoff, at the grain of a declaration; the second is the same rule read from the other side, a scope being an input like any other.
 
-It rests on [A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md): a record of reads decides nothing while anything but reads reaches a declaration. [Item tasks](04-item-tasks.md) needs this, for the cells its workers write and the records that say which of them may run together.
+It rests on [A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md): a record of reads decides nothing while anything but reads reaches a declaration. [Item tasks](04-item-tasks.md) needs this, for the cells its workers write and the records that say which of them may run together. Its views build on [A reader of finished terms holds no elaboration state](09-a-reader-of-finished-terms-holds-no-elaboration-state.md): erasure reads its scope through the reader it makes for itself.
 
 ## What this builds on
 
@@ -103,7 +103,7 @@ Each lands alone, on its own check, and says what it expects to move; a move out
 
 1. **Lowering.** Decisions 9 and 14. Expected to move: a recompile's lowering, a stored unit's bytes, by the record it no longer carries, and what restoring the prelude costs.
 2. **Records.** Decisions 1 to 6. Expected to move: a stored unit's bytes, by its records; what elaboration costs, by the recording; and which declarations a recompile redoes.
-3. **Views.** Decision 11. Expected to move: what a compile costs before its first declaration.
+3. **Views.** Decision 11, erasure's view read through the reader of [A reader of finished terms holds no elaboration state](09-a-reader-of-finished-terms-holds-no-elaboration-state.md). Expected to move: what a compile costs before its first declaration.
 4. **Addresses.** Decisions 12 and 13. Expected to move: every slot's address, and which units an edit to a dependency compiles.
 5. **Linking.** Decision 8. Expected to move: a stored unit's bytes, by its summaries, what a program links, and every row of a program's compile behind its erasure.
 
