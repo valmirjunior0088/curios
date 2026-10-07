@@ -23,14 +23,14 @@
 use {
     super::{decision_of, global, in_scope, is_empty},
     crate::{
-        Context, Error, classing_among, open_layer, reduce_with, same_uncommitted,
+        Context, Error, classing_among, distributed, open_layer, reduce_with, same_uncommitted,
         zonk_solved_term_metas,
     },
     curios_algebra::{Carrier, Lattice, LinearForm, Monomial, Operation},
     curios_analysis::RESOLVED_SPELLING_LAYERS,
     curios_core::{
         Apply, Cases, Classes, Extremum, Free, Global, InductType, Intrinsic, LinearViews, Match,
-        Nat, Probe, StructType, Subterm, Term, TupleType, atoms_in, classed_in, int_normalize,
+        Nat, Probe, StructType, Subterm, Term, TupleType, atoms_in, classed_in,
     },
     curios_num::{Integer, Natural},
     curios_utilities::{OrderSyntax, Plicity, SyntaxName},
@@ -1277,7 +1277,7 @@ impl<'a> Reader<'a> {
         Ok(())
     }
 
-    /// One side of a comparison at `carrier` as the view reads it: its reading ([`Reader::reading`]) with every product of two sums distributed. The fold leaves such a product standing until a comparison asks, and the view distributes none and reads a standing product's sums as two atoms, so the reader asks by name, as a comparison does and as conversion's own linear solving does.
+    /// One side of a comparison at `carrier` as the view reads it: its reading ([`Reader::reading`]) with its products distributed, as conversion's own linear solving reads a side ([`distributed`]).
     fn side(
         &mut self,
         context: &mut Context,
@@ -1285,16 +1285,11 @@ impl<'a> Reader<'a> {
         term: &Term,
     ) -> Result<Term, Error> {
         let read = self.reading(context, term)?;
-        let distributed = match carrier {
-            Carrier::Natural => Nat::normalize(context, read.clone()),
-            _ => int_normalize(context, read.clone()),
-        };
-        match distributed.probed() {
-            Ok(distributed) => Ok(distributed.unwrap_or(read)),
-            Err(error) => Err(Error::from_reduce(error, |refusal| {
+        distributed(context, carrier, read).map_err(|error| {
+            Error::from_reduce(error, |refusal| {
                 Error::reduce_exhausted(term.clone(), refusal)
-            })),
-        }
+            })
+        })
     }
 
     /// `term` as the view reads it: reduced, the reduct with the metavariables elaboration has solved substituted, and each of its atoms spelled as the first atom read that the elaborator's conversion holds it one with, nothing committed (`same_uncommitted`).

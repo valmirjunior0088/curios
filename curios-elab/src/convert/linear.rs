@@ -115,13 +115,22 @@ fn carrier(context: &Context, intrinsic: &Intrinsic) -> Option<Carrier> {
     }
 }
 
-/// One side as the view reads it: its solved metavariables spliced, and every product of two sums distributed, since the view distributes none and reads a standing product as one atom.
+/// One side as the view reads it: its solved metavariables spliced, and its products distributed ([`distributed`]).
 fn normalized(
     context: &mut Context,
     carrier: Carrier,
     intrinsic: &Intrinsic,
 ) -> Result<Term, ReduceError> {
     let term = zonk_solved_term_metas(context, &Term::intrinsic(intrinsic.clone()));
+    distributed(context, carrier, term)
+}
+
+/// `term`, a number of `carrier`, with every product of two sums distributed, or as it stands where that has no value at the type level. The fold leaves such a product standing until a comparison asks, and the linear view distributes none and reads a standing product as one atom, so each reader of the view asks by name.
+pub(crate) fn distributed(
+    context: &mut Context,
+    carrier: Carrier,
+    term: Term,
+) -> Result<Term, ReduceError> {
     let normalized = match carrier {
         Carrier::Natural => Nat::normalize(context, term.clone()),
         _ => int_normalize(context, term.clone()),
