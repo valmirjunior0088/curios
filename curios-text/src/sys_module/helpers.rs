@@ -9,8 +9,8 @@ use {
         TupleTypeParam,
     },
     curios_core::Intrinsic,
-    curios_num::{Floating, Grain, Natural},
-    curios_utilities::{Plicity, SyntaxName, SyntaxRegistry},
+    curios_num::{Grain, Natural},
+    curios_utilities::{Plicity, SyntaxName},
 };
 
 pub(super) fn name(label: &str) -> Term {
@@ -25,11 +25,6 @@ pub(super) fn registered(target: SyntaxName) -> Term {
 // One of this roster's own operations, named absolutely for the reason `registered` is: a declaration lands in whatever module the roster puts it in, so a relative name would resolve differently per site. Not a registry entry — the registry holds what a crate *below* `/sys` must be able to name, and these are `/sys` naming itself.
 pub(super) fn sys_op(segments: &'static [&'static str]) -> Term {
     registered(SyntaxName::new(segments))
-}
-
-// The proposition a decided bound is stated as: `Holds` applied to the decision itself. `curios-core`'s signature table builds the same shape over the intrinsic nodes these wrappers unfold to, and elaborating a `/sys` body is what holds the two together.
-pub(super) fn decided(syntax: &SyntaxRegistry, decision: Term) -> Term {
-    applied(registered(syntax.proof.holds), vec![decision])
 }
 
 pub(super) fn applied(head: Term, args: Vec<Term>) -> Term {
@@ -74,11 +69,6 @@ pub(super) fn nat_lit(n: u64) -> Term {
     }
 }
 
-/// `left + right` as a `/sys` term. The window bound is the one precondition stated over arithmetic rather than over an operand, so it is the one that has to build a sum.
-pub(super) fn nat_plus(left: Term, right: Term) -> Term {
-    intrinsic(Intrinsic::NatAdd(left, right))
-}
-
 pub(super) fn int() -> Term {
     intrinsic(Intrinsic::IntType)
 }
@@ -121,11 +111,6 @@ pub(super) fn list_of(elem: Term) -> Term {
     intrinsic(Intrinsic::ListType(elem))
 }
 
-// A single-argument function type `(domain) -> output`, for higher-order intrinsics (the `f` of `List/map`).
-pub(super) fn fn_of(domain: Term, output: Term) -> Term {
-    fn_over(vec![domain], output)
-}
-
 // A function type over several explicit parameters `(domains…) -> output`, for the stepper of `List/fold`.
 pub(super) fn fn_over(domains: Vec<Term>, output: Term) -> Term {
     Subterm::FuncType(FuncType {
@@ -142,10 +127,6 @@ pub(super) fn fn_over(domains: Vec<Term>, output: Term) -> Term {
     .into()
 }
 
-pub(super) fn cell_of(elem: Term) -> Term {
-    intrinsic(Intrinsic::CellType(elem))
-}
-
 pub(super) fn io_of(result: Term) -> Term {
     intrinsic(Intrinsic::IoType(result))
 }
@@ -159,11 +140,6 @@ pub(super) fn type_() -> Term {
 // Authoring them in a `.crs` beside this file would read better and place worse: spliced at the root the `Flt` pair would become `/sys/NonNeg`, saying nothing about which carrier, and the range constants would collide with `/sys/Flt`'s `min` and `max` operations one segment away. Placement is what a generator is good at, so the generator keeps them.
 pub(super) fn prop() -> Term {
     Subterm::Prop.into()
-}
-
-// A `Flt` literal, for the two range bounds in the roster. The bounds are stated against the infinities rather than against a written magnitude, so no digit string has to be kept in step with the carrier.
-pub(super) fn flt_lit(value: f64) -> Term {
-    intrinsic(Intrinsic::Flt(Floating::from(value)))
 }
 
 // A one-parameter lambda `(binder: annotation) => body`: the continuation a host row's adapter hands `Io/bind`.

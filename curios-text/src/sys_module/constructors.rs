@@ -3,14 +3,14 @@
 //! Split from the roster itself so that `sys_module.rs` reads as *what `/sys` declares* and this reads as *how a declaration is built*. Nothing here knows what is in the roster; everything here is a shape. Its sibling `helpers.rs` sits one rung below: that builds terms, this builds declarations out of them.
 
 use {
-    super::{host_fn, intrinsic, name},
+    super::{Projection, host_fn, intrinsic, name, projection},
     crate::{
         Doc, FuncSugarParam, GroupItem, LetSignature, Module, Name, Pattern, Term, TopItem, TopLet,
         TopMod, TopUse, UseGroup,
     },
     curios_abi::ForeignStore,
     curios_core::Intrinsic,
-    curios_utilities::Plicity,
+    curios_utilities::{Plicity, SyntaxRegistry},
 };
 
 /// One `/sys` binding, before it is a [`TopItem`].
@@ -153,88 +153,89 @@ pub(super) fn pub_fn_marked(
     }
 }
 
-pub(super) fn binary(
+/// A declaration that is one intrinsic node over its own parameters, typed by what core's table says of that node.
+///
+/// **An entry states what is its own, and nothing the table gives.** Its label, the names its parameters take and the node are the roster's, and which node a name builds is a decision: `gt` is `lt` mirrored, and `Nat/to_flt` rounds ties to even. Each parameter's type and plicity, every bound and the result are `Intrinsic::signature`'s, read by [`projection`], so an entry cannot state a type the table does not.
+///
+/// A proof parameter is an operand like any other, which is what carries its bound into Core: the node holds the proof, and the kernel re-checks it against the same row this declaration's type was read from.
+pub(super) fn operation(
     label: &str,
-    operand: Term,
-    output: Term,
-    ctor: impl FnOnce(Term, Term) -> Intrinsic<Term>,
+    params: &[&str],
+    syntax: &SyntaxRegistry,
+    node: Intrinsic<Term>,
 ) -> Decl {
-    pub_fn(
-        label,
-        vec![("a", operand.clone()), ("b", operand)],
+    let Some(Projection {
+        params: telescope,
         output,
-        intrinsic(ctor(name("a"), name("b"))),
-    )
-}
+    }) = projection(params, &node, syntax)
+    else {
+        panic!(
+            "core's table types no declaration for `{label}`: an operand is not one of its parameters, or a type it states has no surface reading"
+        );
+    };
 
-// A binary operation whose second operand carries a precondition — the divisions, whose fold reports rather than answers on a zero divisor. The bound is stated the way source states it, for the reason `bin_ops` gives: a refinement is keyed on the term written, and a caller can only write the operand.
-pub(super) fn guarded_binary(
-    label: &str,
-    operand: Term,
-    output: Term,
-    bound: Term,
-    ctor: fn(Term, Term, Term) -> Intrinsic<Term>,
-) -> Decl {
-    pub_fn_marked(
-        label,
-        vec![
-            (Plicity::Explicit, "a", operand.clone()),
-            (Plicity::Explicit, "b", operand),
-            (Plicity::Implicit, "ok", bound),
-        ],
+    Decl {
+        doc: None,
+        vis_pub: true,
+        label: label.to_string(),
+        params: params
+            .iter()
+            .zip(telescope)
+            .map(|(label, (plicity, type_))| (plicity, (*label).to_string(), type_))
+            .collect(),
         output,
-        // The proof parameter is named in the body, which is what carries the bound into Core: an implicit nothing referenced would be checked here and forgotten, leaving the kernel nothing to re-verify.
-        intrinsic(ctor(name("a"), name("b"), name("ok"))),
-    )
-}
-
-pub(super) fn guarded_unary(
-    label: &str,
-    input: Term,
-    output: Term,
-    bound: Term,
-    ctor: fn(Term, Term) -> Intrinsic<Term>,
-) -> Decl {
-    pub_fn_marked(
-        label,
-        vec![
-            (Plicity::Explicit, "a", input),
-            (Plicity::Implicit, "ok", bound),
-        ],
-        output,
-        intrinsic(ctor(name("a"), name("ok"))),
-    )
+        body: intrinsic(node),
+    }
 }
 
 pub(super) fn unary(
     label: &str,
-    input: Term,
-    output: Term,
+    syntax: &SyntaxRegistry,
     ctor: impl FnOnce(Term) -> Intrinsic<Term>,
 ) -> Decl {
-    pub_fn(
-        label,
-        vec![("a", input)],
-        output,
-        intrinsic(ctor(name("a"))),
-    )
+    operation(label, &["a"], syntax, ctor(name("a")))
+}
+
+pub(super) fn binary(
+    label: &str,
+    syntax: &SyntaxRegistry,
+    ctor: impl FnOnce(Term, Term) -> Intrinsic<Term>,
+) -> Decl {
+    operation(label, &["a", "b"], syntax, ctor(name("a"), name("b")))
 }
 
 pub(super) fn ternary(
     label: &str,
-    operand: Term,
-    output: Term,
+    syntax: &SyntaxRegistry,
     ctor: impl FnOnce(Term, Term, Term) -> Intrinsic<Term>,
 ) -> Decl {
-    pub_fn(
+    operation(
         label,
-        vec![
-            ("a", operand.clone()),
-            ("b", operand.clone()),
-            ("c", operand),
-        ],
-        output,
-        intrinsic(ctor(name("a"), name("b"), name("c"))),
+        &["a", "b", "c"],
+        syntax,
+        ctor(name("a"), name("b"), name("c")),
+    )
+}
+
+// An operation whose last operand is the proof of its bound.
+pub(super) fn guarded_unary(
+    label: &str,
+    syntax: &SyntaxRegistry,
+    ctor: fn(Term, Term) -> Intrinsic<Term>,
+) -> Decl {
+    operation(label, &["a", "ok"], syntax, ctor(name("a"), name("ok")))
+}
+
+pub(super) fn guarded_binary(
+    label: &str,
+    syntax: &SyntaxRegistry,
+    ctor: fn(Term, Term, Term) -> Intrinsic<Term>,
+) -> Decl {
+    operation(
+        label,
+        &["a", "b", "ok"],
+        syntax,
+        ctor(name("a"), name("b"), name("ok")),
     )
 }
 

@@ -1,10 +1,10 @@
 //! What a `/sys` description lowers to, and how the host-row join places one.
 //!
-//! The subject is the description layer, not the roster's contents. What `/sys` declares is checked where it already is — the prelude build elaborates and certifies every one of these declarations against `Intrinsic::signature`, and `into_core/sys_tests.rs` pins the root's reachability and `/sys/Io`'s roster — so a second statement of the roster here would be a copy to keep in step rather than a check. What has no other check is the shape a `Decl` lowers to and the placement the join decides.
+//! The subject is the description layer, not the roster's contents. What `/sys` declares is checked where it already is — the prelude build elaborates and certifies every one of these declarations, and `into_core/sys_tests.rs` pins the root's reachability and `/sys/Io`'s roster — so a second statement of the roster here would be a copy to keep in step rather than a check. What has no other check is the shape a `Decl` lowers to, how a node's row in `Intrinsic::signature` is read into a declaration's types, and the placement the join decides.
 
 use {
     super::*,
-    crate::{LetSignature, Pattern},
+    crate::{LetSignature, Pattern, SYNTAX},
     curios_abi::{ForeignFunction, ForeignStore, HostOp},
     curios_utilities::Plicity,
 };
@@ -68,7 +68,10 @@ fn a_telescope_lowers_to_the_function_sugar_carrying_every_plicity_mark() {
 // What `documented` attaches, read back off the declaration it built.
 #[test]
 fn a_gloss_lands_on_the_declaration_it_is_written_above() {
-    let declaration = documented(&["Their sum.", "", "A second paragraph."], nat_succ());
+    let declaration = documented(
+        &["Their sum.", "", "A second paragraph."],
+        nat_succ(&SYNTAX),
+    );
 
     let doc = declaration
         .doc
@@ -88,7 +91,7 @@ fn a_host_row_opens_the_module_its_subject_names_when_nothing_declared_it() {
 // `Handle` is the carrier in both inputs and `proc` the module of operations in both; one rule places each, and neither is lifted out and appended by hand.
 #[test]
 fn a_host_row_joins_the_module_that_declared_its_subject() {
-    let declared = vec![SysModule::ops("proc", vec![nat_succ()])];
+    let declared = vec![SysModule::ops("proc", vec![nat_succ(&SYNTAX)])];
     let modules = absorb_host_rows(declared, &store(&["proc_args", "file_open"]));
 
     assert_eq!(modules.len(), 2, "a joined subject opens no second module");
@@ -103,7 +106,7 @@ fn a_host_row_joins_the_module_that_declared_its_subject() {
 // A declared module is kept whatever the store holds: the join adds rows to it and never decides whether it exists, so a store that names it in no row cannot drop what it declares.
 #[test]
 fn a_declared_module_survives_a_store_that_names_it_in_no_row() {
-    let declared = vec![SysModule::ops("proc", vec![nat_succ()])];
+    let declared = vec![SysModule::ops("proc", vec![nat_succ(&SYNTAX)])];
     let modules = absorb_host_rows(declared, &store(&["file_open"]));
 
     assert_eq!(labels(&modules[0]), ["succ"]);
@@ -126,27 +129,91 @@ fn a_subject_nothing_declared_keeps_the_order_its_first_row_appears_in() {
     assert_eq!(labels(&modules[0]), ["bind", "listen"]);
 }
 
-// Every roster entry that is one node over its own parameters states the types core's table gives that node. Where the two differ it is a bound, which the roster spells through `/sys`'s wrappers and the table over the nodes they unfold to; and what the table is not asked about is a constant holding a literal, which has no parameter to type.
+// The table states an operand's type by the operand's position, and an entry names its parameters in its own order: `gt` is `lt` with its operands the other way round. A shift takes an `Int` and then a `Nat`, so the parameter standing second in the node is the `Int`.
 #[test]
-fn the_table_restates_every_entry_but_the_spelling_of_a_bound() {
-    let module = written(&curios_abi::host_ops(), &crate::SYNTAX);
+fn a_parameter_takes_the_type_of_the_operand_it_stands_as() {
+    let declaration = operation(
+        "shifted",
+        &["count", "value"],
+        &SYNTAX,
+        Intrinsic::IntShl(name("value"), name("count")),
+    );
 
-    for entry in compare(&module, &crate::SYNTAX) {
-        match &entry.differences {
-            None => assert_eq!(
-                entry.parameters, 0,
-                "{} is an operation the table was not asked about",
-                entry.path
-            ),
-            Some(differences) => {
-                for difference in differences {
-                    assert!(
-                        difference.bound,
-                        "{}: {} is written `{}` and the table gives `{}`",
-                        entry.path, difference.subject, difference.written, difference.table
-                    );
-                }
-            }
-        }
-    }
+    let types = declaration
+        .params
+        .iter()
+        .map(|(_, label, type_)| (label.as_str(), type_.clone()))
+        .collect::<Vec<_>>();
+    assert_eq!(types, [("count", nat()), ("value", int())]);
+    assert_eq!(declaration.output, int());
+}
+
+#[test]
+fn a_type_and_a_proof_are_implicit_and_every_other_operand_is_written() {
+    let declaration = operation(
+        "get",
+        &["T", "list", "index", "ok"],
+        &SYNTAX,
+        Intrinsic::ListGet {
+            element: name("T"),
+            list: name("list"),
+            index: name("index"),
+            in_range: name("ok"),
+        },
+    );
+
+    let marks = declaration
+        .params
+        .iter()
+        .map(|(plicity, _, _)| *plicity)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        marks,
+        [
+            Plicity::Implicit,
+            Plicity::Explicit,
+            Plicity::Explicit,
+            Plicity::Implicit
+        ]
+    );
+}
+
+// A former's operand is the type a reader writes, `List(Nat)`, where an operation's is the one a call leaves to be inferred.
+#[test]
+fn a_formers_type_operand_is_written() {
+    let declaration = operation("List", &["T"], &SYNTAX, Intrinsic::ListType(name("T")));
+
+    assert_eq!(declaration.params[0].0, Plicity::Explicit);
+    assert_eq!(declaration.output, type_());
+}
+
+// The bound is the row's own proposition over the entry's parameters: `Holds` applied to the decision, which names the divisor by the name the entry gave it.
+#[test]
+fn a_bound_is_the_tables_proposition_over_the_parameters_it_names() {
+    let declaration = operation(
+        "div",
+        &["a", "b", "ok"],
+        &SYNTAX,
+        Intrinsic::NatDiv {
+            dividend: name("a"),
+            divisor: name("b"),
+            non_zero: name("ok"),
+        },
+    );
+
+    assert_eq!(
+        declaration.params[2].2,
+        applied(
+            registered(SYNTAX.proof.holds),
+            vec![intrinsic(Intrinsic::NatLt(nat_lit(0), name("b")))]
+        )
+    );
+}
+
+// An entry is one node over its own parameters, so an operand that is none of them leaves the table nothing to type it by.
+#[test]
+fn an_operand_that_is_no_parameter_is_refused() {
+    let node = Intrinsic::NatAdd(name("a"), name("stray"));
+
+    assert!(projection(&["a"], &node, &SYNTAX).is_none());
 }
