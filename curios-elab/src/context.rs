@@ -1,14 +1,23 @@
+mod asking;
+pub(crate) use asking::*;
+
 mod caches;
 pub(crate) use caches::*;
 
 mod frames;
 pub(crate) use frames::*;
 
+mod posture;
+pub(crate) use posture::*;
+
 mod program;
 pub(crate) use program::*;
 
 mod solutions;
 pub(crate) use solutions::*;
+
+mod spend;
+pub(crate) use spend::*;
 
 #[cfg(test)]
 mod tests;
@@ -33,7 +42,7 @@ use {
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, Span, SyntaxRegistry},
     std::{
-        cell::{Cell, RefCell},
+        cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap},
         mem,
         ops::{Deref, DerefMut},
@@ -124,15 +133,8 @@ pub(crate) struct SolutionMark {
 #[derive(Debug)]
 pub struct Context {
     fresh_names: Entropy,
-    /// Units of reduction work each declaration may spend, restored by [`Context::restore_budget`] at every declaration boundary. A transition costs one; a construction costs what it builds, per [`Cost`].
-    budget: u64,
-    /// Work left in the current declaration's budget. `Cell` because the conversion queue spends through a shared borrow.
-    remaining: Cell<u64>,
-    /// How many guarded reduction levels are live, and the deepest this declaration has reached. `Cell` for [`Context::remaining`]'s reason; see [`Context::enter_level`].
-    depth: Cell<usize>,
-    peak_depth: Cell<usize>,
-    /// The heaviest declaration elaborated so far, for a measurement to read. See [`Consumption`]; nothing in elaboration consults it.
-    heaviest: Cell<Consumption>,
+    // What a judgment may spend, restored at every declaration boundary, and what has been drawn from it; see [`Spend`].
+    spend: Spend,
     // The reduction and elaboration memo tables with their write stamps and the named invalidation protocol every mutation site routes through; see [`Caches`].
     caches: Caches,
     // The frame-scoped lexical stores — assumptions, local definitions, refinements, the witness scope; see [`Frames`].
@@ -142,17 +144,10 @@ pub struct Context {
     universe_solver: UniverseSolver,
     // The program-wide declaration registries, witness table, and totality verdicts — flat stores of monotonic facts about the program, not lexically-scoped bindings; `enter_frame`/`leave_frame` never touch them. See [`Program`].
     program: Program,
-    // The module whose item is currently being elaborated — the qualifier prefix of that item's name (a fresh context starts at the root, the empty qualifier). Set by `elaborate_module_suffix` per item; read by the representation-privacy checks. `None` arises only through `with_suppressed_privacy` and means there is no surface use site to judge from, which suppresses the checks structurally: privacy is a property of *surface elaboration*, and machinery that re-derives types from already-elaborated terms — the metavariable oracle — walks compiler-built projections (witness splices, eta-expansions) that must not be re-adjudicated. A machinery path that forgets its bracket fails loudly (a spurious privacy error), never silently.
-    island: Option<Qualifier>,
-    /// Whether the procedure that proves a bound from the facts in scope is running ([`crate::entail`]). It does not run inside itself: what it elaborates is its own candidate, and a bound one of the candidate's operands carries is not the one it was asked about.
-    entailing: bool,
-    /// How many questions a judgment's reduction has put to conversion, and how many of every question asked with nothing committed were declined for a commit — what a remembered reduct is held against ([`Context::note_question`], [`Context::note_declined`]).
-    questions: u64,
-    declined: u64,
-    /// The two atoms a classing is asking conversion about ([`Context::ask`]); `None` where no classing is asking.
-    asked: Option<(Term, Term)>,
-    /// Whether reduction is plain: it asks the elaborator's conversion nothing ([`Context::plainly`]).
-    plain: bool,
+    // Where surface elaboration stands: the module whose item is being elaborated, and whether the prover is running; see [`Posture`].
+    posture: Posture,
+    // The protocol by which a judgment's reduction asks conversion; see [`Asking`].
+    asking: Asking,
     /// The declaration being elaborated ([`Context::enter_declaration`]); `None` for an entry's final term.
     declaration: Option<Global>,
     /// The written binder each local was opened from, kept while one item elaborates: the declaration it was opened in, and the binder's place among that declaration's written binders. The declaration is read from here rather than from what is current when a proof reads the local, since a group's parked bounds are retried once every member has elaborated. The place is kept here rather than on the local, so a scope rebuilt over the local remembers none: a term that reaches another declaration is credited nothing there.
@@ -262,22 +257,14 @@ impl Context {
     pub fn new(budget: u64, syntax: SyntaxRegistry) -> Self {
         Self {
             fresh_names: Entropy::<usize>::new(),
-            budget,
-            remaining: Cell::new(budget),
-            depth: Cell::new(0),
-            peak_depth: Cell::new(0),
-            heaviest: Cell::new(Consumption::default()),
+            spend: Spend::new(budget),
             caches: Caches::new(),
             frames: Frames::new(),
             solutions: Solutions::new(),
             universe_solver: UniverseSolver::new(0),
             program: Program::new(),
-            island: Some(Qualifier::empty()),
-            entailing: false,
-            questions: 0,
-            declined: 0,
-            asked: None,
-            plain: false,
+            posture: Posture::default(),
+            asking: Asking::default(),
             declaration: None,
             opened: BTreeMap::new(),
             credited: Vec::new(),
@@ -731,86 +718,46 @@ impl Context {
         self.minted = Rc::new(minted.clone());
     }
 
-    /// Charge `cost` against the current declaration's budget, failing when it cannot be afforded.
-    ///
-    /// [`Cost::STEP`] at the three loops that drive reduction and conversion is what makes the budget bound every route into unbounded computation; a construction charge at every allocating fold is what makes it bound the *memory* those routes reach, which a transition count could not see.
-    ///
-    /// A saturated cost is refused without being compared, so a size that overflowed while being computed can never look affordable. That is the one case where the budget is not consulted at all, and [`Cost`]'s module documentation carries why.
+    /// [`Spend::spend`].
     pub(crate) fn spend(&self, cost: Cost) -> Result<(), ReduceError> {
-        if cost.is_refused() {
-            return Err(ReduceError::exhausted(self.remaining.get(), cost));
-        }
-
-        match self.remaining.get().checked_sub(cost.get()) {
-            Some(remaining) => {
-                self.remaining.set(remaining);
-                Ok(())
-            }
-            None => {
-                // Built before the budget moves, from bounded metadata alone — see `curios-cert`'s `Spend::spend`, which does the same thing for the same reason.
-                let refusal = ReduceError::exhausted(self.remaining.get(), cost);
-                self.remaining.set(0);
-
-                Err(refusal)
-            }
-        }
+        self.spend.spend(cost)
     }
 
-    /// Enter one guarded reduction level, charging [`Cost::FRAME`] when it is deeper than any level this declaration has reached before.
-    ///
-    /// Per new peak rather than per call, for the reason `curios-cert`'s `Spend::enter_level` states in full: a level's native frame is reclaimed when the level returns, and reduction re-enters itself once per operand and once per spine link, so charging every call would price a stack the reduction is not holding. The kernel charges the same row the same way, which is what lets the two checkers' depth limits be compared.
+    /// [`Spend::enter_level`].
     pub(crate) fn enter_level(&self) -> Result<(), ReduceError> {
-        let depth = self.depth.get() + 1;
-        self.depth.set(depth);
-
-        if depth > self.peak_depth.get() {
-            self.peak_depth.set(depth);
-            self.spend(Cost::FRAME)?;
-        }
-
-        Ok(())
+        self.spend.enter_level()
     }
 
-    /// Leave a guarded reduction level. The peak stands; only the live count falls.
+    /// [`Spend::leave_level`].
     pub(crate) fn leave_level(&self) {
-        self.depth.set(self.depth.get() - 1);
+        self.spend.leave_level();
     }
 
-    /// Restore the full budget for a new declaration, and with it the depth this declaration may reach before paying again.
-    ///
-    /// The live count is reset for the reason `curios-cert`'s `Spend::restore_budget` states in full: [`Context::enter_level`] increments before it charges and propagates the refusal, so an exhausted level is never left, and elaboration continues to the next declaration. A leaked level costs every later declaration [`Cost::FRAME`] for a frame nothing holds.
-    ///
-    /// **What the declaration it closes consumed is sampled under `profile`**, as `budget::consumed` — the profile-side reading of [`Context::heaviest_declaration`], whose `max` in a fold is that figure for whatever the profiled run elaborated, and whose distribution says whether it is one declaration or many near it — with `term::looks` beside it, the nodes its walks looked at, as `curios-cert`'s `Spend::restore_budget` samples the pair.
+    /// Restore the full budget for a new declaration ([`Spend::restore`]), and forget what was memoized under the one it closes: nothing a budget paid for outlives it.
     pub(crate) fn restore_budget(&mut self) {
-        curios_profile::sample!("budget::consumed", self.consumed().units());
-        curios_profile::sample!("term::looks", curios_core::take_looks());
-        self.heaviest
-            .set(self.heaviest.get().heavier_of(self.consumed()));
-
-        self.remaining.set(self.budget);
-        self.depth.set(0);
-        self.peak_depth.set(0);
+        self.spend.restore();
         self.caches.begin_declaration();
         self.frames.forget_spellings();
     }
 
-    /// What the declaration being elaborated has consumed so far.
+    /// What the declaration being elaborated has consumed so far ([`Spend::consumed`]), which this crate's measurements read between two judgments.
+    #[cfg(test)]
     pub(crate) fn consumed(&self) -> Consumption {
-        Consumption::new(self.budget - self.remaining.get(), self.peak_depth.get())
+        self.spend.consumed()
     }
 
     /// The heaviest single judgment this context has made, the one in progress included: a declaration's elaboration, or one of the judgments of its final terms, each of which spends a budget restored for it (`Context::restore_budget`).
     ///
     /// The counterpart of `curios-cert`'s `Kernel::heaviest_declaration` on the other side of the seam — the two are deliberately the same shape, because comparing them is the point. An observation for a measurement; nothing in elaboration reads it.
     pub fn heaviest_declaration(&self) -> Consumption {
-        self.heaviest.get().heavier_of(self.consumed())
+        self.spend.heaviest()
     }
 
     /// The read half of the reduction cache. The reducer probes it wherever a term's reduction begins — at entry, and at the scrutinee stack's frame push, where a warm scrutinee dispatches in place instead of framing.
     ///
     /// **A universe metavariable in the term does not exclude it.** Reduction is parametric in levels — no rule reads one, `Type u` being a payload and not a scrutinee, and an instantiation substitutes a parameter with whatever level stands in the instance, a metavariable included — so a reduct is the same function of its term whether the metas in it are solved or not, and the in-place rewrites that do change what a level *spells* (defaulting, finalization, instance closure) clear the cache where they happen. Excluding one would remember nothing of a web of universe-polymorphic definitions inside the declaration that instantiates them, whose occurrences all carry that declaration's level metas, and a reduct shared as a graph would be re-derived once per occurrence — the `2^n` `curios`' `scrutinee_refinement_measurements` guards under `numeric, proved`.
     pub(crate) fn cached_reduced(&self, term: &Term) -> Option<Term> {
-        self.caches.reduction_get(term, self.plain)
+        self.caches.reduction_get(term, self.asking.plain())
     }
 
     /// Record that `term` reduces to `result` — the write half of the reduction cache, hit wherever a reduction's value lands: the reducer's final return, and its scrutinee stack's frame pop. Memoize only closed terms whose WHNF names no *unsolved* term metavariable — `any_metavar` bails on the first one, never building the id set. A solve is monotonic, so it can only invalidate a reduct that still names the metavariable it solved, and reduction gets stuck on (hence surfaces) an unsolved metavariable it actually depends on. Refusing to cache those is what lets `solve_metavar` skip a cache clear; an entry naming only *solved* metavariables stays valid under forward solves (re-validation's `rollback_solutions`, which *un*-solves, clears separately). A *universe* metavariable excludes nothing, for the reason [`Context::cached_reduced`] gives.
@@ -822,18 +769,18 @@ impl Context {
 
         if cacheable {
             self.caches
-                .reduction_insert(term, result.clone(), self.plain);
+                .reduction_insert(term, result.clone(), self.asking.plain());
         }
     }
 
     /// The remembered sort of `type_`, where the context stands as it did when it was filed. [`Caches::sorts`] carries how long that is.
     pub(crate) fn cached_sort(&mut self, type_: &Term) -> Option<Sort> {
-        self.caches.sort_get(type_, self.plain)
+        self.caches.sort_get(type_, self.asking.plain())
     }
 
     /// Remember `type_`'s sort. Stored for nothing, as a reduct is.
     pub(crate) fn record_sort(&mut self, type_: Term, sort: Sort) {
-        self.caches.sort_insert(type_, self.plain, sort);
+        self.caches.sort_insert(type_, self.asking.plain(), sort);
     }
 
     /// [`Context::kernel_spelling`] of a recorded scrutinee, remembered where no metavariable in it is left unsolved ([`Caches::kernel_spellings`]).
@@ -864,7 +811,7 @@ impl Context {
         self.frames.settled_spelling(
             frame,
             key,
-            self.plain,
+            self.asking.plain(),
             self.solutions.solved_len(),
             &self.universe_solver.state_token(),
         )
@@ -883,7 +830,7 @@ impl Context {
     ) {
         let solved = (unsolved || levels.is_some()).then(|| self.solutions.solved_len());
         self.frames
-            .settle_spelling(frame, key, self.plain, settled, solved, levels);
+            .settle_spelling(frame, key, self.asking.plain(), settled, solved, levels);
     }
 
     /// Run `attempt` with at most `allowance` units of this declaration's budget in reach, answering `None` when it did not finish inside that.
@@ -896,16 +843,13 @@ impl Context {
         allowance: u64,
         attempt: impl FnOnce(&mut Self) -> Result<T, ReduceError>,
     ) -> Result<Option<T>, ReduceError> {
-        let before = self.remaining.get();
-        let granted = before.min(allowance);
-        self.remaining.set(granted);
+        let capped = self.spend.cap(allowance);
 
         let outcome = attempt(self);
-        let spent = granted.saturating_sub(self.remaining.get());
-        self.remaining.set(before.saturating_sub(spent));
+        self.spend.lift(&capped);
 
         // An attempt the declaration's own remainder bound is a probe like any other: its exhaustion is the declaration's verdict, and absorbing it would hand the caller a declined attempt where the truth is that nothing is left to spend, the caller going ahead on that answer. Only an attempt the cap bound below the remainder is the allowance's to decline, its exhaustion with every other failure, since the declaration still holds what the cap withheld.
-        match before <= allowance {
+        match capped.bound_by_the_remainder() {
             true => outcome.probed(),
             false => Ok(outcome.ok()),
         }
@@ -932,8 +876,8 @@ impl Context {
             ElabProbe::Hit(hit) => Ok(hit),
             // A miss as much as a term the gate refuses: a miss is recorded only when its run wrote nothing, and a run over this declaration's levels writes, so a miss is what the oracle's re-runs were.
             probe if self.oracle_memoizable(term, expected) => {
-                let privacy_checked = self.island.is_some();
-                let plain = self.plain;
+                let privacy_checked = self.posture.island().is_some();
+                let plain = self.asking.plain();
                 if let Some(hit) = self
                     .caches
                     .oracle_get(term, expected, privacy_checked, plain)
@@ -979,10 +923,12 @@ impl Context {
         // Locally-nameless discipline: every scope is opened before descent, so a term in elaboration position carries no loose bound indices — which is what makes it keyable without any binder context.
         debug_assert!(term.closed(), "elaboration-cache key has loose indices");
 
-        match self
-            .caches
-            .elaboration_get(term, expected, self.island.is_some(), self.plain)
-        {
+        match self.caches.elaboration_get(
+            term,
+            expected,
+            self.posture.island().is_some(),
+            self.asking.plain(),
+        ) {
             Some(hit) => ElabProbe::Hit(hit),
             None => ElabProbe::Miss(self.caches.stamps()),
         }
@@ -1012,8 +958,8 @@ impl Context {
             self.caches.elaboration_insert(
                 term,
                 expected,
-                self.island.is_some(),
-                self.plain,
+                self.posture.island().is_some(),
+                self.asking.plain(),
                 result,
             );
         }
@@ -1692,11 +1638,13 @@ impl Context {
         frame: usize,
         f: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        self.caches.invalidate_settlement_boundary(self.plain);
+        self.caches
+            .invalidate_settlement_boundary(self.asking.plain());
         let previous = self.frames.withhold_refinements_from(frame);
         let result = f(self);
         self.frames.restore_withheld_refinements(previous);
-        self.caches.invalidate_settlement_boundary(self.plain);
+        self.caches
+            .invalidate_settlement_boundary(self.asking.plain());
 
         result
     }
@@ -1922,67 +1870,67 @@ impl Context {
 
     /// The module whose item is currently being elaborated (the qualifier prefix of its name; empty for the root), or `None` when no surface item is being elaborated — which suppresses the representation-privacy checks (see the field's invariant).
     pub(crate) fn island(&self) -> Option<&Qualifier> {
-        self.island.as_ref()
+        self.posture.island()
     }
 
     /// Set the current module before elaborating an item (see `elaborate_module_suffix`).
     pub(crate) fn set_island(&mut self, island: Qualifier) {
         // Every item boundary also lands a `define_entry` clear, but this one keeps the cache's soundness independent of that ordering.
         self.caches.invalidate_for_island_change();
-        self.island = Some(island);
+        self.posture.stand(Some(island));
     }
 
     /// Run `f` with no island — suppressing the representation-privacy checks for re-derivation of already-elaborated terms, whose machinery-built projections were never subject to surface privacy in the first place. The bracket is the only way to clear an island (mirroring the parking half of the oracle package), so no context can be left permanently altered.
     pub(crate) fn with_suppressed_privacy<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let previous = self.island.take();
+        let previous = self.posture.stand(None);
         let result = f(self);
-        self.island = previous;
+        self.posture.stand(previous);
 
         result
     }
 
     /// Whether the procedure that proves a bound from the facts in scope is running, so it is not asked again from inside its own candidate.
     pub(crate) fn entailing(&self) -> bool {
-        self.entailing
+        self.posture.entailing()
     }
 
     /// Run `f` as that procedure, which is not asked again until `f` returns.
     pub(crate) fn with_entailing<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let previous = std::mem::replace(&mut self.entailing, true);
+        let previous = self.posture.set_entailing(true);
         let result = f(self);
-        self.entailing = previous;
+        self.posture.set_entailing(previous);
 
         result
     }
 
     /// Whether reduction is plain: it asks the elaborator's conversion nothing ([`Context::plainly`]).
     pub(crate) fn plain(&self) -> bool {
-        self.plain
+        self.asking.plain()
     }
 
     /// A judgment's reduction is putting a question to conversion. Its answer rests on the level constraints that stand, so a scope that is rolled back with constraints withdrawn after one was asked inside it clears what was reduced meanwhile ([`Context::rollback_solutions`]).
     pub(crate) fn note_question(&mut self) {
-        self.questions += 1;
+        self.asking.note_question();
     }
 
     /// A question asked with nothing committed was answered no because answering yes would have committed a solution or a level constraint. The answer can change once the solver moves, so no reduct taken across it is remembered (`reduce`'s `remember`).
     pub(crate) fn note_declined(&mut self) {
-        self.declined += 1;
+        self.asking.note_declined();
     }
 
     /// How many questions have been declined for a commit.
     pub(crate) fn declined(&self) -> u64 {
-        self.declined
+        self.asking.declined()
     }
 
     /// The two atoms a classing is asking conversion about, which a classing made meanwhile is held inside (`curios_core::Classes::of`).
     pub(crate) fn asked(&self) -> Option<&(Term, Term)> {
-        self.asked.as_ref()
+        self.asking.asked()
     }
 
     /// Enter or leave a classing's question about two atoms, answering what stood before.
     pub(crate) fn ask(&mut self, asked: Option<(Term, Term)>) -> Option<(Term, Term)> {
-        mem::replace(&mut self.asked, asked)
+        self.asking.ask(asked)
     }
 
     /// The universe solver's state now, which a settlement made across a declined question is filed beside.
@@ -1992,9 +1940,9 @@ impl Context {
 
     /// Run `read` with reduction plain: it asks the elaborator's conversion nothing, at a stuck fold or at a missed equation — the kernel's `Kernel::plainly`, for the kernel's two readers. A question reduction puts to conversion is answered by it, which is what ends the regress, and a shared analysis reads a term by it (`Env::force`), since totality may rest on no verdict of conversion's. Each of the two keeps its own answers: the reducts, the sorts read through them and the settled spellings (`Frames::scrutinee_spellings`) are all filed by which reduction took them.
     pub(crate) fn plainly<R>(&mut self, read: impl FnOnce(&mut Self) -> R) -> R {
-        let previous = mem::replace(&mut self.plain, true);
+        let previous = self.asking.set_plain(true);
         let answer = read(self);
-        self.plain = previous;
+        self.asking.set_plain(previous);
 
         answer
     }
@@ -2400,7 +2348,7 @@ impl Context {
             universe: self.universe_solver.mark(),
             credited_len: self.credited.len(),
             checked_len: self.checked.len(),
-            questions: self.questions,
+            questions: self.asking.questions(),
         }
     }
 
@@ -2447,7 +2395,7 @@ impl Context {
             self.caches.note_universe_write();
             self.caches.invalidate_for_universe_transaction();
             // A question asked inside the scope was answered on the level constraints it held, and a reduct or a settled spelling may rest on the answer: those go with the constraints. A scope that asked none leaves the reducts alone, which no rule of reduction reads a level for.
-            if self.questions != mark.questions {
+            if self.asking.questions() != mark.questions {
                 self.caches.invalidate_for_withdrawn_answers();
                 self.frames.forget_spellings();
             }
