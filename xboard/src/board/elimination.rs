@@ -10,32 +10,32 @@ pub(super) const ELIMINATION: Part = Part {
     tickets: &[Ticket {
         title: "An arm of a fold is typed with its scrutinee at the arm's case, and is taken at every tail",
         found_on: Date::new(2026, 10, 7),
-        status: Status::Open,
+        status: Status::Fixed,
         witnesses: &[
             Witness {
                 what: "a fold whose identity arm is a hypothesis about its scrutinee, false at zero",
                 proof: Proof::Program(AN_IDENTITY_ARM_READS_ITS_SCRUTINEE_AT_ZERO),
-                expect: refused![elaborator],
+                expect: refused![elaborator: curios_elab::Error::TypeMismatch { .. }],
             },
             Witness {
                 what: "a fold whose cons arm reads a hypothesis about its scrutinee beside the one at the tail",
                 proof: Proof::Program(A_CONS_ARM_READS_ITS_SCRUTINEE_AT_A_SUCCESSOR),
-                expect: refused![elaborator],
+                expect: refused![elaborator: curios_elab::Error::TypeMismatch { .. }],
             },
             Witness {
                 what: "the fold over a call, whose equation is recorded and not substituted",
                 proof: Proof::Program(AN_IDENTITY_ARM_READS_A_CALL_AT_ZERO),
-                expect: refused![elaborator],
+                expect: refused![elaborator: curios_elab::Error::TypeMismatch { .. }],
             },
             Witness {
                 what: "the fold over a list, whose identity arm reads its length at the empty one",
                 proof: Proof::Program(AN_IDENTITY_ARM_READS_A_LIST_AT_THE_EMPTY_ONE),
-                expect: refused![elaborator],
+                expect: refused![elaborator: curios_elab::Error::TypeMismatch { .. }],
             },
             Witness {
                 what: "the fold whose identity arm is a hypothesis about its scrutinee, as a term",
                 proof: Proof::Module(an_identity_arm_typed_at_zero),
-                expect: refused![kernel],
+                expect: refused![kernel: curios_cert::Error::Mismatch { .. }],
             },
         ],
     }],

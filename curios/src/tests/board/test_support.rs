@@ -1803,3 +1803,79 @@ pub(super) const A_FOLD_MOTIVE_THAT_BINDS_ITS_SCRUTINEE_STILL_FOLDS: &str = r#"
 
         /std/print(Nat/to_str(3))
         "#;
+
+pub(super) const THE_IDENTITY_ARM_OF_A_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#"
+        use /std/{Nat};
+        use /std/Bool/{True, False, Holds};
+
+        let f(n : Nat, h : Holds(n == 2)) -> False =
+            match n : (m) => False
+            | 0 => h
+            | k + 1; ih => ih
+            end;
+
+        let boom : False = f(2, True/qed());
+
+        /std/print("unreachable")
+        "#;
+
+pub(super) const THE_CONS_ARM_OF_A_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#"
+        use /std/{Nat};
+        use /std/Bool/{True, False, Holds};
+
+        let step(k : Nat, a : Holds(k + 1 == 2), b : Holds(k == 0)) -> Holds(k + 1 == 0) =
+            True/proved();
+
+        let f(n : Nat, h : Holds(n == 2)) -> Holds(n == 0) =
+            match n : (m) => Holds(m == 0)
+            | 0 => True/qed()
+            | k + 1; ih => step(k, h, ih)
+            end;
+
+        let boom : False = f(2, True/qed());
+
+        /std/print("unreachable")
+        "#;
+
+pub(super) const AN_ARM_OF_A_FOLD_OVER_A_CALL_RECORDS_NO_EQUATION: &str = r#"
+        use /std/{Nat};
+        use /std/Bool/{True, False, Holds};
+
+        let f(g : (Nat) -> Nat, x : Nat, h : Holds(g(x) == 2)) -> False =
+            match g(x) : (m) => False
+            | 0 => h
+            | k + 1; ih => ih
+            end;
+
+        let boom : False = f((y : Nat) => y, 2, True/qed());
+
+        /std/print("unreachable")
+        "#;
+
+pub(super) const AN_ARM_OF_A_LIST_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#"
+        use /std/{Nat, List};
+        use /std/Bool/{True, False, Holds};
+
+        let f(xs : List(Nat), h : Holds(List/len(xs) == 2)) -> False =
+            match xs : (m) => False
+            | [] => h
+            | [x, ..t]; ih => ih
+            end;
+
+        let boom : False = f([1, 2], True/qed());
+
+        /std/print("unreachable")
+        "#;
+
+pub(super) const A_HYPOTHESIS_ABOUT_A_FOLDS_SCRUTINEE_RIDES_IN_ITS_MOTIVE: &str = r#"
+        use /std/{Nat};
+        use /std/Bool/{True, Holds};
+
+        let counted(n : Nat, bound : Nat, h : Holds(n <= bound)) -> Nat =
+            match n : (m) => (h : Holds(m <= bound)) -> Nat
+            | 0 => (_) => 0
+            | k + 1; ih => (h) => ih(True/proved()) + 1
+            end(h);
+
+        /std/print(Nat/to_str(counted(3, 5, True/qed())))
+        "#;

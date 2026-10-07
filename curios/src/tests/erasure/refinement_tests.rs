@@ -1,4 +1,4 @@
-//! An arm is erased under the refinement it was elaborated under, however it is lowered: a case split as well as a fold, an expression scrutinee as well as a variable. Erasure re-types what it walks — the head of an application is inferred again — so an arm whose proof reads the scrutinee at its case is refused unless the case is in scope.
+//! An arm is erased under what it was elaborated under, however it is lowered: a case split under its scrutinee's refinement, an expression scrutinee as well as a variable, and a fold's step under none, since reduction takes it at every tail. Erasure re-types what it walks — the head of an application is inferred again — so a case split's arm whose proof reads the scrutinee at its case is refused unless the case is in scope, and a fold's step whose proof bounds its tail reads the bound its motive carries.
 
 use crate::tests::run;
 
@@ -15,15 +15,18 @@ fn a_nat_case_split_is_erased_under_its_successor() {
     assert_eq!(run(source), b"14");
 }
 
-// An expression scrutinee is refined under its own spelling, which is the one the arm's proof mentions. Refining an alias for it instead — a fresh variable defined as `count(x)` — would leave `Holds(xp < count(x))` undecided even in a fold's step.
+// A fold's step learns nothing of its scrutinee, an expression as a variable: `xp < count(x)` holds at every tail and by no equation, since `count(x)` is `xp + 1` at the outermost step alone. The bound rides in the motive, which restates it at each tail, and the step is erased under no refinement: the curried call makes erasure infer `ih(xp, …)` again, and its proof reads `below`.
 #[test]
-fn a_nat_fold_over_an_expression_is_erased_under_its_successor() {
+fn a_nat_fold_over_an_expression_carries_its_bound_in_its_motive() {
     let source = r#"
         use /std/{Nat};
         use /std/Bool/{True, Holds};
         let count(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => count(k) + 1 end;
         let f(x: Nat, ih: (y: Nat, r: Holds(y < count(x))) -> (Nat) -> Nat, m: Nat) -> Nat =
-            match count(x) | 0 => m | xp + 1; h => h + ih(xp, True/qed())(m) end;
+            match count(x): (c) => (below: Holds(c <= count(x))) -> Nat
+            | 0 => (_) => m
+            | xp + 1; h => (below) => h(True/proved()) + ih(xp, True/proved())(m)
+            end(True/qed());
         /std/print(Nat/to_str(f(3, (y, _) => (m) => y + m, 10)))
         "#;
     assert_eq!(run(source), b"43");
@@ -69,14 +72,17 @@ fn a_bytes_case_split_is_erased_under_its_cons() {
     assert_eq!(run(source), b"3");
 }
 
-// A sequence fold's step over an expression scrutinee, refined under the expression's spelling as the `Nat` fold's is.
+// A sequence fold's step over an expression scrutinee, erased under no refinement as the `Nat` fold's is: the tail's length is below the scrutinee's by the bound the motive carries.
 #[test]
-fn a_list_fold_over_an_expression_is_erased_under_its_cons() {
+fn a_list_fold_over_an_expression_carries_its_bound_in_its_motive() {
     let source = r#"
         use /std/{Nat, List};
         use /std/Bool/{True, Holds};
         let f(l: List(Nat), g: (t: List(Nat), r: Holds(List/len(t) < List/len(List/reverse(l)))) -> (Nat) -> Nat) -> Nat =
-            match List/reverse(l) | [] => 0 | [_, ..t]; h => h + g(t, True/qed())(1) end;
+            match List/reverse(l): (s) => (below: Holds(List/len(s) <= List/len(List/reverse(l)))) -> Nat
+            | [] => (_) => 0
+            | [_, ..t]; h => (below) => h(True/proved()) + g(t, True/proved())(1)
+            end(True/qed());
         /std/print(Nat/to_str(f([1, 2, 3], (t, _) => (m) => List/len(t) + m)))
         "#;
     assert_eq!(run(source), b"6");

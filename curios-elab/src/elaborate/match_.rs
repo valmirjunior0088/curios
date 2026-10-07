@@ -72,7 +72,7 @@ fn resolve_intrinsic_motive(
 
 /// Refuse a fold whose arm reads its hypothesis, under a motive that reaches its scrutinee other than through the binder it declares.
 ///
-/// The induction hypothesis is assumed at the motive opened at the tail *inside* the cons arm, where `refine_head` has the scrutinee reducing to the cons value. A captured occurrence reduces with it, so the hypothesis would be typed at the arm's own goal: `match n : (_) => Eq()(n, 0) | 0 => refl | k + 1; ih => ih end` then proves `Eq()(n, 0)` for every `n`. The kernel refuses the same shape by the same test (`check_free_monoid`); this is the elaborator's copy, so the refusal is reported where the motive was written. A local defined in the frame — a `let` alias of the scrutinee, or a binder an enclosing arm refined — is read through its definition, since the reducer will read it the same way.
+/// The induction hypothesis is assumed at the motive opened at the tail, and a motive that names the scrutinee instead of binding it states one proposition at every tail: `match n : (_) => Eq()(n, 0) | 0 => refl | k + 1; ih => ih end` asks its identity arm for `Eq()(n, 0)` itself. An arm of a fold learns nothing of the scrutinee (`check_fold_arm`), so the captured occurrence is refined nowhere, and the motive is refused as written. The kernel refuses the same shape by the same test (`check_free_monoid`); this is the elaborator's copy, so the refusal is reported where the motive was written. A local defined in the frame — a `let` alias of the scrutinee, or a binder an enclosing arm refined — is read through its definition, since the reducer will read it the same way.
 fn refuse_captured_scrutinee(
     context: &Context,
     motive: &Scope<Many>,
@@ -163,14 +163,21 @@ fn may_read_hypothesis<N: Arity>(arm: &Scope<N>, index: usize) -> bool {
     arm.uses(index) || holds_goal(arm.body())
 }
 
-/// One arm of a fold, at its case value: the scrutinee refined to it, the locals its solution re-types re-assumed, and the body checked against the result there.
+/// One arm of a free-monoid elimination, at its case value. A case split's has the scrutinee refined to the case, the locals its solution re-types re-assumed, and the body checked against the result there.
+///
+/// An arm of a fold — an elimination whose cons arm reads its hypothesis — learns nothing of the scrutinee: the fold at the tail is the same arms over the tail, so reduction takes each at every tail of the value, where the scrutinee is no case of it. It is checked at the motive opened at its case value and under nothing else, the kernel's rule (`check_free_monoid`), and a hypothesis about the scrutinee rides in the motive.
 fn check_fold_arm(
     context: &mut Context,
     head: &Term,
     result: &MatchResult,
     value: &Term,
     body: &Term,
+    reads_hypothesis: bool,
 ) -> Result<Term, Error> {
+    if reads_hypothesis {
+        return check(context, body, result.at(head, &[], &[], value));
+    }
+
     refine_head(context, head, value)
         .and_then(|()| {
             retype_locals(context, head, value, Vec::new());
@@ -211,10 +218,17 @@ fn elaborate_nat_match(
         reads_hypothesis,
     )?;
 
-    // Refine the scrutinee to its constructor in each arm (as `Bool`/`Switch` already do): a context hypothesis whose type mentions the scrutinee then reduces at the arm's value, so a dependent match needs no hand-written convoy to carry it across the eliminator.
+    // A case split's arms have the scrutinee refined to their case (as `Bool`/`Switch` do), so a hypothesis whose type mentions it reduces at the arm's value with no hand-written convoy. A fold's arms learn nothing of it (`check_fold_arm`).
     let zero_value: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))).into();
     let zero_elaborated = context.with_frame(|context| {
-        check_fold_arm(context, &head_elaborated, &result, &zero_value, zero_case)
+        check_fold_arm(
+            context,
+            &head_elaborated,
+            &result,
+            &zero_value,
+            zero_case,
+            reads_hypothesis,
+        )
     })?;
 
     let pred_label = context.fresh_for(succ_case.hint(0), succ_case.written(0));
@@ -233,7 +247,14 @@ fn elaborate_nat_match(
         .into();
 
         let body = succ_case.open(&[&Term::free_var(&pred_label), &Term::free_var(&ih_label)]);
-        check_fold_arm(context, &head_elaborated, &result, &succ_value, &body)
+        check_fold_arm(
+            context,
+            &head_elaborated,
+            &result,
+            &succ_value,
+            &body,
+            reads_hypothesis,
+        )
     })?;
 
     let succ_elaborated = Scope::close(Two, &[&pred_label, &ih_label], succ_body);
@@ -284,14 +305,21 @@ fn elaborate_list_match(
         reads_hypothesis,
     )?;
 
-    // Refine the scrutinee to its value in each arm (as `Nat`/`Bool`/`Switch` already do), so a hypothesis whose type mentions the scrutinee reduces at the arm's value without a hand-written convoy.
+    // A case split's arms have the scrutinee refined to their case (as `Bool`/`Switch` do), so a hypothesis whose type mentions it reduces at the arm's value with no hand-written convoy. A fold's arms learn nothing of it (`check_fold_arm`).
     let empty_value: Term = Subterm::Intrinsic(Intrinsic::List {
         element: elem.clone(),
         items: vec![],
     })
     .into();
     let empty_elaborated = context.with_frame(|context| {
-        check_fold_arm(context, &head_elaborated, &result, &empty_value, empty_case)
+        check_fold_arm(
+            context,
+            &head_elaborated,
+            &result,
+            &empty_value,
+            empty_case,
+            reads_hypothesis,
+        )
     })?;
 
     let head_label = context.fresh_for(cons_case.hint(0), cons_case.written(0));
@@ -324,7 +352,14 @@ fn elaborate_list_match(
             &Term::free_var(&tail_label),
             &Term::free_var(&ih_label),
         ]);
-        check_fold_arm(context, &head_elaborated, &result, &cons_value, &body)
+        check_fold_arm(
+            context,
+            &head_elaborated,
+            &result,
+            &cons_value,
+            &body,
+            reads_hypothesis,
+        )
     })?;
 
     let cons_elaborated = Scope::close(Three, &[&head_label, &tail_label, &ih_label], cons_body);
@@ -369,10 +404,17 @@ fn elaborate_bin_match(
         reads_hypothesis,
     )?;
 
-    // Refine the scrutinee to its value in each arm (as `Nat`/`Bool`/`Switch` already do): a context hypothesis whose type mentions the scrutinee then reduces at the arm's value, so a dependent match needs no hand-written convoy to carry it across the eliminator.
+    // A case split's arms have the scrutinee refined to their case (as `Bool`/`Switch` do), so a hypothesis whose type mentions it reduces at the arm's value with no hand-written convoy. A fold's arms learn nothing of it (`check_fold_arm`).
     let empty_value: Term = Subterm::Intrinsic(Intrinsic::Bin(grain, Binary::empty())).into();
     let empty_elaborated = context.with_frame(|context| {
-        check_fold_arm(context, &head_elaborated, &result, &empty_value, empty_case)
+        check_fold_arm(
+            context,
+            &head_elaborated,
+            &result,
+            &empty_value,
+            empty_case,
+            reads_hypothesis,
+        )
     })?;
 
     let head_label = context.fresh_for(cons_case.hint(0), cons_case.written(0));
@@ -409,7 +451,14 @@ fn elaborate_bin_match(
             &Term::free_var(&tail_label),
             &Term::free_var(&ih_label),
         ]);
-        check_fold_arm(context, &head_elaborated, &result, &cons_value, &body)
+        check_fold_arm(
+            context,
+            &head_elaborated,
+            &result,
+            &cons_value,
+            &body,
+            reads_hypothesis,
+        )
     })?;
 
     let cons_elaborated = Scope::close(Three, &[&head_label, &tail_label, &ih_label], cons_body);

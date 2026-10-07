@@ -540,7 +540,7 @@ fn motive_sort(kernel: &mut Kernel, stated: &Term) -> Result<Sort, Error> {
 
 /// Check an elimination's arms against its motive.
 ///
-/// A nominal elimination is verified in full, each arm at its own constructor's index targets. The intrinsic carriers are verified at their case values: `Bool`'s two literals, a `Switch`'s enumerated literals (its default at the scrutinee's own instance, the only one it has), and the free-monoid carriers' identity and cons arms — the typing face of the fact `uncons` computes with and `close` traverses by, that every carrier value is the identity or one generator over a shorter value. A variable scrutinee *is* the case's value within an arm, so every arm is checked with that equation substituted, the zero-index instance of the specialization `eliminate` gives nominal arms.
+/// A nominal elimination is verified in full, each arm at its own constructor's index targets. The intrinsic carriers are verified at their case values: `Bool`'s two literals, a `Switch`'s enumerated literals (its default at the scrutinee's own instance, the only one it has), and the free-monoid carriers' identity and cons arms — the typing face of the fact `uncons` computes with and `close` traverses by, that every carrier value is the identity or one generator over a shorter value. A variable scrutinee *is* the case's value within an arm, so every arm is checked with that equation substituted, the zero-index instance of the specialization `eliminate` gives nominal arms. An arm of a fold is the exception ([`check_free_monoid`]): reduction takes it at every tail, where the scrutinee is no case of it.
 fn check_cases(
     kernel: &mut Kernel,
     family: Option<&InductType>,
@@ -551,7 +551,11 @@ fn check_cases(
 ) -> Result<(), Error> {
     let motive_sort = check_motive(kernel, family, result, scrutinee_type)?;
 
-    let typed = |kernel: &mut Kernel, value: Term, body: &Term| {
+    // An arm taken once, at the scrutinee itself: not typed where a scrutinee that already is another case never takes it, and otherwise at its case, the scrutinee standing refined to it.
+    let at = |kernel: &mut Kernel, value: Term, body: &Term| {
+        if eliminate::never_taken(kernel, scrutinee, &value, &[])? {
+            return Ok(());
+        }
         let expected = result.at(scrutinee, &[], &[], &value);
 
         kernel.scoped(|kernel| {
@@ -567,16 +571,6 @@ fn check_cases(
                 &expected.substitute(&solutions),
             )
         })
-    };
-    // An arm of a case split, which a scrutinee that already is another case never takes.
-    let at = |kernel: &mut Kernel, value: Term, body: &Term| match eliminate::never_taken(
-        kernel,
-        scrutinee,
-        &value,
-        &[],
-    )? {
-        true => Ok(()),
-        false => typed(kernel, value, body),
     };
 
     match cases {
@@ -639,11 +633,9 @@ fn check_cases(
             })
         }
 
-        // A fold is no case split: its reduct holds the fold at the tail, so a value of either case takes the identity arm in the end, and every arm of one is typed.
-        Cases::FreeMonoid { carrier } => match reads_hypothesis(carrier) {
-            true => check_free_monoid(kernel, result, scrutinee, scrutinee_type, carrier, &typed),
-            false => check_free_monoid(kernel, result, scrutinee, scrutinee_type, carrier, &at),
-        },
+        Cases::FreeMonoid { carrier } => {
+            check_free_monoid(kernel, result, scrutinee, scrutinee_type, carrier, &at)
+        }
     }
 }
 
@@ -657,7 +649,9 @@ fn reads_hypothesis(carrier: &Carrier) -> bool {
 
 /// The free-monoid arm rule: the identity arm inhabits the result at the carrier's empty value, and the cons arm — under a peeled generator, a tail, and the induction hypothesis at that tail when the arm reads it — inhabits it at one generator prepended to the tail. The case values are spelled exactly as elaboration spelled them (`pred + 1`, the singleton-concat for `List`, the append-to-empty singleton for `Bin`, whose packed literals cannot hold a symbolic atom), and conversion's free-monoid peel is what makes those spellings and reduction's forms one normal form.
 ///
-/// **The hypothesis is assumed exactly when the arm reads it, and only a family types it**, at the motive opened at the tail — the rule erasure's split-or-fold reading and the elaborator's state too. Its two preconditions therefore bind exactly the folds that read it: an ambient goal has no tail to be taken at once the head is substituted away, so it cannot type one ([`Error::AmbientFold`]); and a family that reaches the scrutinee other than through its binder would type it at the arm's own goal ([`Error::FoldMotiveCapturesScrutinee`]). An arm that reads none — a case split — is checked as a `Bool` arm is, at its case value under either form of result: its reduct `arm(h, t, fold(t))` never contains the fold at the tail, so nothing needs the type the hypothesis would have had.
+/// **The hypothesis is assumed exactly when the arm reads it, and only a family types it**, at the motive opened at the tail — the rule erasure's split-or-fold reading and the elaborator's state too. Its two preconditions therefore bind exactly the folds that read it: an ambient goal has no tail to be taken at once the head is substituted away, so it cannot type one ([`Error::AmbientFold`]); and a family that reaches the scrutinee other than through its binder states one proposition at every tail, and is refused as written ([`Error::FoldMotiveCapturesScrutinee`]). An arm that reads none — a case split — is checked as a `Bool` arm is, at its case value under either form of result: its reduct `arm(h, t, fold(t))` never contains the fold at the tail, so nothing needs the type the hypothesis would have had.
+///
+/// **An arm of a fold learns nothing of the scrutinee.** The fold at the tail is the same two arms over the tail, so reduction takes each arm at every tail of the value, where the scrutinee is no case of that arm. An arm typed with the scrutinee at its case would read a hypothesis about the scrutinee at a value the scrutinee never has: under `h : Holds(n == 2)`, `match n : (_) => False | 0 => h | k + 1; ih => ih end` is `h` at `2`, and it was typed at `0`. So each arm of a fold is checked at the motive opened at its case value and under nothing else — no solution, no case equation, no size — and every arm of one is typed, a value of either case taking the identity arm in the end. A hypothesis about the scrutinee rides in the motive, which is abstracted over it and so restates it at each tail. A case split's arm is taken once, at the scrutinee itself, and keeps the specialization every other arm has (`at`).
 ///
 /// The carrier's own element type must agree with the scrutinee's: the arms are typed against the carrier's copy, and a value flowing through the match carries the scrutinee's, so a disagreement would type the arms at one type and run them at another.
 fn check_free_monoid(
@@ -671,7 +665,7 @@ fn check_free_monoid(
     let motive = match (reads_hypothesis(carrier), result) {
         (false, _) => None,
         (true, MatchResult::Ambient(goal)) => return Err(Error::AmbientFold(goal.clone())),
-        // The capture is refused syntactically — `match n : (_) => Eq()(n, 0) | 0 => refl | k + 1; ih => ih end` would prove `Eq()(n, 0)` for every `n` — which is exact for a variable scrutinee and, for an expression, covers every occurrence the case equation recorded against that spelling could reach.
+        // The capture is refused syntactically: `match n : (_) => Eq()(n, 0) | 0 => refl | k + 1; ih => ih end` states `Eq()(n, 0)` at every tail, and no arm of a fold refines `n`.
         (true, MatchResult::Family(motive)) => {
             if motive.body().mentions_term(scrutinee) {
                 return Err(Error::FoldMotiveCapturesScrutinee(scrutinee.clone()));
@@ -683,7 +677,13 @@ fn check_free_monoid(
     // The hypothesis at a tail, for an arm that reads one.
     let hypothesis = |tail: &Term| motive.map(|motive| motive.open(&[tail]));
 
-    // One cons arm: open the binders, assume them at the carrier's types, and check the body at the result of the cons value — with the scrutinee standing refined to that value, exactly as in every other arm.
+    // The identity arm: a fold's at the motive alone, a case split's as every arm taken once.
+    let identity = |kernel: &mut Kernel, value: Term, body: &Term| match motive {
+        Some(motive) => check(kernel, body, &motive.open(&[&value])),
+        None => at(kernel, value, body),
+    };
+
+    // One cons arm: open the binders, assume them at the carrier's types, and check the body at the result of the cons value — a fold's at the motive alone, a case split's with the scrutinee standing refined to that value, exactly as in every other arm.
     //
     // `size_value` is the cons value as the call recorder reads a size: the same value, spelled as the carrier's layered form where the typing's spelling is an operation the size order does not read through.
     let cons = |kernel: &mut Kernel,
@@ -696,11 +696,15 @@ fn check_free_monoid(
             for (binder, type_) in &binders {
                 kernel.assume(binder, type_);
             }
+            if let Some(motive) = motive {
+                return check(kernel, body, &motive.open(&[&cons_value]));
+            }
+
             let names = binders
                 .iter()
                 .map(|(binder, _)| **binder)
                 .collect::<Vec<_>>();
-            if motive.is_none() && eliminate::never_taken(kernel, scrutinee, &cons_value, &names)? {
+            if eliminate::never_taken(kernel, scrutinee, &cons_value, &names)? {
                 return Ok(());
             }
 
@@ -728,7 +732,7 @@ fn check_free_monoid(
                 return Err(Error::Unclassified(scrutinee_type.clone()));
             }
 
-            at(
+            identity(
                 kernel,
                 Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
                 empty_case,
@@ -769,7 +773,7 @@ fn check_free_monoid(
                 });
             }
 
-            at(
+            identity(
                 kernel,
                 Term::intrinsic(Intrinsic::List {
                     element: elem.clone(),
@@ -818,7 +822,7 @@ fn check_free_monoid(
             }
 
             let empty = Term::intrinsic(Intrinsic::Bin(*grain, Binary::empty()));
-            at(kernel, empty.clone(), empty_case)?;
+            identity(kernel, empty.clone(), empty_case)?;
 
             let atom_type = Term::intrinsic(match grain {
                 Grain::X => Intrinsic::ByteType,

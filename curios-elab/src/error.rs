@@ -598,7 +598,7 @@ pub enum Error {
     MissingArmNotImpossible {
         tag: Atom,
     },
-    /// A fold's motive mentions its scrutinee other than through the binder it declares. The induction hypothesis is assumed at the motive opened at the tail inside the cons arm, where the scrutinee is refined to the cons value — so a captured occurrence is refined too, and the hypothesis would be typed at the arm's own goal.
+    /// A fold's motive mentions its scrutinee other than through the binder it declares. The induction hypothesis is assumed at the motive opened at the tail, and an arm of a fold learns nothing of the scrutinee — so a captured occurrence is the scrutinee itself at every tail, and the motive states one proposition where it was written to state one per tail.
     FoldMotiveCapturesScrutinee {
         scrutinee: Term,
     },

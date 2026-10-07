@@ -202,7 +202,7 @@ impl Lowering {
         Ok(self.seal(outcome))
     }
 
-    /// Open a fresh block, erase `body` as a tail typed at `expected` without refining the scrutinee, and seal it — the catch-all default, which stands for no one case, and `List/fold`'s initial value.
+    /// Open a fresh block, erase `body` as a tail typed at `expected` without refining the scrutinee, and seal it — the catch-all default, which stands for no one case, `List/fold`'s initial value, and a fold's identity arm, which a value of either case takes in the end.
     fn open_arm(
         &mut self,
         context: &mut Context,
@@ -212,6 +212,22 @@ impl Lowering {
         self.builder.open_block();
         let outcome = self.walk(context, body, expected, None)?;
         Ok(self.seal(outcome))
+    }
+
+    /// The identity arm of a free-monoid elimination, at the carrier's empty `value`: a case split's refined by `head = value`, a fold's under no refinement — each as it was elaborated (`check_fold_arm`).
+    fn identity_arm(
+        &mut self,
+        context: &mut Context,
+        head: &Term,
+        value: &Term,
+        result: &MatchResult,
+        body: &Term,
+        folds: bool,
+    ) -> Result<curios_ersd::BlockId, Error> {
+        match folds {
+            true => self.open_arm(context, &result.at(head, &[], &[], value), body),
+            false => self.refined_arm(context, head, value, result, body),
+        }
     }
 
     /// A dependent `Bool` elimination — a first-class `SwitchBool`, distinct from a `Nat` dispatch.
@@ -293,7 +309,7 @@ impl Lowering {
         ))
     }
 
-    /// A `Nat` free-monoid elimination: a successor arm that uses its induction hypothesis is a `FoldNat`; one that ignores it is a case split, a single-key dispatch whose default computes the predecessor from the erased operand. Either way the successor arm is erased under `head = pred + 1`, the refinement it was elaborated under.
+    /// A `Nat` free-monoid elimination: a successor arm that uses its induction hypothesis is a `FoldNat`; one that ignores it is a case split, a single-key dispatch whose default computes the predecessor from the erased operand. A case split's successor arm is erased under `head = pred + 1`, the refinement it was elaborated under, and a fold's arms under none, as they were.
     fn erase_nat_fold(
         &mut self,
         context: &mut Context,
@@ -306,12 +322,13 @@ impl Lowering {
         let head_type = Term::intrinsic(Intrinsic::NatType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
-        let zero = self.refined_arm(
+        let zero = self.identity_arm(
             context,
             head,
             &Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             result,
             empty_case,
+            cons_case.uses(1),
         )?;
 
         let pred_hint = cons_case.first_hint().map(str::to_string);
@@ -378,7 +395,6 @@ impl Lowering {
         let outcome = context.with_frame(|context| {
             context.assume(&pred_label, &Term::intrinsic(Intrinsic::NatType));
             context.assume(&hypothesis_label, &result.at(head, &[], &[], &pred_var));
-            refine_head(context, head, &successor)?;
 
             let body = cons_case.open(&[&pred_var, &Term::free_var(&hypothesis_label)]);
             let expected = result.at(head, &[], &[], &successor);
@@ -495,13 +511,20 @@ impl Lowering {
         let head_type = carrier.sequence_type();
         let sequence = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
-        let empty = self.refined_arm(context, head, &carrier.empty_value(), result, empty_case)?;
+        let empty = self.identity_arm(
+            context,
+            head,
+            &carrier.empty_value(),
+            result,
+            empty_case,
+            cons_case.uses(2),
+        )?;
 
         // The hypothesis is dead: a case split over the length, peeling the cons arm at the head element and tail slice.
         //
         // The peel binds *names* for the element and the suffix rather than writing `get`/`slice` terms into the arm and letting the walk typecheck them. That is a typing requirement, not a style choice: both reads are bounded operations, and the bound each would carry — `0 < len` for the element, `1 <= len` for the window — is exactly what the dispatch establishes, so at the point the terms would be constructed there is no proof to hand them.
         //
-        // The binders are opaque assumptions of the element and sequence types rather than the reads themselves, so the connection back to the scrutinee is restored as the fold's step restores it: the arm is erased under `head = [element, ..suffix]`, the refinement it was elaborated under. Erasure re-types what it walks, and a proof in the arm may need the scrutinee at its case — `len(suffix) < len(head)` is decided only there.
+        // The binders are opaque assumptions of the element and sequence types rather than the reads themselves, so the connection back to the scrutinee is restored by the refinement the arm was elaborated under: it is erased under `head = [element, ..suffix]`. Erasure re-types what it walks, and a proof in the arm may need the scrutinee at its case — `len(suffix) < len(head)` is decided only there.
         //
         // **The reads are not emitted here at all.** `UnconsSequence` is one peel, and how a peel is performed belongs to the lowering that performs it — `into_cont`'s `emit_peel`, which the fold reaches too. Open-coding it here would make this crate hold a window's operand convention, which is the lowering's.
         if !cons_case.uses(2) {
@@ -575,7 +598,6 @@ impl Lowering {
             context.assume(&accumulator_label, &result.at(head, &[], &[], &suffix_var));
 
             let cons_value = carrier.cons_value(&element_var, &suffix_var);
-            refine_head(context, head, &cons_value)?;
 
             let body = cons_case.open(&[
                 &element_var,

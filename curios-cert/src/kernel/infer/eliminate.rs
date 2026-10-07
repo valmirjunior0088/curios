@@ -21,6 +21,8 @@
 #[cfg(test)]
 mod ambient_tests;
 #[cfg(test)]
+mod fold_tests;
+#[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod tests;
@@ -163,7 +165,7 @@ fn check_arm(
 ///
 /// **Nothing reads it.** A value is its case under every substitution, so a case split over one is its one arm wherever it stands: reduction opens no other, and conversion compares none, since the elimination is never stuck. Typing the arm would establish a term no rule reads, and would refuse one that was typed already: an arm is typed under the equation between its scrutinee and its case, an equation between two values is recorded nowhere ([`records_case_equation`](curios_analysis::records_case_equation)), and the result an arm is checked at puts a case in its scrutinee's place through the goal ([`MatchResult::at`]), an elimination of that scrutinee inside the goal among it. A proof that stood under that elimination's other arm, resting on its guard, then stands under a literal.
 ///
-/// **A fold is never asked.** Its reduct holds the fold at the tail, so a value of either case takes the identity arm in the end: `match 3 : (_) => P | 0 => … | k + 1; ih => ih end` is its identity arm, which skipped would inhabit any `P` untyped. The callers ask for an elimination no arm of which reads a hypothesis.
+/// **A fold is never asked.** Its reduct holds the fold at the tail, so a value of either case takes the identity arm in the end: `match 3 : (_) => P | 0 => … | k + 1; ih => ih end` is its identity arm, which skipped would inhabit any `P` untyped. The callers ask for an arm taken once, at the scrutinee itself.
 ///
 /// **The scrutinee is read as it stands and never computed.** Computing it would decide more — an elimination over `0 < 0` is its `false` arm — and typing must not evaluate a term that runs, which may be the whole program. [`stands_as_a_case`] is that gate and no part of the answer.
 pub(super) fn never_taken(
@@ -206,9 +208,9 @@ fn stands_as_a_case(term: &Term) -> bool {
 ///
 /// **Recording costs nothing: no reduction happens at registration.** `Scope::refine` and `whnf`'s `refined_reduct` carry a two-tier key, and reduce at most once per equation, only when a probe presents a term the written spelling does not answer. Reducing the scrutinee here, once per arm, merely to obtain a key would unfold a web of combinator definitions each naming the one before it twice exponentially before a single arm was checked — the scrutinee mentions a local, which is exactly the term the evaluation memos may not store — where the elaborator, registering on the written spelling, checks the same program flat.
 ///
-/// Every scrutinee gets its equation, because a term of non-`Io` type denotes one value: an `Io` is opaque and cannot be eliminated, so it never reaches a scrutinee position, and no inhabitant of an ordinary arrow performs an effect.
+/// Every scrutinee of an arm taken once gets its equation, because a term of non-`Io` type denotes one value: an `Io` is opaque and cannot be eliminated, so it never reaches a scrutinee position, and no inhabitant of an ordinary arrow performs an effect.
 ///
-/// Stated once because the three arm rules that need it — nominal, boolean-and-dispatch, and free-monoid — were three chances to state it differently, and what a case teaches its arm is precisely what coverage and obligation (V) read back out.
+/// Stated once because the three arm rules that need it — nominal, boolean-and-dispatch, and a free-monoid case split — were three chances to state it differently, and what a case teaches its arm is precisely what coverage and obligation (V) read back out.
 ///
 /// Appends to `solutions` rather than replacing them, so [`check_arm`] can hand over the index equations it has already solved; `value` is substituted through those first, since a case value built from the constructor's payload may mention a binder they pinned. Must be called inside the arm's [`Kernel::scoped`] bracket — that bracket is what scopes the refinement to the arm.
 ///
