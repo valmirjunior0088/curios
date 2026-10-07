@@ -45,3 +45,24 @@ pub let div_lt_of_lt_mul(
     p: Holds(n < m * d),
 ) -> Holds(Nat/div(n, d, @ok) < m) =
     True/proved();
+
+--- A quotient and a remainder are the ones `/` and `%` compute: a `q` and an `r` with `n = q * d + r` and `r < d` are `n / d` and `n % d`.
+---
+--- What a Euclidean argument ends in: a multiple's quotient is its multiplier, and its remainder zero. The quotient is pinned from both sides by its own bounds, each a product the elaborator proves from the facts in scope, and the remainder is what Euclid's identity leaves once the two quotients are one.
+pub let unique(
+    n: Nat,
+    d: Nat,
+    q: Nat,
+    r: Nat,
+    @ok: Holds(0 < d),
+    joined: Eq()(n, q * d + r),
+    bounded: Holds(r < d),
+) -> {quotient: Eq()(q, Nat/div(n, d, @ok)), remainder: Eq()(r, Nat/rem(n, d, @ok))} =
+    let quotient: Eq()(q, Nat/div(n, d, @ok)) =
+        Nat/le/antisym(q, Nat/div(n, d, @ok), True/proved(), True/proved());
+    let euclid: Eq()(n, Nat/div(n, d, @ok) * d + Nat/rem(n, d, @ok)) = Eq/refl();
+    let rejoined: Eq()(n, q * d + Nat/rem(n, d, @ok)) =
+        Eq/subst((x: Nat) => Eq()(n, x * d + Nat/rem(n, d, @ok)), Eq/sym(quotient), euclid);
+    (
+        quotient = quotient,
+        remainder = Eq/cong((x: Nat) => x - q * d, Eq/trans(Eq/sym(joined), rejoined)));

@@ -1,0 +1,74 @@
+-- Euclid's layer at the boundaries its statements name: a zero dividend, a divisor of one, a dividend below its divisor, an exact multiple with its neighbours, and a multiple by a divisor no literal names.
+use /std/{Nat, Eq};
+use /std/Nat/{Divides, DivMod};
+use /std/Bool/{True, Holds};
+
+let _a_zero_dividend_has_a_zero_quotient_and_remainder: {
+    quotient: Eq()(0, 0 / 7),
+    remainder: Eq()(0, 0 % 7)} =
+    DivMod/unique(0, 7, 0, 0, Eq/refl(), True/qed());
+
+let _a_divisor_of_one_leaves_nothing: {quotient: Eq()(9, 9 / 1), remainder: Eq()(0, 9 % 1)} =
+    DivMod/unique(9, 1, 9, 0, Eq/refl(), True/qed());
+
+let _a_dividend_below_its_divisor_is_its_own_remainder: {
+    quotient: Eq()(0, 3 / 7),
+    remainder: Eq()(3, 3 % 7)} =
+    DivMod/unique(3, 7, 0, 3, Eq/refl(), True/qed());
+
+let _a_multiple_has_its_multiplier_and_no_remainder: {
+    quotient: Eq()(4, 20 / 5),
+    remainder: Eq()(0, 20 % 5)} =
+    DivMod/unique(20, 5, 4, 0, Eq/refl(), True/qed());
+
+let _one_below_a_multiple_has_the_greatest_remainder: {
+    quotient: Eq()(3, 19 / 5),
+    remainder: Eq()(4, 19 % 5)} =
+    DivMod/unique(19, 5, 3, 4, Eq/refl(), True/qed());
+
+let _one_past_a_multiple_has_a_remainder_of_one: {
+    quotient: Eq()(4, 21 / 5),
+    remainder: Eq()(1, 21 % 5)} =
+    DivMod/unique(21, 5, 4, 1, Eq/refl(), True/qed());
+
+let _a_multiple_by_any_divisor_has_its_multiplier_as_quotient(
+    k: Nat,
+    d: Nat,
+    @ok: Holds(0 < d),
+) -> Eq()(k, Nat/div(k * d, d, @ok)) =
+    DivMod/unique(k * d, d, k, 0, Eq/refl(), ok).quotient;
+
+let _a_divisor_leaves_no_remainder: Holds(12 % 4 == 0) =
+    Divides/to_rem(12, 4, Divides/intro(3, Eq/refl()));
+
+let _a_multiple_by_any_divisor_leaves_no_remainder(
+    k: Nat,
+    d: Nat,
+    @ok: Holds(0 < d),
+) -> Holds(Nat/rem(k * d, d, @ok) == 0) =
+    Divides/to_rem(k * d, d, Divides/intro(k, Eq/refl()));
+
+let _a_quotient_by_a_divisor_is_exact: Eq()(12, 12 / 4 * 4) =
+    Divides/exact(12, 4, Divides/intro(3, Eq/refl()));
+
+let _zero_is_every_divisor_s_exact_multiple(
+    d: Nat,
+    @ok: Holds(0 < d),
+) -> Eq()(0, Nat/div(0, d, @ok) * d) =
+    Divides/exact(0, d, Divides/zero(d));
+
+let _a_divisor_of_a_sum_and_a_summand_divides_the_other: Divides(3, 9) =
+    Divides/sub(@3, @6, @9, Divides/intro(5, Eq/refl()), Divides/intro(2, Eq/refl()));
+
+let _zero_divides_only_what_is_left_of_a_zero_sum(b: Nat, p: Divides(0, 0 + b)) -> Divides(0, b) =
+    Divides/sub(@0, @0, @b, p, Divides/zero(0));
+
+let _two_numbers_that_divide_each_other_are_one(
+    a: Nat,
+    p: Divides(a, 6),
+    q: Divides(6, a),
+) -> Eq()(a, 6) =
+    Divides/antisym(p, q);
+
+let _a_common_divisor_divides_the_remainder: Divides(3, 21 % 12) =
+    Divides/rem(@3, 21, 12, Divides/intro(7, Eq/refl()), Divides/intro(4, Eq/refl()));

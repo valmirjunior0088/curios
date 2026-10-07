@@ -3,6 +3,8 @@ use /std/{Nat, Int, Bool, Flt, Option, Test};
 
 mod products;
 
+mod euclid;
+
 test nat_powers_divisors_logarithms_and_roots_compute =
     Test/equal(
         [

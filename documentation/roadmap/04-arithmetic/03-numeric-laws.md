@@ -10,11 +10,10 @@ It waits on no other spec.
 - **Conversion decides the carriers' algebra** ([A law is decided where it neither respells nor invents](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md)): the sum normal form, Euclid's identity and the remainder's bound, a comparison through its difference, `Nat/to_int` as an ordered-semiring embedding, `shl(x, k)` as `x * pow(2, k)`, a sum in an exponent as a product, a power of a base at least one as at least one, and what is declared of `min`, `max`, `abs` and `sign`.
 - **The elaborator proves a linear step from the facts in scope** ([A bound that follows from the facts in scope is proved by the elaborator](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)), a quotient's bounds, a product of two facts and the cases of `min`, `max`, `abs` and `sign` among them. Its goal is a `<` or a `<=`, so an equation is `le/antisym` over two of them.
 - **Totality reads an arithmetic descent from a guard** ([Totality of the erased program](../../design/soundness/totality-of-the-erased-program.md)): `n / k` is below `n` where an enclosing arm rules `n`'s zero out, and a hypothesis is no such arm.
-- **The library** has `/std/Nat/DivMod/of`, which hands back `/`'s quotient and `%`'s remainder with Euclid's identity and the bound; `/std/Nat/Divides` with `refl`, `trans`, `zero`, `one`, `add`, `mul` and `of_rem`; `/std/WellFounded/recurse` over `WellFounded/lt`; `/std/Int`'s `Sign` view with `trichotomy` and `eq_of_eql`; and the laws a hypothesis decides `min`, `max`, `abs` and `sign` by.
+- **The library** has `/std/Nat/DivMod/of`, which hands back `/`'s quotient and `%`'s remainder with Euclid's identity and the bound, and `DivMod/unique`, by which a quotient and a remainder that satisfy both are those two; `/std/Nat/Divides` with `refl`, `trans`, `zero`, `one`, `add`, `mul`, `sub`, `antisym`, its two bridges to a zero remainder, `of_rem` and `to_rem`, the exact quotient `exact` and the remainder's divisor `rem`; `/std/WellFounded/recurse` over `WellFounded/lt`; `/std/Int`'s `Sign` view with `trichotomy` and `eq_of_eql`; and the laws a hypothesis decides `min`, `max`, `abs` and `sign` by.
 
 ## The gap
 
-- **`Divides(d, n)` does not give a zero remainder.** `(k * d) % d` at a symbolic `d` is neither conversion's nor the elaborator's, so `of_rem` has no converse and a quotient under `Divides` has no law.
 - **No type may mention a greatest common divisor.** `/std/Nat/gcd` recurses on a remainder, which totality does not grade, so a type that reaches it is refused as not known to terminate (`curios`'s `tests::numeric::arithmetic_tests`). No proposition says two numbers are coprime or a fraction reduced.
 - **Nothing strips a number's factors of two with a proof.** `/std/Dyadic/normalized` does it with `Nat/and`, `Nat/xor`, `Nat/log2` and `Int/shr`, none of which the logic reads, so the odd mantissa it answers is a fact no type states. `Nat/log2` carries no bound, and a power of a power or of a product has no lemma.
 - **`ord` carries no law** at `Nat` or at `Int`: that it answers `eq` exactly at an equation, and `lt` and `gt` exactly at their comparisons, is unstated.
@@ -42,14 +41,6 @@ It waits on no other spec.
 ## Stages
 
 Each lands alone and is one commit.
-
-**Stage 1 — Euclid on `Nat`.** Serves [exact rationals](04-exact-rationals.md)' stages 1 and 4.
-
-- `DivMod/unique`: a `q` and an `r` with `n = q * d + r` and `r < d` are `n / d` and `n % d`. It is what every Euclidean argument ends in.
-- `Divides/to_rem`, the converse of `of_rem`, and `Divides/exact`: under `Divides(d, n)` and a positive `d`, `n` is `(n / d) * d`.
-- `Divides/sub`, a divisor of a sum and of one summand divides the other; `Divides/rem`, a common divisor of a dividend and its divisor divides the remainder; and `Divides/antisym`.
-
-Check: each law at its boundaries as type-level rows of `curios-std`'s `numeric` unit, a zero dividend, a divisor of one, a dividend below its divisor and an exact multiple with its neighbours.
 
 **Stage 2 — `Gcd` and `Coprime`.** Serves [exact rationals](04-exact-rationals.md)' stages 1 and 4.
 

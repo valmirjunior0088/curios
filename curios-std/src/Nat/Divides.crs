@@ -1,11 +1,13 @@
 use /std/{Nat, Eq};
-use /std/Bool/{Holds};
+use /std/Bool/{True, Holds};
 
 --- That `d` divides `n`: some multiple of `d` is `n`.
 pub induct Divides(d: Nat, n: Nat): pub Prop
 --- `n` is `k` copies of `d`.
 | intro(k: Nat, e: Eq()(n, k * d))
 end
+
+pub use Divides/*;
 
 --- `d` divides itself.
 pub let refl(d: Nat) -> Divides(d, d) =
@@ -46,10 +48,48 @@ pub let mul(@d: Nat, @a: Nat, p: Divides(d, a), c: Nat) -> Divides(d, a * c) =
     | intro(k, e) => Divides/intro(k * c, Eq/subst((x: Nat) => Eq()(a * c, x * c), e, Eq/refl()))
     end;
 
-let zero_of_eql(x: Nat, h: Holds(x == 0)) -> Eq()(x, 0) =
-    match x
-    | 0 => Eq/refl()
-    | _ + 1 => match h end
+--- A divisor of a sum and of one of its summands divides the other.
+---
+--- With `a + b` as `k` copies of `d` and `a` as `m` of them, `b` is the `k - m` left, where `m <= k`. Where it is not, `d` is zero: one copy more than `k` would already pass the sum, so the copies weigh nothing and `b` is zero, which everything divides.
+pub let sub(@d: Nat, @a: Nat, @b: Nat, p: Divides(d, a + b), q: Divides(d, a)) -> Divides(d, b) =
+    match p
+    | intro(k, e) =>
+        match q
+        | intro(m, f) =>
+            let sum: Eq()(m * d + b, k * d) = Eq/trans(Eq/cong((x: Nat) => x + b, Eq/sym(f)), e);
+            match m <= k
+            | true =>
+                let split: Eq()(m + (k - m), k) = Nat/le/add_sub_cancel(m, k, True/qed());
+                let spread: Eq()(m * d + b, (m + (k - m)) * d) =
+                    Eq/subst((x: Nat) => Eq()(m * d + b, x * d), Eq/sym(split), sum);
+                Divides/intro(k - m, Eq/cong((x: Nat) => x - m * d, spread))
+            | false =>
+                let grown: Holds((k + 1) * d <= m * d) =
+                    Nat/le/mul_mono_r(@k + 1, @m, d, True/proved());
+                Divides/intro(0, Nat/le/antisym(b, 0, True/proved(), True/qed()))
+            end
+        end
+    end;
+
+--- Two numbers that divide each other are one number.
+pub let antisym(@a: Nat, @b: Nat, p: Divides(a, b), q: Divides(b, a)) -> Eq()(a, b) =
+    match p
+    | intro(k, e) =>
+        match q
+        | intro(m, f) =>
+            match k
+            | 0 =>
+                let gone: Eq()(b, 0) = e;
+                Eq/trans(Eq/subst((x: Nat) => Eq()(a, m * x), gone, f), Eq/sym(gone))
+            | kp + 1 =>
+                match m
+                | 0 =>
+                    let gone: Eq()(a, 0) = f;
+                    Eq/trans(gone, Eq/sym(Eq/subst((x: Nat) => Eq()(b, (kp + 1) * x), gone, e)))
+                | _ + 1 => Nat/le/antisym(a, b, True/proved(), True/proved())
+                end
+            end
+        end
     end;
 
 --- A zero remainder is a divisor: `n % d == 0` gives `Divides(d, n)`, the quotient as the witness.
@@ -64,5 +104,52 @@ pub let of_rem(
         Nat/div(n, d, @ok),
         Eq/subst(
             (r: Nat) => Eq()(n, Nat/div(n, d, @ok) * d + r),
-            zero_of_eql(Nat/rem(n, d, @ok), h),
+            Nat/eq_of_eql(Nat/rem(n, d, @ok), 0, h),
             joined));
+
+--- A divisor leaves no remainder: `Divides(d, n)` gives `n % d == 0`, the converse of [`of_rem`].
+---
+--- A multiple's remainder by a symbolic divisor is zero by neither reduction nor the facts in scope; it is [`Nat/DivMod/unique`] at the multiplier and a remainder of zero.
+pub let to_rem(
+    n: Nat,
+    d: Nat,
+    @ok: Holds(0 < d),
+    p: Divides(d, n),
+) -> Holds(Nat/rem(n, d, @ok) == 0) =
+    match p
+    | intro(k, e) =>
+        Eq/subst(
+            (r: Nat) => Holds(r == 0),
+            Nat/DivMod/unique(n, d, k, 0, e, True/proved()).remainder,
+            True/qed())
+    end;
+
+--- A quotient by a divisor is exact: under `Divides(d, n)`, `n` is `n / d` copies of `d`.
+---
+--- What the evidence buys of `/`, which is the quotient either way: the multiple with nothing left over.
+pub let exact(
+    n: Nat,
+    d: Nat,
+    @ok: Holds(0 < d),
+    p: Divides(d, n),
+) -> Eq()(n, Nat/div(n, d, @ok) * d) =
+    match p
+    | intro(k, e) =>
+        Eq/subst(
+            (x: Nat) => Eq()(n, x * d),
+            Nat/DivMod/unique(n, d, k, 0, e, True/proved()).quotient,
+            e)
+    end;
+
+--- A common divisor of a dividend and its divisor divides the remainder.
+---
+--- The dividend is the divisor's multiple and the remainder, by Euclid's identity, and a divisor of the first two divides the third by [`sub`]: the step Euclid's algorithm takes.
+pub let rem(
+    @d: Nat,
+    a: Nat,
+    b: Nat,
+    @ok: Holds(0 < b),
+    p: Divides(d, a),
+    q: Divides(d, b),
+) -> Divides(d, Nat/rem(a, b, @ok)) =
+    sub(@d, @b * Nat/div(a, b, @ok), @Nat/rem(a, b, @ok), p, mul(q, Nat/div(a, b, @ok)));
