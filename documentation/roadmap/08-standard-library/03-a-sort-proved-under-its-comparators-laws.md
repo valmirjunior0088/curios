@@ -15,9 +15,7 @@ It waits on no other spec.
 
 ## The gap
 
-- **`List/sort` stops at five thousand elements and costs the square of its input.** `insert_by` (`curios-std/src/List.crs`) recurses under a cons as deep as the place it inserts at: counted at `bf21a9065`, under the stack a program then ran on, 4,500 descending elements sort and 5,000 stop on `wasm trap: call stack exhausted`. Each insertion peels the list the one before it extended, the rope's quadratic alternation, so a list already in order costs what any other does. `sort` has no caller outside `curios-std`'s `tests/`.
-- **What the sort promises is held by eight examples**, four in `tests/aggregates/list.crs` and four in `tests/flt.crs`. Nothing states that its answer is its input rearranged, that it is in order, or that elements the comparator ties keep their order, which its documentation promises.
-- **No comparator in `/std` has a stated law.** That `Nat/ord` answers `gt` one way exactly where it answers `lt` the other is provable and unstated, and [the numeric laws](../04-arithmetic/03-numeric-laws.md) state it at `Nat` and `Int`.
+- **No comparator in `/std` has a stated law, so the sort's theorem is read at no type's own order.** That `Nat/ord` answers `gt` one way exactly where it answers `lt` the other is provable and unstated, as it is of `Bytes/ord` and `Str/ord`, and [the numeric laws](../04-arithmetic/03-numeric-laws.md) state it at `Nat` and `Int`.
 
 ## Prior art
 
@@ -39,34 +37,7 @@ It waits on no other spec.
 
 ## Stages
 
-Each lands alone and is one commit. What the theorem is stated in has landed: `/std/List/Permutation` and `/std/List/Member`, `/std/List/ordered` and `/std/List/Pairwise`, and `/std/Ord`'s `Flips`, `Transitive`, `le` and `then`.
-
-**Stage 3 — the sort.** `/std/List/sort_by` holds the function and its theorem, and `/std/List/sort` its reading at `Ord/ord`.
-
-```crs
-pub let permuted(@T: Type, l: List(T), ord: (T, T) -> Ordering) -> Permutation()(l, sort_by(l, ord))
-
-pub let ordered(
-    @T: Type,
-    ord: (T, T) -> Ordering,
-    flips: Ord/Flips(ord),
-    second: (T, T) -> Bool,
-    l: List(T),
-    given: Pairwise(second)(l),
-) -> Holds(List/ordered(sort_by(l, ord), Ord/then(ord, second)))
-
-pub let sorted(
-    @T: Type,
-    ord: (T, T) -> Ordering,
-    flips: Ord/Flips(ord),
-    l: List(T),
-) -> Holds(List/ordered(sort_by(l, ord), Ord/le(ord)))
-```
-
-- The merge's four facts: it permutes its accumulator and its two runs; it is its accumulator followed by the merge into none; an element below both runs' heads is below the merge's; and two runs in order by `Ord/then(ord, second)`, every element of the first standing in `second` to every element of the second, merge into one in that order.
-- The stack's three invariants, kept by a push and by the final flush: its runs flattened with the input left are a permutation of the input; each run is in order; and every element of the runs beneath stands in `second` to every element of a run and of the input left.
-
-Check: the `aggregates` unit sorts 100,000 elements in ascending, descending and scattered order, the eight examples stand, and it holds a closed sort by `Eq/refl()` and its order by `True/qed()`.
+Each lands alone and is one commit. What the theorem is stated in has landed: `/std/List/Permutation` and `/std/List/Member`, `/std/List/ordered` and `/std/List/Pairwise`, and `/std/Ord`'s `Flips`, `Transitive`, `le` and `then`. The sort has landed with its theorem: `/std/List/sort_by` is the merge sort, with `permuted`, `ordered` and `sorted`, and `/std/List/sort` reads the three at `Ord/ord`.
 
 **Stage 4 — the laws the sort is used at.** `Nat/ord/flips`, taken from [the numeric laws](../04-arithmetic/03-numeric-laws.md) where they have landed and written here otherwise; `Bytes/ord/flips` and `Str/ord/flips`; and `sort`'s three theorems.
 

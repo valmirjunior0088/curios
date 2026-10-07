@@ -1,0 +1,700 @@
+use /std/{List, Bool, Option, Eq, Ordering, Ord};
+use /std/Bool/{True, Holds};
+use /std/List/{Member, Permutation, Pairwise};
+
+-- `a` and `b` merged behind `acc`, an element of `a` first where `ord` ties the two heads.
+--
+-- A tail call that appends to what it has built and never reads it: a run is built whole before the next merge reads it, so a merge costs its length, and its depth is constant. Each call peels one list and keeps the other, which totality grades.
+let merge(@T: Type, ord: (T, T) -> Ordering, a: List(T), b: List(T), acc: List(T)) -> List(T) =
+    match a
+    | [] => [..acc, ..b]
+    | [x, ..xs] =>
+        match b
+        | [] => [..acc, ..a]
+        | [y, ..ys] =>
+            match ord(x, y)
+            | gt() => merge(ord, a, ys, [..acc, y])
+            | _ => merge(ord, xs, b, [..acc, x])
+            end
+        end
+    end;
+
+-- A run pushed onto the stack of runs, the newest on top. A level holds one run or none, as a binary counter holds a digit: a run that meets one of its own level merges with it, the older on the left, and carries to the next.
+let push(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    stack: List(Option(List(T))),
+    run: List(T),
+) -> List(Option(List(T))) =
+    match stack
+    | [] => [Option/some(run)]
+    | [top, ..rest] =>
+        match top
+        | none() => [Option/some(run), ..rest]
+        | some(older) => [Option/none(), ..push(ord, rest, merge(ord, older, run, []))]
+        end
+    end;
+
+-- Every run left on the stack merged into `newer`, each older run on the left.
+let flush(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    stack: List(Option(List(T))),
+    newer: List(T),
+) -> List(T) =
+    match stack
+    | [] => newer
+    | [top, ..rest] =>
+        match top
+        | none() => flush(ord, rest, newer)
+        | some(run) => flush(ord, rest, merge(ord, run, newer, []))
+        end
+    end;
+
+-- Each element of `rest` pushed as a run of one, and the stack flushed at the end.
+let drive(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    stack: List(Option(List(T))),
+    rest: List(T),
+) -> List(T) =
+    match rest | [] => flush(ord, stack, []) | [h, ..t] => drive(ord, push(ord, stack, [h]), t) end;
+
+--- `l` sorted by `ord`, stably: elements `ord` ties keep the order they came in.
+---
+--- A merge sort over a stack of runs, so it costs `n log n` comparisons and its depth is the logarithm of its input. Its answer is a permutation of `l` whatever `ord` is, by `permuted`, and in order under `Ord/Flips(ord)`, by `ordered` and `sorted`.
+pub let sort_by(@T: Type, l: List(T), ord: (T, T) -> Ordering) -> List(T) =
+    drive(ord, [], l);
+
+-- What a level of the stack holds.
+let held(@T: Type, top: Option(List(T))) -> List(T) =
+    match top | none() => [] | some(run) => run end;
+
+-- The stack's runs end to end, the oldest first.
+let flat(@T: Type, stack: List(Option(List(T)))) -> List(T) =
+    match stack | [] => [] | [top, .._]; below => [..below, ..held(top)] end;
+
+-- A merge permutes what it was given.
+let merge_permutes(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    a: List(T),
+    b: List(T),
+    acc: List(T),
+) -> Permutation()([..acc, ..a, ..b], merge(ord, a, b, acc)) =
+    match a: (m) =>
+        (b: List(T), acc: List(T)) -> Permutation()([..acc, ..m, ..b], merge(ord, m, b, acc))
+    | [] => (b, acc) => Permutation/refl([..acc, ..b])
+    | [x, ..xs]; iha =>
+        (b, acc) =>
+            match b: (n) =>
+                (acc: List(T)) -> Permutation()(
+                    [..acc, x, ..xs, ..n],
+                    merge(ord, [x, ..xs], n, acc))
+            | [] => (acc) => Permutation/refl([..acc, x, ..xs])
+            | [y, ..ys]; ihb =>
+                (acc) =>
+                    match ord(x, y)
+                    | gt() =>
+                        Permutation/trans(
+                            Permutation/prefixed(acc, Permutation/fronted(y, [x, ..xs], ys)),
+                            ihb([..acc, y]))
+                    | lt() => iha([y, ..ys], [..acc, x])
+                    | eq() => iha([y, ..ys], [..acc, x])
+                    end
+            end(acc)
+    end(b, acc);
+
+-- A merge behind `acc` is `acc` followed by the merge behind nothing, which is how every other fact reads it.
+let merge_accumulates(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    a: List(T),
+    b: List(T),
+    acc: List(T),
+) -> Eq()(merge(ord, a, b, acc), [..acc, ..merge(ord, a, b, [])]) =
+    match a: (m) =>
+        (b: List(T), acc: List(T)) -> Eq()(merge(ord, m, b, acc), [..acc, ..merge(ord, m, b, [])])
+    | [] => (_, _) => Eq/refl()
+    | [x, ..xs]; iha =>
+        (b, acc) =>
+            match b: (n) =>
+                (acc: List(T)) -> Eq()(
+                    merge(ord, [x, ..xs], n, acc),
+                    [..acc, ..merge(ord, [x, ..xs], n, [])])
+            | [] => (_) => Eq/refl()
+            | [y, ..ys]; ihb =>
+                (acc) =>
+                    match ord(x, y)
+                    | gt() =>
+                        Eq/trans(
+                            ihb([..acc, y]),
+                            Eq/sym(Eq/cong((r: List(T)) => [..acc, ..r], ihb([y]))))
+                    | lt() =>
+                        Eq/trans(
+                            iha([y, ..ys], [..acc, x]),
+                            Eq/sym(Eq/cong((r: List(T)) => [..acc, ..r], iha([y, ..ys], [x]))))
+                    | eq() =>
+                        Eq/trans(
+                            iha([y, ..ys], [..acc, x]),
+                            Eq/sym(Eq/cong((r: List(T)) => [..acc, ..r], iha([y, ..ys], [x]))))
+                    end
+            end(acc)
+    end(b, acc);
+
+-- An element that leads both runs leads their merge.
+let merge_leads(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    le: (T, T) -> Bool,
+    z: T,
+    a: List(T),
+    b: List(T),
+    za: Holds(List/ordered/leads(le, z, a)),
+    zb: Holds(List/ordered/leads(le, z, b)),
+) -> Holds(List/ordered/leads(le, z, merge(ord, a, b, []))) =
+    match a
+    | [] => zb
+    | [x, ..xs] =>
+        match b
+        | [] => za
+        | [y, ..ys] =>
+            match ord(x, y)
+            | gt() =>
+                Eq/subst(
+                    (r: List(T)) => Holds(List/ordered/leads(le, z, r)),
+                    Eq/sym(merge_accumulates(ord, [x, ..xs], ys, [y])),
+                    zb)
+            | lt() =>
+                Eq/subst(
+                    (r: List(T)) => Holds(List/ordered/leads(le, z, r)),
+                    Eq/sym(merge_accumulates(ord, xs, [y, ..ys], [x])),
+                    za)
+            | eq() =>
+                Eq/subst(
+                    (r: List(T)) => Holds(List/ordered/leads(le, z, r)),
+                    Eq/sym(merge_accumulates(ord, xs, [y, ..ys], [x])),
+                    za)
+            end
+        end
+    end;
+
+-- Every element of `a` stands in `second` to every element of `b`.
+let Across(@T: Type, second: (T, T) -> Bool, a: List(T), b: List(T)) -> Prop =
+    (x: T, y: T, Member()(x, a), Member()(y, b)) -> Holds(second(x, y));
+
+-- Two runs in order by `ord` and then `second`, the first across from the second, merge into one in that order.
+--
+-- Where `ord` puts the second run's head first, the flip puts it below the first run's; where it ties the two heads, the first run's goes first and `second` holds between them, the runs standing across.
+let merge_ordered(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    flips: Ord/Flips(ord),
+    second: (T, T) -> Bool,
+    a: List(T),
+    b: List(T),
+    sa: Holds(List/ordered(a, Ord/then(ord, second))),
+    sb: Holds(List/ordered(b, Ord/then(ord, second))),
+    across: Across(second, a, b),
+) -> Holds(List/ordered(merge(ord, a, b, []), Ord/then(ord, second))) =
+    let le = Ord/then(ord, second);
+    match a: (m) =>
+        (
+            b: List(T),
+            sa: Holds(List/ordered(m, le)),
+            sb: Holds(List/ordered(b, le)),
+            across: Across(second, m, b)) -> Holds(List/ordered(merge(ord, m, b, []), le))
+    | [] => (_, _, sb, _) => sb
+    | [x, ..xs]; iha =>
+        (b, sa, sb, across) =>
+            match b: (n) =>
+                (sb: Holds(List/ordered(n, le)), across: Across(second, [x, ..xs], n)) -> Holds(
+                    List/ordered(merge(ord, [x, ..xs], n, []), le))
+            | [] => (_, _) => sa
+            | [y, ..ys]; ihb =>
+                (sb, across) =>
+                    match ord(x, y)
+                    | gt() =>
+                        let below: Holds(le(y, x)) =
+                            Eq/subst(
+                                (o: Ordering) =>
+                                    Holds(
+                                        match o
+                                        | lt() => true
+                                        | eq() => second(y, x)
+                                        | gt() => false
+                                        end),
+                                Eq/sym(flips(x, y)),
+                                True/qed());
+                        let rest =
+                            ihb(
+                                List/ordered/tail(le, y, ys, sb),
+                                (u, v, iu, iv) => across(u, v, iu, Member/there(iv)));
+                        let lead =
+                            merge_leads(
+                                ord,
+                                le,
+                                y,
+                                [x, ..xs],
+                                ys,
+                                below,
+                                List/ordered/head(le, y, ys, sb));
+                        Eq/subst(
+                            (r: List(T)) => Holds(List/ordered(r, le)),
+                            Eq/sym(merge_accumulates(ord, [x, ..xs], ys, [y])),
+                            List/ordered/cons(le, y, merge(ord, [x, ..xs], ys, []), lead, rest))
+                    | lt() =>
+                        let rest =
+                            iha(
+                                [y, ..ys],
+                                List/ordered/tail(le, x, xs, sa),
+                                sb,
+                                (u, v, iu, iv) => across(u, v, Member/there(iu), iv));
+                        let lead =
+                            merge_leads(
+                                ord,
+                                le,
+                                x,
+                                xs,
+                                [y, ..ys],
+                                List/ordered/head(le, x, xs, sa),
+                                True/qed());
+                        Eq/subst(
+                            (r: List(T)) => Holds(List/ordered(r, le)),
+                            Eq/sym(merge_accumulates(ord, xs, [y, ..ys], [x])),
+                            List/ordered/cons(le, x, merge(ord, xs, [y, ..ys], []), lead, rest))
+                    | eq() =>
+                        let rest =
+                            iha(
+                                [y, ..ys],
+                                List/ordered/tail(le, x, xs, sa),
+                                sb,
+                                (u, v, iu, iv) => across(u, v, Member/there(iu), iv));
+                        let lead =
+                            merge_leads(
+                                ord,
+                                le,
+                                x,
+                                xs,
+                                [y, ..ys],
+                                List/ordered/head(le, x, xs, sa),
+                                across(x, y, Member/here(), Member/here()));
+                        Eq/subst(
+                            (r: List(T)) => Holds(List/ordered(r, le)),
+                            Eq/sym(merge_accumulates(ord, xs, [y, ..ys], [x])),
+                            List/ordered/cons(le, x, merge(ord, xs, [y, ..ys], []), lead, rest))
+                    end
+            end(sb, across)
+    end(b, sa, sb, across);
+
+-- What lies across from two runs lies across from their merge, a merge holding no element its runs did not.
+let across_merged(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    second: (T, T) -> Bool,
+    under: List(T),
+    a: List(T),
+    b: List(T),
+    over_a: Across(second, under, a),
+    over_b: Across(second, under, b),
+) -> Across(second, under, merge(ord, a, b, [])) =
+    (u, v, iu, iv) =>
+        Member/split(
+            a,
+            Permutation/member(Permutation/sym(merge_permutes(ord, a, b, [])), iv),
+            (ia) => over_a(u, v, iu, ia),
+            (ib) => over_b(u, v, iu, ib));
+
+-- A push keeps the stack's elements: its runs end to end are the old ones and the new run, rearranged.
+let push_permutes(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    stack: List(Option(List(T))),
+    run: List(T),
+) -> Permutation()([..flat(stack), ..run], flat(push(ord, stack, run))) =
+    match stack: (s) => (run: List(T)) -> Permutation()([..flat(s), ..run], flat(push(ord, s, run)))
+    | [] => (run) => Permutation/refl(run)
+    | [top, ..rest]; ih =>
+        (run) =>
+            match top
+            | none() => Permutation/refl([..flat(rest), ..run])
+            | some(older) =>
+                Permutation/trans(
+                    Permutation/prefixed(flat(rest), merge_permutes(ord, older, run, [])),
+                    ih(merge(ord, older, run, [])))
+            end
+    end(run);
+
+-- A flush keeps them too.
+let flush_permutes(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    stack: List(Option(List(T))),
+    newer: List(T),
+) -> Permutation()([..flat(stack), ..newer], flush(ord, stack, newer)) =
+    match stack: (s) =>
+        (newer: List(T)) -> Permutation()([..flat(s), ..newer], flush(ord, s, newer))
+    | [] => (newer) => Permutation/refl(newer)
+    | [top, ..rest]; ih =>
+        (newer) =>
+            match top
+            | none() => ih(newer)
+            | some(run) =>
+                Permutation/trans(
+                    Permutation/prefixed(flat(rest), merge_permutes(ord, run, newer, [])),
+                    ih(merge(ord, run, newer, [])))
+            end
+    end(newer);
+
+-- The stack's runs and the input left are, at every step, the answer rearranged.
+let drive_permutes(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    stack: List(Option(List(T))),
+    rest: List(T),
+) -> Permutation()([..flat(stack), ..rest], drive(ord, stack, rest)) =
+    match rest: (m) =>
+        (stack: List(Option(List(T)))) -> Permutation()([..flat(stack), ..m], drive(ord, stack, m))
+    | [] => (stack) => flush_permutes(ord, stack, [])
+    | [h, ..t]; ih =>
+        (stack) =>
+            Permutation/trans(
+                Permutation/suffixed(t, push_permutes(ord, stack, [h])),
+                ih(push(ord, stack, [h])))
+    end(stack);
+
+--- The sort's answer is its input rearranged, whatever `ord` is.
+pub let permuted(
+    @T: Type,
+    l: List(T),
+    ord: (T, T) -> Ordering,
+) -> Permutation()(l, sort_by(l, ord)) =
+    drive_permutes(ord, [], l);
+
+-- Whether every run the stack holds is in order.
+let runs_ordered(@T: Type, le: (T, T) -> Bool, stack: List(Option(List(T)))) -> Bool =
+    match stack
+    | [] => true
+    | [top, ..rest] =>
+        match List/ordered(held(top), le) | true => runs_ordered(le, rest) | false => false end
+    end;
+
+let runs_cons(
+    @T: Type,
+    le: (T, T) -> Bool,
+    top: Option(List(T)),
+    rest: List(Option(List(T))),
+    first: Holds(List/ordered(held(top), le)),
+    others: Holds(runs_ordered(le, rest)),
+) -> Holds(runs_ordered(le, [top, ..rest])) =
+    match List/ordered(held(top), le)
+    | true => others
+    | false => match first end
+    end;
+
+let runs_head(
+    @T: Type,
+    le: (T, T) -> Bool,
+    top: Option(List(T)),
+    rest: List(Option(List(T))),
+    whole: Holds(runs_ordered(le, [top, ..rest])),
+) -> Holds(List/ordered(held(top), le)) =
+    match List/ordered(held(top), le)
+    | true => True/qed()
+    | false => match whole end
+    end;
+
+let runs_tail(
+    @T: Type,
+    le: (T, T) -> Bool,
+    top: Option(List(T)),
+    rest: List(Option(List(T))),
+    whole: Holds(runs_ordered(le, [top, ..rest])),
+) -> Holds(runs_ordered(le, rest)) =
+    match List/ordered(held(top), le)
+    | true => whole
+    | false => match whole end
+    end;
+
+-- Every run lies across from the runs beneath it, which are the elements that came before its own.
+induct Layered(@T: Type, second: (T, T) -> Bool): (List(Option(List(T)))) -> Prop
+| bottom(): ([])
+| level(
+    @top: Option(List(T)),
+    @rest: List(Option(List(T))),
+    over: Across(second, flat(rest), held(top)),
+    below: Layered(second)(rest)): ([top, ..rest])
+end
+
+let layered_over(
+    @T: Type,
+    @second: (T, T) -> Bool,
+    @top: Option(List(T)),
+    @rest: List(Option(List(T))),
+    layered: Layered(second)([top, ..rest]),
+) -> Across(second, flat(rest), held(top)) =
+    match layered: (s, _) =>
+        match s: (_) => Prop | [] => True | [t, ..r] => Across(second, flat(r), held(t)) end
+    | bottom() => True/qed()
+    | level(over, _) => over
+    end;
+
+let layered_below(
+    @T: Type,
+    @second: (T, T) -> Bool,
+    @top: Option(List(T)),
+    @rest: List(Option(List(T))),
+    layered: Layered(second)([top, ..rest]),
+) -> Layered(second)(rest) =
+    match layered: (s, _) => match s: (_) => Prop | [] => True | [_, ..r] => Layered(second)(r) end
+    | bottom() => True/qed()
+    | level(_, below) => below
+    end;
+
+-- A push keeps the stack layered, under a run the stack lies across from.
+let push_layered(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    second: (T, T) -> Bool,
+    stack: List(Option(List(T))),
+    run: List(T),
+    layered: Layered(second)(stack),
+    across: Across(second, flat(stack), run),
+) -> Layered(second)(push(ord, stack, run)) =
+    match stack: (s) =>
+        (
+            run: List(T),
+            layered: Layered(second)(s),
+            across: Across(second, flat(s), run)) -> Layered(second)(push(ord, s, run))
+    | [] =>
+        (run, _, _) =>
+            let nothing: Across(second, [], run) = (_, _, iu, _) => match Member/absent(iu) end;
+            Layered/level(nothing, Layered/bottom())
+    | [top, ..rest]; ih =>
+        (run, layered, across) =>
+            match top
+            | none() => Layered/level(across, layered_below(layered))
+            | some(older) =>
+                let merged = merge(ord, older, run, []);
+                let nothing: Across(second, flat(push(ord, rest, merged)), []) =
+                    (_, _, _, iv) => match Member/absent(iv) end;
+                Layered/level(
+                    nothing,
+                    ih(
+                        merged,
+                        layered_below(layered),
+                        across_merged(
+                            ord,
+                            second,
+                            flat(rest),
+                            older,
+                            run,
+                            layered_over(layered),
+                            (u, v, iu, iv) => across(u, v, Member/left(older, iu), iv))))
+            end
+    end(run, layered, across);
+
+-- A push keeps every run in order, under a run in order that the stack lies across from.
+let push_ordered(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    flips: Ord/Flips(ord),
+    second: (T, T) -> Bool,
+    stack: List(Option(List(T))),
+    run: List(T),
+    runs: Holds(runs_ordered(Ord/then(ord, second), stack)),
+    one: Holds(List/ordered(run, Ord/then(ord, second))),
+    layered: Layered(second)(stack),
+    across: Across(second, flat(stack), run),
+) -> Holds(runs_ordered(Ord/then(ord, second), push(ord, stack, run))) =
+    let le = Ord/then(ord, second);
+    match stack: (s) =>
+        (
+            run: List(T),
+            runs: Holds(runs_ordered(le, s)),
+            one: Holds(List/ordered(run, le)),
+            layered: Layered(second)(s),
+            across: Across(second, flat(s), run)) -> Holds(runs_ordered(le, push(ord, s, run)))
+    | [] => (run, _, one, _, _) => runs_cons(le, Option/some(run), [], one, True/qed())
+    | [top, ..rest]; ih =>
+        (run, runs, one, layered, across) =>
+            match top
+            | none() =>
+                runs_cons(le, Option/some(run), rest, one, runs_tail(le, Option/none(), rest, runs))
+            | some(older) =>
+                let merged = merge(ord, older, run, []);
+                runs_cons(
+                    le,
+                    Option/none(),
+                    push(ord, rest, merged),
+                    True/qed(),
+                    ih(
+                        merged,
+                        runs_tail(le, Option/some(older), rest, runs),
+                        merge_ordered(
+                            ord,
+                            flips,
+                            second,
+                            older,
+                            run,
+                            runs_head(le, Option/some(older), rest, runs),
+                            one,
+                            (u, v, iu, iv) => across(u, v, Member/right(flat(rest), iu), iv)),
+                        layered_below(layered),
+                        across_merged(
+                            ord,
+                            second,
+                            flat(rest),
+                            older,
+                            run,
+                            layered_over(layered),
+                            (u, v, iu, iv) => across(u, v, Member/left(older, iu), iv))))
+            end
+    end(run, runs, one, layered, across);
+
+-- A flush of a stack whose runs are in order and layered, into a run in order it lies across from, is in order.
+let flush_ordered(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    flips: Ord/Flips(ord),
+    second: (T, T) -> Bool,
+    stack: List(Option(List(T))),
+    newer: List(T),
+    runs: Holds(runs_ordered(Ord/then(ord, second), stack)),
+    one: Holds(List/ordered(newer, Ord/then(ord, second))),
+    layered: Layered(second)(stack),
+    across: Across(second, flat(stack), newer),
+) -> Holds(List/ordered(flush(ord, stack, newer), Ord/then(ord, second))) =
+    let le = Ord/then(ord, second);
+    match stack: (s) =>
+        (
+            newer: List(T),
+            runs: Holds(runs_ordered(le, s)),
+            one: Holds(List/ordered(newer, le)),
+            layered: Layered(second)(s),
+            across: Across(second, flat(s), newer)) -> Holds(List/ordered(flush(ord, s, newer), le))
+    | [] => (_, _, one, _, _) => one
+    | [top, ..rest]; ih =>
+        (newer, runs, one, layered, across) =>
+            match top
+            | none() =>
+                ih(
+                    newer,
+                    runs_tail(le, Option/none(), rest, runs),
+                    one,
+                    layered_below(layered),
+                    across)
+            | some(run) =>
+                ih(
+                    merge(ord, run, newer, []),
+                    runs_tail(le, Option/some(run), rest, runs),
+                    merge_ordered(
+                        ord,
+                        flips,
+                        second,
+                        run,
+                        newer,
+                        runs_head(le, Option/some(run), rest, runs),
+                        one,
+                        (u, v, iu, iv) => across(u, v, Member/right(flat(rest), iu), iv)),
+                    layered_below(layered),
+                    across_merged(
+                        ord,
+                        second,
+                        flat(rest),
+                        run,
+                        newer,
+                        layered_over(layered),
+                        (u, v, iu, iv) => across(u, v, Member/left(run, iu), iv)))
+            end
+    end(newer, runs, one, layered, across);
+
+-- The whole drive, from a stack in order and layered that lies across from an input pairwise in `second`.
+let drive_ordered(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    flips: Ord/Flips(ord),
+    second: (T, T) -> Bool,
+    stack: List(Option(List(T))),
+    rest: List(T),
+    runs: Holds(runs_ordered(Ord/then(ord, second), stack)),
+    layered: Layered(second)(stack),
+    across: Across(second, flat(stack), rest),
+    given: Pairwise(second)(rest),
+) -> Holds(List/ordered(drive(ord, stack, rest), Ord/then(ord, second))) =
+    let le = Ord/then(ord, second);
+    match rest: (m) =>
+        (
+            stack: List(Option(List(T))),
+            runs: Holds(runs_ordered(le, stack)),
+            layered: Layered(second)(stack),
+            across: Across(second, flat(stack), m),
+            given: Pairwise(second)(m)) -> Holds(List/ordered(drive(ord, stack, m), le))
+    | [] =>
+        (stack, runs, layered, across, _) =>
+            flush_ordered(ord, flips, second, stack, [], runs, True/qed(), layered, across)
+    | [h, .._]; ih =>
+        (stack, runs, layered, across, given) =>
+            let one: Across(second, flat(stack), [h]) =
+                (u, _, iu, iv) =>
+                    Member/uncons(
+                        iv,
+                        (e) =>
+                            Eq/subst(
+                                (k: T) => Holds(second(u, k)),
+                                Eq/sym(e),
+                                across(u, h, iu, Member/here())),
+                        (none) => match Member/absent(none) end);
+            ih(
+                push(ord, stack, [h]),
+                push_ordered(ord, flips, second, stack, [h], runs, True/qed(), layered, one),
+                push_layered(ord, second, stack, [h], layered, one),
+                (u, v, iu, iv) =>
+                    Member/split(
+                        flat(stack),
+                        Permutation/member(Permutation/sym(push_permutes(ord, stack, [h])), iu),
+                        (old) => across(u, v, old, Member/there(iv)),
+                        (new) =>
+                            Member/uncons(
+                                new,
+                                (e) =>
+                                    Eq/subst(
+                                        (k: T) => Holds(second(k, v)),
+                                        Eq/sym(e),
+                                        Pairwise/head(given)(v, iv)),
+                                (none) => match Member/absent(none) end)),
+                Pairwise/tail(given))
+    end(stack, runs, layered, across, given);
+
+--- Over a list in order by `second` at every pair, the sort's answer is in order by `ord` and then by `second`, at adjacent elements, under `ord`'s flip.
+---
+--- The one theorem of the sort's order. At a `second` that always holds it says the answer is in order, which is `sorted`. At a `second` that is an earlier sort's order it says two sorts in a row order by both keys, the later first. And it is what stable means: among the elements `ord` ties, whatever order `second` names of the input, the answer keeps.
+pub let ordered(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    flips: Ord/Flips(ord),
+    second: (T, T) -> Bool,
+    l: List(T),
+    given: Pairwise(second)(l),
+) -> Holds(List/ordered(sort_by(l, ord), Ord/then(ord, second))) =
+    let nothing: Across(second, [], l) = (_, _, iu, _) => match Member/absent(iu) end;
+    drive_ordered(ord, flips, second, [], l, True/qed(), Layered/bottom(), nothing, given);
+
+-- The relation that always holds, and every list pairwise in it.
+let always(@T: Type, _: T, _: T) -> Bool =
+    true;
+
+let pairwise_always(@T: Type, l: List(T)) -> Pairwise((a: T, b: T) => always(a, b))(l) =
+    match l: (m) => Pairwise((a: T, b: T) => always(a, b))(m)
+    | [] => Pairwise/empty()
+    | [_, .._]; ih => Pairwise/cons((_, _) => True/qed(), ih)
+    end;
+
+--- The sort's answer is in order by `ord`, under `ord`'s flip.
+pub let sorted(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    flips: Ord/Flips(ord),
+    l: List(T),
+) -> Holds(List/ordered(sort_by(l, ord), Ord/le(ord))) =
+    ordered(ord, flips, (a, b) => always(a, b), l, pairwise_always(l));

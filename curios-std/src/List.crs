@@ -20,6 +20,14 @@ pub use ordered/{let ordered};
 pub mod Pairwise;
 pub use Pairwise/{let Pairwise};
 
+--- A stable sort by a comparator, with its theorem: the answer is the input rearranged, and in order under the comparator's flip.
+pub mod sort_by;
+pub use sort_by/{let sort_by};
+
+--- A stable sort by a type's own order, and `sort_by`'s theorem read at it.
+pub mod sort;
+pub use sort/{let sort};
+
 --- The element at `i`, or `none` past the end.
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
     match i < len(a) | true => Option/some(get(a, i)) | false => Option/none() end;
@@ -170,20 +178,6 @@ pub let each(@M: (Type) -> Type, @T: Type, use Monad(M), l: List(T), f: (T) -> M
         let _ = f(h)!;
         each(t, f)
     end;
-
-let insert_by(@T: Type, x: T, sorted: List(T), ord: (T, T) -> Ordering) -> List(T) =
-    match sorted
-    | [] => [x]
-    | [h, ..t] => match ord(x, h) | gt() => [h, ..insert_by(x, t, ord)] | _ => [x, h, ..t] end
-    end;
-
---- A stable sort by `ord`.
-pub let sort_by(@T: Type, l: List(T), ord: (T, T) -> Ordering) -> List(T) =
-    match l | [] => [] | [h, .._]; sorted => insert_by(h, sorted, ord) end;
-
---- A stable sort by `T`'s order.
-pub let sort(@T: Type, use Ord(T), l: List(T)) -> List(T) =
-    sort_by(l, (a, b) => Ord/ord(a, b));
 
 --- `n` singles combined as a balanced tree, so `combine` nests to a depth of `log2(n)` rather than `n`. Each single is asked for with the proof that its index is below `n`, so a caller indexing `n` elements reads them without a default.
 ---

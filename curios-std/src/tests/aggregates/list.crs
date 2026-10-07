@@ -1,6 +1,6 @@
 -- The `List` functions every peer ships: structural predicates and searches, the fold-shaped builders, `traverse` over a monad, and the stable sort.
 use /std/{Nat, Str, Bool, List, Option, Eq, Ord, Ordering, Test};
-use /std/Bool/{Holds};
+use /std/Bool/{True, Holds};
 use /std/List/{Member, Permutation, Pairwise};
 
 test predicates_and_searches_answer_over_the_elements =
@@ -53,7 +53,7 @@ test traverse_collects_under_a_monad =
         Test/equal(List/traverse([2, 4, 6], halve), Option/some([1, 2, 3])),
         Test/equal(List/traverse([2, 3, 6], halve), Option/none())]);
 
--- The sort is the `; ih` right fold inserting before equals, which is what makes it stable: the two `1`s keep their order, and `sort_by` under a reversed comparator reverses the distinct keys while equal keys still keep theirs.
+-- The sort merges runs, the older on the left, and takes from the left where the comparator ties, which is what makes it stable: the two `1`s keep their order, and `sort_by` under a reversed comparator reverses the distinct keys while equal keys still keep theirs.
 test sort_is_stable_and_sort_by_takes_a_comparator =
     let pairs = [(2, "b"), (1, "x"), (2, "a"), (1, "y")];
     Test/all([
@@ -108,3 +108,68 @@ let _adjacent_order_reaches_every_pair(
     given: Holds(List/ordered(l, le)),
 ) -> Pairwise(le)(l) =
     Pairwise/of_ordered(le, carries, l, given);
+
+let counted(n: Nat, each: (Nat) -> Nat) -> List(Nat) =
+    let go(i: Nat, left: Nat, acc: List(Nat)) -> List(Nat) =
+        match left | 0 => acc | fewer + 1 => go(i + 1, fewer, [..acc, each(i)]) end;
+    go(0, n, []);
+
+let whole_and_in_order(l: List(Nat)) -> Test =
+    let sorted = List/sort(l);
+    Test/all([
+        Test/equal(List/len(sorted), List/len(l)),
+        Test/assert(List/ordered(sorted, Ord/le(Nat/ord)))]);
+
+-- A hundred thousand elements, which a sort as deep as its input or as costly as its square does not answer for: already in order, in reverse, and scattered.
+test sort_answers_at_a_hundred_thousand_elements_in_any_order =
+    Test/all([
+        whole_and_in_order(counted(100000, (i) => i)),
+        whole_and_in_order(counted(100000, (i) => 99999 - i)),
+        whole_and_in_order(counted(100000, (i) => (i * 7919 + 13) % 100003))]);
+
+-- The sort descends on its lists' structure alone, so a closed sort computes in a type and its order is decided there.
+let _a_closed_sort_computes: Eq()(List/sort_by([3, 1, 2, 1], Nat/ord), [1, 1, 2, 3]) =
+    Eq/refl();
+
+let _a_closed_sort_is_in_order: Holds(
+    List/ordered(List/sort_by([3, 1, 2, 1], Nat/ord), Ord/le(Nat/ord))) =
+    True/qed();
+
+-- The theorem's two statements, each over any comparator: the answer is the input rearranged, under no law, and it is in order under the comparator's flip.
+let _a_sort_rearranges_under_any_comparator(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    l: List(T),
+) -> Permutation()(l, List/sort_by(l, ord)) =
+    List/sort_by/permuted(l, ord);
+
+let _a_sort_is_in_order_under_the_flip(
+    @T: Type,
+    ord: (T, T) -> Ordering,
+    flips: Ord/Flips(ord),
+    l: List(T),
+) -> Holds(List/ordered(List/sort_by(l, ord), Ord/le(ord))) =
+    List/sort_by/sorted(ord, flips, l);
+
+-- What stable buys: a list sorted by one comparator and then by another is in order by the second, and by the first among what the second ties.
+let _two_sorts_order_by_both_keys(
+    @T: Type,
+    later: (T, T) -> Ordering,
+    earlier: (T, T) -> Ordering,
+    later_flips: Ord/Flips(later),
+    earlier_flips: Ord/Flips(earlier),
+    earlier_carries: Ord/Transitive(Ord/le(earlier)),
+    l: List(T),
+) -> Holds(
+    List/ordered(List/sort_by(List/sort_by(l, earlier), later), Ord/then(later, Ord/le(earlier)))) =
+    let once = List/sort_by(l, earlier);
+    List/sort_by/ordered(
+        later,
+        later_flips,
+        Ord/le(earlier),
+        once,
+        Pairwise/of_ordered(
+            Ord/le(earlier),
+            earlier_carries,
+            once,
+            List/sort_by/sorted(earlier, earlier_flips, l)));
