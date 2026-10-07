@@ -414,10 +414,12 @@ let step(@spec: List(Arg), w: Walk(spec), tokens: List(Str)) -> Result(Failure, 
         end
     end;
 
+-- Not local to `field`: a local definition takes one level, and `field` reads a `Value` under each of `Kind`'s.
+let read_with(name: Str, v: Value, s: Str) -> Result(Failure, v.A) =
+    Result/map_failure(v.read(s), (reason) => Failure/bad_value(name, reason));
+
 let field(name: Str, k: Kind, occurrences: List(Str)) -> Result(Failure, KindCarrier(k)) =
     let last_of = List/last(occurrences);
-    let read_with(v: Value, s: Str) -> Result(Failure, v.A) =
-        Result/map_failure(v.read(s), (reason) => Failure/bad_value(name, reason));
     match k
     | flag() => Result/success(match occurrences | [] => false | [_, .._] => true end)
     | option(v, presence) =>
@@ -425,25 +427,28 @@ let field(name: Str, k: Kind, occurrences: List(Str)) -> Result(Failure, KindCar
         | required() =>
             match last_of
             | none() => Result/failure(Failure/missing_required(name))
-            | some(s) => read_with(v, s)
+            | some(s) => read_with(name, v, s)
             end
         | optional() =>
             match last_of
             | none() => Result/success(Option/none())
             | some(s) =>
-                let a = read_with(v, s)!;
+                let a = read_with(name, v, s)!;
                 Result/success(Option/some(a))
             end
         | default(fallback) =>
-            match last_of | none() => Result/success(fallback) | some(s) => read_with(v, s) end
+            match last_of
+            | none() => Result/success(fallback)
+            | some(s) => read_with(name, v, s)
+            end
         end
-    | many(v) => List/traverse(occurrences, (s) => read_with(v, s))
+    | many(v) => List/traverse(occurrences, (s) => read_with(name, v, s))
     | positional(v) =>
         match last_of
         | none() => Result/failure(Failure/missing_required(name))
-        | some(s) => read_with(v, s)
+        | some(s) => read_with(name, v, s)
         end
-    | rest(v) => List/traverse(occurrences, (s) => read_with(v, s))
+    | rest(v) => List/traverse(occurrences, (s) => read_with(name, v, s))
     end;
 
 let fill(@spec: List(Arg), slots: Slots(spec)) -> Result(Failure, Values(spec)) =
