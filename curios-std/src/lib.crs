@@ -193,9 +193,9 @@ pub use State/{let State};
 pub mod Vec;
 pub use Vec/{let Vec};
 
---- A map keyed on the byte string a `Key` witness produces.
+--- A map from keys of one type to values, built and read under the `Key` dictionary its type names.
 ---
---- The key type is forgotten: the byte string is the identity, so two key types encoding alike are the same key, and the keys handed back are `Bytes`. A `Key` witness proves its encoding injective.
+--- A key is held as it went in and handed back at its own type, in the order of the keys' encodings, which a `Key` witness proves injective. A map under another dictionary is a value of another type, and `rekey` moves one across.
 pub mod Map;
 pub use Map/{let Map};
 
