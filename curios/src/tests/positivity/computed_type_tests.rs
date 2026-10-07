@@ -136,7 +136,7 @@ fn a_constructor_payload_a_self_calling_rec_computes_is_admitted() {
 
 // A user's own refinement over a packed carrier — the shape the corpus fixture `/big_nat` declares, with nothing of `BigNat` in it: a struct field whose proposition applies a self-calling fold to an earlier field.
 //
-// The cost is the walk's, not the declaration checker's: put a type error in a later item and the diagnostic arrives, because the module fold stops before the whole-module passes run. Nothing here turns on how much native stack a thread has, and the tree sets none anywhere. What keeps a fold clear of this shape is the contrast in the test below.
+// The cost is the positivity walk's, not the declaration checker's, and it is spent where the declaration is published, on a budget restored for that walk. Nothing here turns on how much native stack a thread has, and the tree sets none anywhere. What keeps a fold clear of this shape is the contrast in the test below.
 #[test]
 fn a_refinement_field_over_a_self_calling_fold_is_admitted() {
     let source = r#"

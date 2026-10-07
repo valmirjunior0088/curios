@@ -35,7 +35,7 @@ pub(crate) struct Program {
     witness_table: BTreeMap<(Global, WitnessKey), Witness>,
     /// The witnesses the unit declares that have not finished elaborating, each under the key its signature is spelled at. With the table this is every witness a question about a concept is answered by, whichever of them has elaborated: the table alone holds the ones that have, and an answer read off it would follow the order items elaborate in.
     declared: BTreeMap<Global, Declared>,
-    /// Each definition's totality, recorded as it is defined. The whole-module pass recomputes these post-zonk; this copy exists so a type position can be refused *before* it is reduced, which is the only point at which a non-productive type-level loop can still be diagnosed rather than run.
+    /// Each definition's totality: recorded as it is defined, for the rest of its own declaration to read, and again over its final terms as its item is published, which is the verdict every other declaration reads and its stamp carries. Kept here so a type position can be refused *before* it is reduced, which is the only point at which a non-productive type-level loop can still be diagnosed rather than run.
     totality: BTreeMap<Global, Totality>,
     /// Every prefix this compilation mounts — the scope's, then the unit's own. Accumulated as each module is seeded, from the `mounts` that module carries, so the elaborator answers a privilege question out of what was actually mounted rather than out of a stamp copied onto each declaration.
     mounts: Vec<Mount>,
@@ -300,7 +300,7 @@ impl Program {
 
     /// Record a definition's totality the moment it is defined.
     ///
-    /// The whole-module pass computes the same verdicts by a fixpoint, and needs one because it sees every item at once. Here the items arrive in dependency order, so everything a definition mentions is already classified and one pass per definition suffices.
+    /// A declaration elaborates after what it reads, so everything a definition mentions outside its own group is already classified and one pass per definition suffices.
     pub(crate) fn record_definition_totality(&mut self, name: &Global, totality: Totality) {
         self.totality.insert(*name, totality);
     }

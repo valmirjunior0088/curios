@@ -24,10 +24,10 @@ mod derive;
 pub(crate) use derive::*;
 
 mod positivity;
-pub use positivity::*;
+use positivity::*;
 
 mod variance;
-pub use variance::*;
+use variance::*;
 
 mod totality;
 pub use totality::*;

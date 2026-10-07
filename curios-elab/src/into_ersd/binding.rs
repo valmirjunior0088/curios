@@ -11,6 +11,8 @@ impl Lowering {
     /// Erase every top-level item, in dominance order among themselves (see [`dominance_order`]).
     ///
     /// A module carries only its own items: what an earlier erasure established arrives as bindings the environment already holds, so there is no prefix here to start past.
+    ///
+    /// Each item is erased on a budget restored for it, as it was elaborated on one: whether an item erases is a fact about that item, never about what the items before it spent.
     pub(super) fn erase_items(
         &mut self,
         context: &mut Context,
@@ -18,6 +20,7 @@ impl Lowering {
     ) -> Result<(), Error> {
         for index in dominance_order(module) {
             let item = &module.items[index];
+            context.restore_budget();
             self.types.clear();
             match item {
                 Item::Let(definition) => {

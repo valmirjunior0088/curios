@@ -1,11 +1,11 @@
 //! The elaborator's driver for the shared variance analysis: when it runs, and where its vectors live.
 //!
-//! The analysis itself lives in `curios-analysis/src/variance.rs` (see that module for the rule and its rationale) and is run by both checkers. It runs here twice, for one reason each. When a family's group finalizes, because a later item of the same unit may compare two of its instances: that vector is kept on the context's registry entry, and it is the one the unit carries. And over the zonked module, where the telescopes are final and meta-free: that run writes nothing and holds the carried vector to what the declarations say.
+//! The analysis itself lives in `curios-analysis/src/variance.rs` (see that module for the rule and its rationale) and is run by both checkers. It runs here twice for each declaration, for one reason each. When a family's group finalizes, because a later item of the same declaration may compare two of its instances: that vector is kept on the context's registry entry, and it is the one the unit carries. And as the declaration is published, where its telescopes are final and meta-free: that run writes nothing and holds the carried vector to what the declaration says.
 
 use {
-    super::{Context, Error, zonk_solved_term_metas},
+    super::{Context, Error, Published, zonk_solved_term_metas},
     curios_analysis::{Declarations, VarianceVectors, variance_vectors},
-    curios_core::{Families, Global, InductDecl, InductParam, Module, StructDecl, Variance},
+    curios_core::{Families, Global, InductDecl, InductParam, StructDecl, Variance},
     std::collections::BTreeMap,
 };
 
@@ -78,27 +78,35 @@ pub(crate) fn record_variances(context: &mut Context, names: &[Global]) {
     }
 }
 
-/// Recompute every vector of `module` over its zonked declarations and hold the one each entry carries to it.
+/// Recompute the vector of each entry `published` declares over its zonked telescopes and hold the one the entry carries to it.
 ///
-/// `module` is exactly the declaration set to analyze, and anything outside it answers from this context's registry, for the reason [`check_positivity`](super::check_positivity) gives. The carried vector is the one taken as the family's group finalized, and it stays: the unit's later items were compared under it, so a stored unit hands a later compile the reading its own items had and a reused family is read as a re-elaborated one is. What this run decides is that it claims no irrelevance the final telescopes deny. It may claim less, a telescope having held a metavariable since solved, and that family is counted rather than rewritten.
-pub fn check_variance(context: &mut Context, module: &Module) -> Result<(), Error> {
+/// The entries of one declaration are exactly the set to analyze, and anything outside it answers from this context's registry, for the reason [`decide_polarities`](super::decide_polarities) gives. The carried vector is the one taken as the family's group finalized, and it stays: the declaration's later items were compared under it, so a stored unit hands a later compile the reading its own items had and a reused family is read as a re-elaborated one is. What this run decides is that it claims no irrelevance the final telescopes deny. It may claim less, a telescope having held a metavariable since solved, and that family is counted rather than rewritten.
+///
+/// A reduction the budget refused reads its term as mentioning every level, so a denial that follows one may be the budget's alone, and the budget is what is reported.
+pub(crate) fn hold_variances(context: &mut Context, published: &Published) -> Result<(), Error> {
+    if published.induct_decls.is_empty() && published.struct_decls.is_empty() {
+        return Ok(());
+    }
+
     curios_profile::profile!("check_variance");
-    let VarianceVectors { vectors, .. } = variance_vectors(
-        context,
-        Declarations::of(&module.induct_decls, &module.struct_decls),
-    );
+    let inducts = published
+        .induct_decls
+        .iter()
+        .cloned()
+        .collect::<BTreeMap<_, _>>();
+    let structs = published
+        .struct_decls
+        .iter()
+        .cloned()
+        .collect::<BTreeMap<_, _>>();
+    let VarianceVectors { vectors, exhausted } =
+        variance_vectors(context, Declarations::of(&inducts, &structs));
 
     let carried = |name: &Global| {
-        module
-            .induct_decls
+        inducts
             .get(name)
             .map(|declaration| &declaration.variances)
-            .or_else(|| {
-                module
-                    .struct_decls
-                    .get(name)
-                    .map(|declaration| &declaration.variances)
-            })
+            .or_else(|| structs.get(name).map(|declaration| &declaration.variances))
     };
 
     for (name, settled) in &vectors {
@@ -109,9 +117,12 @@ pub fn check_variance(context: &mut Context, module: &Module) -> Result<(), Erro
             *carried == Variance::Irrelevant && *settled == Variance::Invariant
         });
         if let Some(level) = denied {
-            return Err(Error::UniverseInvariant(format!(
-                "{name}: universe level {level} is carried as irrelevant, and its declaration mentions it"
-            )));
+            return Err(match exhausted {
+                Some((walked, error)) => error.in_declaration(&walked.symbol(), Some(&walked)),
+                None => Error::UniverseInvariant(format!(
+                    "{name}: universe level {level} is carried as irrelevant, and its declaration mentions it"
+                )),
+            });
         }
     }
     curios_profile::sample!(

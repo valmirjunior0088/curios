@@ -388,7 +388,7 @@ impl Context {
         Rc::clone(&self.checked_site)
     }
 
-    /// Read the recorded terms without consuming them — obligation (T) reads them first, and (V) drains afterwards.
+    /// Read the recorded terms without consuming them — obligation (T) reads them first, and (V) takes them afterwards.
     pub(crate) fn checked(&self) -> &[(Term, Term, Rc<str>)] {
         &self.checked
     }
@@ -650,9 +650,9 @@ impl Context {
         self.program.seed_totality(inherited);
     }
 
-    /// Drain the recorded terms. The gate takes them once per module.
-    pub(crate) fn take_checked(&mut self) -> Vec<(Term, Term, Rc<str>)> {
-        mem::take(&mut self.checked)
+    /// Take the terms recorded since `mark`: a published declaration's, or the entry's, which (V) reads last.
+    pub(crate) fn split_checked(&mut self, mark: usize) -> Vec<(Term, Term, Rc<str>)> {
+        self.checked.split_off(mark)
     }
 
     /// Mint a binder nothing else can name, rendering as `hint`.
@@ -775,7 +775,7 @@ impl Context {
         Consumption::new(self.budget - self.remaining.get(), self.peak_depth.get())
     }
 
-    /// The heaviest declaration this context has elaborated, including the one in progress.
+    /// The heaviest single judgment this context has made, the one in progress included: a declaration's elaboration, or one of the judgments of its final terms, each of which spends a budget restored for it (`Context::restore_budget`).
     ///
     /// The counterpart of `curios-cert`'s `Kernel::heaviest_declaration` on the other side of the seam — the two are deliberately the same shape, because comparing them is the point. An observation for a measurement; nothing in elaboration reads it.
     pub fn heaviest_declaration(&self) -> Consumption {

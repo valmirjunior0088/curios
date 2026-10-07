@@ -44,7 +44,7 @@ impl FlatLet {
             name: self.name,
             kind: self.kind,
             universe_context: curios_core::UniverseContext::empty(),
-            // Lowering cannot know this. `curios_elab::record_totality` computes the definition's totality after elaboration and zonking and writes it back here.
+            // Lowering cannot know this. Elaboration computes the definition's totality over its final terms, as its item is published, and writes it here.
             totality: curios_core::Totality::default(),
             type_: self.type_,
             body: self.body,

@@ -32,7 +32,8 @@ pub(super) struct Cycle(Vec<usize>);
 
 /// What one attempt at a declaration made of each of its items, held until the attempt is known to stand.
 enum Outcome {
-    Kept(Item),
+    /// The item as it was published, with the erasure obligations it breaks.
+    Kept(Item, Vec<Error>),
     /// The item as it elaborated and where it holds the goals it wrote, which are reported in its place.
     Held(Item, Vec<GoalSite>),
     Refused(Error),
@@ -262,8 +263,8 @@ impl<'a> Demand<'a> {
                 }
                 let member = ItemMark::begin(context);
                 match elaborate_module_item(context, item) {
-                    Ok(Elaborated::Published(elaborated)) => {
-                        outcomes.push(Outcome::Kept(elaborated));
+                    Ok(Elaborated::Published { item, obligations }) => {
+                        outcomes.push(Outcome::Kept(item, obligations));
                     }
                     Ok(Elaborated::Held {
                         item: elaborated,
@@ -297,8 +298,9 @@ impl<'a> Demand<'a> {
                 for (position, outcome) in items.iter().zip(outcomes) {
                     let item = &module.items[*position];
                     match outcome {
-                        Outcome::Kept(elaborated) => {
-                            self.survivors.keep(ItemStamp(*position), elaborated);
+                        Outcome::Kept(elaborated, obligations) => {
+                            self.survivors
+                                .keep(ItemStamp(*position), elaborated, obligations);
                         }
                         Outcome::Held(elaborated, sites) => {
                             self.survivors.drop_item(item);

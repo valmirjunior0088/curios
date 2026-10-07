@@ -1,4 +1,4 @@
-//! What the erased half of a program reaches: obligation (T)'s seeding, and the closure both obligations share.
+//! What the erased half of a program names: obligation (T)'s seeding, and the seeds both obligations ask the verdicts of.
 //!
 //! **(T)** is seeded here, from every type position, and takes the *aggressive* reading: everything a type reaches must be total, not merely the values a type-level eliminator scrutinizes. The narrow reading is unsound, because a *total* type-level function applied to a *partial value* reties the negative knot that strict positivity exists to forbid.
 //!
@@ -6,17 +6,17 @@
 //!
 //! Neither obligation subsumes the other. The type-level `rec` route violates only (T); the partial-carrier and `exit` routes violate only (V).
 //!
-//! The closure follows a definition into its **body**, not only its type. That is easy to overlook and load-bearing, for the same `Canonical` reason.
+//! A seed's verdict covers its **body**, not only its type: a definition is partial where anything it mentions is, through either. That is easy to overlook and load-bearing, for the same `Canonical` reason.
 //!
-//! The module in hand is one unit's own, so a predecessor unit's definition is a sink of this relation. That is sound for the same reason it is sound for positivity — a predecessor cannot mention a successor — and it is why partiality persists on the definition rather than being recomputed.
+//! The module in hand holds one declaration's item, or none beside a program's entry, so every definition it names has finished and is a sink of this relation. That is sound for the same reason it is sound for positivity — a finished declaration cannot mention this one — and it is why partiality persists on the definition rather than being recomputed.
 
 use {
     curios_core::{
         Bound, Definition, Enter, Entrypoint, Func, FuncType, Global, Intrinsic, Item, Let, Match,
-        Module, Rec, Struct, Subterm, Telescope, Term, Totality, Variant,
+        Module, Rec, Struct, Subterm, Telescope, Term, Variant,
     },
     std::{
-        collections::{BTreeMap, BTreeSet, HashSet},
+        collections::{BTreeSet, HashSet},
         rc::Rc,
     },
 };
@@ -93,39 +93,6 @@ pub(crate) fn seeds(positions: &[Position]) -> BTreeSet<Global> {
         mark(&position.term, &mut seeds);
     }
     seeds
-}
-
-/// Close `seeds` over the definitions they name, following each into both its type and its body.
-pub(crate) fn reachable(module: &Module, seeds: BTreeSet<Global>) -> BTreeSet<Global> {
-    let bodies = definitions(module)
-        .map(|definition| {
-            // Both halves borrowed and filtered straight into the result, rather than cloned, unioned, and filtered — three sets per definition where one suffices, over every definition, once per obligation.
-            let named = definition
-                .type_
-                .free_vars_shared()
-                .iter()
-                .chain(definition.body.free_vars_shared())
-                .filter_map(|free| free.as_global().cloned())
-                .collect::<BTreeSet<_>>();
-            (definition.name, named)
-        })
-        .collect::<BTreeMap<_, _>>();
-
-    let mut reached = seeds;
-    let mut frontier = reached.iter().cloned().collect::<Vec<_>>();
-    while let Some(name) = frontier.pop() {
-        let Some(named) = bodies.get(&name) else {
-            // Outside the module under analysis, which means some predecessor unit declares it — the archived prelude, or a unit compiled earlier in this same fold. Either way its own closure was settled when *it* was checked, and `Definition::totality` already folds that closure into the flag the caller reads: partial means something partial is reachable. So not following it is the same answer, not a gap.
-            continue;
-        };
-        for next in named {
-            if reached.insert(*next) {
-                frontier.push(*next);
-            }
-        }
-    }
-
-    reached
 }
 
 /// Every top-level definition in the module, `let` and `rec` alike.
@@ -243,22 +210,6 @@ fn annotate_node(term: &Term, site: &Rc<str>, positions: &mut Vec<Position>) -> 
     }
 
     Enter::Descend
-}
-
-/// One reachability answer: which partial definitions the seeds reach.
-pub(crate) fn offenders(
-    reached: &BTreeSet<Global>,
-    classified: &BTreeMap<Global, Totality>,
-) -> Vec<Global> {
-    reached
-        .iter()
-        .filter(|name| {
-            classified
-                .get(*name)
-                .is_some_and(|totality| !totality.is_total())
-        })
-        .cloned()
-        .collect()
 }
 
 /// Why one position fails its obligation.

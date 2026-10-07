@@ -1,6 +1,6 @@
 //! The elaborator's driver for the shared size-change totality analysis.
 //!
-//! The analysis itself lives in `curios-analysis/src/totality.rs` (see that module for the size-change principle and its rationale) and is run by both checkers; what belongs here is the driving: seeding the two erased-half obligations — (T) from written type positions, (V) from the proof positions elaboration recorded — and classifying every top-level definition transitively against the group verdicts, with diverging host calls and inherited prelude partiality folded in.
+//! The analysis itself lives in `curios-analysis/src/totality.rs` (see that module for the size-change principle and its rationale) and is run by both checkers; what belongs here is the driving, a declaration at a time as each is published: classifying its definitions against the group verdicts, with diverging host calls and the partiality of what they mention folded in, and seeding the two erased-half obligations — (T) from its written type positions, (V) from the proof positions its elaboration recorded.
 //!
 //! Rejection is a **classification, not an error**. `/std/Async` is corecursive, `/std/Json/decode`'s parsers are nullary and productive, and the corpus fixture's `/big_nat/convert/to_str_go` recurses on a computed quotient; none passes this check and none needs to. They stay usable everywhere erasure keeps them. Only [`crate::check_type_totality`] and [`crate::check_proof_totality`] turn a `Partial` classification into a rejection, and only for the positions that erase.
 
@@ -28,9 +28,9 @@ use {
     },
 };
 
-/// Classify one definition against the verdicts already recorded, and record it, by the rule [`classify_module`] states.
+/// Classify one definition against the verdicts already recorded, and record it, by the rule `stamp_totality` states, while its declaration is still elaborating: what the rest of that declaration reads it by, so a written type or a bound that names it is refused by name before it is reduced. The verdict every other declaration reads is the one `stamp_totality` records as the item is published.
 ///
-/// The whole-module pass needs a fixpoint because it sees every item at once. Items arrive here in dependency order, so everything a definition mentions is already classified and a single pass suffices. A name with no verdict is a member of the group currently elaborating, which [`group_totality`] settles for the group as a whole.
+/// Everything a definition mentions outside its own group has finished, so it is already classified and a single pass suffices. A name with no verdict is a member of the group currently elaborating, which [`group_totality`] settles for the group as a whole.
 pub fn record_definition_totality(
     context: &mut Context,
     definition: &Definition,
@@ -102,112 +102,75 @@ pub fn check_written_type_totality(
     }
 }
 
-/// Every top-level definition's totality.
+/// Classify a published item and stamp each of its definitions with the verdict: the one write of a definition's [`Definition::totality`].
 ///
-/// Group rejection is only the local part. A definition is also `Partial` if it calls a host row that diverges — which erasure drops, so an exit behind a nullary proof never fires — or if it mentions anything already `Partial`. That last clause is a transitive closure, and it is what makes the flag a usable cross-module summary: "this prelude definition is partial" means something partial is in its closure, so a user proof mentioning it inherits the same.
+/// Group rejection is only the local part. A definition is also `Partial` if it calls a host row that diverges — which erasure drops, so an exit behind a nullary proof never fires — or if it mentions anything already `Partial`. That last clause is a transitive closure, and it is what makes the flag a usable summary across declarations and across units: "this definition is partial" means something partial is in its closure, so a proof mentioning it inherits the same.
 ///
-/// `inherited` carries the totality of definitions `module` references but does not define — its predecessor units'. Because each of its flags is already a closure, the walk stops at that boundary instead of re-analyzing the standard library on every compilation. Pass an empty map when `module` is the whole program.
-pub fn classify_module(
-    context: &mut Context,
-    module: &Module,
-    inherited: &BTreeMap<Global, Totality>,
-) -> Result<BTreeMap<Global, Totality>, Error> {
-    let mut local: BTreeMap<Global, bool> = BTreeMap::new();
-    let mut mentions: BTreeMap<Global, BTreeSet<Global>> = BTreeMap::new();
-    // One cache for the whole module: definitions share subterms heavily, and a node classified for one is classified for all.
-    let mut memo = LocalMemo::new();
-
-    for item in &module.items {
-        match item {
-            Item::Let(definition) => {
-                let partial = definition_is_locally_partial(context, definition, &mut memo)?;
-                local.insert(definition.name, partial);
-                mentions.insert(definition.name, definition.mentions());
-            }
-            Item::Rec(rec) => {
-                let rejected = group_totality(context, &rec.group)? == Totality::Partial;
-                for definition in rec.definitions() {
-                    let partial =
-                        rejected || definition_is_locally_partial(context, &definition, &mut memo)?;
-                    local.insert(definition.name, partial);
-                    mentions.insert(definition.name, definition.mentions());
-                }
-            }
-        }
-    }
-
-    let mut partial: BTreeSet<Global> = local
-        .iter()
-        .filter(|(_, value)| **value)
-        .map(|(name, _)| *name)
-        .collect();
-
-    // A name neither defined here nor inherited is treated as total. Every `Global` a zonked module mentions is defined either in it or in one of the units it was elaborated against, and `inherited` is flattened over all of them — so that case is unreachable rather than an approximation, whatever the scope holds.
-    let reaches_partial = |partial: &BTreeSet<Global>, reached: &BTreeSet<Global>| {
-        reached.iter().any(|other| {
-            partial.contains(other)
-                || inherited
-                    .get(other)
-                    .is_some_and(|totality| !totality.is_total())
-        })
+/// Runs as the item is published, where its terms are final and meta-free, so no metavariable can be solved to a partial term after the fact. Everything the item mentions outside itself has finished, a declaration elaborating after what it reads, so its verdict is recorded and is a closure already, and the walk stops there: at a predecessor unit's definition, which is why the standard library is not analyzed again on every compilation, and at an earlier declaration's of this unit alike. Among the members of one group the closure is iterated, since each may mention the others. A name with no verdict is treated as total: every `Global` a published item mentions is defined by a finished declaration or by the item itself, so that case is unreachable rather than an approximation.
+pub(crate) fn stamp_totality(context: &mut Context, item: &mut Item) -> Result<(), Error> {
+    curios_profile::profile!("record_totality");
+    // A group that does not descend makes every member partial, whatever each body looks like on its own.
+    let rejected = match &*item {
+        Item::Let(_) => false,
+        Item::Rec(rec) => group_totality(context, &rec.group)? == Totality::Partial,
     };
-
+    let definitions = item.definitions();
+    let own = definitions
+        .iter()
+        .map(|definition| definition.name)
+        .collect::<BTreeSet<_>>();
+    // One cache for the item: its definitions share subterms, and a node classified for one is classified for all.
+    let mut memo = LocalMemo::new();
+    let mut partial = BTreeSet::new();
+    let mut mentions = Vec::with_capacity(definitions.len());
+    for definition in &definitions {
+        let named = definition.mentions();
+        let reaches_partial = named.iter().any(|name| {
+            !own.contains(name)
+                && context
+                    .definition_totality(name)
+                    .is_some_and(|totality| !totality.is_total())
+        });
+        if rejected
+            || reaches_partial
+            || definition_is_locally_partial(context, definition, &mut memo)?
+        {
+            partial.insert(definition.name);
+        }
+        mentions.push((definition.name, named));
+    }
     loop {
-        let mut changed = false;
-        for (name, reached) in &mentions {
-            if partial.contains(name) {
-                continue;
-            }
-            if reaches_partial(&partial, reached) {
+        let before = partial.len();
+        for (name, named) in &mentions {
+            if named.iter().any(|other| partial.contains(other)) {
                 partial.insert(*name);
-                changed = true;
             }
         }
-        if !changed {
+        if partial.len() == before {
             break;
         }
     }
 
-    Ok(local
-        .keys()
-        .map(|name| {
-            let totality = match partial.contains(name) {
-                true => Totality::Partial,
-                false => Totality::Total,
-            };
-            (*name, totality)
-        })
-        .collect())
-}
-
-/// Classify `module` and stamp each definition's [`Definition::totality`].
-///
-/// Runs post-zonk, beside [`crate::check_positivity`], and for the same reason: the terms it reads are final and meta-free here, so no metavariable can be solved to a partial term after the fact.
-///
-/// This is the only place the flag is written, and both gates read what it wrote rather than re-deriving it — classification reduces, so doing it once per module is the difference between one pass over the group corpus and three.
-pub fn record_totality(
-    context: &mut Context,
-    module: &mut Module,
-    inherited: &BTreeMap<Global, Totality>,
-) -> Result<(), Error> {
-    curios_profile::profile!("record_totality");
-    let classified = classify_module(context, module, inherited)?;
-    let of = |name: &Global| classified.get(name).copied().unwrap_or_default();
-
-    for item in &mut module.items {
-        match item {
-            Item::Let(definition) => definition.totality = of(&definition.name),
-            Item::Rec(rec) => {
-                for member in &mut rec.definitions {
-                    member.totality = of(&member.name);
-                }
+    let of = |name: &Global| match partial.contains(name) {
+        true => Totality::Partial,
+        false => Totality::Total,
+    };
+    for name in &own {
+        context.record_definition_totality(name, of(name));
+    }
+    match item {
+        Item::Let(definition) => definition.totality = of(&definition.name),
+        Item::Rec(rec) => {
+            for member in &mut rec.definitions {
+                member.totality = of(&member.name);
             }
         }
     }
+
     Ok(())
 }
 
-/// The totality [`record_totality`] stamped onto every definition in `module`.
+/// The totality `stamp_totality` stamped onto every definition in `module`.
 ///
 /// This is how the replay path inherits the prelude's verdicts: the archive stores the stamped module, so a user compilation reads the flags instead of re-analyzing the standard library.
 pub fn recorded_totality(module: &Module) -> BTreeMap<Global, Totality> {
@@ -227,28 +190,19 @@ pub fn recorded_totality(module: &Module) -> BTreeMap<Global, Totality> {
     recorded
 }
 
-/// The verdict for every name in play: `module`'s own stamps over `inherited`.
-fn settled(module: &Module, inherited: &BTreeMap<Global, Totality>) -> BTreeMap<Global, Totality> {
-    let mut settled = inherited.clone();
-    settled.extend(recorded_totality(module));
-    settled
-}
-
 /// Every way the given positions fail to be total, with the site of each.
 ///
-/// Two ways, and a position can fail either: it reaches a definition already classified `Partial`, or it *is* partial with no name to blame — an inline `rec` that does not descend, or a call to a host row that diverges.
-fn faults(
-    context: &mut Context,
-    module: &Module,
-    positions: &[Position],
-    inherited: &BTreeMap<Global, Totality>,
-) -> Result<Vec<(String, Fault)>, Error> {
+/// Two ways, and a position can fail either: it names a definition classified `Partial`, or it *is* partial with no name to blame — an inline `rec` that does not descend, or a call to a host row that diverges. A verdict is a closure already ([`stamp_totality`]), so what a position reaches through a total definition is total, and the definitions it names are all there is to ask.
+fn faults(context: &mut Context, positions: &[Position]) -> Result<Vec<(String, Fault)>, Error> {
     curios_profile::sample!("totality::faults_positions", positions.len());
-    let seeded = seeds(positions);
-    let reached = reachable(module, seeded);
-    curios_profile::sample!("totality::reached", reached.len());
-    let settled = settled(module, inherited);
-    let named = offenders(&reached, &settled);
+    let named = seeds(positions)
+        .into_iter()
+        .filter(|name| {
+            context
+                .definition_totality(name)
+                .is_some_and(|totality| !totality.is_total())
+        })
+        .collect::<Vec<_>>();
 
     let mut faults = Vec::new();
     // One cache across every position: (V) seeds a literal's derivation once per link, and those links share their tails.
@@ -258,7 +212,7 @@ fn faults(
             faults.push((position.site.to_string(), Fault::Inline));
         }
     }
-    // One named fault per offending definition, attributed to the first position that names it. The closure is over the union of the seeds, so the exact position is a best effort; which definition is partial is not.
+    // One named fault per offending definition, attributed to the first position that names it.
     for name in named {
         let site = positions
             .iter()
@@ -271,7 +225,7 @@ fn faults(
                     .any(|global| *global == name)
             })
             .map(|position| position.site.to_string())
-            .unwrap_or_else(|| "a position reached from here".to_string());
+            .expect("a seed is a name some position writes");
         faults.push((site, Fault::Named(name)));
     }
     Ok(faults)
@@ -281,7 +235,7 @@ fn faults(
 ///
 /// Not an optimization detail but a contract. (T) and (V) are seeded from the *same* [`Context::record_checked`](crate::Context) entries, and each needs the zonked type of every entry plus the zonked term of every entry it keeps — so a cache local to either does the same work twice, and hash-consing collapses the recorded entries to far fewer distinct types and terms.
 ///
-/// One map serves types and terms alike because zonk is a *function of its argument*: a term appearing in both populations has one zonked form, and sharing the entry is correct rather than merely convenient. Sound to share across the passes for the reason either could memoize alone — the solution set is final once `zonk_module` has run.
+/// One map serves types and terms alike because zonk is a *function of its argument*: a term appearing in both populations has one zonked form, and sharing the entry is correct rather than merely convenient. Sound to share across the two obligations of one declaration, or of the entry, for the reason either could memoize alone — the solution set is final once what they read has been published, or the module zonked.
 ///
 /// The cost is memory: this is held across both obligations rather than dropped between them. That is the trade; the cache is not free, it is cheaper than the work it removes.
 pub type Zonked = HashMap<Term, Term>;
@@ -299,18 +253,18 @@ fn zonked(context: &Context, cache: &mut Zonked, term: &Term) -> Result<Term, Er
 
 /// Obligation **(T)**: everything a type position reaches must be total.
 ///
-/// A divergent type breaks type formation, and — through `rec Bad : Type = Sink(Bad)` — ties the negative knot strict positivity exists to forbid without ever writing an `induct`. Runs post-zonk, after [`record_totality`], whose flags it reads.
-pub fn check_type_totality(
+/// A divergent type breaks type formation, and — through `rec Bad : Type = Sink(Bad)` — ties the negative knot strict positivity exists to forbid without ever writing an `induct`. Decided for one declaration as it is published, over `module` holding its item and the entries it declares, and for the entry once the module is zonked; either way after [`stamp_totality`], whose verdicts it reads, and over the terms recorded since `mark`.
+pub(crate) fn check_type_totality(
     context: &mut Context,
     module: &Module,
     entry: Option<&Entrypoint>,
-    inherited: &BTreeMap<Global, Totality>,
+    mark: usize,
     cache: &mut Zonked,
 ) -> Result<(), Error> {
     curios_profile::profile!("check_type_totality");
     let mut positions = type_positions(module, entry);
-    positions.extend(checked_type_positions(context, cache)?);
-    report(context, module, &positions, inherited, Erased::Type)
+    positions.extend(checked_type_positions(context, mark, cache)?);
+    report(context, &positions, Erased::Type)
 }
 
 /// The terms elaboration settled *at a sort* — a term whose type is `Type` or `Prop` is itself a type, wherever it was written.
@@ -320,9 +274,10 @@ pub fn check_type_totality(
 /// The two seedings are **incomparable**, not nested: the walk sees definition bodies whose type ends in a sort, and no typing judgment classifies those as type positions; this sees type arguments, which no syntactic walk can find without re-deriving the head's telescope. Taking the union costs one pass over already-recorded terms and needs neither.
 fn checked_type_positions(
     context: &mut Context,
+    mark: usize,
     cache: &mut Zonked,
 ) -> Result<Vec<Position>, Error> {
-    let settled = context.checked().to_vec();
+    let settled = context.checked()[mark..].to_vec();
     // One label per elaboration site, not per position: `Context::record_checked` already stores an `Rc<str>` site, and many recorded terms share one.
     let mut sites: HashMap<Rc<str>, Rc<str>> = HashMap::new();
     let mut positions = Vec::new();
@@ -353,30 +308,30 @@ fn checked_type_positions(
 
 /// Obligation **(V)**: everything a `Prop`-checked term reaches must be total.
 ///
-/// A divergent proof proves anything, and erasure deletes it — so an `exit` behind a proposition never fires and the program continues with a forged invariant. Independent of [`check_type_totality`]: neither obligation subsumes the other.
-pub fn check_proof_totality(
+/// A divergent proof proves anything, and erasure deletes it — so an `exit` behind a proposition never fires and the program continues with a forged invariant. Independent of [`check_type_totality`]: neither obligation subsumes the other. Decided where that one is, over the terms recorded since `mark`, which it takes.
+pub(crate) fn check_proof_totality(
     context: &mut Context,
-    module: &Module,
-    inherited: &BTreeMap<Global, Totality>,
+    mark: usize,
     cache: &mut Zonked,
 ) -> Result<(), Error> {
     curios_profile::profile!("check_proof_totality");
-    let positions = checked_proof_positions(context, cache)?;
-    report(context, module, &positions, inherited, Erased::Proof)
+    let positions = checked_proof_positions(context, mark, cache)?;
+    report(context, &positions, Erased::Proof)
 }
 
 /// Obligation (V)'s seed: every term elaboration settled at a `Prop`-sorted type.
 ///
-/// Drains what [`Context::record_checked`] collected and keeps the propositions. This is the whole of (V)'s seeding. There is no walk, because there is nothing to look for — elaboration already decided, for every term in the program, what type that term has, and the only thing a later pass can do with that question is re-derive it, incompletely.
+/// Takes what [`Context::record_checked`] collected since `mark` and keeps the propositions. This is the whole of (V)'s seeding. There is no walk, because there is nothing to look for — elaboration already decided, for every term in the program, what type that term has, and the only thing a later pass can do with that question is re-derive it, incompletely.
 ///
 /// Two properties follow from the seed rather than from care. **Coverage** is a consequence of elaboration being a typechecker: a position it never settles is a position the program was never typed at. And the **prelude boundary** is a consequence of replay — the archived prefix is defined into the context rather than elaborated, so it settles nothing and seeds nothing, and its verdicts arrive through [`recorded_totality`] instead.
 ///
-/// Sort-hood is decided here rather than at the hook because a type may still carry unsolved metavariables while elaborating. Post-zonk every solution is materialized, so [`is_prop`] is asked once per *distinct* type, and hash-consing keeps that set far smaller than the term count.
+/// Sort-hood is decided here rather than at the hook because a type may still carry unsolved metavariables while elaborating. Once the declaration is published every solution is materialized, so [`is_prop`] is asked once per *distinct* type, and hash-consing keeps that set far smaller than the term count.
 fn checked_proof_positions(
     context: &mut Context,
+    mark: usize,
     cache: &mut Zonked,
 ) -> Result<Vec<Position>, Error> {
-    let checked = context.take_checked();
+    let checked = context.split_checked(mark);
     // One label per elaboration site, not per position: `Context::record_checked` already stores an `Rc<str>` site, and many recorded terms share one.
     let mut sites: HashMap<Rc<str>, Rc<str>> = HashMap::new();
     let mut memo: HashMap<Term, bool> = HashMap::new();
@@ -385,7 +340,7 @@ fn checked_proof_positions(
     for (term, type_, site) in checked {
         // Two memos, keyed on the two different terms, because they save two different things. `memo` answers `is_prop` once per *zonked* type, as the doc above says. `zonked` answers the zonk once per *raw* type, which is the coarser question: a recorded type is the type elaboration wrote down, and thousands of terms are checked against the same one. Keying the outer memo on the raw type rather than folding both into one map keeps `is_prop`'s dedup as wide as the zonked types — raw types that differ but zonk alike still share a verdict.
         //
-        // Sound because zonk is a pure function of the solution set, and the solution set is final here: `zonk_module` has run, and `is_prop` sees only zonked — hence metavariable-free — types, so it cannot solve anything that would make an earlier answer stale.
+        // Sound because zonk is a pure function of the solution set, and the solution set is final here: what is read has been published, and `is_prop` sees only zonked — hence metavariable-free — types, so it cannot solve anything that would make an earlier answer stale.
         let type_ = zonked(context, cache, &type_)?;
         let prop = match memo.get(&type_) {
             Some(prop) => *prop,
@@ -415,17 +370,8 @@ fn checked_proof_positions(
     Ok(positions)
 }
 
-fn report(
-    context: &mut Context,
-    module: &Module,
-    positions: &[Position],
-    inherited: &BTreeMap<Global, Totality>,
-    erased: Erased,
-) -> Result<(), Error> {
-    match faults(context, module, positions, inherited)?
-        .into_iter()
-        .next()
-    {
+fn report(context: &mut Context, positions: &[Position], erased: Erased) -> Result<(), Error> {
+    match faults(context, positions)?.into_iter().next() {
         None => Ok(()),
         Some((site, Fault::Named(name))) => Err(Error::PartialInErasedPosition {
             erased,

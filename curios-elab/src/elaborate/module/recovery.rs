@@ -160,22 +160,27 @@ pub(super) struct Holding {
 pub(super) struct Survived {
     pub(super) items: Vec<Item>,
     pub(super) refusals: Vec<Error>,
+    pub(super) obligations: Vec<Error>,
     pub(super) held: Vec<Holding>,
     pub(super) dropped: BTreeSet<Global>,
 }
 
-/// The items elaborated so far, with the refusals recorded against their positions and the names of the items that did not survive.
+/// The items elaborated so far, with the refusals and the broken erasure obligations recorded against their positions and the names of the items that did not survive.
 #[derive(Default)]
 pub(super) struct Survivors {
     kept: Vec<(ItemStamp, Item)>,
     refusals: Vec<(ItemStamp, Error)>,
+    obligations: Vec<(ItemStamp, Error)>,
     held: Vec<Holding>,
     dropped: BTreeSet<Global>,
 }
 
 impl Survivors {
-    pub(super) fn keep(&mut self, stamp: ItemStamp, item: Item) {
+    /// Keep an item that elaborated, with the erasure obligations it breaks: reported, and no refusal, since the item stands for the certifier to judge.
+    pub(super) fn keep(&mut self, stamp: ItemStamp, item: Item, obligations: Vec<Error>) {
         self.kept.push((stamp, item));
+        self.obligations
+            .extend(obligations.into_iter().map(|error| (stamp, error)));
     }
 
     /// Record that no item was produced for what `item` declares — it was withheld before elaborating, or refused.
@@ -207,14 +212,20 @@ impl Survivors {
             .collect()
     }
 
-    /// The kept items and the refusals, each in item order — the entry's refusal after every item's, and a whole-module pass's after the entry's — with the declarations that wrote goals, whose reports are ordered where they are made, and every name an item that did not survive declared. Items elaborate when they are asked for, so the order they were kept in is not the module's.
+    /// The kept items, the refusals and the broken obligations, each in item order — the entry's refusal after every item's — with the declarations that wrote goals, whose reports are ordered where they are made, and every name an item that did not survive declared. Items elaborate when they are asked for, so the order they were kept in is not the module's.
     pub(super) fn into_parts(mut self) -> Survived {
         self.kept.sort_by_key(|(stamp, _)| *stamp);
         self.refusals.sort_by_key(|(stamp, _)| *stamp);
+        self.obligations.sort_by_key(|(stamp, _)| *stamp);
 
         Survived {
             items: self.kept.into_iter().map(|(_, item)| item).collect(),
             refusals: self.refusals.into_iter().map(|(_, error)| error).collect(),
+            obligations: self
+                .obligations
+                .into_iter()
+                .map(|(_, error)| error)
+                .collect(),
             held: self.held,
             dropped: self.dropped,
         }

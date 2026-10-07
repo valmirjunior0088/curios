@@ -63,6 +63,8 @@ impl<'a> Established<'a> {
     /// The definitions themselves, into the persistent base frame.
     ///
     /// `define_assuming_scheme` reproduces exactly the state `elaborate_module_let`/`_rec` leave behind — assume the type, define the body — with no re-checking, because these terms are already elaborated. A witness additionally re-registers its already-elaborated signature, since the witness table is per-elaboration state and is not carried on a module.
+    ///
+    /// Registering reduces the signature to its key, so each registration spends a budget restored for it: what a scope costs to bring in is spent on no declaration's budget, and a unit elaborates under the same one whatever its scope holds.
     pub(crate) fn replay_definitions(&self, context: &mut Context) -> Result<(), Error> {
         for module in self.modules {
             for item in &module.items {
@@ -76,6 +78,7 @@ impl<'a> Established<'a> {
                             def.universe_context.clone(),
                         );
                         if module.witnesses.contains(&def.name) {
+                            context.restore_budget();
                             register_witness(
                                 context,
                                 &def.name,
@@ -100,6 +103,7 @@ impl<'a> Established<'a> {
                             );
                             // A witness that resolves through its own entry is lowered as a group of one, so the table has to be rebuilt from this arm as well — a replayed unit would otherwise hand its successors a scope in which that witness is undeclared.
                             if module.witnesses.contains(&definition.name) {
+                                context.restore_budget();
                                 register_witness(
                                     context,
                                     &definition.name,
@@ -115,17 +119,5 @@ impl<'a> Established<'a> {
         }
 
         Ok(())
-    }
-
-    /// The totality verdicts this scope recorded, which the erasure obligations inherit rather than recompute.
-    ///
-    /// Flattened across every unit in scope. Names are disjoint by mount, so the order of the merge cannot decide a verdict.
-    pub(crate) fn recorded_totality(
-        &self,
-    ) -> std::collections::BTreeMap<curios_core::Global, curios_core::Totality> {
-        self.modules
-            .iter()
-            .flat_map(|module| recorded_totality(module))
-            .collect()
     }
 }

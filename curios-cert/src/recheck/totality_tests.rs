@@ -12,7 +12,7 @@ use {
 ///
 /// `reaches` is total in itself, stamped `Total`, and mentions the diverging `sink`: only the closure contradicts it. A comparison against the local half would pass it. Nothing reads the stamp afterwards — a later walk reads the certifier's record, which [`a_carried_totality_stamp_is_ignored_where_the_certifiers_record_classifies`] holds — so what this guards is the two checkers' disagreement being reported where they disagree.
 ///
-/// No surface program reaches it: the only stamp writer is `record_totality`, whose closure is correct, so the lie must be constructed — which is why this lives here and why nothing in the corpus could have found it. The control is [`an_honest_stamp_on_a_definition_reaching_a_partial_one_is_accepted`]: a `Partial` stamp on the same definition is a classification, not an error, and must stay accepted.
+/// No surface program reaches it: the only stamp writer is `curios-elab`'s `stamp_totality`, whose closure is correct, so the lie must be constructed — which is why this lives here and why nothing in the corpus could have found it. The control is [`an_honest_stamp_on_a_definition_reaching_a_partial_one_is_accepted`]: a `Partial` stamp on the same definition is a classification, not an error, and must stay accepted.
 #[test]
 fn a_totality_stamp_contradicted_only_by_the_closure_is_refused() {
     let verdicts = fixture_verdicts(

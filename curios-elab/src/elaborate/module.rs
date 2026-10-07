@@ -10,13 +10,13 @@ mod tests;
 use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
-        Declared, Established, GoalReport, GoalSite, ScheduledTest, Spelled, Written, Zonked,
-        check_concept_registry, check_is_sort, check_positivity, check_proof_totality,
-        check_rec_item_totality, check_type_totality, check_variance, check_written_type_totality,
-        goal_sites, is_prop, record_definition_totality, record_superclasses, record_totality,
-        record_variances, reduce_with, register_witness, report_goals, sort_term,
-        superclass_targets, test_program_tail, zonk, zonk_arity, zonk_entry, zonk_module,
-        zonk_published, zonk_solved_term_metas,
+        Declared, Established, GoalReport, GoalSite, Published, ScheduledTest, Spelled, Written,
+        Zonked, check_concept_registry, check_is_sort, check_proof_totality,
+        check_rec_item_totality, check_type_totality, check_written_type_totality,
+        decide_polarities, goal_sites, hold_variances, is_prop, record_definition_totality,
+        record_superclasses, record_variances, reduce_with, register_witness, report_goals,
+        sort_term, stamp_totality, superclass_targets, test_program_tail, zonk, zonk_arity,
+        zonk_entry, zonk_module, zonk_published, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_core::{
@@ -1184,6 +1184,8 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
 ///
 /// **An item is published as it finishes.** What it elaborated to is zonked, strictly, and the context is made to hold that — the bindings of its names, its registry entries, the terms it recorded — so nothing of the state it elaborated in is left for another declaration to read, the next one elaborating in a state of its own ([`Context::attempt`]). A hole it left unsolved is its own refusal, raised where it stands.
 ///
+/// **What is decided of it over its final terms is decided here, once** ([`settle_published`]): the polarity vectors of the entries it declares, that the variance vectors they carry claim no more than their telescopes grant, each definition's totality, and its two erasure obligations. No pass over the unit decides any of them again.
+///
 /// **An item that wrote a goal is held.** Its goals are found here and reported once every declaration of the unit has finished, in the state it elaborated in, which is the only one that knows them ([`Holding`]). It is published by its types alone ([`Context::publish_held`]), so the declarations that read it elaborate and report their own.
 fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborated, Error> {
     curios_profile::profile!("elaborate_module_item");
@@ -1235,20 +1237,72 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
         }
     }
 
-    let published = zonk_published(context, &elaborated)
+    let mut published = zonk_published(context, &elaborated)
         .map_err(|error| error.in_declaration(&item_names, owner))?;
     context.publish(&published);
     context
         .settle_checked(recorded)
         .map_err(|error| error.in_declaration(&item_names, owner))?;
+    // An attempt that read something unfinished is void whatever it concludes, so nothing is decided of what it published.
+    let obligations = match context.needs_nothing() {
+        true => settle_published(context, &mut published, recorded)
+            .map_err(|error| error.in_declaration(&item_names, owner))?,
+        false => Vec::new(),
+    };
 
-    Ok(Elaborated::Published(published.item))
+    Ok(Elaborated::Published {
+        item: published.item,
+        obligations,
+    })
+}
+
+/// Decide what a published declaration's cells hold beyond its terms, and hand back the erasure obligations it breaks: the polarity vector of each entry it declares, written on the entry; that the variance vector each carries claims no irrelevance its final telescopes deny; each definition's totality, recorded and stamped on the item; and obligations (T) and (V) over the item's positions and the terms recorded since `recorded`, which are taken.
+///
+/// **Here, and nowhere after.** Each of these is a cell of the declaration, written once, by it, before any other declaration reads it (`documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md`): every declaration it reads has finished, so what the analyses meet outside it is final, and nothing that finishes later can mention it into a different answer. A pass over the unit would decide them a second time, on a budget every declaration of the unit shares.
+///
+/// **Each judgment spends a budget restored for it**, as the item's elaboration does, so whether one fits is a fact about this declaration and never about what the others cost.
+///
+/// The obligations are handed back rather than raised, for the reason [`elaborate_and_zonk_program_reporting`] gives.
+fn settle_published(
+    context: &mut Context,
+    published: &mut Published,
+    recorded: usize,
+) -> Result<Vec<Error>, Error> {
+    if !(published.induct_decls.is_empty() && published.struct_decls.is_empty()) {
+        context.restore_budget();
+        decide_polarities(context, published)?;
+        context.restore_budget();
+        hold_variances(context, published)?;
+    }
+    context.restore_budget();
+    stamp_totality(context, &mut published.item)?;
+
+    context.restore_budget();
+    let alone = Module {
+        items: vec![published.item.clone()],
+        mounts: Vec::new(),
+        induct_decls: published.induct_decls.iter().cloned().collect(),
+        struct_decls: published.struct_decls.iter().cloned().collect(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    };
+    // One cache across both: they are seeded from the same recorded entries, so a cache each zonks every distinct recorded type twice.
+    let mut zonked = Zonked::default();
+
+    Ok([
+        check_type_totality(context, &alone, None, recorded, &mut zonked),
+        check_proof_totality(context, recorded, &mut zonked),
+    ]
+    .into_iter()
+    .filter_map(Result::err)
+    .collect())
 }
 
 /// What one attempt at an item came to.
 enum Elaborated {
-    /// The item, zonked, as the context now holds it.
-    Published(Item),
+    /// The item, zonked, as the context now holds it, with the erasure obligations it breaks.
+    Published { item: Item, obligations: Vec<Error> },
     /// The item as it elaborated, where it holds each goal it wrote, and whether it was published by its types alone or has to be taken out.
     Held {
         item: Item,
@@ -1365,8 +1419,10 @@ struct ElaboratedSuffix {
     module: Module,
     /// A program's entry, stating the type it was judged at, when it elaborated and nothing depends on a refusal.
     entry: Option<Entrypoint>,
-    /// Every item's refusal in item order, the entry's after them, then the whole-module passes'. Non-empty means the module is not the program that was written, and the caller raises these rather than finalizing it as one.
+    /// Every item's refusal in item order, the entry's after them. Non-empty means the module is not the program that was written, and the caller raises these rather than finalizing it as one.
     refusals: Vec<Error>,
+    /// The erasure obligations the kept items break, in item order: reported with the entry's, and never a refusal, since the items stand.
+    obligations: Vec<Error>,
     /// The declarations that wrote goals, each with the state it elaborated in: reported with the entry's once every item has finished.
     held: Vec<Holding>,
     /// Every name an item this run produced no item for: withheld before it elaborated, refused, or held for a goal. Empty is the run that kept everything it was handed; non-empty is *not* the same fact as a non-empty `refusals`, since a withheld item reports nothing — see `recovery`.
@@ -1562,6 +1618,7 @@ fn elaborate_module_suffix(
     let Survived {
         items,
         refusals,
+        obligations,
         held,
         dropped,
     } = survivors.into_parts();
@@ -1580,6 +1637,7 @@ fn elaborate_module_suffix(
         module,
         entry,
         refusals,
+        obligations,
         held,
         dropped,
     })
@@ -1628,23 +1686,22 @@ pub struct FinalizedProgram {
     pub obligations: Vec<Error>,
 }
 
-/// Finalize an elaborated module, and a program's entry beside it, and run the whole-module soundness checks over them.
+/// Finalize an elaborated module, and a program's entry beside it: report the goals the unit wrote, zonk what is left to zonk, and decide the entry's erasure obligations.
 ///
-/// This is the single place every whole-module check the consistency claim rests on is applied, and every entry point that produces an elaborated module must come through it. Keeping the sequence in one function is not tidiness: written out at each entry point, "what does soundness depend on?" would be answered by diffing call sites, and a check added to one and not the other would degrade the claim silently for every real compilation.
+/// Every check of a declaration the consistency claim rests on was applied as the declaration was published ([`settle_published`]), and every entry point that produces an elaborated module comes through there and through here. What is left for this function is what belongs to no declaration: the goals, reported once every declaration has finished, and the entry, which is no item.
 ///
-/// The order is load-bearing, in three places:
+/// The order is load-bearing, in two places:
 ///
-/// - `default_universes` then `zonk_module` and `zonk_entry` come first, which is what makes everything after metavariable-free by construction — both error on an unsolved hole, so no metavariable can later be solved to a partial or negatively-occurring term. Both also validate universes.
-/// - [`Context::restore_budget`] precedes the passes because they reduce, and each has to spend on the same footing as an item rather than on whatever the last item left.
-/// - [`record_totality`] precedes both gates, which read the flags it stamps.
+/// - `default_universes` then `zonk_module` and `zonk_entry` come first, which is what makes the entry metavariable-free by construction — both error on an unsolved hole, so no metavariable can later be solved to a partial term. Both also validate universes.
+/// - [`Context::restore_budget`] precedes the entry's obligations because they reduce, and they have to spend on the same footing as an item's rather than on whatever the entry's check left.
 ///
-/// `check_positivity` is independent of the rest and could sit anywhere after the zonk, and `check_variance` beside it holds the vectors the unit carries to its final telescopes. `inherited` carries the classifications of the units in scope, whose own verdicts were settled when each was elaborated; it is empty for a from-scratch elaboration, where the module defines every name it mentions.
+/// `obligations` are the ones the items broke, in item order; the entry's follow them.
 fn finalize_and_check(
     context: &mut Context,
     module: Module,
     entry: Option<Entrypoint>,
     held: Vec<Holding>,
-    inherited: &BTreeMap<Global, Totality>,
+    mut obligations: Vec<Error>,
 ) -> Result<Finalized, Error> {
     curios_profile::profile!("finalize_and_check");
     let mut entry_terms = Vec::new();
@@ -1674,27 +1731,33 @@ fn finalize_and_check(
         )));
     }
 
-    let mut module = zonk_module(context, &module)?;
+    let module = zonk_module(context, &module)?;
     let entry = entry
         .map(|entry| zonk_entry(context, &module, &entry))
         .transpose()?;
     context.restore_budget();
 
-    // Positivity gates the zonked registries rather than running inside elaboration: the telescopes it reads are final here, and meta-free, so an unsolved hole reports as an unsolved hole instead of as an unseeable occurrence. The module in hand is this unit's own, which is what this must see — a predecessor's entries carry the vectors computed when it was elaborated, and since a predecessor cannot mention a successor they are sinks of the occurrence relation, so no cycle crosses the boundary.
-    check_positivity(context, &mut module)?;
-    check_variance(context, &module)?;
-    record_totality(context, &mut module, inherited)?;
-
     // Reported rather than raised. `curios-cert` decides these same two obligations independently, and a fixture this checker refuses must still be able to reach it — a short circuit here would return no module at all, leaving "would the kernel have caught it?" unobservable, which is exactly the quadrant the trusted base most needs to see. The public entry points raise the first verdict, so nothing on the compile path is weakened.
-    // One cache across both: they are seeded from the same recorded entries, so a cache each zonks every distinct recorded type twice.
+    //
+    // The entry's alone: every item's were decided as it was published, and took the terms it recorded, so what is left recorded is the entry's. One cache across both, which are seeded from the same recorded entries.
+    let nothing = Module {
+        items: Vec::new(),
+        mounts: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    };
     let mut zonked = Zonked::default();
-    let obligations = [
-        check_type_totality(context, &module, entry.as_ref(), inherited, &mut zonked),
-        check_proof_totality(context, &module, inherited, &mut zonked),
-    ]
-    .into_iter()
-    .filter_map(Result::err)
-    .collect();
+    obligations.extend(
+        [
+            check_type_totality(context, &nothing, entry.as_ref(), 0, &mut zonked),
+            check_proof_totality(context, 0, &mut zonked),
+        ]
+        .into_iter()
+        .filter_map(Result::err),
+    );
 
     Ok(Finalized {
         module,
@@ -1788,9 +1851,13 @@ pub fn elaborate_and_zonk_module(
             minted,
             None,
         )?;
-        // Nothing is inherited: `module` is the whole unit, so every name it mentions it also defines.
-        let finalized =
-            finalize_and_check(context, suffix.module, None, suffix.held, &BTreeMap::new());
+        let finalized = finalize_and_check(
+            context,
+            suffix.module,
+            None,
+            suffix.held,
+            suffix.obligations,
+        );
         if !suffix.refusals.is_empty() {
             return Err(refused(suffix.refusals, finalized));
         }
@@ -1879,19 +1946,17 @@ fn elaborate_and_zonk(
     grown(|| {
         let elaborated =
             elaborate_module_suffix(context, established, module, module, minted, tail)?;
-        // The scope's own stamps come out of their units already closed, so inheriting them is what lets a user proof see that `/std/Async/bind` is partial without walking `/std` again.
-        let inherited = established.recorded_totality();
         let finalized = finalize_and_check(
             context,
             elaborated.module,
             elaborated.entry,
             elaborated.held,
-            &inherited,
+            elaborated.obligations,
         );
         if !elaborated.refusals.is_empty() {
             return Err(refused(elaborated.refusals, finalized));
         }
-        // Nothing is merged back in. The unit's items, the unit's declarations: what a predecessor contributes is scope, and every consumer past this point takes it as such — `Globals` at the certifier, a replayed context at erasure. A whole-module pass that needs the complete declaration set gets it by being handed both halves (`curios_analysis::Declarations`), not by being handed one map somebody concatenated.
+        // Nothing is merged back in. The unit's items, the unit's declarations: what a predecessor contributes is scope, and every consumer past this point takes it as such — `Globals` at the certifier, a replayed context at erasure.
         let Finalized {
             module,
             entry,
@@ -1908,7 +1973,7 @@ fn elaborate_and_zonk(
 
 /// What an item-level recompile hands elaboration: the baseline's items it reuses, replayed as one more predecessor; the closure it re-elaborates, restricted out of the new lowering, whose seeds come beside it in the whole unit's [`Minted`]; and that lowering, whose item order the two are reassembled in.
 ///
-/// The closure is closed under reverse reachability over the baseline's elaborated graph — the caller's obligation. The whole-module passes run over the reassembled module afterwards rather than believing it: every reused item's totality and every reused entry's polarities are recomputed over the whole and must come out as the baseline carried them.
+/// The closure is closed under reverse reachability over the baseline's elaborated graph — the caller's obligation. A reused declaration's cells stand as the baseline published them — its vectors, its totality — and nothing here writes one again: nothing a reused declaration read is in the closure, so what decided them has not moved.
 pub struct Recompile<'a> {
     pub reused: &'a Module,
     pub closure: &'a Module,
@@ -1917,7 +1982,7 @@ pub struct Recompile<'a> {
 
 /// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the closure alone is elaborated, against the scope with the reused items replayed as one more predecessor, and the result is reassembled with them into one module in the new lowering's order.
 ///
-/// Zonk and the two erasure obligations narrow to the closure by construction, since `finalize_and_check` runs over the closure module and a reused item is zonked and stamped already. Positivity and totality classification then run over the reassembled whole, because a new declaration can reach an old one. A cycle is met among the closure's items as they are asked for: one through a reused witness would need that witness to reach a closure item, which contradicts the closure being closed, and a cycle among reused witnesses was refused when the baseline compiled.
+/// Everything decided of a declaration narrows to the closure by construction: each of its declarations decides its own vectors, totality and erasure obligations as it is published, reading a reused declaration's as the baseline left them, and a reused item is zonked and stamped already. A cycle is met among the closure's items as they are asked for: one through a reused witness would need that witness to reach a closure item, which contradicts the closure being closed, and a cycle among reused witnesses was refused when the baseline compiled.
 ///
 /// **A run that refused nothing may still have kept fewer items than it was handed**, so the reassembly is told what was dropped rather than left to read it off an absence. An item withheld for reaching a broken name records no refusal — that is `recovery`'s decision and the whole-unit path's behaviour — and the early return below therefore does not catch it. Such a run never becomes a unit: poison exists only where something was refused or the lowering reported an item broken, and `with_broken` turns the second into a failure before anything is judged, erased or filed.
 pub fn elaborate_and_zonk_unit_over(
@@ -1948,13 +2013,12 @@ fn elaborate_and_zonk_unit_over_within(
         minted,
         None,
     )?;
-    let inherited = extended.recorded_totality();
     let finalized = finalize_and_check(
         context,
         elaborated.module,
         None,
         elaborated.held,
-        &inherited,
+        elaborated.obligations,
     );
     if !elaborated.refusals.is_empty() {
         return Err(refused(elaborated.refusals, finalized));
@@ -1965,15 +2029,7 @@ fn elaborate_and_zonk_unit_over_within(
         ..
     } = finalized?;
 
-    let mut module = reassemble(&recompile, closure, &elaborated.dropped);
-    context.restore_budget();
-    check_positivity(context, &mut module)?;
-    check_variance(context, &module)?;
-    record_totality(context, &mut module, &established.recorded_totality())?;
-    debug_assert!(
-        agrees_with(&module, recompile.reused),
-        "a reused item's verdict moved, so the closure was not closed"
-    );
+    let module = reassemble(&recompile, closure, &elaborated.dropped);
 
     raise(Finalized {
         module,
@@ -2062,32 +2118,4 @@ fn reassemble(recompile: &Recompile<'_>, closure: Module, dropped: &BTreeSet<Glo
             .cloned()
             .collect(),
     }
-}
-
-/// Whether every verdict `reused` carried came out the same when recomputed over `module`: each reused item's totality, and each reused entry's polarities.
-fn agrees_with(module: &Module, reused: &Module) -> bool {
-    let stamps = module
-        .items
-        .iter()
-        .flat_map(Item::definitions)
-        .map(|definition| (definition.name, definition.totality))
-        .collect::<BTreeMap<_, _>>();
-
-    reused
-        .items
-        .iter()
-        .flat_map(Item::definitions)
-        .all(|definition| stamps.get(&definition.name) == Some(&definition.totality))
-        && reused.induct_decls.iter().all(|(name, declaration)| {
-            module
-                .induct_decls
-                .get(name)
-                .is_some_and(|whole| whole.polarities == declaration.polarities)
-        })
-        && reused.struct_decls.iter().all(|(name, declaration)| {
-            module
-                .struct_decls
-                .get(name)
-                .is_some_and(|whole| whole.polarities == declaration.polarities)
-        })
 }

@@ -794,7 +794,7 @@ fn paired_fold(width: usize, paired: bool) -> String {
 ///
 /// The machine records a forced application's value under the application itself, the path whose head is a recursive member included. That *a member selection's calls never repeat within a run because the fold argument strictly shrinks* is false for every tuple-returning recursion: `let (a, b) = go(…)` lowers to two projections of one call, so without the record each level would demand the same call twice and the fold would cost `2^n`.
 ///
-/// What this asserts is the *shape* rather than a figure: the pair form's increment per four bits must not grow. The single-value twin is the control — it makes one demand per level, so a regression that slowed both equally would not read as this defect.
+/// What this asserts is the *shape* rather than a figure: the pair form's increment per four bits must not grow. The single-value twin is the control — it makes one demand per level, so it grows by the same amount every four bits, and a regression that slowed both equally would not read as this defect. What is read is the heaviest single judgment, which here is the elaboration of the declaration that calls the fold.
 ///
 /// **Run against the defect and observed to fail**, which is what makes it a detector rather than a description: with the record removed the pair form's increments grow with every four bits, and the assertion names them. Reproduce by deleting the `Frame::Memo` push at the head frame's entry in `curios-core`'s machine.
 ///
@@ -821,10 +821,11 @@ fn a_recursive_call_read_twice_is_evaluated_once() {
     let paired = [4usize, 8, 12, 16].map(|width| units(width, true));
     let single = [4usize, 8, 12, 16].map(|width| units(width, false));
 
-    // The control is flat, so the pair form's growth is about the second demand rather than about the fold.
+    // The control grows by one demand a level and no more, so what the pair form adds to it is the second demand rather than the fold.
     assert_eq!(
-        single[0], single[3],
-        "the single-value twin should not grow with width: {single:?}"
+        single[1] - single[0],
+        single[3] - single[2],
+        "the single-value twin should grow by the same amount every four bits: {single:?}"
     );
 
     // Linear growth: each further four bits costs about what the previous four did. Doubling per bit makes the later increments explode, which is exactly what this refuses.
