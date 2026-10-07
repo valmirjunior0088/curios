@@ -707,16 +707,17 @@ pub let split(s: Str, sep: Str) -> List(Str) =
     | none() => List/map(to_list(s), of_char)
     | some(first) =>
         At/forward(
-            (_) => List(Str),
+            (_) => (pieces: List(Str)) -> List(Str),
             (at, again) =>
-                match occurrence(s, at, sep, first)
-                | some(found) =>
-                    [
-                        between(s, at, found.start, @found.ordered),
-                        ..again(found.past, True/proved())]
-                | none() => [after(s, at)]
-                end,
-            At/start(s))
+                (pieces) =>
+                    match occurrence(s, at, sep, first)
+                    | some(found) =>
+                        again(found.past, True/proved())([
+                            ..pieces,
+                            between(s, at, found.start, @found.ordered)])
+                    | none() => [..pieces, after(s, at)]
+                    end,
+            At/start(s))([])
     end;
 
 --- Every occurrence of `from` replaced by `to`, left to right; an empty `from` changes nothing.
@@ -725,38 +726,39 @@ pub let replace(s: Str, from: Str, to: Str) -> Str =
     | none() => s
     | some(first) =>
         At/forward(
-            (_) => Str,
+            (_) => (written: Str) -> Str,
             (at, again) =>
-                match occurrence(s, at, from, first)
-                | some(found) =>
-                    flatten([
-                        between(s, at, found.start, @found.ordered),
-                        to,
-                        again(found.past, True/proved())])
-                | none() => after(s, at)
-                end,
-            At/start(s))
+                (written) =>
+                    match occurrence(s, at, from, first)
+                    | some(found) =>
+                        again(found.past, True/proved())(
+                            concat(
+                                concat(written, between(s, at, found.start, @found.ordered)),
+                                to))
+                    | none() => concat(written, after(s, at))
+                    end,
+            At/start(s))("")
     end;
 
 --- `s` with each character `with` answers for replaced by the answer, and the runs between copied as the pieces of `s` they are, so what comes back is text without being checked again: one walk forward, which is what an encoder escapes through.
 pub let escape(s: Str, with: (Char) -> Option(Str)) -> Str =
     At/forward(
-        (at) => (run: At(s), ordered: Holds(run.offset <= at.offset)) -> Str,
+        (at) => (written: Str, run: At(s), ordered: Holds(run.offset <= at.offset)) -> Str,
         (at, again) =>
-            (run, ordered) =>
+            (written, run, ordered) =>
                 match At/try_next(s, at)
-                | none() => between(s, run, at, @ordered)
+                | none() => concat(written, between(s, run, at, @ordered))
                 | some(n) =>
                     match with(n.char)
-                    | none() => again(n.past, n.progress)(run, True/proved())
+                    | none() => again(n.past, n.progress)(written, run, True/proved())
                     | some(replacement) =>
-                        flatten([
-                            between(s, run, at, @ordered),
-                            replacement,
-                            again(n.past, n.progress)(n.past, Nat/le/refl(n.past.offset))])
+                        again(n.past, n.progress)(
+                            concat(concat(written, between(s, run, at, @ordered)), replacement),
+                            n.past,
+                            Nat/le/refl(n.past.offset))
                     end
                 end,
-        At/start(s))(At/start(s), Nat/le/refl(0));
+        At/start(s))("", At/start(s), Nat/le/refl(0));
 
 --- The lines: split on newlines, one trailing carriage return dropped from each, and a final newline closing the last line rather than opening an empty one.
 pub let lines(s: Str) -> List(Str) =
@@ -764,18 +766,19 @@ pub let lines(s: Str) -> List(Str) =
         match strip_suffix(line, "\r") | some(bare) => bare | none() => line end;
     let newline = At/next("\n", At/start("\n"));
     At/forward(
-        (_) => List(Str),
+        (_) => (read: List(Str)) -> List(Str),
         (at, again) =>
-            match occurrence(s, at, "\n", newline)
-            | some(found) =>
-                [
-                    strip(between(s, at, found.start, @found.ordered)),
-                    ..again(found.past, True/proved())]
-            | none() =>
-                let rest = after(s, at);
-                match is_empty(rest) | true => [] | false => [strip(rest)] end
-            end,
-        At/start(s));
+            (read) =>
+                match occurrence(s, at, "\n", newline)
+                | some(found) =>
+                    again(found.past, True/proved())([
+                        ..read,
+                        strip(between(s, at, found.start, @found.ordered))])
+                | none() =>
+                    let rest = after(s, at);
+                    match is_empty(rest) | true => read | false => [..read, strip(rest)] end
+                end,
+        At/start(s))([]);
 
 --- `s` widened to `n` characters with `c` at the front; a string already that wide is unchanged.
 pub let pad_start(s: Str, n: Nat, c: Char) -> Str =

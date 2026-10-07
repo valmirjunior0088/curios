@@ -126,6 +126,19 @@ test a_piece_is_matched_in_the_stack_it_started_with =
         end,
         "b");
 
+-- A text is split, read by lines, replaced in and escaped over `2^17` pieces, each handed on with what was built before it.
+test a_text_is_taken_apart_over_many_pieces =
+    let cells = doubled("7,", 17);
+    let spaced(c: Char) -> Option(Str) =
+        match c == ',' | true => Option/some("; ") | false => Option/none() end;
+    Test/equal(
+        Str/join(" ", [
+            Nat/to_str(List/len(Str/split(cells, ","))),
+            Nat/to_str(List/len(Str/lines(doubled("7\n", 17)))),
+            Nat/to_str(Str/len(Str/replace(cells, ",", "; "))),
+            Nat/to_str(Str/len(Str/escape(cells, spaced)))]),
+        "131073 131072 393216 393216");
+
 -- Every walk here moves between positions through `Str/At/forward` or `backward`, each step handing over the proof that it moved, so every one is total and computes in a type: a claim about what they answer is a proof the kernel discharges, and one that stopped terminating would be refused where it is stated rather than tested.
 let _splits_in_a_type: Eq()(Str/split("a€€b€c", "€"), ["a", "", "b", "c"]) =
     Eq/refl();
