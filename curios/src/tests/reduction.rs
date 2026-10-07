@@ -798,14 +798,14 @@ fn paired_fold(width: usize, paired: bool) -> String {
 ///
 /// **Run against the defect and observed to fail**, which is what makes it a detector rather than a description: with the record removed the pair form's increments grow with every four bits, and the assertion names them. Reproduce by deleting the `Frame::Memo` push at the head frame's entry in `curios-core`'s machine.
 ///
-/// The figures, `cargo test --package curios -- a_recursive_call_read_twice`, on aarch64-apple-darwin:
+/// The figures, `cargo xtask test curios a_recursive_call_read_twice`, counted at `526b55a0f`:
 ///
 /// ```text
 ///   width   single   paired
-///       4     8622     9789
-///       8     8622    10469
-///      12     8622    11149
-///      16     8622    11829
+///       4     6954     9947
+///       8     7382    10611
+///      12     7810    11275
+///      16     8238    11939
 /// ```
 #[test]
 fn a_recursive_call_read_twice_is_evaluated_once() {
