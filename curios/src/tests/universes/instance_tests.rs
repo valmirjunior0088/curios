@@ -187,7 +187,7 @@ fn an_ordinary_function_passed_bare_takes_an_instance_at_each_argument() {
     assert_eq!(typecheck(&through("(A, x) => const_nat(A, x)")), Ok(()));
 }
 
-// **Both checkers hold two instances of a former apart in its level to be one type.** `first`'s body is `x.0`, at `Io` over `Nat` at the level `Both` passes its family at, one above zero since `Both` applies it to `Type` as well, and its declared type is `Io(Nat)` at zero. The body's type arrives as a projection's, a spelling apart from the declared one in more than levels, so both sides are reduced, nothing is committed, and the kernel certifies the definition by unfolding `Io` on both sides.
+// **Both checkers hold two instances of a former apart in its level to be one type.** `first`'s body is `x.0`, at `Io` over `Nat` at the level `Both` passes its family at, one above the level of the `Type` `Both` applies it to as well, which is `Both`'s caller's to choose, and its declared type is `Io(Nat)` at zero. The body's type arrives as a projection's, a spelling apart from the declared one in more than levels, so both sides are reduced, nothing is committed, and the kernel certifies the definition by unfolding `Io` on both sides.
 #[test]
 fn two_instances_of_a_former_convert_where_their_spellings_differ_in_more_than_levels() {
     let source = r#"
@@ -203,8 +203,8 @@ fn two_instances_of_a_former_convert_where_their_spellings_differ_in_more_than_l
     let signatures = signatures(source);
     let first = &signatures["/first"];
     assert!(
-        first.contains("Io.{1}") && first.contains("Io.{0}"),
-        "the two instances no longer sit at two decided levels, so the program holds nothing: {first}",
+        first.contains("Io.{u+1}") && first.contains("Io.{0}"),
+        "the two instances no longer sit at two levels no instance makes one, so the program holds nothing: {first}",
     );
     assert_eq!(run(source), b"picked");
 }

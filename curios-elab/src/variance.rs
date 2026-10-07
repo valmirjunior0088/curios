@@ -12,7 +12,10 @@ use {
         StructDecl, Subterm, Term, UniverseContext, UniverseMetaId, UniverseParam, Variance,
         rewrite_universe_levels_scoped_shared, universe_params,
     },
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        slice,
+    },
 };
 
 /// The registries as conversion's level alignment reads them: a family's vector is the one its entry holds while the unit elaborates, empty for a family still inside its own group, so every level of it is compared there, and a definition's is the one it finished with.
@@ -225,6 +228,32 @@ fn compared_in(context: &Context, parts: &[Term]) -> Option<BTreeSet<UniverseMet
     }
 
     Some(held)
+}
+
+/// The levels still open that the body of a declaration answering a type holds where conversion compares them once an occurrence of it is unfolded; none for a declaration that answers anything else. A level among them that the body alone mentions is the declaration's parameter as a signature's is, where any other body level is a classifier nothing can observe.
+///
+/// The body is read as a signature's parts are ([`compared_in`]), as it is written: a binder's annotation is unread, being the signature's to hold, and a member of a group is read as a `let` is, its siblings standing as the names they are assumed under. Where the body may hold any level, every level it mentions is held.
+///
+/// `lifted` are the levels of the declaration's result sort alone, and none of them is held, nor any level conversion has joined to one: a body restates the sort it answers at wherever it says what it answers, in a match's motive, and cumulativity lifts the result there as at the signature's terminal.
+pub(crate) fn body_levels(
+    context: &Context,
+    type_: &Term,
+    body: &Term,
+    lifted: &BTreeSet<UniverseMetaId>,
+) -> BTreeSet<UniverseMetaId> {
+    if !answers_a_type(type_) {
+        return BTreeSet::new();
+    }
+    curios_profile::profile!("body_levels");
+    let body = zonk_solved_term_metas(context, body);
+    let held = compared_in(context, slice::from_ref(&body))
+        .unwrap_or_else(|| context.universe_metas_in(&body));
+
+    let solver = context.universes();
+    let lifted = solver.representatives(lifted.iter().copied());
+    held.into_iter()
+        .filter(|meta| solver.representatives([*meta]).is_disjoint(&lifted))
+        .collect()
 }
 
 /// Whether a definition of this type answers a type: its terminal, past every function type, is a sort.

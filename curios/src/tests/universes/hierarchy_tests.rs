@@ -1,6 +1,9 @@
 //! What the hierarchy admits and what it refuses: cumulativity, one declaration at two levels, the paradox's shape, and the two honest programs that meet the refusal with their remedies.
 
-use crate::tests::{error, run};
+use {
+    super::test_support::universe_parameters,
+    crate::tests::{error, run},
+};
 
 // `Unit` is an ordinary level-0 type, and storing it in `Box` requires it where a higher level is expected. Cumulativity is what admits this, and it is the reason a declaration whose level is determined can be minimized rather than generalized — the lower level is usable wherever a higher one is required.
 #[test]
@@ -34,44 +37,50 @@ fn one_declaration_serves_two_universe_levels() {
     assert_eq!(run(source), b"both");
 }
 
-/// A type that quantifies over a type and answers a double powerset of it — the carrier Hurkens' form of Girard's paradox is stated over — with `tau`, the half of the paradox that stratifies. Both of `U`'s levels are carried by its body alone, so they are minimized as `a_body_carried_level_is_minimized_rather_than_generalized` pins: `X` ranges over level 0 and `U` sits at level 1.
+/// A type that quantifies over a type and answers a double powerset of it — the carrier Hurkens' form of Girard's paradox is stated over — with `tau`, the half of the paradox that stratifies. `U` answers a type, so the levels its body holds are its callers': the one `X` ranges over and the one each of its four powersets answers at.
 const A_TYPE_QUANTIFYING_OVER_TYPES: &str = r#"
     let Pow(A: Type) -> Type = (A) -> Type;
     let U: Type = (X: Type, f: (Pow(Pow(X))) -> X) -> Pow(Pow(X));
     let tau(t: Pow(Pow(U))) -> U = (X, f) => (p) => t((x) => p(f(x(X, f))));
     "#;
 
-// The refusal with nothing beside it: `s(U, f)` instantiates `U`'s bound `X` at `U`, which asks `U`, at level 1, to be a type of level 0. The diagnostic names the rule and the declaration, since a fixture that accepted any error would pass on a program broken some other way — and `tau`, which mentions `U` as often, is not where it is refused.
+// `s(U, f)` instantiates the `X` an instance of `U` binds at an instance of `U` below it, and `sigma`, the self-application Girard's paradox needs, does the same with `tau`. Both are typed: the two instances are two types, one a level under the other, and nothing here asks them to be one. The count is what says `U`'s levels are its callers', without which the instance below would not exist.
 #[test]
-fn a_type_quantifying_over_types_cannot_be_instantiated_at_itself() {
+fn a_type_quantifying_over_types_is_instantiated_at_an_instance_of_itself_below_it() {
     let source = format!(
         r#"{A_TYPE_QUANTIFYING_OVER_TYPES}
         let at_itself(s: U, f: (Pow(Pow(U))) -> U) -> Pow(Pow(U)) = s(U, f);
-        /std/print("no")
+        let sigma(s: U) -> Pow(Pow(U)) = s(U, tau);
+        /std/print("stratified")
         "#
     );
 
-    let message = error(&source);
-    assert!(message.contains("strictly below itself"), "got: {message}");
-    assert!(message.contains("/at_itself"), "got: {message}");
+    let parameters = universe_parameters(&source);
+    assert_eq!(
+        parameters.get("/U"),
+        Some(&5),
+        "the carrier stopped taking the levels its body holds, so no instance of it sits below another: {parameters:?}",
+    );
+    assert_eq!(run(&source), b"stratified");
 }
 
-// The paradox's own shape: `sigma` is the self-application Girard's paradox needs, and it is refused at the same instantiation for the same reason. The hierarchy does not make this unspellable; it makes it ill-typed.
+// The paradox's own shape: it needs `sigma`'s argument and the `U` it answers over to be one type, which `omega` asks by applying `p`, a predicate over the instance below, to `x`, an inhabitant of the instance above. That is the instance below asked to be the one above it, and it is refused. The hierarchy does not make the self-application unspellable; it makes the loop ill-typed, and the diagnostic names the rule and the declaration, since a fixture that accepted any error would pass on a program broken some other way.
 #[test]
-fn the_self_application_girards_paradox_needs_is_refused() {
+fn the_self_application_girards_paradox_needs_is_refused_at_one_instance() {
     let source = format!(
         r#"{A_TYPE_QUANTIFYING_OVER_TYPES}
         let sigma(s: U) -> Pow(Pow(U)) = s(U, tau);
+        let omega(x: U, p: Pow(U)) -> Type = (h: sigma(x)(p)) -> p(x);
         /std/print("no")
         "#
     );
 
     let message = error(&source);
     assert!(message.contains("strictly below itself"), "got: {message}");
-    assert!(message.contains("/sigma"), "got: {message}");
+    assert!(message.contains("/omega"), "got: {message}");
 }
 
-// The control, differing in the last declaration alone: the same `s` instantiated at a type its caller supplies. `A`'s level is held to the one `X` ranges over, which is satisfiable — what the refusals above rest on is the self-instantiation, not the quantifier.
+// The control, differing in the last declaration alone: the same `s` instantiated at a type its caller supplies. `A`'s level is held to the one `X` ranges over, which is satisfiable — what the refusal above rests on is the self-instantiation at one instance, not the quantifier.
 #[test]
 fn the_same_quantifier_instantiates_at_a_type_below_it() {
     let source = format!(

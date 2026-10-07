@@ -135,7 +135,7 @@ fn mismatch_reports_spell_no_universe_instances() {
 
 #[test]
 fn a_mismatch_over_a_polymorphic_head_spells_no_universe_metas() {
-    // The instance suffixes are gone by the sibling above, but a `Type`'s *own* level is a separate node, and a diagnostic over a polymorphic head is where unsolved ones cluster: unsuppressed, this fixture would read `(A: Type.{?u263}) -> Nat` against `(#…: (#…: Type.{?u261}) -> Type.{?u262}) -> Nat`. Three placeholders, none of them the disagreement. A concrete level still prints — only a metavariable-headed one is suppressed.
+    // The instance suffixes are gone by the sibling above, but a `Type`'s *own* level is a separate node, and a diagnostic over a polymorphic head is where unsolved ones cluster: unsuppressed, this fixture would read `(A: Type.{?u263}) -> Nat` against `(#…: (#…: Type.{?u261}) -> Type.{?u262}) -> Nat`. Three placeholders, none of them the disagreement. A concrete level still prints — only a metavariable-headed one is suppressed, which `curios-core`'s `a_concrete_level_prints_where_a_metavariable_headed_one_is_suppressed` holds over terms built by hand: a declaration's levels are its callers', so a program's report meets none above zero that is decided.
     let source = r#"
         use /std/{Nat};
         let g(A : Type) -> Nat = 0;
@@ -151,25 +151,6 @@ fn a_mismatch_over_a_polymorphic_head_spells_no_universe_metas() {
         "unexpected error: {error}"
     );
     assert!(!error.contains("?u"), "universe meta leaked: {error}");
-}
-
-#[test]
-fn a_mismatch_keeps_a_concrete_universe_level() {
-    // The other half of the rule, and the reason it is not "suppress every level": `Type` inhabits the sort one above it, so this reports a genuine `Type.{1}`. Erasing that would render two distinct sorts identically, which is the one thing a mismatch may never do.
-    let source = r#"
-        use /std/{Str};
-        let f : Type = Type;
-        let g : Str = f;
-        /std/Io/pure(())
-    "#;
-
-    let error = compile(source).unwrap_err();
-
-    assert!(error.contains("type mismatch"), "unexpected error: {error}");
-    assert!(
-        error.contains("inferred: Type.{1}"),
-        "concrete level suppressed: {error}"
-    );
 }
 
 #[test]

@@ -11,7 +11,7 @@ use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
         Declared, Established, GoalReport, GoalSite, Published, ScheduledTest, Spelled, Written,
-        Zonked, check_concept_registry, check_is_sort, check_proof_totality,
+        Zonked, body_levels, check_concept_registry, check_is_sort, check_proof_totality,
         check_rec_item_totality, check_type_totality, check_written_type_totality, compared_levels,
         decide_polarities, definition_variances, goal_sites, hold_variances, is_prop,
         record_definition_totality, record_superclasses, record_variances, reduce_with,
@@ -603,8 +603,12 @@ fn finalize_definition(
         interface.extend(universe_metas(&concept.params));
     }
     let mut internal = context.universe_metas_in(&body);
-    internal.extend(determined);
-    let compared = compared_levels(context, &type_);
+    internal.extend(determined.iter().copied());
+    let mut compared = compared_levels(context, &type_);
+    // What a type-valued definition's body holds is what an occurrence of it unfolds to, so it is held as the signature's is, and a level the body alone mentions joins the interface with it. The result sort's own level stays determined, the body restating it where it says what it answers.
+    let unfolded = body_levels(context, &type_, &body, &determined);
+    interface.extend(unfolded.iter().copied());
+    compared.extend(unfolded);
 
     let universe_context = context.finalize_universe_metas(interface, internal, compared)?;
     let levels = universe_context.identity_instance();
@@ -1018,11 +1022,17 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .iter()
         .flat_map(|body| context.universe_metas_in(body))
         .collect::<BTreeSet<_>>();
-    internal.extend(determined);
-    let compared = types
+    internal.extend(determined.iter().copied());
+    let mut compared = types
         .iter()
         .flat_map(|type_| compared_levels(context, type_))
         .collect::<BTreeSet<_>>();
+    // A member that answers a type is read as a `let` that does: what its body holds joins the group's interface, held.
+    for (type_, body) in types.iter().zip(&bodies) {
+        let unfolded = body_levels(context, type_, body, &determined);
+        interface.extend(unfolded.iter().copied());
+        compared.extend(unfolded);
+    }
     let universe_context = context.finalize_universe_metas(interface, internal, compared)?;
 
     // The group's members are monomorphic in their own universes, so every occurrence of one member inside the group — in a signature, a body, or a rebuilt registry telescope — denotes the group's own instance. Those occurrences were elaborated before the parameters existed and carry no instance at all until this rewrite gives them one.

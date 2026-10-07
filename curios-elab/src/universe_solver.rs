@@ -1430,7 +1430,7 @@ impl UniverseSolver {
     }
 
     /// The unsolved metas that carry `metas`, following each solution to the metas it names. Following one link is not enough, because the meta a link lands on may itself be solved; a level solved to a constant carries no meta and needs no parameter.
-    fn representatives(
+    pub fn representatives(
         &self,
         metas: impl IntoIterator<Item = UniverseMetaId>,
     ) -> BTreeSet<UniverseMetaId> {

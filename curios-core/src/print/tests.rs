@@ -607,3 +607,17 @@ fn like_named_binders_take_the_least_free_suffixes() {
     assert_eq!(spelled(2), Some("x4"));
     assert_eq!(spelled(9_999), Some("x10001"));
 }
+
+/// A sort's own level where instances are suppressed: a concrete one is the node's whole content and prints, and one headed by a metavariable names nothing a reader can act on and does not. Held over terms built by hand, a program's sorts above zero being at levels their declarations leave to a caller, which a report meets still open.
+#[test]
+fn a_concrete_level_prints_where_a_metavariable_headed_one_is_suppressed() {
+    let spelling = Rc::new(Spelling::default().with_erased_universes());
+    let printed = |level: Level| Term::type_at(level).spelled(&spelling).to_string();
+    let one = |level: Level| level.succ().expect("a successor is a level");
+    let open = Level::meta(crate::UniverseMetaId(7));
+
+    assert_eq!(printed(Level::zero()), "Type");
+    assert_eq!(printed(one(Level::zero())), "Type.{1}");
+    assert_eq!(printed(open.clone()), "Type");
+    assert_eq!(printed(one(open)), "Type");
+}

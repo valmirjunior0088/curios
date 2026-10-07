@@ -324,9 +324,9 @@ fn a_result_at_a_compared_position_keeps_its_level() {
     }
 }
 
-// **A type-valued definition's body level settles at zero.** `Holder`'s body names `Value` at an occurrence of its own, which nothing in the source ties to its parameter's, and a level only a body mentions is minimized: the alias unfolds to a record over `Value` at zero, and `hold`, which builds one, is held there with it. `Types` and the recursive `Tower` settle the same way, `top` following `Tower`. The roadmap's *A universe level settled before its evidence is in* owns the gap.
+// **A type-valued definition's body level is its callers' where its body holds it.** `Holder`'s body names `Value` at an occurrence of its own, which nothing in the source ties to its parameter's. `Value` is invariant in its level, so an occurrence of `Holder` unfolds to a record that holds it, and it is `Holder`'s second parameter; `hold` builds that record from its argument, where the two are one level, and takes a `Value` whose `A` is `Type`. `Types` keeps the level of the `Type` it lists, and the recursive `Tower` those of its two occurrences of `Value`, `top` following it.
 #[test]
-fn a_type_valued_definitions_body_level_settles_at_zero() {
+fn a_type_valued_definitions_body_level_is_its_callers() {
     let program = |use_: &str| {
         format!(
             r#"
@@ -345,28 +345,27 @@ fn a_type_valued_definitions_body_level_settles_at_zero() {
 
     let parameters = universe_parameters(&program(""));
     for (name, count) in [
-        ("/Holder", 1),
-        ("/hold", 0),
-        ("/Types", 0),
-        ("/Tower", 0),
-        ("/top", 0),
+        ("/Holder", 2),
+        ("/hold", 1),
+        ("/Types", 1),
+        ("/Tower", 2),
+        ("/top", 2),
     ] {
         assert_eq!(
             parameters.get(name),
             Some(&count),
-            "a type-valued definition's body level moved, so the gap this pins has moved with it: {parameters:?}",
+            "a level a type-valued definition's body holds stopped being its callers', or one it does not hold became theirs: {parameters:?}",
         );
     }
 
     let large = r#"let large: Value = Value { A = Type, read = (_) => Result/success(Nat) };
         pub let held: Holder(large) = hold(large);"#;
-    let message = typecheck(&program(large)).expect_err("an alias's body holds its users at zero");
-    assert!(message.contains("strictly below itself"), "got: {message}");
+    assert_eq!(typecheck(&program(large)), Ok(()));
 }
 
-// **The library's instances.** `/std/Cli` describes a spec at any level and parses at one: `help` prints a spec whose reader answers a type, and `parse` refuses that spec, its walk held at the zeros its private `Claim` alias's body settles at. The stock readers keep their level, a `Value` being invariant in it, so a spec holds `nat` beside a reader of a type. The roadmap's *A universe level settled before its evidence is in* owns the refusal that is left.
+// **The library's instances.** `/std/Cli` describes and parses a spec at any level: `help` prints a spec whose reader answers a type, and `parse` walks it, its private `Claim` alias keeping the levels of the `Arg` its body names. The stock readers keep their level, a `Value` being invariant in it, so a spec holds `nat` beside a reader of a type.
 #[test]
-fn the_command_line_parser_is_held_at_one_universe_instance() {
+fn the_command_line_parser_takes_a_spec_at_any_universe_instance() {
     let program = |body: &str| {
         format!(
             r#"
@@ -396,6 +395,5 @@ fn the_command_line_parser_is_held_at_one_universe_instance() {
         r#"pub let parsed: Outcome(spec) = parse(spec, [], Option/none());
         /std/print("parsed")"#,
     );
-    let message = typecheck(&parsed).expect_err("the parser sits at one instance");
-    assert!(message.contains("strictly below itself"), "got: {message}");
+    assert_eq!(typecheck(&parsed), Ok(()));
 }
