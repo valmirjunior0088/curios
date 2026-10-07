@@ -26,7 +26,6 @@ use {
 pub struct UniverseMark {
     constraints: StoreScope,
     solution_log_len: usize,
-    floor_log_len: usize,
     weak_len: usize,
 }
 
@@ -53,8 +52,6 @@ struct UniverseMeta {
     provenance: Provenance,
     origin: Option<UniverseConstraintOrigin>,
     solution: Option<Level>,
-    /// Whether a constant has bounded this occurrence's level from below. The store discharges `0 ≤ u` as trivially true — when it is added, and when a substitution turns `ℓ ≤ u` into it — so this is the one record that it was ever said; Rocq keeps an inferred `Set ≤ u` apart for the same reason. A bound by another level stays in the store, where a lower bound is read.
-    floored: bool,
 }
 
 /// Where a universe meta came from, which decides which member of an identified pair represents it and how finalization settles it.
@@ -454,8 +451,6 @@ pub struct UniverseSolver {
     metas: Vec<UniverseMeta>,
     constraints: ConstraintStore,
     solution_log: Vec<UniverseMetaId>,
-    /// The levels whose floor was recorded, in order, so a rollback unrecords them as it unsolves `solution_log`'s.
-    floor_log: Vec<UniverseMetaId>,
     next_meta: usize,
     consistency: Option<ConsistencyCache>,
     /// The pairs conversion met at positions a nominal family or a definition is irrelevant in, in the order it met them. None is a constraint, since no checker compares the two levels of one; each is tried where its declaration's levels settle ([`UniverseSolver::join_weak_equations`]).
@@ -516,12 +511,10 @@ impl UniverseSolver {
                     provenance: Provenance::Chosen,
                     origin: None,
                     solution: None,
-                    floored: false,
                 })
                 .collect(),
             constraints: ConstraintStore::default(),
             solution_log: Vec::new(),
-            floor_log: Vec::new(),
             next_meta: meta_floor,
             consistency: None,
             weak: Vec::new(),
@@ -539,7 +532,6 @@ impl UniverseSolver {
                 provenance: seed.role.into(),
                 origin: seed.origin.clone(),
                 solution: None,
-                floored: false,
             })
             .collect();
         self.next_meta = seeds.len();
@@ -565,7 +557,6 @@ impl UniverseSolver {
             provenance,
             origin,
             solution: None,
-            floored: false,
         });
         id
     }
@@ -585,7 +576,6 @@ impl UniverseSolver {
         UniverseMark {
             constraints: self.constraints.enter(),
             solution_log_len: self.solution_log.len(),
-            floor_log_len: self.floor_log.len(),
             weak_len: self.weak.len(),
         }
     }
@@ -609,10 +599,6 @@ impl UniverseSolver {
         while self.solution_log.len() > mark.solution_log_len {
             let meta = self.solution_log.pop().unwrap();
             self.metas[meta.0].solution = None;
-        }
-        while self.floor_log.len() > mark.floor_log_len {
-            let meta = self.floor_log.pop().unwrap();
-            self.metas[meta.0].floored = false;
         }
         self.constraints.rollback(mark.constraints);
         self.consistency = None;
@@ -900,11 +886,6 @@ impl UniverseSolver {
         constraint.lower = self.zonk(&constraint.lower)?;
         constraint.upper = self.zonk(&constraint.upper)?;
         if constraint.lower.structurally_leq(&constraint.upper) {
-            if constraint.lower.atoms().next().is_none()
-                && let Some(meta) = bare_meta(&constraint.upper)
-            {
-                self.record_floor(meta);
-            }
             return Ok(());
         }
         if constraint.lower.atoms.is_empty() && constraint.upper.atoms.is_empty() {
@@ -1015,18 +996,6 @@ impl UniverseSolver {
             }
         }
         Ok((!lowers.is_empty()).then(|| Level::max(lowers)))
-    }
-
-    /// Record that a constant bounded an occurrence's level from below — see `UniverseMeta::floored`. Only an occurrence's floor is read, so no other level records one.
-    fn record_floor(&mut self, meta: UniverseMetaId) {
-        let Some(entry) = self.metas.get_mut(meta.0) else {
-            return;
-        };
-        if entry.provenance != Provenance::Occurrence || entry.floored {
-            return;
-        }
-        entry.floored = true;
-        self.floor_log.push(meta);
     }
 
     /// Whether any constraint genuinely bounds `meta` from below — names it on its upper side. A level with no such bound has the unconditional least solution zero.
@@ -1302,21 +1271,13 @@ impl UniverseSolver {
         if entry.solution.is_some() {
             return Ok(());
         }
-        // A floor survives an alias: whatever bounded `meta` from below bounds the level it now names.
-        let alias = entry.floored.then(|| bare_meta(&level)).flatten();
         entry.solution = Some(level);
         self.solution_log.push(meta);
         self.consistency = None;
-        if let Some(alias) = alias {
-            self.record_floor(alias);
-        }
 
         let head = LevelHead::Meta(meta);
         let solution = self.zonk(&Level::meta(meta))?;
-        for floored in self.constraints.substitute_head(head, &solution)? {
-            self.record_floor(floored);
-        }
-        Ok(())
+        self.constraints.substitute_head(head, &solution)
     }
 
     /// Instantiate a closed context for one use, returning its fresh argument vector after inserting the substituted residual constraints transactionally. The levels it mints are the use's own — `Provenance::Occurrence`.
@@ -1511,18 +1472,14 @@ impl UniverseSolver {
         }
     }
 
-    /// Settle `metas` at their least solutions wherever that takes no choice from a caller, round after round until one settles nothing.
+    /// Settle `metas` at their least solutions, round after round until one settles nothing.
     ///
-    /// A level with a principal lower bound takes it. A level in `floored` that nothing bounds from below takes zero; any other stays, and so does one whose only lower bounds are disjunctive, for the reason [`Self::close_stalled_components`] declines a disjunction. A round commits every settlement it finds and checks consistency once, since a check after an assignment rebuilds the difference graph; a round the check refuses is retaken one level at a time, keeping each settlement that stays consistent.
-    fn settle(
-        &mut self,
-        metas: &BTreeSet<UniverseMetaId>,
-        floored: &BTreeSet<UniverseMetaId>,
-    ) -> Result<(), UniverseError> {
+    /// A level with a principal lower bound takes it, and one nothing bounds from below takes zero. One whose only lower bounds are disjunctive stays, for the reason [`Self::close_stalled_components`] declines a disjunction, and so does one a lower bound of which still names an open level. A round commits every settlement it finds and checks consistency once, since a check after an assignment rebuilds the difference graph; a round the check refuses is retaken one level at a time, keeping each settlement that stays consistent.
+    fn settle(&mut self, metas: &BTreeSet<UniverseMetaId>) -> Result<(), UniverseError> {
         curios_profile::profile!("universe::settle");
         loop {
             let mark = self.mark();
-            let settled = self.settle_round(metas, floored, false)?;
+            let settled = self.settle_round(metas, false)?;
             if settled == 0 {
                 self.release(mark);
                 return Ok(());
@@ -1533,7 +1490,7 @@ impl UniverseSolver {
             }
             self.rollback(mark);
             self.release(mark);
-            if self.settle_round(metas, floored, true)? == 0 {
+            if self.settle_round(metas, true)? == 0 {
                 return Ok(());
             }
         }
@@ -1543,7 +1500,6 @@ impl UniverseSolver {
     fn settle_round(
         &mut self,
         metas: &BTreeSet<UniverseMetaId>,
-        floored: &BTreeSet<UniverseMetaId>,
         checked: bool,
     ) -> Result<usize, UniverseError> {
         let mut settled = 0;
@@ -1553,7 +1509,7 @@ impl UniverseSolver {
             }
             let level = match self.principal_lower_bound(meta)? {
                 Some(level) => level,
-                None if floored.contains(&meta) && !self.is_bounded_below(meta) => Level::zero(),
+                None if !self.is_bounded_below(meta) => Level::zero(),
                 None => continue,
             };
             if !checked {
@@ -1671,7 +1627,7 @@ impl UniverseSolver {
         self.merge_forced_equalities(&relevant)?;
         // A merge can have joined a held level to another, which is then held with it.
         let held = self.hold(held);
-        // An occurrence's level in the signature settles at its recorded floor: `List(Nat)` in a domain sits at `Type 0` where its reduct does, rather than at a parameter no caller needs. As in Rocq, a level settles only at a lower bound something recorded, so one nothing bounded from below stays — and a chosen level identified with an occurrence stays with it, being the class's representative.
+        // An occurrence's level in the signature that nothing holds settles at its least value: `List(Nat)` in a domain sits at `Type 0` where its reduct does, rather than at a parameter no caller needs, and a level nothing bounds from below sits at zero, no position reading it. A chosen level identified with an occurrence stays with it, being the class's representative.
         let occurrences = interface
             .iter()
             .copied()
@@ -1679,12 +1635,7 @@ impl UniverseSolver {
                 self.provenance(*meta) == Some(Provenance::Occurrence) && !held.contains(meta)
             })
             .collect::<BTreeSet<_>>();
-        let floored = occurrences
-            .iter()
-            .copied()
-            .filter(|meta| self.metas[meta.0].floored)
-            .collect::<BTreeSet<_>>();
-        self.settle(&occurrences, &floored)?;
+        self.settle(&occurrences)?;
         // Last, a level the constraints reach but neither the type nor the body mentions — read after the occurrences settle, since settling one at a chosen level's bound makes that level the one the signature names; read before them, `Try`'s `Monad` witness would take its payload at zero while the lambda binder that chose it goes unmentioned. What is left is one nothing can observe — `/sys/List`'s body level, joined to its result by `v ≤ u` and nothing else — so it is settled rather than generalized, which is Rocq's restriction of a context to the universes its terms use.
         let interface = self.representatives(interface);
         let unmentioned = relevant
@@ -1692,7 +1643,7 @@ impl UniverseSolver {
             .copied()
             .filter(|meta| !interface.contains(meta) && !internal.contains(meta))
             .collect::<BTreeSet<_>>();
-        self.settle(&unmentioned, &unmentioned)?;
+        self.settle(&unmentioned)?;
         // Settling can leave two levels mutual, and a chosen level bounded by one chosen level alone, so the merge and the identification are asked of what it left.
         self.merge_forced_equalities(&relevant)?;
         self.identify_bounded_choices(&relevant)?;

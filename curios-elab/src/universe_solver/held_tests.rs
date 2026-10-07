@@ -104,3 +104,28 @@ fn an_occurrence_above_a_held_level_settles_at_it() {
     assert_eq!(context.parameter_count, 1);
     assert!(context.constraints.is_empty());
 }
+
+// An occurrence's level nothing bounds from below and nothing holds settles at zero: no position reads it, so the least level takes nothing from a caller, whether a constant ever bounded it or another occurrence that settled first. Held, it is the declaration's parameter.
+#[test]
+fn an_occurrence_nothing_bounds_or_holds_settles_at_zero() {
+    for (held, parameters) in [(false, 0), (true, 1)] {
+        let mut solver = UniverseSolver::new(0);
+        let level = occurrence(&mut solver);
+
+        let context = solver.finalize([level], [], held.then_some(level)).unwrap();
+
+        assert_eq!(context.parameter_count, parameters, "held: {held}");
+    }
+
+    let mut solver = UniverseSolver::new(0);
+    let below = occurrence(&mut solver);
+    let above = occurrence(&mut solver);
+    solver
+        .add_leq(Level::meta(below), Level::meta(above), conversion())
+        .unwrap();
+
+    let context = solver.finalize([below, above], [], []).unwrap();
+
+    assert_eq!(context.parameter_count, 0);
+    assert_eq!(solver.zonk(&Level::meta(above)).unwrap(), Level::zero());
+}

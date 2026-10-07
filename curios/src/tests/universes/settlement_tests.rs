@@ -456,6 +456,39 @@ fn a_weak_equation_decides_no_level_a_signature_holds() {
     assert_eq!(parameters.get("/counted"), Some(&1), "{parameters:?}");
 }
 
+// **A level nothing holds settles at its least value.** An occurrence's level that stands only where conversion compares nothing is no caller's to choose. `parameters` answers an `Option` of a record through a local definition answering the same, each `Option`'s level bounded by the other's alone, and the witness of `Source` over `Io` names a bare `Io` at a level nothing bounds from below. Each settles at zero, and no parameter is carried for it. Nothing reads such a level, so a region at a larger one is still sequenced through the witness.
+#[test]
+fn a_level_nothing_holds_settles_at_its_least_value() {
+    let source = r#"
+        use /std/{Nat, Io, Monad, List, Option};
+        pub concept Source(M: (Type) -> Type, S: Type): pub Type {
+            pull(s: S) -> M(Nat),
+        }
+        satisfy Source(Io, Nat) {
+            pull(n) = Io/pure(n),
+        }
+        pub let drained(@M: (Type) -> Type, @S: Type, use Monad(M), use Source(M, S), s: S) -> M(Nat) =
+            Source/pull(s);
+        pub let large: Io(Type) =
+            let _n = drained(3)!;
+            Io/pure(Nat);
+        pub let parameters(n: Nat) -> Option({nums: List(Nat), final: Nat}) =
+            let go(j: Nat) -> Option({nums: List(Nat), final: Nat}) =
+                match j
+                | 0 => Option/none()
+                | m + 1 => go(m)
+                end;
+            go(n);
+        /std/print("least")
+        "#;
+
+    let parameters = universe_parameters(source);
+    for name in ["/parameters", "the witness in the entry module"] {
+        assert_eq!(parameters.get(name), Some(&0), "{name}: {parameters:?}");
+    }
+    assert_eq!(run(source), b"least");
+}
+
 // **A type former sits where its parts are typed, which is where the kernel types it.** A function type or a tuple type over a part whose written type is above its reduct's — a closed match typed by its motive, a call typed by its codomain, an associated type named through a witness at a level of its own — is sized from the part as typing read it. Sized from the part's reduct it sat a level short, and the kernel refused the sort the elaborator declared: `Over` at `Type` over a domain typed at its witness's level, and `listed`'s `List` at zero over a record of one.
 #[test]
 fn a_type_former_is_sized_by_its_parts_as_they_are_written() {

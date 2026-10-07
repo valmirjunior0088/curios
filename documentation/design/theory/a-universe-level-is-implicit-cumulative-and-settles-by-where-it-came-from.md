@@ -2,7 +2,7 @@
 
 **Decision.** Surface `Type` is nullary, and Core gives every occurrence an inferred level in an infinite cumulative hierarchy, `Type u : Type (u + 1)`. A declaration generalizes the levels its constraints leave free and instantiates them freshly at each external use; a recursive group is monomorphic in its own levels. Every universe metavariable the elaborator mints carries a provenance — *chosen*, a `Type` written in an input position; *occurrence*, the instance level a use of a universe-polymorphic name mints; *inferred*, every other — and `UniverseSolver::finalize` settles a level by it before generalizing what remains:
 
-- an occurrence's level settles at its recorded floor, its principal lower bound or zero, while a level nothing bounds from below stays;
+- an occurrence's level that nothing holds settles at its least value, its principal lower bound or zero;
 - a chosen level bounded above only by one other chosen level is that level, so a concept's method level is its family's domain;
 - a level neither the type nor the body mentions settles, after the occurrences;
 - a witness's levels close with the declaration that resolves it: a goal is resolved while its consumer is open, wherever its witness is written, and is pinned to what the goal fixes, the consumer's closing settling the rest; one a parked constraint wakes after its consumer has closed is closed where it resolves;
