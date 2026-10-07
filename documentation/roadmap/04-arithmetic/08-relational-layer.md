@@ -20,7 +20,7 @@ Reserved with the layer it serves, and refined with it when the trigger is met:
 - **Evidence is keyed by what it is about.** A certificate is found under the canonical form of the formula it justifies, so the certifier's relation is a function of the question and never of where it was asked.
 - **It travels with the module.** A unit carries a table of the evidence its verdicts rest on, stored and validated as the unit is, and a later walk reads it there.
 - **Missing or failing evidence is a refusal**, never an acceptance, and a certificate is checked each time it is read.
-- **The checker is certifier-grade.** It meets the six clauses of [the kernel's design decision](../../design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md), lives where [the trusted base is held](../01-soundness/03-the-trusted-base-is-held-by-the-tree.md), and is held against certificates corrupted one step at a time, each corruption refused. The search that found a certificate is not trusted.
+- **The checker is certifier-grade.** It meets the six clauses of [the kernel's design decision](../../design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md), lives inside the certifier's closure, and is held against certificates corrupted one step at a time, each corruption refused. The search that found a certificate is not trusted.
 - **The certifier's time is measured** before and after the layer opens, and reported with it.
 
 ## Rejected

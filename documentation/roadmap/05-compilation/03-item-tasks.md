@@ -2,7 +2,7 @@
 
 Working specification for multithreaded compilation, the payoff of [a declaration being a function of what it reads](02-a-declaration-is-a-function-of-what-it-reads.md). Once that holds, no artifact carries a minted identity ([a unit carries none another compilation could mint](../../../curios-unit/README.md#a-unit-carries-no-identity-another-compilation-could-mint)) and no verdict depends on history ([no memo outlives its declaration](../../design/soundness/a-reduction-step-costs-what-it-builds.md)), the items of a compilation can run on as many workers as the product supplies, in any order, and the determinism that property gives is what the gate holds them to. The compiler is single-threaded today by omission rather than by decision, and every design statement to the contrary is listed under what this overturns.
 
-It needs [that specification](02-a-declaration-is-a-function-of-what-it-reads.md) whole, with its one environment, and what it builds on, and not [the trusted base being held by the tree](../01-soundness/03-the-trusted-base-is-held-by-the-tree.md); [Cranelift's parallel compilation](../../../curios-runtime/README.md#compilation-runs-across-threads-and-only-where-compilation-exists) is already its first parallelism.
+It needs [that specification](02-a-declaration-is-a-function-of-what-it-reads.md) whole, with its one environment, and what it builds on; [Cranelift's parallel compilation](../../../curios-runtime/README.md#compilation-runs-across-threads-and-only-where-compilation-exists) is already its first parallelism.
 
 ## What this builds on
 

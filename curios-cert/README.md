@@ -82,3 +82,5 @@ join -t$'\t' -1 2 -2 2 <(per_item declaration curios-prelude-archive/.artifacts/
 ```
 
 The columns are the item, its elaboration milliseconds and its certification milliseconds; `Item::describe` names every witness of a module alike, so a module's witnesses share one row.
+
+**Whether the kernel keeps the closed machine is decided from this stream.** The `reduce` and `reduce_forced` rows of the prelude's certification with the machine on are read against the same stream with it off, which needs a walk that can leave the machine out as `Kernel::uncached` leaves the memos out. If the strategy alone certifies `/std` within the budget every item has, the machine leaves the kernel's path; if not, it stays a trusted evaluator.
