@@ -1,4 +1,4 @@
-//! Folding an unfolded top-level `rec` back into its definitions' names: for display ([`refold_recs`]), and exactly, for a term the elaborator commits ([`named_members`]).
+//! Folding an unfolded top-level `rec` back into its definitions' names: for display ([`refold_recs`]), and exactly, for a term the elaborator commits ([`named_members`]). And contracting, for display, a lambda that is applied where it stands ([`contract_redexes`]).
 //!
 //! A mismatch report normalizes both sides so the disagreement is visible, and normalizing `double(p + 1)` unfolds the global through its structural group, which carries no name: the report would then spell `rec #0: (n: Nat) -> Nat = n => …; #0(p) + 2` where the author wrote `double`. [`refold_recs`] recognizes a `Rec` node whose group is one the context defined — compared projected, so an instance of a universe-polymorphic group is the group it instantiates — and spells its tail with each member as the definition it is: `double(p) + 2`. This lives here rather than in the printer because the group to recognize is the *elaborated* one, which only the context holds; the lowered module the formatter has is a different structure, and on an error path there is no elaborated module at all.
 //!
@@ -10,7 +10,8 @@ mod tests;
 use {
     super::Context,
     curios_core::{
-        Bound, Enter, Free, Global, InstanceHead, Rec, RecGroup, Subterm, Term, Var, Visit,
+        Apply, Bound, Enter, Free, Func, Global, InstanceHead, Rec, RecGroup, Subterm, Term, Var,
+        Visit,
     },
     std::{collections::HashSet, rc::Rc},
 };
@@ -28,6 +29,49 @@ pub(crate) fn refold_recs(context: &Context, term: &Term) -> Term {
             .collect(),
     );
     refold_with(&table, term)
+}
+
+/// `term` with every lambda that is applied where it stands contracted: `((a, b) => f(a, b))(x, y)` spelled `f(x, y)`. Display-only.
+///
+/// A reduct holds such a redex wherever reduction stopped above it. A definition unfolded at an argument that is itself a function leaves that function's value applied under the binders reduction did not enter: `Ord/Transitive(Ord/le(ord))` unfolds to a bound over `((a, b) => Ordering/is_le(ord(a, b)))(x, y)`. A reader would not have written the redex, and it does not read back: a lambda's parameters take their types from an annotation or from the position it is checked at, and an applied lambda has neither.
+pub(crate) fn contract_redexes(term: &Term) -> Term {
+    // Memoized on node identity, as the refold is and for its reason.
+    let mut visit = Visit::rewriting_shared(
+        |_, _| None,
+        Box::new(|_, term| {
+            let Subterm::Apply(Apply { head, arguments }) = &**term else {
+                return None;
+            };
+            // A head that is itself an application may contract to the lambda this one applies.
+            let head = match &**head {
+                Subterm::Apply(_) => contract_redexes(head),
+                _ => head.clone(),
+            };
+            let Subterm::Func(Func { telescope }) = &*head else {
+                return None;
+            };
+            if arguments.len() < telescope.len() {
+                return None;
+            }
+            let (taken, rest) = arguments.split_at(telescope.len());
+            let refs = taken
+                .iter()
+                .map(|argument| &argument.term)
+                .collect::<Vec<_>>();
+            let body = telescope.open(&refs);
+            let contracted = match rest.is_empty() {
+                true => body,
+                false => Term::apply_marked(
+                    body,
+                    rest.iter()
+                        .map(|argument| (argument.plicity, argument.term.clone())),
+                ),
+            };
+            // The contracted body is walked in turn, since a substituted node is not descended into.
+            Some(contract_redexes(&contracted))
+        }),
+    );
+    term.traverse(&mut visit)
 }
 
 /// `term` with every member of a top-level `rec` group it holds spelled by the member's name, at the universe instance it stands at: how a term the elaborator commits — a metavariable's solution, a proof it wrote — names a recursive definition it calls.

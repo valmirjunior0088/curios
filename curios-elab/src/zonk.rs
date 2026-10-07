@@ -3,8 +3,8 @@ mod tests;
 
 use {
     super::{
-        Context, Error, GoalReport, Suggestions, UniverseSolver, callee, refold_recs,
-        suggest_candidates, universe_context_validate,
+        Context, Error, GoalReport, Suggestions, UniverseSolver, callee, contract_redexes,
+        refold_recs, suggest_candidates, universe_context_validate,
     },
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind,
@@ -995,13 +995,13 @@ pub(crate) fn report_goals(
         ));
     }
 
-    // Materialize committed substitutions tolerantly and erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved). How a witness reads is the printer's, against the witness binders the goal was written under (axis (h)).
+    // Materialize committed substitutions tolerantly and erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved). A lambda applied where it stands is contracted, since a solution is a reduct and may hold one no reader could write back (`contract_redexes`). How a witness reads is the printer's, against the witness binders the goal was written under (axis (h)).
     let context = &*context;
     let display = |term: &Term| {
-        refold_recs(
+        contract_redexes(&refold_recs(
             context,
             &project_erased_universes(&zonk_solved_term_metas(context, term)),
-        )
+        ))
     };
     sites
         .iter()

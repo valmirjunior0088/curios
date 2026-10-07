@@ -280,6 +280,21 @@ fn a_short_lambda_body_stays_on_the_arrows_line() {
     assert_eq!(identity.to_string(), "(x) => x");
 }
 
+/// A lambda applied where it stands is written in parentheses, the one spelling that reads back as the application: bare, `(x) => x(3)` is a lambda whose body applies `x`.
+#[test]
+fn an_applied_lambda_is_parenthesized() {
+    let x = Free::local(0, Some("x"));
+    let identity = Term::func(
+        [(x, Term::intrinsic(Intrinsic::NatType))],
+        Term::free_var(&x),
+    );
+    let applied = Term::apply(
+        identity,
+        [Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)))],
+    );
+    assert_eq!(applied.to_string(), "((x) => x)(3)");
+}
+
 /// A body that carries a break of its own — a `match` — takes the line after the arrow and indents.
 #[test]
 fn a_lambda_body_with_a_match_breaks_after_the_arrow() {

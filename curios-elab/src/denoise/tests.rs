@@ -1,5 +1,5 @@
 use {
-    curios_core::{Free, Intrinsic, Subterm, Term},
+    curios_core::{Free, Intrinsic, Nat, Subterm, Term},
     std::rc::Rc,
 };
 
@@ -24,4 +24,29 @@ fn a_shared_term_is_refolded_once_per_node() {
         panic!("the walk changed the root: {refolded}");
     };
     assert!(std::ptr::eq::<Subterm>(&**left, &**right));
+}
+
+/// A lambda applied where it stands is contracted for display, under a binder as at the root, and a lambda no argument reaches is left: `(c) => ((a, b) => a + b)(c, 1)` is shown as `(c) => c + 1`.
+#[test]
+fn an_applied_lambda_is_contracted_where_it_stands() {
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let a = Free::local(0, Some("a"));
+    let b = Free::local(1, Some("b"));
+    let c = Free::local(2, Some("c"));
+    let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+
+    let sum = Term::func(
+        [(a, nat()), (b, nat())],
+        Term::intrinsic(Intrinsic::nat_add(Term::free_var(&a), Term::free_var(&b))),
+    );
+    let applied = Term::func(
+        [(c, nat())],
+        Term::apply(sum, [Term::free_var(&c), one.clone()]),
+    );
+    let shown = Term::func(
+        [(c, nat())],
+        Term::intrinsic(Intrinsic::nat_add(Term::free_var(&c), one)),
+    );
+
+    assert_eq!(super::contract_redexes(&applied), shown);
 }

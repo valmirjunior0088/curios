@@ -1994,8 +1994,17 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             {
                 return method;
             }
+            // A lambda applied where it stands is written in parentheses: bare, its body would take the arguments, and `(x) => f(x)(a)` reads back as a lambda. One printed as the type former it eta-expands is no lambda on the page.
+            let lambda = matches!(
+                &*head,
+                Subterm::Func(Func { telescope }) if former_eta(telescope, &telescope.marks()).is_none()
+            );
+            let callee = match lambda {
+                true => flat([pure("("), sub(head, frame), pure(")")]),
+                false => sub(head, frame),
+            };
             flat([
-                sub(head, frame),
+                callee,
                 listed(
                     "(".into(),
                     false,
