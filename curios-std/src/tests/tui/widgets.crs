@@ -1,5 +1,6 @@
 -- The widget six, each a pure function of its state and its size.
-use /std/{Nat, Str, Option, Test, Tui};
+use /std/{Nat, Bool, Str, Option, Test, Tui};
+use /std/Bool/{True};
 use /std/Tui/{Style, Frame, Key, Listing, Field};
 use /std/Tui/Key/{Code};
 
@@ -26,6 +27,18 @@ test a_listing_moves_within_its_bounds_and_scrolls_to_its_selection =
         Test/equal(render(Listing/draw(moved, Style/plain, Style/plain, 5, 2)), "two  /three"),
         Test/equal(Listing/index(Listing/move(l, Code/up())), Option/some(0)),
         Test/equal(Listing/index(Listing/new([])), Option/none())]);
+
+-- A listing built with items and nothing selected highlights no row, where its first row is highlighted once it is the selection.
+test a_listing_with_nothing_selected_highlights_no_row =
+    let marked = Style { ..Style/plain, reverse = true };
+    let first_row_marked(l: Listing) -> Bool =
+        let drawn = Listing/draw(l, Style/plain, marked, 5, 2);
+        Frame/get(drawn, 0, 0, True/qed(), True/qed()).style.reverse;
+    Test/all([
+        Test/equal(
+            first_row_marked(Listing { items = ["one", "two"], cursor = Option/none() }),
+            false),
+        Test/equal(first_row_marked(Listing/new(["one", "two"])), true)]);
 
 -- An input edits at its cursor, which never passes its text.
 test an_input_edits_at_its_cursor =

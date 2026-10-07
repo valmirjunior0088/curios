@@ -46,10 +46,14 @@ pub let move(l: Listing, code: Code) -> Listing =
         end
     end;
 
---- The items as rows, the selected one in `highlight`, scrolled so the selection is in view. An empty listing selects nothing and draws from the top.
+--- The items as rows, the selected one in `highlight`, scrolled so the selection is in view. A listing with nothing selected highlights no row and draws from the top.
 pub let draw(l: Listing, style: Style, highlight: Style, w: Nat, h: Nat) -> Frame(w, h) =
-    let chosen = Option/unwrap_or(index(l), 0);
-    let first = match chosen < h | true => 0 | false => chosen + 1 - h end;
+    let chosen = index(l);
+    let first =
+        match chosen
+        | some(i) => match i < h | true => 0 | false => i + 1 - h end
+        | none() => 0
+        end;
     let shown =
         List/take(
             List/drop_while(
@@ -57,6 +61,6 @@ pub let draw(l: Listing, style: Style, highlight: Style, w: Nat, h: Nat) -> Fram
                 (e) => e.0 < first),
             h);
     let row(entry: {Nat, Str}) -> Vec(Tile, w) =
-        let s = match entry.0 == chosen | true => highlight | false => style end;
+        let s = match chosen == Option/some(entry.0) | true => highlight | false => style end;
         Vec/first(Frame/fit(Frame/text(s, entry.1).frame, w, 1));
     Frame/fit(Vec/of_list(List/map(shown, row)), w, h);
