@@ -1,0 +1,166 @@
+use /std/{Nat, Str, Spell};
+use /std/ops/{Eql};
+use /std/time/{Timestamp};
+
+--- A day of the week.
+pub induct Weekday: pub Type
+| sunday()
+| monday()
+| tuesday()
+| wednesday()
+| thursday()
+| friday()
+| saturday()
+end
+
+satisfy Eql(Weekday) {
+    ..
+}
+
+satisfy Spell(Weekday) {
+    ..
+}
+
+--- A month of the year.
+pub induct Month: pub Type
+| january()
+| february()
+| march()
+| april()
+| may()
+| june()
+| july()
+| august()
+| september()
+| october()
+| november()
+| december()
+end
+
+satisfy Eql(Month) {
+    ..
+}
+
+satisfy Spell(Month) {
+    ..
+}
+
+--- A moment as the calendar and the clock name it, in UTC by the Gregorian calendar: what a protocol that writes a date out spells.
+pub struct Date: pub Type {
+    year: Nat,
+    month: Month,
+    --- The day of the month, from 1.
+    day: Nat,
+    weekday: Weekday,
+    --- The hour of the day, from 0 to 23.
+    hour: Nat,
+    minute: Nat,
+    second: Nat,
+}
+
+satisfy Eql(Date) {
+    ..
+}
+
+satisfy Spell(Date) {
+    ..
+}
+
+-- The month `n` months after March.
+let month_from_march(n: Nat) -> Month =
+    match n
+    | 0 => Month/march()
+    | 1 => Month/april()
+    | 2 => Month/may()
+    | 3 => Month/june()
+    | 4 => Month/july()
+    | 5 => Month/august()
+    | 6 => Month/september()
+    | 7 => Month/october()
+    | 8 => Month/november()
+    | 9 => Month/december()
+    | 10 => Month/january()
+    | _ => Month/february()
+    end;
+
+-- The day of the week `n` days after a Sunday.
+let weekday_from_sunday(n: Nat) -> Weekday =
+    match n % 7
+    | 0 => Weekday/sunday()
+    | 1 => Weekday/monday()
+    | 2 => Weekday/tuesday()
+    | 3 => Weekday/wednesday()
+    | 4 => Weekday/thursday()
+    | 5 => Weekday/friday()
+    | _ => Weekday/saturday()
+    end;
+
+--- The date and the time of day `t` is, to the second. The days since the epoch are counted in eras of 400 years, each of 146 097 days, and in years that begin on the first of March, so that a leap day is its year's last and a month's first day falls where a line through the months puts it; the first of January 1970 was a Thursday.
+pub let of_timestamp(t: Timestamp) -> Date =
+    let secs = Timestamp/to_unix(t).secs;
+    let days = secs / 86400;
+    let within = secs % 86400;
+    let shifted = days + 719468;
+    let day_of_era = shifted % 146097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let months = (5 * day_of_year + 2) / 153;
+    Date {
+        year =
+            year_of_era + shifted / 146097 * 400 + match months < 10 | true => 0 | false => 1 end,
+        month = month_from_march(months),
+        day = day_of_year - (153 * months + 2) / 5 + 1,
+        weekday = weekday_from_sunday(days + 4),
+        hour = within / 3600,
+        minute = within % 3600 / 60,
+        second = within % 60,
+    };
+
+let weekday_name(d: Weekday) -> Str =
+    match d
+    | sunday() => "Sun"
+    | monday() => "Mon"
+    | tuesday() => "Tue"
+    | wednesday() => "Wed"
+    | thursday() => "Thu"
+    | friday() => "Fri"
+    | saturday() => "Sat"
+    end;
+
+let month_name(m: Month) -> Str =
+    match m
+    | january() => "Jan"
+    | february() => "Feb"
+    | march() => "Mar"
+    | april() => "Apr"
+    | may() => "May"
+    | june() => "Jun"
+    | july() => "Jul"
+    | august() => "Aug"
+    | september() => "Sep"
+    | october() => "Oct"
+    | november() => "Nov"
+    | december() => "Dec"
+    end;
+
+let digits(n: Nat, width: Nat) -> Str =
+    Str/pad_start(Nat/to_str(n), width, '0');
+
+--- The date as the Internet message format's fixed-length form spells it, `Sun, 06 Nov 1994 08:49:37 GMT`: the form HTTP sends a date in (RFC 9110 §5.6.7). A year past 9999 takes the digits it needs.
+pub let to_imf_fixdate(d: Date) -> Str =
+    Str/flatten([
+        weekday_name(d.weekday),
+        ", ",
+        digits(d.day, 2),
+        " ",
+        month_name(d.month),
+        " ",
+        digits(d.year, 4),
+        " ",
+        digits(d.hour, 2),
+        ":",
+        digits(d.minute, 2),
+        ":",
+        digits(d.second, 2),
+        " GMT"]);

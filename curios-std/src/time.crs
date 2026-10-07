@@ -9,3 +9,7 @@ pub use Duration/{let Duration};
 --- A moment that means something: seconds since the Unix epoch, as the wall clock and a file's modification time report it.
 pub mod Timestamp;
 pub use Timestamp/{let Timestamp};
+
+--- A moment as the calendar and the clock name it in UTC, and as a protocol spells it.
+pub mod Date;
+pub use Date/{let Date};

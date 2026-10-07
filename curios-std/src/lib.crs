@@ -118,9 +118,9 @@ pub use Async/{let Async};
 pub mod Try;
 pub use Try/{let Try};
 
---- Clocks: `Instant`, `Timestamp` and the `Duration` between two of either.
+--- Clocks and the calendar: `Instant`, `Timestamp`, the `Duration` between two of either, and the `Date` a timestamp is.
 ---
---- `Instant` is an opaque reading of the monotonic clock, good for measuring alone; `Timestamp` is a moment that means something; `Duration` is the distance between two of either, with no sign. The two moments do not convert.
+--- `Instant` is an opaque reading of the monotonic clock, good for measuring alone; `Timestamp` is a moment that means something; `Duration` is the distance between two of either, with no sign. The two moments do not convert. A `Date` is a timestamp as the Gregorian calendar and the clock name it in UTC, written out as HTTP writes one.
 pub mod time;
 
 --- Randomness from the host, in `Io`.

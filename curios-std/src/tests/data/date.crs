@@ -1,0 +1,68 @@
+-- A moment as the calendar names it: the date and the time of day a timestamp is, and the form HTTP writes one in.
+use /std/{Str, Nat, List, Test};
+use /std/time/{Timestamp, Date};
+use /std/time/Date/{Month, Weekday};
+
+let at(secs: Nat) -> Date =
+    Date/of_timestamp(Timestamp/of_unix(secs, 0));
+
+let spelled(secs: Nat) -> Str =
+    Date/to_imf_fixdate(at(secs));
+
+-- The epoch is the first of January 1970, a Thursday, at midnight.
+test the_epoch_is_a_thursday =
+    Test/equal(
+        at(0),
+        Date {
+            year = 1970,
+            month = Month/january(),
+            day = 1,
+            weekday = Weekday/thursday(),
+            hour = 0,
+            minute = 0,
+            second = 0,
+        });
+
+-- A leap day is the twenty-ninth of February, in a year four divides and in a century four hundred divides; a century it does not has none, so the day after its twenty-eighth of February is the first of March.
+test a_leap_day_falls_where_the_calendar_puts_it =
+    Test/all([
+        Test/equal(spelled(1709164800), "Thu, 29 Feb 2024 00:00:00 GMT"),
+        Test/equal(spelled(951782400), "Tue, 29 Feb 2000 00:00:00 GMT"),
+        Test/equal(spelled(4107542399), "Sun, 28 Feb 2100 23:59:59 GMT"),
+        Test/equal(spelled(4107542400), "Mon, 01 Mar 2100 00:00:00 GMT")]);
+
+-- A date is written as HTTP writes one: the weekday and the month by three letters, the day, the hour, the minute and the second in two digits, the year in four. Each month is spelled, here by its fifteenth at noon.
+test a_date_is_spelled_as_http_spells_one =
+    Test/all([
+        Test/equal(spelled(784111777), "Sun, 06 Nov 1994 08:49:37 GMT"),
+        Test/equal(spelled(0), "Thu, 01 Jan 1970 00:00:00 GMT"),
+        Test/equal(spelled(253402300799), "Fri, 31 Dec 9999 23:59:59 GMT"),
+        Test/equal(
+            List/map(
+                [
+                    1673784000,
+                    1676462400,
+                    1678881600,
+                    1681560000,
+                    1684152000,
+                    1686830400,
+                    1689422400,
+                    1692100800,
+                    1694779200,
+                    1697371200,
+                    1700049600,
+                    1702641600],
+                spelled),
+            [
+                "Sun, 15 Jan 2023 12:00:00 GMT",
+                "Wed, 15 Feb 2023 12:00:00 GMT",
+                "Wed, 15 Mar 2023 12:00:00 GMT",
+                "Sat, 15 Apr 2023 12:00:00 GMT",
+                "Mon, 15 May 2023 12:00:00 GMT",
+                "Thu, 15 Jun 2023 12:00:00 GMT",
+                "Sat, 15 Jul 2023 12:00:00 GMT",
+                "Tue, 15 Aug 2023 12:00:00 GMT",
+                "Fri, 15 Sep 2023 12:00:00 GMT",
+                "Sun, 15 Oct 2023 12:00:00 GMT",
+                "Wed, 15 Nov 2023 12:00:00 GMT",
+                "Fri, 15 Dec 2023 12:00:00 GMT"])]);

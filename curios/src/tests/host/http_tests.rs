@@ -47,20 +47,22 @@ fn a_message_no_wire_carries_is_refused_where_it_is_written() {
     }
 }
 
-/// A server over one connection: it accepts it, answers it as `http/Server/answer` does under the default bounds, and closes it. Its handler answers the method, the path and how many octets of content arrived, and fails where the path is `/fail`. `Listener/serve` is not what runs it: the scripted host's accept fails once its connections are spent, which ends that loop under a connection still parked.
+/// A server over one connection: it accepts it, answers it as `http/Server/answer` does under the default bounds, and closes it. Its handler answers the method, the path and how many octets of content arrived, fails where the path is `/fail`, and dates its own reply where it is `/dated`. `Listener/serve` is not what runs it: the scripted host's accept fails once its connections are spent, which ends that loop under a connection still parked.
 const SERVER: &str = r#"
     use /std/{Str, Bytes, Nat, Show, Try, Async, Io};
     use /std/tcp/{Listener, Socket};
     use /std/http/{Server, Request, Response};
     use /std/http/Url/{Scheme};
     let handler(r: Request) -> Try(Async, Io/Error, Response) =
-        match r.url.path == "/fail"
-        | true => Try/raise(Io/Error/refused())
-        | false =>
-            Try/pure(
-                Response/of_text(
-                    200,
-                    Str/flatten([Show/show(r.method), " ", r.url.path, " ", Nat/to_str(Bytes/len(r.body))])))
+        let said =
+            Response/of_text(
+                200,
+                Str/flatten([Show/show(r.method), " ", r.url.path, " ", Nat/to_str(Bytes/len(r.body))]));
+        choose
+        | r.url.path == "/fail" => Try/raise(Io/Error/refused())
+        | r.url.path == "/dated" =>
+            Try/pure(Response/with_header(said, "Date", "Tue, 15 Nov 1994 08:12:31 GMT"))
+        | _ => Try/pure(said)
         end;
     let session: Try(Async, Io/Error, {}) =
         let l = Listener/listen("0.0.0.0", 8080)!;
@@ -119,6 +121,7 @@ fn a_server_answers_a_connection_as_http_asks() {
     an_expectation_is_answered_from_the_head(&server);
     a_reply_to_head_is_its_head_alone(&server);
     options_is_asked_of_a_resource_or_of_the_server(&server);
+    a_reply_carries_the_date_it_is_sent_at(&server);
     a_reply_is_written_finished_and_read_past_before_the_close(&server);
 }
 
@@ -286,6 +289,34 @@ fn options_is_asked_of_a_resource_or_of_the_server(server: &Compiled) {
         status(&reply(server, "GET * HTTP/1.1\r\nHost: h\r\n\r\n")),
         "HTTP/1.1 400 Bad Request"
     );
+}
+
+// A reply carries the date it is sent at, read off the wall clock and spelled as HTTP spells one, a refusal's among them; a handler's own date is the one sent.
+fn a_reply_carries_the_date_it_is_sent_at(server: &Compiled) {
+    let host = MockHost::builder()
+        .inbound_waiting([vec!["GET /x HTTP/1.1\r\nHost: h\r\n\r\n"]])
+        .wall([(784_111_777, 0)]);
+    let (stamped, _) = served(server, host);
+
+    assert!(
+        stamped.contains("\r\nDate: Sun, 06 Nov 1994 08:49:37 GMT\r\n"),
+        "{stamped}"
+    );
+
+    let refused = reply(server, "GET /\r\n\r\n");
+
+    assert!(
+        refused.contains("\r\nDate: Thu, 01 Jan 1970 00:00:00 GMT\r\n"),
+        "{refused}"
+    );
+
+    let dated = reply(server, "GET /dated HTTP/1.1\r\nHost: h\r\n\r\n");
+
+    assert!(
+        dated.contains("\r\nDate: Tue, 15 Nov 1994 08:12:31 GMT\r\n"),
+        "{dated}"
+    );
+    assert_eq!(dated.matches("\r\nDate: ").count(), 1, "{dated}");
 }
 
 // A connection is ended as the protocol asks: the reply written, the sending half finished, what the peer still sends read until the peer closes, and only then the close. A refusal sent before the request's content is read reaches a peer that is still sending it; and a peer that neither sends nor closes is closed on once it has been quiet.

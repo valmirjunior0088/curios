@@ -1,5 +1,5 @@
 use /std/{Bytes, Str, Nat, Bool, List, Result, Try, Async, Io};
-use /std/time/{Duration};
+use /std/time/{Duration, Timestamp, Date};
 use /std/tcp/{Socket, Listener};
 use /std/http/{Method, Url, Field, Status, Request, Response, Version, Limits, Refusal, Framing,
     read, stream};
@@ -148,12 +148,27 @@ let drain(c: Socket, quiet: Duration, left: Nat) -> Async({}) =
         end
     end;
 
+-- `reply` with the `Date` of the moment it is sent, which an origin server with a clock owes (RFC 9110 §6.6.1), unless its handler dated it. A date is letters, digits, a comma, colons and spaces, so the field reads; were it not to, none would be sent.
+let dated(reply: Response) -> Async(Response) =
+    match Response/header(reply, "Date")
+    | some(_) => Async/pure(reply)
+    | none() =>
+        let now = Timestamp/now()!;
+        Async/pure(
+            match Field/read("Date", Str/to_bytes(Date/to_imf_fixdate(Date/of_timestamp(now))))
+            | some(date) =>
+                Response { ..reply, headers = [date, ..reply.headers], @bodied = reply.bodied }
+            | none() => reply
+            end)
+    end;
+
 -- `reply` written to `c` in answer to a request of `method` — its head alone where the method is `HEAD`, stating the length its body has — and the connection ended as RFC 9112 §9.6 asks: the sending half first, then what the peer still sends read on, since a close over unread bytes would reset the connection under the reply.
 let send(s: Server, c: Socket, method: Method, reply: Response) -> Async({}) =
+    let stamped = dated(reply)!;
     let bytes =
         match method
-        | head() => Response/render_head(reply, reply.body)
-        | _ => Response/render(reply)
+        | head() => Response/render_head(stamped, stamped.body)
+        | _ => Response/render(stamped)
         end;
     let wrote = Socket/write(c, bytes)!;
     match wrote
@@ -172,7 +187,7 @@ let allowed: Response =
         body = x[],
     };
 
---- What a server does with one connection of `scheme`: read a request as its framing delimits it, hand it to `handler`, write the reply, and end the connection as HTTP asks — the sending half ended, what the peer still sends read until it closes or falls quiet, and the close left to whoever opened the connection. A request the reader refuses is answered with the status its refusal names, one that has not arrived whole within `s.deadline` 408, and a handler that fails 500; `OPTIONS *`, which asks about the server and no resource, is answered by the server with the methods it reads, and no handler sees it; a peer that sends nothing is told nothing. `serve` and `serve_tls` run it over a listener of their own, and a program with a listener of its own hands it each socket it accepts.
+--- What a server does with one connection of `scheme`: read a request as its framing delimits it, hand it to `handler`, write the reply, and end the connection as HTTP asks — the sending half ended, what the peer still sends read until it closes or falls quiet, and the close left to whoever opened the connection. A request the reader refuses is answered with the status its refusal names, one that has not arrived whole within `s.deadline` 408, and a handler that fails 500; `OPTIONS *`, which asks about the server and no resource, is answered by the server with the methods it reads, and no handler sees it; a peer that sends nothing is told nothing. Every reply carries the `Date` it is sent at, unless its handler dated it. `serve` and `serve_tls` run it over a listener of their own, and a program with a listener of its own hands it each socket it accepts.
 pub let answer(s: Server, scheme: Scheme, handler: Handler) -> (Socket) -> Async({}) =
     (c) =>
         let arrived = Async/timeout(s.deadline, request(s.limits, scheme, c))!;
