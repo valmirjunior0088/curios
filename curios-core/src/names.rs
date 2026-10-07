@@ -373,12 +373,35 @@ impl fmt::Display for Free {
     }
 }
 
-/// One binding a `use` brought into a lexical scope: its canonical name, and the path the reader wrote it under — `/std/Eq/cong` as `Eq/cong` after `use /std/{Eq}`, or as `cong` after a glob. Core holds only the canonical name; the spelling is the text stage's, and it is what a goal report's candidate must be displayed under to be pasteable.
+/// One thing a `use` brought into a lexical scope, as it was written. Core holds only canonical names; the spelling is the text stage's, and it is what a goal report's candidate must be displayed under to be pasteable.
+///
+/// **A module is recorded as the module, never as its members.** `use /std/{Eq}` puts every public binding of `/std/Eq` in scope, spelled through the label, and which bindings those are is the module's to say, once ([`Imports::members`]): an entry for each of them here would restate one module's interface in every scope that imports it, and a declaration added to the module would change what every one of those scopes stores.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
-pub struct Import {
+pub enum Import {
+    /// A binding, under the path the reader wrote it as: `/std/Eq/cong` as `cong` after a glob or a selector.
+    Binding { global: Global, spelling: String },
+    /// A module, under the label it came in as: `/std/Eq` as `Eq` after `use /std/{Eq}`.
+    Module { module: Qualifier, label: String },
+}
+
+/// One binding in scope, with the spelling it resolves under there: an imported binding as it was written, or a member of an imported module through the module's label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Imported<'a> {
     pub global: Global,
-    pub spelling: String,
+    /// The label of the module the binding is reached through, where it is.
+    through: Option<&'a str>,
+    written: &'a str,
+}
+
+impl Imported<'_> {
+    /// The path a reader writes the binding as: `cong`, or `Eq/cong` through the module's label.
+    pub fn spelling(&self) -> String {
+        match self.through {
+            Some(label) => [label, "/", self.written].concat(),
+            None => self.written.to_string(),
+        }
+    }
 }
 
 /// What a unit's `use` declarations brought into scope, and where. `use` is point-of-use: it binds from its own position to the end of the module body it is written in, and a nested module body starts with nothing. So each definition records the imports in scope where it was written, and the entrypoint tail records its own — what a goal inside either may be offered, spelled as it resolves there.
@@ -391,16 +414,51 @@ pub struct Imports {
     pub by_item: BTreeMap<Global, Vec<usize>>,
     /// The indices in scope where the entrypoint tail was written — the end of the root body.
     pub tail: Vec<usize>,
+    /// The public bindings of each module an entry imports: each label with what it resolves to, by label.
+    pub members: BTreeMap<Qualifier, Vec<(String, Global)>>,
 }
 
 impl Imports {
-    /// The imports in scope at `owner`'s definition, or at the entrypoint tail for a goal no definition owns. A definition the lowering never snapshotted — one it synthesized, which no written goal can sit in — falls back to the tail's view as well.
-    pub fn in_scope_at(&self, owner: Option<&Global>) -> impl Iterator<Item = &Import> {
+    /// The bindings in scope at `owner`'s definition, or at the entrypoint tail for a goal no definition owns, each under every spelling a `use` gave it there and in the order the `use`s were written: a module's members where the module was imported, by label. One binding may be listed under several spellings, all of which resolve; a reader is shown the shortest ([`Spellings::spell`]). A definition the lowering never snapshotted — one it synthesized, which no written goal can sit in — falls back to the tail's view as well.
+    pub fn in_scope_at(&self, owner: Option<&Global>) -> impl Iterator<Item = Imported<'_>> {
         owner
             .and_then(|owner| self.by_item.get(owner))
             .unwrap_or(&self.tail)
             .iter()
-            .map(|index| &self.entries[*index])
+            .flat_map(|index| self.brought(&self.entries[*index]))
+    }
+
+    /// Every binding some scope of the unit has imported, under each spelling it was imported by.
+    pub fn everywhere(&self) -> impl Iterator<Item = Imported<'_>> {
+        self.entries.iter().flat_map(|import| self.brought(import))
+    }
+
+    /// The bindings `import` brings into scope: itself, or the members of the module it names.
+    pub fn brought<'a>(&'a self, import: &'a Import) -> impl Iterator<Item = Imported<'a>> {
+        let (binding, members) = match import {
+            Import::Binding { global, spelling } => (
+                Some(Imported {
+                    global: *global,
+                    through: None,
+                    written: spelling,
+                }),
+                None,
+            ),
+            Import::Module { module, label } => (
+                None,
+                self.members.get(module).map(|members| (label, members)),
+            ),
+        };
+
+        binding
+            .into_iter()
+            .chain(members.into_iter().flat_map(|(label, members)| {
+                members.iter().map(move |(written, global)| Imported {
+                    global: *global,
+                    through: Some(label),
+                    written,
+                })
+            }))
     }
 }
 
@@ -446,8 +504,8 @@ impl Spellings {
         candidates.extend(
             self.imports
                 .in_scope_at(owner)
-                .filter(|import| import.global == *global)
-                .map(|import| import.spelling.clone()),
+                .filter(|imported| imported.global == *global)
+                .map(|imported| imported.spelling()),
         );
 
         candidates

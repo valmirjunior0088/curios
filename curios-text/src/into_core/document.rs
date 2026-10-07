@@ -18,7 +18,8 @@ use {
     curios_print::{Printer, render_annotated},
     curios_utilities::{Mount, Qualifier, RootKind},
     std::{
-        collections::{HashMap, HashSet},
+        cell::RefCell,
+        collections::{BTreeSet, HashMap, HashSet},
         rc::Rc,
     },
 };
@@ -79,6 +80,7 @@ pub(super) fn document(
         adopted: &adopted,
         records,
         public_names: HashMap::new(),
+        spellings: RefCell::new(HashMap::new()),
     };
     // Read before the walk, because a signature anywhere in the unit may name an adopted declaration, and taken through the reader because knowing which modules have pages is its own rule.
     reader.public_names = reader.exposed_names();
@@ -108,6 +110,8 @@ struct Reader<'a> {
     records: &'a [&'a Documentation],
     /// What a consumer calls each declaration that no page of its own shows: its declaration site, to the path of the page that exposes it. One entry per declaration a private child or an adopted root holds and a page re-exports.
     public_names: HashMap<Qualifier, Qualifier>,
+    /// What [`Reader::imports_of`] has answered, by module: a page asks once for itself and once for every declaration it shows out of another module, and a facade shows many out of one.
+    spellings: RefCell<HashMap<Qualifier, Rc<HashMap<String, Qualifier>>>>,
 }
 
 impl Reader<'_> {
@@ -783,6 +787,7 @@ impl Reader<'_> {
         binders: &HashSet<String>,
         head: Printer,
     ) -> Signature {
+        curios_profile::profile!("document::signature");
         let (rendered, annotations) = render_annotated(head, INDENT, WIDTH);
 
         let mut text = String::new();
@@ -861,27 +866,39 @@ impl Reader<'_> {
     /// Every spelling a `use` in `module` brought into scope, with what it resolved to — the union over the module's declarations of the scopes the lowering recorded for them. `use` is point-of-use, so two declarations may differ in what they see, but a spelling that resolves two ways in one module is a program nobody writes, and the first recorded wins.
     ///
     /// **The union is over every declaration, which is what makes a concept-only module resolve at all.** A union over `let`s and `test`s alone would leave a module whose declarations are a concept, an inductive or a structure nothing to union, and every name in its signatures would render as plain text — `/std/Show`'s `show(A) -> Str` beside `/std/Spell`'s identical method, which links only because `Spell` declares `let`s importing the same name.
-    fn imports_of(&self, module: &Qualifier) -> HashMap<String, Qualifier> {
-        let mut spellings = HashMap::new();
-        for (owner, indices) in &self.imports.by_item {
+    fn imports_of(&self, module: &Qualifier) -> Rc<HashMap<String, Qualifier>> {
+        if let Some(spellings) = self.spellings.borrow().get(module) {
+            return Rc::clone(spellings);
+        }
+
+        // The `use`s some declaration of the module has in scope, each once and in the order they were written: a module's declarations mostly share them, and a module they import is expanded where it is read.
+        let mut written = BTreeSet::new();
+        for (owner, in_scope) in &self.imports.by_item {
             // A witness is anonymous, so it is placed by the module its identity names rather than by a qualifier it does not have; every other declaration is placed by the module its own name lies in.
             let declaring = match owner {
                 curios_core::Global::Authored(owner) => owner.without_last(),
                 curios_core::Global::Witness(id) => *id.module(),
             };
-            if declaring != *module {
-                continue;
-            }
-            for index in indices {
-                let import = &self.imports.entries[*index];
-                let curios_core::Global::Authored(target) = &import.global else {
-                    continue;
-                };
-                spellings
-                    .entry(import.spelling.clone())
-                    .or_insert_with(|| *target);
+            if declaring == *module {
+                written.extend(in_scope.iter().copied());
             }
         }
+
+        let mut spellings = HashMap::new();
+        for imported in written
+            .into_iter()
+            .flat_map(|index| self.imports.brought(&self.imports.entries[index]))
+        {
+            let curios_core::Global::Authored(target) = imported.global else {
+                continue;
+            };
+            spellings.entry(imported.spelling()).or_insert(target);
+        }
+        let spellings = Rc::new(spellings);
+        self.spellings
+            .borrow_mut()
+            .insert(*module, Rc::clone(&spellings));
+
         spellings
     }
 }

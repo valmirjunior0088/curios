@@ -545,22 +545,21 @@ fn imports_record_each_binding_under_the_spelling_it_resolves_by() {
     let spelling = |path: &str| {
         let global = global_name(path);
         imports
-            .entries
-            .iter()
-            .filter(|import| import.global == global)
-            .map(|import| import.spelling.as_str())
+            .everywhere()
+            .filter(|imported| imported.global == global)
+            .map(|imported| imported.spelling())
             .min_by_key(|spelling| spelling.len())
     };
     let in_scope = |owner: Option<&str>| {
         imports
             .in_scope_at(owner.map(global_name).as_ref())
-            .map(|import| format!("{}={}", import.global, import.spelling))
+            .map(|imported| format!("{}={}", imported.global, imported.spelling()))
             .collect::<Vec<_>>()
     };
 
-    assert_eq!(spelling("/Outer/M/f"), Some("M/f"));
-    assert_eq!(spelling("/Outer/M/g"), Some("g"));
-    assert_eq!(spelling("/Outer/N/h"), Some("N/h"));
+    assert_eq!(spelling("/Outer/M/f").as_deref(), Some("M/f"));
+    assert_eq!(spelling("/Outer/M/g").as_deref(), Some("g"));
+    assert_eq!(spelling("/Outer/N/h").as_deref(), Some("N/h"));
     assert_eq!(spelling("/Outer/M"), None, "a module is not a binding");
 
     assert!(

@@ -1441,6 +1441,34 @@ fn process_items(
     Ok(())
 }
 
+/// The public bindings of each module some entry of `entries` imports: each label with what it resolves to, by label. A module's interface answers a public binding's target whoever asks (`visible_binding`), so the list is the module's and nothing of the scope that imported it.
+fn module_members(
+    entries: &[curios_core::Import],
+    public: &Scoped<'_, PublicInterface>,
+) -> BTreeMap<Qualifier, Vec<(String, curios_core::Global)>> {
+    let mut members = BTreeMap::new();
+    for import in entries {
+        let curios_core::Import::Module { module, .. } = import else {
+            continue;
+        };
+        if members.contains_key(module) {
+            continue;
+        }
+        let Some(interface) = public.get(module) else {
+            continue;
+        };
+        let mut bindings = interface
+            .bindings
+            .iter()
+            .map(|(label, entry)| (label.clone(), curios_core::Global::Authored(entry.target)))
+            .collect::<Vec<_>>();
+        bindings.sort();
+        members.insert(*module, bindings);
+    }
+
+    members
+}
+
 /// What a unit is lowered from: the modules under the prefixes it claims, and — for the one unit that has one — its entrypoint.
 ///
 /// **One resolver.** A tree parsed from a file graph, as the entry program is, and one handed over already parsed, as the fixed prelude is, differ in nothing but where a module body comes from, which is exactly the question a [`RootSource`] answers. The one genuine difference is this: an executable carries a tail expression and owns the empty prefix, and a library does neither.
@@ -1753,6 +1781,12 @@ fn into_core_unit_within(
 
     // The entrypoint, for the one unit that has one. Its tail closes the root body, so the imports in scope there are the last the root saw.
     context.record_import_scope(None);
+    // Every scope is recorded: the members of the modules they import are the interfaces' to state, once for the unit.
+    {
+        let mut imports = imports.borrow_mut();
+        let members = module_members(&imports.entries, &public);
+        imports.members = members;
+    }
     // The entry mints in a space of its own, as a declaration does.
     context.begin_declaration();
     let entry = {

@@ -750,37 +750,26 @@ impl<'a> Context<'a> {
         Ok(result)
     }
 
-    // Record that `target` is in scope of this body under `spelling`, from here on. A target already in scope under a spelling no longer than this one is not recorded again — both resolve, and the shorter is the one a reader would write; a shorter spelling arriving later is a second entry, so an item between the two sees only the first.
+    // Record that the binding `target` is in scope of this body under `spelling`, from here on, as it was written: which of two spellings of one binding a reader is shown is decided where one is spelled (`curios_core::Spellings::spell`).
     fn record_import(&mut self, target: &Qualifier, spelling: String) {
-        let global = curios_core::Global::Authored(*target);
-        let mut imports = self.imports.borrow_mut();
-        let shadowed = self.in_scope.iter().any(|index| {
-            let existing = &imports.entries[*index];
-            existing.global == global && existing.spelling.len() <= spelling.len()
+        self.record(curios_core::Import::Binding {
+            global: curios_core::Global::Authored(*target),
+            spelling,
         });
-        if shadowed {
-            return;
-        }
-        imports
-            .entries
-            .push(curios_core::Import { global, spelling });
-        self.in_scope.push(imports.entries.len() - 1);
     }
 
-    // Record every public binding of the module imported under `label`, each spelled through it — `Eq/cong` for `use /std/{Eq}`. Direct bindings only: a deeper member is reached by a longer path the reader has not written, and its own module's import is the place it would be recorded.
+    // Record that the module imported under `label` is in scope of this body, from here on: its public bindings are, each spelled through the label — `Eq/cong` for `use /std/{Eq}` — and which they are is the module's interface to say, read where the unit is assembled (`module_members`), never here. Direct bindings only: a deeper member is reached by a longer path the reader has not written, and its own module's import is the place it would be recorded.
     fn record_module_import(&mut self, module: &Qualifier, label: &str) {
-        let Some(interface) = self.public.get(module) else {
-            return;
-        };
-        let mut labels = interface.bindings.keys().cloned().collect::<Vec<_>>();
-        labels.sort();
-        for binding in labels {
-            if let Some(target) =
-                visible_binding(self.public, self.table, &self.prefix, module, &binding)
-            {
-                self.record_import(&target, format!("{label}/{binding}"));
-            }
-        }
+        self.record(curios_core::Import::Module {
+            module: *module,
+            label: label.to_string(),
+        });
+    }
+
+    fn record(&mut self, import: curios_core::Import) {
+        let mut imports = self.imports.borrow_mut();
+        imports.entries.push(import);
+        self.in_scope.push(imports.entries.len() - 1);
     }
 
     // Snapshot the imports in scope of this body as the view of the declaration `owner` — what a goal inside it may be offered, and what a page resolves the names in its signature through. `None` is the entrypoint tail, which closes the root body.
