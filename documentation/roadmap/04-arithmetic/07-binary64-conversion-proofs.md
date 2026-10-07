@@ -13,7 +13,7 @@ The boundary between executable evidence and formal theorems remains explicit. E
 
 ## Theorem targets
 
-Stated over `Rat` and `/std/Flt`'s exact layer. The rounding the conversions go through, `Flt/rounded/of_dyadic`, is Curios code, so its correctness is proved here in every direction; the `Flt` primitives beside it are the trusted model. Each statement below reads a primitive's result through its exact value — `Dyadic/of` goes through `/sys/Flt/mantissa` and `/sys/Flt/exponent` — and so needs a stated tie between a primitive and its exact result. The reflected model that was to state it is no part of the [declared](02-declared-operations.md) float identities, which hold identities of the model rather than tie it to exact values, so this work waits until that foundation has a specified owner and contract.
+Stated over `Rat` and `/std/Flt`'s exact layer. The rounding the conversions go through, `Flt/rounded/of_dyadic`, is Curios code, so its correctness is proved here in every direction; the `Flt` primitives beside it are the trusted model. Each statement below reads a primitive's result through its exact value — `Dyadic/of` goes through `/sys/Flt/mantissa` and `/sys/Flt/exponent` — and so needs a stated tie between a primitive and its exact result. The reflected model that was to state it is no part of the [declared](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md) float identities, which hold identities of the model rather than tie it to exact values, so this work waits until that foundation has a specified owner and contract.
 
 - **Round trip.** `to_flt(r, of_flt(f, @ok))` is `f` for every finite `f` but `-0.0`, in every direction; `-0.0` widens to canonical zero and canonical zero narrows to `+0.0`.
 - **The directions.** For `x` narrowing to a finite `f` toward negative, `f ≤ x` and no finite binary64 lies in `(f, x]`; toward positive and toward zero by symmetry.
@@ -24,10 +24,10 @@ The proof library isolates the field interpretation, the grid spacing and adjace
 
 ## Decisions required before implementation
 
-- Specify the connection between the primitive floating-point model and the exact values the proofs read, identify its owner, and state which facts are trusted and which are proved. A model reflected into Curios is one proposal, not an interface [the declared operations](02-declared-operations.md) supply.
+- Specify the connection between the primitive floating-point model and the exact values the proofs read, identify its owner, and state which facts are trusted and which are proved. A model reflected into Curios is one proposal, not an interface [the declared operations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) supply.
 - Give each theorem its precise premises and equality notion, including negative zero, finite results, overflow and all rounding directions. The target descriptions above do not replace elaborated theorem statements.
 - Identify the reusable lemmas for grid spacing, adjacent values, quotient bounds and guard/sticky reasoning. Keep integer facts with [the numeric laws](03-numeric-laws.md) and implementation contracts with the eventual permanent owner of exact rationals.
-- Establish proof sequencing, resource bounds and focused validation before implementation. Stronger conversion — [the declared operations](02-declared-operations.md), and [the relational layer](08-relational-layer.md) if its consumer appears — is available only when the required capability actually lands.
+- Establish proof sequencing, resource bounds and focused validation before implementation. Stronger conversion than [the declared operations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) give — [the relational layer](08-relational-layer.md), if its consumer appears — is available only when that capability lands.
 
 ## Verification to refine
 

@@ -10,6 +10,14 @@ A stuck term is spelled one way. `gt` and `ge` are spelled as their `lt` and `le
 
 A held law is a declaration's generated row. The law's family is declared for the operation at every carrier its rule decides; `tests::laws::generated` states the instance at each, puts it to both checkers as an `Eq/refl()` proof and holds it at closed values computed through `curios-num`, and `tests::laws::audit` holds it reversed, chained with every law sharing a side, at compound terms and through a solved metavariable. A law no family states is written in `tests::laws::written` at every carrier its rule reaches. A control that is not a law stands beside it, a value grid in `curios-core` holds the rule to ground truth, and a count or a cap is the theory's, never the host's.
 
+An operation is declared with the theory it is decided in ([The carriers' algebra stays in conversion](the-carriers-algebra-stays-in-conversion.md)), each a `/sys` operation that folds as it executes, and a true law outside its theory is a `/std` lemma with a refused row beside the held ones:
+
+- `min` and `max`, at `Nat` and at `Int`, are a semilattice with successor: commutative, associative and idempotent, decided as a set of leaves; a literal every operand carries stands outside; an operand the comparison holds at most another answers for both; and the comparison reads a `min` as at most each operand and at least what is at most all of them, a `max` the mirror. A symbolic summand every operand shares and `min(a, b) + max(a, b) = a + b` are lemmas.
+- `abs` and `sign`, at `Int`: a negation leaves `abs` and flips `sign`; a literal factor of every coefficient, and a power of a literal base every monomial holds, leave by magnitude and by sign; `abs` inverts `Nat/to_int`, a magnitude widened back being its operand or the negation where the comparison decides the sign; and the `sign` of what the comparison decides against zero is `+1`, `+0` or `-1`. Their laws over a product are lemmas.
+- `pow`, at `Nat`, is a morphism of its exponent at a fixed base: `pow(x, 0)` is one, a sum in the exponent is a product and a literal there so many factors; a base of one answers one; a power of a base at least one is at least one; and a left shift is its value times a power of two, at `Nat` and at `Int`. A power of a power and a power of a product are lemmas.
+- `Int` declares the families it shares with `Nat` and no more: the bitwise identities, `-1` the unit of `and` and the absorber of `or`; the shifts' zero laws; the quotient and the remainder by one, of a zero dividend, of a dividend by itself and of an exact multiple; and the product's associativity. What truncation toward zero and an operand below zero break — the floor law, the Euclidean split, a remainder's sign, every domination `Nat` reads — is a control there.
+- `Flt` declares what its model fixes at every bit pattern ([`Flt` is specified by a model and the runtime conforms](flt-is-specified-by-a-model-and-the-runtime-conforms.md)).
+
 **Rationale.**
 
 - **A reducer may not invent a proof.** Rewriting `get(slice(xs, s, l), i)` to `get(xs, s + i)` owes `s + i < len(xs)`, which no reduct can carry; a comparison builds no term, so the peel owes nothing, and irrelevance leaves the bounds unread.
@@ -24,6 +32,7 @@ A held law is a declaration's generated row. The law's family is declared for th
 - **Reducing a tautology to `true`**, which takes the table into the fold; `Bool/holds_of_eq` over `Eq/refl()` proves it in one written step.
 - **Reducing through a window with a library lemma**, which makes the trusted reducer's output name a `/std` declaration and fail where the slot is unfilled, as while the library compiles itself.
 - **Asking conversion whether a mapped function is the identity**, which only equates, so `len` and `get` would not see through the map, and which makes a fold's reduct depend on a conversion verdict.
+- **`gcd` as an operation conversion decides**: its certified form recurses on well-founded `<` in the library, and nothing in conversion needs it.
 - **A right shift through a division node**: `NatDiv` carries a proof its divisor is nonzero that a reducer may not invent.
 - **Teaching conversion the mirror**, or keeping `Gt`/`Ge` heads below the rows: a case in the trusted comparison, or a head no producer reaches and no test exercises, where a mirrored row is one line.
 - **Rewriting the decided propositions to the canonical spelling**, which leaves one spelling a user must match.

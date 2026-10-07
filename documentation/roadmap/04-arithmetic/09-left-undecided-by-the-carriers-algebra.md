@@ -24,7 +24,7 @@ The cap is also a place conversion is not transitive, by design: with `A` the co
 
 ## A reflection law for `Bytes/eql`
 
-`a == b` giving `Eq(a, b)` holds as a lemma for `Nat`, `Byte` and `Int` (`Int/eq_of_eql`). `Bytes/eql` does not reduce over a list, so its reflection would be a new intrinsic law, declared as [the declared operations](02-declared-operations.md) are. Stepping confirms a match without one, so it waits for a consumer that needs the equation rather than the step.
+`a == b` giving `Eq(a, b)` holds as a lemma for `Nat`, `Byte` and `Int` (`Int/eq_of_eql`). `Bytes/eql` does not reduce over a list, so its reflection would be a new intrinsic law, declared as [the declared operations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) are. Stepping confirms a match without one, so it waits for a consumer that needs the equation rather than the step.
 
 ## One internal sequence carrier
 

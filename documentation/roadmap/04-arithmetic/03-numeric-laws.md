@@ -2,11 +2,11 @@
 
 Working specification for the theorems and certified functions `/std/Nat`, `/std/Int` and `/std/Flt` still lack, proved in the library over what conversion decides. [`/std/Rat`](04-exact-rationals.md) is the consumer that asks for the `Nat` and `Int` layers and names which layer each of its stages needs; each layer is also an independent capability of its module that stands without any consumer.
 
-The operations these laws are about — `pow`, `min`, `max`, `abs` and `sign` — are [declared to conversion](02-declared-operations.md) with every law it decides about them. The linear steps inside the proofs below are the elaborator's to fill ([A bound that follows from the facts in scope is proved by the elaborator](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)), so a proof here states its nonlinear or inductive step and leaves the arithmetic around it to the elaborator. A layer depends on those declarations only for the operations it uses, and lands when they have.
+The operations these laws are about — `pow`, `min`, `max`, `abs` and `sign` — are [declared to conversion](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) with every law it decides about them. The linear steps inside the proofs below are the elaborator's to fill ([A bound that follows from the facts in scope is proved by the elaborator](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)), so a proof here states its nonlinear or inductive step and leaves the arithmetic around it to the elaborator.
 
 ## What this builds on
 
-`Nat` and `Int` are unbounded at every layer, the running program included ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)), so a law stated over them holds of the compiled program, and nothing below needs a second, library-defined number. Their arithmetic is reasoned about by the kernel rather than beside it: what conversion decides — the commutative-semiring and ring laws through the sum normal form, Euclid's identity and the remainder's bound, a comparison through its difference split by sign, and `Nat/to_int` as an ordered-semiring embedding — is stated once, in `curios-algebra` ([A law is decided where it neither respells nor invents](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md)), and [the declared operations](02-declared-operations.md) add theirs.
+`Nat` and `Int` are unbounded at every layer, the running program included ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)), so a law stated over them holds of the compiled program, and nothing below needs a second, library-defined number. Their arithmetic is reasoned about by the kernel rather than beside it: what conversion decides — the commutative-semiring and ring laws through the sum normal form, Euclid's identity and the remainder's bound, a comparison through its difference split by sign, and `Nat/to_int` as an ordered-semiring embedding — is stated once, in `curios-algebra` ([A law is decided where it neither respells nor invents](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md)), with what is declared of `min`, `max`, `abs`, `sign` and `pow`.
 
 The library carries what reduction does not state:
 
@@ -16,7 +16,7 @@ The library carries what reduction does not state:
 - `/std/Int`'s indexed `Sign` view — every `Int` is `nonneg(n)`, the embedding of `n`, or `neg(n)`, which is `-1 - Nat/to_int(n)` — with `view`, `trichotomy` and `eq_of_eql`;
 - `/std/Int/lt` and `/std/Int/le`, each law proved by carrying the `Nat` law along the embedding through the sign view, which the `Int` lemmas below follow too: a statement about `Int` is split by the view of its operands, and each case is a `Nat` law read through `Nat/to_int`.
 
-**Declared or proved.** Every law below is a lemma. A law conversion decides is [declared](02-declared-operations.md), and a fact inside the fragment conversion decides, or [the elaborator proves from the facts in scope](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md), that neither reaches is a gap there, recorded there — in the law grid or in `curios`'s `tests::bounds`. A fact outside it is proved here, and a refused row in the law grid records why conversion does not take it.
+**Declared or proved.** Every law below is a lemma. A law conversion decides is [declared](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md), and a fact inside the fragment conversion decides, or [the elaborator proves from the facts in scope](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md), that neither reaches is a gap there, recorded there — in the law grid or in `curios`'s `tests::bounds`. A fact outside it is proved here, and a refused row in the law grid records why conversion does not take it.
 
 ## `Nat`: the Euclidean remainder
 
@@ -40,7 +40,7 @@ The library carries what reduction does not state:
 
 ## `Nat`: the unsigned binary scale
 
-The dyadic `Rat` normalizes by stripping powers of two and compares values held at different binary exponents; both are unsigned facts about a magnitude and belong here. `shl(x, k) = x · pow(2, k)`, a sum in an exponent being a product, and a power being positive where the comparison holds its base at least one, as `pow(2, k)` and `pow(x + 1, k)`, are [declared](02-declared-operations.md).
+The dyadic `Rat` normalizes by stripping powers of two and compares values held at different binary exponents; both are unsigned facts about a magnitude and belong here. `shl(x, k) = x · pow(2, k)`, a sum in an exponent being a product, and a power being positive where the comparison holds its base at least one, as `pow(2, k)` and `pow(x + 1, k)`, are [declared](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md).
 
 - **A power of a power, and of a product.** `pow(pow(x, a), b) = pow(x, a · b)` by induction on `b`, and `pow(x · y, a) = pow(x, a) · pow(y, a)` by induction on `a`, each step the declared law at a successor. Conversion takes neither, since the first gives the second and the second factors a literal base.
 - **A power of a positive base, under a hypothesis.** `0 < x` gives `0 < pow(x, k)`, by induction on `k`. A declared operation reads its base as a term and no hypothesis, so conversion holds the power positive only where it holds the base so, and the elaborator's linear search does not reach an induction.- **The shift undone.** `shr(shl(x, k), k) = x`.
@@ -49,7 +49,7 @@ The dyadic `Rat` normalizes by stripping powers of two and compares values held 
 
 ## `Nat`: `min` and `max`
 
-Their order facts and semilattice equations hold by conversion through their [declarations](02-declared-operations.md), and so does a literal added to both operands. A declared operation reads no arm, so a hypothesis reaches one through `/std`'s `min/of_le`, `min/of_ge`, `max/of_le` and `max/of_ge` at each carrier, which the procedure that proves a bound reads `min` and `max` through. These are lemmas here:
+Their order facts and semilattice equations hold by conversion through their [declarations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md), and so does a literal added to both operands. A declared operation reads no arm, so a hypothesis reaches one through `/std`'s `min/of_le`, `min/of_ge`, `max/of_le` and `max/of_ge` at each carrier, which the procedure that proves a bound reads `min` and `max` through. These are lemmas here:
 
 - `min(a, b) + max(a, b) = a + b`;
 - `(a - b) + b = max(a, b)`, truncated subtraction read through the same definitions;
@@ -70,7 +70,7 @@ Two laws a proof might expect to state are already conversion's and are not lemm
 
 ## `Int`: `abs`, `sign`, `min` and `max`
 
-What holds by conversion is [declared](02-declared-operations.md): a negation leaving `abs` and flipping `sign`, a literal or a power factor leaving either, `abs` inverting the embedding, and two `abs` of opposite operands being one, which is the symmetry of `abs(a - b)`. A declared operation reads no arm, so a hypothesis reaches one through `/std/Int/abs`'s `of_non_neg` and `of_neg`, which `/std/Map`'s `Key(Int)` consumes, and `/std/Int/sign`'s `of_pos`, `of_neg`, `of_not_pos` and `of_not_neg`, which the procedure that proves a bound reads `abs` and `sign` through. These are lemmas here, each a case split on the operand's sign with linear arithmetic in each case:
+What holds by conversion is [declared](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md): a negation leaving `abs` and flipping `sign`, a literal or a power factor leaving either, `abs` inverting the embedding, and two `abs` of opposite operands being one, which is the symmetry of `abs(a - b)`. A declared operation reads no arm, so a hypothesis reaches one through `/std/Int/abs`'s `of_non_neg` and `of_neg`, which `/std/Map`'s `Key(Int)` consumes, and `/std/Int/sign`'s `of_pos`, `of_neg`, `of_not_pos` and `of_not_neg`, which the procedure that proves a bound reads `abs` and `sign` through. These are lemmas here, each a case split on the operand's sign with linear arithmetic in each case:
 
 - **a product**: `abs(a · b) = abs(a) · abs(b)` and `sign(a · b) = sign(a) · sign(b)`, which conversion does not take, a product reaching either operation distributed;
 - **the order facts**: `abs(n)` is zero exactly when `n` is, `Le(+0, n)` exactly when `sign(n)` is not `-1`, and `Le(-Nat/to_int(abs(n)), n)` and `Le(n, Nat/to_int(abs(n)))`;
@@ -81,7 +81,7 @@ What holds by conversion is [declared](02-declared-operations.md): a negation le
 
 ## `Int`: the signed scale
 
-The dyadic `Rat` holds a signed mantissa at a binary exponent, so the unsigned binary-scale layer has to reach through a sign. That a shift keeps the sign is [declared](02-declared-operations.md).
+The dyadic `Rat` holds a signed mantissa at a binary exponent, so the unsigned binary-scale layer has to reach through a sign. That a shift keeps the sign is [declared](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md).
 
 - **A right shift is a floor**: `shr(n, k)` is `⌊n / 2ᵏ⌋`, so for a negative `n` it is `-shr(abs(n) - 1, k) - 1`, and it agrees with the `Nat` shift on a non-negative `n`.
 - **Parity through the sign**: `n` is odd exactly when `abs(n)` is, so the odd-mantissa invariant is stated once on the magnitude. A lemma by the sign view: `Int`'s remainder takes its dividend's sign, so conversion relates neither side to the other.
@@ -89,7 +89,7 @@ The dyadic `Rat` holds a signed mantissa at a binary exponent, so the unsigned b
 
 ## `Flt`: theorems over the bits
 
-Provable in `/std` without further trust, over the model the [float declarations](02-declared-operations.md) are validated against:
+Provable in `/std` without further trust, over the model the [float declarations](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md) are validated against:
 
 - `ord` is reflexive, transitive and total, antisymmetric to `Eq`, and `ord(a, b) = eq` exactly when `Eq()(a, b)` — so `Ord(Flt)` is IEEE's `totalOrder` in fact as well as in intent.
 - A `Key(Flt)` over `to_le_bytes` is a congruence, since the byte round trip is injective. Whether to give one is a separate decision: `/std/Map` withholds it because `/std/ops/Eql`'s witness is IEEE `==`, which calls `+0.0` and `-0.0` equal and a NaN equal to nothing, and a map keyed on propositional equality would disagree with it at both ends. The theorem lands whichever way that goes.
