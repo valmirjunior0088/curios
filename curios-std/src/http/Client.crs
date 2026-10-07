@@ -68,6 +68,7 @@ let reply(
         end
     end;
 
+-- One exchange over a connection of its own. The reply is read whether or not the request was written whole: a peer that answers before it has read its request and then stops reading fails the write, and the reply it sent is still there (RFC 9112 §9.6). The failed write is the exchange's failure only where no reply is.
 let exchange(c: Client, request: Request) -> Try(Async, Error, Response) =
     let u = request.url;
     let open =
@@ -78,9 +79,16 @@ let exchange(c: Client, request: Request) -> Try(Async, Error, Response) =
     let read =
         Try/map_error(
             Socket/with(open, (s) =>
-                let _ = Try/attempt(Socket/write(s, Request/render(request)))!;
+                let wrote = Socket/write(s, Request/render(request))!;
                 let answered = reply(c.limits, request.method, s, x[])!;
-                Try/pure(answered)),
+                match wrote
+                | success(_) => Try/pure(answered)
+                | failure(unsent) =>
+                    match answered
+                    | success(_) => Try/pure(answered)
+                    | failure(_) => Try/raise(unsent)
+                    end
+                end),
             (e) => Error/net(e))!;
     Try/attempt(Async/pure(read));
 
@@ -120,7 +128,7 @@ let follow(c: Client, request: Request, left: Nat) -> Try(Async, Error, Response
         end
     end;
 
---- One exchange: connect by the scheme, send the request whole, read the reply as its framing delimits it and no further, and follow a redirect while the limit allows — all under the deadline, which is reported as `timeout`. A reply the peer closes on before it is whole is `incomplete` with what arrived of it, and one that is malformed or past `c.limits` is `refused`.
+--- One exchange: connect by the scheme, send the request whole, read the reply as its framing delimits it and no further, and follow a redirect while the limit allows — all under the deadline, which is reported as `timeout`. A reply the peer closes on before it is whole is `incomplete` with what arrived of it, and one that is malformed or past `c.limits` is `refused`. A reply a peer sent before it had read the request is the answer even where the request could not then be sent whole.
 pub let perform(c: Client, request: Request) -> Try(Async, Error, Response) =
     let outcome = Async/timeout(c.timeout, Try/run(follow(c, request, c.redirects)))!;
     match outcome

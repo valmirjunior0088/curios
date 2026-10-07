@@ -416,6 +416,7 @@ fn a_client_reads_a_reply_as_its_framing_delimits_it() {
     a_reply_is_read_to_where_its_framing_ends(&client);
     a_reply_cut_short_is_incomplete_with_what_arrived(&client);
     a_reply_that_is_not_read_says_why(&client);
+    a_reply_sent_ahead_of_a_failed_write_is_the_answer(&client);
 }
 
 // A reply is read to where its framing ends, and no further: the peer answers and keeps the connection open, so a client that read to the close would wait out its deadline. A reply to `HEAD` that states a length has no body to wait for, and a `100 Continue` ahead of the final reply is passed over.
@@ -491,4 +492,18 @@ fn a_reply_that_is_not_read_says_why(client: &Compiled) {
 
     assert_eq!(got(client, reset), "net reset");
     assert_eq!(got(client, MockHost::builder()), "net refused");
+}
+
+// A peer that answers before it has read the request and then stops reading is still heard: the client's write fails, and the reply that had arrived is its answer. Where none had, the failed write is what the exchange reports.
+fn a_reply_sent_ahead_of_a_failed_write_is_the_answer(client: &Compiled) {
+    let early = MockHost::builder().net_deaf([(
+        "example.com:80",
+        vec!["HTTP/1.1 413 Content Too Large\r\nContent-Length: 0\r\n\r\n"],
+    )]);
+
+    assert_eq!(got(client, early), "413 ");
+
+    let silent = MockHost::builder().net_deaf([("example.com:80", Vec::<&str>::new())]);
+
+    assert_eq!(got(client, silent), "net other(32)");
 }

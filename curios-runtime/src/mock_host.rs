@@ -269,6 +269,8 @@ struct Chunked {
     position: usize,
     due: bool,
     ending: Ending,
+    /// Whether the peer has stopped reading: a write to it fails with [`EPIPE`], and what it sent is still served.
+    deaf: bool,
 }
 
 /// What a scripted peer does once its chunks are spent.
@@ -289,6 +291,7 @@ enum Ending {
 struct Script {
     chunks: Vec<Vec<u8>>,
     ending: Ending,
+    deaf: bool,
 }
 
 impl Chunked {
@@ -296,6 +299,7 @@ impl Chunked {
         Self::scripted(Script {
             chunks,
             ending: Ending::Closed,
+            deaf: false,
         })
     }
 
@@ -305,6 +309,7 @@ impl Chunked {
             position: 0,
             due: true,
             ending: script.ending,
+            deaf: script.deaf,
         }
     }
 
@@ -476,6 +481,9 @@ pub struct MockHost {
 
 /// `SIGKILL`, the signal a killed child ends by — `9` on both release targets, Linux and macOS.
 const SIGKILL: NonZeroU32 = NonZeroU32::new(9).unwrap();
+
+/// `EPIPE`, the errno a write reports once its peer has stopped reading — `32` on both release targets, Linux and macOS.
+const EPIPE: u32 = 32;
 
 /// `ENOTTY`, the errno a terminal `ioctl` reports on a descriptor that is not a terminal — `25` on both release targets, Linux and macOS.
 const ENOTTY: u32 = 25;
@@ -922,6 +930,8 @@ impl HostOps for MockHost {
 
                 Ok(full)
             }
+            // A peer that has stopped reading takes nothing, as a connection whose far end is closed.
+            Some(MockResource::Outbound(stream)) if stream.deaf => Err(Failure::Other(EPIPE)),
             // Outbound connection: accept and discard (the in-memory test host does not capture request bytes).
             Some(MockResource::Outbound(_)) => {
                 self.wrote(bytes.len());
@@ -1488,6 +1498,26 @@ impl MockHostBuilder {
         self
     }
 
+    /// Script network endpoints as `net_chunks` does, whose peer answered and stopped reading before the client wrote: every write to it fails with a broken pipe, and its chunks are still there to read, as a reply sent ahead of a close is.
+    pub fn net_deaf<E, C, I>(mut self, endpoints: I) -> Self
+    where
+        E: AsRef<[u8]>,
+        C: AsRef<[u8]>,
+        I: IntoIterator<Item = (E, Vec<C>)>,
+    {
+        self.endpoints
+            .extend(endpoints.into_iter().map(|(endpoint, chunks)| {
+                let peer = Script {
+                    deaf: true,
+                    ..script(chunks, Ending::Closed)
+                };
+
+                (endpoint.as_ref().to_vec(), peer)
+            }));
+
+        self
+    }
+
     /// Script the serial devices `serial_list` names and `serial_open` finds: `(path, chunks)`, each port serving its chunks as `net_chunks` serves a response — the first arrived by the open, each later one once a `handle_poll` arms it. Opening an unscripted path is `NotFound`.
     pub fn serial<P, C, I>(mut self, devices: I) -> Self
     where
@@ -1689,6 +1719,7 @@ fn script<C: AsRef<[u8]>>(chunks: Vec<C>, ending: Ending) -> Script {
     Script {
         chunks: chunk_list(chunks),
         ending,
+        deaf: false,
     }
 }
 

@@ -671,6 +671,29 @@ fn a_resetting_peer_answers_a_reset_after_its_chunks() {
     assert_eq!(host.handle_read(socket, 8), Err(Failure::ConnectionReset));
 }
 
+/// A peer scripted to have stopped reading refuses every write with a broken pipe, and what it sent before is still read to its end.
+#[test]
+fn a_deaf_peer_refuses_a_write_and_is_still_read() {
+    let (host, _io) = MockHost::builder()
+        .net_deaf([("example.com:80", vec!["early"])])
+        .build();
+    let socket = host.socket_open(b"example.com:80".to_vec()).unwrap();
+    assert_eq!(
+        host.socket_connect(socket.clone(), b"example.com:80".to_vec()),
+        Ok(())
+    );
+
+    assert_eq!(
+        host.handle_write(socket.clone(), b"request".to_vec()),
+        Err(Failure::Other(32))
+    );
+    assert_eq!(
+        host.handle_read(socket.clone(), 8),
+        Ok(Some(b"early".to_vec()))
+    );
+    assert_eq!(host.handle_read(socket, 8), Ok(None));
+}
+
 /// The scripted host refuses what the native host refuses before asking anything: a lookup of a host that is not UTF-8 or of a port past sixteen bits, and a variable whose name no variable can have.
 #[test]
 fn a_lookup_and_a_variable_are_refused_as_the_native_host_refuses_them() {
