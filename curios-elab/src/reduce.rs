@@ -47,13 +47,17 @@ fn machine_admissible(context: &Context, term: &Term) -> bool {
 }
 
 /// The elaborator's reduction strategy, supplied to `curios-core`'s intrinsic folds. It is the full-strength one: definitions unfold, metavariables resolve, scrutinee refinements fire, and every step is charged against the declaration's budget.
+///
+/// **A reduct is handed over with its solved metavariables substituted.** A fold pairs by identity — a summand with a summand, a remainder with its quotient's dividend — and reduction opens nothing inside a stuck call, where an operator still reaches its concept through a witness metavariable of its own, solved and not yet spliced: two occurrences of `f(a + b)` are two terms until both are substituted. The kernel is handed substituted terms, so read as they stand the elaborator alone would refuse what a fold decides.
 impl Reducer for Context {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
-        reduce(self, term)
+        let reduct = reduce(self, term)?;
+        Ok(zonk_solved_term_metas(self, &reduct))
     }
 
     fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
-        reduce_forced(self, term)
+        let reduct = reduce_forced(self, term)?;
+        Ok(zonk_solved_term_metas(self, &reduct))
     }
 
     fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {

@@ -187,6 +187,11 @@ const ATOMS_HELD: &[&str] = &[
     "Eq()(u((x) => x + a) - u((x) => a + x), 0)",
     "Eq()(h(i + j) == h(j + i), true)",
     "Eq()(match f(a + b) == f(b + a) | true => 0 | false => 1 end, 0)",
+    // Euclid's recombination pairs a remainder with its quotient's multiple on their dividend and divisor. The two are atoms of two kinds, which nothing asks about each other, so the dividend and the divisor of each are classed: a remainder beside the multiple of a quotient over a dividend conversion holds the same is recombined, at `Nat` and at `Int`, under a comparison as under an equation.
+    "Eq()(2 * (f(a + b) / 2) + f(b + a) % 2, f(a + b))",
+    "Eq()(2 * (f(a + b) / 2) + f(a + b) % 2, f(b + a))",
+    "Eq()(2 * (f(a + b) / 2) + f(b + a) % 2 <= f(a + b), true)",
+    "Eq()(+2 * (h(i + j) / +2) + h(j + i) % +2, h(i + j))",
     // A float's sum, product, `min` and `max`, and a fused multiply-add's two factors with its addend in place, pair their operands by identity as every symmetric reader does; a difference is the sum it is spelled as.
     "Eq()(r(a + b) + s(c + d), s(d + c) + r(b + a))",
     "Eq()(r(a + b) * s(c + d), s(d + c) * r(b + a))",

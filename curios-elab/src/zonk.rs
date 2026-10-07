@@ -171,6 +171,9 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
             ),
         );
     }
+    if solutions.is_empty() {
+        return value.clone();
+    }
     materialize(
         value,
         Rc::new(solutions),

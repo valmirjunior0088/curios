@@ -133,7 +133,7 @@ pub fn atoms_within(
         }
         atom.clone()
     });
-    walk.operands(&Term::intrinsic(operation.clone()), operation)?;
+    walk.operands(&Term::intrinsic(operation.clone()), operation, usize::MAX)?;
     Ok(atoms)
 }
 
@@ -159,7 +159,7 @@ pub fn refold(
             .cloned()
             .unwrap_or_else(|| atom.clone())
     });
-    let respelled = walk.operands(&term, operation)?;
+    let respelled = walk.operands(&term, operation, usize::MAX)?;
     let built = walk.built;
     reducer.spend(Cost::term(built))?;
     let Subterm::Intrinsic(respelled) = &*respelled else {
@@ -337,6 +337,18 @@ fn read_through(intrinsic: &Intrinsic) -> bool {
     }
 }
 
+/// Whether `intrinsic` is a half of Euclid's division at a carrier whose sum recombines a remainder beside its multiple: a quotient or a remainder of two `Nat`s or of two `Int`s. The recombination pairs the two on their dividend and divisor ([`Nat::sum_over_floor`], `int_merged`), and the two are atoms of two kinds, which nothing asks about each other; so the walk reads the dividend and the divisor of each before it hands the division out, and a remainder whose dividend converts with its quotient's is spelled as its quotient's is.
+fn divides(intrinsic: &Intrinsic) -> bool {
+    matches!(
+        intrinsic.algebra(),
+        Declaration::Operation {
+            carrier: Carrier::Natural | Carrier::Integer,
+            operation: Operation::Quotient | Operation::Remainder,
+            ..
+        }
+    )
+}
+
 /// One walk over the nodes the readers read through, each node forced, each atom put through `atom`, and each node rebuilt only where an operand changed. A node is walked once, keyed on its identity and held alive beside its answer, since an identity is an address and the sides of one comparison share their subterms.
 struct Walk<'r, R, F> {
     reducer: &'r mut R,
@@ -364,7 +376,12 @@ impl<'r, R: Reducer, F: FnMut(&Term) -> Term> Walk<'r, R, F> {
             let forced = forced(self.reducer, term)?;
             match &*forced {
                 Subterm::Intrinsic(intrinsic) if read_through(intrinsic) => {
-                    self.operands(&forced, intrinsic)
+                    self.operands(&forced, intrinsic, usize::MAX)
+                }
+                // Its dividend and its divisor, and then the division itself: the proof it carries stands as written, which no reader reads.
+                Subterm::Intrinsic(intrinsic) if divides(intrinsic) => {
+                    let division = self.operands(&forced, intrinsic, 2)?;
+                    Ok((self.atom)(&division))
                 }
                 _ => Ok((self.atom)(&forced)),
             }
@@ -374,15 +391,23 @@ impl<'r, R: Reducer, F: FnMut(&Term) -> Term> Walk<'r, R, F> {
         Ok(walked)
     }
 
-    /// `intrinsic` with each operand walked. The operands are `Intrinsic::traverse`'s, the one definition of what an intrinsic's operands are, taken out by one pass and put back by another.
-    fn operands(&mut self, term: &Term, intrinsic: &Intrinsic) -> Result<Term, ReduceError> {
+    /// `intrinsic` with each of its first `read` operands walked and the rest as they stand. The operands are `Intrinsic::traverse`'s, the one definition of what an intrinsic's operands are, taken out by one pass and put back by another.
+    fn operands(
+        &mut self,
+        term: &Term,
+        intrinsic: &Intrinsic,
+        read: usize,
+    ) -> Result<Term, ReduceError> {
         let mut masking = Visit::masking(|_, _: &Var| None, Term::type_ground());
         intrinsic.traverse(&mut masking);
 
         let mut operands = Vec::new();
         let mut changed = false;
-        for operand in masking.take_masked_children() {
-            let walked = self.spine(&operand)?;
+        for (index, operand) in masking.take_masked_children().into_iter().enumerate() {
+            let walked = match index < read {
+                true => self.spine(&operand)?,
+                false => operand.clone(),
+            };
             changed |= walked != operand;
             operands.push(walked);
         }
