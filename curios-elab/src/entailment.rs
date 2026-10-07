@@ -288,7 +288,7 @@ fn check(context: &mut Context, candidate: &Term, bound: &Term) -> Result<Option
     verdict
 }
 
-/// Whether a proof form may apply every name in `names` ([`Context::proof_may_apply`]): a proof form writes only names in scope, which is how an item of `/std` written before its vocabulary behaves as it would with no procedure.
+/// Whether a proof form may apply every name in `names` ([`Context::proof_may_apply`]): a proof form writes only names in scope, which is how a declaration of `/std` the vocabulary reads behaves as it would with no procedure.
 fn in_scope(context: &Context, names: &[SyntaxName]) -> bool {
     names
         .iter()

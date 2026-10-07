@@ -1413,6 +1413,55 @@ fn spelled_witnesses(
         .collect()
 }
 
+/// The names of the unit the prover's vocabulary stands on before any item elaborates: the vocabulary's own, and what it reads through the items a recompile reuses, which arrive elaborated and which no walk asks for. The walk asks for the declarations among them first ([`Demand::all`]), so a declaration the vocabulary reads is given no lemma of the unit whether its unit is compiled whole or over a baseline.
+///
+/// Empty for a unit that declares none of the vocabulary, which is every unit but the library's.
+fn vocabulary_reach(
+    context: &Context,
+    established: Established<'_>,
+    order: &BTreeMap<Global, usize>,
+) -> BTreeSet<Global> {
+    let mut pending = context
+        .syntax()
+        .entailment
+        .targets()
+        .map(|name| Global::Authored(name.qualifier()))
+        .filter(|name| order.contains_key(name))
+        .collect::<Vec<_>>();
+    if pending.is_empty() {
+        return BTreeSet::new();
+    }
+
+    // The unit's items that arrive elaborated, each with the module that says what it reaches.
+    let reused = established
+        .modules()
+        .iter()
+        .flat_map(|module| module.items.iter().map(move |item| (*module, item)))
+        .flat_map(|(module, item)| {
+            item.declared_names()
+                .into_iter()
+                .filter(|name| order.contains_key(*name))
+                .map(move |name| (*name, (module, item)))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut reached = BTreeSet::new();
+    while let Some(name) = pending.pop() {
+        if !reached.insert(name) {
+            continue;
+        }
+        if let Some((module, item)) = reused.get(&name) {
+            pending.extend(
+                module
+                    .reaches(item)
+                    .into_iter()
+                    .filter(|name| order.contains_key(name)),
+            );
+        }
+    }
+
+    reached
+}
+
 /// What one unit's elaboration produced, before anything is finalized: the module itself and the refusals it recovered from.
 struct ElaboratedSuffix {
     /// The items that elaborated, with the registry entries, witness markers and tests of those alone.
@@ -1488,6 +1537,7 @@ fn elaborate_module_suffix(
     for (name, declared) in spelled_witnesses(context, module, lowered, &order) {
         context.declare_witness(name, declared);
     }
+    let vocabulary = vocabulary_reach(context, established, &order);
     context.begin_unit(
         order,
         module
@@ -1507,7 +1557,7 @@ fn elaborate_module_suffix(
         Poison::seeded(context.take_broken()),
         Survivors::default(),
     );
-    demand.all(context);
+    demand.all(context, vocabulary);
     let Demand {
         poison,
         mut survivors,

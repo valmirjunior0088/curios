@@ -321,7 +321,7 @@ pub(super) fn order_flat_items(
         .collect())
 }
 
-/// Every node the procedure that proves a bound from the facts in scope may run in, ordered after the procedure's vocabulary: in the unit that declares it, `/std`, its lemmas are elaborated beside the items that lean on them, and a proof form is written only where every name it applies is already in scope. Any item may omit a bound, and none says so before elaboration, so the edge runs from every node the vocabulary does not itself need.
+/// Every node the procedure that proves a bound from the facts in scope may run in, ordered after the procedure's vocabulary: in the unit that declares it, `/std`, its lemmas are elaborated beside the items that lean on them. Any item may omit a bound, and none says so before elaboration, so the edge runs from every node the vocabulary does not itself need. Which lemmas a proof may apply is the elaborator's walk's to say, and it reads no order (`curios-elab`'s `Demand::all`): these edges decide where an item sits in the lowered module and nothing of what it means.
 ///
 /// **What the vocabulary needs is its closure under both kinds of edge.** A node the vocabulary reaches by a name, or by a witness row it dispatches through, cannot follow it, so it is left where it is. No node inside that closure depends on a node outside it, so the edges added here close no cycle and leave the soft witness edges the closure holds as satisfiable as they were. In a unit that does not declare the vocabulary no node owns its names, and nothing moves.
 fn order_after_entailment(

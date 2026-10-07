@@ -167,9 +167,9 @@ fn an_attempt_begins_with_nothing_needed() {
     assert!(context.take_needs().is_empty());
 }
 
-/// A proof the elaborator writes applies a name of its own unit only from a declaration written after it, wherever the two elaborate.
+/// A proof the elaborator writes applies no name of its own unit until the unit's walk offers them, and then every one that elaborated, wherever each is written.
 #[test]
-fn a_proof_applies_a_name_of_its_unit_only_from_a_declaration_written_after_it() {
+fn a_proof_applies_a_name_of_its_unit_once_the_walk_offers_them() {
     let mut context = context();
     let [a, b] = unit_of_two(&mut context);
     for name in [&a, &b] {
@@ -182,24 +182,33 @@ fn a_proof_applies_a_name_of_its_unit_only_from_a_declaration_written_after_it()
     }
     context.finish(&[&a, &b]);
 
-    context.enter_item(Some(b));
-    assert!(context.proof_may_apply(&a));
-    context.enter_item(Some(a));
-    assert!(!context.proof_may_apply(&b));
-    assert!(!context.proof_may_apply(&a));
+    for declaration in [a, b] {
+        context.enter_item(Some(declaration));
+        assert!(!context.proof_may_apply(&a));
+        assert!(!context.proof_may_apply(&b));
+    }
+
+    context.offer_lemmas();
+    for declaration in [a, b] {
+        context.enter_item(Some(declaration));
+        assert!(context.proof_may_apply(&a));
+        assert!(context.proof_may_apply(&b));
+    }
 }
 
-/// A name written before the declaration and not elaborated yet is one the proof may apply, so the attempt needs it.
+/// A name of the unit that is not in scope is applied by no proof and needed by none, offered or not: the walk asked for the vocabulary before it offered any of it, so one that is missing was refused.
 #[test]
-fn a_proof_needs_a_name_written_before_it_that_has_not_elaborated() {
+fn a_proof_needs_no_name_of_its_unit() {
     let mut context = context();
     let [a, b] = unit_of_two(&mut context);
     context.attempt(&[&b]);
     context.enter_item(Some(b));
 
     assert!(!context.proof_may_apply(&a));
+    context.offer_lemmas();
+    assert!(!context.proof_may_apply(&a));
 
-    assert_eq!(context.take_needs(), BTreeSet::from([a]));
+    assert!(context.take_needs().is_empty());
 }
 
 /// A witness the unit declares and has not elaborated, spelled at `Show(Nat)` at the place `position`.
@@ -345,7 +354,7 @@ fn a_state_set_aside_keeps_what_its_attempt_solved() {
     assert!(context.metavar_solution(MetavarId(0)).is_none());
 }
 
-/// A name no declaration of the unit writes is another unit's, and is applied wherever it is in scope.
+/// A name no declaration of the unit writes is another unit's, and is applied wherever it is in scope, before the unit's own are offered as after.
 #[test]
 fn a_proof_applies_another_units_name_wherever_it_is_in_scope() {
     let mut context = context();

@@ -345,7 +345,7 @@ impl ProofSyntax {
     }
 }
 
-/// The names the procedure that proves a bound from the facts in scope writes into its proofs — `curios-elab`'s `entailment`. A proof form is written only where every name it applies is assumed in the context. Inside `/std`, where the vocabulary is elaborated beside its users, `curios-text`'s scheduler orders every item the vocabulary does not itself need after it ([`EntailmentSyntax::targets`]), since any item may omit a bound and no item says so ahead of elaboration.
+/// The names the procedure that proves a bound from the facts in scope writes into its proofs — `curios-elab`'s `entailment`. A proof form is written only where every name it applies is assumed in the context. Inside `/std`, where the vocabulary is elaborated beside its users, `curios-elab`'s walk elaborates the vocabulary first, with every declaration it reads, and offers it to the rest of the unit from then on ([`EntailmentSyntax::targets`]), since any item may omit a bound and no item says so ahead of elaboration.
 #[derive(Debug, Clone, Copy)]
 pub struct EntailmentSyntax {
     /// A decision conversion equates with `true` holds: the proof of a tautology conversion decides and reduction does not.

@@ -2,7 +2,9 @@
 //!
 //! **The declaration is the unit of work.** A declaration is an item with every item the lowering generated from it — a type former with its constructors, a concept with its method wrappers. Its items share what one written declaration shares: the universe levels of its written types, which the lowering mints once and copies, and the registry entry the former rebuilds and a constructor is finalized against. So they are attempted together, in item order, in one state, and are published together.
 //!
-//! **A declaration elaborates after what it reads, wherever each was written.** The walk asks for the declarations in their lowered order, and asking for one first asks for every declaration its items' lowered forms reach. What it turns out to read beyond that — the witness a goal resolves to, a name a proof the elaborator writes applies — it meets while it elaborates: the read records the declaration it needed ([`Context::need`]), and an attempt that recorded one is void whatever it went on to conclude. A void attempt is undone as a refused item is, poisoning nothing; what it needed is elaborated; and the attempt is made again. No attempt is suspended to run another inside it, so one context serves them all.
+//! **A declaration elaborates after what it reads, wherever each was written.** The walk asks for the declarations in their lowered order, and asking for one first asks for every declaration its items' lowered forms reach. What it turns out to read beyond that — the witness a goal resolves to — it meets while it elaborates: the read records the declaration it needed ([`Context::need`]), and an attempt that recorded one is void whatever it went on to conclude. A void attempt is undone as a refused item is, poisoning nothing; what it needed is elaborated; and the attempt is made again. No attempt is suspended to run another inside it, so one context serves them all.
+//!
+//! **The prover's vocabulary is asked for first.** A proof the elaborator writes applies lemmas no declaration names, so nothing a declaration writes says it reads them. The walk therefore begins with the declarations of the vocabulary the unit declares, which brings in every declaration they read, with no lemma of the unit on offer — and, compiled over a baseline, with the declarations the vocabulary reads through an item the baseline holds, which no walk asks for; and only then offers them ([`Context::offer_lemmas`]) and asks for the rest. A declaration the vocabulary reads is thereby proved without it, every other finds all of it elaborated, and no proof makes one declaration wait on another.
 //!
 //! **A cycle is refused by its members.** A declaration asked for while it is being asked for closes a cycle, through a name it wrote or a witness a goal of its resolves to alike. Every member is refused, the report is raised once, at the first member in source order, naming them all, and what reaches a member is withheld as a dependent of any refusal is.
 
@@ -121,8 +123,17 @@ impl<'a> Demand<'a> {
         }
     }
 
-    /// Elaborate every declaration, each after what it reads.
-    pub(super) fn all(&mut self, context: &mut Context) {
+    /// Elaborate every declaration, each after what it reads: the declarations of `vocabulary` and what they read first, then the rest with the unit's lemmas on offer.
+    pub(super) fn all(&mut self, context: &mut Context, vocabulary: BTreeSet<Global>) {
+        for declaration in self.owners(vocabulary, usize::MAX) {
+            let closed = self.declaration(context, declaration);
+            assert!(
+                closed.is_ok(),
+                "a cycle is closed by the member asked for first, which nothing here asked for"
+            );
+        }
+        context.offer_lemmas();
+
         // In the order the declarations are written, which is their first items'.
         let mut order = (0..self.declarations.len()).collect::<Vec<_>>();
         order.sort_by_key(|declaration| self.declarations[*declaration][0]);

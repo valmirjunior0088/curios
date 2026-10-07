@@ -160,8 +160,10 @@ pub struct Context {
     checked: Vec<(Term, Term, Rc<str>)>,
     // The definition whose body is currently elaborating, for those sites.
     checked_site: Rc<str>,
-    /// Where each name the unit declares sits in its lowered order — every item's, the ones a recompile reuses among them. What a proof the elaborator writes may apply is read off it ([`Context::proof_may_apply`]).
+    /// Where each name the unit declares sits in its lowered order — every item's, the ones a recompile reuses among them: which names are the unit's own ([`Context::proof_may_apply`]), and where a goal's report is placed ([`Context::written_at`]).
     order: BTreeMap<Global, usize>,
+    /// Whether the lemmas the unit being elaborated declares are on offer to the proofs the elaborator writes: not while its walk elaborates the prover's vocabulary, and from then on ([`Context::offer_lemmas`]). A context no unit was begun in offers whatever is in scope.
+    offering: bool,
     /// The names of the unit's declarations that have not finished elaborating.
     unfinished: BTreeSet<Global>,
     /// The names the attempt under way declares, which it reads as its own.
@@ -278,6 +280,7 @@ impl Context {
             checked: Vec::new(),
             checked_site: Rc::from("the entrypoint"),
             order: BTreeMap::new(),
+            offering: true,
             unfinished: BTreeSet::new(),
             attempting: BTreeSet::new(),
             needs: RefCell::new(BTreeSet::new()),
@@ -403,7 +406,7 @@ impl Context {
         self.checked.truncate(mark);
     }
 
-    /// Begin a unit's items: where each of its names sits in the lowered order, and the names its own items declare, none finished yet.
+    /// Begin a unit's items: where each of its names sits in the lowered order, and the names its own items declare, none finished yet. No lemma of the unit is on offer until its walk says so ([`Context::offer_lemmas`]).
     pub(crate) fn begin_unit(
         &mut self,
         order: BTreeMap<Global, usize>,
@@ -411,6 +414,12 @@ impl Context {
     ) {
         self.order = order;
         self.unfinished = declared;
+        self.offering = false;
+    }
+
+    /// Offer the lemmas of the unit being elaborated to the proofs the elaborator writes from here on: its walk has elaborated the prover's vocabulary, with every declaration it reads.
+    pub(crate) fn offer_lemmas(&mut self) {
+        self.offering = true;
     }
 
     /// Begin an attempt at the declaration declaring `names`, with nothing needed yet and in a state of its own ([`Context::begin_state`]).
@@ -611,22 +620,11 @@ impl Context {
         }
     }
 
-    /// Whether a proof the elaborator writes for the declaration being elaborated may apply `name`. A name another unit declares is applied wherever it is in scope. A name this unit declares is applied by the declarations lowered after it and by no other, so what a declaration's proof is built from follows where the two are written, never which of them happened to elaborate first; where such a name has not elaborated, the attempt needs it.
+    /// Whether a proof the elaborator writes for the declaration being elaborated may apply `name`. A name another unit declares is applied wherever it is in scope. A name this unit declares is one of the prover's vocabulary, which the unit's walk elaborates before anything else, with every declaration it reads, and offers only from then on: so the vocabulary and what it reads are proved without it, every other declaration finds all of it elaborated, and what a declaration's proof is built from follows what the vocabulary reads, never where either is written or which of them was asked for first. A lemma that is on offer and not in scope was refused, and is applied by nothing.
     pub(crate) fn proof_may_apply(&self, name: &Global) -> bool {
-        let applied = Free::Global(*name);
-        let assumed = self.frames.assumption(&applied).is_some();
-        let Some(written) = self.order.get(name) else {
-            return assumed;
-        };
-        let earlier = self
-            .declaration
-            .and_then(|declaration| self.order.get(&declaration))
-            .is_none_or(|here| written < here);
-        if earlier && !assumed {
-            self.missed(&applied);
-        }
+        let assumed = self.frames.assumption(&Free::Global(*name)).is_some();
 
-        earlier && assumed
+        assumed && (self.offering || !self.order.contains_key(name))
     }
 
     /// Name the declarations a lowering could not read. Their dependents are withheld from elaboration before the first item is checked, so a parse failure in one declaration reports as that declaration's and nothing else's.
