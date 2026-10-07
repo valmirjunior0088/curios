@@ -20,6 +20,8 @@ pub induct Error: pub Type
 | is_directory()
 --- A file was given where a directory was wanted.
 | not_directory()
+--- The peer reset the connection.
+| reset()
 --- Anything else, carrying the host's own code.
 | other(Nat)
 end
@@ -36,7 +38,8 @@ let errors: List({Nat, Error}) =
         (/sys/status/would_block, Error/would_block()),
         (/sys/status/not_empty, Error/not_empty()),
         (/sys/status/is_directory, Error/is_directory()),
-        (/sys/status/not_directory, Error/not_directory())];
+        (/sys/status/not_directory, Error/not_directory()),
+        (/sys/status/reset, Error/reset())];
 
 satisfy Show(Error) {
     show(e) =
@@ -50,6 +53,7 @@ satisfy Show(Error) {
         | not_empty() => "not_empty"
         | is_directory() => "is_directory"
         | not_directory() => "not_directory"
+        | reset() => "reset"
         | other(n) => Str/flatten(["other(", Nat/to_str(n), ")"])
         end,
 }

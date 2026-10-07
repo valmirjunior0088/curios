@@ -833,6 +833,78 @@ fn a_flush_pushes_what_rustls_holds() {
     host.handle_close(listener);
 }
 
+/// Everything `handle` sends until its stream ends, each read waited for through `handle_poll`.
+fn read_to_the_end(host: &OsHost, handle: &Handle) -> Vec<u8> {
+    let mut bytes = Vec::new();
+
+    loop {
+        let ready = host
+            .handle_poll(
+                vec![handle.clone()],
+                vec![Poll::from_bits(event::READ)],
+                5_000,
+            )
+            .unwrap();
+        assert_ne!(ready[0].bits() & event::READ, 0);
+
+        match host.handle_read(handle.clone(), 4096) {
+            Ok(Some(chunk)) => bytes.extend(chunk),
+            Ok(None) => return bytes,
+            Err(Failure::WouldBlock) => {}
+            Err(failure) => panic!("the read answered {failure:?}"),
+        }
+    }
+}
+
+/// A finish ends the sending half alone: the peer reads the end of the stream, and what the peer sends afterwards is still read. A kind with no sending half of its own — a standard stream, a listener — and an unknown handle are `NotFound`.
+#[test]
+fn a_finished_socket_ends_for_its_peer_and_still_reads() {
+    let host = OsHost::with_args(vec![]);
+    let (listener, client, server) = loopback_pair(&host);
+
+    assert_eq!(host.handle_finish(Handle::Stdout), Err(Failure::NotFound));
+    assert_eq!(host.handle_finish(listener.clone()), Err(Failure::NotFound));
+    assert_eq!(
+        host.handle_finish(Handle::Other(vec![0xff, 0xff])),
+        Err(Failure::NotFound)
+    );
+
+    assert_eq!(host.handle_write(server.clone(), b"done".to_vec()), Ok(4));
+    assert_eq!(host.handle_finish(server.clone()), Ok(()));
+    assert_eq!(read_to_the_end(&host, &client), b"done");
+
+    assert_eq!(host.handle_write(client.clone(), b"late".to_vec()), Ok(4));
+    host.handle_close(client);
+    assert_eq!(read_to_the_end(&host, &server), b"late");
+
+    host.handle_close(server);
+    host.handle_close(listener);
+}
+
+/// A TLS stream's finish sends its closure alert ahead of the end: the peer's last record is the alert — content type 21, two bytes, a warning's `close_notify` — and its stream ends after it. Here the alert follows the client's hello in the clear, since no handshake has completed to encrypt it.
+#[test]
+fn a_finished_tls_stream_sends_its_closure_alert_before_it_ends() {
+    let host = OsHost::with_args(vec![]);
+    let (listener, client, server) = loopback_pair(&host);
+
+    assert_eq!(
+        host.tls_start(client.clone(), b"localhost".to_vec()),
+        Ok(())
+    );
+    assert_eq!(host.handle_finish(client.clone()), Ok(()));
+
+    let sent = read_to_the_end(&host, &server);
+    assert_eq!(&sent[..2], &[0x16, 0x03], "a TLS handshake record");
+
+    let alert = &sent[sent.len() - 7..];
+    assert_eq!(alert[0], 0x15, "an alert record");
+    assert_eq!(&alert[3..], &[0x00, 0x02, 0x01, 0x00]);
+
+    host.handle_close(server);
+    host.handle_close(client);
+    host.handle_close(listener);
+}
+
 /// Two slots naming one descriptor are polled once and answered each in its own terms: the one asking to read sees the readiness to read, the one asking to write the readiness to write, and neither the other's.
 #[test]
 fn slots_naming_one_descriptor_are_answered_each_for_its_interest() {

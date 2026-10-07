@@ -3,7 +3,7 @@
 use {
     crate::tests::{run, run_text},
     curios_pipeline::compile_with_prelude,
-    curios_runtime::{ForeignBindings, MockHost},
+    curios_runtime::{ForeignBindings, MockHost, SocketEvent},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::test_support::Temporary,
 };
@@ -75,6 +75,38 @@ fn https_perform_reaches_a_public_host_over_the_real_host() {
 
     let written = std::fs::read(&report).expect("the program wrote its report");
     assert_eq!(written, b"200");
+}
+
+// `with` ends its socket's sending half once the body has answered and before the close, so the peer is told the stream is over rather than left to find it gone. A finish that waits, as a TLS stream's does behind its closure alert, is parked on.
+#[test]
+fn with_finishes_its_socket_before_it_closes_it() {
+    for waits in [0, 2] {
+        let (system, io) = MockHost::builder()
+            .net([("example.com:80", "pong")])
+            .pending_finishes(waits)
+            .build();
+        run_text(CALL, system).expect("expected result");
+        assert_eq!(io.output(), b"pong");
+        assert_eq!(
+            io.socket_events(),
+            [
+                SocketEvent::Wrote(9),
+                SocketEvent::Ended,
+                SocketEvent::Finished,
+                SocketEvent::Closed,
+            ]
+        );
+    }
+}
+
+// A peer that resets the connection is a failure with a name, the same on every system, where its errno is not.
+#[test]
+fn a_peer_that_resets_reads_as_reset() {
+    let (system, io) = MockHost::builder()
+        .net_reset([("example.com:80", vec!["par"])])
+        .build();
+    run_text(CALL, system).expect("expected result");
+    assert_eq!(io.output(), b"reset");
 }
 
 /// `with` over the connector `open`, the body reading one chunk off the socket it is handed and answering it.
@@ -153,6 +185,23 @@ fn serve_handles_a_scripted_inbound_connection() {
     let (system, io) = MockHost::builder().inbound(["ping"]).build();
     run_text(&source, system).expect("expected result");
     assert_eq!(io.captures(), vec![b"echo: ping".to_vec()]);
+}
+
+// A served connection is finished before it is closed: the handler's reply is written, the sending half ended, and only then the handle closed.
+#[test]
+fn serve_finishes_a_connection_before_it_closes_it() {
+    let source = echo_server(r#"Listener/serve("0.0.0.0", 8080, handler)"#, "echo: ");
+
+    let (system, io) = MockHost::builder().inbound(["ping"]).build();
+    run_text(&source, system).expect("expected result");
+    assert_eq!(
+        io.socket_events(),
+        [
+            SocketEvent::Wrote(10),
+            SocketEvent::Finished,
+            SocketEvent::Closed,
+        ]
+    );
 }
 
 // Server TLS termination: `serve_tls` builds a config token, then files the server session on each accepted connection before the handler runs. The mock host runs cleartext, so the upgrade is a no-op identity and the handler echoes the scripted request the host captures.

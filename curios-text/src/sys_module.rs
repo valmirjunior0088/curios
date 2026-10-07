@@ -1019,6 +1019,7 @@ fn code_modules() -> Vec<SysModule> {
                 pub_let("not_empty", nat(), nat_lit(status::NOT_EMPTY)),
                 pub_let("is_directory", nat(), nat_lit(status::IS_DIRECTORY)),
                 pub_let("not_directory", nat(), nat_lit(status::NOT_DIRECTORY)),
+                pub_let("reset", nat(), nat_lit(status::CONNECTION_RESET)),
                 pub_let("other_base", nat(), nat_lit(status::OTHER_BASE)),
             ],
         ),

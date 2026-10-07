@@ -149,6 +149,20 @@ let flush_parking(h: Handle) -> Async(Result(Io/Error, {})) =
         end
     end;
 
+--- `h`'s sending half ended and its receiving half left as it is, parking while the host would block: the peer reads the end of the stream, a TLS stream's closure alert ahead of it, and `h` still reads what the peer sends. Only a connected socket has a sending half of its own to end, and any other handle is `not_found`.
+pub let finish(h: Handle) -> Async(Result(Io/Error, {})) =
+    let r = /sys/Handle/finish(h)!;
+    match r
+    | success(_) => Async/pure(Result/success(()))
+    | failure(s) =>
+        choose
+        | s == /sys/status/would_block =>
+            let _ = park_on(h, Interest/writable)!;
+            finish(h)
+        | _ => Async/pure(Result/failure(Io/Error/of(s)))
+        end
+    end;
+
 satisfy Async/Read(Io, Handle) {
     read(h, n, @positive) = read_waiting(h, n, @positive),
 }

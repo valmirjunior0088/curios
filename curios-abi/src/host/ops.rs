@@ -37,6 +37,9 @@ macro_rules! for_each_host_op {
             /// Drain what the host still holds for `h`: a TLS stream's pending records, answering `WouldBlock` until `rustls` holds nothing — `handle_poll` reports the handle writable meanwhile — and `Ok` at once for any other kind, whose accepted writes the host holds nothing of. It promises the host's own buffers are empty, not that a peer has received the bytes or a disk has stored them. `NotFound` for an unknown handle.
             HandleFlush: fn handle_flush(h: Handle) -> Result<(), Failure> as Handle/flush { marks: [Blocks, Tls] }
 
+            /// End `h`'s sending half and leave its receiving half as it is: the peer reads the end of the stream, and `h` still reads what the peer sends. A connected socket shuts down its write side. A TLS stream sends its closure alert first — queued once, answering `WouldBlock` until `rustls` holds none of it, `handle_poll` reporting the handle writable meanwhile — and shuts the socket's write side down after. It is how a stream tells its peer it has finished before `handle_close`, which tells it nothing and resets a connection that holds unread bytes. `NotFound` for an unknown handle and for a kind with no sending half of its own to end: a standard stream, a file, a listener, a pipe to a child, a serial port.
+            HandleFinish: fn handle_finish(h: Handle) -> Result<(), Failure> as Handle/finish { marks: [Blocks, Tls] }
+
             /// Open the file at `path` in `mode`, succeeding with its handle.
             FileOpen: fn file_open(path: Vec<u8>, mode: Mode) -> Result<Handle, Failure> as file/open { yields: handle }
 

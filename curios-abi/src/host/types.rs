@@ -160,6 +160,8 @@ pub enum Failure {
     IsDirectory,
     /// A directory operation applied to something that is not one (`ErrorKind::NotADirectory`).
     NotDirectory,
+    /// The peer reset the connection (`ErrorKind::ConnectionReset`).
+    ConnectionReset,
     /// An otherwise-unrecognized failure, carrying the OS errno that produced it.
     Other(u32),
 }
@@ -177,6 +179,7 @@ impl Failure {
             Failure::NotEmpty => status::NOT_EMPTY,
             Failure::IsDirectory => status::IS_DIRECTORY,
             Failure::NotDirectory => status::NOT_DIRECTORY,
+            Failure::ConnectionReset => status::CONNECTION_RESET,
             Failure::Other(errno) => status::OTHER_BASE + u64::from(errno),
         }
     }

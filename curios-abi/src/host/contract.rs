@@ -71,6 +71,7 @@ const SYSTEM: &[u64] = &[
     status::NOT_EMPTY,
     status::IS_DIRECTORY,
     status::NOT_DIRECTORY,
+    status::CONNECTION_RESET,
 ];
 
 impl HostOp {

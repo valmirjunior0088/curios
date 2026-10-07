@@ -200,6 +200,8 @@ export async function run(config) {
     // Nothing is held back in the playground — every write is delivered as it is made — so a standard stream's flush has nothing to drain, and no other handle exists here.
     handle_flush: (handle) =>
       standard.has(keyOf(handle)) ? status.OK : status.NOT_FOUND,
+    // No stream here has a sending half of its own to end: the standard streams are not sockets, and no other handle exists.
+    handle_finish: () => status.NOT_FOUND,
     clock_wall: () => {
       const millis = Date.now();
 

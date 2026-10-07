@@ -22,7 +22,7 @@ use {
         ffi::OsStr,
         fs::{self, File, OpenOptions},
         io::{self, Error, ErrorKind, Read, Write, stderr, stdin, stdout},
-        net::SocketAddr,
+        net::{Shutdown, SocketAddr},
         os::{
             fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
             unix::ffi::{OsStrExt, OsStringExt},
@@ -760,6 +760,15 @@ impl HostOps for OsHost {
         }
     }
 
+    fn handle_finish(&self, io: Handle) -> Result<(), Failure> {
+        match self.table.lock().unwrap().get_mut(&io) {
+            Some(OsResource::Connected(socket)) => finish(socket),
+            Some(OsResource::ClientTls(tls)) => finish_tls(&mut tls.conn, &mut tls.sock),
+            Some(OsResource::ServerTls(tls)) => finish_tls(&mut tls.conn, &mut tls.sock),
+            _ => Err(Failure::NotFound),
+        }
+    }
+
     fn clock_wall(&self) -> Timestamp {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -1125,6 +1134,19 @@ fn flush_tls<Data>(conn: &mut ConnectionCommon<Data>, sock: &mut Socket) -> Resu
     }
 
     Ok(())
+}
+
+/// End `socket`'s sending half, leaving it to read what its peer still sends.
+fn finish(socket: &Socket) -> Result<(), Failure> {
+    socket.shutdown(Shutdown::Write).map_err(failure_from_error)
+}
+
+/// End a TLS stream's sending half: its closure alert, drained as [`flush_tls`] drains, and then the socket's own. `rustls` queues the alert once however often it is asked, so a call retried after `WouldBlock` drains what the first one left.
+fn finish_tls<Data>(conn: &mut ConnectionCommon<Data>, sock: &mut Socket) -> Result<(), Failure> {
+    conn.send_close_notify();
+    flush_tls(conn, sock)?;
+
+    finish(sock)
 }
 
 /// The interest to watch a TLS stream's socket for. While the handshake is under way `rustls`'s own demand replaces the guest's: a socket is nearly always writable, so a fiber that parked on `WRITE` to send its request would spin while `rustls` was in fact waiting to read the server's reply. Afterwards the guest's interest stands, plus `WRITE` whenever `rustls` still holds records to push.

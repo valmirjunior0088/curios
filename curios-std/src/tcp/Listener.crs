@@ -65,10 +65,11 @@ let accept_loop(l: Listener, on_conn: (Handle) -> Async({})) -> Async({}) =
         end;
     go();
 
---- `handler` over the connection, then what the connection holds of the writes it accepted handed on, so a TLS stream has sent its records before it is closed.
+--- `handler` over the connection, then what the connection holds of the writes it accepted handed on and its sending half ended, so a TLS stream has sent its records and its closure alert before it is closed.
 let served(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
     let _ = handler(Socket/of_handle(h))!;
     let _ = Async/Write/flush(h)!;
+    let _ = Handle/finish(h)!;
     Async/pure(());
 
 let serve_conn(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =

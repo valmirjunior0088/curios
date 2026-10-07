@@ -268,25 +268,56 @@ struct Chunked {
     chunks: VecDeque<Vec<u8>>,
     position: usize,
     due: bool,
+    ending: Ending,
+}
+
+/// What a scripted peer does once its chunks are spent.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Ending {
+    /// It has closed: a read answers the end of the stream.
+    Closed,
+    /// It keeps its sending half open until this side finishes its own, as a peer waiting on a reply does: a read answers `WouldBlock` and no poll reports it readable until `handle_finish`, after which it has closed.
+    Waiting,
+    /// It resets the connection: a read answers `ConnectionReset`.
+    Reset,
+}
+
+/// A scripted peer: the chunks it sends and what it does after them.
+#[derive(Clone)]
+struct Script {
+    chunks: Vec<Vec<u8>>,
+    ending: Ending,
 }
 
 impl Chunked {
     fn new(chunks: Vec<Vec<u8>>) -> Self {
+        Self::scripted(Script {
+            chunks,
+            ending: Ending::Closed,
+        })
+    }
+
+    fn scripted(script: Script) -> Self {
         Self {
-            chunks: chunks.into(),
+            chunks: script.chunks.into(),
             position: 0,
             due: true,
+            ending: script.ending,
         }
     }
 
-    /// Serve up to `count` bytes of the front chunk: `Eof` once no chunk is left, `WouldBlock` while the next chunk is not yet due, and the chunk's tail otherwise, disarming the stream when the chunk is spent. An empty chunk is skipped rather than served as a zero-byte read.
+    /// Serve up to `count` bytes of the front chunk: once no chunk is left, what the script's ending says; `WouldBlock` while the next chunk is not yet due; and the chunk's tail otherwise, disarming the stream when the chunk is spent. An empty chunk is skipped rather than served as a zero-byte read.
     fn read(&mut self, count: u64) -> Result<Option<Vec<u8>>, Failure> {
         while self.chunks.front().is_some_and(|chunk| chunk.is_empty()) {
             self.chunks.pop_front();
         }
 
         let Some(front) = self.chunks.front() else {
-            return Ok(None);
+            return match self.ending {
+                Ending::Closed => Ok(None),
+                Ending::Waiting => Err(Failure::WouldBlock),
+                Ending::Reset => Err(Failure::ConnectionReset),
+            };
         };
 
         if !self.due {
@@ -308,9 +339,18 @@ impl Chunked {
         Ok(Some(bytes))
     }
 
-    /// Make the next chunk due — what a `handle_poll` reporting the handle readable means.
-    fn arm(&mut self) {
+    /// Make the next chunk due — what a `handle_poll` reporting the handle readable means — and say whether a read now answers anything but `WouldBlock`: a spent script whose peer waits has nothing to read.
+    fn arm(&mut self) -> bool {
         self.due = true;
+
+        !(self.ending == Ending::Waiting && self.chunks.iter().all(Vec::is_empty))
+    }
+
+    /// This side has ended its sending half: a peer that waited for that closes in answer.
+    fn finish(&mut self) {
+        if self.ending == Ending::Waiting {
+            self.ending = Ending::Closed;
+        }
     }
 
     /// Drop what has arrived and not been read — the rest of the front chunk, when it is due — as a driver's input flush does. A chunk not yet due has not arrived, so it survives.
@@ -385,16 +425,20 @@ pub struct MockHost {
     files: MockFileSystem,
     /// One table for every non-stdio handle, keyed by token bytes: open files, outbound/inbound connections, and unconnected/listening sockets. The BSD lifecycle transitions a handle in place (`socket_open` → `socket_connect`/`socket_listen` → `socket_accept`) and `handle_close` releases any kind uniformly — the scripted mirror of `OsHost`'s real-resource table.
     table: Mutex<Table<MockResource>>,
-    /// Scripted network endpoints: `host:port` → the chunks a connection serves on read. Read-only during the run; connecting elsewhere is refused.
-    endpoints: HashMap<Vec<u8>, Vec<Vec<u8>>>,
-    /// Scripted inbound requests as chunk lists, one served per `socket_accept` (FIFO).
-    inbound: Mutex<VecDeque<Vec<Vec<u8>>>>,
+    /// Scripted network endpoints: `host:port` → the peer a connection reads from. Read-only during the run; connecting elsewhere is refused.
+    endpoints: HashMap<Vec<u8>, Script>,
+    /// Scripted inbound peers, one served per `socket_accept` (FIFO).
+    inbound: Mutex<VecDeque<Script>>,
     /// Whether `socket_connect` answers `WouldBlock` and settles through `handle_poll` and `socket_finish_connect`, as a connect to a remote peer does, rather than at once as loopback does.
     connect_pending: bool,
     /// Captured server responses: one entry per accepted connection, the concatenation of its writes. Shared with [`MockIo::captures`].
     captures: Arc<Mutex<Vec<Vec<u8>>>>,
     /// How many flushes are still to answer `WouldBlock` before one drains, as a TLS stream's do while its records wait for the socket.
     pending_flushes: Mutex<u64>,
+    /// How many finishes are still to answer `WouldBlock` before one ends the sending half, as a TLS stream's do while its closure alert waits for the socket.
+    pending_finishes: Mutex<u64>,
+    /// What happened on the scripted connections, in order. Shared with [`MockIo::socket_events`], so a test can see that a stream was finished before it was closed, and read to its end between the two.
+    socket_events: Arc<Mutex<Vec<SocketEvent>>>,
     /// Scripted wall-clock readings, served in order by `clock_wall`.
     clock_wall_seq: Mutex<VecDeque<(u64, u64)>>,
     /// Scripted monotonic readings, served in order by `clock_mono`.
@@ -472,6 +516,23 @@ impl MockHost {
         }
     }
 
+    /// A scripted connection's read as it answered, recorded where it answered the end of the stream.
+    fn ended(&self, read: Result<Option<Vec<u8>>, Failure>) -> Result<Option<Vec<u8>>, Failure> {
+        if read == Ok(None) {
+            self.socket_events.lock().unwrap().push(SocketEvent::Ended);
+        }
+
+        read
+    }
+
+    /// Record a write of `count` bytes to a scripted connection.
+    fn wrote(&self, count: usize) {
+        self.socket_events
+            .lock()
+            .unwrap()
+            .push(SocketEvent::Wrote(count));
+    }
+
     /// Mint a fresh handle for `resource` under the table lock (see [`Table::mint`]).
     fn mint(&self, resource: MockResource) -> Handle {
         self.table.lock().unwrap().mint(resource)
@@ -535,7 +596,7 @@ impl HostOps for MockHost {
         }
 
         let outcome = match self.endpoints.get(&addr) {
-            Some(response) => Ok(Chunked::new(response.clone())),
+            Some(peer) => Ok(Chunked::scripted(peer.clone())),
             None => Err(Failure::ConnectionRefused),
         };
 
@@ -643,7 +704,7 @@ impl HostOps for MockHost {
         };
 
         Ok(self.mint(MockResource::Inbound(MockServer {
-            bytes: Chunked::new(request),
+            bytes: Chunked::scripted(request),
             capture,
         })))
     }
@@ -656,17 +717,18 @@ impl HostOps for MockHost {
         &self,
         handles: Vec<Handle>,
         events: Vec<Poll>,
-        _: i64,
+        timeout: i64,
     ) -> Result<Vec<Poll>, Refusal> {
-        // Readiness is what the script says is due, and never a wait: the write ends and files mirror the requested interest, standard input and a scripted stream are armed for their next chunk and reported readable (a stream's end counts as readable, as an OS reports a closed peer) plus writable where asked, and an unknown handle reports `ERR`. Arming here is what makes one `handle_poll` one chunk of progress, so a scheduler's park-poll-resume path is taken exactly once per chunk boundary.
+        // Readiness is what the script says is due, and never a wait: the write ends and files mirror the requested interest, standard input and a scripted stream are armed for their next chunk and reported readable (a stream's end counts as readable, as an OS reports a closed peer) plus writable where asked, a stream whose peer waits on this side reports the writable half alone, and an unknown handle reports `ERR`. Arming here is what makes one `handle_poll` one chunk of progress, so a scheduler's park-poll-resume path is taken exactly once per chunk boundary.
         let mut table = self.table.lock().unwrap();
 
-        let ready = handles
+        let ready: Vec<Poll> = handles
             .iter()
             .enumerate()
             .map(|(slot, handle)| {
                 let requested = events.get(slot).copied().unwrap_or_else(Poll::empty);
-                let readable = Poll::from_bits(event::READ | (requested.bits() & event::WRITE));
+                let writable = Poll::from_bits(requested.bits() & event::WRITE);
+                let readable = Poll::from_bits(event::READ | writable.bits());
 
                 match handle {
                     // Standard input is armed like a scripted stream, so one `handle_poll` is one chunk of progress and a fiber parked on `WouldBlock` resumes into the next chunk. The write ends have nothing to arm.
@@ -678,15 +740,15 @@ impl HostOps for MockHost {
                     Handle::Stdout | Handle::Stderr => requested,
                     Handle::Other(_) => match table.get_mut(handle) {
                         Some(MockResource::Outbound(stream) | MockResource::Piped(stream)) => {
-                            stream.arm();
-
-                            readable
+                            match stream.arm() {
+                                true => readable,
+                                false => writable,
+                            }
                         }
-                        Some(MockResource::Inbound(conn)) => {
-                            conn.bytes.arm();
-
-                            readable
-                        }
+                        Some(MockResource::Inbound(conn)) => match conn.bytes.arm() {
+                            true => readable,
+                            false => writable,
+                        },
                         Some(MockResource::Serial(port)) => {
                             port.bytes.arm();
 
@@ -710,7 +772,42 @@ impl HostOps for MockHost {
             })
             .collect();
 
+        // A native poll with no timeout sleeps until a handle is ready. Nothing moves a script but the program, so one that reports nothing would be asked again without end: the call is refused, which ends the run where a real one would hang.
+        if timeout < 0 && !ready.is_empty() && ready.iter().all(|poll| poll.bits() == 0) {
+            return Err(Refusal(
+                "the script readies none of the handles this poll waits on without a timeout"
+                    .to_string(),
+            ));
+        }
+
         Ok(ready)
+    }
+
+    fn handle_finish(&self, io: Handle) -> Result<(), Failure> {
+        let mut table = self.table.lock().unwrap();
+
+        let stream = match table.get_mut(&io) {
+            Some(MockResource::Inbound(conn)) => &mut conn.bytes,
+            Some(MockResource::Outbound(stream)) => stream,
+            _ => return Err(Failure::NotFound),
+        };
+
+        // The scripted host ends a sending half at once — unless the script says a finish waits, as a TLS stream's does while its closure alert waits for the socket.
+        let mut pending = self.pending_finishes.lock().unwrap();
+
+        if *pending > 0 {
+            *pending -= 1;
+
+            return Err(Failure::WouldBlock);
+        }
+
+        stream.finish();
+        self.socket_events
+            .lock()
+            .unwrap()
+            .push(SocketEvent::Finished);
+
+        Ok(())
     }
 
     fn handle_flush(&self, io: Handle) -> Result<(), Failure> {
@@ -736,7 +833,14 @@ impl HostOps for MockHost {
     }
 
     fn handle_close(&self, io: Handle) {
-        self.table.lock().unwrap().remove(&io);
+        let closed = self.table.lock().unwrap().remove(&io);
+
+        if matches!(
+            closed,
+            Some(MockResource::Inbound(_) | MockResource::Outbound(_))
+        ) {
+            self.socket_events.lock().unwrap().push(SocketEvent::Closed);
+        }
     }
 
     fn handle_read(&self, io: Handle, count: u64) -> Result<Option<Vec<u8>>, Failure> {
@@ -758,13 +862,13 @@ impl HostOps for MockHost {
                 serve_from(contents, &mut open.position, count)
             }),
             // Inbound (accepted) connection: serve the scripted request.
-            Some(MockResource::Inbound(conn)) => conn.bytes.read(count),
+            Some(MockResource::Inbound(conn)) => self.ended(conn.bytes.read(count)),
             // A serial port: serve the device's scripted chunks.
             Some(MockResource::Serial(port)) => port.bytes.read(count),
-            // Outbound connection and a child's piped output: serve the scripted chunks.
-            Some(MockResource::Outbound(stream) | MockResource::Piped(stream)) => {
-                stream.read(count)
-            }
+            // Outbound connection: serve the scripted reply.
+            Some(MockResource::Outbound(stream)) => self.ended(stream.read(count)),
+            // A child's piped output: serve the scripted chunks.
+            Some(MockResource::Piped(stream)) => stream.read(count),
             // A missing or non-stream handle is a fault, not an exhausted stream — mirror write's `NotFound` so use-after-close stays loud.
             _ => Err(Failure::NotFound),
         }
@@ -801,11 +905,16 @@ impl HostOps for MockHost {
             // Inbound (accepted) connection: capture the response bytes so a test can inspect what the server wrote back.
             Some(MockResource::Inbound(conn)) => {
                 self.captures.lock().unwrap()[conn.capture].extend_from_slice(&bytes);
+                self.wrote(bytes.len());
 
                 Ok(full)
             }
             // Outbound connection: accept and discard (the in-memory test host does not capture request bytes).
-            Some(MockResource::Outbound(_)) => Ok(full),
+            Some(MockResource::Outbound(_)) => {
+                self.wrote(bytes.len());
+
+                Ok(full)
+            }
             // A child's piped stdin: accepted and discarded too.
             Some(MockResource::Sink) => Ok(full),
             // A serial port: capture the bytes under its path, so a test can see the command the program sent the device.
@@ -1083,12 +1192,26 @@ fn serve_from(
     Ok(Some(bytes))
 }
 
+/// One step of a scripted connection's life, inbound or outbound: what a test reads the order of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SocketEvent {
+    /// A write, by the bytes it took.
+    Wrote(usize),
+    /// A read that answered the end of the stream.
+    Ended,
+    /// The sending half was ended.
+    Finished,
+    /// The handle was closed.
+    Closed,
+}
+
 /// The inspectable side of a [`MockHost`]: the shared buffers the run writes into. The host is moved into the runner, so a test holds this handle to read stdout, files, and server captures back out afterwards.
 pub struct MockIo {
     output: Arc<Mutex<Vec<u8>>>,
     errors: Arc<Mutex<Vec<u8>>>,
     files: MockFileSystem,
     captures: Arc<Mutex<Vec<Vec<u8>>>>,
+    socket_events: Arc<Mutex<Vec<SocketEvent>>>,
     raw_modes: Arc<Mutex<Vec<bool>>>,
     kills: Arc<Mutex<Vec<Vec<u8>>>>,
     serial_opens: Arc<Mutex<Vec<SerialOpen>>>,
@@ -1116,6 +1239,11 @@ impl MockIo {
     /// The captured server responses: one entry per accepted connection, the concatenation of the bytes its handler wrote back.
     pub fn captures(&self) -> Vec<Vec<u8>> {
         self.captures.lock().unwrap().clone()
+    }
+
+    /// What happened on the scripted connections, in order: each write, each read that met the end of the stream, each finish and each close.
+    pub fn socket_events(&self) -> Vec<SocketEvent> {
+        self.socket_events.lock().unwrap().clone()
     }
 
     /// Every raw-mode switch the guest asked for, in order: `true` for on, `false` for off.
@@ -1160,10 +1288,11 @@ pub struct MockHostBuilder {
     input: Vec<u8>,
     input_chunks: Vec<Vec<u8>>,
     files: HashMap<Vec<u8>, Vec<u8>>,
-    endpoints: HashMap<Vec<u8>, Vec<Vec<u8>>>,
-    inbound: VecDeque<Vec<Vec<u8>>>,
+    endpoints: HashMap<Vec<u8>, Script>,
+    inbound: VecDeque<Script>,
     connect_pending: bool,
     pending_flushes: u64,
+    pending_finishes: u64,
     clock_wall_seq: VecDeque<(u64, u64)>,
     clock_mono_seq: VecDeque<(u64, u64)>,
     args: Vec<Vec<u8>>,
@@ -1306,10 +1435,25 @@ impl MockHostBuilder {
         C: AsRef<[u8]>,
         I: IntoIterator<Item = (E, Vec<C>)>,
     {
+        self.endpoints
+            .extend(endpoints.into_iter().map(|(endpoint, chunks)| {
+                (endpoint.as_ref().to_vec(), script(chunks, Ending::Closed))
+            }));
+
+        self
+    }
+
+    /// Script network endpoints as `net_chunks` does, whose peer resets the connection once its chunks are read: the read after them answers `ConnectionReset`.
+    pub fn net_reset<E, C, I>(mut self, endpoints: I) -> Self
+    where
+        E: AsRef<[u8]>,
+        C: AsRef<[u8]>,
+        I: IntoIterator<Item = (E, Vec<C>)>,
+    {
         self.endpoints.extend(
-            endpoints
-                .into_iter()
-                .map(|(endpoint, chunks)| (endpoint.as_ref().to_vec(), chunk_list(chunks))),
+            endpoints.into_iter().map(|(endpoint, chunks)| {
+                (endpoint.as_ref().to_vec(), script(chunks, Ending::Reset))
+            }),
         );
 
         self
@@ -1355,7 +1499,32 @@ impl MockHostBuilder {
         mut self,
         requests: I,
     ) -> Self {
-        self.inbound.extend(requests.into_iter().map(chunk_list));
+        self.inbound.extend(
+            requests
+                .into_iter()
+                .map(|chunks| script(chunks, Ending::Closed)),
+        );
+
+        self
+    }
+
+    /// Script inbound requests as `inbound_chunks` does, whose peer keeps its sending half open after its chunks, as one waiting on a reply does, and closes once the server has finished its own: until then a read past the chunks answers `WouldBlock` and no poll reports the connection readable, so a server that reads past its request's end never returns.
+    pub fn inbound_waiting<C: AsRef<[u8]>, I: IntoIterator<Item = Vec<C>>>(
+        mut self,
+        requests: I,
+    ) -> Self {
+        self.inbound.extend(
+            requests
+                .into_iter()
+                .map(|chunks| script(chunks, Ending::Waiting)),
+        );
+
+        self
+    }
+
+    /// Make the first `count` finishes of a scripted connection answer `WouldBlock`, as a TLS stream's do while its closure alert waits for the socket, so a caller that retries a finish is exercised.
+    pub fn pending_finishes(mut self, count: u64) -> Self {
+        self.pending_finishes = count;
 
         self
     }
@@ -1402,6 +1571,7 @@ impl MockHostBuilder {
         let errors = Arc::new(Mutex::new(Vec::new()));
         let files = MockFileSystem::new(self.files, self.dirs);
         let captures = Arc::new(Mutex::new(Vec::new()));
+        let socket_events = Arc::new(Mutex::new(Vec::new()));
         let raw_modes = Arc::new(Mutex::new(Vec::new()));
         let kills = Arc::new(Mutex::new(Vec::new()));
         let serial_opens = Arc::new(Mutex::new(Vec::new()));
@@ -1414,6 +1584,7 @@ impl MockHostBuilder {
             errors: errors.clone(),
             files: files.clone(),
             captures: captures.clone(),
+            socket_events: socket_events.clone(),
             raw_modes: raw_modes.clone(),
             kills: kills.clone(),
             serial_opens: serial_opens.clone(),
@@ -1432,6 +1603,8 @@ impl MockHostBuilder {
             inbound: Mutex::new(self.inbound),
             connect_pending: self.connect_pending,
             pending_flushes: Mutex::new(self.pending_flushes),
+            pending_finishes: Mutex::new(self.pending_finishes),
+            socket_events,
             captures,
             clock_wall_seq: Mutex::new(self.clock_wall_seq),
             clock_mono_seq: Mutex::new(self.clock_mono_seq),
@@ -1466,6 +1639,14 @@ fn stdin_script(lines: Vec<u8>, chunks: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
     script.extend(chunks);
 
     script
+}
+
+/// The scripted peer that sends `chunks` and then ends as `ending` says.
+fn script<C: AsRef<[u8]>>(chunks: Vec<C>, ending: Ending) -> Script {
+    Script {
+        chunks: chunk_list(chunks),
+        ending,
+    }
 }
 
 /// The owned chunk list a script's borrowed chunks become.

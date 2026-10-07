@@ -23,6 +23,7 @@ fn errno_lane_is_disjoint_from_named_codes() {
         status::NOT_EMPTY,
         status::IS_DIRECTORY,
         status::NOT_DIRECTORY,
+        status::CONNECTION_RESET,
     ];
 
     assert!(named.iter().all(|&code| code < status::OTHER_BASE));
@@ -43,6 +44,7 @@ fn names_are_the_wire_abi() {
             "handle_read",
             "handle_write",
             "handle_flush",
+            "handle_finish",
             "file_open",
             "dns_lookup",
             "dns_resolve",

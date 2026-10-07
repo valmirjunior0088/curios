@@ -24,8 +24,10 @@ pub mod status {
     pub const IS_DIRECTORY: u64 = 9;
     /// A directory operation applied to something that is not one (`ErrorKind::NotADirectory`).
     pub const NOT_DIRECTORY: u64 = 10;
+    /// The peer reset the connection (`ErrorKind::ConnectionReset`). Named because the operating systems disagree on its errno — 104 on Linux, 54 on macOS — so a program telling a reset from any other failure could not spell it once.
+    pub const CONNECTION_RESET: u64 = 11;
     /// The errno passthrough lane: `Status::Other(errno)` lowers as `OTHER_BASE + errno`, one past the last named code, so a raw OS errno — EIO is 5, ENXIO is 6 — can never masquerade as `OK` or a named failure. The guest's `Io/Error/of` subtracts it back out.
-    pub const OTHER_BASE: u64 = NOT_DIRECTORY + 1;
+    pub const OTHER_BASE: u64 = CONNECTION_RESET + 1;
     /// The largest errno the lane carries: an OS reports a positive `int`, so a code past `OTHER_BASE + ERRNO_MAX` is no failure any host can answer.
     pub const ERRNO_MAX: u64 = i32::MAX as u64;
 }

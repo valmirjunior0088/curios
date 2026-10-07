@@ -29,6 +29,10 @@ satisfy Async/Write(Async, Socket) {
     flush(c) = Async/Write/flush(c.0),
 }
 
+--- `c`'s sending half ended, with `c` still reading: the peer reads the end of the stream — a TLS peer its closure alert first — and whatever it sends after is still `c`'s to read. It is how a connection says it has finished, where `close` says nothing and resets a connection that holds unread bytes.
+pub let finish(c: Socket) -> Async(Result(Io/Error, {})) =
+    Handle/finish(c.0);
+
 --- Close `c`.
 pub let close(c: Socket) -> Io({}) =
     Handle/close(c.0);
@@ -95,7 +99,7 @@ pub let connect_tls(host: Str, port: Nat) -> Try(Async, Io/Error, Socket) =
     let addr = resolve(host, port)!;
     connect_addr(host, addr, true);
 
---- `body` over the socket `open` connects, closed whichever way the task ends.
+--- `body` over the socket `open` connects, its sending half ended once `body` has answered, and closed whichever way the task ends.
 pub let with(
     @A: Type,
     open: Try(Async, Io/Error, Socket),
@@ -106,10 +110,11 @@ pub let with(
     let a = outcome!;
     Try/pure(a);
 
---- `body`, then what `c` holds of the writes it accepted handed on, so a TLS stream has sent its records before `with` closes it; a failure to hand them on is the task's.
+--- `body`, then what `c` holds of the writes it accepted handed on, so a TLS stream has sent its records before `with` closes it; a failure to hand them on is the task's. `c`'s sending half is ended after, a courtesy to a peer that may already be gone, so its failure is not.
 let flushed(@A: Type, c: Socket, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
     let a = body!;
     let _ = Try/attempt(Async/Write/flush(c))!;
+    let _ = finish(c)!;
     Try/pure(a);
 
 --- `request` written whole and the reply read to its end, over the socket `open` connects, closed after. One exchange with a peer that closes when it has answered.

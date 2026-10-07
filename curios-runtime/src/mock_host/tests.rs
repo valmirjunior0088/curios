@@ -1,7 +1,7 @@
 //! The scripted host's contract: handles miss loudly after close, and a chunked stream — standard input among them — hands the wait back to its reader between chunks.
 
 use {
-    super::{EBUSY, ENOTTY, MockHost},
+    super::{EBUSY, ENOTTY, MockHost, SocketEvent},
     crate::{
         ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, Mode, Poll, SerialFlow,
         SerialOp, SerialParity, StdioMode, TtySize,
@@ -531,6 +531,95 @@ fn a_scripted_flush_waits_then_drains() {
         host.handle_flush(Handle::Other(vec![0xff])),
         Err(Failure::NotFound)
     );
+}
+
+/// A scripted finish waits as a TLS stream's does while its closure alert waits for the socket, then ends the sending half, which is recorded; a standard stream and an unknown handle have none to end.
+#[test]
+fn a_scripted_finish_waits_then_ends_the_sending_half() {
+    let (host, io) = MockHost::builder()
+        .net([("example.com:80", "")])
+        .pending_finishes(1)
+        .build();
+    let socket = host.socket_open(b"example.com:80".to_vec()).unwrap();
+    assert_eq!(
+        host.socket_connect(socket.clone(), b"example.com:80".to_vec()),
+        Ok(())
+    );
+
+    assert_eq!(host.handle_finish(Handle::Stdout), Err(Failure::NotFound));
+    assert_eq!(
+        host.handle_finish(Handle::Other(vec![0xff])),
+        Err(Failure::NotFound)
+    );
+    assert_eq!(host.handle_finish(socket.clone()), Err(Failure::WouldBlock));
+    assert!(io.socket_events().is_empty());
+    assert_eq!(host.handle_finish(socket.clone()), Ok(()));
+    host.handle_close(socket);
+    assert_eq!(
+        io.socket_events(),
+        [SocketEvent::Finished, SocketEvent::Closed]
+    );
+}
+
+/// A peer scripted to wait keeps its sending half open past its chunks: a read answers `WouldBlock`, a poll reports nothing to read, and one with no timeout is refused, where a native one would sleep without end. Once this side finishes, the peer has closed, and the events say in what order it all happened.
+#[test]
+fn a_waiting_peer_closes_once_this_side_has_finished() {
+    let (host, io) = MockHost::builder().inbound_waiting([vec!["ping"]]).build();
+    let listener = host.socket_open(b"0.0.0.0:8080".to_vec()).unwrap();
+    assert_eq!(host.socket_listen(listener.clone(), 1), Ok(()));
+    let conn = host.socket_accept(listener).unwrap();
+    let reading = || {
+        host.handle_poll(vec![conn.clone()], vec![Poll::from_bits(event::READ)], 0)
+            .unwrap()[0]
+            .bits()
+            & event::READ
+    };
+
+    assert_eq!(
+        host.handle_read(conn.clone(), 8),
+        Ok(Some(b"ping".to_vec()))
+    );
+    assert_eq!(host.handle_read(conn.clone(), 8), Err(Failure::WouldBlock));
+    assert_eq!(reading(), 0);
+    assert!(
+        host.handle_poll(vec![conn.clone()], vec![Poll::from_bits(event::READ)], -1)
+            .is_err()
+    );
+
+    assert_eq!(host.handle_write(conn.clone(), b"pong".to_vec()), Ok(4));
+    assert_eq!(host.handle_finish(conn.clone()), Ok(()));
+    assert_ne!(reading(), 0);
+    assert_eq!(host.handle_read(conn.clone(), 8), Ok(None));
+    host.handle_close(conn);
+
+    assert_eq!(
+        io.socket_events(),
+        [
+            SocketEvent::Wrote(4),
+            SocketEvent::Finished,
+            SocketEvent::Ended,
+            SocketEvent::Closed,
+        ]
+    );
+}
+
+/// A peer scripted to reset answers `ConnectionReset` to the read after its chunks, where one that closed answers the end of the stream.
+#[test]
+fn a_resetting_peer_answers_a_reset_after_its_chunks() {
+    let (host, _io) = MockHost::builder()
+        .net_reset([("example.com:80", vec!["par"])])
+        .build();
+    let socket = host.socket_open(b"example.com:80".to_vec()).unwrap();
+    assert_eq!(
+        host.socket_connect(socket.clone(), b"example.com:80".to_vec()),
+        Ok(())
+    );
+
+    assert_eq!(
+        host.handle_read(socket.clone(), 8),
+        Ok(Some(b"par".to_vec()))
+    );
+    assert_eq!(host.handle_read(socket, 8), Err(Failure::ConnectionReset));
 }
 
 /// The scripted host refuses what the native host refuses before asking anything: a lookup of a host that is not UTF-8 or of a port past sixteen bits, and a variable whose name no variable can have.

@@ -312,6 +312,10 @@ fn a_network_row_s_failure_is_the_error_it_names() {
                 r#"tcp/Listener/serve_tls("h", 80, x[], x[], (_) => Async/pure(()))"#,
                 vec![(HostOp::TlsServerConfig, denied(vec![bytes(b"")]))],
             ),
+            (
+                "Try/attempt(Handle/finish(Handle/stdout))",
+                vec![(HostOp::HandleFinish, denied(vec![]))],
+            ),
         ],
     );
 }
@@ -360,9 +364,27 @@ fn a_process_row_s_failure_is_the_error_it_names() {
     );
 }
 
-/// `/std` absorbs two failures by design: a listener's `SO_REUSEADDR` is a courtesy the bind does not depend on, and a kill that fails leaves a child the bracket reaps regardless.
+/// `/std` absorbs three failures by design: a listener's `SO_REUSEADDR` is a courtesy the bind does not depend on, a kill that fails leaves a child the bracket reaps regardless, and a socket's finish is a courtesy to a peer that may already be gone.
 #[test]
 fn the_failures_std_absorbs_by_design_are_absorbed() {
+    assert_eq!(
+        exit_code(
+            In::Async,
+            r#"tcp/Socket/with(tcp/Socket/connect("h", 80), (_) => Try/pure(()))"#,
+            vec![
+                (HostOp::DnsLookup, ok(vec![bytes(&[7])])),
+                (
+                    HostOp::DnsResolve,
+                    ok(vec![RawValue::BytesList(vec![b"a".to_vec()])]),
+                ),
+                (HostOp::SocketOpen, ok(vec![bytes(&[8])])),
+                (HostOp::SocketConnect, ok(vec![])),
+                (HostOp::HandleFlush, ok(vec![])),
+                (HostOp::HandleFinish, denied(vec![])),
+            ],
+        ),
+        0
+    );
     assert_eq!(
         exit_code(
             In::Async,

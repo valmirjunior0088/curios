@@ -39,6 +39,7 @@ fn read_all_of_a_missing_path_is_not_found() {
             | not_empty() => /std/print("not empty")
             | is_directory() => /std/print("is a directory")
             | not_directory() => /std/print("not a directory")
+            | reset() => /std/print("reset")
             | other(_) => /std/print("other")
             end
         end
