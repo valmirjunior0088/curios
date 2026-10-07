@@ -6,7 +6,7 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 
 ## What this builds on
 
-- **A unit's items elaborate on demand, and an answer does not depend on when it is asked** ([A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md)). An item elaborates after what it reads, an attempt that read a declaration not yet elaborated is void and made again, declarations that need one another are refused by name, and a witness is known before it elaborates by the key its signature spells (`curios-elab/src/elaborate/module/demand.rs`, `curios-elab/src/concept/spelled.rs`).
+- **A unit's items elaborate on demand, and an answer does not depend on when it is asked** ([A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md)). An item elaborates after what it reads, an attempt that read a declaration not yet elaborated — its name, a witness's key or a registry entry — is void and made again, declarations that need one another are refused by name, and a witness is known before it elaborates by the key its signature spells (`curios-elab/src/elaborate/module/demand.rs`, `curios-elab/src/concept/spelled.rs`).
 - **A declaration's identities and its state are its own** (the same decision). `curios_core::Minted` holds what each source declaration's lowering minted, a declaration being an item with the items generated from it; `Context::attempt` replaces the elaboration state where an attempt begins; and a finished item is published into the context zonked, as a unit in scope is replayed.
 - **An item can be undone, and elaborated apart from its unit.** `ItemMark::undo` and `ItemMark::void` (`curios-elab/src/elaborate/module/recovery.rs`) take a refused item and a void attempt out of every store another item reads, and `elaborate_and_zonk_unit_over` elaborates a set of items against the rest of their unit replayed as a predecessor.
 - **The elaborator writes a declaration's cells once, each on a budget of its own** (the same decision). `settle_published` (`curios-elab/src/elaborate/module.rs`) decides a declaration's polarity vectors, holds its variance vectors to its final telescopes, stamps its totality and decides its erasure obligations as it is published; no pass runs over a unit after its items, a recompile writes none of a reused declaration's cells, and erasure and the replay of a scope's witnesses restore their budget for each item and each witness. `curios-pipeline`'s `tests::budget_tests` hold a unit to the budget one of its declarations takes.
@@ -15,8 +15,6 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 - **A top-level definition writes its type** ([Top-level definitions](../../syntax.md#top-level-definitions)), so its universe levels are all a signature leaves open.
 
 ## The gap
-
-**A registry read needs nothing.** Every `induct`, `struct` and `concept` entry of a unit is registered as lowered before its first item, and `Context::induct_decl`, `struct_decl` and `concept` hand back whatever is registered, where a miss on a name or on a witness key records what the attempt needs. That a read of an unfinished declaration voids the attempt is held for an entry by an argument, that an item elaborates after everything its lowered form reaches, and by no read.
 
 **The items are sorted three times, each on the order before it.** The lowering sorts by the names an item writes (`order_flat_items`, `curios-text/src/into_core/order.rs`), with soft edges from a use to its concept's witnesses for a deferred store elaboration no longer has, and hard edges from every item to the prover's vocabulary. The kernel sorts again over the elaborated terms (`dependency_order`) and erasure a third time (`dominance_order`, `curios-elab/src/into_ersd/binding.rs`), since elaboration adds 3,018 edges to the 6,488 the lowered forms of `/std`'s 1,926 declarations name, 1,881 of them to a witness; each breaks its ties on the order it was handed. So where a declaration is written reaches the items a unit stores and the module a program compiles to. `Demand::settle` and the recompile's closure walk the graph twice more. Counted at `0283c7242`, as *Verification* states.
 
@@ -57,7 +55,6 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 
 | Component | Treatment | Stage |
 | --- | --- | --- |
-| Reads | Every accessor that hands back a cell of the unit records a need for an unfinished declaration | 4 |
 | Item order | One function of a module in `curios-core`; `dependency_order` and `dominance_order` are deleted | 5 |
 | The lowering | Hands its items on as written; its sort, its soft and vocabulary edges and its cycle refusal are deleted | 6 |
 
@@ -65,7 +62,6 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 
 Each lands alone, on its own check, and says what it expects to move; a move outside that is a finding.
 
-4. **Every read of an unfinished declaration is a need.** Decision 4. Expected to move: nothing, and the count of void attempts over `/std` is read before and after.
 5. **One stored order.** Decision 13 for the kernel and erasure. Expected to move, once: the item order of every stored unit and of every program's emitted module. No verdict moves.
 6. **The lowering stops sorting.** Decisions 5 and 13 for the lowering. Expected to move: the text stage's part of a stored unit, the order refusals are reported in, which is then the order they are written in, and the wording of a written cycle's refusal, which is the elaborator's. A unit's core module, its record and its arena are the bytes stage 5 left.
 

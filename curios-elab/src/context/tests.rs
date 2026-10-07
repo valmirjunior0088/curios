@@ -2,9 +2,9 @@ use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Free, Global, Intrinsic, Level, MetavarId, Minted, Mints, Nat, Term,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
-        UniverseRole,
+        ConceptDecl, Free, Global, InductDecl, Intrinsic, Level, MetavarId, Minted, Mints, Nat,
+        StructDecl, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseMetaId, UniverseRole,
     },
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
@@ -128,6 +128,109 @@ fn a_read_of_a_declaration_that_has_not_elaborated_is_a_need() {
     assert!(context.assumption(&Free::from(&a)).is_none());
 
     assert_eq!(context.take_needs(), BTreeSet::from([a]));
+}
+
+/// A unit that writes a family, a record, a concept and then `reader`, none elaborated, the three entries registered as a unit's are before its first item: with no constructor, no field, and neither parameter nor field.
+fn unit_of_entries(context: &mut Context) -> [Global; 4] {
+    let names = [
+        named("Family"),
+        named("Record"),
+        named("Concept"),
+        named("reader"),
+    ];
+    let [family, record, concept, _] = names;
+    context.begin_unit(
+        names
+            .iter()
+            .enumerate()
+            .map(|(place, name)| (*name, place))
+            .collect(),
+        BTreeSet::from(names),
+    );
+    context
+        .register_induct(
+            &family,
+            InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: Vec::new(),
+                result_sort: Term::type_ground(),
+                module: Qualifier::default(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is registered once");
+    context
+        .register_struct(
+            &record,
+            StructDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::done(())),
+                result_sort: Term::type_ground(),
+                module: Qualifier::default(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is registered once");
+    context
+        .register_concept(
+            &concept,
+            ConceptDecl {
+                universe_context: UniverseContext::default(),
+                params: Telescope::done(()),
+                fields: Vec::new(),
+                supers: Vec::new(),
+            },
+        )
+        .expect("a name is registered once");
+
+    names
+}
+
+/// A registry entry read before its declaration has elaborated is the lowered one, so the read is a need, in each registry, as a missed name is.
+///
+/// Mutation-checked against each accessor's record: with one left out, its read needs nothing.
+#[test]
+fn a_registry_entry_read_before_its_declaration_has_finished_is_a_need() {
+    let mut context = context();
+    let [family, record, concept, reader] = unit_of_entries(&mut context);
+
+    context.attempt(&[&reader]);
+    assert!(context.induct_decl(&family).is_some());
+    assert_eq!(context.take_needs(), BTreeSet::from([family]));
+
+    context.attempt(&[&reader]);
+    assert!(context.struct_decl(&record).is_some());
+    assert_eq!(context.take_needs(), BTreeSet::from([record]));
+
+    context.attempt(&[&reader]);
+    assert!(context.concept(&concept).is_some());
+    assert_eq!(context.take_needs(), BTreeSet::from([concept]));
+}
+
+/// A declaration reads its own entries without a need, and so does any declaration once the one that declares them has finished.
+#[test]
+fn a_declarations_own_entry_and_a_finished_one_are_read_without_a_need() {
+    let mut context = context();
+    let [family, record, concept, reader] = unit_of_entries(&mut context);
+    let read = |context: &Context| {
+        assert!(context.induct_decl(&family).is_some());
+        assert!(context.struct_decl(&record).is_some());
+        assert!(context.concept(&concept).is_some());
+    };
+
+    context.attempt(&[&family, &record, &concept]);
+    read(&context);
+    assert!(context.take_needs().is_empty());
+
+    context.finish(&[&family, &record, &concept]);
+    context.attempt(&[&reader]);
+    read(&context);
+    assert!(context.take_needs().is_empty());
 }
 
 /// A declaration's own name is bound by the group it becomes, so missing it is no read of another.

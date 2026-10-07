@@ -80,7 +80,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 ## Compilation
 
 - [x] [Every stage but reduction costs the graph it is handed](design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md): a read visits a node once, a rebuild keeps the graph, a judgment is remembered while what it read stands, a print is bounded, and the kernel binds a `let`, so a chain of `let`s each naming the one before it twice compiles in its size
-- [ ] [A declaration is a function of what it reads](roadmap/05-compilation/02-a-declaration-is-a-function-of-what-it-reads.md) — a registry entry read before its declaration has elaborated needs nothing, and the items are sorted three times, each on the order before it, so where a declaration is written reaches the unit and the module it compiles to
+- [ ] [A declaration is a function of what it reads](roadmap/05-compilation/02-a-declaration-is-a-function-of-what-it-reads.md) — the items are sorted three times, each on the order before it, so where a declaration is written reaches the unit and the module it compiles to
 - [ ] [A compile costs what it reads](roadmap/05-compilation/03-a-compile-costs-what-it-reads.md) — an edit redoes every item that reaches the one it changed where few read what moved, nothing records what elaboration read, every compile re-seeds all its predecessors, and the fold is a line
 - [ ] [A compilation is a graph of item tasks](roadmap/05-compilation/04-item-tasks.md) — nothing the compiler holds can cross a thread, so a compilation occupies one core
 - [ ] [Size cliffs](roadmap/05-compilation/05-size-cliffs.md) — not refined yet; elaboration is not linear in `let` depth, the parser buys its depth with stack, and every binding gets a fresh local

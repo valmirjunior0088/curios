@@ -620,6 +620,13 @@ impl Context {
         }
     }
 
+    /// Record a need where `name` keys a registry entry of a declaration of the unit that has not finished, other than the one being attempted. Every entry of a unit is registered as lowered before its first item, so one read before its declaration has elaborated is not the entry the declaration publishes: the read is answered, and the attempt that made it is void, as one that missed a name is ([`Context::missed`]).
+    fn reads_entry(&self, name: &Global) {
+        if self.unfinished.contains(name) && !self.attempting.contains(name) {
+            self.need(*name);
+        }
+    }
+
     /// Whether a proof the elaborator writes for the declaration being elaborated may apply `name`. A name another unit declares is applied wherever it is in scope. A name this unit declares is one of the prover's vocabulary, which the unit's walk elaborates before anything else, with every declaration it reads, and offers only from then on: so the vocabulary and what it reads are proved without it, every other declaration finds all of it elaborated, and what a declaration's proof is built from follows what the vocabulary reads, never where either is written or which of them was asked for first. A lemma that is on offer and not in scope was refused, and is applied by nothing.
     pub(crate) fn proof_may_apply(&self, name: &Global) -> bool {
         let assumed = self.frames.assumption(&Free::Global(*name)).is_some();
@@ -1687,6 +1694,7 @@ impl Context {
     }
 
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
+        self.reads_entry(name);
         self.program.induct_decl(name)
     }
 
@@ -1703,6 +1711,7 @@ impl Context {
     }
 
     pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
+        self.reads_entry(name);
         self.program.struct_decl(name)
     }
 
@@ -1715,6 +1724,7 @@ impl Context {
     }
 
     pub(crate) fn concept(&self, name: &Global) -> Option<&ConceptDecl> {
+        self.reads_entry(name);
         self.program.concept(name)
     }
 
