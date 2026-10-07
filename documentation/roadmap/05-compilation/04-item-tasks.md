@@ -2,12 +2,12 @@
 
 Working specification for multithreaded compilation, the payoff of [a declaration being a function of what it reads](02-a-declaration-is-a-function-of-what-it-reads.md). Once that holds, no artifact carries a minted identity ([a unit carries none another compilation could mint](../../../curios-unit/README.md#a-unit-carries-no-identity-another-compilation-could-mint)) and no verdict depends on history ([no memo outlives its declaration](../../design/soundness/a-reduction-step-costs-what-it-builds.md)), the items of a compilation can run on as many workers as the product supplies, in any order, and the determinism that property gives is what the gate holds them to. The compiler is single-threaded today by omission rather than by decision, and every design statement to the contrary is listed under what this overturns.
 
-It needs [that specification](02-a-declaration-is-a-function-of-what-it-reads.md) whole, with its one environment, and what it builds on; [Cranelift's parallel compilation](../../../curios-runtime/README.md#compilation-runs-across-threads-and-only-where-compilation-exists) is already its first parallelism.
+It needs [that specification](02-a-declaration-is-a-function-of-what-it-reads.md) whole, [A compile costs what it reads](03-a-compile-costs-what-it-reads.md) for the one environment its workers share, and what they build on; [Cranelift's parallel compilation](../../../curios-runtime/README.md#compilation-runs-across-threads-and-only-where-compilation-exists) is already its first parallelism.
 
 ## What this builds on
 
 - **What already runs beside the compiler**: `wonder server`'s protocol thread, Binaryen behind its process lock, and the prelude images validated once per process.
-- **The one environment**, whose recorded graph says which items may run together, and the throughput [its specification](02-a-declaration-is-a-function-of-what-it-reads.md) measures that graph to admit.
+- **The one environment** ([A compile costs what it reads](03-a-compile-costs-what-it-reads.md)), whose recorded reads say which items may run together, and the throughput [A declaration is a function of what it reads](02-a-declaration-is-a-function-of-what-it-reads.md) measures the graph to admit.
 - **Peers.** Lean 4.19 elaborates theorem bodies in parallel (lean4#7084). rustc parallelizes type checking per item under one build that selects serial or parallel synchronization at run time (`rustc_data_structures::sync`, `DynSend`/`DynSync`). Kontroli, a Rust checker for the λΠ-calculus modulo rewriting (Färber, CPP 2022), measured `Arc` terms 28.2% slower than `Rc` on one thread, won already at two threads, and reached 6.6× at eight. Rocq checks opaque proofs in worker processes (Barras, Tankink and Tassi, ITP 2015); GHC compiles modules in parallel under `-j`.
 
 ## The gap
@@ -40,7 +40,7 @@ It needs [that specification](02-a-declaration-is-a-function-of-what-it-reads.md
 
 Each lands alone, on its own check.
 
-1. **Erasure per item, linked by name.** The cumulative arena is deleted, and stored units are addressed over their dependency closure. Each item is erased under a budget of its own: erasure walks a whole unit under one today, so whether an item erases depends on what was erased before it.
+1. **Erasure per item, linked by name.** The cumulative arena is deleted, and stored units are addressed over their dependency closure.
 2. **A term representation that crosses threads.** Needs the interned names a unit carries, so that the measurement includes what interning removes. Measured: the prelude build's wall time and the compile time of the corpus in `programs/`, on a release build without `profile`, before and after. Kontroli's 28.2% is the figure to expect and not the figure to report.
 3. **The executor, and the gate holding one worker and many to the same bytes.** The seam and the two executors land first, with the differential; then, each switched on alone and measured: the kernel behind elaboration, elaboration by item, parsing and lowering by file and module, erasure by item, and the independent jobs — `curios test`'s library and executables, `format` and `lint` over their files, and `wonder`'s analysts.
 
