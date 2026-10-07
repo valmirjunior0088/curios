@@ -3,7 +3,7 @@
 //! An item's name is bound in its fragment's environment, which is what the item hands on of itself: how each name it declares is bound is all another item's erasure reads of it. The Core context holds every item's definition before any is erased, so nothing here writes one.
 
 use {
-    super::{Context, Error, Lowering, Outcome, Subterm},
+    super::{Error, Lowering, Outcome, Retyping, Subterm},
     curios_core::{Definition, Free},
 };
 
@@ -11,7 +11,7 @@ impl Lowering<'_> {
     /// Erase one top-level definition as the fragment's item, and bind its name.
     pub(super) fn erase_definition(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         definition: &Definition,
     ) -> Result<(), Error> {
         let symbol = definition.name.symbol();

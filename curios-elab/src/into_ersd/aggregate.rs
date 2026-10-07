@@ -6,15 +6,15 @@
 
 use {
     super::{
-        ConstructorRow, Context, Error, FamilyRow, Lowering, Outcome, ProductRow, Proj, Struct,
+        ConstructorRow, Error, FamilyRow, Lowering, Outcome, ProductRow, Proj, Retyping, Struct,
         StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, constructor_entries,
-        emitted, erasure_mask, reduce_with,
+        emitted, erasure_mask,
     },
     curios_core::Bound,
 };
 
 /// Open a parameter telescope with fresh assumed variables, handing back the abstract parameter terms a declaration's fields are instantiated at.
-fn open_opaque<B: Bound>(context: &mut Context, telescope: Telescope<B>) -> Vec<Term> {
+fn open_opaque<B: Bound>(context: &mut Retyping, telescope: Telescope<B>) -> Vec<Term> {
     let mut cursor = telescope.cursor();
     while let Some((_, type_)) = cursor.entry() {
         context.advance_assumed(&mut cursor, &type_);
@@ -26,7 +26,7 @@ impl Lowering<'_> {
     /// The memoized layout of a registered structure.
     pub(super) fn struct_row(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         name: &curios_core::Global,
     ) -> Result<ProductRow, Error> {
         if let Some(row) = self.environment.struct_row(name) {
@@ -71,7 +71,7 @@ impl Lowering<'_> {
     /// The memoized layout of a registered inductive.
     pub(super) fn induct_row(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         name: &curios_core::Global,
     ) -> Result<FamilyRow, Error> {
         if let Some(row) = self.environment.induct_row(name) {
@@ -89,7 +89,7 @@ impl Lowering<'_> {
         self.pending_families.insert(*name, family);
         // A `Prop`-sorted family is proof-irrelevant, so erasure drops its inhabitants wholesale — payloads included. Classifying each payload on its own type would keep a `Type`-sorted one (`Eq`'s `refl(@z : A)` has an abstract `A`, which is neither prop nor universe), leaving a live field inside an erased proof: rebuilding the constructor would then compute that field from binders the same erasure had dropped. `Prop` structures already guarantee this by declaration — their fields must be non-informative — so this aligns inductives with them.
         let proof_family = matches!(
-            &*reduce_with(context, &induct_decl.result_sort)?,
+            &*context.reduce_with(&induct_decl.result_sort)?,
             Subterm::Prop
         );
         let mut constructors = Vec::new();
@@ -197,7 +197,7 @@ impl Lowering<'_> {
     /// The family identity of a registered inductive, minting its row if this is the first reference.
     pub(super) fn family_identity(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         name: &curios_core::Global,
     ) -> Result<curios_ersd::FamilyId, Error> {
         if let Some(row) = self.environment.induct_row(name) {
@@ -227,12 +227,12 @@ impl Lowering<'_> {
     /// Lower a tuple against its checked tuple type. Erasable fields drop; a type left with one relevant field collapses to it, whether or not a drop produced that width — the same relevant-arity rule [`struct_row`](Self::struct_row) applies, and the rule [`erase_proj`](Self::erase_proj) reads back.
     pub(super) fn erase_tuple(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         tuple: &Tuple,
         expected: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let telescope = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
+        let telescope = match Term::unwrap_or_clone(context.reduce_with(expected)?) {
             Subterm::TupleType(TupleType { telescope }) => telescope,
             _ => unreachable!("erase: tuple checked against non-tuple type"),
         };
@@ -267,7 +267,7 @@ impl Lowering<'_> {
     /// Lower a struct value: a newtype is its bare field; anything else is a product over the declaration's schema.
     pub(super) fn erase_struct(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         value: &Struct,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
@@ -299,7 +299,7 @@ impl Lowering<'_> {
     /// Lower a constructor value to a schema-carrying `Construct`; the discriminant is the constructor's registry position, recorded in the registered family.
     pub(super) fn erase_variant(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         variant: &Variant,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
@@ -334,7 +334,7 @@ impl Lowering<'_> {
     /// Lower a projection by relevant-field arithmetic. A head left with a single relevant field already *is* that field, so the projection vanishes.
     pub(super) fn erase_proj(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         proj: &Proj,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
@@ -345,7 +345,7 @@ impl Lowering<'_> {
         };
 
         let head_type = self.type_of(context, head)?;
-        let head_type = reduce_with(context, &head_type)?;
+        let head_type = context.reduce_with(&head_type)?;
 
         // Projecting an *erased* field yields proof content only: the unit constant, never a runtime projection (the field has no slot).
         let erased_field = |mask: &[bool], index: usize| mask.get(index).copied().unwrap_or(false);

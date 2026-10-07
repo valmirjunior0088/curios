@@ -8,18 +8,16 @@
 
 use {
     super::{
-        Bound, Cases, Context, Error, Func, FuncType, InductType, Let, Lowering, Many, Match, Proj,
-        Rec, Scope, StructType, Subterm, Term, Tuple, TupleType, Variant, reduce_with, sort_term,
-        synth_neutral,
+        Bound, Cases, Error, Func, FuncType, InductType, Let, Lowering, Many, Match, Proj, Rec,
+        Retyping, Scope, StructType, Subterm, Term, Tuple, TupleType, Variant,
     },
-    crate::Binders,
     curios_core::{Cost, Produced, ReduceError, foreign_signature},
     curios_utilities::recurse,
 };
 
 impl Lowering<'_> {
     /// The type `term` has, read at most once for the item being erased.
-    pub(super) fn type_of(&mut self, context: &mut Context, term: &Term) -> Result<Term, Error> {
+    pub(super) fn type_of(&mut self, context: &mut Retyping, term: &Term) -> Result<Term, Error> {
         if let Some(known) = self.types.get(term) {
             return Ok(known.clone());
         }
@@ -31,7 +29,7 @@ impl Lowering<'_> {
     }
 
     /// One reading. A step is charged for each, as the kernel charges its typing walk, so the budget bounds this one too.
-    fn read_type(&mut self, context: &mut Context, term: &Term) -> Result<Term, Error> {
+    fn read_type(&mut self, context: &mut Retyping, term: &Term) -> Result<Term, Error> {
         context
             .spend(Cost::STEP)
             .map_err(|error| exhausted(error, term))?;
@@ -45,7 +43,7 @@ impl Lowering<'_> {
             Subterm::Apply(apply) => {
                 let head_type = self.type_of(context, &apply.head)?;
                 let Subterm::FuncType(FuncType { telescope, .. }) =
-                    Term::unwrap_or_clone(reduce_with(context, &head_type)?)
+                    Term::unwrap_or_clone(context.reduce_with(&head_type)?)
                 else {
                     unreachable!("erase: applied a non-function");
                 };
@@ -64,7 +62,7 @@ impl Lowering<'_> {
                     unreachable!("unresolved label projection reached erasure");
                 };
                 let head_type = self.type_of(context, head)?;
-                let field_type = match Term::unwrap_or_clone(reduce_with(context, &head_type)?) {
+                let field_type = match Term::unwrap_or_clone(context.reduce_with(&head_type)?) {
                     Subterm::TupleType(TupleType { telescope }) => {
                         telescope.field_type_from(head, *index)
                     }
@@ -139,7 +137,7 @@ impl Lowering<'_> {
                 let indices = match cases {
                     Cases::Induct { .. } => {
                         let head_type = self.type_of(context, head)?;
-                        match Term::unwrap_or_clone(reduce_with(context, &head_type)?) {
+                        match Term::unwrap_or_clone(context.reduce_with(&head_type)?) {
                             Subterm::InductType(InductType { indices, .. }) => indices,
                             _ => unreachable!(
                                 "erase: inductive match scrutinee checked by elaborate"
@@ -167,7 +165,7 @@ impl Lowering<'_> {
             Subterm::Intrinsic(intrinsic) => {
                 match intrinsic.signature(&context.syntax()).produced {
                     Produced::Fixed(type_) => Ok(type_),
-                    Produced::Sort => sort_term(context, term),
+                    Produced::Sort => context.sort_term(term),
                 }
             }
             Subterm::Foreign(function, arguments) => {
@@ -184,13 +182,12 @@ impl Lowering<'_> {
             | Subterm::FuncType(_)
             | Subterm::TupleType(_)
             | Subterm::InductType(_)
-            | Subterm::StructType(_) => sort_term(context, term),
+            | Subterm::StructType(_) => context.sort_term(term),
             // A name, or a member of a group read off the group it carries.
-            Subterm::Var(_) | Subterm::Instance(_) => {
-                Ok(synth_neutral(context, &Binders::default(), &[], term)
-                    .map_err(|error| exhausted(error, term))?
-                    .expect("erase: a name in scope"))
-            }
+            Subterm::Var(_) | Subterm::Instance(_) => Ok(context
+                .synth_neutral(term)
+                .map_err(|error| exhausted(error, term))?
+                .expect("erase: a name in scope")),
             Subterm::Metavar(_) => unreachable!("metavariable survived zonking into erasure"),
             Subterm::Transient(_) => {
                 unreachable!("transient node survived elaboration into erasure")
@@ -198,7 +195,7 @@ impl Lowering<'_> {
         }
     }
 
-    fn lambda_type(&mut self, context: &mut Context, func: &Func) -> Result<Term, Error> {
+    fn lambda_type(&mut self, context: &mut Retyping, func: &Func) -> Result<Term, Error> {
         context.with_frame(|context| {
             let mut domains = Vec::with_capacity(func.telescope.len());
             let mut cursor = func.telescope.cursor();
@@ -220,7 +217,7 @@ impl Lowering<'_> {
     }
 
     /// The type of a local group's tail, with each member it names folded back to the group's own projection, so what leaves names nothing the group's scope bound.
-    fn group_tail_type(&mut self, context: &mut Context, rec: &Rec) -> Result<Term, Error> {
+    fn group_tail_type(&mut self, context: &mut Retyping, rec: &Rec) -> Result<Term, Error> {
         let Rec { group, tail } = rec;
         let names = tail
             .hint_iter()

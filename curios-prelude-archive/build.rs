@@ -1,8 +1,8 @@
 use {
     curios_core::{Global, Item, Sharing, Zonked, validate_stored_identities},
     curios_elab::{
-        Context, ErasedUnit, Erasures, Established, elaborate_and_zonk_unit, erase_unit,
-        validate_lowered_universe_seeds, validate_universes,
+        Context, DEFAULT_STEP_BUDGET, ErasedUnit, Erasures, Established, elaborate_and_zonk_unit,
+        erase_unit, validate_lowered_universe_seeds, validate_universes,
     },
     curios_std::std_source,
     curios_text::{PreparedText, SYNTAX, prepare_prelude, sys_source},
@@ -130,7 +130,8 @@ fn archive(
 
     // No entrypoint, so nothing to link: each item's erased form is its own, which is what a successor reads and a program links.
     let ersd = erase_unit(
-        &mut Context::with_default_budget(SYNTAX),
+        DEFAULT_STEP_BUDGET,
+        SYNTAX,
         Erasures::of(predecessors, erased),
         &zonked,
     )

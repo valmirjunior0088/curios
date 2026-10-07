@@ -8,7 +8,7 @@ use {
     curios_core::{
         Bound, Cases, Enter, Global, Item, Match, Subterm, Term, Variance, Visit, Zonked,
     },
-    curios_elab::{Context, DEFAULT_STEP_BUDGET, Erasures, erase_unit},
+    curios_elab::{DEFAULT_STEP_BUDGET, Erasures, erase_unit},
     curios_text::SYNTAX,
     curios_unit::{Record, Uncertified, segments},
     curios_utilities::digest,
@@ -391,10 +391,14 @@ fn stored_prelude_measurements() {
                 .unwrap_or_else(|| "?".to_string());
             let zonked = Zonked::project(core).expect("a restored prelude root is zonked");
 
-            let mut erasure_context = Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
             let start = Instant::now();
-            erase_unit(&mut erasure_context, Erasures::of(&cores, &units), &zonked)
-                .expect("a stored prelude root re-erases");
+            erase_unit(
+                DEFAULT_STEP_BUDGET,
+                SYNTAX,
+                Erasures::of(&cores, &units),
+                &zonked,
+            )
+            .expect("a stored prelude root re-erases");
             let erasure = start.elapsed();
 
             let start = Instant::now();

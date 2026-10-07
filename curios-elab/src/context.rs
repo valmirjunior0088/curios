@@ -28,6 +28,9 @@ pub(crate) use posture::*;
 mod program;
 pub(crate) use program::*;
 
+mod retyping;
+pub(crate) use retyping::*;
+
 mod solutions;
 pub(crate) use solutions::*;
 

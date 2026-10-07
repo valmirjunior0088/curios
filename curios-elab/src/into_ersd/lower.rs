@@ -4,16 +4,15 @@
 
 use {
     super::{
-        Binding, Bound, Context, Environment, ErasedItem, ErasedUnit, Erasures, Error, Export,
-        InductDecl, Intrinsic, Let, Subterm, Telescope, Term, emitted, intrinsic, link,
-        reduce_with,
+        Binding, Bound, Environment, ErasedItem, ErasedUnit, Erasures, Error, Export, InductDecl,
+        Intrinsic, Let, Retyping, Subterm, Telescope, Term, emitted, intrinsic, link,
     },
     crate::{validate_entry_universes, validate_universes},
     curios_core::{
         Certification, ConceptDecl, Definition, Entrypoint, Free, Global, InductParam, Item,
         Module, Operand, Program, StructDecl, Zonked, foreign_operands, project_erased_universes,
     },
-    curios_utilities::{Span, grown},
+    curios_utilities::{Span, SyntaxRegistry, grown},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         sync::Arc,
@@ -177,7 +176,7 @@ fn project_module(module: &Module) -> Module {
 }
 
 /// Seed the erasure context's registries with `module`'s declarations — the re-derived types every item consults — for each scope unit and then the unit being erased.
-fn seed_registries(context: &mut Context, module: &Module) -> Result<(), Error> {
+fn seed_registries(context: &mut Retyping, module: &Module) -> Result<(), Error> {
     for (name, induct_decl) in &module.induct_decls {
         context.register_induct(name, induct_decl.clone())?;
     }
@@ -190,7 +189,7 @@ fn seed_registries(context: &mut Context, module: &Module) -> Result<(), Error> 
 /// Erase the entrypoint body into the entry block of a fragment of its own — [`erase_program`]'s tail. The program's own body owns what it mints, the same way an item owns what its body mints: the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from. The verifier is the rejection point for the recursion classes the language does not admit — an evaluation cycle, an initializer that performs an effect — and hands those back as the refusal; a malformed fragment is an erasure fault, which the verifier panics on rather than returning here.
 fn seal_entry(
     mut lowering: Lowering<'_>,
-    context: &mut Context,
+    context: &mut Retyping,
     body: &Term,
     expected: &Term,
 ) -> Result<ErasedItem, Error> {
@@ -211,7 +210,7 @@ fn seal_entry(
 /// Nothing else in the language may: there is no eliminator from `Io(T)` to `T`, which is what makes every term of non-`Io` type pure by typing. The force is type-directed rather than unconditional so a non-`Io` tail erases unforced — the erasure unit tests state such tails directly. What makes it mandatory in production is `curios-pipeline`, which checks the tail against `Io({})`, so the payload the force yields there is already unit and the entry discards nothing an author wrote. The runtime ignores `func/main`'s result either way: a program's meaning is the effects its description performs.
 fn force_entry(
     lowering: &mut Lowering<'_>,
-    context: &mut Context,
+    context: &mut Retyping,
     expected: &Term,
     outcome: Outcome,
 ) -> Result<Outcome, Error> {
@@ -219,7 +218,7 @@ fn force_entry(
         return Ok(outcome);
     };
     if !matches!(
-        &*reduce_with(context, expected)?,
+        &*context.reduce_with(expected)?,
         Subterm::Intrinsic(Intrinsic::IoType(_))
     ) {
         return Ok(Outcome::Emitted(description));
@@ -365,7 +364,7 @@ impl<'s> Lowering<'s> {
     /// The one walk that consumes a signature mask, shared by every site that fills a telescope: struct, variant, and tuple construction, and the argument list of an application. Its slot-for-slot agreement with [`erasure_mask`](super::erasure_mask) is what fixes a function's runtime arity, so it must stay a single implementation.
     pub(super) fn masked_fields<B: Bound>(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         mask: &[bool],
         telescope: Telescope<B>,
         values: &[Term],
@@ -389,7 +388,7 @@ impl<'s> Lowering<'s> {
     /// Erase one expression to an operand. `expected` is the type the expression was checked against, consumed where a runtime shape must be read off it; `hint` names the statement when this expression binds one.
     pub(super) fn walk(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         term: &Term,
         expected: &Term,
         hint: Option<&str>,
@@ -404,7 +403,7 @@ impl<'s> Lowering<'s> {
 
     fn walk_subterm(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         term: &Term,
         expected: &Term,
         hint: Option<&str>,
@@ -495,7 +494,7 @@ impl<'s> Lowering<'s> {
     /// Erase a let block binding for binding, in written order: each value is erased once (the operand law), defined in the Core context so dependent types reduce through it, and mapped to its operand; then the tail.
     fn erase_let(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         binding: &Let,
         expected: &Term,
         hint: Option<&str>,
@@ -563,11 +562,21 @@ impl ErasedProgram {
 
 /// Erase one unit's items, each into a fragment of its own, over what its scope erased to.
 ///
-/// The Core context is seeded with the scope's definitions and the unit's own, so every re-derived type reduces through them, and the items erase in the order the module stores them, every item after the items it reaches — so the erased form of every name an item uses is in hand when it is asked for.
+/// The reader erasure reads through is its own, made here on `budget` and handed in by no caller (`Retyping`). It is seeded with the scope's definitions and the unit's own, so every re-derived type reduces through them, and the items erase in the order the module stores them, every item after the items it reaches — so the erased form of every name an item uses is in hand when it is asked for.
 ///
 /// **A unit and a program are erased by one walk, and only a program is linked.** The entry is not a unit's to carry: a program is its module and the term it closes with ([`Program`]), so [`erase_program`] runs this same walk, erases the entry at the type it states, which [`Zonked`] holds, and links what the entry reaches.
 pub fn erase_unit(
-    context: &mut Context,
+    budget: u64,
+    syntax: SyntaxRegistry,
+    scope: Erasures<'_>,
+    module: &Zonked<Module>,
+) -> Result<ErasedUnit, Error> {
+    erase_unit_in(&mut Retyping::new(budget, syntax), scope, module)
+}
+
+/// [`erase_unit`] through a reader its caller holds.
+pub(crate) fn erase_unit_in(
+    context: &mut Retyping,
     scope: Erasures<'_>,
     module: &Zonked<Module>,
 ) -> Result<ErasedUnit, Error> {
@@ -582,13 +591,15 @@ pub fn erase_unit(
 ///
 /// What is redone is closed under what an item's erasure reads — the types and registry entries of the names it reaches, and how each of them is bound — which is the caller's to guarantee, as it is for the items elaborated again.
 pub fn erase_unit_over(
-    context: &mut Context,
+    budget: u64,
+    syntax: SyntaxRegistry,
     scope: Erasures<'_>,
     module: &Zonked<Module>,
     baseline: &ErasedUnit,
     redone: &dyn Fn(&Global) -> bool,
 ) -> Result<ErasedUnit, Error> {
     curios_profile::profile!("erase_unit");
+    let context = &mut Retyping::new(budget, syntax);
     grown(|| {
         let module = seed(context, scope, module)?;
         erase_items(context, scope, &module, |item| {
@@ -603,7 +614,17 @@ pub fn erase_unit_over(
 
 /// [`erase_unit`] for a program: its module erased over its scope, its entry erased at the type it states, and the two linked with what they reach of the scope — the module whose [`ErasedProgram::into_module`] the back half lowers.
 pub fn erase_program(
-    context: &mut Context,
+    budget: u64,
+    syntax: SyntaxRegistry,
+    scope: Erasures<'_>,
+    program: &Zonked<Program>,
+) -> Result<ErasedProgram, Error> {
+    erase_program_in(&mut Retyping::new(budget, syntax), scope, program)
+}
+
+/// [`erase_program`] through a reader its caller holds.
+pub(crate) fn erase_program_in(
+    context: &mut Retyping,
     scope: Erasures<'_>,
     program: &Zonked<Program>,
 ) -> Result<ErasedProgram, Error> {
@@ -636,7 +657,7 @@ pub fn erase_program(
 
 /// Seed the erasure context with what every item's re-derived types reduce through — the scope's registries and definitions, then the unit's own — and hand back the unit projected out of its universes.
 fn seed(
-    context: &mut Context,
+    context: &mut Retyping,
     scope: Erasures<'_>,
     module: &Zonked<Module>,
 ) -> Result<Module, Error> {
@@ -663,7 +684,7 @@ fn seed(
 }
 
 /// Define `item`'s names in the Core context: a definition at its type and body, a group's members each at its type and its selection.
-fn define(context: &mut Context, item: &Item) {
+fn define(context: &mut Retyping, item: &Item) {
     match item {
         Item::Let(definition) => {
             context.define_assuming_scheme(
@@ -695,7 +716,7 @@ fn define(context: &mut Context, item: &Item) {
 
 /// Erase `module`'s items in the order it stores them, each into a fragment of its own, but for those `reused` hands an erased form for.
 fn erase_items(
-    context: &mut Context,
+    context: &mut Retyping,
     scope: Erasures<'_>,
     module: &Module,
     reused: impl Fn(&Item) -> Option<ErasedItem>,
@@ -717,7 +738,7 @@ fn erase_items(
 
 /// Erase one item into a fragment of its own, on a budget restored for it.
 fn erase_item(
-    context: &mut Context,
+    context: &mut Retyping,
     externals: Externals<'_>,
     item: &Item,
 ) -> Result<ErasedItem, Error> {

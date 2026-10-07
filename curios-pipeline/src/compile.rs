@@ -632,7 +632,8 @@ fn erase_checked(
     let erased = predecessors.erased();
 
     let mut linked = erase_program(
-        &mut Context::new(budget, *syntax),
+        budget,
+        *syntax,
         Erasures::of(&cores, &erased),
         &judged.program,
     )
@@ -908,12 +909,10 @@ pub fn compile_unit(
     }
 
     let erased = predecessors.erased();
-    let ersd = erase_unit(
-        &mut Context::new(budget, *syntax),
-        Erasures::of(&cores, &erased),
-        &core,
-    )
-    .map_err(|error| CompileError::Failure(error.reports_with(core.as_module(), &cores, syntax)))?;
+    let ersd =
+        erase_unit(budget, *syntax, Erasures::of(&cores, &erased), &core).map_err(|error| {
+            CompileError::Failure(error.reports_with(core.as_module(), &cores, syntax))
+        })?;
 
     let core = core.into_module();
 

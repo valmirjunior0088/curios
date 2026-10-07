@@ -6,8 +6,8 @@
 
 use {
     super::{
-        Apply, Context, Error, Func, FuncType, Lowering, Outcome, Subterm, Term, emitted,
-        erasure_mask, is_erasable, reduce_with,
+        Apply, Error, Func, FuncType, Lowering, Outcome, Retyping, Subterm, Term, emitted,
+        erasure_mask, is_erasable,
     },
     curios_core::{DefinitionKind, Global, Lockstep, Step},
 };
@@ -15,7 +15,7 @@ use {
 impl Lowering<'_> {
     pub(super) fn erase_func(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         func: &Func,
         expected: &Term,
         hint: Option<&str>,
@@ -39,13 +39,13 @@ impl Lowering<'_> {
     /// Erase a lambda into a previously reserved function identity — shared by the expression form above (which reserves and binds it) and recursive groups (which reserve every member first for mutual visibility).
     pub(super) fn define_lambda(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         function: curios_ersd::FunctionId,
         func: &Func,
         expected: &Term,
         hint: Option<&str>,
     ) -> Result<(), Error> {
-        let ft = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
+        let ft = match Term::unwrap_or_clone(context.reduce_with(expected)?) {
             Subterm::FuncType(ft) => ft,
             // Elaborate already checked this function against a function type.
             _ => unreachable!("erase: function checked against non-function type"),
@@ -108,7 +108,7 @@ impl Lowering<'_> {
 
     pub(super) fn erase_apply(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         apply: &Apply,
         expected: &Term,
         hint: Option<&str>,
@@ -122,7 +122,7 @@ impl Lowering<'_> {
         let params = apply.params().cloned().collect::<Vec<_>>();
 
         let head_type = self.type_of(context, head)?;
-        let head_type = reduce_with(context, &head_type)?;
+        let head_type = context.reduce_with(&head_type)?;
         let ft = match &*head_type {
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.clone(),
             _ => unreachable!("erase: applied a non-function"),
@@ -160,7 +160,7 @@ impl Lowering<'_> {
     /// A `let` binding is a kept slot too: the name stays bound for the tail, and a proof or a type bound to it is not computed. Nothing is lost by that. No term outside `Io` performs an effect, so the value performed nothing; the totality obligations make every proof and every type total, so it would have returned; and what it could still have done is refuse on a run-time carrier, which is a behaviour no proof should be able to give a program.
     pub(super) fn kept_operand(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         value: &Term,
         type_: &Term,
         hint: Option<&str>,
@@ -174,10 +174,10 @@ impl Lowering<'_> {
     /// The content-free stand-in for an erased value in a kept slot, shaped by the slot's type. A proof or a type is the unit constant. A proof-valued *function* — a `Type`-valued parameter instantiated at a proposition, `WellFounded/recurse`'s `step` at a `Prop` motive — is a function of the slot's kept arity whose body is the stand-in for its codomain, one layer per curried arrow: the declaration kept the slot because the callee applies it, and applying the unit constant traps where applying this returns. The two sides of the seam agree the way the declaration mask and `masked_fields` do — the callee's own calls drop the same parameters this stub omits, both reading the one telescope.
     fn proof_stub(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         type_: &Term,
     ) -> Result<curios_ersd::Atom, Error> {
-        let ft = match Term::unwrap_or_clone(reduce_with(context, type_)?) {
+        let ft = match Term::unwrap_or_clone(context.reduce_with(type_)?) {
             Subterm::FuncType(ft) => ft,
             _ => return Ok(self.unit()),
         };
@@ -215,7 +215,7 @@ impl Lowering<'_> {
 /// The call a concept method's wrapper forwards to, at `apply`'s arguments — `w.i(x…)` for a method, `w.i` for any other field — or `None` when the callee is not a wrapper.
 ///
 /// `into_core` generates each wrapper as exactly that forwarding, `(@p…, use w, x…) => w.i(x…)`, and a call fills its one parameter group, so every call to one supplies the whole group and unfolds in one step: the wrapper's body opened at the call's arguments. One step and no further — reducing the call instead would go on into the method's own body wherever the dictionary is known, which is inlining arbitrary code. The kind is the definition's, read as [`is_proof_constructor`] reads its own, rather than guessed from the name.
-fn forwarded_method(context: &Context, apply: &Apply) -> Option<Term> {
+fn forwarded_method(context: &Retyping, apply: &Apply) -> Option<Term> {
     let Subterm::Var(var) = &*apply.head else {
         return None;
     };
@@ -233,7 +233,7 @@ fn forwarded_method(context: &Context, apply: &Apply) -> Option<Term> {
 /// Whether `head` names a constructor of a `Prop`-sorted inductive.
 ///
 /// The owning family comes from the definition's own [`DefinitionKind::InductiveConstructor`], recorded by `into_core` where the constructor function was generated. Splitting the name into a qualifier prefix and a last segment would instead ask whether some *other* declaration happens to be registered under this name's prefix — a question whose answer is only accidentally the same one, and which decides whether a call is dropped entirely.
-fn is_proof_constructor(context: &mut Context, head: &Term) -> Result<bool, Error> {
+fn is_proof_constructor(context: &mut Retyping, head: &Term) -> Result<bool, Error> {
     let Subterm::Var(var) = &**head else {
         return Ok(false);
     };
@@ -249,7 +249,7 @@ fn is_proof_constructor(context: &mut Context, head: &Term) -> Result<bool, Erro
     };
 
     Ok(matches!(
-        &*reduce_with(context, &declaration.result_sort)?,
+        &*context.reduce_with(&declaration.result_sort)?,
         Subterm::Prop
     ))
 }

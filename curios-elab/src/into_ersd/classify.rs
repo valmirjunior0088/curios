@@ -2,7 +2,7 @@
 
 use {
     super::Lowering,
-    crate::{Context, Error, is_prop_in, reduce_with},
+    crate::{Error, Retyping},
     curios_core::{
         Advance, Bound, Free, FuncType, Global, Intrinsic, Subterm, Telescope, Term, TupleType,
     },
@@ -15,17 +15,17 @@ use {
 /// [`Sort::of`](crate::Sort::of) classifies the empty tuple `{}` as `Type`, not a prop — `{}` is the result type of effects (`print`'s `let _ = write(..); ()`) and must be kept — so `{}`, `{ .., {} }`, and `X -> {}` are not erased. A `FuncType` erases only when its ultimate codomain does, recursing past the parameters into the return type, which lands on `{}` (kept) or on a genuine proposition / universe (erased).
 ///
 /// CRITICAL: evaluate against the binder's *declared* (signature) type, opened only with the surrounding binders as opaque variables — never with concrete call arguments. A polymorphic field `value : A` is kept (its abstract `A` is neither prop nor type); re-classifying it at a call where `A := SomeProp` would diverge the construction's arity from the constructor function's fixed arity. [`signature_entries`] enforces the opaque-open discipline.
-pub(crate) fn is_erasable(context: &mut Context, type_: &Term) -> Result<bool, Error> {
+pub(crate) fn is_erasable(context: &mut Retyping, type_: &Term) -> Result<bool, Error> {
     is_erasable_in(context, &mut Vec::new(), type_)
 }
 
 /// [`is_erasable`] under the binders a surrounding telescope walk has opened, each carried with its declared type — threaded rather than assumed for the reason [`crate::is_prop_in`] states. A domain that is a bound variable of `Prop` sort — `proof: P` under `P: Prop` — classifies as a proof only through this record, and every telescope walk in this module threads it so the declaration's mask and the application's agree.
 fn is_erasable_in(
-    context: &mut Context,
+    context: &mut Retyping,
     opened: &mut Vec<(Free, Term)>,
     type_: &Term,
 ) -> Result<bool, Error> {
-    match Term::unwrap_or_clone(reduce_with(context, type_)?) {
+    match Term::unwrap_or_clone(context.reduce_with(type_)?) {
         Subterm::Type(_) | Subterm::Prop => Ok(true),
         Subterm::Instance(instance) => is_erasable_in(context, opened, &instance.head.to_term()),
         // A function erases iff what it ultimately returns does — a proof-/type-producing function is pure, content-free; an effectful `X -> {}` is not. Recurse past the parameters into the codomain, each opened binder joining `opened` so the codomain can read its sort.
@@ -40,13 +40,13 @@ fn is_erasable_in(
             opened.truncate(mark);
             result
         }
-        _ => is_prop_in(context, opened, type_),
+        _ => context.is_prop_in(opened, type_),
     }
 }
 
 /// The signature view of a telescope: one entry per binder — its label and whether it is erased — classifying each domain with the *preceding* binders opened as fresh opaque variables carrying their declared types (see [`is_erasable_in`]). That opaque-open discipline is what keeps a function's runtime arity fixed across every instantiation, so this is the only walk that computes it; the terminal body is ignored. Pairs with a concrete walk over the actual values: the signature decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types.
 pub(crate) fn signature_entries<B: Bound>(
-    context: &mut Context,
+    context: &mut Retyping,
     telescope: Telescope<B>,
 ) -> Result<Vec<(Option<String>, bool)>, Error> {
     let mut entries = Vec::new();
@@ -64,7 +64,7 @@ pub(crate) fn signature_entries<B: Bound>(
 
 /// The label-free reading of [`signature_entries`]: the per-binder erasability mask, for the sites that decide drops without naming the slots.
 pub(crate) fn erasure_mask<B: Bound>(
-    context: &mut Context,
+    context: &mut Retyping,
     telescope: Telescope<B>,
 ) -> Result<Vec<bool>, Error> {
     Ok(signature_entries(context, telescope)?
@@ -76,7 +76,7 @@ pub(crate) fn erasure_mask<B: Bound>(
 /// The constructor-payload view of a telescope: [`signature_entries`] plus the recorded carrier shape of each kept domain. An erased entry's shape is `Opaque`; nothing reads it.
 pub(crate) fn constructor_entries<B: Bound>(
     lowering: &mut Lowering<'_>,
-    context: &mut Context,
+    context: &mut Retyping,
     telescope: Telescope<B>,
 ) -> Result<Vec<(Option<String>, bool, curios_ersd::FieldShape)>, Error> {
     let mut entries = Vec::new();
@@ -101,11 +101,11 @@ pub(crate) fn constructor_entries<B: Bound>(
 /// `visited` makes the chain-chasing terminate: a self-referential struct elaborates (it is merely uninhabited), so the recursion through nominal declarations can cycle, and a cycle classifies `Opaque`. The chain recurses into at most one field per level, so the set is the ancestor chain and never needs unwinding.
 pub(crate) fn field_shape(
     lowering: &mut Lowering<'_>,
-    context: &mut Context,
+    context: &mut Retyping,
     visited: &mut BTreeSet<Global>,
     type_: &Term,
 ) -> Result<curios_ersd::FieldShape, Error> {
-    match Term::unwrap_or_clone(reduce_with(context, type_)?) {
+    match Term::unwrap_or_clone(context.reduce_with(type_)?) {
         Subterm::Intrinsic(Intrinsic::BoolType | Intrinsic::ByteType) => {
             Ok(curios_ersd::FieldShape::Immediate)
         }
@@ -190,7 +190,7 @@ enum Chain {
 }
 
 fn relevant_chain<B: Bound>(
-    context: &mut Context,
+    context: &mut Retyping,
     telescope: Telescope<B>,
 ) -> Result<Chain, Error> {
     let mut first = None;

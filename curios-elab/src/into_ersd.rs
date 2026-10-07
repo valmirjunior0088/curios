@@ -9,7 +9,7 @@
 //! The boundary validates what it has not already seen validated, and projects what is not already projected — which for a unit erased over a scope is the unit's own items and the registry entries it adds. The prelude arrives immutable and checked from `curios-prelude-archive`'s restore, so validating and projecting it again would be a walk of the whole standard library, inside the erasure context's step budget, for an answer already in hand.
 
 use {
-    super::{Context, Error, reduce_with, refine_head, sort_term, synth_neutral},
+    super::{Error, Retyping},
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, Func, FuncType, InductArm, InductDecl, InductType,
         Intrinsic, Let, Many, Match, Nat, Proj, Rec, RecItem, Scope, Struct, StructType, Subterm,

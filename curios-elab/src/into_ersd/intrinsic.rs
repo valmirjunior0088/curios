@@ -3,7 +3,7 @@
 //! No carrier is chosen here: `Bool` values and operations stay `Bool`-shaped, `Byte` stays `Byte`, `Handle` stays an opaque handle constant, and a packed binary's element is its grain's shape (`Byte` for `X`, `Bool` for `B`) — every collapse onto a runtime carrier belongs to the lowering out of the representation. Type-level numerals cross whole, the erased carriers being unbounded too; the one narrowing here is a dispatch key's, refused rather than wrapped (`narrow_case_key`).
 
 use {
-    super::{Context, Error, Intrinsic, Lowering, Nat, Natural, Outcome, Subterm, Term, emitted},
+    super::{Error, Intrinsic, Lowering, Nat, Natural, Outcome, Retyping, Subterm, Term, emitted},
     curios_core::Global,
     curios_num::Grain,
     curios_utilities::SyntaxName,
@@ -60,7 +60,7 @@ impl Lowering<'_> {
     /// Resolve an outcome through the declaration's ordinary registered layout.
     fn outcome_constructor(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         family: SyntaxName,
         constructor: SyntaxName,
     ) -> Result<curios_ersd::ConstructorId, Error> {
@@ -82,7 +82,7 @@ impl Lowering<'_> {
     /// Erase the operands (each against its type, in order) and bind a scalar operation.
     fn operation(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         operation: curios_ersd::Operation,
         operands: &[(&Term, Term)],
         hint: Option<&str>,
@@ -142,7 +142,7 @@ impl Lowering<'_> {
     /// The sequence-family counterpart of [`operation`](Self::operation).
     fn sequence(
         &mut self,
-        context: &mut Context,
+        context: &mut Retyping,
         operation: curios_ersd::SequenceOp,
         operands: &[(&Term, Term)],
         hint: Option<&str>,
@@ -164,7 +164,7 @@ impl Lowering<'_> {
 /// Transcribe one intrinsic. Every arm reads its runtime shapes off the types the node itself carries — a list literal included, whose element-type slot elaboration already solved.
 pub(super) fn erase_intrinsic(
     lowering: &mut Lowering<'_>,
-    context: &mut Context,
+    context: &mut Retyping,
     intrinsic: &Intrinsic,
     hint: Option<&str>,
 ) -> Result<Outcome, Error> {

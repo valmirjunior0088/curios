@@ -88,7 +88,8 @@ pub fn compile_unit_over(
     // An item's erasure reads the types and registry entries of the names it reaches and how each is bound, every one of which the closure holds where it moved: the closure is the reverse of reaching, and transitive.
     let erased = predecessors.erased();
     let ersd = erase_unit_over(
-        &mut Context::new(budget, *syntax),
+        budget,
+        *syntax,
         Erasures::of(&cores, &erased),
         &core,
         baseline.erased(),

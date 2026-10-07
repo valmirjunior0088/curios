@@ -21,8 +21,8 @@ fn nominal(path: &str) -> Global {
     Global::Authored(Qualifier::from([path]))
 }
 
-fn context() -> Context {
-    Context::with_default_budget(SYNTAX)
+fn context() -> Retyping {
+    Retyping::new(DEFAULT_STEP_BUDGET, SYNTAX)
 }
 
 /// A top-level definition's identity, from the path a test writes — the same name [`definition`] declares it under. Fixture-only.
@@ -76,11 +76,11 @@ fn stating(program: &Program, type_: Term) -> Program {
 
 /// `program` erased with nothing in scope, its entry stating `type_`.
 fn try_erase(
-    context: &mut Context,
+    context: &mut Retyping,
     program: &Program,
     type_: Term,
 ) -> Result<curios_ersd::Module, Error> {
-    erase_program(
+    erase_program_in(
         context,
         Erasures::nothing(),
         &zonked(&stating(program, type_)),
@@ -88,7 +88,7 @@ fn try_erase(
     .map(ErasedProgram::into_module)
 }
 
-fn erase(context: &mut Context, program: &Program, type_: Term) -> curios_ersd::Module {
+fn erase(context: &mut Retyping, program: &Program, type_: Term) -> curios_ersd::Module {
     try_erase(context, program, type_).expect("the program erases")
 }
 
@@ -339,7 +339,7 @@ fn identity_arena(stamp: Totality) -> ErasedProgram {
     declared.totality = stamp;
     let body = Term::apply(Term::free_var(&global("identity")), [nat_lit(4)]);
 
-    erase_program(
+    erase_program_in(
         &mut context,
         Erasures::nothing(),
         &zonked(&stating(&module(items, body), nat)),
@@ -470,7 +470,7 @@ fn erasure_is_deterministic() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     // Both runs erase the *same* term under a fresh context, so any difference would be erasure's own, not a difference in the binders handed to it.
-    let build = |context: &mut Context| {
+    let build = |context: &mut Retyping| {
         let body = Term::let_(
             &x,
             Term::intrinsic(Intrinsic::NatType),
@@ -490,7 +490,7 @@ fn erasure_is_deterministic() {
 /// What an item's erasure hands on holds no binder it opened. A binder's identity counts the binders its context had minted before it, so two erasures of one unit would part on every binder they kept, and an item that read the erased form would hold an identity it mints again.
 #[test]
 fn an_erased_form_keeps_no_binder_its_erasure_opened() {
-    let erased = |context: &mut Context| {
+    let erased = |context: &mut Retyping| {
         let x = context.fresh(Some("x"));
         let y = context.fresh(Some("y"));
         let nat = Term::intrinsic(Intrinsic::NatType);
@@ -514,7 +514,7 @@ fn an_erased_form_keeps_no_binder_its_erasure_opened() {
         )
         .module;
 
-        erase_unit(context, Erasures::nothing(), &zonked(&unit)).expect("the unit erases")
+        erase_unit_in(context, Erasures::nothing(), &zonked(&unit)).expect("the unit erases")
     };
     let first = erased(&mut context());
     let mut later = context();
@@ -549,14 +549,20 @@ fn a_unit_erased_over_a_baseline_erases_what_it_redoes_and_no_other() {
         )
     };
 
-    let baseline =
-        erase_unit(&mut context(), Erasures::nothing(), &unit(1, 2)).expect("the baseline erases");
+    let baseline = erase_unit(
+        DEFAULT_STEP_BUDGET,
+        SYNTAX,
+        Erasures::nothing(),
+        &unit(1, 2),
+    )
+    .expect("the baseline erases");
     let edited = unit(3, 4);
-    let whole =
-        erase_unit(&mut context(), Erasures::nothing(), &edited).expect("the unit erases whole");
+    let whole = erase_unit(DEFAULT_STEP_BUDGET, SYNTAX, Erasures::nothing(), &edited)
+        .expect("the unit erases whole");
     let redone = nominal("redone");
     let over = erase_unit_over(
-        &mut context(),
+        DEFAULT_STEP_BUDGET,
+        SYNTAX,
         Erasures::nothing(),
         &edited,
         &baseline,
@@ -891,7 +897,8 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
     };
 
     let unit = erase_unit(
-        &mut context(),
+        DEFAULT_STEP_BUDGET,
+        SYNTAX,
         Erasures::nothing(),
         &zonked(&fixture.module),
     )
@@ -1558,7 +1565,7 @@ entry
 /// What erasing a function over a chain of `depth` eliminations spends, in budget units. `step` wraps the type one level deeper and `eliminate` the term.
 fn chain_cost(
     depth: usize,
-    step: impl Fn(&mut Context, Term) -> Term,
+    step: impl Fn(&mut Retyping, Term) -> Term,
     eliminate: impl Fn(Term) -> Term,
 ) -> u64 {
     let mut context = context();

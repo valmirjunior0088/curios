@@ -5,7 +5,7 @@
 use {
     crate::*,
     curios_core::{Item, Module, Sharing, Variance},
-    curios_elab::{Context, Erasures, erase_program},
+    curios_elab::{DEFAULT_STEP_BUDGET, Erasures, erase_program},
     curios_prelude::with_prelude,
     curios_text::{Entrypoint, LintKind, RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
@@ -98,7 +98,8 @@ pub(super) fn erase_to_ersd(source: &str) -> curios_ersd::Module {
     with_prelude(|prelude| {
         let predecessors = Predecessors::over(prelude);
         erase_program(
-            &mut Context::with_default_budget(SYNTAX),
+            DEFAULT_STEP_BUDGET,
+            SYNTAX,
             Erasures::of(&predecessors.cores(), &predecessors.erased()),
             &program,
         )
