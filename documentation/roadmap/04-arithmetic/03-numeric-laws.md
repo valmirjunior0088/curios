@@ -40,18 +40,21 @@ The library carries what reduction does not state:
 
 ## `Nat`: the unsigned binary scale
 
-The dyadic `Rat` normalizes by stripping powers of two and compares values held at different binary exponents; both are unsigned facts about a magnitude and belong here. `shl(x, k) = x · pow(2, k)` and the exponent laws are [declared](02-declared-operations.md).
+The dyadic `Rat` normalizes by stripping powers of two and compares values held at different binary exponents; both are unsigned facts about a magnitude and belong here. `shl(x, k) = x · pow(2, k)`, a sum in an exponent being a product, and a power of a positive base being positive are [declared](02-declared-operations.md).
 
+- **A power of a power, and of a product.** `pow(pow(x, a), b) = pow(x, a · b)` by induction on `b`, and `pow(x · y, a) = pow(x, a) · pow(y, a)` by induction on `a`, each step the declared law at a successor. Conversion takes neither, since the first gives the second and the second factors a literal base.
 - **The shift undone.** `shr(shl(x, k), k) = x`.
 - **Trailing zeros.** `trailing_zeros(n)` counts the factors of two in a positive `n`, and `odd_part(n)` is what is left, with the reconstruction `n = shl(odd_part(n), trailing_zeros(n))`, the oddness of `odd_part(n)`, and uniqueness: an odd `m` and a count `k` with `n = shl(m, k)` are `odd_part(n)` and `trailing_zeros(n)`. Zero is excluded by a `Lt(0, n)` premise rather than given a conventional count.
 - **Comparing differently shifted magnitudes.** `shl(a, i)` against `shl(b, j)` is decided by aligning the smaller count, `shl(a, i - j)` against `b` when `j ≤ i`, with the order and equality it answers proved to be the unshifted comparison's.
 
 ## `Nat`: `min` and `max`
 
-Their order facts and semilattice equations hold by conversion through their [declarations](02-declared-operations.md). The two equations a case split proves are lemmas here:
+Their order facts and semilattice equations hold by conversion through their [declarations](02-declared-operations.md), and so does a literal added to both operands. These are lemmas here:
 
+- **under a hypothesis**: `a <= b` gives `Eq()(min(a, b), a)` and `Eq()(max(a, b), b)`, and `b <= a` their twins. A declared operation reads no arm, so a guard reaches it through these; they land with the declarations, the procedure that proves a bound reading `min` and `max` through them;
 - `min(a, b) + max(a, b) = a + b`;
-- `(a - b) + b = max(a, b)`, truncated subtraction read through the same definitions.
+- `(a - b) + b = max(a, b)`, truncated subtraction read through the same definitions;
+- a symbolic summand shared by both operands, `min(a + c, b + c) = min(a, b) + c`.
 
 ## `Int`: order
 
@@ -68,12 +71,14 @@ Two laws a proof might expect to state are already conversion's and are not lemm
 
 ## `Int`: `abs`, `sign`, `min` and `max`
 
-The homomorphism and reflection laws hold by conversion through their [declarations](02-declared-operations.md). These are lemmas, each a case split on the operand's sign with linear arithmetic in each case:
+What holds by conversion is [declared](02-declared-operations.md): a negation leaving `abs` and flipping `sign`, a literal or a power factor leaving either, `abs` inverting the embedding, and two `abs` of opposite operands being one, which is the symmetry of `abs(a - b)`. These are lemmas, each a case split on the operand's sign with linear arithmetic in each case:
 
+- **under a hypothesis**: `NonNeg(n)` gives `Eq()(Nat/to_int(abs(n)), n)`, and `n < +0` gives `Eq()(+0 - Nat/to_int(abs(n)), n)`, through the sign view. They land with the declarations, `/std/Map`'s `Key(Int)` consuming both;
+- **a product**: `abs(a · b) = abs(a) · abs(b)` and `sign(a · b) = sign(a) · sign(b)`, which conversion does not take, a product reaching either operation distributed;
 - **the order facts**: `abs(n)` is zero exactly when `n` is, `Le(+0, n)` exactly when `sign(n)` is not `-1`, and `Le(-Nat/to_int(abs(n)), n)` and `Le(n, Nat/to_int(abs(n)))`;
-- **the absolute difference**: `abs(a - b)` is symmetric and satisfies the triangle inequality `Le(abs(a - c), abs(a - b) + abs(b - c))` in `Nat` — the form a rounding error is compared in;
+- **the absolute difference**: the triangle inequality `Le(abs(a - c), abs(a - b) + abs(b - c))` in `Nat` — the form a rounding error is compared in;
 - **decomposition**, `Eq()(n, sign(n) · Nat/to_int(abs(n)))`: a product of two defined operations, which linear arithmetic reads as one opaque atom;
-- **`abs(a - b)` is zero exactly when `Eq()(a, b)`**: its `Bool` half holds by conversion, and its `Prop` half is a lemma through `eq_of_eql`;
+- **`abs(a - b)` is zero exactly when `Eq()(a, b)`**: `abs(a - b) == 0` against `a == b` by the sign view, and its `Prop` half through `eq_of_eql`;
 - `min` and `max`'s equations, as `Nat`'s.
 
 ## `Int`: the signed scale
@@ -81,7 +86,7 @@ The homomorphism and reflection laws hold by conversion through their [declarati
 The dyadic `Rat` holds a signed mantissa at a binary exponent, so the unsigned binary-scale layer has to reach through a sign. That a shift keeps the sign is [declared](02-declared-operations.md).
 
 - **A right shift is a floor**: `shr(n, k)` is `⌊n / 2ᵏ⌋`, so for a negative `n` it is `-shr(abs(n) - 1, k) - 1`, and it agrees with the `Nat` shift on a non-negative `n`.
-- **Parity through the sign**: `n` is odd exactly when `abs(n)` is, so the odd-mantissa invariant is stated once on the magnitude. It holds by conversion in its `Bool` form, the remainder by a literal being a defined operation.
+- **Parity through the sign**: `n` is odd exactly when `abs(n)` is, so the odd-mantissa invariant is stated once on the magnitude. A lemma by the sign view: `Int`'s remainder takes its dividend's sign, so conversion relates neither side to the other.
 - **Odd-mantissa uniqueness**: two odd mantissas at two exponents denoting one value are equal, and so are their exponents — the unsigned uniqueness of `odd_part` and `trailing_zeros`, carried through the sign.
 
 ## `Flt`: theorems over the bits
