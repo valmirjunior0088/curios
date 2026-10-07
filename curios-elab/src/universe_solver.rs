@@ -1591,7 +1591,9 @@ impl UniverseSolver {
         let held = self.hold(compared);
         // Follow each interface level to the metas that actually carry it. Conversion aliases one meta onto another whenever two spellings of a level are forced equal — keeping the member of greater provenance, but not by the signature's choice — so the set the caller computed from the declaration's type can name metas that were solved away, several links back from the ones still standing. Those representatives are then reached by `universe_metas_in(&body)` instead and land on the internal side, where `minimize` takes least solutions for them; the declaration comes back at a ground level rather than generalized over a level its own signature mentions, and every polymorphic caller is refused by the kernel for supplying a parameter where it demands a constant.
         let interface = self.representatives(interface);
-        let internal = internal
+        // An internal level is followed as an interface one is. A weak equation aliases a body's level onto one the body never spells, and that one is the level to minimize: left out, it is no level of the body's and none of the signature's until an occurrence of the signature settles at it as its lower bound, which makes it a parameter nothing reads.
+        let internal = self
+            .representatives(internal)
             .into_iter()
             .filter(|meta| !interface.contains(meta))
             .collect::<BTreeSet<_>>();

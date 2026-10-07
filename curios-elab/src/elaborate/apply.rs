@@ -1,14 +1,13 @@
 use {
     super::{Misaligned, align, flexible, trivially_inhabited},
     crate::{
-        ArgumentSite, Context, Entailed, Error, FrozenFrame, Mode, ParkedWork, SettleTier,
+        ArgumentSite, Context, Entailed, Error, FrozenFrame, Mode, ParkedWork, SettleTier, Sort,
         attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort, elaborate, entail,
-        exhausted_bound, expect, is_prop, reduce_with, settle_against, sort_term,
-        transitively_ground,
+        exhausted_bound, expect, is_prop, reduce_with, settle_against, transitively_ground,
     },
     curios_core::{
         Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, InstanceHead, Intrinsic,
-        MetavarId, One, Probe, Scope, Spelling, Subterm, Telescope, Term, WitnessOrigin,
+        Level, MetavarId, One, Probe, Scope, Spelling, Subterm, Telescope, Term, WitnessOrigin,
     },
     curios_utilities::Plicity,
     std::collections::BTreeSet,
@@ -20,11 +19,16 @@ pub(super) fn elaborate_func_type(
 ) -> Result<(Term, Term), Error> {
     // One walk, each domain opened once at the binders before it, rather than a recursion reopening the rest per binder.
     let mut domains: Vec<(Plicity, Free, Term)> = Vec::new();
-    let output = context.with_frame(|context| {
+    // The level of each domain that is no proposition, as typing read it.
+    let mut levels = Vec::new();
+    let (output, output_sort) = context.with_frame(|context| {
         let mut cursor = ft.telescope.cursor();
         while let Some((_, ty)) = cursor.entry() {
             let mark = cursor.mark().expect("a mark stands at an entry");
-            let domain = check_is_sort(context, &ty)?.0;
+            let (domain, domain_sort) = check_is_sort(context, &ty)?;
+            if let Sort::Type(level) = domain_sort {
+                levels.push(level);
+            }
             // A definition sugar's parameter is one written binder in its type and in its lambda, so a proof written under it here credits it as one written in the body does.
             let written = cursor.written();
             let name = cursor.advance_fresh(|hint| context.fresh_for(hint, written));
@@ -37,7 +41,7 @@ pub(super) fn elaborate_func_type(
         }
 
         let output = cursor.body().expect("a cursor past every entry");
-        let output = check_is_sort(context, &output).map(|(term, _)| term)?;
+        let (output, output_sort) = check_is_sort(context, &output)?;
 
         // An `@` member is filled by unification, which needs a later type to mention it, and resolution answers only `use` slots. One at a concept's type that nothing later mentions could only ever be written out, so every call leaving it out would fail far from here, as an implicit that was not inferred: refused where it is declared, beside the dual [`check_witness_domain`] refuses. One a later type does mention — `@from: Key(K)` beside `map: Map(K, use from, V)` — is determined, and stays.
         for (index, (mark, name, domain)) in domains.iter().enumerate() {
@@ -59,13 +63,20 @@ pub(super) fn elaborate_func_type(
             }
         }
 
-        Ok::<_, Error>(output)
+        Ok::<_, Error>((output, output_sort))
     })?;
 
     let rebuilt = Term::func_type_marked(domains, output);
 
-    let sort = sort_term(context, &rebuilt)?;
-    Ok((rebuilt, sort))
+    // Sized from its parts' sorts as typing read each, a Π into a proposition being one: where the kernel types it, which reads a part as it is written. Sized from the parts' reducts, a part whose written type sits above its reduct's, a call typed by its codomain or an occurrence at a level its value drops, leaves the former below the sort the kernel finds.
+    let sort = match output_sort {
+        Sort::Prop => Sort::Prop,
+        Sort::Type(level) => {
+            levels.push(level);
+            Sort::Type(Level::max(levels))
+        }
+    };
+    Ok((rebuilt, sort.term()))
 }
 
 /// Refuse a written `use` binder whose type is not a concept application.

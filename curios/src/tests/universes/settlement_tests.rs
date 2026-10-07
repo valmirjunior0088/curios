@@ -419,3 +419,24 @@ fn the_command_line_parser_takes_a_spec_at_any_universe_instance() {
     );
     assert_eq!(typecheck(&parsed), Ok(()));
 }
+
+// **A type former sits where its parts are typed, which is where the kernel types it.** A function type or a tuple type over a part whose written type is above its reduct's — a closed match typed by its motive, a call typed by its codomain, an associated type named through a witness at a level of its own — is sized from the part as typing read it. Sized from the part's reduct it sat a level short, and the kernel refused the sort the elaborator declared: `Over` at `Type` over a domain typed at its witness's level, and `listed`'s `List` at zero over a record of one.
+#[test]
+fn a_type_former_is_sized_by_its_parts_as_they_are_written() {
+    let source = r#"
+        use /std/{Nat, Bool, Str, List};
+        let over_match(A: Type, B: Type) -> Type =
+            (match true: (_) => Type | true => A | false => B end) -> Nat;
+        let pair_match(A: Type, B: Type) -> Type =
+            {held: match true: (_) => Type | true => A | false => B end, n: Nat};
+        let Pick(b: Bool) -> Type = match b | true => Nat | false => (A: Type) -> A end;
+        let over_call() -> Type = (Pick(true)) -> Nat;
+        pub concept Sized(T: Type): pub Type { Carrier: Type }
+        satisfy Sized(Nat) { Carrier = Str }
+        pub let Over: Type = (x: Sized/Carrier(@Nat)) -> Nat;
+        pub let listed(xs: List({a: Sized/Carrier(@Nat), n: Nat})) -> Nat = 0;
+        /std/print("sized")
+        "#;
+
+    assert_eq!(run(source), b"sized");
+}

@@ -1,12 +1,12 @@
 use {
     super::{FieldSource, check_dependent_fields, park_checking},
     crate::{
-        Context, Error, FrozenFrame, Mode, ParkedProjection, ParkedWork, check, check_is_sort,
-        elaborate, expect, fill_placeholder, reduce_with, sort_term, stuck_on_metavar,
+        Context, Error, FrozenFrame, Mode, ParkedProjection, ParkedWork, Sort, check,
+        check_is_sort, elaborate, expect, fill_placeholder, reduce_with, stuck_on_metavar,
     },
     curios_core::{
-        Bound, Field, InductType, Proj, SelfReference, StructType, Subterm, Telescope, Term, Tuple,
-        TupleType, Variant, instantiate_universe_levels_scoped, stamp_declaration_instance,
+        Bound, Field, InductType, Level, Proj, SelfReference, StructType, Subterm, Telescope, Term,
+        Tuple, TupleType, Variant, instantiate_universe_levels_scoped, stamp_declaration_instance,
     },
     curios_utilities::Plicity,
     std::collections::BTreeSet,
@@ -27,9 +27,14 @@ pub(super) fn elaborate_tuple_type(
 
     // One walk, each field type opened once at the binders before it, rather than a recursion reopening the rest per field.
     let mut fields = Vec::new();
+    // The level of each field that is no proposition, as typing read it.
+    let mut levels = Vec::new();
     context.with_frame(|context| {
         tt.telescope.walk_producing(|_, hint, ty| {
-            let field = check_is_sort(context, &ty)?.0;
+            let (field, field_sort) = check_is_sort(context, &ty)?;
+            if let Sort::Type(level) = field_sort {
+                levels.push(level);
+            }
             let name = context.fresh(hint);
             let x = Term::free_var(&name);
             // The *rebuilt* field type, as in `elaborate_func_type`.
@@ -39,13 +44,16 @@ pub(super) fn elaborate_tuple_type(
         })
     })?;
 
+    // A tuple type's sort: `Prop` when it has a field and every one is a proposition, so a record of proofs checks against `Prop`, and `Type` otherwise, the unit `{}` at zero. Sized from its fields' sorts as typing read each, as a function type is and for its reason.
+    let sort = match levels.is_empty() && !fields.is_empty() {
+        true => Sort::Prop,
+        false => Sort::Type(Level::max(levels)),
+    };
     let telescope = Telescope::build(fields, ()).relabel(&source_labels);
 
     let rebuilt: Term = Subterm::TupleType(TupleType { telescope }).into();
 
-    // A tuple type's sort: `Prop` when every field is a proposition (`{}` is the base case), `Type` otherwise — so a record of proofs checks against `Prop`.
-    let sort = sort_term(context, &rebuilt)?;
-    Ok((rebuilt, sort))
+    Ok((rebuilt, sort.term()))
 }
 
 pub(super) fn elaborate_tuple(
