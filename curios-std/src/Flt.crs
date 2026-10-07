@@ -3,8 +3,8 @@ pub use /sys/Flt/{add, sub, mul, div, fma, rem, min, max, eql, neq, lt, gt, le, 
     round, floor, ceil, trunc, nearest, copysign, to_nat, to_int, mantissa, exponent, to_le_bytes,
     of_le_bytes};
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Ord, Dyadic,
-    Vec};
-use /std/Bool/{True, Holds};
+    Vec, Eq};
+use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- IEEE 754's rounding directions.
@@ -480,6 +480,8 @@ let render(f_mant: Nat, exp_field: Nat, even: Bool) -> Str =
 --- The two in IEEE 754's total order, which tells every `Flt` apart: the negative NaNs, then `-inf` up through `-0`, then `+0` up through `+inf`, then the positive NaNs. NaNs order by their bits outward from the infinity of their sign, so a signaling NaN sits nearer it than a quiet one, as §5.10 orders them.
 ---
 --- `==` and `<` stay IEEE's comparisons, which call the two zeros equal and leave a NaN unordered. This is the order `Ord`, and so `List/sort`, needs, and the identity `Hash` already reads. It is also how this library spells IEEE's `totalOrder(x, y)`, as `ord(x, y) != gt`, and `totalOrderMag(x, y)`, as `ord(abs(x), abs(y)) != gt`.
+---
+--- It computes the order `Nat/ord` reads through [`total_key`], which is injective ([`total_key_injective`]): that order is total and answers `eq` exactly at an equation by `Nat/ord`'s laws. That `ord` is that order at every pair, the comparisons it leads with included, is not proved here: no law ties `Flt`'s `<` to the bits.
 pub let ord(x: Flt, y: Flt) -> Ordering =
     choose
     | x < y => Ordering/lt()
@@ -487,11 +489,54 @@ pub let ord(x: Flt, y: Flt) -> Ordering =
     | _ => Nat/ord(total_key(x), total_key(y))
     end;
 
---- `f`'s bits as the natural whose order is the total one: a negative pattern complemented below `2⁶³`, a positive one lifted above it. Only equal numbers and NaNs reach it, since a comparison decides every other pair.
-let total_key(f: Flt) -> Nat =
+--- `f`'s bits as the natural whose order is the total one: a negative pattern complemented below `2⁶³`, a positive one lifted above it. In [`ord`] only equal numbers and NaNs reach it, since a comparison decides every other pair.
+pub let total_key(f: Flt) -> Nat =
     let bits = Bytes/to_nat(to_le_bytes(f));
     let top = pow2(63);
     match bits >= top | true => pow2(64) - 1 - bits | false => bits + top end;
+
+-- The float a run of bytes spells, and `+0.0` for a run that is not eight bytes: total, so congruence can read an encoding back. Only a proof reads it, and only at a float's own encoding, where it is that float.
+let decoded(z: Bytes) -> Flt =
+    Option/unwrap_or(try_of_le_bytes(z), +0.0);
+
+--- A float is its bytes: two floats with one encoding are one float.
+---
+--- [`to_le_bytes`] is injective because `of_le_bytes` undoes it, which is what makes the bytes a float's identity: the two zeros and every NaN pattern are apart, as their encodings are.
+pub let eq_of_le_bytes(a: Flt, b: Flt, same: Eq()(to_le_bytes(a), to_le_bytes(b))) -> Eq()(a, b) =
+    Eq/cong(decoded, same);
+
+--- Two floats with one [`total_key`] are one float: the key tells every pattern apart.
+---
+--- So the order `Nat/ord` reads through the key is a total order that answers `eq` exactly at an equation, by `Nat/ord`'s own laws. A key at or above `2^63` is a pattern with its sign clear, lifted, and one below it a pattern with its sign set, complemented, and neither map folds two patterns into one below `2^64`, where eight bytes keep every pattern.
+pub let total_key_injective(a: Flt, b: Flt, e: Eq()(total_key(a), total_key(b))) -> Eq()(a, b) =
+    let la: Holds(Bytes/to_nat(to_le_bytes(a)) < 18446744073709551616) =
+        Bytes/to_nat_below(to_le_bytes(a));
+    let lb: Holds(Bytes/to_nat(to_le_bytes(b)) < 18446744073709551616) =
+        Bytes/to_nat_below(to_le_bytes(b));
+    let bits: Eq()(Bytes/to_nat(to_le_bytes(a)), Bytes/to_nat(to_le_bytes(b))) =
+        match Bytes/to_nat(to_le_bytes(a)) >= 9223372036854775808
+        | true =>
+            match Bytes/to_nat(to_le_bytes(b)) >= 9223372036854775808
+            | true =>
+                Nat/le/antisym(
+                    Bytes/to_nat(to_le_bytes(a)),
+                    Bytes/to_nat(to_le_bytes(b)),
+                    True/proved(),
+                    True/proved())
+            | false => match False/refuted() end
+            end
+        | false =>
+            match Bytes/to_nat(to_le_bytes(b)) >= 9223372036854775808
+            | true => match False/refuted() end
+            | false =>
+                Nat/le/antisym(
+                    Bytes/to_nat(to_le_bytes(a)),
+                    Bytes/to_nat(to_le_bytes(b)),
+                    True/proved(),
+                    True/proved())
+            end
+        end;
+    eq_of_le_bytes(a, b, Bytes/to_nat_injective(to_le_bytes(a), to_le_bytes(b), Eq/refl(), bits));
 
 --- The shortest decimal that reads back as `f`, always signed: `+2.5`, `-0`, `+inf`, `-inf`. A NaN writes its sign, its kind and its payload where that is not the kind's own — `+nan`, `-snan`, `+nan(0x5)` — so every NaN reads back as the pattern it is.
 pub let to_str(f: Flt) -> Str =

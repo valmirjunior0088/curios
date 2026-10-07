@@ -1,6 +1,6 @@
 -- `/std/Flt` against IEEE 754-2019: the total order `ord` follows, the decimal text `to_str` writes and `of_str` reads back, and the operations built over the primitives. Each claim a type may depend on is stated twice: as a `let` whose type is the claim, which the kernel checks by reducing it on every build, and as a test that runs it in the compiled program.
-use /std/{Flt, Ordering, List, Str, Option, Eq, Test, State, Spell, Toml, Map, Result, Bool, Hash,
-    Show, Dyadic, Vec};
+use /std/{Flt, Nat, Ordering, List, Str, Option, Eq, Test, State, Spell, Toml, Map, Result, Bool,
+    Hash, Show, Dyadic, Vec};
 use /std/Bool/{True};
 use /std/Flt/{Rounding, rounded, signals, Exceptions, Env, Class};
 
@@ -214,6 +214,61 @@ test ord_is_the_ieee_total_order =
             Ordering/lt(),
             Ordering/lt(),
             Ordering/eq()]);
+
+-- `ord` falls back on the order `Nat/ord` reads through `total_key`, and a type computes both: where the comparisons decide nothing, and where they decide, the two answer alike.
+let _ord_is_the_keys_order_at_the_zeros: Eq()(
+    Flt/ord(-0.0, +0.0),
+    Nat/ord(Flt/total_key(-0.0), Flt/total_key(+0.0))) =
+    Eq/refl();
+
+let _ord_is_the_keys_order_at_the_infinities: Eq()(
+    Flt/ord(+inf.0, -inf.0),
+    Nat/ord(Flt/total_key(+inf.0), Flt/total_key(-inf.0))) =
+    Eq/refl();
+
+let _ord_is_the_keys_order_at_two_nans: Eq()(
+    Flt/ord(-nan.0, +nan.0),
+    Nat/ord(Flt/total_key(-nan.0), Flt/total_key(+nan.0))) =
+    Eq/refl();
+
+let _ord_is_the_keys_order_at_a_nan_and_an_infinity: Eq()(
+    Flt/ord(+nan.0, +inf.0),
+    Nat/ord(Flt/total_key(+nan.0), Flt/total_key(+inf.0))) =
+    Eq/refl();
+
+-- A float is its key, and its bytes: either tells every pattern apart.
+let _two_floats_of_one_key_are_one(
+    a: Flt,
+    b: Flt,
+    e: Eq()(Flt/total_key(a), Flt/total_key(b)),
+) -> Eq()(a, b) =
+    Flt/total_key_injective(a, b, e);
+
+let _two_floats_of_one_encoding_are_one(
+    a: Flt,
+    b: Flt,
+    e: Eq()(Flt/to_le_bytes(a), Flt/to_le_bytes(b)),
+) -> Eq()(a, b) =
+    Flt/eq_of_le_bytes(a, b, e);
+
+-- `ord` is the order `Nat/ord` reads through `total_key`: over the zeros, the infinities, and NaNs of both signs and both kinds, every pair answers alike.
+test ord_is_the_order_of_its_key =
+    let specimens =
+        [
+            Flt/neg(Flt/signaling_nan(+1.0)),
+            -nan.0,
+            -inf.0,
+            -1.5,
+            -0.0,
+            +0.0,
+            +1.5,
+            +inf.0,
+            +nan.0,
+            Flt/signaling_nan(+1.0)];
+    Test/equal(
+        List/concat_map(specimens, (x: Flt) => List/map(specimens, (y: Flt) => Flt/ord(x, y))),
+        List/concat_map(specimens, (x: Flt) =>
+            List/map(specimens, (y: Flt) => Nat/ord(Flt/total_key(x), Flt/total_key(y)))));
 
 -- A sort through `Ord(Flt)` places a NaN and the two zeros the same way whatever order they arrive in, which an order that answered `gt` for a NaN on both sides could not.
 test sort_places_nan_and_zeros_the_same_for_every_arrival_order =

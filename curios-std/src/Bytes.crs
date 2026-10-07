@@ -20,46 +20,53 @@ pub let of_nat(n: Nat) -> Bytes =
 pub let to_nat(b: Bytes) -> Nat =
     match b | x[] => 0 | x[h, .._]; ih => Byte/to_nat(h) + 256 * ih end;
 
--- A number as a base-256 high part and a low digit, with the equation joining them.
---
--- The decomposition `of_nat` recurses on, carried as evidence rather than recomputed. `n / 256` and `n % 256` read off `joined` by the division split alone — the residual is a `Byte`, whose carrier bound is what lets the split fire — so Euclid's recombination below is one substitution and needs no law of its own.
-struct Split(n: Nat): Type {
-    high: Nat,
-    low: Byte,
-    joined: Eq()(n, 256 * high + Byte/to_nat(low)),
-}
-
--- Every number has one, by successor induction.
---
--- The step decides whether the digit has filled. The bump branch discharges its own bound by the arm's refinement, `Holds(d + 1 < 256)` being `Holds(d < 255)` after cancellation; the carry branch is where the digit is known to be `255`, which takes both directions of the order — the half the guard refuted, proved from the guard, and the carrier's own bound for the other.
-let split(n: Nat) -> Split(n) =
-    match n
-    | 0 => Split { high = 0, low = 0, joined = Eq/refl() }
-    | p + 1; prev =>
-        match Byte/to_nat(prev.low) < 255
-        | true =>
-            Split {
-                high = prev.high,
-                low = Nat/to_byte(Byte/to_nat(prev.low) + 1),
-                joined = Eq/cong((x) => x + 1, prev.joined),
-            }
-        | false =>
-            let filled: Eq()(Byte/to_nat(prev.low), 255) =
-                Nat/le/antisym(Byte/to_nat(prev.low), 255, True/qed(), True/proved());
-            Split {
-                high = prev.high + 1,
-                low = 0,
-                joined =
-                    Eq/cong(
-                        (x) => x + 1,
-                        Eq/subst((d) => Eq()(p, 256 * prev.high + d), filled, prev.joined)),
-            }
-        end
+--- The number a run denotes is below `256` to the run's length.
+---
+--- What makes [`to_nat`] a bounded reading, so a fixed-width pattern has a fixed range: a float's eight bytes denote a number below `2^64`.
+pub let to_nat_below(b: Bytes) -> Holds(to_nat(b) < Nat/pow(256, len(b))) =
+    match b: (z) => Holds(to_nat(z) < Nat/pow(256, len(z)))
+    | x[] => True/qed()
+    | x[h, ..t]; ih =>
+        let top: Holds(Byte/to_nat(h) <= 255) = True/qed();
+        let _ = ih;
+        True/proved()
     end;
 
--- Euclid's recombination at the encoding's radix.
-let euclid(n: Nat) -> Eq()(256 * (n / 256) + n % 256, n) =
-    Eq/subst((m) => Eq()(256 * (m / 256) + m % 256, m), Eq/sym(split(n).joined), Eq/refl());
+-- A cons has no length of zero: the comparison that decides the two lengths refutes the equation.
+let no_cons(k: Byte, p: Bytes, e: Eq()(0, len(x[k, ..p]))) -> False =
+    Eq/subst((m: Nat) => Holds(Nat/eql(0, m)), e, True/qed());
+
+--- Two runs of one length that denote one number are one run: [`to_nat`] is injective at a fixed width.
+---
+--- Across lengths it is not, a trailing zero byte adding nothing, which is why [`of_nat`] is the minimal encoding. By induction on both runs: the tails' numbers are the quotients by `256` and the heads the remainders, each of which conversion reads off a byte beside a multiple.
+pub let to_nat_injective(
+    a: Bytes,
+    b: Bytes,
+    same: Eq()(len(a), len(b)),
+    e: Eq()(to_nat(a), to_nat(b)),
+) -> Eq()(a, b) =
+    match a: (z) =>
+        (w: Bytes, same: Eq()(len(z), len(w)), e: Eq()(to_nat(z), to_nat(w))) -> Eq()(z, w)
+    | x[] =>
+        (w, same, _) =>
+            match w
+            | x[] => Eq/refl()
+            | x[k, ..p] => match no_cons(k, p, same) end
+            end
+    | x[h, ..t]; ih =>
+        (w, same, e) =>
+            match w
+            | x[] => match no_cons(h, t, Eq/sym(same)) end
+            | x[k, ..p] =>
+                let tails: Eq()(to_nat(t), to_nat(p)) = Eq/cong((n: Nat) => n / 256, e);
+                let heads: Eq()(h, k) = Eq/cong((n: Nat) => Nat/to_byte(n % 256), e);
+                let lens: Eq()(len(t), len(p)) = Eq/cong((n: Nat) => n - 1, same);
+                let rest: Eq()(t, p) = ih(p, lens, tails);
+                Eq/trans(
+                    Eq/cong((y: Byte) => x[y, ..t], heads),
+                    Eq/cong((q: Bytes) => x[k, ..q], rest))
+            end
+    end(b, same, e);
 
 -- The recursion `of_nat` performs terminates, which is what lets injectivity recurse the same way.
 let high_below(n: Nat, positive: Holds(0 < n)) -> Holds(n / 256 < n) =
@@ -148,7 +155,7 @@ pub let of_nat_injective(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq
                                             256 * x + (np + 1) % 256),
                                     highs,
                                     Eq/refl()));
-                        Eq/trans(Eq/sym(euclid(np + 1)), Eq/trans(rejoined, euclid(dq + 1)))
+                        rejoined
                     end
                 end,
         a,

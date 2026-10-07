@@ -67,3 +67,17 @@ test packed_orders_compare_by_prefix_then_by_atom =
         Test/equal(Bits/ord(b[0, 1], b[0, 1]), Ordering/eq()),
         Test/equal(Str/ord("ab", "b"), Ordering/lt()),
         Test/equal(Str/ord("b", "ab"), Ordering/gt())]);
+
+-- A run of bytes read as a number: bounded by its width, and injective at one width.
+let _a_run_denotes_a_number_below_its_width(
+    b: Bytes,
+) -> Bool/Holds(Bytes/to_nat(b) < Nat/pow(256, Bytes/len(b))) =
+    Bytes/to_nat_below(b);
+
+let _two_runs_of_one_length_and_one_number_are_one(
+    a: Bytes,
+    b: Bytes,
+    same: Eq()(Bytes/len(a), Bytes/len(b)),
+    e: Eq()(Bytes/to_nat(a), Bytes/to_nat(b)),
+) -> Eq()(a, b) =
+    Bytes/to_nat_injective(a, b, same, e);

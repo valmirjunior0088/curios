@@ -59,7 +59,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Arithmetic
 
-- [ ] [Numeric laws](roadmap/04-arithmetic/03-numeric-laws.md) — `Flt`'s identity as bits is unstated: that `to_le_bytes` is injective, and that the natural `ord` falls back on tells every pattern apart
+- [ ] [Numeric laws](roadmap/04-arithmetic/03-numeric-laws.md) — every stage has landed, and the specification stands until what cites it is moved to the modules
 - [ ] [Exact rationals and their laws](roadmap/04-arithmetic/04-exact-rationals.md) — no canonical rational library, executable binary64 conversions, exact decimals or library proofs
 - [ ] [Alternate floating-point exception handling](roadmap/04-arithmetic/05-flt-exception-handling.md) — IEEE 754's remaining §8 policies, and per-operation substitution and recording
 - [ ] [Correctly rounded elementary functions](roadmap/04-arithmetic/06-flt-elementary-functions.md) — the §9.2 functions are absent, and fuel and exhaustion need a contract

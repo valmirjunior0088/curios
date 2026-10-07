@@ -14,7 +14,6 @@ It waits on no other spec.
 
 ## The gap
 
-- **`Flt`'s identity as bits is unstated**: that `to_le_bytes` is injective, and that the natural `ord` falls back on tells every pattern apart.
 
 ## Prior art
 
@@ -37,14 +36,6 @@ It waits on no other spec.
 ## Stages
 
 Each lands alone and is one commit.
-
-**Stage 5 — `Flt`'s bits.** No stage of exact rationals needs it; it is where [the binary64 conversion proofs](07-binary64-conversion-proofs.md) and a decision on `Key(Flt)` start.
-
-- `/std/Bytes/to_nat` is injective on runs of one length, and below `pow(256, len)`.
-- `Flt/to_le_bytes` is injective.
-- `Flt/total_key` is public and injective, so the order `Nat/ord` reads through it is total and agrees with `Eq` by stage 4's laws. `ord`'s documentation names it as the order `ord` computes.
-
-Check: `curios-std`'s `flt` unit holds `ord` to the key's order at the zeros, the infinities and NaNs of both signs and kinds.
 
 ## Closed where it is used
 
