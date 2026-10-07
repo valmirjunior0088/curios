@@ -85,24 +85,23 @@ let kitty(code: Nat) -> Option(Code) =
     | _ => Option/map(Char/of_nat(code), Code/char)
     end;
 
---- The parameters of the control sequence whose parameter bytes begin at `i`, its final byte and where it ends, or `none` when the chunk ends first. Parameters read as ECMA-48 reads them: digits accumulate from zero, and an empty one before a separator stands for 1. An empty last one is left out, for the reader of each final byte to default.
-let parameters(b: Bytes, i: Nat) -> Option({nums: List(Nat), final: Nat, next: Nat}) =
+--- The parameters of the control sequence whose parameter bytes begin at `i`, its final byte and where it ends, or `none` when the chunk ends first. Parameters read as ECMA-48 reads them: digits accumulate from zero, and an empty one is `none`, its default being each control function's to state. An empty last one is left out.
+let parameters(b: Bytes, i: Nat) -> Option({nums: List(Option(Nat)), final: Nat, next: Nat}) =
     let go(
         j: Nat,
         current: Option(Nat),
-        nums: List(Nat),
-    ) -> Option({nums: List(Nat), final: Nat, next: Nat}) =
+        nums: List(Option(Nat)),
+    ) -> Option({nums: List(Option(Nat)), final: Nat, next: Nat}) =
         match at(b, j)
         | none() => Option/none()
         | some(n) =>
             choose
             | Nat/in_range(n, '0', '9') =>
                 go(j + 1, Option/some(Option/unwrap_or(current, 0) * 10 + (n - '0')), nums)
-            | n == ';' || n == ':' =>
-                go(j + 1, Option/none(), [Option/unwrap_or(current, 1), ..nums])
+            | n == ';' || n == ':' => go(j + 1, Option/none(), [current, ..nums])
             | Nat/in_range(n, 0x20, 0x3F) => go(j + 1, current, nums)
             | Nat/in_range(n, 0x40, 0x7E) =>
-                let all = match current | some(k) => [k, ..nums] | none() => nums end;
+                let all = match current | some(_) => [current, ..nums] | none() => nums end;
                 Option/some((nums = List/reverse(all), final = n, next = j + 1))
             | _ => Option/none()
             end
@@ -172,19 +171,23 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
     let csi(i: Nat, j: Nat) -> Step(E) =
         match parameters(input, j)
         | none() => Step/cut()
-        -- An omitted parameter is 1, ECMA-48's default for these sequences: no modifiers, and the first key of the `~` table.
+        -- An omitted modifier is 1, no modifiers; the key a `~` or a `u` names has no default, both being private finals.
         | some(p) =>
-            let m = Option/unwrap_or(List/try_get(p.nums, 1), 1);
+            let parameter(k: Nat) -> Option(Nat) = Option/flatten(List/try_get(p.nums, k));
+            let m = Option/unwrap_or(parameter(1), 1);
             choose
             | p.final == '~' =>
-                let n = Option/unwrap_or(List/try_get(p.nums, 0), 1);
-                choose
-                | n == 200 => paste(i, p.next)
-                | some(code) = tilde(n) => Step/emit(key(modified(code, m)), p.next)
-                | _ => Step/emit(Option/none(), p.next)
+                match parameter(0)
+                | none() => Step/emit(Option/none(), p.next)
+                | some(n) =>
+                    choose
+                    | n == 200 => paste(i, p.next)
+                    | some(code) = tilde(n) => Step/emit(key(modified(code, m)), p.next)
+                    | _ => Step/emit(Option/none(), p.next)
+                    end
                 end
             | p.final == 'u' =>
-                match Option/bind(List/try_get(p.nums, 0), kitty)
+                match Option/bind(parameter(0), kitty)
                 | some(code) => Step/emit(key(modified(code, m)), p.next)
                 | none() => Step/emit(Option/none(), p.next)
                 end

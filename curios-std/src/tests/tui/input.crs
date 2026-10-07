@@ -63,6 +63,16 @@ test the_kitty_form_reads_the_code_and_modifiers =
 test a_kitty_sequence_without_a_code_names_no_key =
     Test/equal(keys(x[0x1B, '[', 'u', 'q']), [k(Code/char('q'))]);
 
+-- The `~` form names its key by its first parameter too, and an empty parameter before a separator is as absent as one left out: neither form reads it as 1.
+test a_sequence_whose_key_parameter_is_empty_names_no_key =
+    Test/equal(
+        keys(x[0x1B, '[', '~', 0x1B, '[', ';', '5', '~', 0x1B, '[', ';', '5', 'u', 'q']),
+        [k(Code/char('q'))]);
+
+-- A cursor key is named by its final byte, so its modifier is read past a first parameter left empty.
+test a_cursor_key_reads_its_modifier_past_an_empty_parameter =
+    Test/equal(keys(x[0x1B, '[', ';', '5', 'A']), [Event/key(Key/with_ctrl(Code/up()))]);
+
 test an_escape_before_a_printable_byte_is_alt =
     Test/equal(keys(x[0x1B, 'x']), [Event/key(Key/with_alt(Code/char('x')))]);
 
