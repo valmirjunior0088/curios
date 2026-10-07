@@ -228,6 +228,15 @@ pub(crate) enum Relation {
     Below,
 }
 
+/// Which side of a problem at below a metavariable stands on: the direction a level of its own is bounded in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Standing {
+    /// `?m ≤ t`: the metavariable is the lower side.
+    Under,
+    /// `t ≤ ?m`: the metavariable is the upper side.
+    Over,
+}
+
 /// One conversion constraint, `this ≡ that : type_`, or `this ≤ that` between two types (comparison is type-directed: the type drives η-expansion and proof irrelevance). Public because a [`Outcome::Blocked`] verdict surrenders its still-blocked problems to the caller, which parks them on the [`Context`] (as `ParkedWork::Conversion`) for retry once a watched metavariable is solved.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct Problem {
@@ -1828,6 +1837,7 @@ impl Convert {
         flex: &Term,
         rigid: &Term,
         rigid_raw: &Term,
+        standing: Option<Standing>,
     ) -> Result<Option<Solved>, ReduceError> {
         let Subterm::Apply(apply) = &**flex else {
             return Ok(None);
@@ -1848,16 +1858,32 @@ impl Convert {
             return Ok(None);
         };
 
-        let binders = domains
-            .iter()
-            .map(|(_, binder, _)| Term::free_var(binder))
-            .collect::<Vec<_>>();
-        let body = rigid
-            .capture(&variables.iter().collect::<Vec<_>>())
-            .release(&binders.iter().collect::<Vec<_>>());
-        let candidate = Term::func_marked(domains, body);
+        // The body at levels of its own where the pair is asked at below, as a bare metavariable's candidate is ([`Self::sorts_of_its_own`]), minted in the transaction that offers it.
+        let mark = context.solution_mark();
+        let own = match standing {
+            Some(standing) => self.sorts_of_its_own(context, &metavar, rigid, standing),
+            None => Ok(None),
+        };
+        let solved = own.and_then(|own| {
+            let binders = domains
+                .iter()
+                .map(|(_, binder, _)| Term::free_var(binder))
+                .collect::<Vec<_>>();
+            let body = own
+                .as_ref()
+                .unwrap_or(rigid)
+                .capture(&variables.iter().collect::<Vec<_>>())
+                .release(&binders.iter().collect::<Vec<_>>());
+            let candidate = Term::func_marked(domains, body);
 
-        self.solve(context, &metavar, &candidate).map(Some)
+            self.solve(context, &metavar, &candidate)
+        });
+        if !matches!(solved, Ok(Solved::Done)) {
+            context.rollback_solutions(mark);
+        }
+        context.end_solutions(mark);
+
+        solved.map(Some)
     }
 
     /// Flex-apply imitation — the restricted higher-order rule: for `?m(a₁ … aₖ) ≡ T(p̄ ++ ī)` where `T` is a nominal (inductive or struct) type constructor or a unary intrinsic type former (`List`, `Cell`), commit the *imitation* solution `?m := λx₁…xₖ. T(x₁, …, xₖ)` and equate arguments pairwise. This is what unifies `?M(?A) ≡ Option(Nat)` for higher-kinded concepts — the same commitment Lean's first-order approximation and Agda's constructor-headed unification make.
@@ -2043,16 +2069,25 @@ impl Convert {
         Ok(fresh)
     }
 
-    /// [`Self::solve`] with a candidate read off a problem's rigid side, a family among them taken at an occurrence of its own ([`Self::family_at_its_own_occurrence`]). The occurrence is minted and the candidate offered in one transaction, as an imitated family's is, so one `solve` postpones or refuses leaves no occurrence standing with no term to hold it.
+    /// [`Self::solve`] with a candidate read off a problem's rigid side, at levels of its own: a family among them taken at an occurrence of its own ([`Self::family_at_its_own_occurrence`]), and, where the problem is asked at below, a side that ends in a `Type` taken with that sort at a level of its own ([`Self::sorts_of_its_own`]). The levels are minted and the candidate offered in one transaction, so one `solve` postpones or refuses leaves no level standing with no term to hold it.
     fn solve_rigid(
         &mut self,
         context: &mut Context,
         metavar: &Metavar,
         candidate: &Term,
+        standing: Option<Standing>,
     ) -> Result<Solved, ReduceError> {
         let mark = context.solution_mark();
-        let family = match Self::family_at_its_own_occurrence(context, candidate) {
-            Ok(Some(family)) => family,
+        let own = match standing {
+            Some(standing) => self.sorts_of_its_own(context, metavar, candidate, standing),
+            None => Ok(None),
+        };
+        let own = match own {
+            Ok(None) => Self::family_at_its_own_occurrence(context, candidate),
+            decided => decided,
+        };
+        let own = match own {
+            Ok(Some(own)) => own,
             Ok(None) => {
                 context.end_solutions(mark);
                 return self.solve(context, metavar, candidate);
@@ -2064,12 +2099,74 @@ impl Convert {
             }
         };
 
-        let solved = self.solve(context, metavar, &family);
+        let solved = self.solve(context, metavar, &own);
         if !matches!(solved, Ok(Solved::Done)) {
             context.rollback_solutions(mark);
         }
         context.end_solutions(mark);
         solved
+    }
+
+    /// `term` with each `Type` it ends in at a level of its own, where it ends in one: a sort, or a function type whose codomain ends in one, each read forced as the relation reads it. `None` where it ends in anything else, and the candidate is then the term as it stands.
+    ///
+    /// A metavariable met at below is held to an inequality, and the other side's own sort is only the nearest solution of it. Solved to that, `S` in `both(@S, f: (Bool) -> S, g: (Bool) -> S)` is the first argument's sort and the second is held to it: the call is admitted in one order and refused in the other, and a declaration that makes it bounds its own callers by that order. The fresh level is bounded by the one it copies in the problem's direction, so the problem holds as asked and a later bound moves the copy alone, the declaration's closing taking the join. It stands for the `Type` the program would have written at the implicit and takes that level's provenance ([`UniverseSolver::fresh_beside`](crate::UniverseSolver::fresh_beside)), so the call elaborates to what it does with `@Type` written. Rocq's `refresh_universes` gives an evar met under cumulativity the same copy, for a universe that cannot move.
+    ///
+    /// Each reading is under the refinements `metavar` was born under and no others, for the reason [`Self::solve_at_birth`] gives. The caller holds the transaction: a level minted and bounded here goes with a candidate `solve` does not commit.
+    fn sorts_of_its_own(
+        &mut self,
+        context: &mut Context,
+        metavar: &Metavar,
+        term: &Term,
+        standing: Standing,
+    ) -> Result<Option<Term>, ReduceError> {
+        let birth = context
+            .metavar_entry(metavar.id)
+            .map(|entry| entry.refinements.clone());
+        let forced = match &birth {
+            Some(birth) => {
+                context.with_refinements(birth, |context| reduce_forced(context, term.clone()))?
+            }
+            None => reduce_forced(context, term.clone())?,
+        };
+
+        match &*forced {
+            Subterm::Type(level) => {
+                let origin = UniverseConstraintOrigin {
+                    span: self.span.clone(),
+                    kind: UniverseConstraintKind::Cumulativity,
+                    declaration: None,
+                    binder: None,
+                };
+                let own = context
+                    .fresh_universe_beside(level, Some(origin.clone()))
+                    .map_err(ReduceError::Universe)?;
+                let (lower, upper) = match standing {
+                    Standing::Over => (level.clone(), own.clone()),
+                    Standing::Under => (own.clone(), level.clone()),
+                };
+                context
+                    .universes_mut()
+                    .add_leq(lower, upper, origin)
+                    .map_err(ReduceError::Universe)?;
+
+                Ok(Some(Term::type_at(own)))
+            }
+            Subterm::FuncType(FuncType { telescope }) => {
+                let mut binders = Vec::with_capacity(telescope.len());
+                let mut cursor = telescope.cursor();
+                while let Some((_, domain)) = cursor.entry() {
+                    let mark = cursor.mark().expect("a mark stands at an entry");
+                    let binder = cursor.advance_fresh(|hint| context.fresh(hint));
+                    binders.push((mark, binder, domain));
+                }
+                let codomain = cursor.body().expect("a cursor past every entry");
+
+                Ok(self
+                    .sorts_of_its_own(context, metavar, &codomain, standing)?
+                    .map(|own| Term::func_type_marked(binders, own)))
+            }
+            _ => Ok(None),
+        }
     }
 
     /// `term` at an occurrence of the family's own ([`Self::occurrence_of`]) where it is a family, and `None` where it is anything else or stands at such an occurrence already. A family arrives in three spellings: its name with no argument, the bare projection of its group, which is the name as reduction spells it, and a lambda over a nominal type, each family among that type's parameters taken the same way.
@@ -2177,24 +2274,27 @@ impl Convert {
         metavar: &Metavar,
         rigid: &Term,
         rigid_raw: &Term,
+        standing: Option<Standing>,
     ) -> Result<Solved, ReduceError> {
         let birth = match context.metavar_entry(metavar.id) {
             Some(entry) => entry.refinements.clone(),
             // No birth record: `solve` refuses it, as it refuses any.
-            None => return self.solve_rigid(context, metavar, rigid),
+            None => return self.solve_rigid(context, metavar, rigid, standing),
         };
 
         if context.refinements_are(&birth) {
             // A rigid side whose reduction only unfolded a name into a stuck form — `double(n)` to the folded call's neutral — is committed as written when that passes every check, and falls back to the reduced spelling on any other verdict, so no equation the reduced spelling decides is lost. Reduction takes the name straight back to the same neutral, so nothing downstream can tell the two solutions apart; what differs is the spelling a report materializes, which keeps the name instead of the whole recursive group, and the Core term the kernel receives, which carries the call instead of an inlined copy of the group.
             let stalled = stalled_unfolding(rigid_raw, rigid);
-            if stalled && let Solved::Done = self.solve_rigid(context, metavar, rigid_raw)? {
+            if stalled
+                && let Solved::Done = self.solve_rigid(context, metavar, rigid_raw, standing)?
+            {
                 return Ok(Solved::Done);
             }
 
             // A reduct need not re-check where what it was reduced from does. Typing a match reads its scrutinee's type as spelled, and a reduct that inlined a definition's absurd arm — `hop`'s `match some end`, typed there because the arm refines the variable `b` — spells that type afresh from the substituted scrutinee, where no equation reaches it, and re-validation refuses it; the kernel reads a match's scrutinee type the same way. A refused reduct is therefore tried as written before the problem fails, unless the rule above already tried that spelling — which can only turn a refusal into a solution. `implicit_tests`' `a_solution_whose_reduct_does_not_recheck_is_committed_as_written` is the program.
-            return Ok(match self.solve_rigid(context, metavar, rigid)? {
+            return Ok(match self.solve_rigid(context, metavar, rigid, standing)? {
                 Solved::Failed if !stalled && rigid_raw != rigid => {
-                    match self.solve_rigid(context, metavar, rigid_raw)? {
+                    match self.solve_rigid(context, metavar, rigid_raw, standing)? {
                         Solved::Done => Solved::Done,
                         Solved::Postponed | Solved::Failed => Solved::Failed,
                     }
@@ -2208,7 +2308,7 @@ impl Convert {
 
         // The refinements beyond the birth's made no difference for this term: the unguarded path, hard verdicts included.
         if at_birth == *rigid {
-            return self.solve_rigid(context, metavar, rigid);
+            return self.solve_rigid(context, metavar, rigid, standing);
         }
 
         // The spelling at birth is itself flexible — only the other refinements made the side look rigid. Undecided.
@@ -2216,11 +2316,13 @@ impl Convert {
             return Ok(Solved::Postponed);
         }
 
-        Ok(match self.solve_rigid(context, metavar, &at_birth)? {
-            Solved::Done => Solved::Done,
-            // A verdict the spelling at birth cannot reach (out of scope, ill-typed at the birth context) is not a hard failure of the problem — the spelling in view may still discharge it once the metavariable is pinned elsewhere.
-            Solved::Postponed | Solved::Failed => Solved::Postponed,
-        })
+        Ok(
+            match self.solve_rigid(context, metavar, &at_birth, standing)? {
+                Solved::Done => Solved::Done,
+                // A verdict the spelling at birth cannot reach (out of scope, ill-typed at the birth context) is not a hard failure of the problem — the spelling in view may still discharge it once the metavariable is pinned elsewhere.
+                Solved::Postponed | Solved::Failed => Solved::Postponed,
+            },
+        )
     }
 
     fn outcome(&mut self, context: &mut Context) -> Result<Outcome, ReduceError> {
@@ -2363,7 +2465,8 @@ impl Convert {
                         self.blocked.push(raw_problem(&type_));
                         continue;
                     }
-                    match self.solve_at_birth(context, &metavar, &that, &that_raw)? {
+                    let standing = (relation == Relation::Below).then_some(Standing::Under);
+                    match self.solve_at_birth(context, &metavar, &that, &that_raw, standing)? {
                         Solved::Done => continue,
                         Solved::Postponed => {
                             self.blocked.push(raw_problem(&type_));
@@ -2377,7 +2480,8 @@ impl Convert {
                         self.blocked.push(raw_problem(&type_));
                         continue;
                     }
-                    match self.solve_at_birth(context, &metavar, &this, &this_raw)? {
+                    let standing = (relation == Relation::Below).then_some(Standing::Over);
+                    match self.solve_at_birth(context, &metavar, &this, &this_raw, standing)? {
                         Solved::Done => continue,
                         Solved::Postponed => {
                             self.blocked.push(raw_problem(&type_));
@@ -2464,8 +2568,12 @@ impl Convert {
 
             // A metavariable applied to distinct bound variables has one solution, the other side abstracted over them, and it is taken ahead of every rule that would guess at one. A candidate that cannot be committed yet waits, as a bare metavariable's does: no other rule's answer is this pair's.
             let mut abstracted = None;
-            for (flex, rigid, rigid_raw) in [(&this, &that, &that_raw), (&that, &this, &this_raw)] {
-                match self.abstract_flex_apply(context, flex, rigid, rigid_raw)? {
+            for (flex, rigid, rigid_raw, standing) in [
+                (&this, &that, &that_raw, Standing::Under),
+                (&that, &this, &this_raw, Standing::Over),
+            ] {
+                let standing = (relation == Relation::Below).then_some(standing);
+                match self.abstract_flex_apply(context, flex, rigid, rigid_raw, standing)? {
                     Some(Solved::Done) => {
                         abstracted = Some(Solved::Done);
                         break;

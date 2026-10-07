@@ -178,3 +178,54 @@ fn a_pair_that_is_no_sort_and_no_function_type_is_the_equation_it_was() {
 
     assert_eq!(run(source), b"ok");
 }
+
+// A sort an implicit is left to is no first argument's: `S` is a level of its own over both, in either order, in a call, a list literal and a match's arms.
+#[test]
+fn a_sort_left_to_an_implicit_is_held_by_no_argument() {
+    let source = r#"
+        use /std/{Bool, Nat, List, print};
+
+        let both(@S: Type, f: (Bool) -> S, g: (Bool) -> S) -> Nat = 0;
+        let fam(b: Bool) -> Type = Nat;
+        let fam1(b: Bool) -> Type = Type;
+
+        let high_first: Nat = both(fam1, fam);
+        let low_first: Nat = both(fam, fam1);
+
+        let listed_high_first = [Type, Nat];
+        let listed_low_first = [Nat, Type];
+
+        let arms(b: Bool) -> Nat =
+            let high = match b | true => Type | false => Nat end;
+            let low = match b | true => Nat | false => Type end;
+            0;
+
+        let _ = high_first + low_first + arms(true);
+        let _ = listed_high_first;
+        let _ = listed_low_first;
+        print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
+// A declaration keeps no argument order in its scheme: `outer` bounds its caller's level by nothing `both` was not asked, so a family two levels up passes whichever way the body wrote the call.
+#[test]
+fn a_declaration_keeps_no_argument_order_in_its_scheme() {
+    let source = r#"
+        use /std/{Bool, Nat, Eq, print};
+
+        let both(@S: Type, f: (Bool) -> S, g: (Bool) -> S) -> Nat = 0;
+        let fam1(b: Bool) -> Type = Type;
+        let fam2(b: Bool) -> Type = {K: Type, same: Eq()(K, Type)};
+
+        let family_last(f: (Bool) -> Type) -> Nat = both(fam1, f);
+        let family_first(f: (Bool) -> Type) -> Nat = both(f, fam1);
+        let written(f: (Bool) -> Type) -> Nat = both(@Type, fam1, f);
+
+        let _ = family_last(fam2) + family_first(fam2) + written(fam2);
+        print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}

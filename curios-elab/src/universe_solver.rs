@@ -561,6 +561,19 @@ impl UniverseSolver {
         id
     }
 
+    /// Mint a level that stands for `beside` at an occurrence of its own: with the provenance of the level `beside` is, where it is one level, and an invented classifier's otherwise. A copy of a chosen level is a level a caller chooses, as the `Type` written in its place would be; a copy of a constant or of a maximum is nobody's until a position holds it.
+    pub fn fresh_beside(
+        &mut self,
+        beside: &Level,
+        origin: Option<UniverseConstraintOrigin>,
+    ) -> Result<UniverseMetaId, UniverseError> {
+        let provenance = bare_meta(&self.zonk(beside)?)
+            .and_then(|meta| self.provenance(meta))
+            .unwrap_or(Provenance::Inferred);
+
+        Ok(self.mint(provenance, origin))
+    }
+
     fn provenance(&self, meta: UniverseMetaId) -> Option<Provenance> {
         self.metas.get(meta.0).map(|entry| entry.provenance)
     }

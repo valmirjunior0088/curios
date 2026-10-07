@@ -1,7 +1,7 @@
 //! Which of a declaration's levels its callers choose, and where every other one lands.
 
 use {
-    super::test_support::{definition_variances, universe_parameters},
+    super::test_support::{definition_variances, signatures, universe_parameters},
     crate::tests::{run, typecheck},
 };
 
@@ -522,4 +522,41 @@ fn a_type_former_is_sized_by_its_parts_as_they_are_written() {
         "#;
 
     assert_eq!(run(source), b"sized");
+}
+
+// A sort an implicit is left to closes as the `Type` written at it does. A call that leaves the implicit out elaborates to the scheme its written twin has, in a signature over two type binders, in a signature over closed types, and in a body that answers a type: the sort is a level of its own over what it met, with the provenance of the level it copies, where solved by the equation it was the first argument's sort.
+#[test]
+fn a_sort_left_to_an_implicit_closes_as_the_type_written_there() {
+    let source = r#"
+        use /std/{Eq, Nat, Bool};
+        let lemma_inferred(A: Type, B: Type, p: Eq()(A, B)) -> Nat = 0;
+        let lemma_written(A: Type, B: Type, p: Eq(@Type)(A, B)) -> Nat = 0;
+        let stated_inferred(p: Eq()(Nat, Bool)) -> Nat = 0;
+        let stated_written(p: Eq(@Type)(Nat, Bool)) -> Nat = 0;
+        let answered_inferred: Prop = Eq()(Nat, Bool);
+        let answered_written: Prop = Eq(@Type)(Nat, Bool);
+        /std/print("twins")
+        "#;
+
+    let signatures = signatures(source);
+    let parameters = universe_parameters(source);
+
+    for twin in ["lemma", "stated", "answered"] {
+        let (inferred, written) = (format!("/{twin}_inferred"), format!("/{twin}_written"));
+        assert_eq!(
+            signatures.get(&inferred),
+            signatures.get(&written),
+            "{signatures:?}"
+        );
+        assert_eq!(
+            parameters.get(&inferred),
+            parameters.get(&written),
+            "{parameters:?}"
+        );
+    }
+    assert_eq!(
+        parameters.get("/lemma_inferred"),
+        Some(&1),
+        "{parameters:?}"
+    );
 }

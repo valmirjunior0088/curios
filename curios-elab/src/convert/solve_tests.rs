@@ -1277,3 +1277,85 @@ fn a_goal_parked_at_equal_resumes_at_equal() {
 
     assert!(context.drain_parked().is_err());
 }
+
+// === A metavariable met at below ============================================
+
+// `Type 0 ≤ ?0` solves `?0` to a `Type` at a level of its own over zero, so `Type 1 ≤ ?0` still holds and the levels close. Solved by the equation, `?0` is `Type 0` and the second bound is refused.
+#[test]
+fn a_metavariable_met_at_a_type_from_below_takes_a_level_of_its_own() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(2)));
+
+    let small = Term::type_ground();
+    let large = Term::type_at(Level::constant(1));
+    assert!(matches!(
+        subsume_outcome(&mut context, &small, &Term::hole(0), None),
+        Ok(Outcome::Converts)
+    ));
+    assert!(matches!(
+        subsume_outcome(&mut context, &large, &Term::hole(0), None),
+        Ok(Outcome::Converts)
+    ));
+    assert!(context.universes_mut().finalize([], [], []).is_ok());
+}
+
+// Control: the same two bounds with the first an equation.
+#[test]
+fn a_metavariable_met_at_a_type_as_an_equation_is_that_type() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(2)));
+
+    let small = Term::type_ground();
+    let large = Term::type_at(Level::constant(1));
+    assert_eq!(conv(&mut context, &small, &Term::hole(0)), Ok(true));
+    let second = subsume_outcome(&mut context, &large, &Term::hole(0), None);
+    let closed = context.universes_mut().finalize([], [], []);
+    assert!(
+        !matches!(second, Ok(Outcome::Converts)) || closed.is_err(),
+        "{second:?} {closed:?}"
+    );
+}
+
+// The metavariable below: `?0 ≤ Type 1` solves `?0` to a `Type` at a level of its own under one, so `?0 ≤ Type 0` still holds.
+#[test]
+fn a_metavariable_met_at_a_type_from_above_takes_a_level_of_its_own() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(2)));
+
+    let small = Term::type_ground();
+    let large = Term::type_at(Level::constant(1));
+    assert!(matches!(
+        subsume_outcome(&mut context, &Term::hole(0), &large, None),
+        Ok(Outcome::Converts)
+    ));
+    assert!(matches!(
+        subsume_outcome(&mut context, &Term::hole(0), &small, None),
+        Ok(Outcome::Converts)
+    ));
+    assert!(context.universes_mut().finalize([], [], []).is_ok());
+}
+
+// A function type's codomain is the position: `(x: Nat) -> Type 0 ≤ ?0` then `(x: Nat) -> Type 1 ≤ ?0`.
+#[test]
+fn a_function_type_met_from_below_takes_its_codomain_at_a_level_of_its_own() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(2)));
+    let family = |context: &mut Context, level: u32| {
+        Term::func_type(
+            [(context.fresh(Some("x")), nat_type())],
+            Term::type_at(Level::constant(level)),
+        )
+    };
+
+    let small = family(&mut context, 0);
+    let large = family(&mut context, 1);
+    assert!(matches!(
+        subsume_outcome(&mut context, &small, &Term::hole(0), None),
+        Ok(Outcome::Converts)
+    ));
+    assert!(matches!(
+        subsume_outcome(&mut context, &large, &Term::hole(0), None),
+        Ok(Outcome::Converts)
+    ));
+    assert!(context.universes_mut().finalize([], [], []).is_ok());
+}

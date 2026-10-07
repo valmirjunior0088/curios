@@ -2489,6 +2489,17 @@ impl Context {
         Level::meta(meta)
     }
 
+    /// A fresh level standing for `beside` at an occurrence of its own ([`UniverseSolver::fresh_beside`]).
+    pub(crate) fn fresh_universe_beside(
+        &mut self,
+        beside: &Level,
+        origin: Option<UniverseConstraintOrigin>,
+    ) -> Result<Level, UniverseError> {
+        self.universes_mut()
+            .fresh_beside(beside, origin)
+            .map(Level::meta)
+    }
+
     pub(crate) fn fresh_classifier_type(&mut self, kind: &str) -> Term {
         let level = self.fresh_universe(
             UniverseRole::Flexible,
