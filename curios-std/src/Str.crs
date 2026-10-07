@@ -499,6 +499,7 @@ pub let join(sep: Str, parts: List(Str)) -> Str =
         (i, ok) => List/get(@Str, parts, i, @ok),
         (l, r) => concat(concat(l, sep), r));
 
+-- That the walk has not gone back goes down with the position, here and in `occurrence`, so the recursion is a tail call and a character passed keeps no frame.
 --- Where `s` holds `piece` from `from` on, stepping both a character at a time from `p`: the position past it, which is not before `from`, or `none`.
 let meets(
     s: Str,
@@ -507,26 +508,24 @@ let meets(
     p: At(piece),
 ) -> Option({past: At(s), reach: Holds(from.offset <= past.offset)}) =
     At/forward(
-        (at) => (p: At(piece)) -> Option({past: At(s), reach: Holds(at.offset <= past.offset)}),
+        (at) =>
+            (p: At(piece), reached: Holds(from.offset <= at.offset)) -> Option(
+                {past: At(s), reach: Holds(from.offset <= past.offset)}),
         (at, again) =>
-            (p) =>
+            (p, reached) =>
                 match At/try_next(piece, p)
-                | none() => Option/some((past = at, reach = Nat/le/refl(at.offset)))
+                | none() => Option/some((past = at, reach = reached))
                 | some(want) =>
                     match At/try_next(s, at)
                     | some(have) =>
                         match have.char == want.char
-                        | true =>
-                            match again(have.past, have.progress)(want.past)
-                            | some(met) => Option/some((past = met.past, reach = True/proved()))
-                            | none() => Option/none()
-                            end
+                        | true => again(have.past, have.progress)(want.past, True/proved())
                         | false => Option/none()
                         end
                     | none() => Option/none()
                     end
                 end,
-        from)(p);
+        from)(p, Nat/le/refl(from.offset));
 
 --- Where `piece` follows `from` in `s`: the position past it, which is not before `from`, or `none` when `s` does not hold it there.
 pub let follows(
@@ -605,42 +604,35 @@ let occurrence(
                 first.progress,
                 first.past.within));
     At/forward(
-        (at) => Option(Found(s, at)),
+        (at) => (reached: Holds(from.offset <= at.offset)) -> Option(Found(s, from)),
         (at, again) =>
-            match at.offset < Bytes/len(s.bytes)
-            | false => Option/none()
-            | true =>
-                let onward = At/skip(s, at);
-                let later() -> Option(Found(s, at)) =
-                    match again(onward.past, onward.progress)
-                    | some(found) =>
-                        Option/some((
-                            start = found.start,
-                            past = found.past,
-                            ordered = True/proved(),
-                            progress = found.progress))
-                    | none() => Option/none()
-                    end;
-                match Bytes/get(s.bytes, at.offset) == lead_byte
-                | false => later()
+            (reached) =>
+                match at.offset < Bytes/len(s.bytes)
+                | false => Option/none()
                 | true =>
-                    let have = At/next(s, at);
-                    match have.char == first.char
+                    let onward = At/skip(s, at);
+                    let later() -> Option(Found(s, from)) =
+                        again(onward.past, onward.progress)(True/proved());
+                    match Bytes/get(s.bytes, at.offset) == lead_byte
                     | false => later()
                     | true =>
-                        match meets(s, have.past, needle, first.past)
-                        | some(met) =>
-                            Option/some((
-                                start = at,
-                                past = met.past,
-                                ordered = Nat/le/refl(at.offset),
-                                progress = True/proved()))
-                        | none() => later()
+                        let have = At/next(s, at);
+                        match have.char == first.char
+                        | false => later()
+                        | true =>
+                            match meets(s, have.past, needle, first.past)
+                            | some(met) =>
+                                Option/some((
+                                    start = at,
+                                    past = met.past,
+                                    ordered = reached,
+                                    progress = True/proved()))
+                            | none() => later()
+                            end
                         end
                     end
-                end
-            end,
-        from);
+                end,
+        from)(Nat/le/refl(from.offset));
 
 --- The first occurrence of `needle` in `s`: where it starts and the position past it, or `none`. An empty needle occurs at the start.
 let first_occurrence(s: Str, needle: Str) -> Option({start: At(s), past: At(s)}) =

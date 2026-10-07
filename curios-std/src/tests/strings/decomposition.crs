@@ -98,6 +98,34 @@ test escape_replaces_chosen_characters_and_copies_the_runs_between =
             Str/escape("héllo", (_) => Option/none())]),
         "\\\"aEURb😀\\\"|EUREUR||héllo");
 
+-- Where `needle` first lies in `text`, as a byte offset. The text is a parameter, so no type holds the characters a test hands over.
+let sought(text: Str, needle: Str) -> Str =
+    match Str/index_of_substr(text, needle)
+    | some(at) => Nat/to_str(at.offset)
+    | none() => "none"
+    end;
+
+-- `s` beside itself `times` times over, so twenty-four concatenations build a text of `2^24` characters.
+let doubled(s: Str, times: Nat) -> Str =
+    match times | 0 => s | k + 1 => doubled(Str/concat(s, s), k) end;
+
+-- A search keeps nothing waiting on a character it passes: `2^24` that are not its needle's first cost it the stack one does, where a frame each is more than the stack a module runs on.
+test a_search_passes_characters_in_the_stack_it_started_with =
+    let passed = doubled("a", 24);
+    Test/equal(
+        Str/join(" ", [sought(Str/concat(passed, "b"), "b"), sought(passed, "b")]),
+        "16777216 none");
+
+-- A piece is matched the same way, over `2^24` characters of it.
+test a_piece_is_matched_in_the_stack_it_started_with =
+    let piece = doubled("a", 24);
+    Test/equal(
+        match Str/strip_prefix(Str/concat(piece, "b"), piece)
+        | some(rest) => rest
+        | none() => "none"
+        end,
+        "b");
+
 -- Every walk here moves between positions through `Str/At/forward` or `backward`, each step handing over the proof that it moved, so every one is total and computes in a type: a claim about what they answer is a proof the kernel discharges, and one that stopped terminating would be refused where it is stated rather than tested.
 let _splits_in_a_type: Eq()(Str/split("a€€b€c", "€"), ["a", "", "b", "c"]) =
     Eq/refl();
