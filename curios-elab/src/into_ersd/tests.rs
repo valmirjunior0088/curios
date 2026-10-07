@@ -41,6 +41,7 @@ fn definition(name: &str, type_: Term, body: Term) -> Item {
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
         totality: Totality::default(),
+        variances: Vec::new(),
         type_,
         body,
     })
@@ -532,6 +533,7 @@ fn universe_erasure_is_a_validated_structural_projection() {
         },
         island: Qualifier::empty(),
         totality: Totality::default(),
+        variances: Vec::new(),
         type_: Term::type_at(parameter.succ().unwrap()),
         body: Term::induct_type_at(
             nominal("Family"),
@@ -1214,6 +1216,7 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
         totality: Totality::default(),
+        variances: Vec::new(),
         type_: func_type.clone(),
         body: Term::func(
             [(x, Term::type_ground())],

@@ -158,6 +158,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         },
         island: Qualifier::default(),
         totality: Totality::Total,
+        variances: Vec::new(),
         type_: Term::type_at(Level::param(UniverseParam(1))),
         body: Term::induct_type_at(
             family,

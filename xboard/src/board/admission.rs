@@ -42,6 +42,7 @@ fn authored(name: &Global, type_: Term, body: Term) -> Item {
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
         totality: Totality::Total,
+        variances: Vec::new(),
         type_,
         body,
     })

@@ -677,3 +677,53 @@ fn family_variance_inventory() {
         println!("  {:>4}  invariant", parameters - irrelevant);
     });
 }
+
+/// Which universe parameters of the prelude's definitions their values hold, printed rather than asserted: one line per non-recursive definition that takes one, `*` for an irrelevant level and `=` for an invariant one, as the archive carries the vector `curios-elab`'s `definition_variances` read where the definition's levels closed. A recursive member carries none and is counted apart. Counted.
+#[test]
+#[ignore = "inventory: measures which universe parameters of the prelude's definitions their values hold rather than asserting it"]
+fn definition_variance_inventory() {
+    with_prelude(|prelude| {
+        let mut definitions = 0;
+        let mut polymorphic = 0;
+        let mut recursive = 0;
+        let mut parameters = 0;
+        let mut irrelevant = 0;
+        for item in items(prelude) {
+            let Item::Let(definition) = item else {
+                recursive += item
+                    .definitions()
+                    .iter()
+                    .filter(|definition| definition.universe_context.parameter_count > 0)
+                    .count();
+                continue;
+            };
+            definitions += 1;
+            if definition.variances.is_empty() {
+                continue;
+            }
+            polymorphic += 1;
+            parameters += definition.variances.len();
+            irrelevant += definition
+                .variances
+                .iter()
+                .filter(|variance| **variance == Variance::Irrelevant)
+                .count();
+
+            let spelled = definition
+                .variances
+                .iter()
+                .map(|variance| match variance {
+                    Variance::Irrelevant => '*',
+                    Variance::Invariant => '=',
+                })
+                .collect::<String>();
+            println!("{}\t{spelled}", definition.name);
+        }
+
+        println!(
+            "\n=== {definitions} definitions outside a group, {polymorphic} of them carrying {parameters} universe parameters; {recursive} recursive members take one and carry no vector ==="
+        );
+        println!("  {irrelevant:>4}  irrelevant");
+        println!("  {:>4}  invariant", parameters - irrelevant);
+    });
+}

@@ -3,11 +3,11 @@
 //! An integration test for the reason `driven.rs` gives: the analysis is written against `Env`, and the only implementations sit above this crate. A family here is built by hand at its universe parameters, declared to the kernel and put to `variance_vectors`; a vector is spelled with `*` for an irrelevant level and `=` for an invariant one.
 
 use {
-    curios_analysis::{Declarations, test_support::SYNTAX, variance_vectors},
+    curios_analysis::{Declarations, Passed, held_levels, test_support::SYNTAX, variance_vectors},
     curios_cert::Kernel,
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, StructDecl, Telescope, Term,
-        UniverseContext, UniverseParam, Variance,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, LevelHead, StructDecl,
+        Telescope, Term, UniverseContext, UniverseMetaId, UniverseParam, Variance,
     },
     curios_utilities::{Plicity, Qualifier},
     std::collections::BTreeMap,
@@ -419,4 +419,112 @@ fn a_family_outside_the_set_answers_from_the_vector_it_carries() {
 
         assert_eq!(vectors(&mut kernel, &inducts)[&named("Holder")], expected);
     }
+}
+
+/// The universe parameters `parts` hold, by index, read as `passed` says.
+fn held(kernel: &mut Kernel, parts: &[Term], passed: Passed) -> Vec<usize> {
+    let found = held_levels(kernel, parts, passed);
+    assert!(!found.every, "no part holds a metavariable");
+
+    found
+        .heads
+        .iter()
+        .filter_map(|head| match head {
+            LevelHead::Param(param) => Some(param.0),
+            LevelHead::Meta(_) => None,
+        })
+        .collect()
+}
+
+/// A kernel declaring `Wrap`, irrelevant in its level, and `Box`, invariant in its.
+fn with_wrap_and_box() -> Kernel {
+    let mut kernel = kernel();
+    kernel
+        .declare_induct(
+            &named("Wrap"),
+            &InductDecl {
+                variances: vec![Variance::Irrelevant],
+                ..wrap()
+            },
+        )
+        .expect("a name is declared once");
+    kernel
+        .declare_induct(
+            &named("Box"),
+            &InductDecl {
+                variances: vec![Variance::Invariant],
+                ..boxed()
+            },
+        )
+        .expect("a name is declared once");
+
+    kernel
+}
+
+// A definition's body applied at its binders, which is how its caller hands it over: `((A: Type u) => Type v)(x)` reduces to `Type v`, so the level the binder was annotated at is gone with the lambda and the one the value is stays.
+#[test]
+fn a_body_applied_at_its_binders_holds_what_its_reduct_does() {
+    let carrier = Free::local(1, Some("A"));
+    let argument = Free::local(2, Some("x"));
+    let body = Term::func(
+        [(carrier, Term::type_at(level(0)))],
+        Term::type_at(level(1)),
+    );
+    let applied = Term::apply(body, [Term::free_var(&argument)]);
+
+    assert_eq!(held(&mut kernel(), &[applied], Passed::AsWritten), [1]);
+}
+
+// `(A: Type u) => Box.{v}` and `(A: Type u) => Wrap.{v}(A)`, each a family passed as an argument. Met at no function type two of them are compared binder by binder, so the annotation's level is held; under eta both are applied first and only the body is read. The body's own level is held by its family's vector either way.
+#[test]
+fn a_lambda_is_read_with_its_binders_as_written_and_by_its_body_under_eta() {
+    let carrier = Free::local(1, Some("A"));
+    let over = |body: Term| Term::func([(carrier, Term::type_at(level(0)))], body);
+    let invariant = over(at("Box", &[level(1)], Vec::new()));
+    let irrelevant = over(at("Wrap", &[level(1)], vec![Term::free_var(&carrier)]));
+    let mut kernel = with_wrap_and_box();
+
+    assert_eq!(
+        held(
+            &mut kernel,
+            std::slice::from_ref(&invariant),
+            Passed::AsWritten
+        ),
+        [0, 1]
+    );
+    assert_eq!(held(&mut kernel, &[invariant], Passed::UnderEta), [1]);
+    assert_eq!(
+        held(
+            &mut kernel,
+            std::slice::from_ref(&irrelevant),
+            Passed::AsWritten
+        ),
+        [0]
+    );
+    assert!(held(&mut kernel, &[irrelevant], Passed::UnderEta).is_empty());
+}
+
+// A family's name with no argument. As written its instance is compared level by level, as two formers met at no function type are; under eta it is the node it builds once applied, and is read by the family's vector.
+#[test]
+fn a_bare_former_is_read_whole_as_written_and_by_its_vector_under_eta() {
+    let bare = |name: &str| Term::instance_of(&Free::from(&named(name)), vec![level(0)]);
+    let mut kernel = with_wrap_and_box();
+
+    assert_eq!(held(&mut kernel, &[bare("Wrap")], Passed::AsWritten), [0]);
+    assert!(held(&mut kernel, &[bare("Wrap")], Passed::UnderEta).is_empty());
+    assert_eq!(held(&mut kernel, &[bare("Box")], Passed::UnderEta), [0]);
+}
+
+// A level its declaration has not closed is reported by its head as a parameter is, so the walk answers while a declaration elaborates.
+#[test]
+fn a_level_still_open_is_reported_by_its_head() {
+    let open = UniverseMetaId(3);
+    let found = held_levels(
+        &mut kernel(),
+        &[Term::type_at(Level::meta(open))],
+        Passed::AsWritten,
+    );
+
+    assert!(found.holds(LevelHead::Meta(open)));
+    assert!(!found.holds(LevelHead::Param(UniverseParam(0))));
 }

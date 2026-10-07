@@ -30,6 +30,7 @@ pub(super) fn authored(name: &Global, type_: Term, body: Term) -> Item {
         island: Qualifier::default(),
         // Non-recursive and free of diverging host calls, so the honest flag; `Totals::classify` recomputes it.
         totality: Totality::Total,
+        variances: Vec::new(),
         type_,
         body,
     })
@@ -384,6 +385,7 @@ pub(super) fn level_definition(level: &Level) -> Module {
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
         totality: Totality::Total,
+        variances: Vec::new(),
         type_: Term::type_at(level.clone()),
         body: Term::intrinsic(Intrinsic::NatType),
     };
@@ -733,6 +735,7 @@ pub(super) fn scheme_definition(level: &Level, parameter_count: usize) -> Module
         },
         island: Qualifier::default(),
         totality: Totality::Total,
+        variances: Vec::new(),
         type_: Term::type_at(level.clone()),
         body: Term::intrinsic(Intrinsic::NatType),
     };
@@ -805,6 +808,7 @@ pub(super) fn instance_of_width(width: usize) -> Module {
         },
         island: Qualifier::default(),
         totality: Totality::Total,
+        variances: Vec::new(),
         type_: Term::type_at(Level::param(UniverseParam(0))),
         body: Term::induct_type_at(family, levels, Vec::<Term>::new(), Vec::<Term>::new()),
     };
@@ -842,6 +846,7 @@ pub(super) fn foreign_held_at(row: ForeignFunction, claimed: &Term, false_name: 
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
         totality: Totality::Total,
+        variances: Vec::new(),
         type_: claimed.clone(),
         body: Term::foreign(row, Vec::new()),
     };
@@ -885,6 +890,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
         },
         island: Qualifier::default(),
         totality: Totality::Total,
+        variances: Vec::new(),
         type_: Term::type_at(Level::param(UniverseParam(0))),
         body: Term::induct_type_at(
             family,
@@ -2165,6 +2171,7 @@ pub(super) fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> M
         universe_context: scheme_context(),
         island: Qualifier::default(),
         totality: Totality::Total,
+        variances: Vec::new(),
         type_: Term::type_at(Level::param(UniverseParam(1))),
         body: Term::type_at(Level::param(UniverseParam(0))),
     };
@@ -2177,6 +2184,7 @@ pub(super) fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> M
             universe_context,
             island: Qualifier::default(),
             totality: Totality::Total,
+            variances: Vec::new(),
             type_: Term::type_at(Level::param(UniverseParam(1))),
             body,
         }));
@@ -2290,6 +2298,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
         },
         island: Qualifier::default(),
         totality: Totality::Total,
+        variances: Vec::new(),
         type_: Term::func_type(
             [(
                 Free::local(622, Some("x")),
@@ -2461,6 +2470,7 @@ fn constant(name: Global) -> Definition {
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
         totality: Totality::Total,
+        variances: Vec::new(),
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
     }
@@ -3093,6 +3103,7 @@ pub(super) fn alias_module(variances: Vec<Variance>) -> (Global, Module) {
         universe_context: scheme.clone(),
         island: Qualifier::default(),
         totality: Totality::Total,
+        variances: Vec::new(),
         type_: Term::func_type([(carrier, sort.clone())], sort.clone()),
         body: Term::func([(carrier, sort.clone())], Term::free_var(&carrier)),
     });

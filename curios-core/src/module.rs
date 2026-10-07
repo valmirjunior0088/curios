@@ -10,7 +10,7 @@ use {
     super::{
         Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Many,
         Polarity, RecGroup, RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm,
-        Telescope, Term, UniverseContext, UniverseError, WitnessSpelling, build_shorten,
+        Telescope, Term, UniverseContext, UniverseError, Variance, WitnessSpelling, build_shorten,
     },
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -178,6 +178,10 @@ pub struct Definition {
     ///
     /// This is the cross-module summary elaboration's own gates read: a user program that mentions a prelude definition inherits the flag rather than re-analyzing the prelude, which is sound because "partial" already means "something partial is in its closure". The certifier reads it only as a claim to contradict, and nothing below erasure reads it: an erased function's termination flag is marked from the certifier's record.
     pub totality: Totality,
+    /// Which of this definition's universe parameters its value holds, one entry per parameter of `universe_context`: two instances apart in an irrelevant one alone are one term, unfolding either giving the same value. Written back by `curios-elab` where the definition's levels have closed, read off its body as [`InductDecl::variances`](super::InductDecl::variances) is read off a family's telescopes. Empty until then, for a definition that takes no universe parameter, and on a recursive member's opened view, both checkers comparing two projections of one group at every level; a position it does not reach is invariant.
+    ///
+    /// The elaborator's level alignment is its one reader. The kernel compares two instances of a definition by their spines and levels and unfolds where that decides nothing, so it holds none of this: a vector claiming an irrelevance the body denies costs a kernel refusal and admits nothing.
+    pub variances: Vec<Variance>,
     pub type_: Term,
     pub body: Term,
 }
@@ -276,6 +280,7 @@ impl RecItem {
                 universe_context: self.group.universe_context().clone(),
                 island: definition.island,
                 totality: definition.totality,
+                variances: Vec::new(),
                 type_: member.type_.open(&name_refs),
                 body: member.body.open(&name_refs),
             })
@@ -433,6 +438,7 @@ impl Module {
             universe_context: definition.universe_context.unplaced(),
             island: definition.island,
             totality: definition.totality,
+            variances: definition.variances.clone(),
             type_: sharing.share(&definition.type_),
             body: sharing.share(&definition.body),
         };

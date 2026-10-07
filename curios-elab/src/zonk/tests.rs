@@ -32,6 +32,7 @@ fn lowered_module(body: Term) -> Module {
             universe_context: UniverseContext::empty(),
             island: Qualifier::empty(),
             totality: Totality::default(),
+            variances: Vec::new(),
             type_: nat(),
             body,
         })],
@@ -202,6 +203,7 @@ fn two_items_with_unsolved_holes_are_both_reported() {
             universe_context: UniverseContext::empty(),
             island: Qualifier::empty(),
             totality: Totality::default(),
+            variances: Vec::new(),
             type_: nat(),
             body,
         })

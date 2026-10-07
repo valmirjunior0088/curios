@@ -64,6 +64,7 @@ fn let_item(path: &str, type_: Term, body: Term) -> Item {
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
         totality: Totality::default(),
+        variances: Vec::new(),
         type_,
         body,
     })
@@ -260,6 +261,7 @@ fn baseline_reading_through() -> Module {
             universe_context: UniverseContext::empty(),
             island: Qualifier::empty(),
             totality: Totality::default(),
+            variances: Vec::new(),
             type_: nat(),
             body: mention("between"),
         }),

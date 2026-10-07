@@ -36,6 +36,7 @@ fn an_unsatisfiable_universe_context_is_refused() {
         universe_context,
         island: Qualifier::default(),
         totality: Totality::Total,
+        variances: Vec::new(),
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
     };
@@ -77,6 +78,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
         universe_context,
         island: Qualifier::default(),
         totality: Totality::Total,
+        variances: Vec::new(),
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
     };

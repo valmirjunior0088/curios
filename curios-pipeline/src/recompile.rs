@@ -260,6 +260,7 @@ fn item_unchanged(before: &Item, after: &Item) -> bool {
                 && this.island == that.island
                 && this.universe_context == that.universe_context
                 && this.totality == that.totality
+                && this.variances == that.variances
                 && this.type_.equal_modulo_metas(&that.type_, &mut renaming)
                 && this.body.equal_modulo_metas(&that.body, &mut renaming)
         }

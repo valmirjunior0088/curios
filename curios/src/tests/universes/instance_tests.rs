@@ -1,7 +1,9 @@
 //! Two instances of one name: the levels an occurrence carries, and what two of them compare as.
 
 use {
-    super::test_support::{family_variances, signatures, universe_parameters},
+    super::test_support::{
+        definition_variances, family_variances, signatures, universe_parameters,
+    },
     crate::tests::{error, run, typecheck, typecheck_within},
     curios_pipeline::DEFAULT_STEP_BUDGET,
 };
@@ -213,4 +215,30 @@ fn two_instances_of_a_former_convert_where_their_spellings_differ_in_more_than_l
         "the two instances no longer sit at two decided levels, so the program holds nothing: {first}",
     );
     assert_eq!(run(source), b"picked");
+}
+
+// **A definition carries which of its levels its value holds.** Its body is read at its binders, so a parameter's annotation is unread and what is left is what unfolding two instances would compare: `const_nat` reduces to a numeral and `Act` to a former the level is gone from, each irrelevant in its one level, where `Value`'s former builds a node its family is invariant in. `Curried` answers a lambda, and the level its binder is annotated at is held beside the unread one of `A`: two lambdas met at no function type are compared binder by binder.
+#[test]
+fn a_definition_carries_the_levels_its_value_holds() {
+    let source = r#"
+        use /std/{Nat, Str, Io, Result};
+        pub let const_nat(A: Type, x: A) -> Nat = 0;
+        pub let Act(A: Type) -> Type = Io(A);
+        pub struct Value: pub Type { A: Type, read: (Str) -> Result(Str, A) }
+        pub let Curried(A: Type) -> (Type) -> Type = (B: Type) => A;
+        pub let plain(n: Nat) -> Nat = n;
+        /std/print("carried")
+        "#;
+
+    let vectors = definition_variances(source);
+
+    assert_eq!(vectors["/const_nat"], "*", "{vectors:?}");
+    assert_eq!(vectors["/Act"], "*", "{vectors:?}");
+    assert_eq!(vectors["/Value"], "=", "{vectors:?}");
+    assert_eq!(vectors["/plain"], "", "{vectors:?}");
+    let curried = &vectors["/Curried"];
+    assert!(
+        curried.contains('*') && curried.contains('='),
+        "a lambda left in the reduct is read with its binder, and its parameter without: {vectors:?}",
+    );
 }
