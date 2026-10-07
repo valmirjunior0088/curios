@@ -33,6 +33,15 @@ let _two_odd_parts_at_two_counts_that_rebuild_one_number_are_one(
 ) -> {count: Eq()(k, j), half: Eq()(m, n)} =
     Scale/unique(k, m, j, n, e);
 
+let _an_odd_part_and_a_count_that_rebuild_a_number_are_its_own(
+    n: Nat,
+    @ok: Holds(0 < n),
+    m: Nat,
+    k: Nat,
+    e: Eq()(Nat/shl(2 * m + 1, k), n),
+) -> {count: Eq()(k, Nat/trailing_zeros(n)), half: Eq()(m, Scale/of(n).half)} =
+    Scale/unique(k, m, Scale/of(n).count, Scale/of(n).half, Eq/trans(e, Scale/of(n).joined));
+
 let _a_power_of_a_power_multiplies_the_exponents(
     x: Nat,
     b: Nat,

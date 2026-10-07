@@ -3,7 +3,7 @@ use {
     crate::{
         BinderSite, FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_intrinsic_head,
         check_motive, contradicted_guard, fill_placeholder, is_prop, reduce_with, refine_head,
-        stuck_on_metavar, unreachable_arm,
+        same_uncommitted, stuck_on_metavar, unreachable_arm,
     },
     curios_analysis::{
         Invert, invert_indices, pinned_by_targets, retyped, scrutinee_solution, solve_indices,
@@ -506,15 +506,29 @@ fn elaborate_switch(
     Ok((rebuilt, result_type))
 }
 
+/// Whether a rebuilt match's `goal` is the type it is now checked at, as far as conversion says with nothing committed: a pair that would need a metavariable solved is left to the checked type.
+fn kept_goal(context: &mut Context, goal: &Term, expected: &Term) -> Result<bool, Error> {
+    same_uncommitted(context, goal, expected).map_err(|error| {
+        Error::from_reduce(error, |refusal| {
+            Error::convert_exhausted(goal.clone(), expected.clone(), refusal)
+        })
+    })
+}
+
 pub(crate) fn elaborate_match(
     context: &mut Context,
     m: &Match,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // A rebuilt match coming back through re-elaboration at its ambient goal: the goal *is* the expected type it was elaborated against, so it re-elaborates as the elided motive it came from, checked against that goal.
+    // A rebuilt match coming back through re-elaboration at its ambient goal: the goal *is* the expected type it was elaborated against, so it re-elaborates as the elided motive it came from, checked against that goal. Checked at another spelling of that type — the one an arm around it specializes now, where its first elaboration met the scrutinee behind a metavariable not yet substituted — it keeps the goal it holds, so elaborating what elaboration built gives it back: conversion compares two goals with no arm's equation, and a rebuilt copy of a recursive member that differed from the member in a goal's spelling would be another term to it.
     let mode = match (&m.result, mode) {
         (MatchResult::Ambient(goal), Mode::Infer) => Mode::Check(goal.clone()),
+        (MatchResult::Ambient(goal), Mode::Check(expected))
+            if *goal != expected && kept_goal(context, goal, &expected)? =>
+        {
+            Mode::Check(goal.clone())
+        }
         (_, mode) => mode,
     };
 
