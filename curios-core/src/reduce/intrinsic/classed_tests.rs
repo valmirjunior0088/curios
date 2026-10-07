@@ -45,7 +45,7 @@ fn commuted(this: &Term, that: &Term) -> Result<bool, Infallible> {
 }
 
 fn classes(atoms: &[Term]) -> Classes {
-    let Ok(classes) = Classes::of(atoms, commuted);
+    let Ok(classes) = Classes::of(atoms, None, commuted);
     classes
 }
 
@@ -91,12 +91,36 @@ fn a_judge_is_asked_only_about_pairs_that_may_be_one() {
         a,
     ];
     let mut asked = Vec::new();
-    let Ok(classes) = Classes::of(&atoms, |this, that| {
+    let Ok(classes) = Classes::of(&atoms, None, |this, that| {
         asked.push((this.clone(), that.clone()));
         commuted(this, that)
     });
     assert_eq!(asked, vec![(atoms[0].clone(), atoms[2].clone())]);
     assert!(!classes.is_empty());
+}
+
+/// A classing made while another is asking is held inside the two atoms that one asked about: a call standing inside one of them is classed, and one that stands inside neither is left an atom of its own whatever the judge would say of it, which is where the two calls of a recursive function land one unfolding on.
+///
+/// Mutation-checked: a `Classes::of` that reads no `asked` joins the two calls that stand inside nothing asked.
+#[test]
+fn a_classing_inside_another_asks_only_about_what_stands_inside_the_pair_asked() {
+    let (a, b, c) = (sym(1, "a"), sym(2, "b"), sym(3, "c"));
+    let call = |left: &Term, right: &Term| applied(10, "f", add(left.clone(), right.clone()));
+    let asked = (
+        applied(11, "g", call(&a, &b)),
+        applied(11, "g", call(&b, &a)),
+    );
+    let every = |_: &Term, _: &Term| Ok::<_, Infallible>(true);
+
+    let Ok(inside) = Classes::of(&[call(&a, &b), call(&b, &a)], Some(&asked), every);
+    assert!(!inside.is_empty());
+
+    let Ok(outside) = Classes::of(&[call(&a, &c), call(&c, &a)], Some(&asked), every);
+    assert!(outside.is_empty());
+
+    // The two asked about are not classed inside their own comparison.
+    let Ok(themselves) = Classes::of(&[asked.0.clone(), asked.1.clone()], Some(&asked), every);
+    assert!(themselves.is_empty());
 }
 
 #[test]
@@ -124,7 +148,7 @@ fn commuted_sums_inside_the_factors_of_an_int_product_meet_once_classed() {
     let that = int_mul(applied(11, "e", k), call(&j, &i));
     assert!(!int_same(&this, &that));
 
-    let Ok(classes) = Classes::of(&atoms(&this, &that), |_, _| Ok::<_, Infallible>(true));
+    let Ok(classes) = Classes::of(&atoms(&this, &that), None, |_, _| Ok::<_, Infallible>(true));
     let (this, that) = classed(&mut Inert, &this, &that, &classes)
         .expect("the inert reducer spends nothing")
         .expect("one atom joined another's class");

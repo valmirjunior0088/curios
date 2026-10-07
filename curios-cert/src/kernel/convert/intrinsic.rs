@@ -5,7 +5,7 @@
 //! The rule is stated *generically* rather than as one arm per operation, and it is stated once for both checkers: `curios-analysis`'s `convert_intrinsics` runs the carriers' algebra and reads the congruence off the traversal that defines an intrinsic's operands, so a new operation is covered the moment it is representable. What this module keeps is the kernel's own discharge.
 
 use {
-    super::{History, compare, ground},
+    super::{History, classing, compare, ground},
     crate::{
         Error, Kernel, connectives_agree, connectives_agree_classed, convert_classed,
         convert_intrinsics,
@@ -83,7 +83,7 @@ pub(super) fn connectives_convert(
 /// **Two atoms whose comparison is already in progress are left apart.** The recurrence rule assumes a goal met again, which is sound for a goal whose children are all still compared; a classing that took the assumption would spell one atom as the other and decide the pair it belongs to without comparing anything. So an atom pair the history holds is two atoms here, which is the refusing direction.
 fn classes(kernel: &mut Kernel, history: &mut History, atoms: &[Term]) -> Result<Classes, Error> {
     curios_profile::profile!("convert::classes");
-    Classes::of(atoms, |this, that| {
+    classing(kernel, atoms, |kernel, this, that| {
         if in_progress(kernel, history, this, that) || in_progress(kernel, history, that, this) {
             return Ok(false);
         }

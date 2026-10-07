@@ -28,13 +28,19 @@ impl Classes {
     /// `atoms` classed by `same`, in the order they were handed out: an atom joins the first class whose representative `same` says it converts with, and otherwise opens one.
     ///
     /// **A pair is asked only where it may be one**, read off the two atoms' heads: two applications of one head to as many arguments, two stuck operations of one kind, or two other terms neither of which is a variable, a metavariable or a stuck operation. It is a cost filter failing toward refusal: a pair it skips stays two atoms, as every pair was before any was classed.
+    ///
+    /// **A classing made while another is asking is held inside what that one asked.** `asked` is the two atoms a classing in progress is having compared, where this one is made inside that comparison, and an atom is then classed only where it stands inside one of the two and is neither: every pair asked about is smaller than the pair it is asked for, so classings nest no deeper than a term does. Without it they nest without end: the two calls of a recursive function unfold to two stuck `match`es whose arms hold the calls one step on, each pair the atoms of a product nothing pairs, and comparing one pair classes the next. Those atoms come of an unfolding and stand inside nothing that was asked, so they stay two atoms, which is the refusing direction.
     pub fn of<E>(
         atoms: &[Term],
+        asked: Option<&(Term, Term)>,
         mut same: impl FnMut(&Term, &Term) -> Result<bool, E>,
     ) -> Result<Self, E> {
         let mut opened: Vec<&Term> = Vec::new();
         let mut representatives = HashMap::new();
         for atom in atoms {
+            if asked.is_some_and(|asked| !stands_inside(atom, asked)) {
+                continue;
+            }
             let mut joined = None;
             for representative in &opened {
                 if may_be_one(representative, atom) && same(representative, atom)? {
@@ -173,6 +179,12 @@ pub fn classed(
     let built = walk.built;
     reducer.spend(Cost::term(built))?;
     Ok(Some((classed_this, classed_that)))
+}
+
+/// Whether `atom` stands inside one of the two atoms `asked` about and is neither of them.
+fn stands_inside(atom: &Term, asked: &(Term, Term)) -> bool {
+    let within = |outer: &Term| outer != atom && outer.mentions_term(atom);
+    within(&asked.0) || within(&asked.1)
 }
 
 /// Whether two atoms could convert without being identical, read off their heads once forced. A variable converts with nothing but itself, and a metavariable with nothing a comparison that solves nothing can say. Two applications are asked about where they are of one head to as many arguments, two stuck operations where they are of one kind, and a stuck operation converts with nothing else. Any other two — a call beside a stuck `match`, which a folded recursive call and its own unfolding are — are asked about.

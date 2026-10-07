@@ -164,6 +164,9 @@ const ATOMS_HELD: &[&str] = &[
     // Two functions whose bodies commute a sum, which differ under a binder.
     "Eq()(u((x) => x + a) * u((x) => x + b), u((x) => b + x) * u((x) => a + x))",
     "Eq()(u((x) => x + a) + u((x) => x + b), u((x) => b + x) + u((x) => a + x))",
+    // An atom whose own atoms need classing, two to a side so no residual hands the inner pair on: a classing asked for inside a classing asks about what stands inside the two atoms being compared, a call of their own head among it.
+    "Eq()(f(g(a + b) * f(c + d)) * f(g(c + a) * f(b + d)), f(f(d + b) * g(a + c)) * f(f(d + c) * g(b + a)))",
+    "Eq()(f(g(a + b) * f(c + d)) + f(g(c + a) * f(b + d)), f(f(d + b) * g(a + c)) + f(f(d + c) * g(b + a)))",
     // Three spellings of one atom are one monomial, so their coefficients merge.
     "Eq()((match n | 0 => a + b + d | _ => c end) + (match n | 0 => b + a + d | _ => c end) + (match n | 0 => d + b + a | _ => c end), 3 * (match n | 0 => a + b + d | _ => c end))",
     // A fold over two atoms that convert is the fold over one: reduction asks its checker's conversion which atoms of a stuck fold are one, so conversion is a congruence under the fold, and a `match` on it reduces.
@@ -910,6 +913,31 @@ fn every_atom_law_closes_at_every_order_of_its_binders() {
             assert!(found.is_empty(), "{}", found.join("\n"));
         }
     }
+}
+
+/// What the rows over a recursive function are stated under: one whose body multiplies two of its own calls, so two calls that differ unfold to products nothing pairs, whose atoms are the same two calls one step on.
+const RECURSIVE: &str = "use /std/{Nat, Eq, Io};\nlet twice(c: Nat, n: Nat) -> Nat = match n == 0 | true => c | false => twice(c, n / 2) * twice(c, n / 2) end;";
+
+#[test]
+fn two_calls_of_a_recursive_function_that_differ_are_refused() {
+    // Each row compares two calls that differ in an argument, and the last two are each a candidate for the other's goal, which compares them through an implicit. A classing asked for inside a classing leaves apart what stands inside neither atom being compared, so no comparison follows the function down its own unfolding, in either checker.
+    let name = "two calls of a recursive function";
+    let rows = [
+        "Eq()(twice(x, y), twice(2, y))",
+        "Eq()(twice(x, y) * x, x * twice(2, y))",
+        "Eq()(Nat/shl(x, y), x * twice(2, y))",
+        "Eq()(twice(x, y + 1), twice(x, y) * x)",
+    ]
+    .map(|claim| ("x: Nat, y: Nat".to_owned(), claim.to_owned()));
+    let mut found = misplaced(RECURSIVE, name, &rows, 0);
+    found.extend(misplaced_by_the_kernel(RECURSIVE, name, &rows, 0));
+    assert!(found.is_empty(), "{}", found.join("\n"));
+
+    // The same comparison where the second call's argument is an implicit to solve.
+    let solved = format!(
+        "{RECURSIVE}\nlet solved(x: Nat, y: Nat, lemma: (@b: Nat, n: Nat, e: Eq()(n, twice(2, b))) -> Nat) -> Nat = lemma(twice(x, y), Eq/refl());\nIo/pure(())"
+    );
+    assert!(typecheck(&solved).is_err());
 }
 
 #[test]

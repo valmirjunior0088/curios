@@ -5,7 +5,7 @@
 //! The rule is stated *generically* rather than as one arm per operation, and once for both checkers: `curios-analysis`'s `convert_intrinsics` runs the carriers' algebra and reads the congruence off the traversal that defines an intrinsic's operands. A hand-written pair match over a roster of upwards of a hundred entries is a list whose omissions are silent — `convert` short-circuits on syntactic identity before reaching here, so a missing arm only surfaces on two spellings that are convertible without being identical, as a *hard mismatch* rather than a postponement. What this module keeps is the elaborator's own part: its preparation, its packed-literal view, and its discharge.
 
 use {
-    super::{Convert, same_uncommitted, solved_linearly},
+    super::{Convert, classing, same_uncommitted, solved_linearly},
     crate::{Context, Declined, zonk_solved_term_metas},
     curios_algebra::{Cut, split},
     curios_analysis::{
@@ -110,7 +110,7 @@ pub(super) fn connectives_convert(
 /// Which of `atoms` are one, as far as the elaborator can say without deciding anything else: two atoms are one where they convert with no solution and no universe constraint committed. Each comparison runs in the bracket a witness probe uses and is rolled back whatever it found, so a pair that would need a metavariable solved stays two atoms, and classing commits nothing.
 fn classes(context: &mut Context, atoms: &[Term]) -> Result<Classes, ReduceError> {
     curios_profile::profile!("convert::classes");
-    Classes::of(atoms, |this, that| same_uncommitted(context, this, that))
+    classing(context, atoms, same_uncommitted)
 }
 
 /// The elaborator as the shared chain's driver: its context reduces, and its queue takes the packed-literal view's goals.

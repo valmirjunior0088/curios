@@ -1592,5 +1592,20 @@ pub(super) fn grounded(kernel: &mut Kernel, this: &Term, that: &Term) -> Result<
 /// Which of `atoms` are one, as reduction asks of the atoms of a stuck fold and of a stuck form beside an equation's scrutinee: each compared with the representative of every class opened before it, by plain reduction ([`Kernel::plainly`]).
 pub(crate) fn asked_classes(kernel: &mut Kernel, atoms: &[Term]) -> Result<Classes, ReduceError> {
     curios_profile::profile!("convert::asked_classes");
-    kernel.plainly(|kernel| Classes::of(atoms, |this, that| grounded(kernel, this, that)))
+    kernel.plainly(|kernel| classing(kernel, atoms, grounded))
+}
+
+/// Which of `atoms` are one by `same`, as a classing asks of them (`curios-core`'s `Classes::of`): each pair stands as the pair asked while it is compared, so a classing made inside that comparison is held inside the two atoms, and this one inside the pair a classing in progress asked about.
+pub(super) fn classing<E>(
+    kernel: &mut Kernel,
+    atoms: &[Term],
+    mut same: impl FnMut(&mut Kernel, &Term, &Term) -> Result<bool, E>,
+) -> Result<Classes, E> {
+    let within = kernel.asked().cloned();
+    Classes::of(atoms, within.as_ref(), |this, that| {
+        let stood = kernel.ask(Some((this.clone(), that.clone())));
+        let same = same(kernel, this, that);
+        kernel.ask(stood);
+        same
+    })
 }

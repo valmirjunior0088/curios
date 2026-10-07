@@ -16,7 +16,7 @@ use {
         Context, Settled, levels_clash_on_a_decided_instance, levels_clash_to_conversion,
         zonk_solved_term_metas,
     },
-    crate::{Error, convert_at, is_prop, reduce_with, same_uncommitted},
+    crate::{Error, classing, convert_at, is_prop, reduce_with, same_uncommitted},
     curios_analysis::{Answered, Driver, answers, answers_classed, could_reduce_to},
     curios_core::{
         Advance, Apply, Argument, Bound, Carrier, Cases, Classes, ClosedHost, Cost, Demand, Field,
@@ -845,7 +845,7 @@ fn asked_classes(context: &mut Context, atoms: &[Term]) -> Result<Classes, Reduc
     curios_profile::profile!("reduce::asked_classes");
     context.note_question();
     context.plainly(|context| {
-        Classes::of(atoms, |this, that| {
+        classing(context, atoms, |context, this, that| {
             Ok(same_uncommitted(context, this, that)
                 .probed()?
                 .unwrap_or(false))

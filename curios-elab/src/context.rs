@@ -148,6 +148,8 @@ pub struct Context {
     /// How many questions a judgment's reduction has put to conversion, and how many of every question asked with nothing committed were declined for a commit — what a remembered reduct is held against ([`Context::note_question`], [`Context::note_declined`]).
     questions: u64,
     declined: u64,
+    /// The two atoms a classing is asking conversion about ([`Context::ask`]); `None` where no classing is asking.
+    asked: Option<(Term, Term)>,
     /// Whether reduction is plain: it asks the elaborator's conversion nothing ([`Context::plainly`]).
     plain: bool,
     /// The declaration being elaborated ([`Context::enter_declaration`]); `None` for an entry's final term.
@@ -273,6 +275,7 @@ impl Context {
             entailing: false,
             questions: 0,
             declined: 0,
+            asked: None,
             plain: false,
             declaration: None,
             opened: BTreeMap::new(),
@@ -1932,6 +1935,16 @@ impl Context {
     /// How many questions have been declined for a commit.
     pub(crate) fn declined(&self) -> u64 {
         self.declined
+    }
+
+    /// The two atoms a classing is asking conversion about, which a classing made meanwhile is held inside (`curios_core::Classes::of`).
+    pub(crate) fn asked(&self) -> Option<&(Term, Term)> {
+        self.asked.as_ref()
+    }
+
+    /// Enter or leave a classing's question about two atoms, answering what stood before.
+    pub(crate) fn ask(&mut self, asked: Option<(Term, Term)>) -> Option<(Term, Term)> {
+        mem::replace(&mut self.asked, asked)
     }
 
     /// The universe solver's state now, which a settlement made across a declined question is filed beside.

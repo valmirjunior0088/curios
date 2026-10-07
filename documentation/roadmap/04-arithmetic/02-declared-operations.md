@@ -107,7 +107,7 @@ What is not a law stays a control, refused with its counterexample: associativit
 
 ## Stages
 
-1. **Two defects that block.** The elaborator's atom classing nests without end over two calls of a recursive function, which the `pow` rows meet, and the comparison reads a bound only against a bare literal, which leaves its order not transitive ([the findings](00-findings.md)). Check: the finding's programs refused with a report, and the transitivity grid.
+1. **A defect that blocks.** The comparison reads a bound only against a bare literal, which leaves its order not transitive ([the findings](00-findings.md)). Check: the transitivity grid.
 2. **Rows first.** State every law above, every row the library definitions hold today and every control in the grid at every carrier and direction it applies to, each refused row commented with the stage that moves it; and put each law to the audit at a product of two sums.
 3. **`Flt`'s identities.** No promotion: the direction in an operation's identity, the symmetric declarations, the difference's fold, the idempotent roundings and the round trip, then the sign kind.
 4. **The families `Int` shares with `Nat`.** No promotion.

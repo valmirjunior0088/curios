@@ -38,14 +38,14 @@ use {
     },
     crate::{Declined, metavar_origins, metavar_spines, zonk_solved_term_metas},
     curios_core::{
-        Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Families, Free, Func,
-        FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Level,
+        Advance, Apply, Bound, Carrier, Cases, Classes, Cost, Cursor, Exhaustion, Families, Free,
+        Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Level,
         Lockstep, Many, Match, MatchResult, Metavar, Probe, Proj, Rec, ReduceError, Scope, Step,
         Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, Variance, Variant,
         past_bool_cap,
     },
-    curios_utilities::Plicity,
+    curios_utilities::{Plicity, recurse},
     std::{
         collections::{HashMap, HashSet, VecDeque},
         mem,
@@ -120,6 +120,21 @@ pub(crate) fn same_uncommitted(
         context.note_declined();
     }
     Ok(converts? && !committed)
+}
+
+/// Which of `atoms` are one by `same`, as a classing asks of them (`curios-core`'s `Classes::of`): each pair stands as the pair asked while it is compared, so a classing made inside that comparison is held inside the two atoms, and this one inside the pair a classing in progress asked about. The comparison is one conversion inside another, so it buys its depth with stack.
+pub(crate) fn classing(
+    context: &mut Context,
+    atoms: &[Term],
+    mut same: impl FnMut(&mut Context, &Term, &Term) -> Result<bool, ReduceError>,
+) -> Result<Classes, ReduceError> {
+    let within = context.asked().cloned();
+    Classes::of(atoms, within.as_ref(), |this, that| {
+        let stood = context.ask(Some((this.clone(), that.clone())));
+        let same = recurse(|| same(context, this, that));
+        context.ask(stood);
+        same
+    })
 }
 
 pub(crate) fn convert_outcome(
