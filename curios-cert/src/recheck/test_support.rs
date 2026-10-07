@@ -28,14 +28,14 @@ pub(super) fn authored(name: &Global, type_: Term, body: Term) -> Item {
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
-        // Non-recursive and free of diverging host calls, so the honest flag; `partial_definitions` recomputes it.
+        // Non-recursive and free of diverging host calls, so the honest flag; `Totals::classify` recomputes it.
         totality: Totality::Total,
         type_,
         body,
     })
 }
 
-/// [`authored`] for a body that recurses without descending. `partial_definitions` recomputes the flag and reports a recorded `Total` it disagrees with, so a partial body must say so.
+/// [`authored`] for a body that recurses without descending. `Totals::classify` recomputes the flag and reports a recorded `Total` it disagrees with, so a partial body must say so.
 pub(super) fn authored_partial(name: &Global, type_: Term, body: Term) -> Item {
     match authored(name, type_, body) {
         Item::Let(definition) => Item::Let(Definition {
@@ -2612,6 +2612,91 @@ pub(super) fn record_negative_in_itself(beside_a_family: bool) -> Program {
             type_: Some(absurd),
         },
     }
+}
+
+/// The family [`wrapper_of_its_parameter`] declares.
+pub(super) fn wrapper_family() -> Global {
+    Global::Authored(Qualifier::from(["Wrapper"]))
+}
+
+/// `induct Wrapper(A : Type) | wrap(held : A) end`, or with `negatively` `| wrap(held : (A) -> Nat) end`, the entry stamped `Strict` in `A` either way: elaboration's vector, the truth of the first and a lie of the second.
+pub(super) fn wrapper_of_its_parameter(negatively: bool) -> Module {
+    let a = Free::local(990, Some("A"));
+    let held = match negatively {
+        true => Term::func_type(
+            [(Free::local(991, Some("taken")), Term::free_var(&a))],
+            Term::intrinsic(Intrinsic::NatType),
+        ),
+        false => Term::free_var(&a),
+    };
+
+    collision_module(
+        Vec::new(),
+        BTreeMap::from([(
+            wrapper_family(),
+            InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::build([(a, Term::type_ground())], Telescope::done(())),
+                constructors: vec![(
+                    Atom::from("wrap"),
+                    InductParam::new(
+                        Telescope::build(
+                            [
+                                (a, Term::type_ground()),
+                                (Free::local(992, Some("held")), held),
+                            ],
+                            Vec::new(),
+                        ),
+                        vec![Plicity::Implicit, Plicity::Explicit],
+                    ),
+                )],
+                result_sort: Term::type_ground(),
+                module: Qualifier::default(),
+                rep_public: true,
+                polarities: vec![Polarity::Strict],
+                variances: Vec::new(),
+            },
+        )]),
+    )
+}
+
+/// The family [`stored_in_the_wrapper`] declares.
+pub(super) fn stored_family() -> Global {
+    Global::Authored(Qualifier::from(["Outer"]))
+}
+
+/// `induct Outer | c(held : Wrapper(Outer)) end`: strictly positive exactly where [`wrapper_family`] is in its parameter.
+pub(super) fn stored_in_the_wrapper() -> Module {
+    let outer = Term::induct_type(stored_family(), Vec::<Term>::new(), Vec::<Term>::new());
+
+    collision_module(
+        Vec::new(),
+        BTreeMap::from([(
+            stored_family(),
+            InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: vec![(
+                    Atom::from("c"),
+                    InductParam::new(
+                        Telescope::build(
+                            [(
+                                Free::local(993, Some("held")),
+                                Term::induct_type(wrapper_family(), [outer], Vec::<Term>::new()),
+                            )],
+                            Vec::new(),
+                        ),
+                        vec![Plicity::Explicit],
+                    ),
+                )],
+                result_sort: Term::type_ground(),
+                module: Qualifier::default(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )]),
+    )
 }
 
 /// `induct Shadowed : Type 0 | mk(a : payload) end`, carried as a registry entry with no items lowering it.

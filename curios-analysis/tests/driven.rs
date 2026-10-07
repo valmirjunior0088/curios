@@ -9,9 +9,9 @@
 use {
     curios_abi::{DeclaredForeign, ForeignFunction, WireResults, WireSignature, WireType},
     curios_analysis::{
-        Answered, Coverage, Declarations, Invert, Judge, PositivityRefusal, answers,
-        answers_classed, group_totality, invert_indices, positivity_vectors, solve_indices,
-        struct_reaches_itself, test_support::SYNTAX,
+        Answered, Declarations, Invert, Judge, PositivityRefusal, answers, answers_classed,
+        group_totality, invert_indices, positivity_vectors, solve_indices, struct_reaches_itself,
+        test_support::SYNTAX,
     },
     curios_cert::Kernel,
     curios_core::{
@@ -308,12 +308,8 @@ fn a_negative_self_occurrence_is_refused() {
             .expect("a name is declared once");
     }
 
-    let refusal = positivity_vectors(
-        &mut kernel,
-        Declarations::of(&inducts, &BTreeMap::new()),
-        Coverage::Complete,
-    )
-    .expect_err("a negative self-occurrence must be refused");
+    let refusal = positivity_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()))
+        .expect_err("a negative self-occurrence must be refused");
     assert!(
         matches!(&refusal, PositivityRefusal::NotPositive(refusal) if refusal.name == bad_name),
         "refused by the rule, at `Bad`: {refusal:?}",
@@ -358,12 +354,8 @@ fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
             .expect("a name is declared once");
     }
 
-    let refusal = positivity_vectors(
-        &mut kernel,
-        Declarations::of(&inducts, &BTreeMap::new()),
-        Coverage::Complete,
-    )
-    .expect_err("an alias the driver cannot unfold is followed, not admitted");
+    let refusal = positivity_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()))
+        .expect_err("an alias the driver cannot unfold is followed, not admitted");
     assert!(
         matches!(&refusal, PositivityRefusal::Exhausted { name, .. } if *name == bad_name),
         "refused for the budget `Bad`'s walk ran out of: {refusal:?}",
@@ -401,11 +393,7 @@ fn a_strict_payload_the_driver_cannot_reduce_is_refused_for_the_budget() {
                 .expect("a name is declared once");
         }
 
-        let verdict = positivity_vectors(
-            &mut kernel,
-            Declarations::of(&inducts, &BTreeMap::new()),
-            Coverage::Complete,
-        );
+        let verdict = positivity_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()));
         match budget {
             0 => assert!(
                 matches!(&verdict, Err(PositivityRefusal::Exhausted { name, .. }) if *name == good_name),
@@ -434,12 +422,8 @@ fn a_strict_self_occurrence_is_admitted() {
             .expect("a name is declared once");
     }
 
-    let vectors = positivity_vectors(
-        &mut kernel,
-        Declarations::of(&inducts, &BTreeMap::new()),
-        Coverage::Complete,
-    )
-    .expect("a strictly positive declaration is admitted");
+    let vectors = positivity_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()))
+        .expect("a strictly positive declaration is admitted");
     assert_eq!(vectors.get(&name), Some(&Vec::new()));
 }
 
@@ -1061,23 +1045,18 @@ fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
     }
 
     assert!(
-        positivity_vectors(
-            &mut kernel,
-            Declarations::of(&inducts, &BTreeMap::new()),
-            Coverage::Complete
-        )
-        .is_err(),
+        positivity_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()),).is_err(),
         "the carried vector was believed instead of recomputed",
     );
 }
 
-/// The same claim at the branch that actually decides it, which the fixture above does not reach: there `Bad` is *inside* the analyzed set, so its polarity comes from the fixpoint and the carried vector is never consulted by any rule. What separates the two coverage modes is the lookup for a name from *outside* the set, and `Coverage::Complete` answering it `Mixed` is the whole of the kernel not inheriting an elaborator-computed vector.
+/// The same claim at the branch that actually decides it, which the fixture above does not reach: there `Bad` is *inside* the analyzed set, so its polarity comes from the fixpoint and the carried vector is never consulted by any rule. A family *outside* the set answers from the entry the kernel holds, and the kernel holding no vector it did not compute is the whole of its not inheriting an elaborator-computed one.
 ///
-/// So `Wrapper` is registered but withheld from the analyzed map, and its carried vector lies — `Strict` in a parameter its constructor would use negatively. `Outer` stores a `Wrapper(Outer)`. Under `Complete` the lookup declines to read the registry and returns `Mixed`, `Outer` reaches itself at `Mixed`, and the set is refused. Under `Partial` — the elaborator holding one unit, where an out-of-set name is one *this same pass* analyzed when its unit was elaborated — the registry answers `Strict` and the set is admitted. Same declarations, same kernel, opposite verdicts: that difference is the branch, and nothing else in the crate exercises it.
+/// So `Wrapper` is declared to the kernel and withheld from the analyzed map, and the vector its entry carries in lies — `Strict` in a parameter its constructor would use negatively. `Outer` stores a `Wrapper(Outer)`. The kernel keeps an entry it is handed without the vector, which is elaboration's, so the lookup answers `Mixed`, `Outer` reaches itself at `Mixed`, and the set is refused.
 ///
-/// No other test reaches it: across a kernel walk of the whole prelude and `curios`'s whole test corpus every `Complete` lookup resolves from the computed map. A change routing `Complete` to the registry the way `Partial` does would therefore pass every other test in the workspace while making the certifier believe a conclusion it did not establish.
+/// A kernel that kept the stamp with the entry would admit `Outer` on it, and pass every test that analyzes a family with the families it mentions, since those resolve from the computed map.
 #[test]
-fn an_out_of_set_vector_is_believed_only_under_partial_coverage() {
+fn a_vector_an_entry_is_handed_in_with_is_not_the_kernels() {
     let mut kernel = kernel();
 
     let wrapper_name = Global::Authored(Qualifier::from(["Wrapper"]));
@@ -1116,22 +1095,8 @@ fn an_out_of_set_vector_is_believed_only_under_partial_coverage() {
     }
 
     assert!(
-        positivity_vectors(
-            &mut kernel,
-            Declarations::of(&inducts, &BTreeMap::new()),
-            Coverage::Complete
-        )
-        .is_err(),
-        "an out-of-set name must read `Mixed` under complete coverage, not the registry's vector",
-    );
-    assert!(
-        positivity_vectors(
-            &mut kernel,
-            Declarations::of(&inducts, &BTreeMap::new()),
-            Coverage::Partial
-        )
-        .is_ok(),
-        "under partial coverage the registry vector is this pass's own earlier result",
+        positivity_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()),).is_err(),
+        "a family the kernel has filed no vector for must read `Mixed`, not the vector its entry was handed in with",
     );
 }
 
@@ -1182,12 +1147,8 @@ fn a_self_calling_type_level_rec_leaves_the_walk_terminating() {
             .expect("a name is declared once");
     }
 
-    let vectors = positivity_vectors(
-        &mut kernel,
-        Declarations::of(&inducts, &BTreeMap::new()),
-        Coverage::Complete,
-    )
-    .expect("a payload the walk cannot see through is admitted, not refused");
+    let vectors = positivity_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()))
+        .expect("a payload the walk cannot see through is admitted, not refused");
     assert_eq!(vectors.get(&name), Some(&Vec::new()));
 }
 

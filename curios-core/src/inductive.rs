@@ -51,7 +51,7 @@ pub struct InductDecl {
     pub module: Qualifier,
     /// Whether construction and elimination are available outside `module`. This metadata is elaboration-only and does not affect erased layouts.
     pub rep_public: bool,
-    /// How this inductive uses each of its `params`, one entry per parameter in declaration order — the fact positivity composes through when a recursive occurrence travels via this type. Computed by `curios-elab` as the declaration is published, once, and carried into the prelude archive so the standard library's are derived once per compiler build. Empty until then; read through [`Self::polarity`], never indexed directly.
+    /// How this inductive uses each of its `params`, one entry per parameter in declaration order — the fact the elaborator's positivity composes through when a recursive occurrence travels via this type. The certifier composes through the vector its own walk filed ([`Certification::polarities`](super::Certification::polarities)), never this one. Computed by `curios-elab` as the declaration is published, once, and carried into the prelude archive so the standard library's are derived once per compiler build. Empty until then; read through [`Self::polarity`], never indexed directly.
     pub polarities: Vec<Polarity>,
     /// How two instances of this family compare in each of its universe parameters, one entry per parameter of `universe_context`. Computed by `curios-elab` and carried into the prelude archive, as the polarities are. Empty until then; read through [`Self::variance`], never indexed directly.
     pub variances: Vec<Variance>,

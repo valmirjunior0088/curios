@@ -26,9 +26,9 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 ### A unit is certified by construction
 
-**Decision.** A `Unit` carries the certifier's record of its definitions, and `Uncertified::certified` is the only way to make one: a compilation assembles an `Uncertified` from what each stage produced and certifies it with the record the kernel's walk left. The only uncertified units kept anywhere are the prelude's images, which `curios-prelude` certifies as it restores them.
+**Decision.** A `Unit` carries the certifier's record of its declarations, and `Uncertified::certified` is the only way to make one: a compilation assembles an `Uncertified` from what each stage produced and certifies it with the record the kernel's walk left. The only uncertified units kept anywhere are the prelude's images, which `curios-prelude` certifies as it restores them.
 
-**Rationale.** A later walk reads a unit in scope for its definitions' totality, so a unit without a record would be a case every reader handles, for the one producer below the certifier by design. The state in the type removes the case from every consumer.
+**Rationale.** A later walk reads a unit in scope for its definitions' totality and its families' polarity vectors, so a unit without a record would be a case every reader handles, for the one producer below the certifier by design. The state in the type removes the case from every consumer.
 
 **Rejected.** An optional record, a special case every reader carries; a unit generic over its record, which two named types say without the machinery; the record outside the unit, which turns the predecessors into a slice of pairs.
 

@@ -50,98 +50,54 @@ pub struct NotPositive {
     pub polarity: Polarity,
 }
 
-/// One pairing of the two nominal registries, as they are always held and passed together.
-type Registries<'a> = (
-    &'a BTreeMap<Global, InductDecl>,
-    &'a BTreeMap<Global, StructDecl>,
-);
-
-/// The declaration set an analysis runs over: what an environment already put in scope, plus what the unit in hand declares.
+/// The declaration set an analysis runs over: the `induct` and `struct` entries of one declaration, a group's taken together.
 ///
-/// **Both halves are analyzed, not merely consulted.** A module carries only its own declarations, so the two arrive in separate maps — but that is a fact about where the maps live, never about which of them is believed. Every vector this pass reports it recomputed, the base's included, which is what [`Coverage::Complete`] means and what keeps the kernel from inheriting a conclusion some other pass reached. Reading the base's carried [`InductDecl::polarities`] instead would be exactly the archived-vector trust the two coverage modes exist to keep apart.
+/// **These are analyzed; every other is consulted.** A family the walk meets outside the set answers from its driver's registry ([`Env::induct_decl`], [`Env::struct_decl`]), by the vector the entry held there carries. Which vector that is is the driver's to say, and each checker reads only its own: the elaborator's entry carries the vector it wrote as that declaration was published, and the kernel's the vector its own walk computed and filed, never the one elaboration stamped on the entry a module carries. An entry with no vector answers `Mixed`.
 ///
-/// A name is one declaration, and the set is read by name. A name in both halves resolves to the unit's own, which is the base's too: the kernel passes a declaration over only where its environment holds the same terms under its name, and refuses a module carrying any other under a held name before it analyses anything. A name in both registries would be read as the inductive wherever it is asked for, the record never analysed, so the kernel refuses that module as well, and lowering refuses the declaration that would produce one.
+/// A name is one declaration, and the set is read by name. A name in both registries would be read as the inductive wherever it is asked for, the record never analysed, so the kernel refuses a module that holds one, and lowering refuses the declaration that would produce one.
 #[derive(Clone, Copy)]
 pub struct Declarations<'a> {
-    /// `None` when nothing is already in scope, which differs from empty maps only in needing no maps to point at: [`Term`] is `Rc`-backed and therefore not `Sync`, so there is no `static` empty registry to borrow.
-    base: Option<Registries<'a>>,
     inducts: &'a BTreeMap<Global, InductDecl>,
     structs: &'a BTreeMap<Global, StructDecl>,
 }
 
 impl<'a> Declarations<'a> {
-    /// Just these declarations, with nothing already in scope.
+    /// These declarations.
     pub fn of(
         inducts: &'a BTreeMap<Global, InductDecl>,
         structs: &'a BTreeMap<Global, StructDecl>,
     ) -> Self {
-        Self {
-            base: None,
-            inducts,
-            structs,
-        }
-    }
-
-    /// These declarations on top of a base an environment put in scope.
-    pub fn extending(
-        base_inducts: &'a BTreeMap<Global, InductDecl>,
-        base_structs: &'a BTreeMap<Global, StructDecl>,
-        inducts: &'a BTreeMap<Global, InductDecl>,
-        structs: &'a BTreeMap<Global, StructDecl>,
-    ) -> Self {
-        Self {
-            base: Some((base_inducts, base_structs)),
-            inducts,
-            structs,
-        }
+        Self { inducts, structs }
     }
 
     pub(crate) fn is_empty(&self) -> bool {
-        self.inducts.is_empty()
-            && self.structs.is_empty()
-            && self
-                .base
-                .is_none_or(|(inducts, structs)| inducts.is_empty() && structs.is_empty())
+        self.inducts.is_empty() && self.structs.is_empty()
     }
 
-    /// Every name to analyze: the inductives in name order, then the structs. Grouped that way rather than globally sorted because the refusal reported is the first in this order, and adding a base should not change which refusal a set spanning both kinds reports.
+    /// Every name to analyze: the inductives in name order, then the structs. Grouped that way rather than globally sorted because the refusal reported is the first in this order.
     pub(crate) fn names(&self) -> Vec<Global> {
-        let inducts = self
-            .base
-            .iter()
-            .flat_map(|(inducts, _)| inducts.keys())
-            .chain(self.inducts.keys())
-            .collect::<BTreeSet<_>>();
-        let structs = self
-            .base
-            .iter()
-            .flat_map(|(_, structs)| structs.keys())
+        self.inducts
+            .keys()
             .chain(self.structs.keys())
-            .collect::<BTreeSet<_>>();
-
-        inducts.into_iter().chain(structs).cloned().collect()
+            .cloned()
+            .collect()
     }
 
     pub(crate) fn induct(&self, name: &Global) -> Option<&InductDecl> {
-        self.inducts
-            .get(name)
-            .or_else(|| self.base.and_then(|(inducts, _)| inducts.get(name)))
+        self.inducts.get(name)
     }
 
     pub(crate) fn struct_(&self, name: &Global) -> Option<&StructDecl> {
-        self.structs
-            .get(name)
-            .or_else(|| self.base.and_then(|(_, structs)| structs.get(name)))
+        self.structs.get(name)
     }
 }
 
 /// Analyze every declaration in `declarations` for strict positivity modulo polarity, returning each declaration's parameter-polarity vector, or the first refusal in name order — reported as [`PositivityRefusal::Exhausted`] when the driver refused a reduction on the way to it.
 ///
-/// The set is exactly what to analyze: everything in scope when the kernel re-checks, and the unit's own declarations alone when the elaborator elaborates a unit over its predecessors. Anything the walk reaches outside it answers from the driver's registry ([`Env::induct_decl`] / [`Env::struct_decl`]), whose vector was computed when that declaration was — sound at the unit boundary because a predecessor cannot mention a successor, so every out-of-set declaration is a sink of the occurrence relation.
+/// The set is exactly what to analyze: the entries one declaration declares, in either checker. Anything the walk reaches outside it answers from the driver's registry ([`Env::induct_decl`] / [`Env::struct_decl`]), whose vector was computed when that declaration was judged — sound because a declaration is judged after every declaration it mentions, and one judged before it cannot mention it, so every out-of-set declaration is a sink of the occurrence relation.
 pub fn positivity_vectors<E: Env>(
     env: &mut E,
     declarations: Declarations<'_>,
-    coverage: Coverage,
 ) -> Result<BTreeMap<Global, Vec<Polarity>>, PositivityRefusal<E::Error>> {
     curios_profile::profile!("positivity_vectors");
     if declarations.is_empty() {
@@ -155,7 +111,7 @@ pub fn positivity_vectors<E: Env>(
         split.insert(*name, Split::of(env, declarations, name));
     }
 
-    let (vectors, closed, exhausted) = fixpoint(env, &split, coverage);
+    let (vectors, closed, exhausted) = fixpoint(env, &split);
 
     for name in &names {
         let diagonal = closed
@@ -346,14 +302,12 @@ fn sweep<E: Env>(
 fn fixpoint<E: Env>(
     env: &mut E,
     split: &BTreeMap<Global, Split>,
-    coverage: Coverage,
 ) -> (Vectors, Occurrences, Option<(Global, E::Error)>) {
     let mut vectors = Vectors {
         computed: split
             .iter()
             .map(|(name, entry)| (*name, vec![Polarity::Unused; entry.params.len()]))
             .collect(),
-        coverage,
     };
     let mut direct: Occurrences = BTreeMap::new();
     let mut exhausted = None;
@@ -506,33 +460,18 @@ enum Target {
 /// At what polarity each declaration occurs inside each other declaration — `relation[owner][mentioned]`. Transient: it exists to answer the acceptance test and is discarded, which is why nothing persists it the way parameter polarities are persisted.
 type Occurrences = BTreeMap<Global, BTreeMap<Global, Polarity>>;
 
-/// Whether the declarations handed to the analysis are every declaration the program has, or only a suffix of them.
-///
-/// The distinction decides what an out-of-set name means. Under [`Coverage::Partial`] — the elaborator holding one unit while every predecessor was analyzed as it was elaborated — a name from outside answers from the registry vector recorded then, which is that pass's own earlier result rather than another's. Under [`Coverage::Complete`] there is no outside: every declaration is in hand, so a name not among them is one this analysis has no result for, and reading a carried vector would mean believing an answer some *other* pass computed. The kernel therefore takes the conservative value instead, the one any unknown name takes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Coverage {
-    /// Every declaration the program has.
-    Complete,
-    /// A suffix, with the earlier declarations analyzed elsewhere.
-    Partial,
-}
-
 /// Each analyzed declaration's parameter polarities as the fixpoint currently estimates them.
 ///
-/// A name absent from the map is outside the set under analysis. What that means depends on [`Coverage`]; either way an unknown lookup is [`Polarity::Mixed`], never `Unused`.
+/// A name absent from the map is outside the set under analysis, and answers from the entry its driver holds ([`Declarations`]): the vector that entry carries, and [`Polarity::Mixed`], never `Unused`, where the driver holds no entry or the entry no vector.
 #[derive(Debug)]
 struct Vectors {
     computed: BTreeMap<Global, Vec<Polarity>>,
-    coverage: Coverage,
 }
 
 impl Vectors {
     fn at<E: Env>(&self, env: &E, name: &Global, index: usize) -> Polarity {
         if let Some(vector) = self.computed.get(name) {
             return vector.get(index).copied().unwrap_or(Polarity::Mixed);
-        }
-        if self.coverage == Coverage::Complete {
-            return Polarity::Mixed;
         }
         env.induct_decl(name)
             .map(|declaration| declaration.polarity(index))

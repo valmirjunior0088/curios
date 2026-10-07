@@ -4,7 +4,7 @@
 
 use {
     super::test_support::{entrypoint_of, mounted},
-    crate::{EntryTail, compile_units, elaborate_and_zonk},
+    crate::{EntryTail, check_entrypoint, compile_units, elaborate_and_zonk},
     curios_core::Zonked,
     curios_elab::{Context, Resumed, erase_program},
     curios_prelude::with_prelude,
@@ -77,18 +77,17 @@ fn values(count: usize) -> String {
     source
 }
 
-/// Whether `source` elaborates under `budget` over `scope`, the kernel not asked.
-fn elaborates(source: &str, budget: u64, scope: &[&Unit]) -> bool {
+/// Whether `source` is taken under `budget` over `scope` by everything that judges it: elaborated, certified by the kernel and erased.
+fn checks(source: &str, budget: u64, scope: &[&Unit]) -> bool {
     let entrypoint = entrypoint_of(source);
 
-    elaborate_and_zonk(
+    check_entrypoint(
         budget,
         Predecessors::over(scope),
         &SYNTAX,
         &entrypoint,
         &RootSource::none(),
         EntryTail::Authored,
-        &mut |_| {},
     )
     .is_ok()
 }
@@ -120,22 +119,22 @@ fn erases(source: &str, budget: u64) -> bool {
     })
 }
 
-/// Sixteen families that name nothing of one another elaborate under the budget one of them does: the passes that decide a family's vectors and its obligations spend that family's budget, not one the unit shares.
+/// Sixteen families that name nothing of one another are taken under the budget one of them is: in either checker, what decides a family's vectors, its sizing and its obligations spends that family's budget, not one the unit shares or one its scope's families draw on.
 #[test]
-fn a_unit_elaborates_its_families_under_the_budget_one_of_them_takes() {
+fn a_unit_takes_its_families_under_the_budget_one_of_them_takes() {
     with_prelude(|prelude| {
-        let one = smallest(|budget| elaborates(&families(1), budget, prelude));
+        let one = smallest(|budget| checks(&families(1), budget, prelude));
 
         assert!(
-            elaborates(&families(16), one, prelude),
-            "sixteen independent families are refused under {one}, which one of them elaborates under"
+            checks(&families(16), one, prelude),
+            "sixteen independent families are refused under {one}, which one of them is taken under"
         );
     });
 }
 
-/// A program elaborates under the budget it takes whatever else its scope holds: a unit of witnesses it never asks for is brought in on no declaration's budget.
+/// A program is taken under the budget it takes whatever else its scope holds: a unit of families and witnesses it never asks for is brought in on no declaration's budget, and judged by no walk but its own.
 #[test]
-fn a_program_elaborates_under_the_same_budget_whatever_its_scope_holds() {
+fn a_program_is_taken_under_the_same_budget_whatever_its_scope_holds() {
     let mut library = String::from("use /std/{Show, Str};\n");
     for index in 1..=128 {
         writeln!(
@@ -163,11 +162,11 @@ fn a_program_elaborates_under_the_same_budget_whatever_its_scope_holds() {
         let mut wider = prelude.to_vec();
         wider.push(&library);
 
-        let alone = smallest(|budget| elaborates(program, budget, prelude));
+        let alone = smallest(|budget| checks(program, budget, prelude));
 
         assert!(
-            elaborates(program, alone, &wider),
-            "a program that elaborates under {alone} is refused under it once its scope holds a unit it does not read"
+            checks(program, alone, &wider),
+            "a program taken under {alone} is refused under it once its scope holds a unit it does not read"
         );
     });
 }

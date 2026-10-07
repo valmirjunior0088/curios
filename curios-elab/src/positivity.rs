@@ -4,7 +4,7 @@
 
 use {
     super::{Context, Error, Published},
-    curios_analysis::{Coverage, Declarations, PositivityRefusal, positivity_vectors},
+    curios_analysis::{Declarations, PositivityRefusal, positivity_vectors},
     curios_core::{InductDecl, StructDecl},
     std::collections::BTreeMap,
 };
@@ -30,23 +30,21 @@ pub(crate) fn decide_polarities(context: &mut Context, published: &Published) ->
         .iter()
         .cloned()
         .collect::<BTreeMap<_, _>>();
-    let vectors = positivity_vectors(
-        context,
-        Declarations::of(&inducts, &structs),
-        // These are this declaration's own; every other was analyzed as it was published, and its vector rides its registry entry.
-        Coverage::Partial,
-    )
-    .map_err(|refusal| match refusal {
-        PositivityRefusal::NotPositive(refusal) => Error::not_strictly_positive(
-            refusal.name.symbol(),
-            refusal.part,
-            refusal.type_,
-            refusal.polarity,
-        ),
-        PositivityRefusal::Exhausted { name, error } => {
-            error.in_declaration(&name.symbol(), Some(&name))
-        }
-    })?;
+    // These are this declaration's own; every other was analyzed as it was published, and its vector rides its registry entry.
+    let vectors =
+        positivity_vectors(context, Declarations::of(&inducts, &structs)).map_err(|refusal| {
+            match refusal {
+                PositivityRefusal::NotPositive(refusal) => Error::not_strictly_positive(
+                    refusal.name.symbol(),
+                    refusal.part,
+                    refusal.type_,
+                    refusal.polarity,
+                ),
+                PositivityRefusal::Exhausted { name, error } => {
+                    error.in_declaration(&name.symbol(), Some(&name))
+                }
+            }
+        })?;
 
     for (name, vector) in vectors {
         if let Some(declaration) = inducts.get(&name) {

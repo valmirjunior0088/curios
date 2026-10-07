@@ -5,8 +5,8 @@ use {
     crate::{Error, Globals},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Atom, Entrypoint, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Nat,
-        Program, RecGroup, RecMemberScopes, ReduceError, Scope, Telescope, Term, UniverseContext,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Nat, RecGroup,
+        RecMemberScopes, ReduceError, Scope, Telescope, Term, UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
@@ -16,8 +16,12 @@ fn good() -> Global {
     Global::Authored(Qualifier::from(["Good"]))
 }
 
-/// `induct Good | c(x : Alias)` with `Alias : Type = Good`, beside an entrypoint `0` declared at `Spin : Type = rec s : Type = s`, which no budget converts to `Nat`.
-fn spent_entry_beside_an_aliased_payload() -> Program {
+fn spent() -> Global {
+    Global::Authored(Qualifier::from(["spent"]))
+}
+
+/// `induct Good | c(x : Alias)` with `Alias : Type = Good`, beside `spent = 0` declared at `Spin : Type = rec s : Type = s`, which no budget converts to `Nat`.
+fn spent_item_beside_an_aliased_payload() -> Module {
     let alias = Global::Authored(Qualifier::from(["Alias"]));
     let spin = Global::Authored(Qualifier::from(["Spin"]));
     let s = Free::local(930, Some("s"));
@@ -50,51 +54,52 @@ fn spent_entry_beside_an_aliased_payload() -> Program {
         variances: Vec::new(),
     };
 
-    Program {
-        module: Module {
-            mounts: Vec::new(),
-            items: vec![
-                authored(
-                    &alias,
-                    Term::type_ground(),
-                    Term::induct_type(good(), Vec::<Term>::new(), Vec::<Term>::new()),
-                ),
-                authored_partial(&spin, Term::type_ground(), Term::rec_proj(group, 0)),
-            ],
-            induct_decls: BTreeMap::from([(good(), declaration)]),
-            struct_decls: BTreeMap::new(),
-            concepts: BTreeMap::new(),
-            witnesses: BTreeSet::new(),
-            tests: Vec::new(),
-        },
-        entry: Entrypoint {
-            body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-            type_: Some(Term::free_var(&Free::from(&spin))),
-        },
+    Module {
+        mounts: Vec::new(),
+        items: vec![
+            authored(
+                &alias,
+                Term::type_ground(),
+                Term::induct_type(good(), Vec::<Term>::new(), Vec::<Term>::new()),
+            ),
+            authored_partial(&spin, Term::type_ground(), Term::rec_proj(group, 0)),
+            authored(
+                &spent(),
+                Term::free_var(&Free::from(&spin)),
+                Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+            ),
+        ],
+        induct_decls: BTreeMap::from([(good(), declaration)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
     }
 }
 
-/// Strict positivity is judged on a budget of its own, not on what the entrypoint left.
+/// Strict positivity is judged on a budget of its own, not on what the item judged before it left.
 ///
-/// The entrypoint spends everything it has: checking `0` against `Spin` converts forever. `Good`'s payload is `Alias`, which the analysis has to unfold to read the strict occurrence of `Good` behind it. Judged on the entrypoint's leftover, the unfold would be refused, the alias read at `Mixed`, and `Good` refused for a budget it never spent.
+/// `spent` spends everything it has: checking `0` against `Spin` converts forever. `Good`'s payload is `Alias`, which the analysis has to unfold to read the strict occurrence of `Good` behind it. No item declares `Good`, so its entry is accepted once every item has been judged: on `spent`'s leftover the unfold would be refused, the alias read at `Mixed`, and `Good` refused for a budget it never spent.
 ///
-/// The entrypoint's own exhaustion is the control: without it the leftover would be most of a budget, and the fixture would pass whether or not positivity restores one.
+/// `spent`'s own exhaustion is the control: without it the leftover would be most of a budget, and the fixture would pass whether or not positivity restores one.
+///
+/// Mutation-checked against the restore: with the analysis run on what the judgment before it left, `Good` is refused for the budget.
 #[test]
 fn positivity_is_judged_on_its_own_budget() {
     let verdicts = fixture_verdicts(
-        &spent_entry_beside_an_aliased_payload(),
+        &spent_item_beside_an_aliased_payload(),
         100_000,
         &Globals::default(),
         SYNTAX,
     );
 
     assert!(
-        verdicts.iter().any(|verdict| verdict.name.is_none()
+        verdicts.iter().any(|verdict| verdict.name == Some(spent())
             && matches!(verdict.error, Error::Reduce(ReduceError::Exhausted { .. }))),
-        "the control stopped holding: the entrypoint must spend its whole budget: {verdicts:?}",
+        "the control stopped holding: `spent` must spend its whole budget: {verdicts:?}",
     );
     assert!(
         verdicts.iter().all(|verdict| verdict.name != Some(good())),
-        "`Good` is strictly positive, and was judged on what the entrypoint left: {verdicts:?}",
+        "`Good` is strictly positive, and was judged on what `spent` left: {verdicts:?}",
     );
 }

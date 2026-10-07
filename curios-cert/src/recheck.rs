@@ -47,22 +47,22 @@ mod universes_tests;
 
 use {
     super::{
-        Error, Globals, Kernel, Position, Standing, check_definition, check_entrypoint,
+        Error, Globals, Kernel, Standing, Totals, check_definition, check_entrypoint,
         check_induct_decl, check_positions, check_rec_group, check_struct_decl,
-        free_locals_outside, partial_definitions, positivity_vectors,
-        rewrite_universe_levels_scoped_shared, satisfiable, universe_metas, variance_vectors,
+        free_locals_outside, positivity_vectors, rewrite_universe_levels_scoped_shared,
+        satisfiable, universe_metas, variance_vectors,
     },
-    curios_analysis::{Coverage, Declarations, PositivityRefusal},
+    curios_analysis::{Declarations, PositivityRefusal},
     curios_core::{
-        Bound, Certification, Certified, Definition, Entrypoint, Free, Global, InductDecl, Item,
-        Level, MetavarId, Module, Program, Reads, StructDecl, Term, Totality, UniverseContext,
+        Bound, Certification, Certified, Entrypoint, Free, Global, InductDecl, Item, Level,
+        MetavarId, Module, Polarity, Program, Reads, StructDecl, Term, Totality, UniverseContext,
         Variance, Zonked,
     },
     curios_utilities::{SyntaxRegistry, grown},
     std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
 };
 
-/// `module`'s items in dependency order: every item after the ones it mentions.
+/// `module`'s items in dependency order: every item after the ones it reaches, by a name it mentions, a nominal head it builds or takes apart, and the telescopes of a registry entry it declares, which is accepted with it.
 ///
 /// The kernel checks items in sequence, defining each as it goes, so an item that mentions a name defined later is `Unbound`. `Module::items` is *not* in that order. `into_core` does sort topologically, but it sorts the surface program — and a concept-dispatched call names a *method*, not the witness that satisfies it: a use of `<` at `Nat` reaches the witness carrying that `Cmp` instance through an edge witness resolution creates during elaboration, long after the lowering sort could have seen it. So the sort has to be redone here, over the elaborated module, where the edge exists.
 ///
@@ -82,14 +82,7 @@ fn dependency_order(module: &Module, judged: &[usize]) -> Vec<usize> {
         .iter()
         .map(|&index| {
             let item = &module.items[index];
-            let names: BTreeSet<Global> = match item {
-                Item::Let(definition) => definition.mentions(),
-                Item::Rec(rec) => rec
-                    .definitions()
-                    .iter()
-                    .flat_map(Definition::mentions)
-                    .collect(),
-            };
+            let names = module.reaches(item);
 
             let targets = names
                 .iter()
@@ -131,7 +124,7 @@ fn dependency_order(module: &Module, judged: &[usize]) -> Vec<usize> {
 
 /// One refusal the kernel reached.
 ///
-/// **Not one per item, and not always an item.** The walk runs several independent passes, so one definition failing two of them yields two verdicts; and the passes over `induct_decls`/`struct_decls` refuse registry entries, which are not in [`Module::items`] at all. A caller counting these against `items.len()` is comparing two different rosters.
+/// **Not one per item, and not always an item.** A declaration is judged several ways, so one failing two of them yields two verdicts; and a registry entry is refused under its own name, which is no item of [`Module::items`]. A caller counting these against `items.len()` is comparing two different rosters.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Verdict {
     /// What failed: an item, or the registry entry a declaration pass refused — a recursive group is named by its first member, since a group is checked and refused as a unit. `None` is the entrypoint expression, which has no name to export.
@@ -144,7 +137,7 @@ pub struct Verdict {
 pub struct Rechecked {
     /// Every refusal the walk reached; empty exactly when the kernel accepted the module.
     pub verdicts: Vec<Verdict>,
-    /// Each judged definition's totality, closed over everything it mentions — what a later walk reads once the unit is in its scope. A definition the walk refused is classified all the same, since the walk defines it anyway; a unit carrying a refusal is never filed, so no record of one is ever read.
+    /// Each judged definition's totality, closed over everything it mentions, and each accepted registry entry's polarity vector — what a later walk reads once the unit is in its scope. A definition the walk refused is classified all the same, since the walk defines it anyway; a unit carrying a refusal is never filed, so no record of one is ever read.
     pub certification: Certification,
 }
 
@@ -188,7 +181,7 @@ pub fn recheck_module(
 ///
 /// A declaration that is `globals`' own — the same terms under the same name — is passed over, standing defined as the environment holds it; one under a held name that is not refuses the module before any of it is judged. On the compile path that environment is the units in scope, and the faith placed in it is in each unit's *construction*, not in any per-compile claim: a unit is certified by construction, and the prelude build runs this same walk over each root, against the roots before it, and fails the build on any refusal, so an archive that exists is one whose items the kernel accepted. Re-judging them per compile would re-answer a settled question at the cost of walking the whole scope.
 ///
-/// Everything module-wide still runs unconditionally — the entrypoint check, strict positivity, and declaration sizing — because a new declaration can reach an old one; only the per-item typing judgment consults the environment.
+/// Every judgment is a declaration's own: its item's typing, its classification, its erased positions, and, where it declares registry entries, their sizing, their strict positivity and their variance, each read against what the environment and the declarations judged before it hold. The entrypoint is checked last.
 pub fn recheck_module_verdicts(
     module: &Zonked<Module>,
     budget: u64,
@@ -278,9 +271,6 @@ pub fn recheck_program_measured(
 
     (rechecked, kernel)
 }
-
-/// One item's erased positions, carried with the name a refusal should be reported against.
-type ItemPositions = (Option<Global>, Vec<Position>);
 
 /// The first metavariable an `induct` registry entry carries, in the order the entry stores its parts.
 fn induct_metavar(declaration: &InductDecl) -> Option<MetavarId> {
@@ -514,8 +504,6 @@ fn verdicts_within(
         }
     };
     let mut verdicts = Vec::new();
-    // What each item's check recorded, kept per item so a refusal names the item it came from. Classified as it drains rather than retained whole: only the positions the obligations are about survive, and sort-hood is asked once per distinct type.
-    let mut positions: Vec<ItemPositions> = Vec::new();
 
     // The environment is the kernel's starting scope, not something consulted beside it: an item already in scope is defined exactly as a refused item is — at its declared type, with its real body — so every judged item downstream sees what a walk that judged everything would have shown it.
     kernel.seed(globals);
@@ -632,9 +620,18 @@ fn verdicts_within(
         }
     }
 
+    // A unit in scope whose record files no vector for an entry of its own: this walk's to compute, before any judgment composes through one.
+    file_scope_polarities(kernel, &mut verdicts);
+
     // What each judged definition read of other items, taken at each judgment's end so it holds that judgment's reads alone.
     let mut reads: BTreeMap<Global, Reads> = BTreeMap::new();
     kernel.take_reads();
+    // The definitions not known to terminate, as the walk comes to know them: the environment's, then each item's as it is judged.
+    let mut totals = Totals::seeded(kernel, globals);
+    let mut local_memo = HashMap::new();
+    // The new registry entries no item has been accepted with yet, and the vector the walk filed for each one it accepted.
+    let mut unaccepted = (judged.inducts.clone(), judged.structs.clone());
+    let mut polarities: BTreeMap<Global, Vec<Polarity>> = BTreeMap::new();
 
     for index in dependency_order(module, &judged.items) {
         let item = &module.items[index];
@@ -715,14 +712,56 @@ fn verdicts_within(
         }
 
         let (drained, failure) = kernel.take_checked();
-        positions.push((item_name, drained));
         if let Some(error) = failure {
             verdicts.push(Verdict {
                 name: item_name,
                 error,
             });
         }
+
+        // The item's classification, then obligations (T) and (V) over the positions its check recorded. Every definition it mentions was judged before it and is classified already, so the set its positions are read against is closed where they are read.
+        for (name, error) in totals.classify(kernel, item) {
+            verdicts.push(Verdict {
+                name: Some(name),
+                error,
+            });
+        }
+        if let Err(error) = check_positions(&drained, totals.partial(), &mut local_memo) {
+            verdicts.push(Verdict {
+                name: item_name,
+                error,
+            });
+        }
+
+        // The registry entries the item declares, accepted with it: an item follows every name its entries' telescopes mention, so each is defined by now.
+        let declared = item.declared_names();
+        let inducts = taken(&module.induct_decls, &mut unaccepted.0, |name| {
+            declared.contains(&name)
+        });
+        let structs = taken(&module.struct_decls, &mut unaccepted.1, |name| {
+            declared.contains(&name)
+        });
+        accept(
+            kernel,
+            &inducts,
+            &structs,
+            &mut verdicts,
+            &mut reads,
+            &mut polarities,
+        );
     }
+
+    // A new entry no judged item declares has no judgment to be accepted with, and is accepted here, with the others like it, once every item has been defined.
+    let inducts = taken(&module.induct_decls, &mut unaccepted.0, |_| true);
+    let structs = taken(&module.struct_decls, &mut unaccepted.1, |_| true);
+    accept(
+        kernel,
+        &inducts,
+        &structs,
+        &mut verdicts,
+        &mut reads,
+        &mut polarities,
+    );
 
     // A unit with no entrypoint has nothing here to judge — being the entry is what having one *means*, and a scope unit is not it.
     if let Some(entry) = entry {
@@ -738,69 +777,137 @@ fn verdicts_within(
     // The entrypoint is no definition, and nothing reads what it read: a later unit never names it.
     kernel.take_reads();
     let (drained, failure) = kernel.take_checked();
-    positions.push((None, drained));
     if let Some(error) = failure {
         verdicts.push(Verdict { name: None, error });
     }
+    if let Err(error) = check_positions(&drained, totals.partial(), &mut local_memo) {
+        verdicts.push(Verdict { name: None, error });
+    }
 
-    // Obligations (T) and (V), after the item walk for the same reason declaration acceptance runs there: the classification closes over what every definition mentions, and the environment is only complete once every item has been defined.
-    let (partial, disagreements) = partial_definitions(kernel, module, globals, &judged.items);
-    for (name, error) in disagreements {
-        verdicts.push(Verdict {
+    // The record of what this walk concluded: every judged definition's totality, from the set each was classified into, with what its judgment read, and every accepted entry's polarity vector — so a later walk reading it needs nothing of this one's.
+    let certification = Certification::of(
+        judged
+            .items
+            .iter()
+            .flat_map(|&index| module.items[index].definitions())
+            .map(|definition| {
+                let totality = match totals.partial().contains(&definition.name) {
+                    true => Totality::Partial,
+                    false => Totality::Total,
+                };
+                let reads = reads.remove(&definition.name).unwrap_or_default();
+                (definition.name, Certified { totality, reads })
+            }),
+        polarities,
+    );
+
+    Rechecked {
+        verdicts,
+        certification,
+    }
+}
+
+/// The entries of `registry` among `unaccepted` that `selected` picks, taken out of it.
+fn taken<D: Clone>(
+    registry: &BTreeMap<Global, D>,
+    unaccepted: &mut BTreeSet<Global>,
+    selected: impl Fn(&Global) -> bool,
+) -> BTreeMap<Global, D> {
+    let names = unaccepted
+        .iter()
+        .filter(|name| selected(name))
+        .copied()
+        .collect::<Vec<_>>();
+
+    names
+        .into_iter()
+        .filter_map(|name| {
+            unaccepted.remove(&name);
+            registry.get(&name).map(|entry| (name, entry.clone()))
+        })
+        .collect()
+}
+
+/// The verdict a refused positivity analysis is reported as.
+fn positivity_verdict(refusal: PositivityRefusal<Error>) -> Verdict {
+    match refusal {
+        PositivityRefusal::NotPositive(refusal) => Verdict {
+            name: Some(refusal.name),
+            error: Error::NotPositive {
+                name: refusal.name,
+                part: refusal.part,
+                polarity: refusal.polarity,
+            },
+        },
+        PositivityRefusal::Exhausted { name, error } => Verdict {
             name: Some(name),
             error,
-        });
+        },
     }
-    let mut local_memo = HashMap::new();
-    for (name, item_positions) in &positions {
-        if let Err(error) = check_positions(item_positions, &partial, &mut local_memo) {
-            verdicts.push(Verdict { name: *name, error });
-        }
+}
+
+/// Compute and file the polarity vector of every registry entry in scope that no record files one for: the entries of a unit mounted without a record a walk made of it. Analyzed together, since nothing says which of them mention which, and before anything is judged, since a judged family composes through them.
+fn file_scope_polarities(kernel: &mut Kernel, verdicts: &mut Vec<Verdict>) {
+    let (inducts, structs) = kernel.unvectored();
+    if inducts.is_empty() && structs.is_empty() {
+        return;
     }
 
-    // Declaration acceptance, after the item walk rather than before it: a registry telescope may mention any top-level definition — a type alias, a type constructor's own `rec` group — and those names are only defined as the walk proceeds. Every item defines whether or not it checked, so by this point the environment is complete. Strict positivity runs over the *full* declaration set — the registries are merged even though the items are not, because a declaration may reach one a unit in scope declares — so the analysis recomputes every vector rather than reading any a unit carries; then the size condition, the clause the item walk cannot supply, because it computes each signature's sort and compares it to nothing.
-    //
-    // Positivity is a judgment of its own and gets its own budget, as the elaborator's pass does. It reduces payload types across every declaration in the program, and on what the entrypoint and the two obligations above left, whether it finished would depend on how much they had spent.
     kernel.restore_budget();
-    if let Err(refusal) = positivity_vectors(
-        kernel,
-        Declarations::extending(
-            globals.inducts(),
-            globals.structs(),
-            &module.induct_decls,
-            &module.struct_decls,
-        ),
-        Coverage::Complete,
-    ) {
-        verdicts.push(match refusal {
-            PositivityRefusal::NotPositive(refusal) => Verdict {
-                name: Some(refusal.name),
-                error: Error::NotPositive {
-                    name: refusal.name,
-                    part: refusal.part,
-                    polarity: refusal.polarity,
-                },
-            },
-            PositivityRefusal::Exhausted { name, error } => Verdict {
-                name: Some(name),
-                error,
-            },
-        });
+    match positivity_vectors(kernel, Declarations::of(&inducts, &structs)) {
+        Ok(vectors) => {
+            for (name, vector) in vectors {
+                kernel.file_polarities(&name, vector);
+            }
+        }
+        Err(refusal) => verdicts.push(positivity_verdict(refusal)),
     }
-    // Variance is reconciled where positivity is decided, and for its reason: a telescope may mention any top-level definition, and the walk above has by now defined them all. The walk compared instances on each carried vector's word, so this module's vectors are recomputed, and a carried irrelevance the recomputation denies refuses the module. A carried invariance it would have granted costs an acceptance and admits nothing. A family of a unit in scope answers from the vector it carries, here as in the walk: that vector was held to its own declarations when the unit was certified, which makes it the certifier's record and not an input, and recomputing it at every certification would buy no verdict the walk does not already rest on.
+    // What this read is no judged item's.
+    kernel.take_reads();
+}
+
+/// Accept the registry entries one declaration declares: their strict positivity, their variance and their sizing, each a judgment of its own on a budget restored for it, so whether one fits is a fact about these entries and never about what the module's others cost.
+///
+/// **Over these entries alone.** A group's formers are one item, so the families that mention one another arrive together; every other family the telescopes mention belongs to a declaration judged before this one — the item follows what its entries reach — or to a unit in scope, and answers from what the kernel holds of it: the vector it filed for strict positivity, the vector the walk reconciled for variance.
+///
+/// **Strict positivity** is recomputed here and filed, in the environment for the declarations judged after this one and in `polarities` for the walk's record; the vector an entry carries is elaboration's and is read by nothing. An entry the analysis refuses is filed no vector, and answers `Mixed` from then on.
+///
+/// **Variance** is reconciled as it is decided: the item's own check compared instances on each carried vector's word, so the vectors are recomputed, and a carried irrelevance the recomputation denies refuses the entry. A carried invariance it would have granted costs an acceptance and admits nothing. A family of a unit in scope answers from the vector it carries, which was held to its own declaration when that unit was certified.
+///
+/// **Sizing** — a literal result sort, sized constructors, each index target typed against the arity — is the clause the item's typing cannot supply, because it computes each signature's sort and compares it to nothing.
+///
+/// What the three read joins what typing each former did: a registry entry is accepted as part of its type former, which every declaration has under its own name.
+fn accept(
+    kernel: &mut Kernel,
+    inducts: &BTreeMap<Global, InductDecl>,
+    structs: &BTreeMap<Global, StructDecl>,
+    verdicts: &mut Vec<Verdict>,
+    reads: &mut BTreeMap<Global, Reads>,
+    polarities: &mut BTreeMap<Global, Vec<Polarity>>,
+) {
+    if inducts.is_empty() && structs.is_empty() {
+        return;
+    }
+
     kernel.restore_budget();
-    let recomputed = variance_vectors(
-        kernel,
-        Declarations::of(&module.induct_decls, &module.struct_decls),
-    );
+    match positivity_vectors(kernel, Declarations::of(inducts, structs)) {
+        Ok(vectors) => {
+            for (name, vector) in vectors {
+                kernel.file_polarities(&name, vector.clone());
+                polarities.insert(name, vector);
+            }
+        }
+        Err(refusal) => verdicts.push(positivity_verdict(refusal)),
+    }
+
+    kernel.restore_budget();
+    let recomputed = variance_vectors(kernel, Declarations::of(inducts, structs));
     let mut exhausted = recomputed.exhausted;
-    let carried = module
-        .induct_decls
+    let carried = inducts
         .iter()
         .map(|(name, declaration)| (name, &declaration.variances))
         .chain(
-            module
-                .struct_decls
+            structs
                 .iter()
                 .map(|(name, declaration)| (name, &declaration.variances)),
         );
@@ -825,53 +932,30 @@ fn verdicts_within(
             },
         });
     }
-    // Positivity is one judgment over the whole declaration set and variance one over this module's, so what they read belongs to no one item's record.
-    kernel.take_reads();
-    // A registry entry is accepted as part of its type former, which every declaration has under its own name, so what accepting the entry read joins what typing the former did.
-    let mut accepted = |kernel: &mut Kernel, name: &Global| {
-        let declaration_reads = kernel.take_reads();
-        if let Some(reads) = reads.get_mut(name) {
-            reads.extend(declaration_reads);
-        }
-    };
-    for (name, declaration) in new_entries(&module.induct_decls, &judged.inducts) {
+
+    kernel.restore_budget();
+    for (name, declaration) in inducts {
         if let Err(error) = check_induct_decl(kernel, declaration) {
             verdicts.push(Verdict {
                 name: Some(*name),
                 error,
             });
         }
-        accepted(kernel, name);
     }
-    for (name, declaration) in new_entries(&module.struct_decls, &judged.structs) {
+    for (name, declaration) in structs {
         if let Err(error) = check_struct_decl(kernel, declaration) {
             verdicts.push(Verdict {
                 name: Some(*name),
                 error,
             });
         }
-        accepted(kernel, name);
     }
 
-    // The record of what this walk concluded, taken from the closed set the obligations read and the reads each judgment made — every judged definition, so a later walk reading it needs nothing of this one's.
-    let certification = Certification::of(
-        judged
-            .items
-            .iter()
-            .flat_map(|&index| module.items[index].definitions())
-            .map(|definition| {
-                let totality = match partial.contains(&definition.name) {
-                    true => Totality::Partial,
-                    false => Totality::Total,
-                };
-                let reads = reads.remove(&definition.name).unwrap_or_default();
-                (definition.name, Certified { totality, reads })
-            }),
-    );
-
-    Rechecked {
-        verdicts,
-        certification,
+    let read = kernel.take_reads();
+    for name in inducts.keys().chain(structs.keys()) {
+        if let Some(reads) = reads.get_mut(name) {
+            reads.extend(read.clone());
+        }
     }
 }
 

@@ -9,8 +9,8 @@
 use {
     super::{
         Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Many,
-        RecGroup, RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm, Telescope, Term,
-        UniverseContext, UniverseError, WitnessSpelling, build_shorten,
+        Polarity, RecGroup, RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm,
+        Telescope, Term, UniverseContext, UniverseError, WitnessSpelling, build_shorten,
     },
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -39,13 +39,15 @@ impl Totality {
     }
 }
 
-/// What the certifier concluded about the definitions one of its walks judged: each one's totality, closed over everything it mentions, and what judging it read of other items.
+/// What the certifier concluded about the declarations one of its walks judged: each definition's totality, closed over everything it mentions, with what judging it read of other items, and each `induct` and `struct` entry's polarity vector.
 ///
 /// Only the certifier's walk makes one — `curios_cert::certify_module` — and a later walk reads it as the verdicts on the definitions it covers, rather than the stamp elaboration writes onto each [`Definition`]. It is filed with the unit whose definitions it covers, and that unit's address is its identity: a stored unit is found only under the compiler that judged it, and the fixed prelude's record is a constant of the build that certified it. It is read only where it [covers](Certification::covers) its unit, never one name at a time — one naming fewer definitions than its unit holds was not made by a walk over that unit, so none of its entries is known to be the closure it claims — and a unit without a covering record is one the reading walk classifies for itself, never one it takes elaboration's word for.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Certification {
     certified: BTreeMap<Global, Certified>,
+    /// How each `induct` and `struct` entry the walk accepted uses its parameters, as the walk computed it: what a later walk composes through where a family it judges mentions this one. The vector the entry itself carries is elaboration's, which no walk reads.
+    polarities: BTreeMap<Global, Vec<Polarity>>,
 }
 
 /// What the certifier concluded about one definition it judged.
@@ -81,11 +83,20 @@ impl Reads {
 }
 
 impl Certification {
-    /// A record of each of `definitions`.
-    pub fn of(definitions: impl IntoIterator<Item = (Global, Certified)>) -> Self {
+    /// A record of each of `definitions`, and of the vector of each entry in `polarities`.
+    pub fn of(
+        definitions: impl IntoIterator<Item = (Global, Certified)>,
+        polarities: impl IntoIterator<Item = (Global, Vec<Polarity>)>,
+    ) -> Self {
         Self {
             certified: definitions.into_iter().collect(),
+            polarities: polarities.into_iter().collect(),
         }
+    }
+
+    /// The polarity vector the certifier computed for the registry entry `name`, when this record holds one.
+    pub fn polarities(&self, name: &Global) -> Option<&[Polarity]> {
+        self.polarities.get(name).map(Vec::as_slice)
     }
 
     /// The certifier's classification of `name`, when this record covers it.
@@ -114,13 +125,20 @@ impl Certification {
             .map(|(name, certified)| (name, certified.totality))
     }
 
-    /// This record with `other`'s entry for each definition of `module` it lacks, its own winning where both hold a name — how an item-level recompile's record joins the baseline's entries for the items it reused to its own walk's, and for no declaration the new text dropped.
+    /// This record with `other`'s entry for each definition of `module` it lacks and `other`'s vector for each registry entry of `module` it lacks, its own winning where both hold a name — how an item-level recompile's record joins the baseline's for the declarations it reused to its own walk's, and for no declaration the new text dropped.
     pub fn extended(mut self, other: &Certification, module: &Module) -> Self {
         for definition in module.items.iter().flat_map(Item::definitions) {
             if let Some(certified) = other.certified.get(&definition.name) {
                 self.certified
                     .entry(definition.name)
                     .or_insert_with(|| certified.clone());
+            }
+        }
+        for name in module.induct_decls.keys().chain(module.struct_decls.keys()) {
+            if let Some(vector) = other.polarities.get(name) {
+                self.polarities
+                    .entry(*name)
+                    .or_insert_with(|| vector.clone());
             }
         }
         self
@@ -285,7 +303,7 @@ impl Definition {
 
     /// Every top-level name this definition's elaboration consumed: what it [`mentions`](Self::mentions), plus the nominal heads its constructions and type-former normal forms name. Those live in the registry rather than the variable graph, so `mentions` cannot see them — and an item that builds a `Struct` or matches a `Variant` depends on that declaration exactly as one that names it does.
     ///
-    /// This is the edge set an invalidation is closed over and a refusal is poisoned along. [`mentions`](Self::mentions) is what the kernel's order and the totality closure need, which the variable edges alone serve.
+    /// This is the edge set an invalidation is closed over, a refusal is poisoned along and, with what an item's registry entries reach ([`Module::reaches`]), the kernel's order follows. [`mentions`](Self::mentions) is what the totality closure needs, which the variable edges alone serve.
     pub fn reaches(&self) -> BTreeSet<Global> {
         let mut names = self.mentions();
         names.extend(construction_heads(&self.type_));

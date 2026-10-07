@@ -15,7 +15,7 @@
 use {
     super::{Error, Globals, Kernel, Position, Sort},
     curios_analysis::Erased,
-    curios_core::{Enter, Free, Global, Item, Module, RecGroup, Reducer, Subterm, Term, Totality},
+    curios_core::{Enter, Free, Global, Item, RecGroup, Reducer, Subterm, Term, Totality},
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
 
@@ -56,30 +56,78 @@ fn holds_a_group(term: &Term) -> bool {
     )
 }
 
-/// Every definition in `module` that is not known to terminate, closed transitively over what each one mentions.
+/// The definitions not known to terminate, as a walk comes to know them: the environment's, then each judged item's as it is classified.
 ///
-/// What `globals` already answers for is read rather than recomputed: its non-total set, which is the certifier's record of each unit it mounted, seeds the closure, and of `module`'s items only the `judged` ones are classified — the walk's own answer to which are new, the rest being the environment's own. That is what keeps a compile from re-analyzing the standard library. What it mounted without a covering record is classified here first, from its items, exactly as a judged item is — and a stamp on one of those is not this walk's to compare, since the walk judges nothing of it.
+/// What an environment already answers for is read rather than recomputed: its non-total set, which is the certifier's record of each unit it mounted, seeds this one, and of a module's items only the judged ones are classified — the walk's own answer to which are new, the rest being the environment's own. That is what keeps a compile from re-analyzing the standard library.
 ///
-/// The stamp comparison on a judged item runs after the closure, against the closed set, because a stamp *asserts* the closure — elaboration's classification closes over mentions as this one does — so a `Total` on a definition partial only through its mentions is exactly as generous as one on a diverging body. No later walk reads a stamp, so a disagreement costs nothing downstream; it is reported because two checkers disagreeing is the signal the second one exists to give.
-///
-/// **Seeding from the environment is load-bearing rather than an optimization.** The closure is over what a definition *mentions*, and the already-judged items are not carried inside `module`, so nothing else in this walk knows `/std/Async/bind` is partial. A user proof reaching it would then close over a name absent from the set and read as total, which is exactly the identification (T) and (V) exist to prevent.
-///
-/// The selection is the walk's, made once before anything is judged ([`recheck_module_verdicts`](crate::recheck_module_verdicts)), so the two cannot disagree on which items are this walk's.
-///
-/// The closure iterates to a fixpoint rather than assuming one pass suffices: items are stored in binding order, and a definition may mention one stored after it.
-pub(crate) fn partial_definitions(
-    kernel: &mut Kernel,
-    module: &Module,
-    globals: &Globals,
-    judged: &[usize],
-) -> (BTreeSet<Global>, Vec<(Global, Error)>) {
-    curios_profile::profile!("partial_definitions");
-    let mut mentions: BTreeMap<Global, BTreeSet<Global>> = BTreeMap::new();
-    let mut partial: BTreeSet<Global> = globals.partial().clone();
-    let mut stamped_total: Vec<Global> = Vec::new();
-    let mut memo = HashMap::new();
-    // `typed` says this walk checked `item`, so what its check enclosed was noted as it went; an item it did not check — one of a unit mounted without a covering record — is read from its terms instead, every group in them one with no verdict here.
-    let mut classify = |item: &Item, typed: bool| {
+/// **Seeding from the environment is load-bearing rather than an optimization.** A definition is partial where anything it *mentions* is, and the already-judged items are not carried inside the module, so nothing else in a walk knows `/std/Async/bind` is partial. A user proof reaching it would then be read against a set the name is absent from and pass as total, which is exactly the identification (T) and (V) exist to prevent.
+pub(crate) struct Totals {
+    partial: BTreeSet<Global>,
+    /// Which terms call a diverging host row, carried across every item the walk classifies: definitions share subterms heavily, and a node settled for one is settled for all.
+    memo: HashMap<Term, bool>,
+}
+
+impl Totals {
+    /// What `globals` holds classified, and what it holds unclassified: the items of a unit mounted without a covering record, classified here from their terms, exactly as a judged item is, every group in them one this walk never typed. Those are closed over one another to a fixpoint, since nothing says in which order they were stored.
+    pub(crate) fn seeded(kernel: &Kernel, globals: &Globals) -> Self {
+        curios_profile::profile!("totals::seeded");
+        let mut totals = Self {
+            partial: globals.partial().clone(),
+            memo: HashMap::new(),
+        };
+        let mut mentions = BTreeMap::new();
+        for item in globals.unclassified() {
+            totals.locally(kernel, item, false, &mut mentions);
+        }
+        totals.close(&mentions);
+
+        totals
+    }
+
+    /// The set so far.
+    pub(crate) fn partial(&self) -> &BTreeSet<Global> {
+        &self.partial
+    }
+
+    /// Classify a judged `item` into the set, and hand back each of its definitions whose stamp says `Total` where the walk says otherwise.
+    ///
+    /// Asked as the item's check ends, so what its check enclosed was noted as it went, and after every definition it mentions outside itself was classified: the walk judges an item after the items it reaches, and what a judged item mentions of the environment is in the set since it was seeded. So one pass over the item settles it, its members closed over one another where it is a group.
+    ///
+    /// The stamp comparison runs against the closed set, because a stamp *asserts* the closure — elaboration's classification closes over mentions as this one does — so a `Total` on a definition partial only through its mentions is exactly as generous as one on a diverging body. No later walk reads a stamp, so a disagreement costs nothing downstream; it is reported because two checkers disagreeing is the signal the second one exists to give. A partial mention is named where one exists; a definition partial in itself alone has nothing to blame.
+    pub(crate) fn classify(&mut self, kernel: &Kernel, item: &Item) -> Vec<(Global, Error)> {
+        let mut mentions = BTreeMap::new();
+        self.locally(kernel, item, true, &mut mentions);
+        self.close(&mentions);
+
+        item.definitions()
+            .into_iter()
+            .filter(|definition| {
+                definition.totality.is_total() && self.partial.contains(&definition.name)
+            })
+            .map(|definition| {
+                let reached = mentions
+                    .get(&definition.name)
+                    .and_then(|reached| reached.iter().find(|other| self.partial.contains(*other)))
+                    .cloned();
+                (
+                    definition.name,
+                    Error::NotTotal {
+                        erased: Erased::Proof,
+                        reached,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    /// Put each definition of `item` that is partial on its own account into the set, and record what each mentions. `typed` says this walk checked `item`, so what its check enclosed was noted as it went; an item it did not check is read from its terms instead, every group in them one with no verdict here.
+    fn locally(
+        &mut self,
+        kernel: &Kernel,
+        item: &Item,
+        typed: bool,
+        mentions: &mut BTreeMap<Global, BTreeSet<Global>>,
+    ) {
         // A group that does not descend makes every member partial, whatever each body looks like on its own.
         let rejected = match item {
             Item::Rec(rec) => !descends(kernel, &rec.group),
@@ -96,64 +144,33 @@ pub(crate) fn partial_definitions(
             };
             if rejected
                 || encloses
-                || calls_a_diverging_row(&definition.body, &mut memo)
-                || calls_a_diverging_row(&definition.type_, &mut memo)
+                || calls_a_diverging_row(&definition.body, &mut self.memo)
+                || calls_a_diverging_row(&definition.type_, &mut self.memo)
             {
-                partial.insert(definition.name);
+                self.partial.insert(definition.name);
             }
             mentions.insert(definition.name, definition.mentions());
         }
-    };
-
-    for item in globals.unclassified() {
-        classify(item, false);
-    }
-    for item in judged.iter().map(|&index| &module.items[index]) {
-        stamped_total.extend(
-            item.definitions()
-                .into_iter()
-                .filter(|definition| definition.totality.is_total())
-                .map(|definition| definition.name),
-        );
-        classify(item, true);
     }
 
-    loop {
-        let mut changed = false;
-        for (name, reached) in &mentions {
-            if partial.contains(name) {
-                continue;
+    /// Close the set over `mentions`: a definition that mentions a partial one is partial, iterated until nothing joins.
+    fn close(&mut self, mentions: &BTreeMap<Global, BTreeSet<Global>>) {
+        loop {
+            let mut changed = false;
+            for (name, reached) in mentions {
+                if self.partial.contains(name) {
+                    continue;
+                }
+                if reached.iter().any(|other| self.partial.contains(other)) {
+                    self.partial.insert(*name);
+                    changed = true;
+                }
             }
-            if reached.iter().any(|other| partial.contains(other)) {
-                partial.insert(*name);
-                changed = true;
+            if !changed {
+                break;
             }
         }
-        if !changed {
-            break;
-        }
     }
-
-    // See the doc above: the stamp asserts the closure, so it is compared against the closed set. A partial mention is named where one exists; a definition partial in itself alone has nothing to blame.
-    let disagreements = stamped_total
-        .into_iter()
-        .filter(|name| partial.contains(name))
-        .map(|name| {
-            let reached = mentions
-                .get(&name)
-                .and_then(|reached| reached.iter().find(|other| partial.contains(*other)))
-                .cloned();
-            (
-                name,
-                Error::NotTotal {
-                    erased: Erased::Proof,
-                    reached,
-                },
-            )
-        })
-        .collect();
-
-    (partial, disagreements)
 }
 
 /// Obligations (T) and (V) over the positions one item's check recorded: each must reach nothing partial, and must not be partial in itself — enclose no group that does not descend, as the walk noted where it typed one, and call no host row that diverges.

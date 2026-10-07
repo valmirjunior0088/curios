@@ -75,7 +75,7 @@ fn a_registry_entry_differing_from_the_environments_is_refused() {
     );
 }
 
-/// A registry entry is the environment's own by what the certifier reads of it: its terms, and the variance vector a walk answers from. Elaboration's stamps take no part — the polarity vector, which no judgment here reads and which a recompile writes again over the whole module, the owning module and the representation's privacy — so an entry differing from the environment's in those alone is passed over.
+/// A registry entry is the environment's own by what the certifier reads of it: its terms, and the variance vector a walk answers from. Elaboration's stamps take no part — the polarity vector, in whose place the environment holds the one the certifier computed, the owning module and the representation's privacy — so an entry differing from the environment's in those alone is passed over.
 ///
 /// Mutation-checked against the comparison: taken over the whole entry, the family and the record are each refused for their name.
 #[test]
@@ -120,6 +120,54 @@ fn a_registry_entry_differing_in_what_the_certifier_reads_is_refused() {
         redeclares(&verdicts, &kept_record()),
         "a record differing from the environment's in a field's type was not refused for the name: {verdicts:?}",
     );
+}
+
+/// The polarity vector a walk composes through is the one the certifier filed for the family, never the one its entry carries.
+///
+/// `Wrapper(A)` holds a function out of `A`, and its entry is stamped `Strict` in `A`: elaboration's vector, and here a lie. `Outer` stores a `Wrapper(Outer)`, so it reaches itself to the left of an arrow and is refused. The walk over `Outer` is handed `Wrapper`'s unit twice: under the record the walk over that unit left, which files the vector that walk computed, and under no record, where the walk computes the vector for itself before it judges anything. Believing the stamp on either path accepts `Outer`, a family negative in itself.
+///
+/// The control is the same pair with `Wrapper` holding an `A`: the stamp is then the truth and `Outer` is accepted on both paths, so the refusal is the vector's and not that of every family storing itself in a mounted one.
+///
+/// Mutation-checked against the environment's construction: keeping the vector each entry carries accepts `Outer`.
+#[test]
+fn a_mounted_familys_vector_is_the_certifiers_and_not_its_entrys() {
+    for negatively in [true, false] {
+        let unit = wrapper_of_its_parameter(negatively);
+        let certified = fixture_certified(&unit, 1_000_000, &Globals::default(), SYNTAX);
+        assert_eq!(
+            certified.verdicts,
+            Vec::new(),
+            "`Wrapper` is well formed on its own, whichever way it holds `A`",
+        );
+
+        let environments = [
+            (
+                "the record its walk left",
+                Globals::of(&unit, &certified.certification),
+            ),
+            ("no record", already_judged(&unit)),
+        ];
+        for (under, environment) in environments {
+            let verdicts =
+                fixture_verdicts(&stored_in_the_wrapper(), 1_000_000, &environment, SYNTAX);
+            let refused = verdicts.iter().any(|verdict| {
+                verdict.name == Some(stored_family())
+                    && matches!(verdict.error, Error::NotPositive { .. })
+            });
+
+            match negatively {
+                true => assert!(
+                    refused,
+                    "`Outer` was accepted on a `Strict` its entry's stamp claims, under {under}: {verdicts:?}",
+                ),
+                false => assert_eq!(
+                    verdicts,
+                    Vec::new(),
+                    "the control stopped holding: `Outer` stores itself strictly, under {under}",
+                ),
+            }
+        }
+    }
 }
 
 /// A declaration equal to the one the environment holds under its name is the environment's own: it is passed over, and the module certified.

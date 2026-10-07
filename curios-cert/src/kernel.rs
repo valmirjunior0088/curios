@@ -58,7 +58,7 @@ use {
         UniverseConstraint, UniverseContext, UniverseError, Variance,
     },
     curios_utilities::{Plicity, SyntaxRegistry},
-    std::{fmt, rc::Rc},
+    std::{collections::BTreeMap, fmt, rc::Rc},
 };
 
 /// Why the kernel refused a term.
@@ -778,6 +778,18 @@ impl Kernel {
     /// Register a `struct` declaration's registry entry, refused where one already stands under `name`.
     pub fn declare_struct(&mut self, name: &Global, declaration: &StructDecl) -> Result<(), Error> {
         self.globals.declare_struct(name, declaration)
+    }
+
+    /// The registry entries of the scope this kernel was seeded with that no record files a polarity vector for, which a walk computes before it judges anything.
+    pub(crate) fn unvectored(
+        &self,
+    ) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
+        self.globals.unvectored()
+    }
+
+    /// File the polarity vector the walk computed for the registry entry under `name` ([`Globals::file_polarities`]).
+    pub(crate) fn file_polarities(&mut self, name: &Global, vector: Vec<Polarity>) {
+        self.globals.file_polarities(name, vector);
     }
 
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {

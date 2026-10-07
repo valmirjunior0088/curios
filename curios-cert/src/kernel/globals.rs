@@ -10,13 +10,13 @@
 //!
 //! # It is also what a walk starts from
 //!
-//! [`Globals::of`] builds this from a whole module, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, its nominal registry, and the certifier's record of its definitions' totality. A caller that has one hands it to [`recheck_module_verdicts`](crate::recheck_module_verdicts) and the walk judges what the environment does not already hold. A name is one declaration: a declaration the module carries is the environment's own where its namespace holds the same terms under its name, new where no namespace holds the name, and refused otherwise — which is what the standing questions below answer, and nothing about them identifies an item by where it sits.
+//! [`Globals::of`] builds this from a whole module, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, its nominal registry, and the certifier's record of its definitions' totality and of its families' polarity vectors. A caller that has one hands it to [`recheck_module_verdicts`](crate::recheck_module_verdicts) and the walk judges what the environment does not already hold. A name is one declaration: a declaration the module carries is the environment's own where its namespace holds the same terms under its name, new where no namespace holds the name, and refused otherwise — which is what the standing questions below answer, and nothing about them identifies an item by where it sits.
 
 use {
     super::Error,
     curios_core::{
-        Certification, Free, Global, InductDecl, Item, Module, StructDecl, Term, Totality,
-        UniverseContext,
+        Certification, Free, Global, InductDecl, Item, Module, Polarity, StructDecl, Term,
+        Totality, UniverseContext,
     },
     std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
 };
@@ -79,7 +79,7 @@ pub(crate) enum Standing {
 
 /// Whether two `induct` registry entries are one declaration to the certifier: equal in everything it reads of one.
 ///
-/// That is the declaration's terms — its universe context, its arity, its constructors and its result sort — and its variance vector, which a walk answers from for a family of a unit in scope. A polarity vector is elaboration's record and no judgment here reads one, every walk recomputing them all; the owning module and the representation's privacy are the elaborator's to read. The entry is taken apart in full, so a field added to it is classified here or does not compile.
+/// That is the declaration's terms — its universe context, its arity, its constructors and its result sort — and its variance vector, which a walk answers from for a family of a unit in scope. The polarity vector an entry carries is elaboration's record, which no judgment here reads: the one an environment holds beside its entry is the certifier's own, filed by the walk that accepted the entry. The owning module and the representation's privacy are the elaborator's to read. The entry is taken apart in full, so a field added to it is classified here or does not compile.
 fn induct_alike(this: &InductDecl, that: &InductDecl) -> bool {
     let InductDecl {
         universe_context,
@@ -120,9 +120,11 @@ fn struct_alike(this: &StructDecl, that: &StructDecl) -> bool {
 #[derive(Default, Clone)]
 pub struct Globals {
     definitions: HashMap<Free, Definition>,
-    /// `BTreeMap` rather than `HashMap` because these are handed to strict positivity as the base of its declaration set, and that pass reports *the first refusal in name order*. A hashed base would make which refusal it reports depend on iteration order.
+    /// Each entry with the polarity vector the certifier computed for it in the place of the one it was handed in with, which is elaboration's: what strict positivity composes through where a family it analyzes mentions this one. An entry no walk has filed a vector for holds none, and answers `Mixed`.
     inducts: BTreeMap<Global, InductDecl>,
     structs: BTreeMap<Global, StructDecl>,
+    /// The entries of every unit mounted here whose record files no vector for them. A walk computes these for itself before it judges anything, as it classifies [`Globals::unclassified`] items.
+    unvectored: BTreeSet<Global>,
     /// Concept names only. No judgment in this crate reads a concept's resolution metadata, so what is held is exactly what [`Globals::in_scope`] needs to answer for the namespace.
     concepts: HashSet<Global>,
     /// The names in scope here that are *not* known to terminate, closed transitively already, as the certifier's record of each unit mounted here classifies them.
@@ -138,7 +140,7 @@ pub struct Globals {
 impl Globals {
     /// Everything `module` puts in scope: its definitions at their declared types with their real bodies, and its nominal registry.
     ///
-    /// `certification` is the record the certifier's walk over `module` filed with it: where it covers `module`, its classifications are the environment's; where it does not, `module`'s items are held for a walk to classify. An environment built by hand, with no walk behind it, passes an empty record, which covers nothing a unit declares.
+    /// `certification` is the record the certifier's walk over `module` filed with it: where it covers `module`, its classifications are the environment's; where it does not, `module`'s items are held for a walk to classify. Each registry entry takes the vector the record files for it, and one it files none for is held for a walk to compute. An environment built by hand, with no walk behind it, passes an empty record, which covers nothing a unit declares.
     ///
     /// A definition enters here exactly as a refused item enters a walk's environment: at its declared type, with its real body, unjudged. That is deliberate and it is the whole meaning of this type — an environment records what is in scope, and whether the recording is warranted is the caller's question, answered before it ever built one.
     pub fn of(module: &Module, certification: &Certification) -> Self {
@@ -168,13 +170,46 @@ impl Globals {
             false => (BTreeSet::new(), module.items.clone()),
         };
 
+        // The vector an entry carries is left behind: the one held here is the record's, or none.
+        let mut unvectored = BTreeSet::new();
+        let mut filed = |name: &Global| match certification.polarities(name) {
+            Some(vector) => vector.to_vec(),
+            None => {
+                unvectored.insert(*name);
+                Vec::new()
+            }
+        };
+        let inducts = module
+            .induct_decls
+            .iter()
+            .map(|(name, declaration)| {
+                let declaration = InductDecl {
+                    polarities: filed(name),
+                    ..declaration.clone()
+                };
+                (*name, declaration)
+            })
+            .collect();
+        let structs = module
+            .struct_decls
+            .iter()
+            .map(|(name, declaration)| {
+                let declaration = StructDecl {
+                    polarities: filed(name),
+                    ..declaration.clone()
+                };
+                (*name, declaration)
+            })
+            .collect();
+
         Self {
             definitions,
-            inducts: module.induct_decls.clone(),
-            structs: module.struct_decls.clone(),
+            inducts,
+            structs,
             concepts: module.concepts.keys().cloned().collect(),
             partial,
             unclassified,
+            unvectored,
         }
     }
 
@@ -208,6 +243,7 @@ impl Globals {
         }
         self.partial.extend(added.partial);
         self.unclassified.extend(added.unclassified);
+        self.unvectored.extend(added.unvectored);
     }
 
     /// The names in scope here that are not known to terminate. See the field.
@@ -220,14 +256,34 @@ impl Globals {
         &self.unclassified
     }
 
-    /// The `induct` registry in scope here, as the base of a declaration set. See [`curios_analysis::Declarations`] on why the base is analyzed rather than believed.
-    pub(crate) fn inducts(&self) -> &BTreeMap<Global, InductDecl> {
-        &self.inducts
+    /// The registry entries in scope here that no record files a vector for, as the two maps strict positivity is handed. See the field.
+    pub(super) fn unvectored(
+        &self,
+    ) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
+        let held = |name: &&Global| self.unvectored.contains(*name);
+
+        (
+            self.inducts
+                .iter()
+                .filter(|(name, _)| held(name))
+                .map(|(name, declaration)| (*name, declaration.clone()))
+                .collect(),
+            self.structs
+                .iter()
+                .filter(|(name, _)| held(name))
+                .map(|(name, declaration)| (*name, declaration.clone()))
+                .collect(),
+        )
     }
 
-    /// The `struct` registry in scope here. See [`Globals::inducts`].
-    pub(crate) fn structs(&self) -> &BTreeMap<Global, StructDecl> {
-        &self.structs
+    /// File `vector` as the polarity vector of the registry entry under `name`: what the walk in progress computed for it, written once, as it accepts the entry, and read from then on by every judgment that composes through the family.
+    pub(super) fn file_polarities(&mut self, name: &Global, vector: Vec<Polarity>) {
+        if let Some(declaration) = self.inducts.get_mut(name) {
+            declaration.polarities = vector;
+        } else if let Some(declaration) = self.structs.get_mut(name) {
+            declaration.polarities = vector;
+        }
+        self.unvectored.remove(name);
     }
 
     /// Whether any namespace here holds `name`.
@@ -321,6 +377,8 @@ impl Globals {
     }
 
     /// Register an `induct` registry entry under `name`, or refuse it where one already stands there: written once, as [`Globals::insert`] writes a definition.
+    ///
+    /// The polarity vector the entry carries is left at the door. It is elaboration's, and the one held here is the certifier's own, which the walk files once it has computed it ([`Globals::file_polarities`]); until then the family answers `Mixed`.
     pub(super) fn declare_induct(
         &mut self,
         name: &Global,
@@ -330,7 +388,13 @@ impl Globals {
             return Err(Error::Redeclared(Free::from(name)));
         }
 
-        self.inducts.insert(*name, declaration.clone());
+        self.inducts.insert(
+            *name,
+            InductDecl {
+                polarities: Vec::new(),
+                ..declaration.clone()
+            },
+        );
 
         Ok(())
     }
@@ -345,7 +409,13 @@ impl Globals {
             return Err(Error::Redeclared(Free::from(name)));
         }
 
-        self.structs.insert(*name, declaration.clone());
+        self.structs.insert(
+            *name,
+            StructDecl {
+                polarities: Vec::new(),
+                ..declaration.clone()
+            },
+        );
 
         Ok(())
     }
