@@ -13,8 +13,8 @@ use {
         Declared, Established, GoalReport, GoalSite, Published, ScheduledTest, Spelled, Written,
         Zonked, body_levels, check_concept_registry, check_is_sort, check_proof_totality,
         check_rec_item_totality, check_type_totality, check_written_type_totality, compared_levels,
-        decide_polarities, definition_variances, goal_sites, hold_variances, is_prop,
-        record_definition_totality, record_superclasses, record_variances, reduce_with,
+        decide_polarities, definition_variances, family_levels, goal_sites, hold_variances,
+        is_prop, record_definition_totality, record_superclasses, record_variances, reduce_with,
         register_witness, report_goals, sort_term, stamp_totality, superclass_targets,
         test_program_tail, zonk, zonk_arity, zonk_entry, zonk_module, zonk_published,
         zonk_solved_term_metas,
@@ -492,6 +492,67 @@ fn result_sort_only_metas(context: &Context, type_: &Term) -> BTreeSet<UniverseM
     result
 }
 
+/// The levels a family's parameters are typed at: the outer telescope of its arity, the indices or fields it closes over apart.
+fn parameter_metas(arity: &Telescope<Telescope<()>>) -> BTreeSet<UniverseMetaId> {
+    let mut metas = BTreeSet::new();
+    let mut current = arity;
+    while let Telescope::Cons(_, domain, rest) = current {
+        metas.extend(domain.universe_metas());
+        current = rest.body();
+    }
+
+    metas
+}
+
+/// Sort the levels of the registry entries `names` declare, the families of one group, into the group's interface and its internal levels, answering the ones an instance holds.
+///
+/// A family's level is its callers' where a parameter is typed at it, where its sort stands, or where an instance holds it, in an index type, a payload, a field or a target ([`family_levels`]). A level an instance holds is compared wherever two instances meet, so it is answered to be held as a signature's compared level is ([`compared_levels`]), a bound on it being its callers' to meet. Any other level its telescopes mention is one no two instances differ in: it is minimized as a body's is, so no occurrence of the family mints a level for it and no signature naming the family carries one.
+fn sort_family_levels(
+    context: &mut Context,
+    names: &[Global],
+    interface: &mut BTreeSet<UniverseMetaId>,
+    internal: &mut BTreeSet<UniverseMetaId>,
+) -> BTreeSet<UniverseMetaId> {
+    let mut mentioned = BTreeSet::new();
+    let mut telescopes = BTreeSet::new();
+    for name in names {
+        if let Some(induct_decl) = context.induct_decl(name) {
+            mentioned.extend(parameter_metas(&induct_decl.arity));
+            mentioned.extend(induct_decl.result_sort.universe_metas());
+            telescopes.extend(universe_metas(&induct_decl.arity));
+            for constructor in induct_decl.signatures() {
+                telescopes.extend(universe_metas(&constructor.telescope));
+            }
+        }
+        if let Some(struct_decl) = context.struct_decl(name) {
+            mentioned.extend(parameter_metas(&struct_decl.arity));
+            mentioned.extend(struct_decl.result_sort.universe_metas());
+            telescopes.extend(universe_metas(&struct_decl.arity));
+        }
+        if let Some(concept) = context.concept(name) {
+            mentioned.extend(universe_metas(&concept.params));
+        }
+    }
+
+    interface.extend(mentioned.iter().copied());
+    if telescopes.is_empty() {
+        return BTreeSet::new();
+    }
+    // Where a telescope may hold any level, every one of its levels stays the group's interface, settled as an occurrence's is.
+    let Some(held) = family_levels(context, names) else {
+        interface.extend(telescopes);
+        return BTreeSet::new();
+    };
+    for meta in &telescopes {
+        match mentioned.contains(meta) || held.contains(meta) {
+            true => interface.insert(*meta),
+            false => internal.insert(*meta),
+        };
+    }
+
+    held.intersection(&telescopes).copied().collect()
+}
+
 fn finalize_definition(
     context: &mut Context,
     name: &Global,
@@ -595,16 +656,10 @@ fn finalize_definition(
     let determined = result_sort_only_metas(context, &type_);
     let mut interface = context.universe_metas_in(&type_);
     interface.retain(|meta| !determined.contains(meta));
-    if let Some(struct_decl) = context.struct_decl(name) {
-        interface.extend(universe_metas(&struct_decl.arity));
-        interface.extend(struct_decl.result_sort.universe_metas());
-    }
-    if let Some(concept) = context.concept(name) {
-        interface.extend(universe_metas(&concept.params));
-    }
     let mut internal = context.universe_metas_in(&body);
     internal.extend(determined.iter().copied());
-    let mut compared = compared_levels(context, &type_);
+    let mut compared = sort_family_levels(context, &[*name], &mut interface, &mut internal);
+    compared.extend(compared_levels(context, &type_));
     // What a type-valued definition's body holds is what an occurrence of it unfolds to, so it is held as the signature's is, and a level the body alone mentions joins the interface with it. The result sort's own level stays determined, the body restating it where it says what it answers.
     let unfolded = body_levels(context, &type_, &body, &determined);
     interface.extend(unfolded.iter().copied());
@@ -1002,31 +1057,16 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     }
     determined.retain(|meta| !kept.contains(meta));
     interface.retain(|meta| !determined.contains(meta));
-    for def in &defs {
-        if let Some(induct_decl) = context.induct_decl(&def.name) {
-            interface.extend(universe_metas(&induct_decl.arity));
-            interface.extend(induct_decl.result_sort.universe_metas());
-            for constructor in induct_decl.signatures() {
-                interface.extend(universe_metas(&constructor.telescope));
-            }
-        }
-        if let Some(struct_decl) = context.struct_decl(&def.name) {
-            interface.extend(universe_metas(&struct_decl.arity));
-            interface.extend(struct_decl.result_sort.universe_metas());
-        }
-        if let Some(concept) = context.concept(&def.name) {
-            interface.extend(universe_metas(&concept.params));
-        }
-    }
     let mut internal = bodies
         .iter()
         .flat_map(|body| context.universe_metas_in(body))
         .collect::<BTreeSet<_>>();
     internal.extend(determined.iter().copied());
-    let mut compared = types
-        .iter()
-        .flat_map(|type_| compared_levels(context, type_))
-        .collect::<BTreeSet<_>>();
+    let names = defs.iter().map(|def| def.name).collect::<Vec<_>>();
+    let mut compared = sort_family_levels(context, &names, &mut interface, &mut internal);
+    for type_ in &types {
+        compared.extend(compared_levels(context, type_));
+    }
     // A member that answers a type is read as a `let` that does: what its body holds joins the group's interface, held.
     for (type_, body) in types.iter().zip(&bodies) {
         let unfolded = body_levels(context, type_, body, &determined);

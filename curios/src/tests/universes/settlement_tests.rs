@@ -53,6 +53,28 @@ fn a_body_carried_level_is_minimized_rather_than_generalized() {
     );
 }
 
+// **A family's level is its callers' where a parameter is typed at it or an instance holds it, and no other is.** `Tree`'s payload names `List` over the family itself, at a level nothing but the family's own sort bounds. `List` is irrelevant in it, so no two instances of `Tree` would differ in it, and it is minimized where its group closes: `Tree` takes no level, and neither does a signature that names it. `Wrap` keeps the level its parameter is typed at, and `Kept` the one its field holds.
+#[test]
+fn a_family_takes_no_level_its_instances_cannot_differ_in() {
+    let source = r#"
+        use /std/{Str, List};
+        pub induct Tree: pub Type | leaf(Str) | node(List(Tree)) end
+        pub induct Wrap(A: Type): pub Type | wrap(a: A, rest: List(Wrap(A))) end
+        pub struct Kept: pub Type { A: Type }
+        pub let leaves(t: Tree) -> List(Tree) = [t];
+        /std/print("sorted")
+        "#;
+
+    let parameters = universe_parameters(source);
+    for (name, count) in [("/Tree", 0), ("/leaves", 0), ("/Wrap", 1), ("/Kept", 1)] {
+        assert_eq!(
+            parameters.get(name),
+            Some(&count),
+            "a family took a level no instance of it holds, or lost one that types a parameter or that an instance holds: {parameters:?}",
+        );
+    }
+}
+
 // **A concept's method level is its family's domain.** `ret`'s `@A: Type` is bounded only by the domain of `M`, and cumulativity already lets a caller pass anything smaller, so it is that domain: `Mon` takes its family's domain and codomain and no parameter per method. Generalized apart, a method level is one an implementation may answer at below its family's domain, which would leave `Result`'s `Monad` witness taking `Type 0` payloads only. `Two` is the control: its `pick` is bounded by two families' domains, which name no one level to be, so it keeps a level of its own.
 #[test]
 fn a_method_level_bounded_by_one_domain_is_that_domain() {

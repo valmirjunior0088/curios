@@ -6,7 +6,7 @@
 
 use {
     super::{Context, Error, Published, zonk_solved_term_metas},
-    curios_analysis::{Declarations, VarianceVectors, held_levels, variance_vectors},
+    curios_analysis::{Declarations, VarianceVectors, held_by, held_levels, variance_vectors},
     curios_core::{
         Bound, Families, Func, FuncType, Global, InductDecl, InductParam, Level, LevelHead,
         StructDecl, Subterm, Term, UniverseContext, UniverseMetaId, UniverseParam, Variance,
@@ -55,6 +55,62 @@ impl Families for Structural<'_> {
 /// Every earlier family's vector answers from the registry. A solved metavariable is spliced in first; one still unsolved is read as mentioning every level, its solution being free to. A reduction the budget refuses reads the same way, and is no error here: the vector it leaves claims less.
 pub(crate) fn record_variances(context: &mut Context, names: &[Global]) {
     curios_profile::profile!("record_variances");
+    let (inducts, structs) = spliced(context, names);
+
+    let VarianceVectors { vectors, .. } =
+        variance_vectors(context, Declarations::of(&inducts, &structs));
+    for (name, vector) in vectors {
+        if let Some(declaration) = context.induct_decl(&name).cloned() {
+            context.update_induct(
+                &name,
+                InductDecl {
+                    variances: vector,
+                    ..declaration
+                },
+            );
+        } else if let Some(declaration) = context.struct_decl(&name).cloned() {
+            context.update_struct(
+                &name,
+                StructDecl {
+                    variances: vector,
+                    ..declaration
+                },
+            );
+        }
+    }
+}
+
+/// The levels still open that the families among `names` hold, the group they close with: what an instance of one holds in its index types, payloads, fields and targets, read by the walk their vectors are computed by once their levels have closed ([`record_variances`]). `None` where a telescope may hold any level, a metavariable in it being still unsolved.
+///
+/// A level it reports is one two instances would be told apart by, so it is the family's parameter. A level of a telescope it does not report is one no instance holds. A reduction the budget refuses reads its term as holding every level it carries, and is no error here: what is reported claims less.
+pub(crate) fn family_levels(
+    context: &mut Context,
+    names: &[Global],
+) -> Option<BTreeSet<UniverseMetaId>> {
+    curios_profile::profile!("family_levels");
+    let (inducts, structs) = spliced(context, names);
+    let found = held_by(context, Declarations::of(&inducts, &structs));
+    if found.every {
+        return None;
+    }
+
+    Some(
+        found
+            .heads
+            .into_iter()
+            .filter_map(|head| match head {
+                LevelHead::Meta(meta) => Some(meta),
+                LevelHead::Param(_) => None,
+            })
+            .collect(),
+    )
+}
+
+/// The registry entries of `names` with every solved metavariable spliced into their telescopes: what the analysis reads of a group as it closes.
+fn spliced(
+    context: &Context,
+    names: &[Global],
+) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
     let mut inducts = BTreeMap::new();
     let mut structs = BTreeMap::new();
     for name in names {
@@ -85,27 +141,7 @@ pub(crate) fn record_variances(context: &mut Context, names: &[Global]) {
         }
     }
 
-    let VarianceVectors { vectors, .. } =
-        variance_vectors(context, Declarations::of(&inducts, &structs));
-    for (name, vector) in vectors {
-        if let Some(declaration) = context.induct_decl(&name).cloned() {
-            context.update_induct(
-                &name,
-                InductDecl {
-                    variances: vector,
-                    ..declaration
-                },
-            );
-        } else if let Some(declaration) = context.struct_decl(&name).cloned() {
-            context.update_struct(
-                &name,
-                StructDecl {
-                    variances: vector,
-                    ..declaration
-                },
-            );
-        }
-    }
+    (inducts, structs)
 }
 
 /// Which of a definition's universe parameters its value holds, read where its levels have closed: one entry per parameter of `universe_context`, none for a definition that takes none.

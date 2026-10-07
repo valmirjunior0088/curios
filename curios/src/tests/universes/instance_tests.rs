@@ -117,9 +117,8 @@ fn a_family_whose_payload_resolves_through_a_later_witness_reads_its_final_teles
     let ordered = family_variances(&program(induct, "Str"));
     assert_eq!(
         ordered.get("/Holder").map(String::as_str),
-        // The witness takes the level `Sized` is invariant in, its result holding it where conversion compares it, and the family whose payload names the witness takes that level beside its own: two, both irrelevant.
-        Some("**"),
-        "a level that only types a parameter stopped reading irrelevant, or the witness's level stopped being the family's: {ordered:?}",
+        Some("*"),
+        "a level that only types a parameter stopped reading irrelevant: {ordered:?}",
     );
     // The struct is accepted as the inductive is; only an inductive family's vector is listed.
     family_variances(&program(struct_, "Str"));

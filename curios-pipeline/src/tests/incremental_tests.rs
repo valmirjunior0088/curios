@@ -257,7 +257,7 @@ pub let reader(@A: Type, h: Held(A)) -> Held(A) = h;
 
 pub let unrelated: Nat = 7;
 ";
-    // `Eq()(A, A)` holds `A` as a value of its own `Type`, so `A`'s level reaches a `Type` and is invariant in `Wrap`.
+    // `Eq()(A, A)` holds `A` as a value of its own `Type`, so `A`'s level reaches a `Type` and is invariant in `Wrap`. An instance of `Held` then holds the level of the `Wrap` in its payload, which is `Held`'s to its callers beside the level its parameter is typed at: two levels where the baseline's `Held`, holding none, takes one.
     let pinned = base.replace("| wrap(a: A)", "| wrap(a: A, same: Eq()(A, A))");
     let baseline = unit_of(base);
 
@@ -268,7 +268,7 @@ pub let unrelated: Nat = 7;
     assert_eq!(carried_variances(&baseline, "Held"), [Variance::Irrelevant]);
     assert_eq!(
         carried_variances(&incremental, "Held"),
-        [Variance::Invariant]
+        [Variance::Irrelevant, Variance::Invariant]
     );
     assert_modules_agree(unit_of(&pinned).core(), incremental.core());
     assert_stored_alike(&unit_of(&pinned), &incremental);

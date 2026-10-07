@@ -230,6 +230,31 @@ pub fn held_levels<E: Env>(env: &mut E, parts: &[Term]) -> HeldLevels<E::Error> 
     }
 }
 
+/// The levels `declarations` hold while their own are still open: what [`variance_vectors`] reads of each, its index types, payloads, fields and targets, reported by head as [`held_levels`] reports a term's, where a vector has no parameter yet to report an open level under.
+///
+/// One sweep, since nothing iterates: a family whose levels are open takes no parameter, and an occurrence of it inside its own group carries no instance. Every other family answers from the driver's registry.
+pub fn held_by<E: Env>(env: &mut E, declarations: Declarations<'_>) -> HeldLevels<E::Error> {
+    curios_profile::profile!("held_by");
+    let mut vectors = Vectors {
+        computed: BTreeMap::new(),
+    };
+    let mut parts = Vec::new();
+    for name in declarations.names() {
+        let entry = Split::of(env, declarations, &name);
+        vectors
+            .computed
+            .insert(name, vec![Variance::Irrelevant; entry.parameters]);
+        parts.extend(entry.parts);
+    }
+    let (marked, exhausted) = sweep(env, &vectors, &parts);
+
+    HeldLevels {
+        heads: marked.heads,
+        every: marked.every,
+        exhausted,
+    }
+}
+
 /// One declaration's traversal: which of its universe parameters something it holds mentions.
 struct Walk<'a, E: Env> {
     env: &'a mut E,
