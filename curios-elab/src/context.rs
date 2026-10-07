@@ -34,6 +34,12 @@ pub(crate) use solutions::*;
 mod spend;
 pub(crate) use spend::*;
 
+mod typing;
+pub(crate) use typing::*;
+
+mod underway;
+pub(crate) use underway::*;
+
 #[cfg(test)]
 mod tests;
 
@@ -143,50 +149,13 @@ pub(crate) struct SolutionMark {
     questions: u64,
 }
 
-/// The elaborator's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure. Two lifetimes coexist: the *frame-scoped* lexical state (`Frames`), pushed and popped as binders and match arms are entered, and the *flat monotonic facts* about the program (`Solutions`, `Program`), which frames never touch. The `Caches` police both with their write stamps, and this façade is where the two halves coordinate: any method that writes a store *and* must stamp or clear a cache lives here, naming both sub-stores explicitly. Reduction is bounded by a step budget restored at every declaration boundary — see [`Context::new`].
+/// The elaborator's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure, in two halves: what any judgment reads and the machine it runs on (`Typing`), and what exists because a unit is being elaborated (`Underway`), which a context that only reads finished terms holds empty. Two lifetimes coexist across them: the *frame-scoped* lexical state (`Frames`), pushed and popped as binders and match arms are entered, and the *flat monotonic facts* about the program (`Solutions`, `Program`), which frames never touch. The `Caches` police both with their write stamps, and this façade is where the stores coordinate: any method that writes a store *and* must stamp or clear a cache lives here, naming both sub-stores explicitly. Reduction is bounded by a step budget restored at every declaration boundary — see [`Context::new`].
 #[derive(Debug)]
 pub struct Context {
-    fresh_names: Entropy,
-    // What a judgment may spend, restored at every declaration boundary, and what has been drawn from it; see [`Spend`].
-    spend: Spend,
-    // The reduction and elaboration memo tables with their write stamps and the named invalidation protocol every mutation site routes through; see [`Caches`].
-    caches: Caches,
-    // The frame-scoped lexical stores — assumptions, local definitions, refinements, the witness scope; see [`Frames`].
-    frames: Frames,
-    // What the attempt under way mints and solves — its metavariables with their solutions, its universe levels with their solver, what it noted of its goals; flat and frame-independent. See [`Attempt`].
-    attempt: Attempt,
-    // The program-wide declaration registries, witness table, and totality verdicts — flat stores of monotonic facts about the program, not lexically-scoped bindings; `enter_frame`/`leave_frame` never touch them. See [`Program`].
-    program: Program,
-    // Where surface elaboration stands: the module whose item is being elaborated, and whether the prover is running; see [`Posture`].
-    posture: Posture,
-    // The protocol by which a judgment's reduction asks conversion; see [`Asking`].
-    asking: Asking,
-    /// The declaration being elaborated ([`Context::enter_declaration`]); `None` for an entry's final term.
-    declaration: Option<Global>,
-    // The written binders the proofs the elaborator wrote read, which `unused-binder` does not report; see [`Credits`].
-    credits: Credits,
-    // Every term elaboration settled, with the type it settled at — the seed of the erasure obligations; see [`CheckedTerms`].
-    checked: CheckedTerms,
-    /// Where each name the unit declares is written, as its place among the unit's items as the lowering hands them on — every item's, the ones a recompile reuses among them: which names are the unit's own ([`Context::proof_may_apply`]), and where a goal's report is placed ([`Context::written_at`]).
-    order: BTreeMap<Global, usize>,
-    /// Whether the lemmas the unit being elaborated declares are on offer to the proofs the elaborator writes: not while its walk elaborates the prover's vocabulary, and from then on ([`Context::offer_lemmas`]). A context no unit was begun in offers whatever is in scope.
-    offering: bool,
-    // Which of the unit's declarations have not finished, and what the attempt under way read of them; see [`Needs`].
-    needs: Needs,
-    // The witnesses the unit declares, as they are known before they elaborate; see [`DeclaredWitnesses`].
-    witnesses: DeclaredWitnesses,
-    /// What the unit's lowering minted, declaration by declaration: what each declaration's state starts above ([`Context::begin_state`]).
-    minted: Rc<Minted>,
-    /// Whether the declaration being elaborated can still settle a universe level: from [`Context::enter_item`] until its levels are finalized. A witness resolved while this holds leaves the levels its scheme minted to that finalization; one resolved after has none left, and closes them where it resolves.
-    scheme_open: bool,
-    /// The names whose declarations the parser could not read, handed in before elaboration so their dependents are withheld from the start. Empty until a lowering reports them.
-    broken: BTreeSet<Global>,
-    // The names the type-directed features synthesize — infix dispatch and row subsumption. Supplied rather than spelled: the elaborator knows *which* declaration it needs, and `curios-prelude` knows what that declaration is called. See [`Context::syntax`].
-    syntax: SyntaxRegistry,
-    /// What each auto-lift site named as written, under the span its `lift` wrapper took — see [`EmbeddingSite`]. One entry per such site the unit elaborates, read only where a missing embedding is reported, so a scan serves.
-    embedding_sites: Vec<(Span, EmbeddingSite)>,
-    // What the unit's `use` declarations brought into scope, where, and under which spelling — the text stage's table, installed by the driver before elaboration. Read by goal suggestions alone, as the pool a candidate may come from beyond the names the program already mentions. Empty means nothing was imported, which is also what every embedding that never installs one gets: the pools then stop at the referenced globals.
-    imports: Imports,
+    // What any judgment reads, and the machine it runs on; see [`Typing`].
+    typing: Typing,
+    // What exists because a unit is being elaborated; see [`Underway`].
+    underway: Underway,
 }
 
 /// What an auto-lift site names as written: the action, and the region's monad — its type without the value slot, as a report shows a monad. A missing embedding is reported through these rather than through the monads unification solved, which are reduced and so spell a type alias by its representation: `Of(Str, (input, offset) => Boundary(input, offset))` where the program wrote `Parse(Str, …)`. The action's monad is read off its head's declaration only when a report asks, since reading it opens the declaration's arrows.
@@ -209,27 +178,8 @@ impl Context {
     /// The registry is a constructor argument rather than something a later call may or may not install, so an embedding cannot reach a type-directed feature with no vocabulary to emit. Whether the named declarations are actually *in scope* is a separate question the features already answer for themselves — a missing concept registration reports `no witness`, and row subsumption declines and lets the original mismatch speak.
     pub fn new(budget: u64, syntax: SyntaxRegistry) -> Self {
         Self {
-            fresh_names: Entropy::<usize>::new(),
-            spend: Spend::new(budget),
-            caches: Caches::new(),
-            frames: Frames::new(),
-            attempt: Attempt::default(),
-            program: Program::new(),
-            posture: Posture::default(),
-            asking: Asking::default(),
-            declaration: None,
-            credits: Credits::default(),
-            checked: CheckedTerms::default(),
-            order: BTreeMap::new(),
-            offering: true,
-            needs: Needs::default(),
-            witnesses: DeclaredWitnesses::default(),
-            minted: Rc::default(),
-            scheme_open: false,
-            broken: BTreeSet::new(),
-            syntax,
-            imports: Imports::default(),
-            embedding_sites: Vec::new(),
+            typing: Typing::new(budget, syntax),
+            underway: Underway::default(),
         }
     }
 
@@ -239,7 +189,7 @@ impl Context {
         id: MetavarId,
         blockers: Vec<(MetavarId, MetavarOrigin, Option<Span>)>,
     ) {
-        self.attempt.note_solve_blockers(id, blockers);
+        self.underway.attempt.note_solve_blockers(id, blockers);
     }
 
     /// [`Attempt::solve_blockers`].
@@ -247,27 +197,28 @@ impl Context {
         &self,
         id: MetavarId,
     ) -> &[(MetavarId, MetavarOrigin, Option<Span>)] {
-        self.attempt.solve_blockers(id)
+        self.underway.attempt.solve_blockers(id)
     }
 
     /// [`Attempt::note_goal_span`].
     pub(crate) fn note_goal_span(&mut self, id: MetavarId, span: Span) {
-        self.attempt.note_goal_span(id, span);
+        self.underway.attempt.note_goal_span(id, span);
     }
 
     /// [`Attempt::goal_span`].
     pub(crate) fn goal_span(&self, id: MetavarId) -> Option<&Span> {
-        self.attempt.goal_span(id)
+        self.underway.attempt.goal_span(id)
     }
 
     /// Record what the auto-lift at `span` named as written.
     pub(crate) fn note_embedding_site(&mut self, span: Span, site: EmbeddingSite) {
-        self.embedding_sites.push((span, site));
+        self.underway.embedding_sites.push((span, site));
     }
 
     /// What the auto-lift at `span` named as written, where it recorded it — the latest record, since re-validation may elaborate a site again.
     pub(crate) fn embedding_site(&self, span: &Span) -> Option<&EmbeddingSite> {
-        self.embedding_sites
+        self.underway
+            .embedding_sites
             .iter()
             .rev()
             .find(|(at, _)| at == span)
@@ -281,64 +232,66 @@ impl Context {
         this: Term,
         that: Term,
     ) {
-        self.attempt.note_goal_obligation(goals, this, that);
+        self.underway
+            .attempt
+            .note_goal_obligation(goals, this, that);
     }
 
     /// [`Attempt::goal_obligations`].
     pub(crate) fn goal_obligations(&self) -> &[GoalObligation] {
-        self.attempt.goal_obligations()
+        self.underway.attempt.goal_obligations()
     }
 
     /// The names this elaboration may synthesize.
     pub(crate) fn syntax(&self) -> SyntaxRegistry {
-        self.syntax
+        self.typing.syntax
     }
 
     /// Install what the unit's `use` declarations brought into scope — each binding's canonical name with the spelling it resolves under, and per definition the ones in scope where it was written — so a goal report may suggest an imported definition the program has not mentioned yet, spelled the way the author would paste it where the goal is.
     pub fn set_imports(&mut self, imports: Imports) {
-        self.imports = imports;
+        self.underway.imports = imports;
     }
 
     /// The table [`Context::set_imports`] installed.
     pub(crate) fn imports(&self) -> &Imports {
-        &self.imports
+        &self.underway.imports
     }
 
     /// Record one settled term and the type it settled at — obligation (V)'s seed, collected where elaboration already knows the answer.
     ///
     /// Sort-hood is *not* decided here. The type may still carry unsolved metavariables, and deciding would both reduce on the hot path and risk an answer a later solution invalidates; the gate classifies post-zonk, memoized per distinct type.
     pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) {
-        self.checked.record(term, type_);
+        self.underway.checked.record(term, type_);
     }
 
     /// Name the definition whose body is elaborating, for (V)'s diagnostics. Returns the previous site so the caller can restore it.
     pub(crate) fn set_checked_site(&mut self, site: &str) -> Rc<str> {
-        self.checked.set_site(Rc::from(site))
+        self.underway.checked.set_site(Rc::from(site))
     }
 
     /// Restore a site saved by [`Context::set_checked_site`].
     pub(crate) fn restore_checked_site(&mut self, site: Rc<str>) {
-        self.checked.set_site(site);
+        self.underway.checked.set_site(site);
     }
 
     /// The site being elaborated, as [`Context::set_checked_site`] last set it.
     pub(crate) fn checked_site(&self) -> Rc<str> {
-        self.checked.site()
+        self.underway.checked.site()
     }
 
     /// Read the recorded terms without consuming them — obligation (T) reads them first, and (V) takes them afterwards.
     pub(crate) fn checked(&self) -> &[(Term, Term, Rc<str>)] {
-        self.checked.terms()
+        self.underway.checked.terms()
     }
 
     /// How many terms are recorded — where an item begins, so [`Context::truncate_checked`] can forget what a refused item recorded.
     pub(crate) fn checked_mark(&self) -> usize {
-        self.checked.mark()
+        self.underway.checked.mark()
     }
 
     /// Forget every term recorded since `mark`: a refused item's, which no obligation may read.
     pub(crate) fn truncate_checked(&mut self, mark: usize) {
-        self.checked.truncate(mark);
+        self.underway.checked.truncate(mark);
     }
 
     /// Begin a unit's items: where each of its names is written, and the names its own items declare, none finished yet. No lemma of the unit is on offer until its walk says so ([`Context::offer_lemmas`]).
@@ -347,27 +300,27 @@ impl Context {
         order: BTreeMap<Global, usize>,
         declared: BTreeSet<Global>,
     ) {
-        self.order = order;
-        self.needs.begin(declared);
-        self.offering = false;
+        self.underway.order = order;
+        self.underway.needs.begin(declared);
+        self.underway.offering = false;
     }
 
     /// Offer the lemmas of the unit being elaborated to the proofs the elaborator writes from here on: its walk has elaborated the prover's vocabulary, with every declaration it reads.
     pub(crate) fn offer_lemmas(&mut self) {
-        self.offering = true;
+        self.underway.offering = true;
     }
 
     /// Begin an attempt at the declaration declaring `names`, with nothing needed yet and in a state of its own ([`Context::begin_state`]).
     pub(crate) fn attempt(&mut self, names: &[&Global]) {
-        self.needs.attempt(names);
+        self.underway.needs.attempt(names);
         self.begin_state();
     }
 
     /// Replace what one declaration's elaboration mints and solves with a state no other declaration wrote: its binder identities, its metavariables and their solutions, and its universe levels with the solver that settles them, each counting from what the declaration's own lowering minted ([`Minted`]). What a declaration elaborates to then follows nothing of the declarations elaborated before it — neither how many there were nor what they left solved — and the identities it mints are the ones it would mint elaborated alone. Every other declaration is read as it was published ([`Context::publish`]), which holds none of these.
     fn begin_state(&mut self) {
-        let minted = Rc::clone(&self.minted);
+        let minted = Rc::clone(&self.underway.minted);
         // The items of one declaration were lowered in one space, so any name the attempt declares says which; an attempt that declares none is the entry's.
-        let mints = match self.needs.attempted() {
+        let mints = match self.underway.needs.attempted() {
             Some(name) => minted.of(name),
             None => &minted.entry,
         };
@@ -377,13 +330,13 @@ impl Context {
     /// Elaborate in `state` from here on, and hand back the state the context elaborated in until now.
     pub(crate) fn exchange(&mut self, state: Attempted) -> Attempted {
         let replaced = Attempted {
-            fresh_names: mem::replace(&mut self.fresh_names, state.fresh_names),
-            attempt: mem::replace(&mut self.attempt, state.attempt),
+            fresh_names: mem::replace(&mut self.typing.fresh_names, state.fresh_names),
+            attempt: mem::replace(&mut self.underway.attempt, state.attempt),
         };
         // Nothing memoized under the state replaced answers for this one.
-        self.caches.begin_declaration();
-        self.caches.note_write();
-        self.caches.note_universe_write();
+        self.typing.caches.begin_declaration();
+        self.typing.caches.note_write();
+        self.typing.caches.note_universe_write();
 
         replaced
     }
@@ -404,12 +357,12 @@ impl Context {
 
     /// Where `name` is written among the unit's items, where a declaration of the unit declares it.
     pub(crate) fn written_at(&self, name: &Global) -> Option<usize> {
-        self.order.get(name).copied()
+        self.underway.order.get(name).copied()
     }
 
     /// Whether the declaration being elaborated wrote a goal ([`Attempt::holds_goals`]).
     pub(crate) fn holds_goals(&self) -> bool {
-        self.attempt.holds_goals()
+        self.underway.attempt.holds_goals()
     }
 
     /// Publish an item that holds a written goal by its types alone: each name stays assumed at its type, zonked, and is bound to nothing. What the item elaborated to holds the metavariables of the state its declaration elaborated in, which no other declaration reads, so what reads this one reads a constant of its type and what would unfold it stays stuck where the goal did. Refused where a type holds a goal itself.
@@ -445,7 +398,7 @@ impl Context {
 
     /// Whether the attempt under way has read nothing unfinished so far.
     pub(crate) fn needs_nothing(&self) -> bool {
-        self.needs.nothing()
+        self.underway.needs.nothing()
     }
 
     /// Publish a finished item: bind each of its names to what it elaborated to and file the registry entries it declares, each zonked ([`zonk_published`](crate::zonk_published)), as a unit in scope is replayed ([`Established::replay_definitions`](crate::Established)). What another declaration reads of this one then holds no metavariable of the state it was elaborated in, which the next declaration replaces, and is what a recompile that reuses the item reads.
@@ -503,8 +456,8 @@ impl Context {
     /// Zonk every term recorded since `mark`, the finished item's, so the erasure obligations read them once the state they were recorded in is gone.
     pub(crate) fn settle_checked(&mut self, mark: usize) -> Result<(), Error> {
         let mut zonked = HashMap::<Term, Term>::new();
-        let mut settled = Vec::with_capacity(self.checked.mark() - mark);
-        for (term, type_, site) in &self.checked.terms()[mark..] {
+        let mut settled = Vec::with_capacity(self.underway.checked.mark() - mark);
+        for (term, type_, site) in &self.underway.checked.terms()[mark..] {
             let mut settle = |term: &Term| match zonked.get(term) {
                 Some(done) => Ok(done.clone()),
                 None => {
@@ -515,7 +468,7 @@ impl Context {
             };
             settled.push((settle(term)?, settle(type_)?, Rc::clone(site)));
         }
-        self.checked.replace_since(mark, settled);
+        self.underway.checked.replace_since(mark, settled);
 
         Ok(())
     }
@@ -523,57 +476,63 @@ impl Context {
     /// The declaration declaring `names` has finished — kept, refused or withheld — and nothing waits on it any more: a witness among them is the table's to answer for, or no one's.
     pub(crate) fn finish(&mut self, names: &[&Global]) {
         for name in names {
-            self.witnesses.settle(name);
+            self.underway.witnesses.settle(name);
         }
-        self.needs.finish(names);
+        self.underway.needs.finish(names);
     }
 
     /// Record that the attempt under way read the declaration declaring `name` before it finished. The attempt is void whatever it goes on to conclude, and is made again once that declaration has elaborated: the record is what voids it, so no site that turns an error into a decision can make a void attempt count.
     pub(crate) fn need(&self, name: Global) {
-        self.needs.need(name);
+        self.underway.needs.need(name);
     }
 
     /// What the attempt under way needed, taken: empty for an attempt that read nothing unfinished, the one whose outcome stands.
     pub(crate) fn take_needs(&mut self) -> BTreeSet<Global> {
-        self.needs.take()
+        self.underway.needs.take()
     }
 
     /// [`Needs::missed`].
     fn missed(&self, name: &Free) {
-        self.needs.missed(name);
+        self.underway.needs.missed(name);
     }
 
     /// [`Needs::reads`].
     fn reads_entry(&self, name: &Global) {
-        self.needs.reads(name);
+        self.underway.needs.reads(name);
     }
 
     /// Whether a proof the elaborator writes for the declaration being elaborated may apply `name`. A name another unit declares is applied wherever it is in scope. A name this unit declares is one of the prover's vocabulary, which the unit's walk elaborates before anything else, with every declaration it reads, and offers only from then on: so the vocabulary and what it reads are proved without it, every other declaration finds all of it elaborated, and what a declaration's proof is built from follows what the vocabulary reads, never where either is written or which of them was asked for first. A lemma that is on offer and not in scope was refused, and is applied by nothing.
     pub(crate) fn proof_may_apply(&self, name: &Global) -> bool {
-        let assumed = self.frames.assumption(&Free::Global(*name)).is_some();
+        let assumed = self
+            .typing
+            .frames
+            .assumption(&Free::Global(*name))
+            .is_some();
 
-        assumed && (self.offering || !self.order.contains_key(name))
+        assumed && (self.underway.offering || !self.underway.order.contains_key(name))
     }
 
     /// Name the declarations a lowering could not read. Their dependents are withheld from elaboration before the first item is checked, so a parse failure in one declaration reports as that declaration's and nothing else's.
     pub fn set_broken(&mut self, names: BTreeSet<Global>) {
-        self.broken = names;
+        self.underway.broken = names;
     }
 
     pub(crate) fn take_broken(&mut self) -> BTreeSet<Global> {
-        mem::take(&mut self.broken)
+        mem::take(&mut self.underway.broken)
     }
 
     pub(crate) fn record_definition_totality(&mut self, name: &Global, totality: Totality) {
-        self.program.record_definition_totality(name, totality);
+        self.typing
+            .program
+            .record_definition_totality(name, totality);
     }
 
     pub(crate) fn definition_totality(&self, name: &Global) -> Option<Totality> {
-        self.program.definition_totality(name)
+        self.typing.program.definition_totality(name)
     }
 
     pub(crate) fn seed_totality(&mut self, inherited: &BTreeMap<Global, Totality>) {
-        self.program.seed_totality(inherited);
+        self.typing.program.seed_totality(inherited);
     }
 
     /// File the vector a finished definition carries, for conversion's level alignment: with the length of its type's outer telescope, which is the one spine that applies it in full.
@@ -582,17 +541,20 @@ impl Context {
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.len(),
             _ => 0,
         };
-        self.program
-            .record_definition_variances(&definition.name, &definition.variances, arity);
+        self.typing.program.record_definition_variances(
+            &definition.name,
+            &definition.variances,
+            arity,
+        );
     }
 
     pub(crate) fn definition_variances(&self, name: &Global) -> Option<(&[Variance], usize)> {
-        self.program.definition_variances(name)
+        self.typing.program.definition_variances(name)
     }
 
     /// Take the terms recorded since `mark`: a published declaration's, or the entry's, which (V) reads last.
     pub(crate) fn split_checked(&mut self, mark: usize) -> Vec<(Term, Term, Rc<str>)> {
-        self.checked.split_off(mark)
+        self.underway.checked.split_off(mark)
     }
 
     /// Mint a binder nothing else can name, rendering as `hint`.
@@ -604,84 +566,88 @@ impl Context {
 
     /// [`Context::fresh`] for a local opened from a scope's binder, recording where the lowering wrote that binder among its declaration's written binders: so a proof that reads the local credits the binder a lint names ([`Context::credit`]).
     pub(crate) fn fresh_for(&mut self, hint: Option<&str>, written: Option<u32>) -> Free {
-        let index = u32::try_from(self.fresh_names.fresh()).expect("binder space exhausted");
+        let index = u32::try_from(self.typing.fresh_names.fresh()).expect("binder space exhausted");
 
         let local = Free::local(index, hint);
         if let Some(written) = written {
-            self.credits.open(local, self.declaration, written);
+            self.underway
+                .credits
+                .open(local, self.underway.declaration, written);
         }
         local
     }
 
     /// Elaborate the item `declaration` from here on — `None` for an entry's final term — forgetting where the previous item's locals were opened: a proof is written only while its bound's item elaborates. Its scheme is open until its universe levels are finalized.
     pub(crate) fn enter_item(&mut self, declaration: Option<Global>) {
-        self.credits.begin_item();
-        self.scheme_open = true;
+        self.underway.credits.begin_item();
+        self.underway.scheme_open = true;
         self.enter_declaration(declaration);
     }
 
     /// Elaborate `declaration`, a member of the item being elaborated, from here on: whose written binders the locals opened next count among.
     pub(crate) fn enter_declaration(&mut self, declaration: Option<Global>) {
-        self.declaration = declaration;
+        self.underway.declaration = declaration;
     }
 
     /// [`Credits::credit`].
     pub(crate) fn credit(&mut self, proof: &Term) {
-        self.credits.credit(proof);
+        self.underway.credits.credit(proof);
     }
 
     /// The written binders proofs the elaborator wrote read, each by its declaration and its place among that declaration's written binders — each used, though no written reference reaches it.
     pub fn credited(&self) -> BTreeSet<(Option<Global>, u32)> {
-        self.credits.credited()
+        self.underway.credits.credited()
     }
 
     /// Take what a unit's lowering minted, declaration by declaration. Each attempt at a declaration begins its state above what that declaration's lowering minted, and the entry's above the entry's ([`Context::begin_state`]), so no identity either mints is one the other already holds.
     ///
     /// `into_core` mints the binders of every lowered scope, a metavariable for every hole and a level for every written type, and elaboration mints more of each; both draw from one identity space per declaration, so the second source starts above the first. Nothing from another declaration or another unit is in that space: no term the scope replays or the context publishes carries a local or a metavariable.
     pub(crate) fn seed(&mut self, minted: &Minted) {
-        self.minted = Rc::new(minted.clone());
+        self.underway.minted = Rc::new(minted.clone());
     }
 
     /// [`Spend::spend`].
     pub(crate) fn spend(&self, cost: Cost) -> Result<(), ReduceError> {
-        self.spend.spend(cost)
+        self.typing.spend.spend(cost)
     }
 
     /// [`Spend::enter_level`].
     pub(crate) fn enter_level(&self) -> Result<(), ReduceError> {
-        self.spend.enter_level()
+        self.typing.spend.enter_level()
     }
 
     /// [`Spend::leave_level`].
     pub(crate) fn leave_level(&self) {
-        self.spend.leave_level();
+        self.typing.spend.leave_level();
     }
 
     /// Restore the full budget for a new declaration ([`Spend::restore`]), and forget what was memoized under the one it closes: nothing a budget paid for outlives it.
     pub(crate) fn restore_budget(&mut self) {
-        self.spend.restore();
-        self.caches.begin_declaration();
-        self.frames.forget_spellings();
+        self.typing.spend.restore();
+        self.typing.caches.begin_declaration();
+        self.typing.frames.forget_spellings();
     }
 
     /// What the declaration being elaborated has consumed so far ([`Spend::consumed`]), which this crate's measurements read between two judgments.
     #[cfg(test)]
     pub(crate) fn consumed(&self) -> Consumption {
-        self.spend.consumed()
+        self.typing.spend.consumed()
     }
 
     /// The heaviest single judgment this context has made, the one in progress included: a declaration's elaboration, or one of the judgments of its final terms, each of which spends a budget restored for it (`Context::restore_budget`).
     ///
     /// The counterpart of `curios-cert`'s `Kernel::heaviest_declaration` on the other side of the seam — the two are deliberately the same shape, because comparing them is the point. An observation for a measurement; nothing in elaboration reads it.
     pub fn heaviest_declaration(&self) -> Consumption {
-        self.spend.heaviest()
+        self.typing.spend.heaviest()
     }
 
     /// The read half of the reduction cache. The reducer probes it wherever a term's reduction begins — at entry, and at the scrutinee stack's frame push, where a warm scrutinee dispatches in place instead of framing.
     ///
     /// **A universe metavariable in the term does not exclude it.** Reduction is parametric in levels — no rule reads one, `Type u` being a payload and not a scrutinee, and an instantiation substitutes a parameter with whatever level stands in the instance, a metavariable included — so a reduct is the same function of its term whether the metas in it are solved or not, and the in-place rewrites that do change what a level *spells* (defaulting, finalization, instance closure) clear the cache where they happen. Excluding one would remember nothing of a web of universe-polymorphic definitions inside the declaration that instantiates them, whose occurrences all carry that declaration's level metas, and a reduct shared as a graph would be re-derived once per occurrence — the `2^n` `curios`' `scrutinee_refinement_measurements` guards under `numeric, proved`.
     pub(crate) fn cached_reduced(&self, term: &Term) -> Option<Term> {
-        self.caches.reduction_get(term, self.asking.plain())
+        self.typing
+            .caches
+            .reduction_get(term, self.typing.asking.plain())
     }
 
     /// Record that `term` reduces to `result` — the write half of the reduction cache, hit wherever a reduction's value lands: the reducer's final return, and its scrutinee stack's frame pop. Memoize only closed terms whose WHNF names no *unsolved* term metavariable — `any_metavar` bails on the first one, never building the id set. A solve is monotonic, so it can only invalidate a reduct that still names the metavariable it solved, and reduction gets stuck on (hence surfaces) an unsolved metavariable it actually depends on. Refusing to cache those is what lets `solve_metavar` skip a cache clear; an entry naming only *solved* metavariables stays valid under forward solves (re-validation's `rollback_solutions`, which *un*-solves, clears separately). A *universe* metavariable excludes nothing, for the reason [`Context::cached_reduced`] gives.
@@ -692,29 +658,35 @@ impl Context {
             term.closed() && !result.any_metavar(&mut |id| self.metavar_solution(id).is_none());
 
         if cacheable {
-            self.caches
-                .reduction_insert(term, result.clone(), self.asking.plain());
+            self.typing
+                .caches
+                .reduction_insert(term, result.clone(), self.typing.asking.plain());
         }
     }
 
     /// The remembered sort of `type_`, where the context stands as it did when it was filed. [`Caches::sorts`] carries how long that is.
     pub(crate) fn cached_sort(&mut self, type_: &Term) -> Option<Sort> {
-        self.caches.sort_get(type_, self.asking.plain())
+        self.typing
+            .caches
+            .sort_get(type_, self.typing.asking.plain())
     }
 
     /// Remember `type_`'s sort. Stored for nothing, as a reduct is.
     pub(crate) fn record_sort(&mut self, type_: Term, sort: Sort) {
-        self.caches.sort_insert(type_, self.asking.plain(), sort);
+        self.typing
+            .caches
+            .sort_insert(type_, self.typing.asking.plain(), sort);
     }
 
     /// [`Context::kernel_spelling`] of a recorded scrutinee, remembered where no metavariable in it is left unsolved ([`Caches::kernel_spellings`]).
     pub(crate) fn kernel_spelled(&self, term: &Term) -> Term {
-        if let Some(known) = self.caches.kernel_spelling_get(term) {
+        if let Some(known) = self.typing.caches.kernel_spelling_get(term) {
             return known;
         }
         let spelled = self.kernel_spelling(term);
         if !spelled.any_metavar(&mut |id| self.metavar_solution(id).is_none()) {
-            self.caches
+            self.typing
+                .caches
                 .kernel_spelling_insert(term.clone(), spelled.clone());
         }
         spelled
@@ -722,22 +694,22 @@ impl Context {
 
     /// Whether the binder `name` is a proof, where that has been asked and remembered ([`Context::remember_proof`]).
     pub(crate) fn cached_proof(&self, name: &Free) -> Option<bool> {
-        self.caches.proof_get(name)
+        self.typing.caches.proof_get(name)
     }
 
     /// Remember whether the binder `name` is a proof, for the declaration.
     pub(crate) fn remember_proof(&mut self, name: Free, proof: bool) {
-        self.caches.proof_insert(name, proof);
+        self.typing.caches.proof_insert(name, proof);
     }
 
     /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`: `None` if no probe has asked for it yet, `Some(None)` if reducing it refused. [`Frames::scrutinee_spellings`] carries how long one stands.
     pub(crate) fn settled_key(&self, frame: usize, key: &Term) -> Option<&Option<Settled>> {
-        self.frames.settled_spelling(
+        self.typing.frames.settled_spelling(
             frame,
             key,
-            self.asking.plain(),
-            self.attempt.solutions.solved_len(),
-            &self.attempt.universe_solver.state_token(),
+            self.typing.asking.plain(),
+            self.underway.attempt.solutions.solved_len(),
+            &self.underway.attempt.universe_solver.state_token(),
         )
     }
 
@@ -752,9 +724,16 @@ impl Context {
         unsolved: bool,
         levels: Option<UniverseStateToken>,
     ) {
-        let solved = (unsolved || levels.is_some()).then(|| self.attempt.solutions.solved_len());
-        self.frames
-            .settle_spelling(frame, key, self.asking.plain(), settled, solved, levels);
+        let solved =
+            (unsolved || levels.is_some()).then(|| self.underway.attempt.solutions.solved_len());
+        self.typing.frames.settle_spelling(
+            frame,
+            key,
+            self.typing.asking.plain(),
+            settled,
+            solved,
+            levels,
+        );
     }
 
     /// Run `attempt` with at most `allowance` units of this declaration's budget in reach, answering `None` when it did not finish inside that.
@@ -767,10 +746,10 @@ impl Context {
         allowance: u64,
         attempt: impl FnOnce(&mut Self) -> Result<T, ReduceError>,
     ) -> Result<Option<T>, ReduceError> {
-        let capped = self.spend.cap(allowance);
+        let capped = self.typing.spend.cap(allowance);
 
         let outcome = attempt(self);
-        self.spend.lift(&capped);
+        self.typing.spend.lift(&capped);
 
         // An attempt the declaration's own remainder bound is a probe like any other: its exhaustion is the declaration's verdict, and absorbing it would hand the caller a declined attempt where the truth is that nothing is left to spend, the caller going ahead on that answer. Only an attempt the cap bound below the remainder is the allowance's to decline, its exhaustion with every other failure, since the declaration still holds what the cap withheld.
         match capped.bound_by_the_remainder() {
@@ -800,11 +779,12 @@ impl Context {
             ElabProbe::Hit(hit) => Ok(hit),
             // A miss as much as a term the gate refuses: a miss is recorded only when its run wrote nothing, and a run over this declaration's levels writes, so a miss is what the oracle's re-runs were.
             probe if self.oracle_memoizable(term, expected) => {
-                let privacy_checked = self.posture.island().is_some();
-                let plain = self.asking.plain();
-                if let Some(hit) = self
-                    .caches
-                    .oracle_get(term, expected, privacy_checked, plain)
+                let privacy_checked = self.underway.posture.island().is_some();
+                let plain = self.typing.asking.plain();
+                if let Some(hit) =
+                    self.typing
+                        .caches
+                        .oracle_get(term, expected, privacy_checked, plain)
                 {
                     return Ok(hit);
                 }
@@ -812,7 +792,8 @@ impl Context {
                 if let ElabProbe::Miss(stamp) = probe {
                     self.record_elaborated(term, expected, stamp, &result);
                 }
-                self.caches
+                self.typing
+                    .caches
                     .oracle_insert(term, expected, privacy_checked, plain, &result);
                 Ok(result)
             }
@@ -832,7 +813,7 @@ impl Context {
     /// **What it is for.** A candidate is a reduct, and a reduct is a graph whose tree can be exponential in its depth — a text position built a character at a time mentions the one before it four times. Elaborating one writes — the level constraints its instances raise, the metavariables its implicit arguments mint — so the cache keeps almost none of it, and without this table re-validation checks the tree: re-validating a three-character `Str/trim` claim stated in a type asks for some hundred thousand elaborations, most of them misses the cache declines to record, and runs out of steps.
     fn oracle_memoizable(&self, term: &Term, expected: Option<&Term>) -> bool {
         let closed = |t: &Term| !t.has_metavar() && !t.has_local_free();
-        self.caches.in_oracle() && closed(term) && expected.is_none_or(closed)
+        self.typing.caches.in_oracle() && closed(term) && expected.is_none_or(closed)
     }
 
     /// Read half of the elaboration cache (see [`Context::get_or_init_elaborated`] for the full contract). Applies the O(1) groundness gate, then either answers from the cache (`Hit`), reports the term ineligible (`Uncacheable`), or snapshots `mutation_stamp` for the caller to thread back into [`record_elaborated`](Self::record_elaborated) (`Miss`). Pure: it never mutates the context, so a driver may probe speculatively at a frame push.
@@ -847,14 +828,14 @@ impl Context {
         // Locally-nameless discipline: every scope is opened before descent, so a term in elaboration position carries no loose bound indices — which is what makes it keyable without any binder context.
         debug_assert!(term.closed(), "elaboration-cache key has loose indices");
 
-        match self.caches.elaboration_get(
+        match self.typing.caches.elaboration_get(
             term,
             expected,
-            self.posture.island().is_some(),
-            self.asking.plain(),
+            self.underway.posture.island().is_some(),
+            self.typing.asking.plain(),
         ) {
             Some(hit) => ElabProbe::Hit(hit),
-            None => ElabProbe::Miss(self.caches.stamps()),
+            None => ElabProbe::Miss(self.typing.caches.stamps()),
         }
     }
 
@@ -879,11 +860,11 @@ impl Context {
         result: &(Term, Term),
     ) {
         if self.elaboration_cacheable(stamp, expected, result) {
-            self.caches.elaboration_insert(
+            self.typing.caches.elaboration_insert(
                 term,
                 expected,
-                self.posture.island().is_some(),
-                self.asking.plain(),
+                self.underway.posture.island().is_some(),
+                self.typing.asking.plain(),
                 result,
             );
         }
@@ -900,7 +881,7 @@ impl Context {
             !t.has_metavar() && !self.has_unsolved_universe_meta(t) && !t.has_local_free()
         };
         let settled = |t: &Term| t.free_vars().iter().all(|name| self.is_defined(name));
-        self.caches.stamps_unchanged(stamp)
+        self.typing.caches.stamps_unchanged(stamp)
             && ground(&result.0)
             && ground(&result.1)
             && settled(&result.0)
@@ -909,21 +890,27 @@ impl Context {
     }
 
     fn has_unsolved_universe_meta(&self, term: &Term) -> bool {
-        term.any_universe_meta(
-            |meta| match self.attempt.universe_solver.zonk(&Level::meta(meta)) {
+        term.any_universe_meta(|meta| {
+            match self
+                .underway
+                .attempt
+                .universe_solver
+                .zonk(&Level::meta(meta))
+            {
                 Ok(level) => level.metas().next().is_some(),
                 Err(_) => true,
-            },
-        )
+            }
+        })
     }
 
     fn enter_frame(&mut self) {
-        self.frames.enter();
+        self.typing.frames.enter();
     }
 
     fn leave_frame(&mut self) {
-        let (dropped_refinements, dropped_definitions) = self.frames.leave();
-        self.caches
+        let (dropped_refinements, dropped_definitions) = self.typing.frames.leave();
+        self.typing
+            .caches
             .invalidate_frame_exit(dropped_refinements, dropped_definitions);
     }
 
@@ -937,8 +924,8 @@ impl Context {
 
     /// [`Frames::assume`], stamping the write.
     pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
-        self.caches.note_write();
-        self.frames.assume(name, type_);
+        self.typing.caches.note_write();
+        self.typing.frames.assume(name, type_);
     }
 
     /// Step `walk` past its next binder: mint one from the entry's hint, assume it at `domain`, and hand it back for the caller's own capture.
@@ -951,7 +938,7 @@ impl Context {
     /// Assume `label : type_` as a `use`-plicity binder: an ordinary assumption that additionally joins the witness scope, where resolution finds it (innermost-first).
     pub(crate) fn assume_witness(&mut self, name: &Free, type_: &Term) {
         self.assume(name, type_);
-        self.frames.push_witness_binder(name, type_);
+        self.typing.frames.push_witness_binder(name, type_);
     }
 
     /// Enter a telescope's member into scope under its mark: assumed at its type, and, where the mark is `use`, in the witness scope as well, so resolution in what follows finds it.
@@ -965,18 +952,18 @@ impl Context {
     }
 
     pub(crate) fn witness_scope(&self) -> &[(Free, Term)] {
-        self.frames.witness_scope()
+        self.typing.frames.witness_scope()
     }
 
     /// [`Frames::reassume`], invalidating the elaboration cache — an entry elaborated between a `rec` group's lowered `assume` and this upgrade could embed the lowered signature.
     pub(crate) fn reassume(&mut self, name: &Free, type_: &Term) {
-        self.caches.invalidate_for_reassumption();
-        self.frames.reassume(name, type_);
+        self.typing.caches.invalidate_for_reassumption();
+        self.typing.frames.reassume(name, type_);
     }
 
     /// The type `name` is assumed at. A miss on a name whose declaration has not finished is recorded as what the attempt needs ([`Context::need`]).
     pub(crate) fn assumption(&self, name: &Free) -> Option<&Term> {
-        let assumed = self.frames.assumption(name);
+        let assumed = self.typing.frames.assumption(name);
         if assumed.is_none() {
             self.missed(name);
         }
@@ -986,12 +973,12 @@ impl Context {
 
     /// [`Frames::rec_definitions`]: every top-level `rec` group defined so far, with its members' names.
     pub(crate) fn rec_definitions(&self) -> Vec<(RecGroup, Vec<Global>)> {
-        self.frames.rec_definitions()
+        self.typing.frames.rec_definitions()
     }
 
     /// [`Frames::member_names`]: the globals `group`'s members are defined under, in member order.
     pub(crate) fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {
-        self.frames.member_names(group)
+        self.typing.frames.member_names(group)
     }
 
     /// Remember that `instance` is `group` opened at `levels`, for the declaration in progress: reduction's own record, read back by [`Context::instance_of`].
@@ -1001,13 +988,14 @@ impl Context {
         group: &RecGroup,
         levels: &[Level],
     ) {
-        self.caches
+        self.typing
+            .caches
             .instance_insert(instance.clone(), group.clone(), levels.to_vec());
     }
 
     /// The group `instance` was opened from and the levels it was opened at, where reduction opened it in the declaration in progress.
     pub(crate) fn instance_of(&self, instance: &RecGroup) -> Option<&(RecGroup, Vec<Level>)> {
-        self.caches.instance_get(instance)
+        self.typing.caches.instance_get(instance)
     }
 
     /// Collect universe metas reachable through a term and through any solved term metavariables it names. Declaration finalization runs before the final term-zonk pass, so a level occurring only in a solved hole must still join the declaration's universe closure. Recursive slots may point back to themselves; `seen` keeps this analysis finite.
@@ -1045,6 +1033,7 @@ impl Context {
             return Ok(None);
         };
         let universe_context = self
+            .typing
             .frames
             .assumption_universe_context(name)
             .unwrap_or_default();
@@ -1072,13 +1061,13 @@ impl Context {
         let Some(type_) = self.assumption(name).cloned() else {
             return Ok(None);
         };
-        let found = self.frames.assumption_universe_context(name);
+        let found = self.typing.frames.assumption_universe_context(name);
         #[cfg(feature = "profile")]
         if found
             .as_ref()
             .is_none_or(|context| context.parameter_count != levels.len())
         {
-            let (frames, holders) = self.frames.assumption_universe_holders(name);
+            let (frames, holders) = self.typing.frames.assumption_universe_holders(name);
             curios_profile::note!(
                 target: "curios_elab::universe",
                 %name,
@@ -1201,21 +1190,28 @@ impl Context {
         name: &Free,
         universe_context: UniverseContext,
     ) {
-        if self.frames.assumption_universe_context(name).as_ref() == Some(&universe_context) {
+        if self
+            .typing
+            .frames
+            .assumption_universe_context(name)
+            .as_ref()
+            == Some(&universe_context)
+        {
             return;
         }
-        self.frames
+        self.typing
+            .frames
             .set_assumption_universe_context(name, universe_context);
-        self.caches.invalidate_for_redefinition();
-        self.frames.forget_spellings();
+        self.typing.caches.invalidate_for_redefinition();
+        self.typing.frames.forget_spellings();
     }
 
     fn is_defined(&self, name: &Free) -> bool {
-        self.frames.is_defined(name)
+        self.typing.frames.is_defined(name)
     }
 
     pub(crate) fn locals(&self) -> &[(Free, Term)] {
-        self.frames.locals()
+        self.typing.frames.locals()
     }
 
     fn define_entry(&mut self, name: Free, entry: DefEntry) {
@@ -1224,15 +1220,15 @@ impl Context {
         // The elaboration cache survives the same fresh definition with no retain at all: its insert gate (`elaboration_cacheable`) already refused every entry naming a not-yet-defined global, so the fresh name appears in no surviving entry. A minted `let` binder — which the frame elaborators mint — is excluded from caching outright (`has_local_free`), and a global is only ever referenced once defined; so not clearing lets a deep spine memoize once across those definitions instead of re-elaborating its shared subterms after each.
         //
         // A *redefinition* voids both arguments — the frame elaborators define under labels that can rebind or shadow, and the old value may sit consumed inside a reduct or an elaboration result that no longer mentions the label — so there both caches clear wholesale.
-        if self.frames.is_defined(&name) {
-            self.caches.invalidate_for_redefinition();
-            self.frames.forget_spellings();
+        if self.typing.frames.is_defined(&name) {
+            self.typing.caches.invalidate_for_redefinition();
+            self.typing.frames.forget_spellings();
         } else {
-            self.caches.retain_reductions_without(&name);
-            self.frames.forget_spellings_naming(&name);
+            self.typing.caches.retain_reductions_without(&name);
+            self.typing.frames.forget_spellings_naming(&name);
         }
 
-        self.frames.define(name, entry);
+        self.typing.frames.define(name, entry);
     }
 
     /// Define `name`. `kind` is the declaring module item's [`DefinitionKind`], or `None` for a local binding no item declared.
@@ -1264,22 +1260,22 @@ impl Context {
     }
 
     pub(crate) fn definition_kind(&self, name: &Free) -> Option<&DefinitionKind> {
-        self.frames.definition_kind(name)
+        self.typing.frames.definition_kind(name)
     }
 
     /// Undo a top-level declaration's bindings ([`Frames::forget`]) — a refused item's, so the scope holds what elaborated and nothing of what did not. The caches clear as for a redefinition: an entry may have consumed the binding.
     pub(crate) fn forget(&mut self, name: &Free) {
-        self.frames.forget(name);
-        self.caches.invalidate_for_redefinition();
-        self.frames.forget_spellings();
+        self.typing.frames.forget(name);
+        self.typing.caches.invalidate_for_redefinition();
+        self.typing.frames.forget_spellings();
     }
 
     // === Refinements (see [`Frames`]) =======================================
 
     /// [`Frames::refine`], with the refinement cache protocol — the variable now reduces differently — with every equation that names the variable restated under its value ([`Context::restate_equations`]), and with every equation the refinement closes withheld ([`Context::withhold_closed_equations`]).
     pub(crate) fn refine(&mut self, name: &Free, term: &Term) {
-        self.caches.invalidate_for_refinement();
-        self.frames.refine(name, term);
+        self.typing.caches.invalidate_for_refinement();
+        self.typing.frames.refine(name, term);
         self.restate_equations(name, term);
         self.withhold_closed_equations();
     }
@@ -1292,11 +1288,12 @@ impl Context {
     ///
     /// An instance that names no local is recorded by neither checker: [`Context::withhold_closed_equations`], which a refinement runs next, withholds it as it withholds any equation the refinement closes. The value an equation assumes is left as it is, a variable in it being read through its refinement.
     fn restate_equations(&mut self, name: &Free, value: &Term) {
-        if !self.frames.has_scrutinee_refinements() {
+        if !self.typing.frames.has_scrutinee_refinements() {
             return;
         }
         let solution = [(*name, value.clone())];
         let named = self
+            .typing
             .frames
             .scrutinee_equations()
             .into_iter()
@@ -1316,9 +1313,9 @@ impl Context {
                 alias: entry.alias,
                 withheld: false,
             };
-            self.frames.withhold_scrutinee(key, entry);
+            self.typing.frames.withhold_scrutinee(key, entry);
             let key = shallow_scrutinee(self, &restated.original);
-            self.frames.refine_scrutinee(key, restated);
+            self.typing.frames.refine_scrutinee(key, restated);
         }
     }
 
@@ -1326,14 +1323,14 @@ impl Context {
     ///
     /// A term that names none is returned as it is, for a walk over its free variables: this is read at every probe of a refined head and at every stuck form put to the reduced spellings.
     pub(crate) fn spelled_as_refined(&self, term: &Term) -> Term {
-        if !term.has_local_free() || !self.frames.refines_a_variable() {
+        if !term.has_local_free() || !self.typing.frames.refines_a_variable() {
             return term.clone();
         }
         let refined_in = |spelled: &Term| {
             spelled
                 .free_vars_shared()
                 .iter()
-                .filter_map(|name| Some((*name, self.frames.refinement_of(name)?.clone())))
+                .filter_map(|name| Some((*name, self.typing.frames.refinement_of(name)?.clone())))
                 .collect::<Vec<_>>()
         };
         let mut refined = refined_in(term);
@@ -1342,7 +1339,7 @@ impl Context {
         }
         let mut spelled = term.clone();
         // Each round substitutes at least one refined variable away, so a chain of them is no longer than the variables refined.
-        for _ in 0..self.frames.refined_variables().len() {
+        for _ in 0..self.typing.frames.refined_variables().len() {
             spelled = spelled.substitute(&refined);
             refined = refined_in(&spelled);
             if refined.is_empty() {
@@ -1365,29 +1362,30 @@ impl Context {
     ///
     /// **The recording rule, read where the kernel reads it.** No checker records an equation under a spelling that mentions no local (`curios_analysis::records_case_equation`). The kernel substitutes an arm's solution through the equations in force, so a guard over a variable an arm inside refines to a closed value is, to the kernel, an equation about a closed term, which it does not record; the elaborator's key still names the variable, and left answering it would accept in that arm a proof the kernel refuses. A closed scrutinee computes, so nothing is lost where the arm is one a value reaches: the fact holds by reduction. Where it computes to another case than its guard assumed the arm is dead, and a proof resting on the guard is refused where it is written.
     fn withhold_closed_equations(&mut self) {
-        if !self.frames.has_scrutinee_refinements() {
+        if !self.typing.frames.has_scrutinee_refinements() {
             return;
         }
         let closed = self
+            .typing
             .frames
             .scrutinee_equations()
             .into_iter()
             .filter(|(_, entry)| !records_case_equation(&self.kernel_spelling(&entry.original)))
             .collect::<Vec<_>>();
         for (key, entry) in closed {
-            self.frames.withhold_scrutinee(key, entry);
+            self.typing.frames.withhold_scrutinee(key, entry);
         }
     }
 
     /// [`Frames::refine_projection`], with the refinement cache protocol.
     pub(crate) fn refine_projection(&mut self, base: Term, index: usize, value: Term) {
-        self.caches.invalidate_for_refinement();
-        self.frames.refine_projection(base, index, value);
+        self.typing.caches.invalidate_for_refinement();
+        self.typing.frames.refine_projection(base, index, value);
     }
 
     /// [`Frames::definition_body`], and a need where the body is missing because its declaration has not finished ([`Context::missed`]): a reduction that asks for one would otherwise go stuck on a name that only has no body yet, and the attempt would be judged on a term it could have reduced.
     pub(crate) fn definition_body(&self, name: &Free) -> Option<&Term> {
-        let body = self.frames.definition_body(name);
+        let body = self.typing.frames.definition_body(name);
         if body.is_none() {
             self.missed(name);
         }
@@ -1397,7 +1395,7 @@ impl Context {
 
     /// [`Frames::var_reduct`], and a need as [`Context::definition_body`] records one.
     pub(crate) fn var_reduct(&self, name: &Free) -> Option<&Term> {
-        let reduct = self.frames.var_reduct(name);
+        let reduct = self.typing.frames.var_reduct(name);
         if reduct.is_none() {
             self.missed(name);
         }
@@ -1407,7 +1405,7 @@ impl Context {
 
     /// [`Frames::var_reduct_at`], and a need as [`Context::definition_body`] records one.
     pub(crate) fn var_reduct_at(&self, name: &Free) -> Option<&Term> {
-        let reduct = self.frames.var_reduct_at(name);
+        let reduct = self.typing.frames.var_reduct_at(name);
         if reduct.is_none() {
             self.missed(name);
         }
@@ -1419,7 +1417,7 @@ impl Context {
     ///
     /// The commitment sits in the accessor for the reason [`Context::scrutinee_reduct`] states, and this store needs one more thing to carry it: its key erases the base, so the unerased spelling is kept beside the value rather than recovered.
     pub(crate) fn proj_reduct(&mut self, base: &Term, index: usize) -> Option<Term> {
-        let entry = self.frames.projection_entry(base, index)?;
+        let entry = self.typing.frames.projection_entry(base, index)?;
         let (original, value) = (entry.original.clone(), entry.value.clone());
 
         hold_at_one_instance(self, base, &original)
@@ -1433,9 +1431,9 @@ impl Context {
         spellings: Vec<(Term, Term, bool)>,
         value: &Term,
     ) {
-        self.caches.invalidate_for_refinement();
+        self.typing.caches.invalidate_for_refinement();
         for (canonical, original, alias) in spellings {
-            self.frames.refine_scrutinee(
+            self.typing.frames.refine_scrutinee(
                 canonical,
                 ScrutineeEntry {
                     original,
@@ -1448,11 +1446,11 @@ impl Context {
     }
 
     pub(crate) fn has_scrutinee_refinements(&self) -> bool {
-        self.frames.has_scrutinee_refinements()
+        self.typing.frames.has_scrutinee_refinements()
     }
 
     pub(crate) fn scrutinee_head_refined(&self, head: HeadTag<'_>) -> bool {
-        self.frames.scrutinee_head_refined(head)
+        self.typing.frames.scrutinee_head_refined(head)
     }
 
     /// [`Frames::scrutinee_entry`]'s value, with `probe` and the spelling the equation was registered on held to one universe instance, and declined where they cannot be ([`hold_at_one_instance`]). The two are read as their key spells them ([`key_spelling`]), so they differ in levels alone.
@@ -1461,7 +1459,7 @@ impl Context {
     ///
     /// A universe error declines. That is the direction the whole read moves in — fewer refinements fire, never more — so it can cost a reduction and never admit one.
     pub(crate) fn scrutinee_reduct(&mut self, canonical: &Term, probe: &Term) -> Option<Term> {
-        let entry = self.frames.scrutinee_entry(canonical)?;
+        let entry = self.typing.frames.scrutinee_entry(canonical)?;
         if entry.withheld {
             return None;
         }
@@ -1475,36 +1473,36 @@ impl Context {
 
     /// Every equation in force with the key it is held under, aliases among them, innermost frame first.
     pub(crate) fn scrutinee_equations(&self) -> Vec<(Term, ScrutineeEntry)> {
-        self.frames.scrutinee_equations()
+        self.typing.frames.scrutinee_equations()
     }
 
     /// Every equation an arm in force withholds, innermost frame first.
     pub(crate) fn withheld_equations(&self) -> Vec<ScrutineeEntry> {
-        self.frames.withheld_equations()
+        self.typing.frames.withheld_equations()
     }
 
     pub(crate) fn visible_scrutinee_entries(
         &self,
     ) -> impl Iterator<Item = (usize, &Term, &ScrutineeEntry)> {
-        self.frames.visible_scrutinee_entries()
+        self.typing.frames.visible_scrutinee_entries()
     }
 
     pub(crate) fn is_scrutinee_key(&self, canonical: &Term) -> bool {
-        self.frames.is_scrutinee_key(canonical)
+        self.typing.frames.is_scrutinee_key(canonical)
     }
 
     pub(crate) fn refinements_suppressed(&self) -> bool {
-        self.frames.refinements_suppressed()
+        self.typing.frames.refinements_suppressed()
     }
 
     /// The refinements a lookup may read now, of every kind — what a metavariable born here is born under.
     pub(crate) fn refinement_snapshot(&mut self) -> SharedRefinements {
-        self.frames.refinement_snapshot()
+        self.typing.frames.refinement_snapshot()
     }
 
     /// Whether `refinements` are exactly the ones a lookup may read now, so that judging under them needs no bracket.
     pub(crate) fn refinements_are(&mut self, refinements: &Refinements) -> bool {
-        let current = self.frames.refinement_snapshot();
+        let current = self.typing.frames.refinement_snapshot();
         std::ptr::eq(&*current, refinements) || current.same_as(refinements)
     }
 
@@ -1523,8 +1521,9 @@ impl Context {
         for (canonical, entry) in &refinements.scrutinees {
             match entry.withheld {
                 true => {
-                    self.caches.invalidate_for_refinement();
-                    self.frames
+                    self.typing.caches.invalidate_for_refinement();
+                    self.typing
+                        .frames
                         .withhold_scrutinee(canonical.clone(), entry.clone());
                 }
                 false => self.refine_scrutinee_spellings(
@@ -1555,7 +1554,7 @@ impl Context {
 
     /// Whether any refinement of any kind is registered, suppressed or not — the closed machine's gate. Suppression must not open it: a suppressed scrutinee key is *withheld* by the strategy, and the machine evaluating it would hand out the value the suppression exists to withhold.
     pub(crate) fn any_refinements_registered(&self) -> bool {
-        self.frames.any_refinements_registered()
+        self.typing.frames.any_refinements_registered()
     }
 
     /// Run `f` with the refinements of `frame` and every frame inside it withheld — the bracket a scrutinee entry's reduced spelling is settled under, so it rests only on the equations that outlive it. [`Frames::withhold_refinements_from`] carries the rule and [`Caches::invalidate_settlement_boundary`] the cache protocol at each side.
@@ -1564,13 +1563,15 @@ impl Context {
         frame: usize,
         f: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        self.caches
-            .invalidate_settlement_boundary(self.asking.plain());
-        let previous = self.frames.withhold_refinements_from(frame);
+        self.typing
+            .caches
+            .invalidate_settlement_boundary(self.typing.asking.plain());
+        let previous = self.typing.frames.withhold_refinements_from(frame);
         let result = f(self);
-        self.frames.restore_withheld_refinements(previous);
-        self.caches
-            .invalidate_settlement_boundary(self.asking.plain());
+        self.typing.frames.restore_withheld_refinements(previous);
+        self.typing
+            .caches
+            .invalidate_settlement_boundary(self.typing.asking.plain());
 
         result
     }
@@ -1579,16 +1580,16 @@ impl Context {
     ///
     /// Brackets the region with reduction-cache clears so refinement-applied and refinement-suppressed reducts never contaminate each other's cache — but only when some refinement is actually registered. With none, suppressing changes no reduct, so the depth is inert and the clears are pure waste (the common re-validation path: an oracle run outside any match arm). Each boundary is gated on the live state independently, so a refinement added and dropped *inside* `f` — which clears on its own add and exit — does not force a clear here.
     pub(crate) fn with_suppressed_refinements<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        if self.frames.any_refinements_registered() {
-            self.caches.invalidate_suppression_boundary();
+        if self.typing.frames.any_refinements_registered() {
+            self.typing.caches.invalidate_suppression_boundary();
         }
 
-        let previous = self.frames.suppress_refinements_here();
+        let previous = self.typing.frames.suppress_refinements_here();
         let result = f(self);
-        self.frames.restore_refinement_suppression(previous);
+        self.typing.frames.restore_refinement_suppression(previous);
 
-        if self.frames.any_refinements_registered() {
-            self.caches.invalidate_suppression_boundary();
+        if self.typing.frames.any_refinements_registered() {
+            self.typing.caches.invalidate_suppression_boundary();
         }
 
         result
@@ -1601,34 +1602,34 @@ impl Context {
         name: &Global,
         induct_decl: InductDecl,
     ) -> Result<(), Error> {
-        self.program.register_induct(name, induct_decl)
+        self.typing.program.register_induct(name, induct_decl)
     }
 
     pub(crate) fn update_induct(&mut self, name: &Global, induct_decl: InductDecl) {
-        self.program.update_induct(name, induct_decl);
+        self.typing.program.update_induct(name, induct_decl);
     }
 
     /// Take a refused declaration's inductive entry out of the registry, if it had one.
     pub(crate) fn remove_induct(&mut self, name: &Global) {
-        self.program.remove_induct(name);
-        self.caches.note_write();
+        self.typing.program.remove_induct(name);
+        self.typing.caches.note_write();
     }
 
     /// Take a refused declaration's struct entry out of the registry, if it had one.
     pub(crate) fn remove_struct(&mut self, name: &Global) {
-        self.program.remove_struct(name);
-        self.caches.note_write();
+        self.typing.program.remove_struct(name);
+        self.typing.caches.note_write();
     }
 
     /// Take a refused declaration's concept entry out of the registry, if it had one.
     pub(crate) fn remove_concept(&mut self, name: &Global) {
-        self.program.remove_concept(name);
-        self.caches.note_write();
+        self.typing.program.remove_concept(name);
+        self.typing.caches.note_write();
     }
 
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
         self.reads_entry(name);
-        self.program.induct_decl(name)
+        self.typing.program.induct_decl(name)
     }
 
     pub(crate) fn register_struct(
@@ -1636,16 +1637,16 @@ impl Context {
         name: &Global,
         struct_decl: StructDecl,
     ) -> Result<(), Error> {
-        self.program.register_struct(name, struct_decl)
+        self.typing.program.register_struct(name, struct_decl)
     }
 
     pub(crate) fn update_struct(&mut self, name: &Global, struct_decl: StructDecl) {
-        self.program.update_struct(name, struct_decl);
+        self.typing.program.update_struct(name, struct_decl);
     }
 
     pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         self.reads_entry(name);
-        self.program.struct_decl(name)
+        self.typing.program.struct_decl(name)
     }
 
     pub(crate) fn register_concept(
@@ -1653,79 +1654,80 @@ impl Context {
         name: &Global,
         concept: ConceptDecl,
     ) -> Result<(), Error> {
-        self.program.register_concept(name, concept)
+        self.typing.program.register_concept(name, concept)
     }
 
     pub(crate) fn concept(&self, name: &Global) -> Option<&ConceptDecl> {
         self.reads_entry(name);
-        self.program.concept(name)
+        self.typing.program.concept(name)
     }
 
     pub(crate) fn update_concept(&mut self, name: &Global, concept: ConceptDecl) {
-        self.program.update_concept(name, concept);
+        self.typing.program.update_concept(name, concept);
     }
 
     pub(crate) fn concepts(&self) -> &BTreeMap<Global, ConceptDecl> {
-        self.program.concepts()
+        self.typing.program.concepts()
     }
 
     /// Record the prefixes one seeded module's unit claims. See [`Program::mount`].
     pub(crate) fn mount(&mut self, mounts: &[Mount]) {
-        self.program.mount(mounts);
+        self.typing.program.mount(mounts);
     }
 
     pub(crate) fn mount_of(&self, name: &Global) -> Option<&Mount> {
-        self.program.mount_of(name)
+        self.typing.program.mount_of(name)
     }
 
     pub(crate) fn mount_of_head(&self, head: &HeadKey) -> Option<&Mount> {
-        self.program.mount_of_head(head)
+        self.typing.program.mount_of_head(head)
     }
 
     pub(crate) fn mark_witness_declaration(&mut self, name: &Global) {
-        self.witnesses.mark(name);
+        self.underway.witnesses.mark(name);
     }
 
     pub(crate) fn is_witness_declaration(&self, name: &Global) -> bool {
-        self.witnesses.is_marked(name)
+        self.underway.witnesses.is_marked(name)
     }
 
     pub(crate) fn witness_keyed_entries(
         &self,
     ) -> impl Iterator<Item = (&Global, &WitnessKey, &Witness)> {
-        self.program.witness_keyed_entries()
+        self.typing.program.witness_keyed_entries()
     }
 
     pub(crate) fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<&Witness> {
-        self.program.witness(concept, key)
+        self.typing.program.witness(concept, key)
     }
 
     /// [`DeclaredWitnesses::declare`].
     pub(crate) fn declare_witness(&mut self, name: Global, declared: Declared) {
-        self.witnesses.declare(name, declared);
+        self.underway.witnesses.declare(name, declared);
     }
 
     /// [`DeclaredWitnesses::spelled`].
     pub(crate) fn spelled_witness(&self, name: &Global) -> Option<Option<&(Global, WitnessKey)>> {
-        self.witnesses.spelled(name)
+        self.underway.witnesses.spelled(name)
     }
 
     /// Take the declared witness `name` out of what a question is answered by, poisoning the key it was spelled at: it was refused or withheld, and a goal keyed there is its dependent whether or not it had registered.
     pub(crate) fn withdraw_declared_witness(&mut self, name: &Global) {
-        if let Some((concept, key)) = self.witnesses.settle(name) {
-            self.witnesses.poison(concept, key);
+        if let Some((concept, key)) = self.underway.witnesses.settle(name) {
+            self.underway.witnesses.poison(concept, key);
         }
     }
 
     /// Whether a witness stands under `(concept, key)`: one registered, or one the unit declares there and has not elaborated. A question of membership, answered the same whichever witnesses have elaborated.
     pub(crate) fn witness_declared(&self, concept: &Global, key: &WitnessKey) -> bool {
-        self.program.witness(concept, key).is_some() || self.witnesses.at(concept, key).is_some()
+        self.typing.program.witness(concept, key).is_some()
+            || self.underway.witnesses.at(concept, key).is_some()
     }
 
     /// Whether the table's miss at `(concept, key)` is a witness the unit declares there and has not elaborated: the attempt needs it, and is void. `false` is a miss no other declaration answers — the one being attempted registers on its signature, so a miss on its own key is its signature asking for itself.
     pub(crate) fn witness_unfinished(&self, concept: &Global, key: &WitnessKey) -> bool {
-        match self.witnesses.at(concept, key) {
-            Some(name) if !self.needs.attempts(&name) => {
+        match self.underway.witnesses.at(concept, key) {
+            Some(name) if !self.underway.needs.attempts(&name) => {
                 self.need(name);
                 true
             }
@@ -1736,14 +1738,16 @@ impl Context {
     /// Every key a witness of `concept` stands under, with the module declaring it: the registered ones, then the ones the unit declares and has not elaborated — the raw material for reachability questions over one concept's edges (the missing-embedding chain report), the same whichever witnesses have elaborated.
     pub(crate) fn witness_keys(&self, concept: &Global) -> Vec<(WitnessKey, Qualifier)> {
         let registered = self
+            .typing
             .program
             .witness_keyed_entries()
             .filter(|(registered, _, _)| *registered == concept)
             .map(|(_, key, witness)| (*key, witness.module));
         let declared = self
+            .underway
             .witnesses
             .keys(concept)
-            .filter(|(key, _)| self.program.witness(concept, key).is_none())
+            .filter(|(key, _)| self.typing.program.witness(concept, key).is_none())
             .map(|(key, module)| (*key, *module));
 
         registered.chain(declared).collect()
@@ -1756,29 +1760,29 @@ impl Context {
         key: WitnessKey,
         witness: Witness,
     ) -> Option<Qualifier> {
-        let existing = self.program.insert_witness(concept, key, witness);
+        let existing = self.typing.program.insert_witness(concept, key, witness);
         if existing.is_none() {
-            self.caches.note_write();
+            self.typing.caches.note_write();
         }
         existing
     }
 
     /// [`Program::remove_witness`], stamping the write: a witness gone can change which pure elaborations succeed as much as one arriving.
     pub(crate) fn remove_witness(&mut self, name: &Global) -> Vec<(Global, WitnessKey)> {
-        let keys = self.program.remove_witness(name);
+        let keys = self.typing.program.remove_witness(name);
         if !keys.is_empty() {
-            self.caches.note_write();
+            self.typing.caches.note_write();
         }
         keys
     }
 
     /// Mark `(concept, key)` as a slot a refused declaration's witness stood in — see [`DeclaredWitnesses::poison`].
     pub(crate) fn poison_witness_key(&mut self, concept: Global, key: WitnessKey) {
-        self.witnesses.poison(concept, key);
+        self.underway.witnesses.poison(concept, key);
     }
 
     pub(crate) fn is_poisoned_witness(&self, concept: &Global, key: &WitnessKey) -> bool {
-        self.witnesses.is_poisoned(concept, key)
+        self.underway.witnesses.is_poisoned(concept, key)
     }
 
     /// [`Program::update_witness_scheme`], stamping the write.
@@ -1788,86 +1792,87 @@ impl Context {
         universe_context: UniverseContext,
         signature: Term,
     ) {
-        self.program
+        self.typing
+            .program
             .update_witness_scheme(name, universe_context, signature);
-        self.caches.note_write();
+        self.typing.caches.note_write();
     }
 
     /// The module whose item is currently being elaborated (the qualifier prefix of its name; empty for the root), or `None` when no surface item is being elaborated — which suppresses the representation-privacy checks (see the field's invariant).
     pub(crate) fn island(&self) -> Option<&Qualifier> {
-        self.posture.island()
+        self.underway.posture.island()
     }
 
     /// Set the current module before elaborating an item (see `elaborate_module_suffix`).
     pub(crate) fn set_island(&mut self, island: Qualifier) {
         // Every item boundary also lands a `define_entry` clear, but this one keeps the cache's soundness independent of that ordering.
-        self.caches.invalidate_for_island_change();
-        self.posture.stand(Some(island));
+        self.typing.caches.invalidate_for_island_change();
+        self.underway.posture.stand(Some(island));
     }
 
     /// Run `f` with no island — suppressing the representation-privacy checks for re-derivation of already-elaborated terms, whose machinery-built projections were never subject to surface privacy in the first place. The bracket is the only way to clear an island (mirroring the parking half of the oracle package), so no context can be left permanently altered.
     pub(crate) fn with_suppressed_privacy<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let previous = self.posture.stand(None);
+        let previous = self.underway.posture.stand(None);
         let result = f(self);
-        self.posture.stand(previous);
+        self.underway.posture.stand(previous);
 
         result
     }
 
     /// Whether the procedure that proves a bound from the facts in scope is running, so it is not asked again from inside its own candidate.
     pub(crate) fn entailing(&self) -> bool {
-        self.posture.entailing()
+        self.underway.posture.entailing()
     }
 
     /// Run `f` as that procedure, which is not asked again until `f` returns.
     pub(crate) fn with_entailing<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let previous = self.posture.set_entailing(true);
+        let previous = self.underway.posture.set_entailing(true);
         let result = f(self);
-        self.posture.set_entailing(previous);
+        self.underway.posture.set_entailing(previous);
 
         result
     }
 
     /// Whether reduction is plain: it asks the elaborator's conversion nothing ([`Context::plainly`]).
     pub(crate) fn plain(&self) -> bool {
-        self.asking.plain()
+        self.typing.asking.plain()
     }
 
     /// A judgment's reduction is putting a question to conversion. Its answer rests on the level constraints that stand, so a scope that is rolled back with constraints withdrawn after one was asked inside it clears what was reduced meanwhile ([`Context::rollback_solutions`]).
     pub(crate) fn note_question(&mut self) {
-        self.asking.note_question();
+        self.typing.asking.note_question();
     }
 
     /// A question asked with nothing committed was answered no because answering yes would have committed a solution or a level constraint. The answer can change once the solver moves, so no reduct taken across it is remembered (`reduce`'s `remember`).
     pub(crate) fn note_declined(&mut self) {
-        self.asking.note_declined();
+        self.typing.asking.note_declined();
     }
 
     /// How many questions have been declined for a commit.
     pub(crate) fn declined(&self) -> u64 {
-        self.asking.declined()
+        self.typing.asking.declined()
     }
 
     /// The two atoms a classing is asking conversion about, which a classing made meanwhile is held inside (`curios_core::Classes::of`).
     pub(crate) fn asked(&self) -> Option<&(Term, Term)> {
-        self.asking.asked()
+        self.typing.asking.asked()
     }
 
     /// Enter or leave a classing's question about two atoms, answering what stood before.
     pub(crate) fn ask(&mut self, asked: Option<(Term, Term)>) -> Option<(Term, Term)> {
-        self.asking.ask(asked)
+        self.typing.asking.ask(asked)
     }
 
     /// The universe solver's state now, which a settlement made across a declined question is filed beside.
     pub(crate) fn universe_state(&self) -> UniverseStateToken {
-        self.attempt.universe_solver.state_token()
+        self.underway.attempt.universe_solver.state_token()
     }
 
     /// Run `read` with reduction plain: it asks the elaborator's conversion nothing, at a stuck fold or at a missed equation — the kernel's `Kernel::plainly`, for the kernel's two readers. A question reduction puts to conversion is answered by it, which is what ends the regress, and a shared analysis reads a term by it (`Env::force`), since totality may rest on no verdict of conversion's. Each of the two keeps its own answers: the reducts, the sorts read through them and the settled spellings (`Frames::scrutinee_spellings`) are all filed by which reduction took them.
     pub(crate) fn plainly<R>(&mut self, read: impl FnOnce(&mut Self) -> R) -> R {
-        let previous = self.asking.set_plain(true);
+        let previous = self.typing.asking.set_plain(true);
         let answer = read(self);
-        self.asking.set_plain(previous);
+        self.typing.asking.set_plain(previous);
 
         answer
     }
@@ -1891,41 +1896,48 @@ impl Context {
         result: Term,
         kind: MetaKind,
     ) {
-        self.caches.note_write();
-        let refinements = self.frames.refinement_snapshot();
+        self.typing.caches.note_write();
+        let refinements = self.typing.frames.refinement_snapshot();
         let witnesses = self.witness_scope();
         let witnesses = (!witnesses.is_empty()).then(|| Rc::from(witnesses));
-        self.attempt
-            .solutions
-            .birth_with_kind(id, telescope, refinements, witnesses, result, kind);
+        self.underway.attempt.solutions.birth_with_kind(
+            id,
+            telescope,
+            refinements,
+            witnesses,
+            result,
+            kind,
+        );
     }
 
     /// Allocate the protected placeholder for one member of a recursive group. It has the same contextual spine as an inference metavariable so parked work can carry it across a popped local frame, but only `fill_rec_slot` may solve it.
     ///
     /// `name` is the member this slot stands for, kept so the substitution walks can spell it — see [`Context::rec_slot_name`].
     pub(crate) fn fresh_rec_slot(&mut self, name: &Free, result: Term) -> (MetavarId, Term) {
-        self.caches.note_write();
-        let id = self.attempt.solutions.mint();
+        self.typing.caches.note_write();
+        let id = self.underway.attempt.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
-        let refinements = self.frames.refinement_snapshot();
-        self.attempt
+        let refinements = self.typing.frames.refinement_snapshot();
+        self.underway
+            .attempt
             .solutions
             .birth_rec_slot(id, telescope, refinements, result);
-        self.attempt.name_rec_slot(id, *name);
+        self.underway.attempt.name_rec_slot(id, *name);
         (id, Term::metavar_birthed(id, MetavarOrigin::Hole, spine))
     }
 
     /// [`Attempt::rec_slot_name`].
     pub(crate) fn rec_slot_name(&self, id: MetavarId) -> Option<&Free> {
-        self.attempt.rec_slot_name(id)
+        self.underway.attempt.rec_slot_name(id)
     }
 
     pub(crate) fn is_rec_slot(&self, id: MetavarId) -> bool {
-        self.attempt.solutions.is_rec_slot(id)
+        self.underway.attempt.solutions.is_rec_slot(id)
     }
 
     pub(crate) fn fill_rec_slot(&mut self, id: MetavarId, term: Term) {
         let entry = self
+            .underway
             .attempt
             .solutions
             .entry(id)
@@ -1936,11 +1948,11 @@ impl Context {
     }
 
     pub(crate) fn is_top_level(&self, name: &Free) -> bool {
-        self.frames.is_top_level(name)
+        self.typing.frames.is_top_level(name)
     }
 
     pub(crate) fn identity_snapshot(&mut self) -> (SharedTelescope, SharedSpine) {
-        self.frames.identity_snapshot()
+        self.typing.frames.identity_snapshot()
     }
 
     /// Mint a metavariable for an omitted implicit argument and birth it immediately — frozen local Γ, the binder's instantiated type as `result` — so the id always has a birth record. Returns its id beside the metavariable term carrying the *call site's* span and the insertion provenance (which rides on the node; see [`Metavar::origin`]). `proposition` is whether `result` is one, decided by the caller, which has the sort in hand; it is kept on the birth record for the unsolved report, which cannot ask.
@@ -1954,22 +1966,22 @@ impl Context {
     ) -> (MetavarId, Term) {
         let (id, metavar) = self.fresh_metavar_with(result, span, MetavarOrigin::Implicit(origin));
         if proposition {
-            self.attempt.solutions.mark_proposition(id);
+            self.underway.attempt.solutions.mark_proposition(id);
         }
         if let Some(reduct) = reduct {
-            self.attempt.solutions.note_reduct(id, reduct);
+            self.underway.attempt.solutions.note_reduct(id, reduct);
         }
         (id, metavar)
     }
 
     /// Record what an unsolved bound's type reduced to when a later attempt asked, for the report the hole becomes.
     pub(crate) fn note_reduct(&mut self, id: MetavarId, reduct: Term) {
-        self.attempt.solutions.note_reduct(id, reduct);
+        self.underway.attempt.solutions.note_reduct(id, reduct);
     }
 
     /// Record why the procedure that proves a bound from the facts in scope proved nothing, for the report the hole becomes.
     pub(crate) fn note_refusal(&mut self, id: MetavarId, refusal: Refusal) {
-        self.attempt.solutions.note_refusal(id, refusal);
+        self.underway.attempt.solutions.note_refusal(id, refusal);
     }
 
     /// Mint a metavariable for an omitted `use` argument — like [`Context::fresh_metavar`] but carrying witness provenance, and returning the id so the caller can register the resolution goal.
@@ -1989,7 +2001,7 @@ impl Context {
 
     /// Mint a metavariable identity with no birth record, for a term built ahead of its elaboration exactly as `into_core` builds one: an omitted motive, a list literal's element type, a witness goal with a provenance of its own. Birth happens where elaboration first meets the term, in checking position, as it does for every lowered hole.
     pub(crate) fn mint_metavar(&mut self) -> MetavarId {
-        self.attempt.solutions.mint()
+        self.underway.attempt.solutions.mint()
     }
 
     /// The frozen ambient scope a settle-synthesized lambda's domain metavariables are born under — captured before the settle walk assumes a single lambda binder, so a domain's birth context is never wider than the expectation it will inhabit, which the embedded-metavariable exemption in `solve` relies on ([`Context::metavar_context_contained`]).
@@ -2006,7 +2018,7 @@ impl Context {
         span: Option<Span>,
         binder: String,
     ) -> Term {
-        let id = self.attempt.solutions.mint();
+        let id = self.underway.attempt.solutions.mint();
         self.birth_metavar(id, scope.telescope.clone(), result);
         let metavar = Term::metavar_birthed(id, MetavarOrigin::Domain(binder), scope.spine.clone());
         match span {
@@ -2197,9 +2209,10 @@ impl Context {
             result,
         } = restriction;
 
-        self.caches.note_write();
-        let narrowed = self.attempt.solutions.mint();
-        self.attempt
+        self.typing.caches.note_write();
+        let narrowed = self.underway.attempt.solutions.mint();
+        self.underway
+            .attempt
             .solutions
             .birth(narrowed, telescope, refinements, witnesses, result);
         let stand_in = Term::metavar_birthed(narrowed, origin, arguments);
@@ -2223,7 +2236,7 @@ impl Context {
         span: Option<Span>,
         origin: MetavarOrigin,
     ) -> (MetavarId, Term) {
-        let id = self.attempt.solutions.mint();
+        let id = self.underway.attempt.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);
         let metavar = Term::metavar_birthed(id, origin, spine);
@@ -2237,30 +2250,30 @@ impl Context {
     }
 
     pub(crate) fn metavar_entry(&self, id: MetavarId) -> Option<&MetaEntry> {
-        self.attempt.solutions.entry(id)
+        self.underway.attempt.solutions.entry(id)
     }
 
     pub(crate) fn witness_hole(&self, term: &Term) -> Option<(WitnessOrigin, Term)> {
-        self.attempt.solutions.witness_hole(term)
+        self.underway.attempt.solutions.witness_hole(term)
     }
 
     pub(crate) fn metavar_solution(&self, id: MetavarId) -> Option<&Term> {
-        self.attempt.solutions.solution(id)
+        self.underway.attempt.solutions.solution(id)
     }
 
     pub(crate) fn resolve_metavar(&self, metavar: &Metavar) -> Option<Term> {
-        self.attempt.solutions.resolve(metavar)
+        self.underway.attempt.solutions.resolve(metavar)
     }
 
     /// Commit a metavariable's solution ([`Solutions::solve`]), stamping the write. Needs no reduction-cache clear: a WHNF that still named an unsolved metavariable was never memoized (see `Context::reduce`), and a solve is monotonic, so every surviving entry stays valid. (Re-validation's [`Context::rollback_solutions`], which *un*-solves, does clear.)
     pub(crate) fn solve_metavar(&mut self, id: MetavarId, term: Term) {
-        self.caches.note_write();
-        self.attempt.solutions.solve(id, term);
+        self.typing.caches.note_write();
+        self.underway.attempt.solutions.solve(id, term);
     }
 
     /// Close a [`Context::solution_mark`] transaction, keeping whatever it left in place. Undoing is [`Context::rollback_solutions`]; a path that undoes still ends here.
     pub(crate) fn end_solutions(&mut self, mark: SolutionMark) {
-        self.attempt.universe_solver.release(mark.universe);
+        self.underway.attempt.universe_solver.release(mark.universe);
     }
 
     /// Watermark for [`Context::rollback_solutions`]: how many solutions have been committed so far. Spans both unification stores, which is why it lives here rather than on either.
@@ -2268,22 +2281,22 @@ impl Context {
     /// Opens a speculative scope on the universe solver, which [`Context::end_solutions`] closes. The two are paired by hand at every site: a closure bracket in the manner of [`Context::with_frame`] would be safer, but these sit on elaboration's recursions, where its body is a stack frame per level.
     pub(crate) fn solution_mark(&mut self) -> SolutionMark {
         SolutionMark {
-            term_solution_log_len: self.attempt.solutions.solved_len(),
-            universe: self.attempt.universe_solver.mark(),
-            credited_len: self.credits.mark(),
-            checked_len: self.checked.mark(),
-            questions: self.asking.questions(),
+            term_solution_log_len: self.underway.attempt.solutions.solved_len(),
+            universe: self.underway.attempt.universe_solver.mark(),
+            credited_len: self.underway.credits.mark(),
+            checked_len: self.underway.checked.mark(),
+            questions: self.typing.asking.questions(),
         }
     }
 
     /// How many term solutions have been committed so far: the watermark [`Context::solutions_since`] reads after.
     pub(crate) fn solutions_committed(&self) -> usize {
-        self.attempt.solutions.solved_len()
+        self.underway.attempt.solutions.solved_len()
     }
 
     /// The solutions committed since `watermark` that still stand, each with its id.
     pub(crate) fn solutions_since(&self, watermark: usize) -> Vec<(MetavarId, Term)> {
-        self.attempt.solutions.solved_since(watermark)
+        self.underway.attempt.solutions.solved_since(watermark)
     }
 
     /// Rewrite standing solutions in place to terms they already denote — what a recursive group does to its own members once its generalization has minted their instance — clearing every cache as a rollback does, since a cached reduct may have gone through a spelling replaced here.
@@ -2291,66 +2304,73 @@ impl Context {
         if solutions.is_empty() {
             return;
         }
-        self.caches.note_write();
+        self.typing.caches.note_write();
         for (id, term) in solutions {
-            self.attempt.solutions.restamp(id, term);
+            self.underway.attempt.solutions.restamp(id, term);
         }
-        self.caches.invalidate_for_rollback();
-        self.frames.forget_spellings();
+        self.typing.caches.invalidate_for_rollback();
+        self.typing.frames.forget_spellings();
     }
 
     /// Unwind every solution committed since `mark` — the transactional bracket around re-validation. Validating a candidate runs full elaboration, which can solve *other* metavariables along the way; if the candidate is ultimately rejected, those nested solutions were derived from an equation that never held and must not survive the verdict. Removes the unwound ids from the wake signals.
     ///
     /// **It invalidates what can rest on what it undid, and nothing more.** An unwound term solution can sit inside any reduct or elaboration cached since, so every cache clears. A universe solver that moved without one — a constraint or a level solution withdrawn — is read by no reduct, reduction being parametric in levels, but an elaboration may have certified its purity against what was withdrawn, so the elaborations clear, as they do where a universe transaction closes. A rollback that undid nothing clears nothing: a witness probe rolls back after every trial — hundreds of times re-validating one `Str/split_once` stated in a type, few of which unwind a solution — and a clear at each would throw away the reducts and elaborations the next node needs.
     pub(crate) fn rollback_solutions(&mut self, mark: SolutionMark) {
-        let unwinds_terms = self.attempt.solutions.solved_len() > mark.term_solution_log_len;
-        let universes_before = self.attempt.universe_solver.state_token();
-        self.attempt.solutions.unwind_to(mark.term_solution_log_len);
-        self.attempt.universe_solver.rollback(mark.universe);
+        let unwinds_terms =
+            self.underway.attempt.solutions.solved_len() > mark.term_solution_log_len;
+        let universes_before = self.underway.attempt.universe_solver.state_token();
+        self.underway
+            .attempt
+            .solutions
+            .unwind_to(mark.term_solution_log_len);
+        self.underway
+            .attempt
+            .universe_solver
+            .rollback(mark.universe);
         // A proof written inside what is rolled back reads nothing that stands.
-        self.credits.truncate(mark.credited_len);
+        self.underway.credits.truncate(mark.credited_len);
         // Nor does a term settled inside it settle anything. It belonged to a candidate that is discarded, and the type it settled at may be a metavariable whose solution has just been unwound: left recorded, the totality obligations would zonk it at the item's end and report an implicit argument of a call the program never kept.
         self.truncate_checked(mark.checked_len);
 
         if unwinds_terms {
-            self.caches.invalidate_for_rollback();
-            self.frames.forget_spellings();
-        } else if self.attempt.universe_solver.state_token() != universes_before {
-            self.caches.note_universe_write();
-            self.caches.invalidate_for_universe_transaction();
+            self.typing.caches.invalidate_for_rollback();
+            self.typing.frames.forget_spellings();
+        } else if self.underway.attempt.universe_solver.state_token() != universes_before {
+            self.typing.caches.note_universe_write();
+            self.typing.caches.invalidate_for_universe_transaction();
             // A question asked inside the scope was answered on the level constraints it held, and a reduct or a settled spelling may rest on the answer: those go with the constraints. A scope that asked none leaves the reducts alone, which no rule of reduction reads a level for.
-            if self.asking.questions() != mark.questions {
-                self.caches.invalidate_for_withdrawn_answers();
-                self.frames.forget_spellings();
+            if self.typing.asking.questions() != mark.questions {
+                self.typing.caches.invalidate_for_withdrawn_answers();
+                self.typing.frames.forget_spellings();
             }
         }
     }
 
     pub(crate) fn universes(&self) -> &UniverseSolver {
-        &self.attempt.universe_solver
+        &self.underway.attempt.universe_solver
     }
 
     /// Mutably borrow the universe solver and advance the authoritative [`Entropy`] stamp on guard drop only if solver state actually changed. Normalized ground/reflexive comparisons are read-equivalent and must not make an otherwise pure elaboration-cache computation look impure. Rollback performs the conservative cache clear separately.
     pub(crate) fn universes_mut(&mut self) -> UniverseMutation<'_> {
-        let before = self.attempt.universe_solver.state_token();
+        let before = self.underway.attempt.universe_solver.state_token();
         UniverseMutation {
-            solver: &mut self.attempt.universe_solver,
-            stamp: self.caches.universe_stamp(),
+            solver: &mut self.underway.attempt.universe_solver,
+            stamp: self.typing.caches.universe_stamp(),
             before,
         }
     }
 
     pub(crate) fn finish_universe_transaction(&mut self) {
-        let before = self.attempt.universe_solver.state_token();
+        let before = self.underway.attempt.universe_solver.state_token();
         self.universes_mut().clear_constraints();
-        if self.attempt.universe_solver.state_token() != before {
-            self.caches.invalidate_for_universe_transaction();
+        if self.underway.attempt.universe_solver.state_token() != before {
+            self.typing.caches.invalidate_for_universe_transaction();
         }
     }
 
     /// Close every speculative universe scope a refusal left open — see [`UniverseSolver::abandon_speculation`] for where that is sound.
     pub(crate) fn abandon_universe_speculation(&mut self) {
-        self.attempt.universe_solver.abandon_speculation();
+        self.underway.attempt.universe_solver.abandon_speculation();
     }
 
     pub(crate) fn fresh_universe(
@@ -2389,14 +2409,14 @@ impl Context {
             .flat_map(|term| self.universe_metas_in(term))
             .collect::<BTreeSet<_>>();
         self.universes_mut().default(metas).map_err(Error::from)?;
-        self.scheme_open = false;
-        let solver = self.attempt.universe_solver.clone();
+        self.underway.scheme_open = false;
+        let solver = self.underway.attempt.universe_solver.clone();
         let terms = terms
             .iter()
             .map(|term| zonk_universe_levels_scoped(*term, &solver).map_err(Error::from))
             .collect::<Result<Vec<_>, _>>()?;
-        self.caches.invalidate_for_universe_rewrite();
-        self.frames.forget_spellings();
+        self.typing.caches.invalidate_for_universe_rewrite();
+        self.typing.frames.forget_spellings();
         Ok(terms)
     }
 
@@ -2412,9 +2432,9 @@ impl Context {
             .universes_mut()
             .finalize(interface, internal, compared)
             .map_err(Error::from)?;
-        self.scheme_open = false;
-        self.caches.invalidate_for_universe_rewrite();
-        self.frames.forget_spellings();
+        self.underway.scheme_open = false;
+        self.typing.caches.invalidate_for_universe_rewrite();
+        self.typing.frames.forget_spellings();
         Ok(universe_context)
     }
 
@@ -2427,9 +2447,9 @@ impl Context {
         self.universes_mut()
             .finalize_at_instance(metas, instance, parameter_count)
             .map_err(Error::from)?;
-        self.scheme_open = false;
-        self.caches.invalidate_for_universe_rewrite();
-        self.frames.forget_spellings();
+        self.underway.scheme_open = false;
+        self.typing.caches.invalidate_for_universe_rewrite();
+        self.typing.frames.forget_spellings();
         Ok(())
     }
 
@@ -2440,26 +2460,27 @@ impl Context {
         instance: &[Level],
         determined: &[Level],
     ) -> Result<(), Error> {
-        match self.scheme_open {
+        match self.underway.scheme_open {
             true => self.universes_mut().pin_instance(instance, determined),
             false => self
                 .universes_mut()
                 .close_instance(minted, instance, determined),
         }
         .map_err(Error::from)?;
-        self.caches.invalidate_for_universe_rewrite();
-        self.frames.forget_spellings();
+        self.typing.caches.invalidate_for_universe_rewrite();
+        self.typing.frames.forget_spellings();
         Ok(())
     }
 
     pub(crate) fn zonk_universe_levels<B: Bound>(&self, value: &B) -> Result<B, Error> {
-        zonk_universe_levels_scoped(value, &self.attempt.universe_solver).map_err(Error::from)
+        zonk_universe_levels_scoped(value, &self.underway.attempt.universe_solver)
+            .map_err(Error::from)
     }
 
     // === Parked constraints ============================================
 
     pub(crate) fn freeze_frame(&self) -> FrozenFrame {
-        self.frames.freeze()
+        self.typing.frames.freeze()
     }
 
     /// Decide a parked problem in exactly the context it froze: enter a frame, hide every local frame below it ([`Frames::hide_frames_below_here`]), restore `frame` above the floor, and run `work` there.
@@ -2474,17 +2495,17 @@ impl Context {
     ) -> R {
         curios_profile::profile!("ctx::retry_frame");
         self.with_frame(|context| {
-            let (previous, hid_refinements) = context.frames.hide_frames_below_here();
+            let (previous, hid_refinements) = context.typing.frames.hide_frames_below_here();
             if hid_refinements {
-                context.caches.invalidate_suppression_boundary();
+                context.typing.caches.invalidate_suppression_boundary();
             }
 
             context.restore_frame(frame);
             let result = work(context);
 
-            context.frames.restore_hidden_frames(previous);
+            context.typing.frames.restore_hidden_frames(previous);
             if hid_refinements {
-                context.caches.invalidate_suppression_boundary();
+                context.typing.caches.invalidate_suppression_boundary();
             }
 
             result
@@ -2512,7 +2533,9 @@ impl Context {
         self.install_refinements(&frame.refinements);
 
         // The witness binders were already re-assumed by the loop above (they are a subset of `assumptions`); only the scope membership is restored here. The enclosing frame's mark truncates it on exit.
-        self.frames.extend_witness_scope(&frame.witness_binders);
+        self.typing
+            .frames
+            .extend_witness_scope(&frame.witness_binders);
     }
 
     /// Park blocked work: freeze the live local frame around it and record which unsolved metavariables could unblock it.
@@ -2524,8 +2547,8 @@ impl Context {
 
     /// Re-park work that is still blocked after a retry, keeping its originally frozen frame ([`Solutions::park`]), stamping the write.
     pub(crate) fn repark(&mut self, work: ParkedWork, origin: Term, frame: FrozenFrame) {
-        self.caches.note_write();
-        self.attempt.solutions.park(work, origin, frame);
+        self.typing.caches.note_write();
+        self.underway.attempt.solutions.park(work, origin, frame);
     }
 
     /// Mint the placeholder metavariable for a parked checking problem: birthed like any hole — frozen Γ, identity spine — with no insertion provenance, and of its own kind, since its check is what fills it ([`MetaKind::Placeholder`]). If it survives unsolved, the item drain reports the parked problem at its origin before zonk could ever meet the placeholder.
@@ -2534,7 +2557,7 @@ impl Context {
         result: Term,
         span: Option<Span>,
     ) -> (MetavarId, Term) {
-        let id = self.attempt.solutions.mint();
+        let id = self.underway.attempt.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar_as(id, telescope, result, MetaKind::Placeholder);
         let term = Term::metavar_birthed(id, MetavarOrigin::Hole, spine);
@@ -2549,59 +2572,59 @@ impl Context {
 
     pub(crate) fn wake_parked(&mut self) -> Vec<ParkedProblem> {
         curios_profile::profile!("ctx::wake_parked");
-        self.attempt.solutions.wake_parked()
+        self.underway.attempt.solutions.wake_parked()
     }
 
     pub(crate) fn take_parked(&mut self) -> Vec<ParkedProblem> {
-        self.attempt.solutions.take_parked()
+        self.underway.attempt.solutions.take_parked()
     }
 
     /// How many metavariables are awaited: the mark a term takes before it awaits any ([`Context::settle_bounds`]).
     pub(crate) fn awaited_mark(&self) -> usize {
-        self.attempt.solutions.awaited_mark()
+        self.underway.attempt.solutions.awaited_mark()
     }
 
     /// Await bounds for `id` until the term that minted it has read its parts: met at `Prop` from below meanwhile, it waits.
     pub(crate) fn await_bounds(&mut self, id: MetavarId) {
-        self.attempt.solutions.await_bounds(id);
+        self.underway.attempt.solutions.await_bounds(id);
     }
 
     /// Whether some term is still reading its parts for `id`.
     pub(crate) fn awaits(&self, id: MetavarId) -> bool {
-        self.attempt.solutions.awaits(id)
+        self.underway.attempt.solutions.awaits(id)
     }
 
     /// Stop awaiting everything awaited since `mark`, and hand it back.
     pub(crate) fn stop_awaiting(&mut self, mark: usize) -> Vec<MetavarId> {
-        self.attempt.solutions.stop_awaiting(mark)
+        self.underway.attempt.solutions.stop_awaiting(mark)
     }
 
     /// Take the problems parked at below that watch one of `ids`.
     pub(crate) fn take_bounds_on(&mut self, ids: &[MetavarId]) -> Vec<ParkedProblem> {
-        self.caches.note_write();
-        self.attempt.solutions.take_bounds_on(ids)
+        self.typing.caches.note_write();
+        self.underway.attempt.solutions.take_bounds_on(ids)
     }
 
     pub(crate) fn parked_len(&self) -> usize {
-        self.attempt.solutions.parked_len()
+        self.underway.attempt.solutions.parked_len()
     }
 
     pub(crate) fn has_newly_solved(&self) -> bool {
-        self.attempt.solutions.has_newly_solved()
+        self.underway.attempt.solutions.has_newly_solved()
     }
 
     pub(crate) fn parking_suppressed(&self) -> bool {
-        self.attempt.solutions.parking_suppressed()
+        self.underway.attempt.solutions.parking_suppressed()
     }
 
     /// Whether work that cannot be judged yet may park. Inside an oracle it may not, and the oracle records that a site wanted to ([`Context::declined_to_park`]): the refusal that site goes on to raise says its term could not be judged, not that it is wrong. A site asks this last, once everything else says it would park, so the record is made only where a park was wanted.
     pub(crate) fn may_park(&mut self) -> bool {
-        self.attempt.solutions.may_park()
+        self.underway.attempt.solutions.may_park()
     }
 
     /// Whether a site inside the oracle in progress wanted to park and was refused. Read inside the oracle, by a reader with three answers: where the question failed and this holds, the failure is undecided rather than a refusal. It errs one way only — a check that recovered from a declined park and then failed on something rigid reads as undecided, and the rigid failure is reported when the work is retried.
     pub(crate) fn declined_to_park(&self) -> bool {
-        self.attempt.solutions.declined_to_park()
+        self.underway.attempt.solutions.declined_to_park()
     }
 
     /// Run `f` as a yes/no *oracle* around full elaboration — a solution's re-validation, a goal candidate's fit — under the refinements `birth` holds and no others: the ones the checked term's metavariable was born under ([`Context::with_refinements`]). Parking is suppressed — `expect` treats `Blocked` as a mismatch and `retry_parked` is a no-op, so provisional success can neither leak into the verdict nor consume a parked obligation whose error the oracle would swallow — and so are the representation-privacy checks: an oracle candidate is a unification artifact that can embed machinery-built projections (eta-expansions, witness splices) whose privacy elaboration already adjudicated, and a swallowed privacy error would silently flip the verdict. The suppressions are a package: an oracle that set only some would be subtly unsound, which is why the parking half has no public setter. What the parking half suppressed is recorded for the oracle's own reader ([`Context::may_park`]): a goal candidate's fit and an entailment read a failure as no, and re-validation, which has a third answer, reads a failure where a park was declined as not judged yet. The bracket also keeps an elaboration table of its own, for what only a verdict may reuse — see [`Context::oracle_memoizable`].
@@ -2610,19 +2633,19 @@ impl Context {
         birth: &Refinements,
         f: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        self.caches.begin_oracle();
+        self.typing.caches.begin_oracle();
         let result = self.with_suppressed_parking(|context| {
             context.with_refinements(birth, |context| context.with_suppressed_privacy(f))
         });
-        self.caches.end_oracle();
+        self.typing.caches.end_oracle();
 
         result
     }
 
     fn with_suppressed_parking<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let enclosing = self.attempt.solutions.enter_oracle();
+        let enclosing = self.underway.attempt.solutions.enter_oracle();
         let result = f(self);
-        self.attempt.solutions.leave_oracle(enclosing);
+        self.underway.attempt.solutions.leave_oracle(enclosing);
 
         result
     }

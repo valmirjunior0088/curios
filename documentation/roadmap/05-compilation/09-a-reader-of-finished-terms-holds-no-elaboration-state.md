@@ -7,21 +7,13 @@ Working specification for making what a judgment can reach follow what the judgm
 ## What this builds on
 
 - **The context's state is its module tree's.** `Context`'s fields are reached from `curios-elab/src/context.rs` and the files under `context/` alone. Every other module of the crate goes through its methods, so how the state is grouped is internal to that tree.
-- **Four stores are types already** (`Caches`, `Frames`, `Solutions`, `Program`, `curios-elab/src/context/`), with the rule that keeps them apart: a method that writes one store and must stamp or clear a cache is `Context`'s, which names both.
-- **So are the budget, the asking protocol and the stance** (`Spend`, `Asking`, `Posture`, beside them): what a judgment may spend and has drawn, the protocol by which reduction asks conversion, and the module a use site is judged from with whether the prover is running.
-- **A declaration is elaborated in a state of its own** ([A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md)): `Context::exchange` swaps what one attempt mints and solves for a state no other declaration wrote, and `Attempted` is that state set aside.
+- **The context's state is two halves, each lifetime in them a value, behind one door**, decisions 1 to 3 (`curios-elab/src/context/`). `Typing` holds the binder supply, the budget (`Spend`), the frames, the registries, the caches over them, the asking protocol (`Asking`) and the names the type-directed features emit. `Underway` holds the attempt under way (`Attempt`, which `Context::exchange` swaps whole), what it needed of unfinished declarations (`Needs`), the witnesses the unit declares before they elaborate (`DeclaredWitnesses`), the binders its proofs read (`Credits`), the terms it settled (`CheckedTerms`) and where a judgment stands (`Posture`). A fresh context holds the second empty, and no module outside the tree names a store.
 - **A finished module is a type.** Erasure takes a `Zonked<Module>` and projects it through `UniverseErased` (`curios-core`): that its input holds no metavariable and no level is evidence a caller hands over, never a condition a caller is trusted to have met.
 - **An erased form is its item's** ([`curios-unit`'s README](../../../curios-unit/README.md#an-erased-form-is-its-items)): each item erases into a fragment on a budget restored for it (`erase_item`, `curios-elab/src/into_ersd/lower.rs`), reading every other declaration by name.
 - **Erasure is directed by types and judges none** ([`curios-elab`'s README](../../../curios-elab/README.md#erasure-reads-a-heads-type-off-the-finished-term)): it reads a head's type off the finished term (`Lowering::type_of`), and nothing in `into_ersd` calls `elaborate`.
 - **The two checkers share what can be shared.** `curios-core` holds the intrinsic folds, the closed machine and the `Reducer` trait that hands a fold its checker's reducer; `curios-analysis` holds the inversion, positivity and totality analyses over `Env` and `Judge`. Each checker implements those traits, and each owns its weak-head reduction of open terms, its sorts and its conversion.
 
 ## The gap
-
-**One type holds every lifetime.** `Context` holds what stands for as long as anything is read: the names the type-directed features emit, the budget, the registries, the mounts, totality, the witness table and the base frame. It holds what stands for one unit's walk: where each of its names is written, which of its declarations have not finished, what is on offer to a proof, the witnesses it declares, the binders its proofs credited, the terms it settled and its imports. It holds what stands for one attempt at a declaration: its metavariables with their solutions, its universe solver and what it noted of its goals. And it holds the declaration a judgment is made for. A method's signature says none of which it touches, and a field's lifetime is its documentation's to state.
-
-**An attempt's state is exchanged a field at a time.** What one attempt mints and solves is fields of `Context` that `Context::exchange` swaps one by one into an `Attempted`. That a field is an attempt's is said by its being listed there, and one that is not listed outlives its declaration.
-
-**A walk keeps part of its state in the registries.** The witnesses a unit declares and has not elaborated, and the keys its refused ones stood at, sit in `Program` beside the witness table, which is what stands whichever unit is being elaborated.
 
 **Erasure is handed a context, and every caller hands it an empty one.** `erase_unit`, `erase_unit_over` and `erase_program` (`curios-elab/src/into_ersd/lower.rs`) take a `&mut Context`, and `curios-pipeline` and the prelude's build each make one for the call and drop it. That it is fresh is each caller's to arrange: the type takes any context, an elaboration's among them, with its attempt's solutions, its unfinished declarations and its registries in it.
 
@@ -54,25 +46,19 @@ Working specification for making what a judgment can reach follow what the judgm
 
 | Component | Treatment | Stage |
 | --- | --- | --- |
-| An attempt's state | One value, exchanged whole | Lifetimes |
-| A walk's state | `Needs`, and `DeclaredWitnesses` out of `Program` | Lifetimes |
-| What elaboration notes for a lint and for the erasure obligations | `Credits`, `CheckedTerms` | Lifetimes |
-| `Context` | `Typing` and `Underway` | Halves |
 | Erasure's context | `Retyping`, made by erasure | Reader |
 | Erasure's reductions | Through the kernel's reducer, or none | Engine |
 
 ## Stages
 
-Each lands alone, on its own check. The first three change nothing a compile produces, and a move there is a finding.
+Each lands alone, on its own check.
 
-1. **Lifetimes.** Decision 2.
-2. **Halves.** Decisions 1 and 3.
-3. **Reader.** Decision 5. Erasure's entry points take a budget and the syntax registry, and `curios-pipeline` and the prelude's build stop making a context for them.
-4. **Engine.** Decision 6, once its question is settled. Expected to move: where the prelude is erased, and what a unit stores if a record is taken.
+1. **Reader.** Decision 5. Erasure's entry points take a budget and the syntax registry, and `curios-pipeline` and the prelude's build stop making a context for them. It changes nothing a compile produces, and a move there is a finding.
+2. **Engine.** Decision 6, once its question is settled. Expected to move: where the prelude is erased, and what a unit stores if a record is taken.
 
 ## Verification
 
-- **Nothing moves.** Through the first three stages every suite holds what it held, and the prelude's images, `sys.rkyv` and `std.rkyv` as `curios-prelude-archive`'s build writes them under `target/`, are byte for byte the ones the commit before the stage writes: every declaration of the prelude elaborates and erases to what it did. Counted.
+- **Nothing moves.** Through the Reader stage every suite holds what it held, and the prelude's images, `sys.rkyv` and `std.rkyv` as `curios-prelude-archive`'s build writes them under `target/`, are byte for byte the ones the commit before it writes: every declaration of the prelude elaborates and erases to what it did. Counted.
 - **The reader is the only way in.** No file under `curios-elab/src/into_ersd/` names `Context`, and `Retyping`'s context is a private field: held by the crate compiling.
 - **Plain reduction.** The measurement the second open question names, taken in the Reader stage. Counted.
 - **Engine.** Every item of `/std` erases to the form it has.
@@ -91,4 +77,4 @@ Each lands alone, on its own check. The first three change nothing a compile pro
 
 ## Completion and retirement
 
-The first three stages are done when every lifetime of the context's state is a value in one of two halves and erasure makes the reader it reads through. Their decisions and what they reject then go to [`curios-elab`'s README](../../../curios-elab/README.md), `Retyping`'s contract to its rustdoc, and this specification shrinks to the Engine stage and its questions. It is done when what erases is decided through no engine that elaborates: the rule goes to the README's *Erasure reads a head's type off the finished term*, corrected in place. Replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.
+The Reader stage is done when erasure makes the reader it reads through and no caller hands it a context. Decisions 1 to 5 and what they reject then go to [`curios-elab`'s README](../../../curios-elab/README.md), `Retyping`'s contract to its rustdoc, and this specification shrinks to the Engine stage and its questions. It is done when what erases is decided through no engine that elaborates: the rule goes to the README's *Erasure reads a head's type off the finished term*, corrected in place. Replace the roadmap entry with a checked summary, verify that nothing references this filename, and delete it.
