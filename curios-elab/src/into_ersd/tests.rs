@@ -487,11 +487,12 @@ fn erasure_is_deterministic() {
 fn an_arena_keeps_no_binder_its_erasure_opened() {
     let arena = |context: &mut Context| {
         let x = context.fresh(Some("x"));
+        // One constant: the module indexes its constants by hash, and two would print in an order of the table's own.
         let body = Term::let_(
             &x,
             Term::intrinsic(Intrinsic::NatType),
             nat_lit(2),
-            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat_lit(3))),
+            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), Term::free_var(&x))),
         );
         let program = stating(
             &module(Vec::new(), body),
