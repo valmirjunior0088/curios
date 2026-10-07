@@ -1,6 +1,9 @@
 mod asking;
 pub(crate) use asking::*;
 
+mod attempt;
+pub(crate) use attempt::*;
+
 mod caches;
 pub(crate) use caches::*;
 
@@ -139,9 +142,8 @@ pub struct Context {
     caches: Caches,
     // The frame-scoped lexical stores — assumptions, local definitions, refinements, the witness scope; see [`Frames`].
     frames: Frames,
-    // The unification state — metavariable records, the solve journal, and parked work; flat and frame-independent. See [`Solutions`].
-    solutions: Solutions,
-    universe_solver: UniverseSolver,
+    // What the attempt under way mints and solves — its metavariables with their solutions, its universe levels with their solver, what it noted of its goals; flat and frame-independent. See [`Attempt`].
+    attempt: Attempt,
     // The program-wide declaration registries, witness table, and totality verdicts — flat stores of monotonic facts about the program, not lexically-scoped bindings; `enter_frame`/`leave_frame` never touch them. See [`Program`].
     program: Program,
     // Where surface elaboration stands: the module whose item is being elaborated, and whether the prover is running; see [`Posture`].
@@ -176,18 +178,6 @@ pub struct Context {
     broken: BTreeSet<Global>,
     // The names the type-directed features synthesize — infix dispatch and row subsumption. Supplied rather than spelled: the elaborator knows *which* declaration it needs, and `curios-prelude` knows what that declaration is called. See [`Context::syntax`].
     syntax: SyntaxRegistry,
-    // Conversions the item drain gave up on because written goals alone held them up — what each such `?` must make true, carried to the goal batch rather than reported as an error. See `Context::note_goal_obligation`.
-    goal_obligations: Vec<GoalObligation>,
-    // Where each written goal `?` was written, recorded as it is born: a report that names a goal names it by this span, since an occurrence of the goal inside a type may carry the span of the binder it was substituted for — a declaration's, not the `?`'s.
-    goal_spans: BTreeMap<MetavarId, Span>,
-    /// The member name each recursive slot stands for.
-    ///
-    /// A slot is the placeholder a `rec` group's member is known by while its body is being checked, and `elaborate_rec` defines the member's *name* to it — so reduction turns a recursive reference into the slot, and a committed solution can carry one. `RecItem::try_new` captures member **names** into the group's binder, so a slot reaching that point is not something the capture can bind: zonk expands it to the member's body instead, the body mentions that solution again, and the walk never ends. Knowing the name lets both substitution walks spell the member as the capturable thing it is.
-    rec_slot_names: BTreeMap<MetavarId, Free>,
-    /// Why a solve could not commit: the unsolved metavariables `Convert::solve`'s embedded-metavariable guard found riding inside a candidate, with what each one fills and where it was written. The last attempt wins, so a metavariable that never solves leaves the reason it never did.
-    ///
-    /// This edge is what lets the item drain report the *cause* of an undecided conversion rather than the goal that merely waited on it. An undischarged bound riding inside a helper's unfolded body blocks every metavariable downstream of it, and without the edge the report names the last of them — an implicit the author never wrote, at a line that is not where the fault is — while the bound nothing discharged goes unmentioned entirely.
-    solve_blockers: BTreeMap<MetavarId, Vec<(MetavarId, MetavarOrigin, Option<Span>)>>,
     /// What each auto-lift site named as written, under the span its `lift` wrapper took — see [`EmbeddingSite`]. One entry per such site the unit elaborates, read only where a missing embedding is reported, so a scan serves.
     embedding_sites: Vec<(Span, EmbeddingSite)>,
     // What the unit's `use` declarations brought into scope, where, and under which spelling — the text stage's table, installed by the driver before elaboration. Read by goal suggestions alone, as the pool a candidate may come from beyond the names the program already mentions. Empty means nothing was imported, which is also what every embedding that never installs one gets: the pools then stop at the referenced globals.
@@ -199,48 +189,6 @@ pub struct Context {
 pub(crate) struct EmbeddingSite {
     pub(crate) action: Term,
     pub(crate) region: Term,
-}
-
-/// A conversion the item drain surrendered to the written goals holding it up: the goals, and the two sides as a report displays them.
-#[derive(Debug, Clone)]
-pub(crate) struct GoalObligation {
-    pub goals: BTreeSet<MetavarId>,
-    pub this: Term,
-    pub that: Term,
-}
-
-/// What one attempt at a declaration mints and solves: its binder identities, its metavariables and their solutions, its universe levels with the solver that settles them, and what it noted of the goals it wrote. The context elaborates in one at a time ([`Context::exchange`]), each declaration's its own; the one a declaration wrote goals in is kept past it, since the goals are known in it alone.
-#[derive(Debug)]
-pub(crate) struct Attempted {
-    fresh_names: Entropy,
-    solutions: Solutions,
-    universe_solver: UniverseSolver,
-    goal_obligations: Vec<GoalObligation>,
-    goal_spans: BTreeMap<MetavarId, Span>,
-    rec_slot_names: BTreeMap<MetavarId, Free>,
-    solve_blockers: BTreeMap<MetavarId, Vec<(MetavarId, MetavarOrigin, Option<Span>)>>,
-}
-
-impl Attempted {
-    /// A state that has minted nothing, each of its counters above what `mints` says a lowering minted.
-    fn above(mints: &Mints) -> Self {
-        let fresh_names = Entropy::<usize>::new();
-        fresh_names.seed(mints.binders);
-        let mut solutions = Solutions::new();
-        solutions.seed_floor(mints.metavariables);
-        let mut universe_solver = UniverseSolver::new(0);
-        universe_solver.seed(&mints.universes);
-
-        Self {
-            fresh_names,
-            solutions,
-            universe_solver,
-            goal_obligations: Vec::new(),
-            goal_spans: BTreeMap::new(),
-            rec_slot_names: BTreeMap::new(),
-            solve_blockers: BTreeMap::new(),
-        }
-    }
 }
 
 impl Context {
@@ -260,8 +208,7 @@ impl Context {
             spend: Spend::new(budget),
             caches: Caches::new(),
             frames: Frames::new(),
-            solutions: Solutions::new(),
-            universe_solver: UniverseSolver::new(0),
+            attempt: Attempt::default(),
             program: Program::new(),
             posture: Posture::default(),
             asking: Asking::default(),
@@ -280,38 +227,35 @@ impl Context {
             broken: BTreeSet::new(),
             syntax,
             imports: Imports::default(),
-            goal_obligations: Vec::new(),
-            goal_spans: BTreeMap::new(),
-            rec_slot_names: BTreeMap::new(),
-            solve_blockers: BTreeMap::new(),
             embedding_sites: Vec::new(),
         }
     }
 
-    /// Record what blocked `id`'s solve, replacing any earlier record: only the last attempt's reason is worth reporting, since an earlier one may since have been solved away.
+    /// [`Attempt::note_solve_blockers`].
     pub(crate) fn note_solve_blockers(
         &mut self,
         id: MetavarId,
         blockers: Vec<(MetavarId, MetavarOrigin, Option<Span>)>,
     ) {
-        self.solve_blockers.insert(id, blockers);
+        self.attempt.note_solve_blockers(id, blockers);
     }
 
+    /// [`Attempt::solve_blockers`].
     pub(crate) fn solve_blockers(
         &self,
         id: MetavarId,
     ) -> &[(MetavarId, MetavarOrigin, Option<Span>)] {
-        self.solve_blockers.get(&id).map_or(&[], Vec::as_slice)
+        self.attempt.solve_blockers(id)
     }
 
-    /// Record where the written goal `id` was written, at its birth.
+    /// [`Attempt::note_goal_span`].
     pub(crate) fn note_goal_span(&mut self, id: MetavarId, span: Span) {
-        self.goal_spans.entry(id).or_insert(span);
+        self.attempt.note_goal_span(id, span);
     }
 
-    /// Where the written goal `id` was written, if elaboration reached it.
+    /// [`Attempt::goal_span`].
     pub(crate) fn goal_span(&self, id: MetavarId) -> Option<&Span> {
-        self.goal_spans.get(&id)
+        self.attempt.goal_span(id)
     }
 
     /// Record what the auto-lift at `span` named as written.
@@ -328,20 +272,19 @@ impl Context {
             .map(|(_, site)| site)
     }
 
-    /// Record a conversion the drain dropped because the written goals in `goals` were all that held it up, with its two sides already in display form. A program holding a goal never compiles, so nothing is lost by not deciding it; what is kept is the constraint the hole must satisfy, which the goal's report shows beside its type.
+    /// [`Attempt::note_goal_obligation`].
     pub(crate) fn note_goal_obligation(
         &mut self,
         goals: BTreeSet<MetavarId>,
         this: Term,
         that: Term,
     ) {
-        self.goal_obligations
-            .push(GoalObligation { goals, this, that });
+        self.attempt.note_goal_obligation(goals, this, that);
     }
 
-    /// Every obligation [`Context::note_goal_obligation`] recorded, in drain order.
+    /// [`Attempt::goal_obligations`].
     pub(crate) fn goal_obligations(&self) -> &[GoalObligation] {
-        &self.goal_obligations
+        self.attempt.goal_obligations()
     }
 
     /// The names this elaboration may synthesize.
@@ -435,12 +378,7 @@ impl Context {
     pub(crate) fn exchange(&mut self, state: Attempted) -> Attempted {
         let replaced = Attempted {
             fresh_names: mem::replace(&mut self.fresh_names, state.fresh_names),
-            solutions: mem::replace(&mut self.solutions, state.solutions),
-            universe_solver: mem::replace(&mut self.universe_solver, state.universe_solver),
-            goal_obligations: mem::replace(&mut self.goal_obligations, state.goal_obligations),
-            goal_spans: mem::replace(&mut self.goal_spans, state.goal_spans),
-            rec_slot_names: mem::replace(&mut self.rec_slot_names, state.rec_slot_names),
-            solve_blockers: mem::replace(&mut self.solve_blockers, state.solve_blockers),
+            attempt: mem::replace(&mut self.attempt, state.attempt),
         };
         // Nothing memoized under the state replaced answers for this one.
         self.caches.begin_declaration();
@@ -469,9 +407,9 @@ impl Context {
         self.order.get(name).copied()
     }
 
-    /// Whether the declaration being elaborated wrote a goal.
+    /// Whether the declaration being elaborated wrote a goal ([`Attempt::holds_goals`]).
     pub(crate) fn holds_goals(&self) -> bool {
-        !self.goal_spans.is_empty()
+        self.attempt.holds_goals()
     }
 
     /// Publish an item that holds a written goal by its types alone: each name stays assumed at its type, zonked, and is bound to nothing. What the item elaborated to holds the metavariables of the state its declaration elaborated in, which no other declaration reads, so what reads this one reads a constant of its type and what would unfold it stays stuck where the goal did. Refused where a type holds a goal itself.
@@ -812,8 +750,8 @@ impl Context {
             frame,
             key,
             self.asking.plain(),
-            self.solutions.solved_len(),
-            &self.universe_solver.state_token(),
+            self.attempt.solutions.solved_len(),
+            &self.attempt.universe_solver.state_token(),
         )
     }
 
@@ -828,7 +766,7 @@ impl Context {
         unsolved: bool,
         levels: Option<UniverseStateToken>,
     ) {
-        let solved = (unsolved || levels.is_some()).then(|| self.solutions.solved_len());
+        let solved = (unsolved || levels.is_some()).then(|| self.attempt.solutions.solved_len());
         self.frames
             .settle_spelling(frame, key, self.asking.plain(), settled, solved, levels);
     }
@@ -985,10 +923,12 @@ impl Context {
     }
 
     fn has_unsolved_universe_meta(&self, term: &Term) -> bool {
-        term.any_universe_meta(|meta| match self.universe_solver.zonk(&Level::meta(meta)) {
-            Ok(level) => level.metas().next().is_some(),
-            Err(_) => true,
-        })
+        term.any_universe_meta(
+            |meta| match self.attempt.universe_solver.zonk(&Level::meta(meta)) {
+                Ok(level) => level.metas().next().is_some(),
+                Err(_) => true,
+            },
+        )
     }
 
     fn enter_frame(&mut self) {
@@ -1935,7 +1875,7 @@ impl Context {
 
     /// The universe solver's state now, which a settlement made across a declined question is filed beside.
     pub(crate) fn universe_state(&self) -> UniverseStateToken {
-        self.universe_solver.state_token()
+        self.attempt.universe_solver.state_token()
     }
 
     /// Run `read` with reduction plain: it asks the elaborator's conversion nothing, at a stuck fold or at a missed equation — the kernel's `Kernel::plainly`, for the kernel's two readers. A question reduction puts to conversion is answered by it, which is what ends the regress, and a shared analysis reads a term by it (`Env::force`), since totality may rest on no verdict of conversion's. Each of the two keeps its own answers: the reducts, the sorts read through them and the settled spellings (`Frames::scrutinee_spellings`) are all filed by which reduction took them.
@@ -1970,7 +1910,8 @@ impl Context {
         let refinements = self.frames.refinement_snapshot();
         let witnesses = self.witness_scope();
         let witnesses = (!witnesses.is_empty()).then(|| Rc::from(witnesses));
-        self.solutions
+        self.attempt
+            .solutions
             .birth_with_kind(id, telescope, refinements, witnesses, result, kind);
     }
 
@@ -1979,31 +1920,28 @@ impl Context {
     /// `name` is the member this slot stands for, kept so the substitution walks can spell it — see [`Context::rec_slot_name`].
     pub(crate) fn fresh_rec_slot(&mut self, name: &Free, result: Term) -> (MetavarId, Term) {
         self.caches.note_write();
-        let id = self.solutions.mint();
+        let id = self.attempt.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
         let refinements = self.frames.refinement_snapshot();
-        self.solutions
+        self.attempt
+            .solutions
             .birth_rec_slot(id, telescope, refinements, result);
-        self.rec_slot_names.insert(id, *name);
+        self.attempt.name_rec_slot(id, *name);
         (id, Term::metavar_birthed(id, MetavarOrigin::Hole, spine))
     }
 
-    /// The member name a *filled* recursive slot stands for, which is what substitution must put in its place.
-    ///
-    /// Only once filled. While a slot is unsolved it is deliberately a blocking dependency — `elaborate_rec` records that a dependency on a later member parks on the unsolved slot — and spelling it as a name would let a conversion commit where it must still wait. Nothing is lost by waiting: the cycle needs substitution to expand a slot into a body, so refusing to do that at all is enough however early the slot leaked.
+    /// [`Attempt::rec_slot_name`].
     pub(crate) fn rec_slot_name(&self, id: MetavarId) -> Option<&Free> {
-        match self.solutions.solution(id).is_some() {
-            true => self.rec_slot_names.get(&id),
-            false => None,
-        }
+        self.attempt.rec_slot_name(id)
     }
 
     pub(crate) fn is_rec_slot(&self, id: MetavarId) -> bool {
-        self.solutions.is_rec_slot(id)
+        self.attempt.solutions.is_rec_slot(id)
     }
 
     pub(crate) fn fill_rec_slot(&mut self, id: MetavarId, term: Term) {
         let entry = self
+            .attempt
             .solutions
             .entry(id)
             .expect("recursive slot has a birth entry");
@@ -2031,22 +1969,22 @@ impl Context {
     ) -> (MetavarId, Term) {
         let (id, metavar) = self.fresh_metavar_with(result, span, MetavarOrigin::Implicit(origin));
         if proposition {
-            self.solutions.mark_proposition(id);
+            self.attempt.solutions.mark_proposition(id);
         }
         if let Some(reduct) = reduct {
-            self.solutions.note_reduct(id, reduct);
+            self.attempt.solutions.note_reduct(id, reduct);
         }
         (id, metavar)
     }
 
     /// Record what an unsolved bound's type reduced to when a later attempt asked, for the report the hole becomes.
     pub(crate) fn note_reduct(&mut self, id: MetavarId, reduct: Term) {
-        self.solutions.note_reduct(id, reduct);
+        self.attempt.solutions.note_reduct(id, reduct);
     }
 
     /// Record why the procedure that proves a bound from the facts in scope proved nothing, for the report the hole becomes.
     pub(crate) fn note_refusal(&mut self, id: MetavarId, refusal: Refusal) {
-        self.solutions.note_refusal(id, refusal);
+        self.attempt.solutions.note_refusal(id, refusal);
     }
 
     /// Mint a metavariable for an omitted `use` argument — like [`Context::fresh_metavar`] but carrying witness provenance, and returning the id so the caller can register the resolution goal.
@@ -2066,7 +2004,7 @@ impl Context {
 
     /// Mint a metavariable identity with no birth record, for a term built ahead of its elaboration exactly as `into_core` builds one: an omitted motive, a list literal's element type, a witness goal with a provenance of its own. Birth happens where elaboration first meets the term, in checking position, as it does for every lowered hole.
     pub(crate) fn mint_metavar(&mut self) -> MetavarId {
-        self.solutions.mint()
+        self.attempt.solutions.mint()
     }
 
     /// The frozen ambient scope a settle-synthesized lambda's domain metavariables are born under — captured before the settle walk assumes a single lambda binder, so a domain's birth context is never wider than the expectation it will inhabit, which the embedded-metavariable exemption in `solve` relies on ([`Context::metavar_context_contained`]).
@@ -2083,7 +2021,7 @@ impl Context {
         span: Option<Span>,
         binder: String,
     ) -> Term {
-        let id = self.solutions.mint();
+        let id = self.attempt.solutions.mint();
         self.birth_metavar(id, scope.telescope.clone(), result);
         let metavar = Term::metavar_birthed(id, MetavarOrigin::Domain(binder), scope.spine.clone());
         match span {
@@ -2275,8 +2213,9 @@ impl Context {
         } = restriction;
 
         self.caches.note_write();
-        let narrowed = self.solutions.mint();
-        self.solutions
+        let narrowed = self.attempt.solutions.mint();
+        self.attempt
+            .solutions
             .birth(narrowed, telescope, refinements, witnesses, result);
         let stand_in = Term::metavar_birthed(narrowed, origin, arguments);
         let stand_in = match span {
@@ -2299,7 +2238,7 @@ impl Context {
         span: Option<Span>,
         origin: MetavarOrigin,
     ) -> (MetavarId, Term) {
-        let id = self.solutions.mint();
+        let id = self.attempt.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);
         let metavar = Term::metavar_birthed(id, origin, spine);
@@ -2313,30 +2252,30 @@ impl Context {
     }
 
     pub(crate) fn metavar_entry(&self, id: MetavarId) -> Option<&MetaEntry> {
-        self.solutions.entry(id)
+        self.attempt.solutions.entry(id)
     }
 
     pub(crate) fn witness_hole(&self, term: &Term) -> Option<(WitnessOrigin, Term)> {
-        self.solutions.witness_hole(term)
+        self.attempt.solutions.witness_hole(term)
     }
 
     pub(crate) fn metavar_solution(&self, id: MetavarId) -> Option<&Term> {
-        self.solutions.solution(id)
+        self.attempt.solutions.solution(id)
     }
 
     pub(crate) fn resolve_metavar(&self, metavar: &Metavar) -> Option<Term> {
-        self.solutions.resolve(metavar)
+        self.attempt.solutions.resolve(metavar)
     }
 
     /// Commit a metavariable's solution ([`Solutions::solve`]), stamping the write. Needs no reduction-cache clear: a WHNF that still named an unsolved metavariable was never memoized (see `Context::reduce`), and a solve is monotonic, so every surviving entry stays valid. (Re-validation's [`Context::rollback_solutions`], which *un*-solves, does clear.)
     pub(crate) fn solve_metavar(&mut self, id: MetavarId, term: Term) {
         self.caches.note_write();
-        self.solutions.solve(id, term);
+        self.attempt.solutions.solve(id, term);
     }
 
     /// Close a [`Context::solution_mark`] transaction, keeping whatever it left in place. Undoing is [`Context::rollback_solutions`]; a path that undoes still ends here.
     pub(crate) fn end_solutions(&mut self, mark: SolutionMark) {
-        self.universe_solver.release(mark.universe);
+        self.attempt.universe_solver.release(mark.universe);
     }
 
     /// Watermark for [`Context::rollback_solutions`]: how many solutions have been committed so far. Spans both unification stores, which is why it lives here rather than on either.
@@ -2344,8 +2283,8 @@ impl Context {
     /// Opens a speculative scope on the universe solver, which [`Context::end_solutions`] closes. The two are paired by hand at every site: a closure bracket in the manner of [`Context::with_frame`] would be safer, but these sit on elaboration's recursions, where its body is a stack frame per level.
     pub(crate) fn solution_mark(&mut self) -> SolutionMark {
         SolutionMark {
-            term_solution_log_len: self.solutions.solved_len(),
-            universe: self.universe_solver.mark(),
+            term_solution_log_len: self.attempt.solutions.solved_len(),
+            universe: self.attempt.universe_solver.mark(),
             credited_len: self.credited.len(),
             checked_len: self.checked.len(),
             questions: self.asking.questions(),
@@ -2354,12 +2293,12 @@ impl Context {
 
     /// How many term solutions have been committed so far: the watermark [`Context::solutions_since`] reads after.
     pub(crate) fn solutions_committed(&self) -> usize {
-        self.solutions.solved_len()
+        self.attempt.solutions.solved_len()
     }
 
     /// The solutions committed since `watermark` that still stand, each with its id.
     pub(crate) fn solutions_since(&self, watermark: usize) -> Vec<(MetavarId, Term)> {
-        self.solutions.solved_since(watermark)
+        self.attempt.solutions.solved_since(watermark)
     }
 
     /// Rewrite standing solutions in place to terms they already denote — what a recursive group does to its own members once its generalization has minted their instance — clearing every cache as a rollback does, since a cached reduct may have gone through a spelling replaced here.
@@ -2369,7 +2308,7 @@ impl Context {
         }
         self.caches.note_write();
         for (id, term) in solutions {
-            self.solutions.restamp(id, term);
+            self.attempt.solutions.restamp(id, term);
         }
         self.caches.invalidate_for_rollback();
         self.frames.forget_spellings();
@@ -2379,10 +2318,10 @@ impl Context {
     ///
     /// **It invalidates what can rest on what it undid, and nothing more.** An unwound term solution can sit inside any reduct or elaboration cached since, so every cache clears. A universe solver that moved without one — a constraint or a level solution withdrawn — is read by no reduct, reduction being parametric in levels, but an elaboration may have certified its purity against what was withdrawn, so the elaborations clear, as they do where a universe transaction closes. A rollback that undid nothing clears nothing: a witness probe rolls back after every trial — hundreds of times re-validating one `Str/split_once` stated in a type, few of which unwind a solution — and a clear at each would throw away the reducts and elaborations the next node needs.
     pub(crate) fn rollback_solutions(&mut self, mark: SolutionMark) {
-        let unwinds_terms = self.solutions.solved_len() > mark.term_solution_log_len;
-        let universes_before = self.universe_solver.state_token();
-        self.solutions.unwind_to(mark.term_solution_log_len);
-        self.universe_solver.rollback(mark.universe);
+        let unwinds_terms = self.attempt.solutions.solved_len() > mark.term_solution_log_len;
+        let universes_before = self.attempt.universe_solver.state_token();
+        self.attempt.solutions.unwind_to(mark.term_solution_log_len);
+        self.attempt.universe_solver.rollback(mark.universe);
         // A proof written inside what is rolled back reads nothing that stands.
         self.credited.truncate(mark.credited_len);
         // Nor does a term settled inside it settle anything. It belonged to a candidate that is discarded, and the type it settled at may be a metavariable whose solution has just been unwound: left recorded, the totality obligations would zonk it at the item's end and report an implicit argument of a call the program never kept.
@@ -2391,7 +2330,7 @@ impl Context {
         if unwinds_terms {
             self.caches.invalidate_for_rollback();
             self.frames.forget_spellings();
-        } else if self.universe_solver.state_token() != universes_before {
+        } else if self.attempt.universe_solver.state_token() != universes_before {
             self.caches.note_universe_write();
             self.caches.invalidate_for_universe_transaction();
             // A question asked inside the scope was answered on the level constraints it held, and a reduct or a settled spelling may rest on the answer: those go with the constraints. A scope that asked none leaves the reducts alone, which no rule of reduction reads a level for.
@@ -2403,30 +2342,30 @@ impl Context {
     }
 
     pub(crate) fn universes(&self) -> &UniverseSolver {
-        &self.universe_solver
+        &self.attempt.universe_solver
     }
 
     /// Mutably borrow the universe solver and advance the authoritative [`Entropy`] stamp on guard drop only if solver state actually changed. Normalized ground/reflexive comparisons are read-equivalent and must not make an otherwise pure elaboration-cache computation look impure. Rollback performs the conservative cache clear separately.
     pub(crate) fn universes_mut(&mut self) -> UniverseMutation<'_> {
-        let before = self.universe_solver.state_token();
+        let before = self.attempt.universe_solver.state_token();
         UniverseMutation {
-            solver: &mut self.universe_solver,
+            solver: &mut self.attempt.universe_solver,
             stamp: self.caches.universe_stamp(),
             before,
         }
     }
 
     pub(crate) fn finish_universe_transaction(&mut self) {
-        let before = self.universe_solver.state_token();
+        let before = self.attempt.universe_solver.state_token();
         self.universes_mut().clear_constraints();
-        if self.universe_solver.state_token() != before {
+        if self.attempt.universe_solver.state_token() != before {
             self.caches.invalidate_for_universe_transaction();
         }
     }
 
     /// Close every speculative universe scope a refusal left open — see [`UniverseSolver::abandon_speculation`] for where that is sound.
     pub(crate) fn abandon_universe_speculation(&mut self) {
-        self.universe_solver.abandon_speculation();
+        self.attempt.universe_solver.abandon_speculation();
     }
 
     pub(crate) fn fresh_universe(
@@ -2466,7 +2405,7 @@ impl Context {
             .collect::<BTreeSet<_>>();
         self.universes_mut().default(metas).map_err(Error::from)?;
         self.scheme_open = false;
-        let solver = self.universe_solver.clone();
+        let solver = self.attempt.universe_solver.clone();
         let terms = terms
             .iter()
             .map(|term| zonk_universe_levels_scoped(*term, &solver).map_err(Error::from))
@@ -2529,7 +2468,7 @@ impl Context {
     }
 
     pub(crate) fn zonk_universe_levels<B: Bound>(&self, value: &B) -> Result<B, Error> {
-        zonk_universe_levels_scoped(value, &self.universe_solver).map_err(Error::from)
+        zonk_universe_levels_scoped(value, &self.attempt.universe_solver).map_err(Error::from)
     }
 
     // === Parked constraints ============================================
@@ -2601,7 +2540,7 @@ impl Context {
     /// Re-park work that is still blocked after a retry, keeping its originally frozen frame ([`Solutions::park`]), stamping the write.
     pub(crate) fn repark(&mut self, work: ParkedWork, origin: Term, frame: FrozenFrame) {
         self.caches.note_write();
-        self.solutions.park(work, origin, frame);
+        self.attempt.solutions.park(work, origin, frame);
     }
 
     /// Mint the placeholder metavariable for a parked checking problem: birthed like any hole — frozen Γ, identity spine — with no insertion provenance, and of its own kind, since its check is what fills it ([`MetaKind::Placeholder`]). If it survives unsolved, the item drain reports the parked problem at its origin before zonk could ever meet the placeholder.
@@ -2610,7 +2549,7 @@ impl Context {
         result: Term,
         span: Option<Span>,
     ) -> (MetavarId, Term) {
-        let id = self.solutions.mint();
+        let id = self.attempt.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar_as(id, telescope, result, MetaKind::Placeholder);
         let term = Term::metavar_birthed(id, MetavarOrigin::Hole, spine);
@@ -2625,59 +2564,59 @@ impl Context {
 
     pub(crate) fn wake_parked(&mut self) -> Vec<ParkedProblem> {
         curios_profile::profile!("ctx::wake_parked");
-        self.solutions.wake_parked()
+        self.attempt.solutions.wake_parked()
     }
 
     pub(crate) fn take_parked(&mut self) -> Vec<ParkedProblem> {
-        self.solutions.take_parked()
+        self.attempt.solutions.take_parked()
     }
 
     /// How many metavariables are awaited: the mark a term takes before it awaits any ([`Context::settle_bounds`]).
     pub(crate) fn awaited_mark(&self) -> usize {
-        self.solutions.awaited_mark()
+        self.attempt.solutions.awaited_mark()
     }
 
     /// Await bounds for `id` until the term that minted it has read its parts: met at `Prop` from below meanwhile, it waits.
     pub(crate) fn await_bounds(&mut self, id: MetavarId) {
-        self.solutions.await_bounds(id);
+        self.attempt.solutions.await_bounds(id);
     }
 
     /// Whether some term is still reading its parts for `id`.
     pub(crate) fn awaits(&self, id: MetavarId) -> bool {
-        self.solutions.awaits(id)
+        self.attempt.solutions.awaits(id)
     }
 
     /// Stop awaiting everything awaited since `mark`, and hand it back.
     pub(crate) fn stop_awaiting(&mut self, mark: usize) -> Vec<MetavarId> {
-        self.solutions.stop_awaiting(mark)
+        self.attempt.solutions.stop_awaiting(mark)
     }
 
     /// Take the problems parked at below that watch one of `ids`.
     pub(crate) fn take_bounds_on(&mut self, ids: &[MetavarId]) -> Vec<ParkedProblem> {
         self.caches.note_write();
-        self.solutions.take_bounds_on(ids)
+        self.attempt.solutions.take_bounds_on(ids)
     }
 
     pub(crate) fn parked_len(&self) -> usize {
-        self.solutions.parked_len()
+        self.attempt.solutions.parked_len()
     }
 
     pub(crate) fn has_newly_solved(&self) -> bool {
-        self.solutions.has_newly_solved()
+        self.attempt.solutions.has_newly_solved()
     }
 
     pub(crate) fn parking_suppressed(&self) -> bool {
-        self.solutions.parking_suppressed()
+        self.attempt.solutions.parking_suppressed()
     }
 
     /// Whether work that cannot be judged yet may park. Inside an oracle it may not, and the oracle records that a site wanted to ([`Context::declined_to_park`]): the refusal that site goes on to raise says its term could not be judged, not that it is wrong. A site asks this last, once everything else says it would park, so the record is made only where a park was wanted.
     pub(crate) fn may_park(&mut self) -> bool {
-        self.solutions.may_park()
+        self.attempt.solutions.may_park()
     }
 
     /// Whether a site inside the oracle in progress wanted to park and was refused. Read inside the oracle, by a reader with three answers: where the question failed and this holds, the failure is undecided rather than a refusal. It errs one way only — a check that recovered from a declined park and then failed on something rigid reads as undecided, and the rigid failure is reported when the work is retried.
     pub(crate) fn declined_to_park(&self) -> bool {
-        self.solutions.declined_to_park()
+        self.attempt.solutions.declined_to_park()
     }
 
     /// Run `f` as a yes/no *oracle* around full elaboration — a solution's re-validation, a goal candidate's fit — under the refinements `birth` holds and no others: the ones the checked term's metavariable was born under ([`Context::with_refinements`]). Parking is suppressed — `expect` treats `Blocked` as a mismatch and `retry_parked` is a no-op, so provisional success can neither leak into the verdict nor consume a parked obligation whose error the oracle would swallow — and so are the representation-privacy checks: an oracle candidate is a unification artifact that can embed machinery-built projections (eta-expansions, witness splices) whose privacy elaboration already adjudicated, and a swallowed privacy error would silently flip the verdict. The suppressions are a package: an oracle that set only some would be subtly unsound, which is why the parking half has no public setter. What the parking half suppressed is recorded for the oracle's own reader ([`Context::may_park`]): a goal candidate's fit and an entailment read a failure as no, and re-validation, which has a third answer, reads a failure where a park was declined as not judged yet. The bracket also keeps an elaboration table of its own, for what only a verdict may reuse — see [`Context::oracle_memoizable`].
@@ -2696,9 +2635,9 @@ impl Context {
     }
 
     fn with_suppressed_parking<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let enclosing = self.solutions.enter_oracle();
+        let enclosing = self.attempt.solutions.enter_oracle();
         let result = f(self);
-        self.solutions.leave_oracle(enclosing);
+        self.attempt.solutions.leave_oracle(enclosing);
 
         result
     }
