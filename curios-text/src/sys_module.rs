@@ -225,6 +225,14 @@ fn nat_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
             binary("xor", syntax, Intrinsic::NatXor),
         ),
         documented(
+            &["The smaller of the two."],
+            binary("min", syntax, Intrinsic::NatMin),
+        ),
+        documented(
+            &["The larger of the two."],
+            binary("max", syntax, Intrinsic::NatMax),
+        ),
+        documented(
             &["`a` doubled `b` times."],
             binary("shl", syntax, Intrinsic::NatShl),
         ),
@@ -348,6 +356,14 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
         documented(
             &["Their bits, kept where exactly one has one."],
             binary("xor", syntax, Intrinsic::IntXor),
+        ),
+        documented(
+            &["The smaller of the two."],
+            binary("min", syntax, Intrinsic::IntMin),
+        ),
+        documented(
+            &["The larger of the two."],
+            binary("max", syntax, Intrinsic::IntMax),
         ),
         documented(
             &["`a` doubled `b` times."],

@@ -3,9 +3,9 @@
 //! [`compare_nat`] cancels what the two sides share before it looks at what is left, so `x + a < x + b` decides on `a` and `b` rather than stalling on the whole spine. `curios-algebra`'s `Comparison` is the verdict — which of the three orderings the operands may still take, so an undecided answer is carried back rather than guessed — and every fact that narrows it is the algebra's: the floors, a bound against a literal, a dominator, divisibility. What is decided here is what to observe and in what order: which terms to normalize, which side is bare, which operand bounds which.
 
 use {
-    super::{nat_bound, nat_dominators, nat_least},
+    super::{lattice_verdict, nat_bound, nat_dominators, nat_least},
     crate::{Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, project_erased_universes},
-    curios_algebra::{Comparison, Side, apart_modulo},
+    curios_algebra::{Carrier, Comparison, Side, apart_modulo},
     curios_num::Natural,
 };
 
@@ -72,6 +72,12 @@ pub(super) fn compare_nat(
     // A symbolic bound decides by the same criterion, through the operand the value never exceeds: `x - y` is at most `x`, so `x - y <= x + z` is decided by comparing `x` in its place, and `x % (y + 1)` is below `y + 1` outright. The dominator is compared one strict subterm down, so the recursion ends. See `nat_dominators` for why each pair holds unconditionally.
     let outcome = match outcome {
         Comparison::Stuck => dominated(reducer, &left, &right)?,
+        decided => decided,
+    };
+
+    // A `min` or a `max` on either side is read through the lattice: at most each of a `min`'s leaves and at least what is at most all of them, and a `max` the mirror. Each verdict it asks is of a leaf, one strict subterm down.
+    let outcome = match outcome {
+        Comparison::Stuck => lattice_verdict(reducer, Carrier::Natural, &left.whole, &right.whole)?,
         decided => decided,
     };
 

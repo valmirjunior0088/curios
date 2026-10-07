@@ -247,6 +247,8 @@ pub(super) fn erase_intrinsic(
         Intrinsic::NatAnd(l, r) => op!(curios_ersd::Operation::NatAnd, nat_type, l, r),
         Intrinsic::NatOr(l, r) => op!(curios_ersd::Operation::NatOr, nat_type, l, r),
         Intrinsic::NatXor(l, r) => op!(curios_ersd::Operation::NatXor, nat_type, l, r),
+        Intrinsic::NatMin(l, r) => op!(curios_ersd::Operation::NatMin, nat_type, l, r),
+        Intrinsic::NatMax(l, r) => op!(curios_ersd::Operation::NatMax, nat_type, l, r),
         Intrinsic::NatShl(l, r) => op!(curios_ersd::Operation::NatShl, nat_type, l, r),
         Intrinsic::NatShr(l, r) => op!(curios_ersd::Operation::NatShr, nat_type, l, r),
 
@@ -273,6 +275,8 @@ pub(super) fn erase_intrinsic(
         Intrinsic::IntAnd(l, r) => op!(curios_ersd::Operation::IntAnd, int_type, l, r),
         Intrinsic::IntOr(l, r) => op!(curios_ersd::Operation::IntOr, int_type, l, r),
         Intrinsic::IntXor(l, r) => op!(curios_ersd::Operation::IntXor, int_type, l, r),
+        Intrinsic::IntMin(l, r) => op!(curios_ersd::Operation::IntMin, int_type, l, r),
+        Intrinsic::IntMax(l, r) => op!(curios_ersd::Operation::IntMax, int_type, l, r),
         Intrinsic::IntShl(l, r) => lowering.operation(
             context,
             curios_ersd::Operation::IntShl,

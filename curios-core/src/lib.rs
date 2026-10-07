@@ -29,6 +29,9 @@ pub use nat::*;
 mod int;
 pub use int::*;
 
+mod lattice;
+pub use lattice::*;
+
 mod universe;
 pub use universe::*;
 

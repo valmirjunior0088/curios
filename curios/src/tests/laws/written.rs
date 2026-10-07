@@ -513,35 +513,23 @@ const CARRIERS: &[Carrier] = &[
         name: "Nat min and max",
         binders: "x: Nat, y: Nat, z: Nat",
         held: &[
-            // An operand the comparison holds at most the other answers for both: the operand itself, a floor apart, a shared sum, zero below everything, a bound against a literal, two literals, and through a nested node.
-            "Eq()(Nat/min(x, x), x)",
-            "Eq()(Nat/max(x, x), x)",
+            // An operand the comparison holds at most the other answers for both: the operand itself, a floor apart, a shared sum, zero below everything, a bound against a literal, two literals, and through a nested node. Each held through the library's definitions before `min` and `max` were operations.
             "Eq()(Nat/min(x, x + 1), x)",
             "Eq()(Nat/max(x, x + 1), x + 1)",
             "Eq()(Nat/max(x + 3, x + 1), x + 3)",
             "Eq()(Nat/min(x + y + 1, y + x), x + y)",
-            "Eq()(Nat/max(x, 0), x)",
-            "Eq()(Nat/min(x, 0), 0)",
             "Eq()(Nat/min(x % 8, 8), x % 8)",
             "Eq()(Nat/min(3, 5), 3)",
             "Eq()(Nat/max(3, 5), 5)",
             "Eq()(Nat/min(Nat/min(x, x + 1), y), Nat/min(x, y))",
-        ],
-        refused: &[
-            // Candidates `documentation/roadmap/04-arithmetic/02-declared-operations.md` moves with `min` and `max`. The semilattice: the definitions compare with `<`, so a commuted pair is two `match`es and zero on the left decides nothing.
-            "Eq()(Nat/min(x, y), Nat/min(y, x))",
-            "Eq()(Nat/max(x, y), Nat/max(y, x))",
-            "Eq()(Nat/min(Nat/min(x, y), z), Nat/min(x, Nat/min(y, z)))",
-            "Eq()(Nat/max(Nat/max(x, y), z), Nat/max(x, Nat/max(y, z)))",
-            "Eq()(Nat/min(0, x), 0)",
-            "Eq()(Nat/max(0, x), x)",
-            // A literal added to both operands leaves, the least floor standing outside as a sum's does.
+            // A literal added to both operands leaves, the least floor standing outside as a sum's does, through a nested node too.
             "Eq()(Nat/min(x + 1, y + 1), Nat/min(x, y) + 1)",
             "Eq()(Nat/max(x + 2, y + 3), Nat/max(x, y + 1) + 2)",
+            "Eq()(Nat/min(Nat/min(x, y) + 1, z), Nat/min(x + 1, Nat/min(y + 1, z)))",
             // An operand at most the other where the comparison decides `<=` and not `<`.
             "Eq()(Nat/max(x, x + y), x + y)",
             "Eq()(Nat/min(x - y, x), x - y)",
-            // Domination and its mirror, and the lattice's own bounds: at most a `min` is at most both operands.
+            // Domination and its mirror, and the lattice's own bounds: at most a `min` is at most both operands, and each absorbs the other.
             "Eq()(Nat/min(x, y) <= x, true)",
             "Eq()(Nat/min(x, y) <= y, true)",
             "Eq()(x <= Nat/max(x, y), true)",
@@ -551,8 +539,14 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(z <= Nat/min(z + x, z + y), true)",
             "Eq()(Nat/min(x, Nat/max(x, y)), x)",
             "Eq()(Nat/max(x, Nat/min(x, y)), x)",
+            // Two trees of one operation under one enclosing sum, and an equality of two that folds: one leaf set is one value.
+            "Eq()(Nat/min(x, y) + 1, Nat/min(y, x) + 1)",
+            "Eq()(Nat/min(z, Nat/min(y, x)), Nat/min(Nat/min(x, z), y))",
+            "Eq()(Nat/min(x, y) == Nat/min(y, x), true)",
             // Two associations whose inner node drops the operand that orders the other two: one value only where the comparison's order is transitive.
             "Eq()(Nat/max(Nat/max(x % 8, 7), y + 7), Nat/max(x % 8, Nat/max(7, y + 7)))",
+        ],
+        refused: &[
             // Lemmas, which no stage moves: each takes a case split, or shares a symbolic summand, and the equations of a sum with `min` and `max` are not decided whole.
             "Eq()(Nat/min(x, y) + Nat/max(x, y), x + y)",
             "Eq()((x - y) + y, Nat/max(x, y))",
@@ -565,26 +559,25 @@ const CARRIERS: &[Carrier] = &[
         ],
     },
     Carrier {
-        // As `Nat`'s, over `/std/Int`'s definitions.
+        // As `Nat`'s, with the least constant standing outside at either sign.
         name: "Int min and max",
         binders: "i: Int, j: Int, k: Int, n: Nat",
         held: &[
-            "Eq()(Int/min(i, i), i)",
-            "Eq()(Int/max(i, i), i)",
             "Eq()(Int/min(i, i + 1), i)",
             "Eq()(Int/max(i, i - 1), i)",
             "Eq()(Int/min(-3, +2), -3)",
-        ],
-        refused: &[
-            // Candidates the same stage moves: the semilattice, a literal on both operands of either sign, an operand below the other by a widened natural, and domination with its mirror.
-            "Eq()(Int/min(i, j), Int/min(j, i))",
-            "Eq()(Int/max(i, j), Int/max(j, i))",
-            "Eq()(Int/min(Int/min(i, j), k), Int/min(i, Int/min(j, k)))",
+            // A literal on both operands of either sign, an operand below the other by a widened natural, and domination with its mirror.
             "Eq()(Int/min(i + 1, j + 1), Int/min(i, j) + 1)",
             "Eq()(Int/max(i - 2, j + 3), Int/max(i, j + 5) - 2)",
+            "Eq()(Int/min(i, -5), Int/min(i + 5, +0) - 5)",
             "Eq()(Int/max(i, i + Nat/to_int(n)), i + Nat/to_int(n))",
             "Eq()(Int/min(i, j) <= i, true)",
             "Eq()(j <= Int/max(i, j), true)",
+            "Eq()(Int/min(i, j) <= Int/max(i, j), true)",
+            "Eq()(Int/min(i, Int/max(i, j)), i)",
+            "Eq()(k <= Int/min(k + Nat/to_int(n), k), true)",
+        ],
+        refused: &[
             // Lemmas: a case split, and a negation through the lattice, which turns one operation into the other.
             "Eq()(Int/min(i, j) + Int/max(i, j), i + j)",
             "Eq()(+0 - Int/min(i, j), Int/max(+0 - i, +0 - j))",
@@ -1455,4 +1448,40 @@ fn a_mismatch_nothing_compared_says_so() {
         compared.contains("type mismatch") && !compared.contains("not compared"),
         "{compared}"
     );
+}
+
+// A `min` computes from its operands alone and reads no arm: under a guard on `a <= b`, and under a hypothesis of it, `Nat/min(a, b)` is the node it was, so `Eq/refl()` does not close it against `a`, and `Nat/min/of_le` over the fact does. So one `min` is one value in every arm it is read in, and commutation and association hold the same under a guard as outside it. The same at `Int`, and for a `max`.
+#[test]
+fn a_min_under_a_guard_reads_no_arm_and_a_lemma_converts_it() {
+    let header = "use /std/{Nat, Int, Eq, Io}; use /std/Bool/{True, Holds};";
+    let under = |carrier: &str, operation: &str, kept: &str, proof: &str| {
+        format!(
+            "{header}\npub let row(a: {carrier}, b: {carrier}) -> Nat = match a <= b | true => let _: Eq()({carrier}/{operation}(a, b), {kept}) = {proof}; 0 | false => 1 end;\nIo/pure(())"
+        )
+    };
+    for (carrier, operation, kept, lemma) in [
+        ("Nat", "min", "a", "Nat/min/of_le(a, b, True/proved())"),
+        ("Nat", "max", "b", "Nat/max/of_le(a, b, True/proved())"),
+        ("Int", "min", "a", "Int/min/of_le(a, b, True/proved())"),
+        ("Int", "max", "b", "Int/max/of_le(a, b, True/proved())"),
+    ] {
+        let refused = typecheck(&under(carrier, operation, kept, "Eq/refl()"))
+            .expect_err("a `min` or a `max` that read its arm");
+        assert!(refused.contains("type mismatch"), "{refused}");
+        if let Err(error) = typecheck(&under(carrier, operation, kept, lemma)) {
+            panic!("{carrier}/{operation}/of_le does not convert it under the guard:\n{error}");
+        }
+    }
+
+    // Under a hypothesis as under a guard, and commuted there as anywhere.
+    let stated = format!(
+        "{header}\npub let row(a: Nat, b: Nat, p: Holds(a <= b)) -> Eq()(Nat/min(a, b), a) = Eq/refl();\nIo/pure(())"
+    );
+    assert!(typecheck(&stated).is_err());
+    let commuted = format!(
+        "{header}\npub let row(a: Nat, b: Nat, p: Holds(a <= b)) -> Eq()(Nat/min(a, b), Nat/min(b, a)) = Eq/refl();\nIo/pure(())"
+    );
+    if let Err(error) = typecheck(&commuted) {
+        panic!("a `min` does not commute under a hypothesis:\n{error}");
+    }
 }

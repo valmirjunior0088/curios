@@ -25,6 +25,9 @@ pub use division::*;
 mod euclid;
 pub use euclid::*;
 
+mod lattice;
+pub use lattice::*;
+
 mod law;
 pub use law::*;
 

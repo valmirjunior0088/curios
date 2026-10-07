@@ -1,0 +1,15 @@
+pub use /sys/Nat/{max};
+use /std/{Nat, Eq};
+use /std/Bool/{Holds};
+
+--- `max(a, b)` is `b` where `a <= b`.
+---
+--- Conversion decides it where it decides the comparison of the two operands as terms, and reads no hypothesis: this is the step a proof takes under one. With `b` read as `a + (b - a)`, which [`Nat/le/add_sub_cancel`] states under `p`, the lesser operand is dropped.
+pub let of_le(a: Nat, b: Nat, p: Holds(a <= b)) -> Eq()(max(a, b), b) =
+    let raised = Nat/le/add_sub_cancel(a, b, p);
+    Eq/trans(Eq/sym(Eq/cong((x) => max(a, x), raised)), raised);
+
+--- `max(a, b)` is `a` where `b <= a`.
+pub let of_ge(a: Nat, b: Nat, p: Holds(b <= a)) -> Eq()(max(a, b), a) =
+    let raised = Nat/le/add_sub_cancel(b, a, p);
+    Eq/trans(Eq/sym(Eq/cong((x) => max(x, b), raised)), raised);

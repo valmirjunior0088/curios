@@ -3,12 +3,12 @@
 //! ℤ under `+` is a group, so every relation reads through the difference: `a ⋈ b` iff `a - b ⋈ 0`. [`int_cancel_common`] moves that difference to the two sides by sign, and a pair whose residuals are both constants is decided by comparing them; anything else is undecided and rebuilt from the residuals, so `i + a < i + b` and `a < b` reduce to one term, which conversion needs.
 
 use {
-    super::compare_nat,
+    super::{compare_nat, lattice_verdict},
     crate::{
         Intrinsic, ReduceError, Reducer, Subterm, Term, int_cancel_common, int_has_stuck_product,
         int_monomial, int_normalize, int_preimage, int_split_by_sign, int_terms,
     },
-    curios_algebra::{Comparison, apart_modulo},
+    curios_algebra::{Carrier, Comparison, apart_modulo},
     curios_num::Natural,
 };
 
@@ -40,9 +40,14 @@ pub(super) fn compare_int(
                 .map(|summand| int_monomial(summand).0.magnitude());
             let difference = (constant_left - constant_right).magnitude();
             let pulled_back = compare_preimages(reducer, &left, &right)?;
-            match apart_modulo((&difference, &Natural::zero()), coefficients) {
+            let ordered = match apart_modulo((&difference, &Natural::zero()), coefficients) {
                 true => pulled_back.unequal(),
                 false => pulled_back,
+            };
+            // A `min` or a `max` on either side is read through the lattice, as `compare_nat` reads one.
+            match ordered {
+                Comparison::Stuck => lattice_verdict(reducer, Carrier::Integer, &left, &right)?,
+                decided => decided,
             }
         }
     };

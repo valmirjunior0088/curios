@@ -404,8 +404,6 @@ pub struct NaturalSyntax {
     pub difference: SyntaxName,
     /// `a <= b` gives `a - b <= 0`: the case that does.
     pub truncated: SyntaxName,
-    /// `a < b` gives `a <= b`: the truncating case's guard loosened to what `truncated` takes.
-    pub loosened: SyntaxName,
 }
 
 impl NaturalSyntax {
@@ -416,10 +414,9 @@ impl NaturalSyntax {
             shift,
             difference,
             truncated,
-            loosened,
         } = self;
 
-        [below, above, shift, difference, truncated, loosened].into_iter()
+        [below, above, shift, difference, truncated].into_iter()
     }
 }
 
@@ -440,6 +437,16 @@ pub struct OrderSyntax {
     pub of_not_lt: SyntaxName,
     /// `a <= b` failing gives `b < a`: a `<=` guard's false arm, and the negated goal of a loose one.
     pub of_not_le: SyntaxName,
+    /// `a < b` gives `a <= b`: a failed `<=` guard's bound loosened to what a lemma over `<=` takes.
+    pub of_lt: SyntaxName,
+    /// `a <= b` gives `min(a, b) = a`: the case of a `min` its first operand answers for.
+    pub min_of_le: SyntaxName,
+    /// `b <= a` gives `min(a, b) = b`: the case its second does.
+    pub min_of_ge: SyntaxName,
+    /// `a <= b` gives `max(a, b) = b`.
+    pub max_of_le: SyntaxName,
+    /// `b <= a` gives `max(a, b) = a`.
+    pub max_of_ge: SyntaxName,
 }
 
 impl OrderSyntax {
@@ -452,9 +459,18 @@ impl OrderSyntax {
             eq_of_eql,
             of_not_lt,
             of_not_le,
+            of_lt,
+            min_of_le,
+            min_of_ge,
+            max_of_le,
+            max_of_ge,
         } = self;
 
-        [add, scale, mul, of_eq, eq_of_eql, of_not_lt, of_not_le].into_iter()
+        [
+            add, scale, mul, of_eq, eq_of_eql, of_not_lt, of_not_le, of_lt, min_of_le, min_of_ge,
+            max_of_le, max_of_ge,
+        ]
+        .into_iter()
     }
 }
 

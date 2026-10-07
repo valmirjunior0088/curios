@@ -17,6 +17,16 @@ pub use lt/{let lt};
 pub mod le;
 pub use le/{let le};
 
+--- The smaller of two naturals, and the laws a hypothesis decides it by.
+---
+--- Conversion decides `min` from its operands as terms — it commutes, associates, drops an operand another is at most and stands a shared literal outside — and reads no hypothesis, so under a guard on `a <= b` these laws are the step.
+pub mod min;
+pub use min/{let min};
+
+--- The larger of two naturals, and the laws a hypothesis decides it by.
+pub mod max;
+pub use max/{let max};
+
 satisfy Eql(Nat) {
     eql = eql,
     neq = neq,
@@ -83,14 +93,6 @@ pub let of_str(s: Str) -> Option(Nat) =
 --- `a - 1`, and `0` at zero.
 pub let pred(a: Nat) -> Nat =
     a - 1;
-
---- The smaller of the two.
-pub let min(a: Nat, b: Nat) -> Nat =
-    match a < b | true => a | false => b end;
-
---- The larger of the two.
-pub let max(a: Nat, b: Nat) -> Nat =
-    match a < b | true => b | false => a end;
 
 --- `base` to the power `exp`.
 ---

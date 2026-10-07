@@ -219,6 +219,8 @@ impl Sort {
                 | Intrinsic::IntToFlt(..)
                 | Intrinsic::IntToNat { .. }
                 | Intrinsic::IntXor(..)
+                | Intrinsic::IntMin(..)
+                | Intrinsic::IntMax(..)
                 | Intrinsic::IoBind { .. }
                 | Intrinsic::IoPure { .. }
                 | Intrinsic::List { .. }
@@ -246,7 +248,9 @@ impl Sort {
                 | Intrinsic::NatToByte { .. }
                 | Intrinsic::NatToFlt(..)
                 | Intrinsic::NatToInt(..)
-                | Intrinsic::NatXor(..) => {
+                | Intrinsic::NatXor(..)
+                | Intrinsic::NatMin(..)
+                | Intrinsic::NatMax(..) => {
                     probe_level_fallback("non-type intrinsic", &reduced);
                     Sort::Type(Level::zero())
                 }

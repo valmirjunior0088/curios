@@ -163,6 +163,26 @@ pub const TABLE: &[Declared] = &[
     },
     Declared {
         carrier: Carrier::Natural,
+        operation: Operation::Min,
+        families: &[
+            Family::Absorber(Position::Both, Constant::Zero),
+            Family::Idempotence,
+            Family::Commutativity,
+            Family::Associativity,
+        ],
+    },
+    Declared {
+        carrier: Carrier::Natural,
+        operation: Operation::Max,
+        families: &[
+            Family::Unit(Position::Both, Constant::Zero),
+            Family::Idempotence,
+            Family::Commutativity,
+            Family::Associativity,
+        ],
+    },
+    Declared {
+        carrier: Carrier::Natural,
         operation: Operation::ShiftLeft,
         families: &[
             Family::Unit(Position::Right, Constant::Zero),
@@ -280,6 +300,24 @@ pub const TABLE: &[Declared] = &[
             Family::Unit(Position::Both, Constant::Zero),
             Family::SelfCancellation(Constant::Zero),
             Family::Commutativity,
+        ],
+    },
+    Declared {
+        carrier: Carrier::Integer,
+        operation: Operation::Min,
+        families: &[
+            Family::Idempotence,
+            Family::Commutativity,
+            Family::Associativity,
+        ],
+    },
+    Declared {
+        carrier: Carrier::Integer,
+        operation: Operation::Max,
+        families: &[
+            Family::Idempotence,
+            Family::Commutativity,
+            Family::Associativity,
         ],
     },
     Declared {

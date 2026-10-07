@@ -723,6 +723,12 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
         Intrinsic::NatXor(left, right) => {
             print_intrinsic_call("Nat/xor", vec![], vec![left, right])
         }
+        Intrinsic::NatMin(left, right) => {
+            print_intrinsic_call("Nat/min", vec![], vec![left, right])
+        }
+        Intrinsic::NatMax(left, right) => {
+            print_intrinsic_call("Nat/max", vec![], vec![left, right])
+        }
         Intrinsic::NatShl(left, right) => {
             print_intrinsic_call("Nat/shl", vec![], vec![left, right])
         }
@@ -764,6 +770,12 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
         Intrinsic::IntOr(left, right) => print_intrinsic_call("Int/or", vec![], vec![left, right]),
         Intrinsic::IntXor(left, right) => {
             print_intrinsic_call("Int/xor", vec![], vec![left, right])
+        }
+        Intrinsic::IntMin(left, right) => {
+            print_intrinsic_call("Int/min", vec![], vec![left, right])
+        }
+        Intrinsic::IntMax(left, right) => {
+            print_intrinsic_call("Int/max", vec![], vec![left, right])
         }
         Intrinsic::IntShl(left, right) => {
             print_intrinsic_call("Int/shl", vec![], vec![left, right])

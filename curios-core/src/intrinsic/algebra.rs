@@ -117,6 +117,26 @@ impl Intrinsic {
                 Operation::Xor,
                 Operands::Two([left, right]),
             ),
+            Intrinsic::NatMin(left, right) => declared(
+                Carrier::Natural,
+                Operation::Min,
+                Operands::Two([left, right]),
+            ),
+            Intrinsic::NatMax(left, right) => declared(
+                Carrier::Natural,
+                Operation::Max,
+                Operands::Two([left, right]),
+            ),
+            Intrinsic::IntMin(left, right) => declared(
+                Carrier::Integer,
+                Operation::Min,
+                Operands::Two([left, right]),
+            ),
+            Intrinsic::IntMax(left, right) => declared(
+                Carrier::Integer,
+                Operation::Max,
+                Operands::Two([left, right]),
+            ),
             Intrinsic::NatShl(left, right) => declared(
                 Carrier::Natural,
                 Operation::ShiftLeft,

@@ -115,6 +115,11 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             eq_of_eql: name(&["std", "Nat", "eq_of_eql"]),
             of_not_lt: name(&["std", "Nat", "le", "of_not_lt"]),
             of_not_le: name(&["std", "Nat", "lt", "of_not_le"]),
+            of_lt: name(&["std", "Nat", "le", "of_lt"]),
+            min_of_le: name(&["std", "Nat", "min", "of_le"]),
+            min_of_ge: name(&["std", "Nat", "min", "of_ge"]),
+            max_of_le: name(&["std", "Nat", "max", "of_le"]),
+            max_of_ge: name(&["std", "Nat", "max", "of_ge"]),
         },
         int: OrderSyntax {
             add: name(&["std", "Int", "le", "add"]),
@@ -124,6 +129,11 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             eq_of_eql: name(&["std", "Int", "eq_of_eql"]),
             of_not_lt: name(&["std", "Int", "le", "of_not_lt"]),
             of_not_le: name(&["std", "Int", "lt", "of_not_le"]),
+            of_lt: name(&["std", "Int", "le", "of_lt"]),
+            min_of_le: name(&["std", "Int", "min", "of_le"]),
+            min_of_ge: name(&["std", "Int", "min", "of_ge"]),
+            max_of_le: name(&["std", "Int", "max", "of_le"]),
+            max_of_ge: name(&["std", "Int", "max", "of_ge"]),
         },
         natural: NaturalSyntax {
             below: name(&["std", "Nat", "le", "add_r"]),
@@ -131,7 +141,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             shift: name(&["std", "Nat", "le", "add_mono_l"]),
             difference: name(&["std", "Nat", "le", "add_sub_cancel"]),
             truncated: name(&["std", "Nat", "le", "sub_zero"]),
-            loosened: name(&["std", "Nat", "le", "of_lt"]),
         },
     },
 };

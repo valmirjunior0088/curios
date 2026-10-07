@@ -258,6 +258,8 @@ impl Semantics {
             | Operation::NatAnd
             | Operation::NatOr
             | Operation::NatXor
+            | Operation::NatMin
+            | Operation::NatMax
             | Operation::NatShl
             | Operation::NatShr
             | Operation::ByteToNat
@@ -272,6 +274,8 @@ impl Semantics {
             | Operation::IntAnd
             | Operation::IntOr
             | Operation::IntXor
+            | Operation::IntMin
+            | Operation::IntMax
             | Operation::IntShl
             | Operation::IntShr
             | Operation::FltAdd(_)
@@ -449,6 +453,8 @@ impl Semantics {
                 Operation::NatAnd => Constant::Nat(nat(0)? & nat(1)?),
                 Operation::NatOr => Constant::Nat(nat(0)? | nat(1)?),
                 Operation::NatXor => Constant::Nat(nat(0)? ^ nat(1)?),
+                Operation::NatMin => Constant::Nat(nat(0)?.min(nat(1)?).clone()),
+                Operation::NatMax => Constant::Nat(nat(0)?.max(nat(1)?).clone()),
                 Operation::NatShl => Constant::Nat(nat(0)?.shl_within(nat(1)?, allowance)?),
                 Operation::NatShr => Constant::Nat(nat(0)? >> nat(1)?),
                 Operation::NatEql => Constant::Bool(nat(0)? == nat(1)?),
@@ -468,6 +474,8 @@ impl Semantics {
                 Operation::IntAnd => Constant::Int(int(0)?.clone() & int(1)?.clone()),
                 Operation::IntOr => Constant::Int(int(0)?.clone() | int(1)?.clone()),
                 Operation::IntXor => Constant::Int(int(0)?.clone() ^ int(1)?.clone()),
+                Operation::IntMin => Constant::Int(int(0)?.min(int(1)?).clone()),
+                Operation::IntMax => Constant::Int(int(0)?.max(int(1)?).clone()),
                 Operation::IntShl => Constant::Int(int(0)?.shl_within(nat(1)?, allowance)?),
                 Operation::IntShr => Constant::Int(int(0)? >> nat(1)?),
                 Operation::IntEql => Constant::Bool(int(0)? == int(1)?),

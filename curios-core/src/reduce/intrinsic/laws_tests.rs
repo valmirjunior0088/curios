@@ -1032,6 +1032,10 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
         })
     };
     let widen = |nat: Term| Term::intrinsic(Intrinsic::NatToInt(nat));
+    let nat_min = |left: Term, right: Term| Term::intrinsic(Intrinsic::NatMin(left, right));
+    let nat_max = |left: Term, right: Term| Term::intrinsic(Intrinsic::NatMax(left, right));
+    let int_min = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntMin(left, right));
+    let int_max = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntMax(left, right));
     let narrow = |int: Term| {
         Term::intrinsic(Intrinsic::IntToNat {
             int,
@@ -2087,6 +2091,125 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             vec![
                 vec![(&nat_x, lit(0)), (&nat_z, lit(5))],
                 vec![(&nat_x, lit(3)), (&nat_z, lit(7))],
+            ],
+        ),
+        // `min` and `max` as a semilattice with a successor: an operand the comparison holds at most the other answers for both, a literal every operand carries stands outside, and a nested node is read through, on `Nat` and on `Int`, whose least constant may be below zero.
+        (
+            "min(x, x + y) = x",
+            nat_min(x.clone(), plus(x.clone(), y.clone())),
+            x.clone(),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(4)), (&nat_y, lit(3))],
+            ],
+        ),
+        (
+            "max(x, x + y) = x + y",
+            nat_max(x.clone(), plus(x.clone(), y.clone())),
+            plus(x.clone(), y.clone()),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(4)), (&nat_y, lit(3))],
+            ],
+        ),
+        (
+            "max(x, 0) = x",
+            nat_max(x.clone(), lit(0)),
+            x.clone(),
+            nats(),
+        ),
+        ("min(0, x) = 0", nat_min(lit(0), x.clone()), lit(0), nats()),
+        (
+            "min(x + 1, y + 1) = min(x, y) + 1",
+            nat_min(plus(x.clone(), lit(1)), plus(y.clone(), lit(1))),
+            plus(nat_min(x.clone(), y.clone()), lit(1)),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(5))],
+                vec![(&nat_x, lit(7)), (&nat_y, lit(2))],
+            ],
+        ),
+        (
+            "max(x + 2, y + 3) = max(x, y + 1) + 2",
+            nat_max(plus(x.clone(), lit(2)), plus(y.clone(), lit(3))),
+            plus(nat_max(x.clone(), plus(y.clone(), lit(1))), lit(2)),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(5))],
+                vec![(&nat_x, lit(7)), (&nat_y, lit(2))],
+            ],
+        ),
+        (
+            "min(min(x, x + 1), y) = min(x, y)",
+            nat_min(nat_min(x.clone(), plus(x.clone(), lit(1))), y.clone()),
+            nat_min(x.clone(), y.clone()),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(5))],
+                vec![(&nat_x, lit(7)), (&nat_y, lit(2))],
+            ],
+        ),
+        (
+            "min(min(x + 1, y + 1), z + 1) = min(min(x, y), z) + 1",
+            nat_min(
+                nat_min(plus(x.clone(), lit(1)), plus(y.clone(), lit(1))),
+                plus(z.clone(), lit(1)),
+            ),
+            plus(nat_min(nat_min(x.clone(), y.clone()), z.clone()), lit(1)),
+            vec![
+                vec![(&nat_x, lit(1)), (&nat_y, lit(2)), (&nat_z, lit(3))],
+                vec![(&nat_x, lit(4)), (&nat_y, lit(0)), (&nat_z, lit(3))],
+            ],
+        ),
+        (
+            "max(x, min(x, y)) = x",
+            nat_max(x.clone(), nat_min(x.clone(), y.clone())),
+            x.clone(),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(5))],
+                vec![(&nat_x, lit(7)), (&nat_y, lit(2))],
+            ],
+        ),
+        (
+            "min(i + 1, j + 1) = min(i, j) + 1",
+            int_min(
+                int_add(i.clone(), integer(1)),
+                int_add(j.clone(), integer(1)),
+            ),
+            int_add(int_min(i.clone(), j.clone()), integer(1)),
+            vec![
+                vec![(&int_i, integer(-3)), (&int_j, integer(5))],
+                vec![(&int_i, integer(7)), (&int_j, integer(-4))],
+            ],
+        ),
+        (
+            "max(i - 2, j + 3) = max(i, j + 5) - 2",
+            int_max(
+                int_add(i.clone(), integer(-2)),
+                int_add(j.clone(), integer(3)),
+            ),
+            int_add(
+                int_max(i.clone(), int_add(j.clone(), integer(5))),
+                integer(-2),
+            ),
+            vec![
+                vec![(&int_i, integer(-3)), (&int_j, integer(5))],
+                vec![(&int_i, integer(7)), (&int_j, integer(-4))],
+            ],
+        ),
+        (
+            "min(i, -5) = min(i + 5, 0) - 5",
+            int_min(i.clone(), integer(-5)),
+            int_add(
+                int_min(int_add(i.clone(), integer(5)), integer(0)),
+                integer(-5),
+            ),
+            ints(),
+        ),
+        (
+            "max(i, i + to_int(x)) = i + to_int(x)",
+            int_max(i.clone(), int_add(i.clone(), widen(x.clone()))),
+            int_add(i.clone(), widen(x.clone())),
+            vec![
+                vec![(&int_i, integer(-3)), (&nat_x, lit(0))],
+                vec![(&int_i, integer(5)), (&nat_x, lit(3))],
             ],
         ),
         (

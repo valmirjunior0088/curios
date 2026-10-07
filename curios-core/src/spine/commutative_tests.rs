@@ -289,3 +289,62 @@ fn the_list_declines_a_pair_a_sufficient_pairing_takes_apart() {
         Some(Deduction::Undecided)
     ));
 }
+
+// Two `min` trees, or two `max` trees, are one value where they hold one set of leaves, however they are nested and whichever node carries a literal offset: `min(min(x, y), z)` against `min(z, min(y, x))`, a repeated leaf against one, and `min(min(x, y) + 1, z)` against `min(x + 1, min(y + 1, z))`. Unlike sets are undecided, never unequal, a `min` against a `max` is no pair of this peel, and neither is a `Flt`'s `min`, which commutes and is no semilattice conversion decides.
+#[test]
+fn peel_lattice_decides_two_trees_of_one_leaf_set_equal() {
+    let (x, y, z) = (sym(0, "x"), sym(1, "y"), sym(2, "z"));
+    let min = |left: &Term, right: &Term| Intrinsic::NatMin(left.clone(), right.clone());
+    let node = |left: &Term, right: &Term| Term::intrinsic(min(left, right));
+    let raised = |term: &Term| Nat::rebuild(1u32.into(), term.clone());
+
+    for (this, that) in [
+        (min(&node(&x, &y), &z), min(&z, &node(&y, &x))),
+        (min(&node(&x, &y), &x), min(&y, &x)),
+        (
+            min(&raised(&node(&x, &y)), &z),
+            min(&raised(&x), &node(&raised(&y), &z)),
+        ),
+    ] {
+        assert!(
+            matches!(peel_lattice(&this, &that), Some(Deduction::Equal)),
+            "`{this:?}` and `{that:?}` hold one set of leaves"
+        );
+    }
+
+    assert!(
+        matches!(
+            peel_lattice(&min(&x, &y), &min(&x, &z)),
+            Some(Deduction::Undecided)
+        ),
+        "unlike leaf sets are the congruence's"
+    );
+    assert!(peel_lattice(&min(&x, &y), &Intrinsic::NatMax(x.clone(), y.clone())).is_none());
+    assert!(
+        peel_lattice(
+            &Intrinsic::FltMin(x.clone(), y.clone()),
+            &Intrinsic::FltMin(y, x)
+        )
+        .is_none(),
+        "a float's `min` is no semilattice here"
+    );
+}
+
+// Two trees that share all but one leaf on each side leave those two to compare, whichever way each is nested and wherever the odd leaf stands: `min(min(w, y), z)` against `min(x, min(y, z))` leaves `w` against `x`, which is what solves a metavariable standing for `w` under an association. Two leaves over on a side are no pair, and neither are two operations.
+#[test]
+fn peel_lattice_leaf_hands_back_the_one_leaf_two_trees_differ_in() {
+    let (w, x, y, z) = (sym(0, "w"), sym(1, "x"), sym(2, "y"), sym(3, "z"));
+    let min = |left: &Term, right: &Term| Intrinsic::NatMin(left.clone(), right.clone());
+    let node = |left: &Term, right: &Term| Term::intrinsic(min(left, right));
+
+    assert_eq!(
+        peel_lattice_leaf(&min(&node(&w, &y), &z), &min(&x, &node(&y, &z))),
+        Some(Conclusion::Sufficient((w.clone(), x.clone()))),
+    );
+    assert_eq!(
+        peel_lattice_leaf(&min(&y, &w), &min(&x, &y)),
+        Some(Conclusion::Sufficient((w.clone(), x.clone()))),
+    );
+    assert!(peel_lattice_leaf(&min(&w, &y), &min(&x, &z)).is_none());
+    assert!(peel_lattice_leaf(&min(&w, &y), &Intrinsic::NatMax(x, y)).is_none());
+}

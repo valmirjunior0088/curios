@@ -132,6 +132,10 @@ pub enum Intrinsic<T = Term> {
     NatAnd(T, T),
     NatOr(T, T),
     NatXor(T, T),
+    /// The lesser of two naturals.
+    NatMin(T, T),
+    /// The greater of two naturals.
+    NatMax(T, T),
     NatShl(T, T),
     NatShr(T, T),
     ByteType,
@@ -167,6 +171,10 @@ pub enum Intrinsic<T = Term> {
     IntAnd(T, T),
     IntOr(T, T),
     IntXor(T, T),
+    /// The lesser of two integers.
+    IntMin(T, T),
+    /// The greater of two integers.
+    IntMax(T, T),
     IntShl(T, T),
     IntShr(T, T),
     FltType,
@@ -825,6 +833,8 @@ impl Intrinsic {
             | Intrinsic::NatAnd(a, b)
             | Intrinsic::NatOr(a, b)
             | Intrinsic::NatXor(a, b)
+            | Intrinsic::NatMin(a, b)
+            | Intrinsic::NatMax(a, b)
             | Intrinsic::NatShl(a, b)
             | Intrinsic::NatShr(a, b)
             | Intrinsic::BoolAnd(a, b)
@@ -842,6 +852,8 @@ impl Intrinsic {
             | Intrinsic::IntAnd(a, b)
             | Intrinsic::IntOr(a, b)
             | Intrinsic::IntXor(a, b)
+            | Intrinsic::IntMin(a, b)
+            | Intrinsic::IntMax(a, b)
             | Intrinsic::IntShl(a, b)
             | Intrinsic::IntShr(a, b)
             | Intrinsic::FltAdd(_, a, b)
@@ -1187,6 +1199,8 @@ impl Intrinsic {
             Intrinsic::NatAnd(l, r) => traverse_binary(l, r, visit, Intrinsic::NatAnd),
             Intrinsic::NatOr(l, r) => traverse_binary(l, r, visit, Intrinsic::NatOr),
             Intrinsic::NatXor(l, r) => traverse_binary(l, r, visit, Intrinsic::NatXor),
+            Intrinsic::NatMin(l, r) => traverse_binary(l, r, visit, Intrinsic::NatMin),
+            Intrinsic::NatMax(l, r) => traverse_binary(l, r, visit, Intrinsic::NatMax),
             Intrinsic::NatShl(l, r) => traverse_binary(l, r, visit, Intrinsic::NatShl),
             Intrinsic::NatShr(l, r) => traverse_binary(l, r, visit, Intrinsic::NatShr),
             Intrinsic::ByteType => Intrinsic::ByteType,
@@ -1231,6 +1245,8 @@ impl Intrinsic {
             Intrinsic::IntAnd(l, r) => traverse_binary(l, r, visit, Intrinsic::IntAnd),
             Intrinsic::IntOr(l, r) => traverse_binary(l, r, visit, Intrinsic::IntOr),
             Intrinsic::IntXor(l, r) => traverse_binary(l, r, visit, Intrinsic::IntXor),
+            Intrinsic::IntMin(l, r) => traverse_binary(l, r, visit, Intrinsic::IntMin),
+            Intrinsic::IntMax(l, r) => traverse_binary(l, r, visit, Intrinsic::IntMax),
             Intrinsic::IntShl(l, r) => traverse_binary(l, r, visit, Intrinsic::IntShl),
             Intrinsic::IntShr(l, r) => traverse_binary(l, r, visit, Intrinsic::IntShr),
             Intrinsic::FltType => Intrinsic::FltType,
@@ -1618,6 +1634,8 @@ impl<T> Intrinsic<T> {
             Intrinsic::NatAnd(l, r) => try_binary(l, r, operand, Intrinsic::NatAnd)?,
             Intrinsic::NatOr(l, r) => try_binary(l, r, operand, Intrinsic::NatOr)?,
             Intrinsic::NatXor(l, r) => try_binary(l, r, operand, Intrinsic::NatXor)?,
+            Intrinsic::NatMin(l, r) => try_binary(l, r, operand, Intrinsic::NatMin)?,
+            Intrinsic::NatMax(l, r) => try_binary(l, r, operand, Intrinsic::NatMax)?,
             Intrinsic::NatShl(l, r) => try_binary(l, r, operand, Intrinsic::NatShl)?,
             Intrinsic::NatShr(l, r) => try_binary(l, r, operand, Intrinsic::NatShr)?,
             Intrinsic::ByteType => Intrinsic::ByteType,
@@ -1662,6 +1680,8 @@ impl<T> Intrinsic<T> {
             Intrinsic::IntAnd(l, r) => try_binary(l, r, operand, Intrinsic::IntAnd)?,
             Intrinsic::IntOr(l, r) => try_binary(l, r, operand, Intrinsic::IntOr)?,
             Intrinsic::IntXor(l, r) => try_binary(l, r, operand, Intrinsic::IntXor)?,
+            Intrinsic::IntMin(l, r) => try_binary(l, r, operand, Intrinsic::IntMin)?,
+            Intrinsic::IntMax(l, r) => try_binary(l, r, operand, Intrinsic::IntMax)?,
             Intrinsic::IntShl(l, r) => try_binary(l, r, operand, Intrinsic::IntShl)?,
             Intrinsic::IntShr(l, r) => try_binary(l, r, operand, Intrinsic::IntShr)?,
             Intrinsic::FltType => Intrinsic::FltType,

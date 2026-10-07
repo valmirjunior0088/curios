@@ -303,6 +303,26 @@ fn the_order_nat_decides_is_transitive() {
             "Byte/to_nat(b)",
             Term::intrinsic(Intrinsic::ByteToNat(sym(2, "b"))),
         ),
+        (
+            "Nat/min(x, y)",
+            Term::intrinsic(Intrinsic::NatMin(x.clone(), y.clone())),
+        ),
+        (
+            "Nat/max(x, y)",
+            Term::intrinsic(Intrinsic::NatMax(x.clone(), y.clone())),
+        ),
+        (
+            "Nat/min(x, y) + 7",
+            above(7, &Term::intrinsic(Intrinsic::NatMin(x.clone(), y.clone()))),
+        ),
+        (
+            "Nat/max(x % 8, y)",
+            Term::intrinsic(Intrinsic::NatMax(remainder(lit(8)), y.clone())),
+        ),
+        (
+            "Nat/min(x, 7)",
+            Term::intrinsic(Intrinsic::NatMin(x.clone(), lit(7))),
+        ),
         ("1", lit(1)),
         ("Nat/shl(1, y)", power.clone()),
         ("Nat/shl(1, y) + 7", above(7, &power)),
@@ -380,10 +400,22 @@ fn the_order_int_decides_is_transitive() {
         ("i + Nat/to_int(n)", plus(&i, widened(n.clone()))),
         (
             "i + Nat/to_int(n) + 1",
-            plus(&plus(&i, widened(n)), integer(1)),
+            plus(&plus(&i, widened(n.clone())), integer(1)),
         ),
         ("Nat/to_int(n % 8)", widened(low.clone())),
         ("Nat/to_int(n % 8) + 1", plus(&widened(low), integer(1))),
+        (
+            "Int/min(i, Nat/to_int(n))",
+            Term::intrinsic(Intrinsic::IntMin(i.clone(), widened(n.clone()))),
+        ),
+        (
+            "Int/max(i, Nat/to_int(n))",
+            Term::intrinsic(Intrinsic::IntMax(i.clone(), widened(n.clone()))),
+        ),
+        (
+            "Int/max(i, +7)",
+            Term::intrinsic(Intrinsic::IntMax(i.clone(), integer(7))),
+        ),
         ("+1", integer(1)),
         ("Nat/to_int(Nat/shl(1, n))", widened(power.clone())),
         (
@@ -563,5 +595,75 @@ fn nat_decides_a_power_positive() {
         ),
         Comparison::Le,
         "a factor nothing is known of may be zero"
+    );
+}
+
+// A `min` is at most each of its leaves and at least what is at most all of them, and a `max` is the mirror, read over the plain comparison's verdicts of the leaves: `min(x, y) <= x`, `x <= max(x, y)`, `z <= min(z + x, z + y)`, `max(x, y) <= x + y`, and a `min` against the `max` of the same two. Two trees of one leaf set are equal, which is what folds an equality of them. An operand nothing orders against the other side decides nothing.
+//
+// Mutation-checked: a `min` read as at most a term where every leaf is, and not where one is, leaves `min(x, y) <= x` undecided.
+#[test]
+fn nat_reads_a_min_and_a_max_through_the_lattice() {
+    let (x, y, z) = (sym(0, "x"), sym(1, "y"), sym(2, "z"));
+    let min =
+        |left: &Term, right: &Term| Term::intrinsic(Intrinsic::NatMin(left.clone(), right.clone()));
+    let max =
+        |left: &Term, right: &Term| Term::intrinsic(Intrinsic::NatMax(left.clone(), right.clone()));
+    let verdict = |left: Term, right: Term| {
+        let (verdict, _, _) = compare_nat(&mut Inert, left, right).expect("reduces");
+        verdict
+    };
+
+    assert_eq!(verdict(min(&x, &y), x.clone()), Comparison::Le);
+    assert_eq!(verdict(x.clone(), min(&x, &y)), Comparison::Ge);
+    assert_eq!(verdict(x.clone(), max(&x, &y)), Comparison::Le);
+    assert_eq!(verdict(max(&x, &y), y.clone()), Comparison::Ge);
+    assert_eq!(
+        verdict(
+            z.clone(),
+            min(&add(z.clone(), x.clone()), &add(z.clone(), y.clone()))
+        ),
+        Comparison::Le,
+        "at most both leaves is at most their `min`"
+    );
+    assert_eq!(
+        verdict(max(&x, &y), add(x.clone(), y.clone())),
+        Comparison::Le,
+        "both leaves at most a term is their `max` at most it"
+    );
+    assert_eq!(verdict(min(&x, &y), max(&x, &y)), Comparison::Le);
+    assert_eq!(verdict(min(&x, &y), min(&y, &x)), Comparison::Eq);
+    assert_eq!(
+        verdict(min(&x, &y), Nat::rebuild(1u32.into(), x.clone())),
+        Comparison::Lt,
+        "a leaf strictly below is the `min` strictly below"
+    );
+    assert_eq!(verdict(min(&x, &y), z.clone()), Comparison::Stuck);
+    assert_eq!(verdict(max(&x, &y), x), Comparison::Ge);
+}
+
+// The same reading on `Int`, where nothing else is known of an operand: a `min` is at most each leaf and a `max` at least each, at either sign.
+#[test]
+fn int_reads_a_min_and_a_max_through_the_lattice() {
+    let (i, j) = (sym(0, "i"), sym(1, "j"));
+    let min = Term::intrinsic(Intrinsic::IntMin(i.clone(), j.clone()));
+    let max = Term::intrinsic(Intrinsic::IntMax(i.clone(), j.clone()));
+    let verdict = |left: Term, right: Term| {
+        let (verdict, _, _) = compare_int(&mut Inert, left, right).expect("reduces");
+        verdict
+    };
+
+    assert_eq!(verdict(min.clone(), i.clone()), Comparison::Le);
+    assert_eq!(verdict(j.clone(), max.clone()), Comparison::Le);
+    assert_eq!(verdict(min.clone(), max.clone()), Comparison::Le);
+    assert_eq!(verdict(max, min.clone()), Comparison::Ge);
+    assert_eq!(
+        verdict(
+            min,
+            Term::intrinsic(Intrinsic::IntAdd(
+                i,
+                Term::intrinsic(Intrinsic::Int(Integer::from(1i32)))
+            ))
+        ),
+        Comparison::Lt
     );
 }

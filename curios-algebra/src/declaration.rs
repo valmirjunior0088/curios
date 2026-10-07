@@ -82,6 +82,7 @@ impl Operation {
             Operation::Quotient | Operation::ShiftRight => (&[0], &[1]),
             Operation::Remainder => (&[], &[1]),
             Operation::And | Operation::Or | Operation::Xor => (&[0, 1], &[]),
+            Operation::Min | Operation::Max => (&[0, 1], &[]),
             _ => (&[], &[]),
         }
     }
@@ -127,19 +128,28 @@ impl Operation {
             }
             Operation::Sum => Some(bound(0)? + bound(1)?),
             Operation::Product => Some(bound(0)? * bound(1)?),
+            // A `min` is at most either operand, so one bound is enough and two give the lesser; a `max` is one of its operands, so it needs both.
+            Operation::Min => match (bound(0), bound(1)) {
+                (Some(left), Some(right)) => Some(left.min(right)),
+                (Some(either), None) | (None, Some(either)) => Some(either),
+                (None, None) => None,
+            },
+            Operation::Max => Some(bound(0)?.max(bound(1)?)),
             _ => None,
         }
     }
 
     /// A lower bound on every value this operation takes over ℕ, from a lower bound on each of its operands, by position; zero where it has none.
     ///
-    /// Every arm is unconditional, as [`Operation::upper_bound`]'s are, and for the mirrored reason: an under-report only withholds a verdict, and an over-report is a false one. A sum is at least the sum of what its operands are at least, a product their product, and a left shift what it shifts, a power of two being at least one — which is what makes `shl(1, k)` positive at every `k`. No other operation is read: a difference, a quotient and a right shift reach zero whatever their first operand is at least, and `and` and `xor` reach zero between two operands that do not.
+    /// Every arm is unconditional, as [`Operation::upper_bound`]'s are, and for the mirrored reason: an under-report only withholds a verdict, and an over-report is a false one. A sum is at least the sum of what its operands are at least, a product their product, a left shift what it shifts, a power of two being at least one — which is what makes `shl(1, k)` positive at every `k` — and a `min` or a `max` the lesser or the greater of what its operands are. No other operation is read: a difference, a quotient and a right shift reach zero whatever their first operand is at least, and `and` and `xor` reach zero between two operands that do not.
     pub fn lower_bound(self, least: &[Natural]) -> Natural {
         let at = |position: usize| least.get(position).cloned().unwrap_or_else(Natural::zero);
         match self {
             Operation::Sum => at(0) + &at(1),
             Operation::Product => at(0) * &at(1),
             Operation::ShiftLeft => at(0),
+            Operation::Min => at(0).min(at(1)),
+            Operation::Max => at(0).max(at(1)),
             _ => Natural::zero(),
         }
     }

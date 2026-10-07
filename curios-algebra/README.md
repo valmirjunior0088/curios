@@ -26,7 +26,7 @@ The carriers' algebra over abstract atoms: what conversion decides about the car
 
 ### An operation's meaning is stated once, and its mapping is Core's
 
-**Decision.** `Operation` names each operation this crate gives a meaning to — sum, truncated or group difference, product, the two halves of a division, the bitwise operations, the shifts, the comparisons, the conversions between carriers, and a float's sum, product and fused multiply-add in each rounding direction with its `min` and `max` — and states its meaning once: which operands bound its result (`bound_reads`, `upper_bound`), what it is at least (`lower_bound`), which it never exceeds (`dominators`), which identities it satisfies (`bitwise_identity`, `shift_identity`), and which conversion undoes which (`undoes`, over `round_trip`). Which concrete operation is which is `curios-core`'s `Intrinsic::algebra`, an exhaustive match. An intrinsic is declared an operation only where an implemented rule reads it at its carrier.
+**Decision.** `Operation` names each operation this crate gives a meaning to — sum, truncated or group difference, product, the two halves of a division, the bitwise operations, the shifts, the comparisons, the conversions between carriers, `min` and `max`, and a float's sum, product and fused multiply-add in each rounding direction — and states its meaning once: which operands bound its result (`bound_reads`, `upper_bound`), what it is at least (`lower_bound`), which it never exceeds (`dominators`), which identities it satisfies (`bitwise_identity`, `shift_identity`), and which conversion undoes which (`undoes`, over `round_trip`). Which concrete operation is which is `curios-core`'s `Intrinsic::algebra`, an exhaustive match. An intrinsic is declared an operation only where an implemented rule reads it at its carrier.
 
 **Rationale.** Stated per operation, the bound criterion — an operand is read where the result is not antitone in it — is a fact checked arm by arm without reading term plumbing, and an intrinsic joins a law by being declared an operation of that kind; declaring only what a rule reads keeps membership from enabling an identity nothing implements.
 
@@ -37,6 +37,14 @@ The carriers' algebra over abstract atoms: what conversion decides about the car
 **Rationale.** Each of the three moves one bit and reads no other, on every pattern, so the reading is complete: two compositions are one pattern at every assignment exactly when they are one form, and the module's tests hold both directions to `curios_num::Floating`. A form rather than a list of laws gives one verdict however a composition is nested.
 
 **Rejected.** A rule per pair of operations — `neg` of `neg`, `abs` of `neg`, `copysign` of `copysign` — which decides the pairs listed and leaves `copysign(a, abs(b))` to be found. Reading a sign through an operation that rounds: `neg(a + b)` and `neg(a) + neg(b)` differ where the sum is a zero and under a directed rounding, and a product of two NaNs answers the greater pattern, its sign included.
+
+### `min` and `max` are the meet and the join, read over the comparison's verdicts
+
+**Decision.** `Lattice` states what a comparison reads of a `min` or a `max` of a total order — a meet is at most each operand and at least what is at most all of them, a join the mirror — as functions of the verdicts the comparison already reached of the operands, and which of two leaves a verdict leaves standing (`keeps`). A leaf another answers for is dropped by a verdict alone.
+
+**Rationale.** Stated over verdicts, the four order facts and the dropping rule are one text for `Nat` and for `Int` and are held to closed values without a term. Dropping by verdict needs the order the comparison decides to be transitive, since a leaf dropped for one that is dropped in turn must have been at least the one that stays; `curios-core` holds its comparison to that over a roster of shapes each operation joins.
+
+**Rejected.** A sorted tree as the fold's normal form, which respells every node it is handed where two trees are compared once, as `&&` and `||` are; and a `min` that asks the comparison of the arm it stands in, which makes one node two values by where it is read ([The carriers' algebra stays in conversion](../documentation/design/arithmetic/the-carriers-algebra-stays-in-conversion.md)).
 
 ### A law is stated once per family, and declared per operation
 

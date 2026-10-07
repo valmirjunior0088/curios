@@ -25,7 +25,7 @@ use {
         Aligned, Classes, Intrinsic, Level, Nat, Operand, Probe, Produced, ReduceError, Reducer,
         Subterm, Term, Var, Visit, align_comparisons, atoms_of, classable, classed, decide_bool,
         int_has_stuck_product, int_normalize, int_same, is_bool_connective, normalize_bool,
-        peel_commutative, peel_comparison, peel_monomial, peel_spine,
+        peel_commutative, peel_comparison, peel_lattice_leaf, peel_monomial, peel_spine,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -334,8 +334,10 @@ fn read(driver: &mut impl Driver, this: Intrinsic, that: Intrinsic) -> Result<Re
         }
     }
 
-    // A commutative operation with one operand paired on each side: the other two are what is left to compare. Asked last, since every reader above pairs more than one operand where it pairs any.
-    if let Some(Conclusion::Sufficient((left, right))) = peel_commutative(&this, &that) {
+    // A commutative operation with one operand paired on each side: the other two are what is left to compare. Asked last, since every reader above pairs more than one operand where it pairs any. Two `min` or `max` trees are paired by their leaves, however each is nested, where all but one leaf of each is shared.
+    if let Some(Conclusion::Sufficient((left, right))) =
+        peel_commutative(&this, &that).or_else(|| peel_lattice_leaf(&this, &that))
+    {
         return Ok(Read::Decided(Outcome::Residual(left, right)));
     }
 

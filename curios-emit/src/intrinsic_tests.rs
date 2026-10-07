@@ -78,6 +78,23 @@ fn nat_lt_compares_the_i31_signed_and_boxed_values_through_big_cmp() {
     assert_refuses_nothing(&wat);
 }
 
+// A `min` and a `max` select one of their two operands as it stands: two i31s by a signed machine comparison, and anything else by `big/cmp` against zero, with nothing boxed and nothing refused, on `Nat` and on `Int`.
+#[test]
+fn a_min_and_a_max_select_an_operand_by_a_signed_comparison_and_big_cmp_past_the_i31() {
+    for (intrinsic, keeps) in [
+        (curios_cont::Intrinsic::NatMin, "i32.le_s"),
+        (curios_cont::Intrinsic::NatMax, "i32.ge_s"),
+        (curios_cont::Intrinsic::IntMin, "i32.le_s"),
+        (curios_cont::Intrinsic::IntMax, "i32.ge_s"),
+    ] {
+        let wat = wat(&intrinsic_main(intrinsic, vec![nat(3), nat(4)]));
+        assert_contains(&wat, keeps);
+        assert_contains(&wat, "select");
+        assert_contains(&wat, "call $big/cmp");
+        assert_refuses_nothing(&wat);
+    }
+}
+
 #[test]
 fn nat_and_combines_i31s_as_words_and_boxed_values_in_twos_complement() {
     let wat = wat(&intrinsic_main(

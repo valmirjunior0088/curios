@@ -587,6 +587,45 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_store(dest, &curios_cont::Repr::Nat);
     }
 
+    /// Lower a `min` or a `max`: two i31s compare as machine words and `keeps` says where the left one is kept, and anything else is compared by `big/cmp`, whose `-1`, `0` or `1` is put to `keeps` against zero. Either way one of the two operands is the result as it stands, so nothing is built. Signed on both carriers, as a comparison is.
+    fn emit_extreme(
+        &mut self,
+        dest: &Dest<'_>,
+        (left, right): (&EmissionValueName, &EmissionValueName),
+        keeps: curios_wasm::Instr,
+    ) {
+        let left = self.operand(left);
+        let right = self.operand(right);
+        let fast = sequence([
+            left.small(),
+            right.small(),
+            left.small(),
+            right.small(),
+            vec![
+                keeps.clone(),
+                curios_wasm::Instr::Select { val_types: vec![] },
+            ],
+        ]);
+        let slow = sequence([
+            left.reference(),
+            right.reference(),
+            left.reference(),
+            right.reference(),
+            vec![
+                self.big(BigHelper::Cmp),
+                curios_wasm::Instr::I32Const { value: 0 },
+                keeps,
+                // A register holds a reference as nullable, so the selection is typed at that and narrowed: neither operand is null.
+                curios_wasm::Instr::Select {
+                    val_types: vec![Table::top_type(true)],
+                },
+                curios_wasm::Instr::RefAsNonNull,
+            ],
+        ]);
+
+        self.emit_settled(dest, &[&left, &right], fast, Fast::Small, slow);
+    }
+
     /// Lower a zero test: an i31 compares, and a boxed value is never zero.
     fn emit_eqz(&mut self, dest: &Dest<'_>, operand: &EmissionValueName) {
         let operand = self.operand(operand);
@@ -1780,6 +1819,12 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             curios_cont::Intrinsic::NatXor | curios_cont::Intrinsic::IntXor => {
                 self.emit_bitwise(dest, (&args[0], &args[1]), Bitwise::Xor)
+            }
+            curios_cont::Intrinsic::NatMin | curios_cont::Intrinsic::IntMin => {
+                self.emit_extreme(dest, (&args[0], &args[1]), curios_wasm::Instr::I32LeS)
+            }
+            curios_cont::Intrinsic::NatMax | curios_cont::Intrinsic::IntMax => {
+                self.emit_extreme(dest, (&args[0], &args[1]), curios_wasm::Instr::I32GeS)
             }
             curios_cont::Intrinsic::NatShl | curios_cont::Intrinsic::IntShl => {
                 self.emit_shift_left(dest, &args[0], &args[1])

@@ -27,6 +27,12 @@ pub let try(a: Int, b: Int) -> Option(Holds(a <= b)) =
 pub let of_not_lt(a: Int, b: Int, p: Holds(Bool/not(a < b))) -> Holds(b <= a) =
     p;
 
+--- A strict bound is a loose one: `a < b` gives `a <= b`.
+---
+--- The step a proof the elaborator writes takes from the arm a `<=` guard failed in to the bound a `min` or a `max` is decided by. `a < b` is `a + 1 <= b` over the integers, so it is [`trans`] after `a <= a + 1`.
+pub let of_lt(a: Int, b: Int, p: Holds(a < b)) -> Holds(a <= b) =
+    trans(@a, @a + 1, @b, True/qed(), p);
+
 --- Transitivity.
 pub let trans(@a: Int, @b: Int, @c: Int, p: Holds(a <= b), q: Holds(b <= c)) -> Holds(a <= c) =
     floor(Int/to_nat(b - a, @p), Int/to_nat(c - b, @q));

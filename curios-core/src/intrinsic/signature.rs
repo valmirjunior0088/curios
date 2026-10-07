@@ -185,6 +185,8 @@ impl Intrinsic {
             | Self::NatAnd(..)
             | Self::NatOr(..)
             | Self::NatXor(..)
+            | Self::NatMin(..)
+            | Self::NatMax(..)
             | Self::NatShl(..)
             | Self::NatShr(..) => bin_op(nat_type(), nat_type()),
             Self::IntAdd(..)
@@ -192,7 +194,9 @@ impl Intrinsic {
             | Self::IntMul(..)
             | Self::IntAnd(..)
             | Self::IntOr(..)
-            | Self::IntXor(..) => bin_op(int_type(), int_type()),
+            | Self::IntXor(..)
+            | Self::IntMin(..)
+            | Self::IntMax(..) => bin_op(int_type(), int_type()),
             // A shift count is a natural on both carriers: a signed count would leave `Int/shr(v, -1)` — `⌊v / 2^-1⌋` — for the theory to define, which it does not.
             Self::IntShl(..) | Self::IntShr(..) => sig(
                 vec![Operand::At(int_type()), Operand::At(nat_type())],

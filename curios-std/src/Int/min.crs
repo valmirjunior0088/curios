@@ -1,0 +1,20 @@
+pub use /sys/Int/{min};
+use /std/{Nat, Int, Eq};
+use /std/Bool/{Holds};
+
+-- An operand beside itself raised by a natural, where the comparison decides which is the lesser by comparing preimages; a law instantiates one at the natural its hypothesis makes of a difference, and the instance reduces to the equation the law concludes.
+let raised(a: Int, n: Nat) -> Eq()(min(a, a + Nat/to_int(n)), a) =
+    Eq/refl();
+
+let lowered(b: Int, n: Nat) -> Eq()(min(b + Nat/to_int(n), b), b) =
+    Eq/refl();
+
+--- `min(a, b)` is `a` where `a <= b`.
+---
+--- Conversion decides it where it decides the comparison of the two operands as terms, and reads no hypothesis: this is the step a proof takes under one.
+pub let of_le(a: Int, b: Int, p: Holds(a <= b)) -> Eq()(min(a, b), a) =
+    raised(a, Int/to_nat(b - a, @p));
+
+--- `min(a, b)` is `b` where `b <= a`.
+pub let of_ge(a: Int, b: Int, p: Holds(b <= a)) -> Eq()(min(a, b), b) =
+    lowered(b, Int/to_nat(a - b, @p));

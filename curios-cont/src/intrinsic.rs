@@ -20,6 +20,8 @@ pub enum Intrinsic {
     NatAnd,
     NatOr,
     NatXor,
+    NatMin,
+    NatMax,
     NatShl,
     NatShr,
     NatEqz,
@@ -37,6 +39,8 @@ pub enum Intrinsic {
     IntAnd,
     IntOr,
     IntXor,
+    IntMin,
+    IntMax,
     IntShl,
     IntShr,
     IntEqz,
@@ -186,6 +190,8 @@ impl Intrinsic {
                 | Self::NatAnd
                 | Self::NatOr
                 | Self::NatXor
+                | Self::NatMin
+                | Self::NatMax
                 | Self::NatShl
                 | Self::NatShr
                 | Self::NatEqz
@@ -203,6 +209,8 @@ impl Intrinsic {
                 | Self::IntAnd
                 | Self::IntOr
                 | Self::IntXor
+                | Self::IntMin
+                | Self::IntMax
                 | Self::IntShl
                 | Self::IntShr
                 | Self::IntEqz
@@ -296,6 +304,8 @@ impl Intrinsic {
             | Self::NatAnd
             | Self::NatOr
             | Self::NatXor
+            | Self::NatMin
+            | Self::NatMax
             | Self::NatShl
             | Self::NatShr
             | Self::IntToNat
@@ -308,6 +318,8 @@ impl Intrinsic {
             | Self::IntAnd
             | Self::IntOr
             | Self::IntXor
+            | Self::IntMin
+            | Self::IntMax
             | Self::IntShl
             | Self::IntShr
             | Self::NatToInt
@@ -410,6 +422,8 @@ impl Intrinsic {
             | Self::NatAnd
             | Self::NatOr
             | Self::NatXor
+            | Self::NatMin
+            | Self::NatMax
             | Self::NatShl
             | Self::NatShr
             | Self::IntEql
@@ -424,6 +438,8 @@ impl Intrinsic {
             | Self::IntAnd
             | Self::IntOr
             | Self::IntXor
+            | Self::IntMin
+            | Self::IntMax
             | Self::IntShl
             | Self::IntShr
             | Self::FltAdd(_)
@@ -516,6 +532,8 @@ impl Intrinsic {
             | Self::NatAnd
             | Self::NatOr
             | Self::NatXor
+            | Self::NatMin
+            | Self::NatMax
             | Self::NatShr
             | Self::NatEqz
             | Self::NatToFlt(_)
@@ -526,6 +544,8 @@ impl Intrinsic {
             | Self::IntAnd
             | Self::IntOr
             | Self::IntXor
+            | Self::IntMin
+            | Self::IntMax
             | Self::IntShr
             | Self::IntEqz
             | Self::IntToFlt(_)
@@ -576,6 +596,8 @@ impl Intrinsic {
                 | Self::NatAnd
                 | Self::NatOr
                 | Self::NatXor
+                | Self::NatMin
+                | Self::NatMax
                 | Self::IntEql
                 | Self::IntNeq
                 | Self::IntAdd
@@ -583,6 +605,8 @@ impl Intrinsic {
                 | Self::IntAnd
                 | Self::IntOr
                 | Self::IntXor
+                | Self::IntMin
+                | Self::IntMax
         )
     }
 

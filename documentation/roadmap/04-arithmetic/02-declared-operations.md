@@ -8,7 +8,8 @@ It builds on the algebra's law families and generated grid, and is independently
 
 - **The algebra's declarations and grid.** `Intrinsic::algebra` names every operation's algebraic role; the grid instantiates each declared family's laws at every carrier it covers and holds each instance through both checkers, through the kernel asked alone, and against the carrier's semantics — for `Flt`, the binary64 model over the grid's bit patterns; the audit holds each law reversed, chained, at compound terms and through a solved metavariable.
 - **The kinds already implemented**:
-  - the semilattice on a leaf set, `peel_bool`, deciding `&&` and `||` up to commutation, association and repetition;
+  - the semilattice on a leaf set, `peel_bool`, deciding `&&` and `||` up to commutation, association and repetition, and `peel_lattice`, deciding `min` and `max` the same way over leaves that carry a literal offset;
+  - the lattice of a total order, `Lattice`, a `min` at most each leaf and at least what is at most all of them and a `max` the mirror, read over the plain comparison's verdicts;
   - domination, `Operation::dominators`, deciding `x - y <= x` by the operand a result never exceeds, and `Operation::upper_bound`, a literal bound;
   - symmetric operands, `peel_symmetric`, and the pairing of a commutative operation's operands, `peel_commutative`, both keyed on an operation and its carrier;
   - a semiring embedding, `Nat/to_int`, pushed through a sum and a product by `int_of_nat` and read back by `int_preimage`;
@@ -23,9 +24,9 @@ It builds on the algebra's law families and generated grid, and is independently
 
 ## The gap
 
-`min` and `max` at both carriers, and `abs` and `sign` at `Int`, are library functions, so conversion sees their unfolded matches: `min(a, b)` against `min(b, a)`, `min(a, b) <= a`, `abs(+0 - a)` against `abs(a)` and `sign(+0 - a)` against `+0 - sign(a)` are refused. `pow` is a library recursion by squaring, so `pow(x, y + 1)` against `pow(x, y) * x` is refused, and `shl(1, k)` against `pow(2, k)`.
+`abs` and `sign` at `Int` are library functions, so conversion sees their unfolded matches: `abs(+0 - a)` against `abs(a)` and `sign(+0 - a)` against `+0 - sign(a)` are refused. `pow` is a library recursion by squaring, so `pow(x, y + 1)` against `pow(x, y) * x` is refused, and `shl(1, k)` against `pow(2, k)`.
 
-What the library definitions decide today is kept: `min(x, x + 1)` is `x`, `max(x, 0)` is `x`, `min(x % 8, 8)` is `x % 8`, `abs(Nat/to_int(n))` is `n`, `abs(+0 - Nat/to_int(n) - 1)` is `n + 1`, `sign(Nat/to_int(n) + 1)` is `+1`, and `pow(x + 1, 2)` is `x * x + 2 * x + 1`.
+What the library definitions decide today is kept: `abs(Nat/to_int(n))` is `n`, `abs(+0 - Nat/to_int(n) - 1)` is `n + 1`, `sign(Nat/to_int(n) + 1)` is `+1`, and `pow(x + 1, 2)` is `x * x + 2 * x + 1`.
 
 ## An operation is declared with the theory it is decided in
 
@@ -37,7 +38,7 @@ Conversion decides a theory or it does not decide it: a law is held where its de
 
 ## `min` and `max`
 
-Declared at `Nat` and at `Int` a semilattice with successor, dominated by its operands, the theory Agda decides of its universe levels ([universe levels](https://agda.readthedocs.io/en/latest/language/universe-levels.html)):
+`/sys` operations at `Nat` and at `Int`, with nothing of this section left to land. Declared a semilattice with successor, dominated by its operands, the theory Agda decides of its universe levels ([universe levels](https://agda.readthedocs.io/en/latest/language/universe-levels.html)):
 
 - commutative, associative and idempotent, decided as a set of leaves, as `&&` is;
 - a literal added to every operand leaves, `min(a + 1, b + 1) = min(a, b) + 1`, so the least floor stands outside as a sum's does;
@@ -46,7 +47,7 @@ Declared at `Nat` and at `Int` a semilattice with successor, dominated by its op
 
 The fold folds literals, hoists the least floor, flattens the operands that are the same operation, drops each leaf the comparison holds another at most, and rebuilds the node only where it dropped one. Two stuck nodes of one operation are one value where their leaf sets are, read by a peel that respells nothing.
 
-Lemmas: `min(a, b) + max(a, b) = a + b`; `(a - b) + b = max(a, b)`; `a <= b` giving `Eq()(min(a, b), a)`, and its three twins; and a symbolic summand shared by every operand, `min(a + c, b + c) = min(a, b) + c`, since deciding the equations of idempotent semifields, of which the integers under `max` and `+` are one, is co-NP-complete ([Equational theories of idempotent semifields](https://arxiv.org/abs/2402.09876)).
+Lemmas: `min(a, b) + max(a, b) = a + b`; `(a - b) + b = max(a, b)`; and a symbolic summand shared by every operand, `min(a + c, b + c) = min(a, b) + c`, since deciding the equations of idempotent semifields, of which the integers under `max` and `+` are one, is co-NP-complete ([Equational theories of idempotent semifields](https://arxiv.org/abs/2402.09876)).
 
 ## `abs` and `sign`
 
@@ -96,15 +97,14 @@ What is not a law stays a control, refused with its counterexample: associativit
 
 ## Promotion
 
-`min` and `max` at both carriers, `abs`, `sign` and `pow` become `/sys` operations. Each is new arithmetic on a numeric carrier and takes everything `.claude/rules/checking.md`'s routing names for one: its `/sys` row and `Intrinsic::signature` entry, which the prelude build checks against each other; its literal fold in every constant folder sharing `scalar` — `curios-core`'s, `curios-ersd`'s and `curios-cont`'s; the emitter's lowering with its i31 fast path and its `big_emitter` library; its declaration; its nodes in `classed`; and the procedure's reading of its definition. Each folds as it executes, at both signs and past the i31, since `Nat` and `Int` are unbounded at every layer ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)). The library function a promotion replaces becomes a re-export under its existing name, and the rows it held by reduction are stated before it lands and hold after.
+`min` and `max` at both carriers are `/sys` operations, and `abs`, `sign` and `pow` become ones. Each is new arithmetic on a numeric carrier and takes everything `.claude/rules/checking.md`'s routing names for one: its `/sys` row and `Intrinsic::signature` entry, which the prelude build checks against each other; its literal fold in every constant folder sharing `scalar` — `curios-core`'s, `curios-ersd`'s and `curios-cont`'s; the emitter's lowering with its i31 fast path and its `big_emitter` library; its declaration; its nodes in `classed`; and the procedure's reading of its definition. Each folds as it executes, at both signs and past the i31, since `Nat` and `Int` are unbounded at every layer ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)). The library function a promotion replaces becomes a re-export under its existing name, and the rows it held by reduction are stated before it lands and hold after.
 
 ## Stages
 
 Every law above, every row the library definitions hold today and every control stands in the grid (`curios`'s `tests::laws::written`), each refused row commented with the stage that moves it, and the audit puts each declared law to a product of two sums.
 
-1. **`min` and `max`**, at both carriers, with the domination mirror.
-2. **`abs` and `sign`**, with the two lemmas `/std/Map` consumes.
-3. **`pow`**, the power atom becoming `pow(2, k)`.
+1. **`abs` and `sign`**, with the two lemmas `/std/Map` consumes.
+2. **`pow`**, the power atom becoming `pow(2, k)`.
 
 Each stage moves its rows from refused to held, extends the grid's audit to the kind it declares, and adds its operation's rows to `curios`'s `tests::bounds`.
 

@@ -4,8 +4,9 @@
 
 use {
     super::{
-        Atoms, Declaration, Element, Intrinsic, Nat, Operands, Sequence, Subterm, Term, Words,
-        bin_grain, int_cancellation, int_monomial, int_rebuild_cancelled, int_shaped, list_element,
+        Atoms, Declaration, Element, Extremum, Intrinsic, Nat, Operands, Sequence, Subterm, Term,
+        Words, bin_grain, int_cancellation, int_monomial, int_rebuild_cancelled, int_shaped,
+        list_element,
     },
     curios_algebra::{
         Carrier, Conclusion, Deduction, Operation, Stripped, pair_factors, same_leaves,
@@ -27,12 +28,13 @@ pub fn peel_intrinsic(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
 }
 
 /// The peels at [`Deduction`]'s strength, in the order they are asked: `Nat` the free commutative monoid on its summands, `Int` the group, `Bin` and `List` the free monoids on their bytes and elements, `&&` and `||` the semilattices on their leaves, a symmetric operation's two orders, and two reads of one position. Each answers `None` for a pair that is not its shape, so the seven are one set of alternatives.
-const PEELS: [fn(&Intrinsic, &Intrinsic) -> Option<Verdict>; 7] = [
+const PEELS: [fn(&Intrinsic, &Intrinsic) -> Option<Verdict>; 8] = [
     peel_nat_pair,
     peel_int_pair,
     peel_bin,
     peel_list,
     peel_bool,
+    peel_lattice,
     peel_symmetric,
     peel_position,
 ];
@@ -80,6 +82,55 @@ pub fn peel_int_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
             .deduction()
             .map(|cancelled| int_rebuild_cancelled(cancelled, &this, &that))
     })
+}
+
+/// `min` and `max` over `Nat` and `Int` are each idempotent, commutative and associative, so two trees of one operation are one value where they hold one set of leaves, each leaf read with the literal offsets of the nodes above it ([`Extremum::leaves`]). `Undecided` otherwise, never `Impossible`, and `None` for any other pair.
+///
+/// Decided here rather than by a canonical spelling in the fold, as [`peel_bool`] decides `&&` and `||`: the fold has already dropped each leaf another answers for, so what is left to compare is the two sets.
+pub fn peel_lattice(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
+    let (this, ..) = Extremum::of(left)?;
+    let (that, ..) = Extremum::of(right)?;
+    if this != that {
+        return None;
+    }
+
+    let mut atoms = Atoms::default();
+    let mut read = |tree: &Intrinsic| {
+        this.leaves(&Term::intrinsic(tree.clone()))
+            .iter()
+            .map(|leaf| atoms.numeric(leaf))
+            .collect::<Vec<_>>()
+    };
+    let (left_atoms, right_atoms) = (read(left), read(right));
+    Some(match same_leaves(&left_atoms, &right_atoms) {
+        true => Deduction::Equal,
+        false => Deduction::Undecided,
+    })
+}
+
+/// Two `min` trees, or two `max` trees, that hold the same leaves but one on each side: the two left over are what is left to compare. The congruence of a lattice operation, as [`peel_commutative`]'s residual is of two operands, read over a tree's leaves so it holds whichever way the two trees are nested, which is what solves a metavariable standing for a leaf under an association.
+///
+/// **Conversion's alone**, as that pairing is: the trees are one value where the two leaves are, and may be where they are not — `min(a, b)` against `min(a, d)` wherever `a` is at most both — so the residual is sufficient and inversion may not deduce it. `None` for any other pair, and where more than one leaf is left on a side.
+pub fn peel_lattice_leaf(left: &Intrinsic, right: &Intrinsic) -> Option<Conclusion<(Term, Term)>> {
+    let (this, ..) = Extremum::of(left)?;
+    let (that, ..) = Extremum::of(right)?;
+    if this != that {
+        return None;
+    }
+
+    let mut ours = this.leaves(&Term::intrinsic(left.clone()));
+    let mut theirs = this.leaves(&Term::intrinsic(right.clone()));
+    ours.retain(|leaf| match theirs.iter().position(|other| other == leaf) {
+        Some(shared) => {
+            theirs.remove(shared);
+            false
+        }
+        None => true,
+    });
+    match (ours.as_slice(), theirs.as_slice()) {
+        ([ours], [theirs]) => Some(Conclusion::Sufficient((ours.clone(), theirs.clone()))),
+        _ => None,
+    }
 }
 
 /// A symmetric operation — an equality or an inequality at any carrier the algebra declares one of, the `xor` that `!=` on `Bool` lowers through, the bitwise `and`, `or` and `xor` on ℕ and on ℤ, and a binary64 sum, product, `min` and `max`, a sum or a product in one rounding direction — denotes one value with its operands in either order, so two of one operation are `Equal` when their operand pairs are one pair swapped, and `Undecided` otherwise, never `Impossible`. `None` for any other pair.

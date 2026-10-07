@@ -49,9 +49,8 @@ The dyadic `Rat` normalizes by stripping powers of two and compares values held 
 
 ## `Nat`: `min` and `max`
 
-Their order facts and semilattice equations hold by conversion through their [declarations](02-declared-operations.md), and so does a literal added to both operands. These are lemmas here:
+Their order facts and semilattice equations hold by conversion through their [declarations](02-declared-operations.md), and so does a literal added to both operands. A declared operation reads no arm, so a hypothesis reaches one through `/std`'s `min/of_le`, `min/of_ge`, `max/of_le` and `max/of_ge` at each carrier, which the procedure that proves a bound reads `min` and `max` through. These are lemmas here:
 
-- **under a hypothesis**: `a <= b` gives `Eq()(min(a, b), a)` and `Eq()(max(a, b), b)`, and `b <= a` their twins. A declared operation reads no arm, so a guard reaches it through these; they land with the declarations, the procedure that proves a bound reading `min` and `max` through them;
 - `min(a, b) + max(a, b) = a + b`;
 - `(a - b) + b = max(a, b)`, truncated subtraction read through the same definitions;
 - a symbolic summand shared by both operands, `min(a + c, b + c) = min(a, b) + c`.

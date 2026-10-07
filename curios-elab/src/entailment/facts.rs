@@ -6,7 +6,7 @@
 //! - A proof field of a tuple- or struct-typed hypothesis, one level down, where the item may open the representation: `v.counted`, `hi.ok`.
 //! - A hypothesis or a field whose statement the arm's refinements reduce to an empty proposition — `in_range(n, 128, 191)` where a guard holds `n <= 127` — which refutes the scope by itself: read as `1 <= 0`, proved by its own zero-arm match.
 //! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
-//! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, and that a power `shl(1, m)` is at least one ([`Reader::definitions`]).
+//! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, and that a power `shl(1, m)` is at least one ([`Reader::definitions`]).
 //! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs.
 //! - That every monomial over naturals is at least zero, which conversion decides.
 //!
@@ -23,11 +23,11 @@
 use {
     super::{decision_of, global, in_scope, is_empty},
     crate::{Context, Error, open_layer, reduce_with},
-    curios_algebra::{Carrier, LinearForm, Monomial, Operation},
+    curios_algebra::{Carrier, Lattice, LinearForm, Monomial, Operation},
     curios_analysis::RESOLVED_SPELLING_LAYERS,
     curios_core::{
-        Apply, Cases, Free, Global, InductType, Intrinsic, LinearViews, Match, Nat, StructType,
-        Subterm, Term, TupleType,
+        Apply, Cases, Extremum, Free, Global, InductType, Intrinsic, LinearViews, Match, Nat,
+        StructType, Subterm, Term, TupleType,
     },
     curios_num::{Integer, Natural},
     curios_utilities::{OrderSyntax, Plicity, SyntaxName},
@@ -44,7 +44,7 @@ pub enum Origin {
     Guard(Term, bool),
     /// That a monomial over naturals is at least zero.
     Natural,
-    /// What an operation defines: a quotient's bound, a case of a truncated subtraction, or that a power is at least one.
+    /// What an operation defines: a quotient's bound, a case of a truncated subtraction, of a `min` or of a `max`, or that a power is at least one.
     Definition,
     /// The product of two facts, from where each came.
     Product(Box<Origin>, Box<Origin>),
@@ -157,13 +157,13 @@ impl Facts {
     }
 }
 
-/// A case split a truncated subtraction `a - b` defines, on `b <= a`, with the facts each case adds.
+/// A case split an operation defines on an order of its operands, with the facts each case adds: a truncated subtraction `a - b` on `b <= a`, and a `min` or a `max` over `a` and `b` on `a <= b`.
 pub(super) struct Split {
-    /// `b <= a`, which the proof splits on.
+    /// The comparison the proof splits on.
     pub(super) guard: Term,
-    /// Where it holds: `b <= a`, and `b + (a - b) = a` by `le/add_sub_cancel`.
+    /// Where it holds: the guard, and for a subtraction `b + (a - b) = a` by `le/add_sub_cancel`, for a `min` or a `max` the operand it is there.
     pub(super) holds: Vec<Fact>,
-    /// Where it fails: `a < b`, and `a - b <= 0` by `le/sub_zero`, which conversion does not decide there.
+    /// Where it fails: the guard's strict dual, and for a subtraction `a - b <= 0` by `le/sub_zero`, which conversion does not decide there, for a `min` or a `max` the other operand.
     pub(super) fails: Vec<Fact>,
 }
 
@@ -174,6 +174,7 @@ pub(super) struct Reader<'a> {
     divided: Vec<Division>,
     subtracted: Vec<(Term, Term)>,
     powered: Vec<Term>,
+    extrema: Vec<(Extremum, Term, Term)>,
 }
 
 impl<'a> Reader<'a> {
@@ -190,6 +191,7 @@ impl<'a> Reader<'a> {
             divided: Vec::new(),
             subtracted: Vec::new(),
             powered: Vec::new(),
+            extrema: Vec::new(),
         }
     }
 
@@ -549,14 +551,133 @@ impl<'a> Reader<'a> {
         )
     }
 
-    /// What the operations the facts and the goal are read over define, until a reading meets no new one: a quotient's bounds hold its dividend, which may be a truncated subtraction, a subtraction's cases hold its operands, which may be quotients, and either may hold a power.
+    /// What the operations the facts and the goal are read over define, until a reading meets no new one: a quotient's bounds hold its dividend, which may be a truncated subtraction, a subtraction's cases hold its operands, which may be quotients, and any of them may hold a power, a `min` or a `max`, whose own operands may be any of them.
     fn definitions(&mut self, context: &mut Context, target: Option<&Target>) -> Result<(), Error> {
         loop {
             let divided = self.quotients(context, target)?;
             let subtracted = self.subtractions(context, target)?;
             let powered = self.powers(context, target)?;
-            if !divided && !subtracted && !powered {
+            let split = self.extrema(context, target)?;
+            if !divided && !subtracted && !powered && !split {
                 return Ok(());
+            }
+        }
+    }
+
+    /// Each `min` and `max` among the atoms read so far, at `Nat` and at `Int`, through the cases its operands' order makes: `a <= b`, where `min(a, b) = a` and `max(a, b) = b`, and `b < a`, where each is the other operand. A case the scope already decides is read as facts; otherwise the cases are kept as a split the search opens where it needs it, as a truncated subtraction's are. Whether it read one.
+    ///
+    /// Conversion decides a `min` and a `max` from their operands as terms and reads no fact, so this is where a bound over one meets what the scope says of its operands.
+    fn extrema(&mut self, context: &mut Context, target: Option<&Target>) -> Result<bool, Error> {
+        let mut pending: Vec<(Extremum, Term, Term)> = Vec::new();
+        for atom in self.atoms(target) {
+            let Subterm::Intrinsic(intrinsic) = &**self.views.term(atom) else {
+                continue;
+            };
+            let Some((extremum, a, b)) = Extremum::of(intrinsic) else {
+                continue;
+            };
+            let node = (extremum, a.clone(), b.clone());
+            if !self.extrema.contains(&node) && !pending.contains(&node) {
+                pending.push(node);
+            }
+        }
+
+        let mut read = false;
+        for (extremum, a, b) in pending {
+            let order = order(context, extremum.carrier);
+            let names = [
+                order.min_of_le,
+                order.min_of_ge,
+                order.max_of_le,
+                order.max_of_ge,
+                order.of_lt,
+                order.of_not_le,
+                order.of_eq,
+                context.syntax().entailment.sym,
+            ];
+            if !in_scope(context, &names) {
+                continue;
+            }
+            self.extrema.push((extremum, a.clone(), b.clone()));
+            read = true;
+
+            let guard = Term::intrinsic(comparison_of(extremum.carrier, Operation::AtMost, &a, &b));
+            match &*reduce_with(context, &guard)? {
+                Subterm::Intrinsic(Intrinsic::Bool(true)) => {
+                    self.kept(context, extremum, &a, &b, true)?
+                }
+                Subterm::Intrinsic(Intrinsic::Bool(false)) => {
+                    self.kept(context, extremum, &a, &b, false)?
+                }
+                _ => {
+                    let holds = self.apart(context, |reader, context| {
+                        reader.kept(context, extremum, &a, &b, true)
+                    })?;
+                    let fails = self.apart(context, |reader, context| {
+                        reader.kept(context, extremum, &a, &b, false)
+                    })?;
+                    // A `min` and a `max` of one pair split on one guard, and so are one split: what the search opens for either it has for both.
+                    match self
+                        .read
+                        .splits
+                        .iter_mut()
+                        .find(|split| split.guard == guard)
+                    {
+                        Some(split) => {
+                            split.holds.extend(holds);
+                            split.fails.extend(fails);
+                        }
+                        None => self.read.splits.push(Split {
+                            guard,
+                            holds,
+                            fails,
+                        }),
+                    }
+                }
+            }
+        }
+        Ok(read)
+    }
+
+    /// One case of a `min` or a `max` over `a` and `b`. Where `a <= b` holds: that, and the operation as the operand it is there, by the carrier's `min/of_le` or `max/of_le`. Where it fails: `b < a`, and the operation as the other operand, by `min/of_ge` or `max/of_ge` over the bound `le/of_lt` loosens.
+    fn kept(
+        &mut self,
+        context: &mut Context,
+        extremum: Extremum,
+        a: &Term,
+        b: &Term,
+        holds: bool,
+    ) -> Result<(), Error> {
+        let order = order(context, extremum.carrier);
+        let node = Term::intrinsic(extremum.node(a.clone(), b.clone()));
+        match holds {
+            true => {
+                let qed = qed(context);
+                let guard = comparison_of(extremum.carrier, Operation::AtMost, a, b);
+                self.admit(context, guard, qed.clone(), Origin::Definition)?;
+                // `a <= b`: a `min` is `a` and a `max` is `b`.
+                let (lemma, kept) = match extremum.lattice {
+                    Lattice::Meet => (order.min_of_le, a),
+                    Lattice::Join => (order.max_of_le, b),
+                };
+                let equation = Term::apply(global(lemma), [a.clone(), b.clone(), qed]);
+                let origin = Origin::Definition;
+                self.equation(context, extremum.carrier, &node, kept, equation, origin)
+            }
+            false => {
+                let failed = [a.clone(), b.clone(), qed(context)];
+                let below = Term::apply(global(order.of_not_le), failed);
+                let guard = comparison_of(extremum.carrier, Operation::Less, b, a);
+                self.admit(context, guard, below.clone(), Origin::Definition)?;
+                let loosened = Term::apply(global(order.of_lt), [b.clone(), a.clone(), below]);
+                // `b <= a`: a `min` is `b` and a `max` is `a`.
+                let (lemma, kept) = match extremum.lattice {
+                    Lattice::Meet => (order.min_of_ge, b),
+                    Lattice::Join => (order.max_of_ge, a),
+                };
+                let equation = Term::apply(global(lemma), [a.clone(), b.clone(), loosened]);
+                let origin = Origin::Definition;
+                self.equation(context, extremum.carrier, &node, kept, equation, origin)
             }
         }
     }
@@ -687,7 +808,7 @@ impl<'a> Reader<'a> {
         let names = [
             natural.difference,
             natural.truncated,
-            natural.loosened,
+            order.of_lt,
             order.of_not_le,
             order.of_eq,
             context.syntax().entailment.sym,
@@ -748,7 +869,8 @@ impl<'a> Reader<'a> {
         let below = Term::apply(global(of_not_le), [b.clone(), a.clone(), qed(context)]);
         let guard = Intrinsic::NatLt(a.clone(), b.clone());
         self.admit(context, guard, below.clone(), Origin::Definition)?;
-        let loosened = Term::apply(global(natural.loosened), [a.clone(), b.clone(), below]);
+        let of_lt = order(context, Carrier::Natural).of_lt;
+        let loosened = Term::apply(global(of_lt), [a.clone(), b.clone(), below]);
         let zero = Term::apply(global(natural.truncated), [a.clone(), b.clone(), loosened]);
         let subtracted = Term::intrinsic(Intrinsic::NatSub(a.clone(), b.clone()));
         let truncation = Intrinsic::NatLe(subtracted, literal(Carrier::Natural, 0u32));

@@ -16,6 +16,9 @@ use nat::*;
 mod int;
 use int::*;
 
+mod lattice;
+use lattice::*;
+
 mod scalar;
 use scalar::*;
 
@@ -31,10 +34,10 @@ pub use classed::*;
 use {
     super::{ReduceError, Reducer},
     crate::{
-        Aligned, Cost, Declaration, Element, FUSION_CAP, FreeMonoid, Func, Intrinsic, LinearViews,
-        Nat, Operands, Probe, Subterm, Telescope, Term, Words, int_cancel_common, int_negate,
-        int_of_nat, int_preimage, int_product, int_sum, int_terms, normalize_concat, peel_bin,
-        peel_first_atom, peel_first_elem,
+        Aligned, Cost, Declaration, Element, Extremum, FUSION_CAP, FreeMonoid, Func, Intrinsic,
+        LinearViews, Nat, Operands, Probe, Subterm, Telescope, Term, Words, int_cancel_common,
+        int_negate, int_of_nat, int_preimage, int_product, int_sum, int_terms, normalize_concat,
+        peel_bin, peel_first_atom, peel_first_elem,
     },
     curios_algebra::{Carrier, Comparison, Deduction, Half, distribution_size},
     curios_num::{Binary, Floating, Grain, Integer, Natural},
@@ -577,6 +580,15 @@ pub fn reduce_intrinsic(
             )?,
             |l, r| bitwise_laws(l, r, intrinsic),
         )),
+        // `min` and `max`, on `Nat` and on `Int`: a semilattice on a tree's leaves with a successor that distributes (`reduce_extremum`).
+        Intrinsic::NatMin(left, right)
+        | Intrinsic::NatMax(left, right)
+        | Intrinsic::IntMin(left, right)
+        | Intrinsic::IntMax(left, right) => {
+            let (extremum, _, _) =
+                Extremum::of(intrinsic).expect("a `min` or a `max` over `Nat` or `Int`");
+            reduce_extremum(reducer, extremum, left, right)
+        }
         Intrinsic::NatShl(left, right) => {
             let shifted = then_laws(reduce_nat_shl(reducer, left, right)?, |l, r| {
                 shift_laws(l, r, intrinsic)
@@ -2197,6 +2209,8 @@ mod cost_tests;
 mod flt_tests;
 #[cfg(test)]
 mod free_monoid_tests;
+#[cfg(test)]
+mod lattice_tests;
 #[cfg(test)]
 mod laws_tests;
 #[cfg(test)]

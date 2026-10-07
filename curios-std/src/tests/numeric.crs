@@ -30,6 +30,15 @@ test parity_and_the_int_extrema_and_sign =
         Test/assert(Nat/is_even(0)),
         Test/assert(Bool/not(Nat/is_even(7))),
         Test/equal([Int/min(-3, +2), Int/max(-3, +2)], [-3, +2]),
+        Test/equal([Nat/min(7, 3), Nat/max(7, 3), Nat/min(4, 4)], [3, 7, 4]),
+        Test/equal(
+            [Nat/min(18446744073709551616, 5), Nat/max(18446744073709551616, 5)],
+            [5, 18446744073709551616]),
+        Test/equal(
+            [
+                Int/min(-18446744073709551616, +5),
+                Int/max(-18446744073709551616, -18446744073709551617)],
+            [-18446744073709551616, -18446744073709551616]),
         Test/equal([Int/sign(-9), Int/sign(+0), Int/sign(+4)], [-1, +0, +1])]);
 
 -- `Flt/to_nat` and `Flt/to_int` carry the decided bounds `NonNeg` and `Finite`, and the `try_` forms are the procedures that decide them: `none` where the bound fails, the raw operation under its evidence where it holds.

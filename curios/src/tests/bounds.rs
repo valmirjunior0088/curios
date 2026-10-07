@@ -284,6 +284,41 @@ const ROWS: &[Row] = &[
         "i: Int, k: Nat, p: Holds(+0 < i)",
         "Holds(+0 < Int/shl(i, k))",
     ),
+    // A `min` and a `max` are read through the two cases their operands' order makes, conversion deciding one from its operands as terms and reading no fact: a bound on both operands bounds a `min` from below and a `max` from above, a bound on one bounds a `min` from above, the two of one pair sum to the pair through one split, and the same over `Int`.
+    claim(
+        "a: Nat, b: Nat, c: Nat, p: Holds(c <= a), q: Holds(c <= b)",
+        "Holds(c <= Nat/min(a, b))",
+    ),
+    claim(
+        "a: Nat, b: Nat, c: Nat, p: Holds(a <= c), q: Holds(b <= c)",
+        "Holds(Nat/max(a, b) <= c)",
+    ),
+    claim(
+        "a: Nat, b: Nat, c: Nat, p: Holds(a <= c)",
+        "Holds(Nat/min(a, b) <= c)",
+    ),
+    claim(
+        "a: Nat, b: Nat",
+        "Holds(a + b <= Nat/min(a, b) + Nat/max(a, b))",
+    ),
+    claim(
+        "a: Nat, b: Nat, p: Holds(a < b)",
+        "Holds(Nat/min(a, b) < Nat/max(a, b))",
+    ),
+    claim(
+        "i: Int, j: Int, k: Int, p: Holds(k <= i), q: Holds(k <= j)",
+        "Holds(k <= Int/min(i, j))",
+    ),
+    claim(
+        "i: Int, j: Int, k: Int, p: Holds(i <= k), q: Holds(j <= k)",
+        "Holds(Int/max(i, j) <= k)",
+    ),
+    // An index a caller clamps by a `min`.
+    body(
+        "xs: List(Nat), i: Nat, n: Nat, p: Holds(n <= List/len(xs)), q: Holds(i < Nat/min(n, 10))",
+        "Nat",
+        "List/get(xs, i)",
+    ),
     // A bound two guards imply through a product, `(n - i - 1) * k >= 0`, which the refinement seam leaves stuck.
     body(
         "n: Nat, k: Nat, l: List(Nat), i: Nat",
@@ -323,6 +358,15 @@ const CONTROLS: &[Row] = &[
     claim("x: Nat, p: Holds(x * x * x <= 7)", "Holds(x <= 1)"),
     // A shifted value nothing in scope says is positive: zero shifted is zero.
     claim("d: Nat, k: Nat", "Holds(0 < Nat/shl(d, k))"),
+    // A `min` bounded from below by a bound on one operand alone, and a `max` from above by one.
+    claim(
+        "a: Nat, b: Nat, c: Nat, p: Holds(c <= a)",
+        "Holds(c <= Nat/min(a, b))",
+    ),
+    claim(
+        "a: Nat, b: Nat, c: Nat, p: Holds(a <= c)",
+        "Holds(Nat/max(a, b) <= c)",
+    ),
     // A remainder by a literal at `Int`, whose bounds conversion does not decide there.
     claim("x: Int", "Holds(x % +3 < +3)"),
     // Rewriting under a function by an equation, which is congruence rather than arithmetic.

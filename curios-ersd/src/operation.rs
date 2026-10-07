@@ -25,6 +25,8 @@ pub enum Operation {
     NatAnd,
     NatOr,
     NatXor,
+    NatMin,
+    NatMax,
     NatShl,
     NatShr,
     ByteToNat,
@@ -41,6 +43,8 @@ pub enum Operation {
     IntAnd,
     IntOr,
     IntXor,
+    IntMin,
+    IntMax,
     IntShl,
     IntShr,
     FltAdd(Rounding),
@@ -109,6 +113,8 @@ impl Operation {
             | Self::NatAnd
             | Self::NatOr
             | Self::NatXor
+            | Self::NatMin
+            | Self::NatMax
             | Self::NatShl
             | Self::NatShr
             | Self::IntEql
@@ -123,6 +129,8 @@ impl Operation {
             | Self::IntAnd
             | Self::IntOr
             | Self::IntXor
+            | Self::IntMin
+            | Self::IntMax
             | Self::IntShl
             | Self::IntShr
             | Self::FltAdd(_)

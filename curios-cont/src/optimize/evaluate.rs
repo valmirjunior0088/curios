@@ -56,6 +56,8 @@ pub(crate) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         Intrinsic::NatAnd => Some(Literal::Nat(nat(0)? & nat(1)?)),
         Intrinsic::NatOr => Some(Literal::Nat(nat(0)? | nat(1)?)),
         Intrinsic::NatXor => Some(Literal::Nat(nat(0)? ^ nat(1)?)),
+        Intrinsic::NatMin => Some(Literal::Nat(nat(0)?.min(nat(1)?).clone())),
+        Intrinsic::NatMax => Some(Literal::Nat(nat(0)?.max(nat(1)?).clone())),
         Intrinsic::NatShl => Some(Literal::Nat(
             nat(0)?.shl_within(nat(1)?, FOLD_ALLOWANCE_BITS)?,
         )),
@@ -77,6 +79,8 @@ pub(crate) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         Intrinsic::IntAnd => Some(Literal::Int(int(0)?.clone() & int(1)?.clone())),
         Intrinsic::IntOr => Some(Literal::Int(int(0)?.clone() | int(1)?.clone())),
         Intrinsic::IntXor => Some(Literal::Int(int(0)?.clone() ^ int(1)?.clone())),
+        Intrinsic::IntMin => Some(Literal::Int(int(0)?.min(int(1)?).clone())),
+        Intrinsic::IntMax => Some(Literal::Int(int(0)?.max(int(1)?).clone())),
         Intrinsic::IntShl => Some(Literal::Int(
             int(0)?.shl_within(nat(1)?, FOLD_ALLOWANCE_BITS)?,
         )),
