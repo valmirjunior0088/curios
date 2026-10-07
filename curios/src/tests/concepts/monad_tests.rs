@@ -309,8 +309,6 @@ impl Region {
     }
 }
 
-const BELOW_ITSELF: &str = "strictly below itself";
-
 // What the two checkers say of a cell, asked without erasing or emitting it: the elaborator's refusal as a compilation prints it, or what the kernel refuses of the program the elaborator built. A cell is about its levels, which both have judged by then, and compiled whole the matrix costs a minute a test.
 fn judged(source: &str) -> Result<Vec<String>, String> {
     let entrypoint = source.parse::<Entrypoint>().expect("the cell parses");
@@ -335,13 +333,6 @@ fn accepted(source: &str) {
             "the kernel refuses: {source}\n{verdicts:?}"
         ),
         Err(message) => panic!("refused: {source}\n{message}"),
-    }
-}
-
-fn refused(source: &str, report: &str) {
-    match judged(source) {
-        Ok(_) => panic!("accepted: {source}"),
-        Err(message) => assert!(message.contains(report), "got: {message}\nfor: {source}"),
     }
 }
 
@@ -462,26 +453,17 @@ fn a_bang_sequences_a_decided_action_below_its_region() {
     }
 }
 
-// Over `Try` the base monad is an implicit that unification solves from the action. It is committed as its check rebuilt it, at the domain `Try/bind` takes it at, so the kernel is handed the same monad whichever side solved it.
+// Over `Try` the base monad is an implicit that unification solves from the action. It is committed as its check rebuilt it, at the domain `Try/bind` takes it at, so the kernel is handed the same monad whichever side solved it. A family is committed at an occurrence of its own, so a bare nominal former read off the action, `Option` under `Try`, is no monad of the action's level alone: the region binds a payload a level above it.
 #[test]
 fn a_monads_own_bind_sequences_a_decided_action_below_its_region() {
-    for region in [&RESULT, &OPTION, &STATE, &TRY, &TRY_LAMBDA] {
+    for region in [&RESULT, &OPTION, &STATE, &TRY, &TRY_LAMBDA, &TRY_OPTION] {
         accepted(&region.huge(Spelling::Own));
     }
 }
 
 #[test]
 fn a_written_bind_sequences_a_decided_action_below_its_region() {
-    for region in [&RESULT, &OPTION, &STATE, &TRY, &TRY_LAMBDA] {
+    for region in [&RESULT, &OPTION, &STATE, &TRY, &TRY_LAMBDA, &TRY_OPTION] {
         accepted(&region.huge(Spelling::Written));
-    }
-}
-
-// Where the base monad is an implicit solved from the action, a bare nominal former is committed as the action spells it, at the action's decided level: a projection of its group is typed at its own function type, where a lambda is rebuilt at the domain it is checked at. `Try/bind` and `Monad/bind` written out then hold the region to the action's level, and the region's payload contradicts it. `!` names the monad from the region and is accepted above; a small action is the control, its level being its caller's.
-#[test]
-fn a_base_monad_solved_from_its_action_is_a_bare_nominal_former_at_the_actions_level() {
-    for spelling in [Spelling::Own, Spelling::Written] {
-        refused(&TRY_OPTION.huge(spelling), BELOW_ITSELF);
-        accepted(&TRY_OPTION.big(spelling));
     }
 }

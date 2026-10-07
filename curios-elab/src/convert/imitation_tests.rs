@@ -299,3 +299,37 @@ fn an_imitated_family_takes_an_instance_of_its_own() {
         );
     }
 }
+
+// A family read off a rigid side whole, with no spine to imitate, is a fresh occurrence of it as an imitated one is. `?0 : (Type 1) -> Type 1` against `(A) => Wrap.{0}(A)`: committed as it was read, the candidate holds its binder to the one instance it was solved from, and is refused whatever `Wrap` holds.
+#[test]
+fn a_family_read_off_a_rigid_side_takes_an_instance_of_its_own() {
+    for (variance, refused) in [(Variance::Irrelevant, false), (Variance::Invariant, true)] {
+        let mut context = context();
+        register_wrap(&mut context, variance);
+        let large = Term::type_at(Level::constant(1));
+        let kind = Term::func_type([(context.fresh(Some("A")), large.clone())], large.clone());
+        context.birth_metavar(MetavarId(0), Vec::new(), kind);
+
+        let carrier = context.fresh(Some("A"));
+        let rigid = Term::func(
+            [(carrier, large)],
+            Term::induct_type_at(
+                nominal("Wrap"),
+                [Level::zero()],
+                [Term::free_var(&carrier)],
+                Vec::<Term>::new(),
+            ),
+        );
+        assert_eq!(
+            conv(&mut context, &Term::hole(0), &rigid),
+            Ok(true),
+            "{variance:?}"
+        );
+        assert!(context.metavar_solution(MetavarId(0)).is_some());
+        assert_eq!(
+            context.universes_mut().finalize([], [], []).is_err(),
+            refused,
+            "{variance:?}"
+        );
+    }
+}

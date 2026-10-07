@@ -1706,6 +1706,37 @@ impl Term {
         Some(opened)
     }
 
+    /// The family this term is the bare former of, with the instance it stands at: a projection of an `induct`'s group applied to nothing, which is how reduction spells the family's name, the group's levels substituted in or the projection held at an instance. `None` for every other term.
+    ///
+    /// The closed body is read for the shape, as [`applied_former`](Self::applied_former) reads it and for its reason.
+    pub fn bare_former(&self) -> Option<(&Global, &[Level])> {
+        let (group, index, instance) = match self.look() {
+            Subterm::Instance(Instance {
+                head: InstanceHead::RecProj(group, index),
+                levels,
+            }) => (group, *index, Some(levels.as_slice())),
+            subterm => {
+                let (group, index) = subterm.as_rec_proj()?;
+                (group, index, None)
+            }
+        };
+
+        let mut binds = 0;
+        let mut peeked = group.iter().nth(index)?.body.body();
+        while let Subterm::Func(Func { telescope, .. }) = peeked.look() {
+            binds += 1;
+            peeked = telescope.terminal();
+        }
+        let Subterm::InductType(InductType {
+            name, universes, ..
+        }) = peeked.look()
+        else {
+            return None;
+        };
+
+        (binds > 0).then_some((name, instance.unwrap_or(universes)))
+    }
+
     /// Whether this is a projection of a former short of its full application: bare, or applied to fewer spines than its member's body binds, which eta would supply before either side is read.
     ///
     /// The closed body is read for the shape, as [`applied_former`](Self::applied_former) reads it and for its reason.

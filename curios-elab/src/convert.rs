@@ -1772,11 +1772,6 @@ impl Convert {
             .map(|(_, binder, _)| Term::free_var(binder))
             .collect::<Vec<_>>();
         let (rigid_prefix, rigid_suffix) = rigid_args.split_at(arity - spine);
-        let full_args = rigid_prefix
-            .iter()
-            .cloned()
-            .chain(binder_vars.iter().cloned())
-            .collect::<Vec<_>>();
 
         // The invariant `solve_at_birth` protects, upheld here by hand (the committed solution is the built candidate, not the rigid side itself): a solution must not be derived from a spelling that holds only under refinements the metavariable was not born under. Where those are in view and the spelling at its birth differs, the nominal shape may be their doing — postpone rather than commit. Asked before the candidate's instance is minted, so every return past it has one transaction to close.
         if let Some(birth) = context
@@ -1797,8 +1792,14 @@ impl Convert {
             Some((name, universes)) => Self::occurrence_of(context, name, universes),
             None => Ok(Vec::new()),
         };
+        // A family in the fixed prefix, a transformer's base monad, is at an occurrence of its own as the node is ([`Self::family_arguments`]).
+        let prefix = Self::family_arguments(context, rigid_prefix);
         // `solve` supplies the occurs check, the embedded-metavariable guard, the spine inversion and scope check (against `?m`'s own birth spine), and re-validation: the candidate is `check`ed against the frozen birth type under the birth context, which is what rejects an ill-kinded imitation before it commits.
         let solved = instance.and_then(|instance| {
+            let full_args = prefix?
+                .into_iter()
+                .chain(binder_vars.iter().cloned())
+                .collect::<Vec<_>>();
             let candidate = Term::func_marked(domains.clone(), mk_body(instance, &full_args));
 
             self.solve(context, &metavar, &candidate)
@@ -1858,6 +1859,133 @@ impl Convert {
         Ok(fresh)
     }
 
+    /// [`Self::solve`] with a candidate read off a problem's rigid side, a family among them taken at an occurrence of its own ([`Self::family_at_its_own_occurrence`]). The occurrence is minted and the candidate offered in one transaction, as an imitated family's is, so one `solve` postpones or refuses leaves no occurrence standing with no term to hold it.
+    fn solve_rigid(
+        &mut self,
+        context: &mut Context,
+        metavar: &Metavar,
+        candidate: &Term,
+    ) -> Result<Solved, ReduceError> {
+        let mark = context.solution_mark();
+        let family = match Self::family_at_its_own_occurrence(context, candidate) {
+            Ok(Some(family)) => family,
+            Ok(None) => {
+                context.end_solutions(mark);
+                return self.solve(context, metavar, candidate);
+            }
+            Err(spent) => {
+                context.rollback_solutions(mark);
+                context.end_solutions(mark);
+                return Err(spent);
+            }
+        };
+
+        let solved = self.solve(context, metavar, &family);
+        if !matches!(solved, Ok(Solved::Done)) {
+            context.rollback_solutions(mark);
+        }
+        context.end_solutions(mark);
+        solved
+    }
+
+    /// `term` at an occurrence of the family's own ([`Self::occurrence_of`]) where it is a family, and `None` where it is anything else or stands at such an occurrence already. A family arrives in three spellings: its name with no argument, the bare projection of its group, which is the name as reduction spells it, and a lambda over a nominal type, each family among that type's parameters taken the same way.
+    ///
+    /// A type's instance is the one the two sides of its problem are compared at. A family is a function, and what stands at its irrelevant levels is each application's to choose: committed at the instance it was read off, the metavariable is a family of the one occurrence it was solved from. `?M` against the `Option` of an action at `Try(Option, Str, Type)` made the base monad one of payloads at that action's level alone, and a region binding a larger one through `Try/bind` or `Monad/bind` written out was refused where `!`, which is handed its monad, accepted it. At an occurrence of its own the family is what `Option` or `(A) => Try(Option, Str, A)` written there elaborates to, held to the instance it was read off by an equation where the family is invariant and by a weak one where it is not.
+    fn family_at_its_own_occurrence(
+        context: &mut Context,
+        term: &Term,
+    ) -> Result<Option<Term>, ReduceError> {
+        if let Some((name, levels)) = Self::bare_family(context, term) {
+            let fresh = Self::occurrence_of(context, &name, &levels)?;
+
+            return Ok((fresh != levels).then(|| Term::instance_of(&Free::from(&name), fresh)));
+        }
+
+        let Subterm::Func(Func { telescope, .. }) = &**term else {
+            return Ok(None);
+        };
+        let mut binders = Vec::with_capacity(telescope.len());
+        let mut cursor = telescope.cursor();
+        while let Some((_, annotation)) = cursor.entry() {
+            let mark = cursor.mark().expect("a mark stands at an entry");
+            let binder = cursor.advance_fresh(|hint| context.fresh(hint));
+            binders.push((mark, binder, annotation));
+        }
+        let body = cursor.body().expect("a cursor past every entry");
+
+        let family = match &*body {
+            Subterm::Func(_) => Self::family_at_its_own_occurrence(context, &body)?,
+            Subterm::InductType(node) => {
+                let universes = Self::occurrence_of(context, &node.name, &node.universes)?;
+                let params = Self::family_arguments(context, &node.params)?;
+                (universes != node.universes || params != node.params).then(|| {
+                    Subterm::InductType(InductType {
+                        universes,
+                        params,
+                        ..node.clone()
+                    })
+                    .into()
+                })
+            }
+            Subterm::StructType(node) => {
+                let universes = Self::occurrence_of(context, &node.name, &node.universes)?;
+                let params = Self::family_arguments(context, &node.params)?;
+                (universes != node.universes || params != node.params).then(|| {
+                    Subterm::StructType(StructType {
+                        universes,
+                        params,
+                        ..node.clone()
+                    })
+                    .into()
+                })
+            }
+            _ => None,
+        };
+
+        Ok(family.map(|body| Term::func_marked(binders, body)))
+    }
+
+    /// The family `term` is the bare name of, with the instance it stands at: a name of a family that takes a parameter, written with no argument or spelled by reduction as the bare projection of its group. A family that takes none is a type under its bare name, and its instance is compared.
+    fn bare_family(context: &Context, term: &Term) -> Option<(Global, Vec<Level>)> {
+        if let Some((name, levels)) = term.bare_former() {
+            return Some((*name, levels.to_vec()));
+        }
+        let Subterm::Instance(Instance {
+            head: InstanceHead::Var(var),
+            levels,
+        }) = &**term
+        else {
+            return None;
+        };
+        let name = *var.as_free()?.as_global()?;
+        let parameters = context
+            .induct_decl(&name)
+            .map(|declaration| declaration.param_count() + declaration.index_count())
+            .or_else(|| {
+                context
+                    .struct_decl(&name)
+                    .map(|declaration| declaration.param_count())
+            })?;
+
+        (parameters > 0).then(|| (name, levels.clone()))
+    }
+
+    /// `arguments`, the parameters a family's node is applied to, each one that is itself a family at an occurrence of its own ([`Self::family_at_its_own_occurrence`]), as a transformer's base monad is.
+    ///
+    /// A family among a node's parameters is compared at its function type, whose domain is the level it was written at, so the node holds that level for every application of the candidate as the node's own instance would.
+    fn family_arguments(
+        context: &mut Context,
+        arguments: &[Term],
+    ) -> Result<Vec<Term>, ReduceError> {
+        arguments
+            .iter()
+            .map(|argument| {
+                Ok(Self::family_at_its_own_occurrence(context, argument)?
+                    .unwrap_or_else(|| argument.clone()))
+            })
+            .collect()
+    }
+
     /// Solve flex–rigid with a candidate spelled under the refinements the metavariable was born under. The drain reduces problems under the live frame, where the refinements of the arm the problem sits in apply — sound for discharging a problem, but not for committing a solution: a metavariable must not be pinned to a value that holds only inside an arm it was not born in (`?k := 0` because the nil arm refined `n := 0`). Where the refinements in view are its birth's — the metavariable solved in the arm it was born in — the rigid side is its spelling, or what it was reduced from where the reduct does not re-check; otherwise the original rigid term is re-reduced under its birth's alone and solved against that spelling. Refinements only ever *add* reductions, so a solution found this way still discharges the problem as it stands. A problem whose verdict changes at the birth's refinements is the other refinements' doing — nothing is globally forced, so it postpones rather than failing or committing.
     fn solve_at_birth(
         &mut self,
@@ -1869,20 +1997,20 @@ impl Convert {
         let birth = match context.metavar_entry(metavar.id) {
             Some(entry) => entry.refinements.clone(),
             // No birth record: `solve` refuses it, as it refuses any.
-            None => return self.solve(context, metavar, rigid),
+            None => return self.solve_rigid(context, metavar, rigid),
         };
 
         if context.refinements_are(&birth) {
             // A rigid side whose reduction only unfolded a name into a stuck form — `double(n)` to the folded call's neutral — is committed as written when that passes every check, and falls back to the reduced spelling on any other verdict, so no equation the reduced spelling decides is lost. Reduction takes the name straight back to the same neutral, so nothing downstream can tell the two solutions apart; what differs is the spelling a report materializes, which keeps the name instead of the whole recursive group, and the Core term the kernel receives, which carries the call instead of an inlined copy of the group.
             let stalled = stalled_unfolding(rigid_raw, rigid);
-            if stalled && let Solved::Done = self.solve(context, metavar, rigid_raw)? {
+            if stalled && let Solved::Done = self.solve_rigid(context, metavar, rigid_raw)? {
                 return Ok(Solved::Done);
             }
 
             // A reduct need not re-check where what it was reduced from does. Typing a match reads its scrutinee's type as spelled, and a reduct that inlined a definition's absurd arm — `hop`'s `match some end`, typed there because the arm refines the variable `b` — spells that type afresh from the substituted scrutinee, where no equation reaches it, and re-validation refuses it; the kernel reads a match's scrutinee type the same way. A refused reduct is therefore tried as written before the problem fails, unless the rule above already tried that spelling — which can only turn a refusal into a solution. `implicit_tests`' `a_solution_whose_reduct_does_not_recheck_is_committed_as_written` is the program.
-            return Ok(match self.solve(context, metavar, rigid)? {
+            return Ok(match self.solve_rigid(context, metavar, rigid)? {
                 Solved::Failed if !stalled && rigid_raw != rigid => {
-                    match self.solve(context, metavar, rigid_raw)? {
+                    match self.solve_rigid(context, metavar, rigid_raw)? {
                         Solved::Done => Solved::Done,
                         Solved::Postponed | Solved::Failed => Solved::Failed,
                     }
@@ -1896,7 +2024,7 @@ impl Convert {
 
         // The refinements beyond the birth's made no difference for this term: the unguarded path, hard verdicts included.
         if at_birth == *rigid {
-            return self.solve(context, metavar, rigid);
+            return self.solve_rigid(context, metavar, rigid);
         }
 
         // The spelling at birth is itself flexible — only the other refinements made the side look rigid. Undecided.
@@ -1904,7 +2032,7 @@ impl Convert {
             return Ok(Solved::Postponed);
         }
 
-        Ok(match self.solve(context, metavar, &at_birth)? {
+        Ok(match self.solve_rigid(context, metavar, &at_birth)? {
             Solved::Done => Solved::Done,
             // A verdict the spelling at birth cannot reach (out of scope, ill-typed at the birth context) is not a hard failure of the problem — the spelling in view may still discharge it once the metavariable is pinned elsewhere.
             Solved::Postponed | Solved::Failed => Solved::Postponed,
