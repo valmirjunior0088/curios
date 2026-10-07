@@ -182,6 +182,7 @@ pub(super) fn audit_public_exposures(
     items: &[FlatItem],
     scope: NominalScope<'_>,
 ) -> Result<(), Error> {
+    curios_profile::profile!("audit_public_exposures");
     let aliases = flat_aliases(items);
     let sources = alias_sources(&aliases);
     let audiences = Audiences::compute(public, table);

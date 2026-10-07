@@ -6,8 +6,7 @@
 //! 2. **Interface resolution** (`interface::resolve_unit`): each module's declarations seeded into its interface, then every `pub use` resolved to a fixed point, before any body is lowered.
 //! 3. **Lowering** (`process_items`): each item's names resolved against those interfaces, its sugar undone and its matches compiled (`match_compile`), then the entry's final term.
 //! 4. **Audit** (`audit`, `lint`): what the public interface exposes, and the declarations nothing reaches.
-//! 5. **Ordering** (`order`): the unit's own items sorted so each one's value dependencies come before it.
-//! 6. **Documentation** (`document`): the unit's documentation record, where it documents a mount.
+//! 5. **Documentation** (`document`): the unit's documentation record, where it documents a mount.
 
 mod audit;
 use audit::*;
@@ -142,6 +141,7 @@ fn writable_paths(
     reach: &Reach<'_>,
     own: &[Mount],
 ) -> BTreeMap<curios_core::Global, Vec<curios_core::WritablePath>> {
+    curios_profile::profile!("writable_paths");
     let audiences = Audiences::compute(public, table);
     // Own, and not inside a predecessor's mount: the entry claims the empty prefix, under which every other unit's names also lie.
     let owned = |path: &Qualifier| {
@@ -375,6 +375,7 @@ impl<'a> Resolved<'a> {
         predecessor_mounts: &[Mount],
         own: &[Mount],
     ) -> Result<Self, Error> {
+        curios_profile::profile!("resolved::of");
         let mut resolved = Resolved {
             modules: HashMap::new(),
             mod_spans: HashMap::new(),
@@ -650,6 +651,7 @@ fn process_items(
                 }
             },
             TopItem::Use(use_item) => {
+                curios_profile::profile!("resolve_use");
                 // The lexical import effect of `use`/`pub use`: source-ordered, point-of-use scoping. The interface (export) effect of `pub use` is precomputed by the `pub use` fixed point (`interface::resolve_unit`), not here.
                 match &use_item.group {
                     UseGroup::Named(items) => {
@@ -1703,7 +1705,7 @@ fn into_core_unit_within(
     }
 
     let mut flat_items = Vec::new();
-    // This unit's own, never the predecessors' extended in place. What a predecessor declares stays its own, and the one pass here that asks about one — the public-exposure audit, whose alias walk may land on a predecessor's type — takes them to query rather than as entries copied into these maps. The dependency sort below never needed it: it looks a declaration up only for names an item itself declares.
+    // This unit's own, never the predecessors' extended in place. What a predecessor declares stays its own, and the one pass here that asks about one — the public-exposure audit, whose alias walk may land on a predecessor's type — takes them to query rather than as entries copied into these maps.
     let mut induct_decls = BTreeMap::new();
     let mut struct_decls = BTreeMap::new();
     let mut concepts = BTreeMap::new();
@@ -1713,7 +1715,7 @@ fn into_core_unit_within(
     let mut broken = Vec::new();
 
     // The compilation root's own items — the entry's, and none for a unit with no entrypoint — then one pass per prefix this unit claims. Exactly one of the two does any work, because owning the empty prefix is what makes a unit the entry.
-    process_items(
+    curios_profile::profile!("process_items" => process_items(
         source.root_items(),
         &mut context,
         &mut flat_items,
@@ -1725,7 +1727,7 @@ fn into_core_unit_within(
         &mut foreigns,
         &mut broken,
         &modules,
-    )?;
+    ))?;
 
     for mount in own.iter().filter(|mount| !mount.prefix.is_root()) {
         let content = modules
@@ -1734,7 +1736,7 @@ fn into_core_unit_within(
 
         let mut nested = context.nested(mount.prefix.head());
 
-        process_items(
+        curios_profile::profile!("process_items" => process_items(
             &content.items,
             &mut nested,
             &mut flat_items,
@@ -1746,7 +1748,7 @@ fn into_core_unit_within(
             &mut foreigns,
             &mut broken,
             &modules,
-        )?;
+        ))?;
     }
 
     // The entrypoint, for the one unit that has one. Its tail closes the root body, so the imports in scope there are the last the root saw.
@@ -1812,6 +1814,7 @@ fn into_core_unit_within(
     });
 
     let paths = writable_paths(&public, &table, &reach, &own);
+    curios_profile::sample!("into_core_unit::imports", imports.borrow().entries.len());
     let unit = PreparedText {
         mounts: own.clone(),
         foreigns,

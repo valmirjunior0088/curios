@@ -224,6 +224,7 @@ pub(super) fn resolve_unit<'a>(
     reach: Reach<'_>,
     scope: Scoped<'a, PublicInterface>,
 ) -> Result<Scoped<'a, PublicInterface>, Error> {
+    curios_profile::profile!("resolve_unit");
     let mut public = scope;
     let mut pub_uses = Vec::new();
 

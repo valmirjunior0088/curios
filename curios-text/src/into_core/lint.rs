@@ -30,6 +30,7 @@ pub(super) struct Declarations<'a> {
 
 /// Every `unused-declaration` lint of the unit, in item order; the caller sorts.
 pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> {
+    curios_profile::profile!("unused_declarations");
     let Declarations {
         items,
         entry,

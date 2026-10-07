@@ -68,6 +68,7 @@ pub(super) fn document(
     records: &[&Documentation],
     description: Option<String>,
 ) -> Documentation {
+    curios_profile::profile!("document");
     let adopted = adopted_mounts(mounts, prefix);
     let mut reader = Reader {
         modules,
