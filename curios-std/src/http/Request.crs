@@ -1,12 +1,14 @@
 use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Parse, Spell};
+use /std/Bool/{Holds};
 use /std/ops/{Eql};
-use /std/http/{Method, Url};
+use /std/http/{Method, Url, Field};
+use /std/http/Field/{Name, Value};
 
 --- What is sent: the method, where to, the headers and the body. Where to is the URL, whose scheme decides the connection and whose host and port the `Host` header.
 pub struct Request: pub Type {
     method: Method,
     url: Url,
-    headers: List({Str, Str}),
+    headers: List(Field),
     body: Bytes,
 }
 
@@ -26,24 +28,19 @@ pub let get(url: Url) -> Request =
 pub let post(url: Url, body: Bytes) -> Request =
     Request { method = Method/post(), url = url, headers = [], body = body };
 
---- `r` with `name: value` appended to its headers.
-pub let with_header(r: Request, name: Str, value: Str) -> Request =
-    Request { ..r, headers = [..r.headers, (name, value)] };
+--- `r` with the field `name: value` appended to its headers. A field the renderer owns — `Host`, `Content-Length`, `Transfer-Encoding`, `Connection` — is kept and not sent.
+pub let with_header(
+    r: Request,
+    name: Str,
+    value: Str,
+    @Holds(Name/is_token(name)),
+    @Holds(Bytes/all(Str/to_bytes(value), Value/admits)),
+) -> Request =
+    Request { ..r, headers = [..r.headers, Field/of(name, value)] };
 
 --- The value of the first header named `name`, compared without case, or `none`.
-pub let header(r: Request, name: Str) -> Option(Str) =
-    Option/map(
-        List/find(r.headers, ((key, _)) => Str/eql_ascii_ci(key, name)),
-        ((_, value)) => value);
-
-let render_header((name, value): {Str, Str}) -> Str =
-    Str/flatten([name, ": ", value, "\r\n"]);
-
-let content_length(body: Bytes) -> Str =
-    match Bytes/len(body) == 0
-    | true => ""
-    | false => Str/flatten(["Content-Length: ", Nat/to_str(Bytes/len(body)), "\r\n"])
-    end;
+pub let header(r: Request, name: Str) -> Option(Value) =
+    Field/find(r.headers, name);
 
 let host_header(u: Url) -> Str =
     match u.port == Url/default_port(u.scheme)
@@ -55,22 +52,39 @@ let host_header(u: Url) -> Str =
 pub let target(u: Url) -> Str =
     match u.query | some(q) => Str/flatten([u.path, "?", q]) | none() => u.path end;
 
---- The request as the bytes sent on the wire: the request line, `Host`, `Connection: close`, the length when there is a body, the headers, then the body.
+--- Whether a request's renderer writes the field named `name` itself: `Host`, the framing fields and `Connection`. A caller's own field of one of these names is not sent.
+pub let owned(name: Name) -> Bool =
+    Name/is(name, "Host") || Name/is(name, "Content-Length") || Name/is(name, "Transfer-Encoding")
+        || Name/is(name, "Connection");
+
+--- Whether a request of method `m` states its length even where it has no content: the methods that define a meaning for content sent with them (RFC 9110 §8.6).
+let states_length(m: Method) -> Bool =
+    match m
+    | post() => true
+    | put() => true
+    | patch() => true
+    | _ => false
+    end;
+
+let length_line(r: Request) -> Bytes =
+    match Bytes/len(r.body) != 0 || states_length(r.method)
+    | true => Str/to_bytes(Str/flatten(["Content-Length: ", Nat/to_str(Bytes/len(r.body)), "\r\n"]))
+    | false => x[]
+    end;
+
+--- The request as the bytes sent on the wire: the request line as HTTP/1.1, `Host`, `Connection: close`, since a client keeps no connection, the length where there is a body or the method always states one, the headers the renderer does not own, then the body. The target and the host are written percent-encoded wherever the wire cannot carry an octet of them, so every request is one a wire can carry and there is nothing to refuse.
 pub let render(r: Request) -> Bytes =
     x[
-        ..Str/to_bytes(
-            Str/flatten([
-                Method/to_str(r.method),
-                " ",
-                target(r.url),
-                " HTTP/1.1\r\n",
-                "Host: ",
-                host_header(r.url),
-                "\r\n",
-                "Connection: close\r\n",
-                content_length(r.body),
-                Str/flatten(List/map(r.headers, render_header)),
-                "\r\n"])),
+        ..Str/to_bytes(Method/to_str(r.method)),
+        ' ',
+        ..Url/escaped(target(r.url)).bytes,
+        ..Str/to_bytes(" HTTP/1.1\r\nHost: "),
+        ..Url/escaped(host_header(r.url)).bytes,
+        ..Str/to_bytes("\r\nConnection: close\r\n"),
+        ..length_line(r),
+        ..Field/lines(r.headers, owned),
+        '\r',
+        '\n',
         ..r.body];
 
 let until(target: Byte) -> (Byte) -> Bool =
@@ -104,8 +118,8 @@ let guard_header: Parse(Bytes, {}) =
         match byte == '\r' | true => Parse/fail("end of header block") | false => Parse/pure(()) end
     end;
 
---- One `name: value` line; the value is trimmed.
-pub let header_line: Parse(Bytes, {Str, Str}) =
+--- One `name: value` line; the value is trimmed. A name that is no token and a value holding a control octet are refused.
+pub let header_line: Parse(Bytes, Field) =
     let _ = guard_header!;
     let name = Parse/bytes/take_while(until(':'))!;
     let _ = Parse/bytes/expect(':')!;
@@ -113,20 +127,22 @@ pub let header_line: Parse(Bytes, {Str, Str}) =
     let _ = Parse/bytes/literal("\r\n")!;
     let n = text(name)!;
     let v = text(value)!;
-    Parse/pure((n, Str/trim(v)));
+    match Field/read(n, Str/to_bytes(Str/trim(v)))
+    | some(field) => Parse/pure(field)
+    | none() =>
+        Parse/commit(Parse/fail("a field's name is a token, and its value holds no control octet"))
+    end;
 
-let lookup(headers: List({Str, Str}), name: Str) -> Option(Str) =
-    Option/map(
-        List/find(headers, ((key, _)) => Str/eql_ascii_ci(key, name)),
-        ((_, value)) => value);
+let lookup(headers: List(Field), name: Str) -> Option(Str) =
+    Option/bind(Field/find(headers, name), Value/to_str);
 
-let body_of(headers: List({Str, Str})) -> Parse(Bytes, Bytes) =
+let body_of(headers: List(Field)) -> Parse(Bytes, Bytes) =
     match Option/bind(lookup(headers, "Content-Length"), Nat/of_str)
     | some(n) => Parse/bytes/take(n)
     | none() => Parse/pure(x[])
     end;
 
-let url_of(headers: List({Str, Str}), target: Str) -> Parse(Bytes, Url) =
+let url_of(headers: List(Field), target: Str) -> Parse(Bytes, Url) =
     let authority = Option/unwrap_or(lookup(headers, "Host"), "localhost");
     match Url/of_str(Str/flatten(["http://", authority, target]))
     | success(u) => Parse/pure(u)

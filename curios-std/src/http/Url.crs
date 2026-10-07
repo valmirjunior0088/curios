@@ -1,6 +1,8 @@
 use /std/{Bytes, Byte, Char, Str, Nat, Bool, List, Option, Result, Parse, Spell};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql};
+use /std/http/Field/{Value};
+use /std/http/Field/Value/{Octet};
 
 --- The scheme, which decides the port when none is written and whether the connection is under TLS.
 pub induct Scheme: pub Type
@@ -46,6 +48,19 @@ let until(stops: List(Byte)) -> (Byte) -> Bool =
 
 let text(b: Bytes) -> Parse(Bytes, Str) =
     match Str/of_bytes(b) | some(s) => Parse/pure(s) | none() => Parse/fail("a URL is text") end;
+
+-- Whether the wire carries `b` as it is: visible ASCII.
+let visible(b: Byte) -> Bool =
+    Nat/in_range(Byte/to_nat(b), 33, 126);
+
+-- One part of a URL as text. A space, a control octet and an octet past ASCII have no place in one: each is written percent-encoded, and one left bare is refused.
+let part(b: Bytes) -> Parse(Bytes, Str) =
+    match Bytes/all(b, visible)
+    | true => text(b)
+    | false =>
+        Parse/fail(
+            "a URL holds no space, control octet or octet past ASCII, each of which is written percent-encoded")
+    end;
 
 let scheme: Parse(Bytes, Scheme) =
     let name = Parse/bytes/take_while(until([':']))!;
@@ -105,13 +120,13 @@ let port_of(s: Scheme) -> Parse(Bytes, Nat) =
 
 let path: Parse(Bytes, Str) =
     let b = Parse/bytes/take_while(until(['?', '#']))!;
-    let s = text(b)!;
+    let s = part(b)!;
     match Str/is_empty(s) | true => Parse/pure("/") | false => Parse/pure(s) end;
 
 let query_text: Parse(Bytes, Option(Str)) =
     let _ = Parse/bytes/expect('?')!;
     let b = Parse/bytes/take_while(until(['#']))!;
-    let s = text(b)!;
+    let s = part(b)!;
     Parse/pure(Option/some(s));
 
 let query: Parse(Bytes, Option(Str)) =
@@ -124,7 +139,7 @@ let query: Parse(Bytes, Option(Str)) =
 let url: Parse(Bytes, Url) =
     let s = scheme!;
     let h = Parse/bytes/take_while(until([':', '/', '?', '#']))!;
-    let host = text(h)!;
+    let host = part(h)!;
     let p = port_of(s)!;
     let pa = path!;
     let q = query!;
@@ -168,6 +183,52 @@ let query_str(q: Option(Str)) -> Str =
 --- The URL as text.
 pub let to_str(u: Url) -> Str =
     Str/flatten([scheme_str(u.scheme), "://", u.host, port_str(u), u.path, query_str(u.query)]);
+
+-- The hexadecimal digit of the nibble `n`, uppercase, as an octet a value may hold.
+let hex_octet(n: Nat) -> Octet =
+    match n
+    | 0 => Octet { byte = '0' }
+    | 1 => Octet { byte = '1' }
+    | 2 => Octet { byte = '2' }
+    | 3 => Octet { byte = '3' }
+    | 4 => Octet { byte = '4' }
+    | 5 => Octet { byte = '5' }
+    | 6 => Octet { byte = '6' }
+    | 7 => Octet { byte = '7' }
+    | 8 => Octet { byte = '8' }
+    | 9 => Octet { byte = '9' }
+    | 10 => Octet { byte = 'A' }
+    | 11 => Octet { byte = 'B' }
+    | 12 => Octet { byte = 'C' }
+    | 13 => Octet { byte = 'D' }
+    | 14 => Octet { byte = 'E' }
+    | _ => Octet { byte = 'F' }
+    end;
+
+-- `b` with every octet that is not visible ASCII written as its `%XX`.
+let escaped_bytes(b: Bytes) -> Value =
+    match b
+    | x[] => Value/empty
+    | x[h, .._]; rest =>
+        let n = Byte/to_nat(h);
+        let quoted =
+            Value/cons(
+                Octet { byte = '%' },
+                Value/cons(hex_octet(n / 16), Value/cons(hex_octet(n % 16), rest)));
+        match Value/admits(h)
+        | false => quoted
+        | true =>
+            match visible(h) | true => Value/cons(Octet { byte = h }, rest) | false => quoted end
+        end
+    end;
+
+--- `s` as the wire carries it, a value a field may hold: every octet that is not visible ASCII written as its `%XX`. Text `of_str` read is unchanged by it, and text that reached a `Url` by another road still cannot end a line.
+pub let escaped(s: Str) -> Value =
+    escaped_bytes(Str/to_bytes(s));
+
+--- The URL as a field's value, as `Location` carries one.
+pub let to_value(u: Url) -> Value =
+    escaped(to_str(u));
 
 --- The path's segments, for a server to match on: `/a/b/` is `["a", "b"]`.
 pub let segments(u: Url) -> List(Str) =

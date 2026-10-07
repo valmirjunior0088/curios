@@ -4,6 +4,14 @@ use /std/{Nat, Try, Async, Io, Parse};
 pub mod Method;
 pub use Method/{let Method};
 
+--- One field line of a message: a name that is a token and a value that holds no control octet, so a message's fields are written as they are held.
+pub mod Field;
+pub use Field/{let Field};
+
+--- A reply's status: its three-digit code and its reason phrase, and which codes carry content.
+pub mod Status;
+pub use Status/{let Status};
+
 --- Where a request goes, read from text and refused at a literal that does not read.
 pub mod Url;
 pub use Url/{let Url};

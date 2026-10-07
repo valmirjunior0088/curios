@@ -1,0 +1,52 @@
+use /std/{Str, Bytes, Bool, List, Option, Spell};
+use /std/Bool/{Holds};
+use /std/ops/{Eql};
+
+--- A field's name: a token.
+pub mod Name;
+pub use Name/{let Name};
+
+--- A field's value: octets, none of them a control octet but the tab.
+pub mod Value;
+pub use Value/{let Value};
+
+--- One field line of a message: its name and its value, each what a line can carry, so a message's fields are written as they are held.
+pub struct Field: pub Type {
+    name: Name,
+    value: Value,
+}
+
+satisfy Eql(Field) {
+    ..
+}
+
+satisfy Spell(Field) {
+    ..
+}
+
+--- The field the literals `name` and `value` spell.
+pub let of(
+    name: Str,
+    value: Str,
+    @Holds(Name/is_token(name)),
+    @Holds(Bytes/all(Str/to_bytes(value), Value/admits)),
+) -> Field =
+    Field { name = Name { text = name }, value = Value/lit(value) };
+
+--- The field `name` and `value` make, or `none` where the name is no token or an octet of the value may not stand in one.
+pub let read(name: Str, value: Bytes) -> Option(Field) =
+    let n = Name/of_str(name)!;
+    let v = Value/of_bytes(value)!;
+    Option/some(Field { name = n, value = v });
+
+--- The value of the first of `fields` named `name`, compared without case, or `none`.
+pub let find(fields: List(Field), name: Str) -> Option(Value) =
+    Option/map(List/find(fields, (f: Field) => Name/is(f.name, name)), (f: Field) => f.value);
+
+--- The field as its line on the wire: the name, a colon and a space, the value, and the line's end.
+pub let line(f: Field) -> Bytes =
+    x[..Str/to_bytes(f.name.text), ':', ' ', ..f.value.bytes, '\r', '\n'];
+
+--- The lines of the `fields` whose name `owned` does not claim, in order: what a renderer writes of a caller's fields beside the ones it writes itself.
+pub let lines(fields: List(Field), owned: (Name) -> Bool) -> Bytes =
+    Bytes/flatten(List/map(List/filter(fields, (f: Field) => Bool/not(owned(f.name))), line));

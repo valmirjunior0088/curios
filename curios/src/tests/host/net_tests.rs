@@ -256,7 +256,10 @@ const HTTP_GET: &str = r#"
         let r = Try/run(http/perform(http/get(http/Url/lit("http://example.com/"))))!;
         match r
         | success(response) =>
-            let ct = Option/unwrap_or(http/Response/header(response, "Content-Type"), "none");
+            let ct =
+                Option/unwrap_or(
+                    Option/bind(http/Response/header(response, "Content-Type"), http/Field/Value/to_str),
+                    "none");
             let body = Option/unwrap_or(Str/of_bytes(response.body), "bad body");
             /std/print(Str/flatten([Nat/to_str(response.status.code), " ", ct, " ", body]))
         | failure(e) =>

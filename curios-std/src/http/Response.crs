@@ -1,27 +1,16 @@
 use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result, Parse, Json, Html, Spell};
+use /std/Bool/{Holds};
 use /std/ops/{Eql};
-use /std/http/{Url};
+use /std/http/{Url, Field, Status};
+use /std/http/Field/{Name, Value};
 
---- The reply's status line.
-pub struct Status: pub Type {
-    version: Str,
-    code: Nat,
-    reason: Str,
-}
-
-satisfy Eql(Status) {
-    ..
-}
-
-satisfy Spell(Status) {
-    ..
-}
-
---- What came back: the status, the headers and the body.
+--- What came back: the status, the headers and the body. A reply holds content only where its status carries any, so one built with a body on a 1xx, 204, 205 or 304 status is refused where it is built, and every reply is one `render` can write.
 pub struct Response: pub Type {
     status: Status,
-    headers: List({Str, Str}),
+    headers: List(Field),
     body: Bytes,
+    --- Why the body is one the status carries.
+    @bodied: Holds(Status/carries_content(status.code) || Bytes/len(body) == 0),
 }
 
 satisfy Eql(Response) {
@@ -44,20 +33,26 @@ let as_text(b: Bytes) -> Parse(Bytes, Str) =
     | none() => Parse/fail("a reply is text before its body")
     end;
 
---- The status line: the version, the code and the reason. A code that is not a number is a refusal.
+--- The status line: the version, the code and the reason. A code that is not three digits is a refusal, and so is a reason holding a control octet.
 pub let status_line: Parse(Bytes, Status) =
-    let version = Parse/bytes/take_while(until(' '))!;
+    let _ = Parse/bytes/take_while(until(' '))!;
     let _ = Parse/bytes/expect(' ')!;
     let digits = Parse/bytes/take_while(is_digit)!;
     let _ = Parse/bytes/expect(' ')!;
     let reason = Parse/bytes/take_while(until('\r'))!;
     let _ = Parse/bytes/literal("\r\n")!;
-    let v = as_text(version)!;
     let spelled = as_text(digits)!;
-    let r = as_text(reason)!;
     match Nat/of_str(spelled)
-    | some(code) => Parse/pure(Status { version = v, code = code, reason = r })
     | none() => Parse/fail("a status code is a number")
+    | some(code) =>
+        match 100 <= code && code <= 999
+        | false => Parse/fail("a status code is three digits")
+        | true =>
+            match Value/of_bytes(reason)
+            | some(phrase) => Parse/pure(Status { code = code, reason = phrase })
+            | none() => Parse/fail("a reason phrase holds no control octet")
+            end
+        end
     end;
 
 let guard_header: Parse(Bytes, {}) =
@@ -68,7 +63,7 @@ let guard_header: Parse(Bytes, {}) =
         match byte == '\r' | true => Parse/fail("end of header block") | false => Parse/pure(()) end
     end;
 
-let header_line: Parse(Bytes, {Str, Str}) =
+let header_line: Parse(Bytes, Field) =
     let _ = guard_header!;
     let name = Parse/bytes/take_while(until(':'))!;
     let _ = Parse/bytes/expect(':')!;
@@ -76,12 +71,14 @@ let header_line: Parse(Bytes, {Str, Str}) =
     let _ = Parse/bytes/literal("\r\n")!;
     let n = as_text(name)!;
     let v = as_text(value)!;
-    Parse/pure((n, Str/trim(v)));
+    match Field/read(n, Str/to_bytes(Str/trim(v)))
+    | some(field) => Parse/pure(field)
+    | none() =>
+        Parse/commit(Parse/fail("a field's name is a token, and its value holds no control octet"))
+    end;
 
-let lookup(headers: List({Str, Str}), name: Str) -> Option(Str) =
-    Option/map(
-        List/find(headers, ((key, _)) => Str/eql_ascii_ci(key, name)),
-        ((_, value)) => value);
+let lookup(headers: List(Field), name: Str) -> Option(Str) =
+    Option/bind(Field/find(headers, name), Value/to_str);
 
 let hex_value(byte: Byte) -> Option(Nat) =
     let n = Byte/to_nat(byte);
@@ -122,14 +119,14 @@ let chunks(acc: Bytes) -> Parse(Bytes, Bytes) =
     end;
 
 --- Whether the transfer encoding lists `chunked`, compared without case, wherever it stands in the list.
-let chunked(headers: List({Str, Str})) -> Bool =
+let chunked(headers: List(Field)) -> Bool =
     match lookup(headers, "Transfer-Encoding")
     | some(value) =>
         List/any(Str/split(value, ","), (coding) => Str/eql_ascii_ci(Str/trim(coding), "chunked"))
     | none() => false
     end;
 
-let body_of(headers: List({Str, Str})) -> Parse(Bytes, Bytes) =
+let body_of(headers: List(Field)) -> Parse(Bytes, Bytes) =
     match chunked(headers)
     | true => chunks(x[])
     | false =>
@@ -139,38 +136,68 @@ let body_of(headers: List({Str, Str})) -> Parse(Bytes, Bytes) =
         end
     end;
 
---- A whole reply: the status line, the headers, then the body — the chunks when the transfer encoding is chunked, `Content-Length` bytes when the header is there, clamped to what arrived, and everything the peer sent otherwise.
+--- The reply `status`, `headers` and `body` make: the body dropped where the status has none whatever its fields say, and a refusal where a 205 reply carries content.
+let framed(status: Status, headers: List(Field), body: Bytes) -> Parse(Bytes, Response) =
+    match Status/carries_content(status.code)
+    | true => Parse/pure(Response { status = status, headers = headers, body = body })
+    | false =>
+        match Status/bodiless(status.code)
+        | true => Parse/pure(Response { status = status, headers = headers, body = x[] })
+        | false =>
+            match Bytes/len(body) == 0
+            | true => Parse/pure(Response { status = status, headers = headers, body = body })
+            | false => Parse/fail("a 205 reply carries no content")
+            end
+        end
+    end;
+
+--- A whole reply: the status line, the headers, then the body — the chunks when the transfer encoding is chunked, `Content-Length` bytes when the header is there, clamped to what arrived, and everything the peer sent otherwise. A 1xx, 204 or 304 reply has no body.
 pub let decode: Parse(Bytes, Response) =
     let status = status_line!;
     let headers = Parse/many0(header_line)!;
     let _ = Parse/bytes/literal("\r\n")!;
     let body = body_of(headers)!;
-    Parse/pure(Response { status = status, headers = headers, body = body });
+    framed(status, headers, body);
 
-let render_header((name, value): {Str, Str}) -> Str =
-    Str/flatten([name, ": ", value, "\r\n"]);
+--- Whether a reply's renderer writes the field named `name` itself: the framing fields and `Connection`. A caller's own field of one of these names is not sent.
+pub let owned(name: Name) -> Bool =
+    Name/is(name, "Content-Length") || Name/is(name, "Transfer-Encoding")
+        || Name/is(name, "Connection");
 
---- The reply as the bytes sent on the wire, its length stated.
-pub let render(r: Response) -> Bytes =
+let length_line(n: Nat) -> Bytes =
+    Str/to_bytes(Str/flatten(["Content-Length: ", Nat/to_str(n), "\r\n"]));
+
+--- The reply's head as the bytes sent on the wire, stating the length of `body`: the status line as HTTP/1.1, `Connection: close`, since a server keeps no connection, `Content-Length` unless the status is 1xx, 204 or 304, then the headers the renderer does not own, and the blank line.
+pub let render_head(r: Response, body: Bytes) -> Bytes =
     x[
-        ..Str/to_bytes(
-            Str/flatten([
-                r.status.version,
-                " ",
-                Nat/to_str(r.status.code),
-                " ",
-                r.status.reason,
-                "\r\n",
-                "Content-Length: ",
-                Nat/to_str(Bytes/len(r.body)),
-                "\r\n",
-                Str/flatten(List/map(r.headers, render_header)),
-                "\r\n"])),
-        ..r.body];
+        ..Str/to_bytes(Str/flatten(["HTTP/1.1 ", Nat/to_str(r.status.code), " "])),
+        ..r.status.reason.bytes,
+        ..Str/to_bytes("\r\nConnection: close\r\n"),
+        ..match Status/bodiless(r.status.code)
+        | true => x[]
+        | false => length_line(Bytes/len(body))
+        end,
+        ..Field/lines(r.headers, owned),
+        '\r',
+        '\n'];
+
+--- The reply as the bytes sent on the wire: its head, then its body. Every reply is one a wire can carry, so there is nothing to refuse.
+pub let render(r: Response) -> Bytes =
+    x[..render_head(r, r.body), ..r.body];
 
 --- The value of the first header named `name`, compared without case, or `none`.
-pub let header(r: Response, name: Str) -> Option(Str) =
-    lookup(r.headers, name);
+pub let header(r: Response, name: Str) -> Option(Value) =
+    Field/find(r.headers, name);
+
+--- `r` with the field `name: value` appended to its headers. A field the renderer owns — `Content-Length`, `Transfer-Encoding`, `Connection` — is kept and not sent.
+pub let with_header(
+    r: Response,
+    name: Str,
+    value: Str,
+    @Holds(Name/is_token(name)),
+    @Holds(Bytes/all(Str/to_bytes(value), Value/admits)),
+) -> Response =
+    Response { ..r, headers = [..r.headers, Field/of(name, value)], @bodied = r.bodied };
 
 --- Whether the status is a success, 200 through 299.
 pub let ok(r: Response) -> Bool =
@@ -184,55 +211,65 @@ pub let text(r: Response) -> Option(Str) =
 pub let json(r: Response) -> Result(Parse/Error, Json) =
     Parse/run(Json/decode, r.body);
 
---- The reason phrase usually sent with `code`, or the empty phrase for a code this table lacks: HTTP makes the phrase optional, and a client reads the code.
-let reason_of(code: Nat) -> Str =
-    match code
-    | 200 => "OK"
-    | 201 => "Created"
-    | 204 => "No Content"
-    | 301 => "Moved Permanently"
-    | 302 => "Found"
-    | 303 => "See Other"
-    | 307 => "Temporary Redirect"
-    | 308 => "Permanent Redirect"
-    | 400 => "Bad Request"
-    | 404 => "Not Found"
-    | 500 => "Internal Server Error"
-    | _ => ""
+--- A reply with `code`, its usual reason, `Content-Type` set to `kind`, and `body`. A status that carries no content takes no body but the empty one.
+pub let of(
+    code: Nat,
+    kind: Str,
+    body: Bytes,
+    @Holds(100 <= code && code <= 999),
+    @Holds(Bytes/all(Str/to_bytes(kind), Value/admits)),
+    @Holds(Status/carries_content(code) || Bytes/len(body) == 0),
+) -> Response =
+    Response { status = Status/of(code), headers = [Field/of("Content-Type", kind)], body = body };
+
+--- A reply with `code`, its usual reason, and neither headers nor content: what a 204 or a 304 is.
+pub let empty(code: Nat, @Holds(100 <= code && code <= 999)) -> Response =
+    Response { status = Status/of(code), headers = [], body = x[] };
+
+--- Plain text, under a status that carries content.
+pub let of_text(
+    code: Nat,
+    s: Str,
+    @Holds(100 <= code && code <= 999),
+    @content: Holds(Status/carries_content(code)),
+) -> Response =
+    match Status/carries_content(code)
+    | true => of(code, "text/plain; charset=utf-8", Str/to_bytes(s))
+    | false => match content end
     end;
 
---- A reply with `code`, its usual reason, `Content-Type` set to `kind`, and `body`.
-pub let of(code: Nat, kind: Str, body: Bytes) -> Response =
-    Response {
-        status = Status { version = "HTTP/1.1", code = code, reason = reason_of(code) },
-        headers = [("Content-Type", kind)],
-        body = body,
-    };
+--- JSON, under a status that carries content.
+pub let of_json(
+    code: Nat,
+    j: Json,
+    @Holds(100 <= code && code <= 999),
+    @content: Holds(Status/carries_content(code)),
+) -> Response =
+    match Status/carries_content(code)
+    | true => of(code, "application/json", Str/to_bytes(Json/encode(j)))
+    | false => match content end
+    end;
 
---- Plain text.
-pub let of_text(code: Nat, s: Str) -> Response =
-    of(code, "text/plain; charset=utf-8", Str/to_bytes(s));
+--- HTML, rendered as `Html/render` writes it, under a status that carries content.
+pub let of_html(
+    code: Nat,
+    h: Html,
+    @Holds(100 <= code && code <= 999),
+    @content: Holds(Status/carries_content(code)),
+) -> Response =
+    match Status/carries_content(code)
+    | true => of(code, "text/html; charset=utf-8", Str/to_bytes(Html/render(h)))
+    | false => match content end
+    end;
 
---- JSON.
-pub let of_json(code: Nat, j: Json) -> Response =
-    of(code, "application/json", Str/to_bytes(Json/encode(j)));
-
---- HTML, rendered as `Html/render` writes it.
-pub let of_html(code: Nat, h: Html) -> Response =
-    of(code, "text/html; charset=utf-8", Str/to_bytes(Html/render(h)));
-
---- A `303 See Other` to `url`.
+--- A `303 See Other` to `url`, its `Location` the URL as the wire carries it.
 pub let redirect(url: Url) -> Response =
     Response {
-        status = Status { version = "HTTP/1.1", code = 303, reason = reason_of(303) },
-        headers = [("Location", Url/to_str(url))],
+        status = Status/of(303),
+        headers = [Field { name = Name { text = "Location" }, value = Url/to_value(url) }],
         body = x[],
     };
 
 --- A `404 Not Found` with an empty body.
 pub let not_found: Response =
-    Response {
-        status = Status { version = "HTTP/1.1", code = 404, reason = reason_of(404) },
-        headers = [],
-        body = x[],
-    };
+    Response { status = Status/of(404), headers = [], body = x[] };

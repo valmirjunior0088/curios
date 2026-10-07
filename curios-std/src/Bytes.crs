@@ -233,6 +233,10 @@ pub let index_of(b: Bytes, x: Byte) -> Option(Nat) =
 pub let contains(b: Bytes, x: Byte) -> Bool =
     Option/is_some(index_of(b, x));
 
+--- Whether `pred` accepts every byte of `b`, which it does of none. It is the fold over `b` itself, so over a byte and the bytes after it it reduces to the byte's answer and the rest's: what a proof about a byte put in front reads.
+pub let all(b: Bytes, pred: (Byte) -> Bool) -> Bool =
+    match b | x[] => true | x[h, .._]; rest => pred(h) && rest end;
+
 --- `parts` with `sep` between each pair.
 pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
     List/balanced(

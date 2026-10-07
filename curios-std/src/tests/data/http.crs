@@ -1,6 +1,7 @@
--- `/std/http`'s vocabulary as data: a URL read and written, the request a client sends, the reply a client reads — by length, by chunks, or to the close — and the methods.
-use /std/{Str, Option, Result, Parse, Show, Test, Html};
-use /std/http/{Method, Url, Request, Response};
+-- `/std/http`'s vocabulary as data: a URL read and written, the fields a message holds, the request a client sends, the reply a client reads — by length, by chunks, or to the close — and the methods.
+use /std/{Str, Bytes, List, Option, Result, Parse, Show, Test, Html};
+use /std/http/{Method, Url, Field, Status, Request, Response};
+use /std/http/Field/{Name, Value};
 
 -- A URL reads into its parts; the fragment is dropped, the port is the scheme's when unwritten, and the path is `/` when empty.
 test a_url_reads_into_its_parts =
@@ -83,7 +84,7 @@ test a_request_renders_and_decodes =
                         (Request/header(d, "Host"), Request/header(d, "Accept")))),
             Result/success((
                 (Method/get(), "http://example.com/x?y=1"),
-                (Option/some("example.com"), Option/some("text/plain"))))),
+                (Option/some(Value/lit("example.com")), Option/some(Value/lit("text/plain")))))),
         Test/equal(
             Str/of_bytes(Request/render(Request/post(Url/lit("http://h:81/"), Str/to_bytes("hi")))),
             Option/some(
@@ -100,8 +101,8 @@ test a_reply_decodes_by_length =
     | success(r) =>
         Test/all([
             Test/equal(r.status.code, 200),
-            Test/equal(r.status.reason, "OK"),
-            Test/equal(Response/header(r, "content-type"), Option/some("text/plain")),
+            Test/equal(r.status.reason, Value/lit("OK")),
+            Test/equal(Response/header(r, "content-type"), Option/some(Value/lit("text/plain"))),
             Test/equal(Response/text(r), Option/some("hello")),
             Test/assert(Response/ok(r))])
     end;
@@ -133,11 +134,159 @@ test a_made_reply_renders_and_decodes =
                             Response/header(d, "Content-Type")))),
             Result/success((
                 (200, Str/to_bytes("hello")),
-                (Option/some("5"), Option/some("text/plain; charset=utf-8"))))),
+                (
+                    Option/some(Value/lit("5")),
+                    Option/some(Value/lit("text/plain; charset=utf-8")))))),
         Test/equal(Response/not_found.status.code, 404),
         Test/equal(
             Response/header(Response/of_html(200, Html/text("x")), "Content-Type"),
-            Option/some("text/html; charset=utf-8")),
+            Option/some(Value/lit("text/html; charset=utf-8"))),
         Test/equal(
             Response/header(Response/redirect(Url/lit("http://h/next")), "Location"),
-            Option/some("http://h/next"))]);
+            Option/some(Value/lit("http://h/next")))]);
+
+let wire(b: Bytes) -> Option(Str) =
+    Str/of_bytes(b);
+
+-- A reply is written as HTTP/1.1 and says `close`; it states its length unless its status is 1xx, 204 or 304, a 205's being zero; and a caller's own framing field is not sent.
+test a_reply_is_written_with_its_own_framing =
+    Test/all([
+        Test/equal(
+            wire(Response/render(Response/of_text(200, "hello"))),
+            Option/some(
+                "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 5\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nhello")),
+        Test/equal(
+            wire(Response/render(Response/empty(204))),
+            Option/some("HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n")),
+        Test/equal(
+            wire(Response/render(Response/empty(304))),
+            Option/some("HTTP/1.1 304 Not Modified\r\nConnection: close\r\n\r\n")),
+        Test/equal(
+            wire(Response/render(Response/empty(205))),
+            Option/some(
+                "HTTP/1.1 205 Reset Content\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")),
+        Test/equal(
+            wire(
+                Response/render(
+                    Response/with_header(
+                        Response/with_header(
+                            Response/with_header(
+                                Response/of_text(200, "hi"),
+                                "Content-Length",
+                                "99"),
+                            "transfer-encoding",
+                            "chunked"),
+                        "X-A",
+                        "one"))),
+            Option/some(
+                "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\nContent-Type: text/plain; charset=utf-8\r\nX-A: one\r\n\r\nhi")),
+        Test/equal(
+            wire(Response/render_head(Response/of_text(200, "hello"), Str/to_bytes("hello"))),
+            Option/some(
+                "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 5\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"))]);
+
+-- A request states its length where it has a body and wherever its method always does, and a caller's own `Host` or framing field is not sent.
+test a_request_is_written_with_its_own_framing =
+    Test/all([
+        Test/equal(
+            wire(Request/render(Request/post(Url/lit("http://h/"), x[]))),
+            Option/some(
+                "POST / HTTP/1.1\r\nHost: h\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")),
+        Test/equal(
+            wire(
+                Request/render(
+                    Request/with_header(
+                        Request/with_header(
+                            Request/post(Url/lit("http://h/"), Str/to_bytes("hi")),
+                            "Content-Length",
+                            "99"),
+                        "host",
+                        "elsewhere"))),
+            Option/some(
+                "POST / HTTP/1.1\r\nHost: h\r\nConnection: close\r\nContent-Length: 2\r\n\r\nhi"))]);
+
+-- A name is a token and a value holds no control octet but the tab: text met at run time is read as one or refused, octets past ASCII are a value's to hold, and names are one name whatever their case.
+test a_field_met_at_run_time_is_read_or_refused =
+    Test/all([
+        Test/equal(Name/of_str("X-Run-Time"), Option/some(Name { text = "x-run-time" })),
+        Test/equal(Name/of_str("X (A)"), Option/none()),
+        Test/equal(Name/of_str(""), Option/none()),
+        Test/equal(Name/of_str("one\r\nX-Injected"), Option/none()),
+        Test/equal(Value/of_str("one\r\nX-Injected: two"), Option/none()),
+        Test/equal(Value/of_bytes(x['o', 0, 'k']), Option/none()),
+        Test/assert(Option/is_some(Value/of_bytes(x['c', 'a', 'f', 0xE9, '\t', ' ']))),
+        Test/assert(Option/is_some(Value/of_str(Str/repeat("x", 65536)))),
+        Test/equal(Field/read("X-A", Str/to_bytes("one")), Option/some(Field/of("X-A", "one"))),
+        Test/equal(Field/read("X A", Str/to_bytes("one")), Option/none()),
+        Test/equal(Field/read("X-A", Str/to_bytes("one\ntwo")), Option/none())]);
+
+-- A URL holds no space, control octet or octet past ASCII: `of_str` refuses one, and a `Url` built by hand is written percent-encoded, in a request line and in a `Location` alike. Text `of_str` read is written as it is.
+test a_url_reaches_the_wire_percent_encoded =
+    let built =
+        Url {
+            ..Url/lit("http://h/"),
+            path = "/a b\r\nX-Injected: two",
+            query = Option/some("q=café"),
+        };
+    Test/all([
+        Test/assert(Result/is_failure(Url/of_str("http://h/a b"))),
+        Test/assert(Result/is_failure(Url/of_str("http://h/a\r\nX-Injected: two"))),
+        Test/assert(Result/is_failure(Url/of_str("http://h/?q=café"))),
+        Test/assert(Result/is_failure(Url/of_str("http://h\u{1}/"))),
+        Test/equal(
+            wire(Request/render(Request/get(built))),
+            Option/some(
+                "GET /a%20b%0D%0AX-Injected:%20two?q=caf%C3%A9 HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")),
+        Test/equal(
+            Response/header(Response/redirect(built), "Location"),
+            Option/some(Value/lit("http://h/a%20b%0D%0AX-Injected:%20two?q=caf%C3%A9"))),
+        Test/equal(Url/escaped("/x?y=1%20z"), Value/lit("/x?y=1%20z"))]);
+
+-- A reply that is read has the body its status carries: none on a 204 or a 304 whatever followed, and a 205 that carries content is refused, as are a status code that is not three digits and a field name that is no token.
+test a_reply_has_no_body_where_its_status_carries_none =
+    Test/all([
+        Test/equal(
+            Result/map_success(reply("HTTP/1.1 204 No Content\r\n\r\nextra"), (r) => r.body),
+            Result/success(x[])),
+        Test/equal(
+            Result/map_success(
+                reply("HTTP/1.1 304 Not Modified\r\nContent-Length: 5\r\n\r\nhello"),
+                (r) => r.body),
+            Result/success(x[])),
+        Test/assert(
+            Result/is_failure(
+                reply("HTTP/1.1 205 Reset Content\r\nContent-Length: 5\r\n\r\nhello"))),
+        Test/assert(Result/is_failure(reply("HTTP/1.1 20 OK\r\n\r\n"))),
+        Test/assert(Result/is_failure(reply("HTTP/1.1 200 OK\r\nX (A): one\r\n\r\n"))),
+        Test/assert(Result/is_failure(reply("HTTP/1.1 200 OK\r\nContent-Length : 2\r\n\r\nhi"))),
+        Test/assert(Result/is_failure(reply("HTTP/1.1 200 OK\r\nX-A: one\ntwo\r\n\r\n")))]);
+
+-- A status carries content unless it is 1xx, 204, 205 or 304, and a reply of all but the 205 among those ends at its head whatever its fields say.
+test a_status_says_whether_it_carries_content =
+    let codes = [100, 200, 204, 205, 304, 404];
+    Test/all([
+        Test/equal(
+            List/map(codes, Status/carries_content),
+            [false, true, false, false, false, true]),
+        Test/equal(List/map(codes, Status/bodiless), [true, false, true, false, true, false]),
+        Test/equal(Status/of(404).reason, Value/lit("Not Found")),
+        Test/equal(Status/of(299).reason, Value/empty)]);
+
+let request(s: Str) -> Result(Parse/Error, Request) =
+    Parse/run(Request/decode, Str/to_bytes(s));
+
+-- A request whose field line no wire carries is refused: whitespace before the colon, a line that begins with whitespace, a name that is no token, and a value holding a line feed or a NUL.
+test a_request_with_a_field_line_no_wire_carries_is_refused =
+    Test/all([
+        Test/assert(Result/is_success(request("GET / HTTP/1.1\r\nHost: h\r\nX-A: one\r\n\r\n"))),
+        Test/assert(
+            Result/is_failure(
+                request("POST / HTTP/1.1\r\nHost: h\r\nContent-Length : 2\r\n\r\nhi"))),
+        Test/assert(Result/is_failure(request("GET / HTTP/1.1\r\n X-A: one\r\nHost: h\r\n\r\n"))),
+        Test/assert(
+            Result/is_failure(request("GET / HTTP/1.1\r\nHost: h\r\nX-A: one\r\n two\r\n\r\n"))),
+        Test/assert(Result/is_failure(request("GET / HTTP/1.1\r\nHost: h\r\nX (A): one\r\n\r\n"))),
+        Test/assert(
+            Result/is_failure(request("GET / HTTP/1.1\r\nHost: h\r\nX-A: one\ntwo\r\n\r\n"))),
+        Test/assert(
+            Result/is_failure(request("GET / HTTP/1.1\r\nHost: h\r\nX-A: one\u{0}two\r\n\r\n")))]);

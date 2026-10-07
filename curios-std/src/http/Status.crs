@@ -1,0 +1,58 @@
+use /std/{Nat, Bool, Spell};
+use /std/Bool/{Holds};
+use /std/ops/{Eql};
+use /std/http/Field/{Value};
+
+--- Whether a reply of status `code` has no body whatever its fields say: a 1xx, 204 or 304 reply ends at its head (RFC 9112 §6.3 rule 1).
+pub let bodiless(code: Nat) -> Bool =
+    code < 200 || code == 204 || code == 304;
+
+--- Whether a reply of status `code` may carry content: every status but the bodiless ones and 205, whose reply a server sends none in (RFC 9110 §15.3.6).
+pub let carries_content(code: Nat) -> Bool =
+    Bool/not(bodiless(code) || code == 205);
+
+--- A reply's status: its code, three digits, and its reason phrase, which a client ignores and which is octets like a field's value. The version is no part of it: a reply is written as HTTP/1.1, and one that is read was framed by the version it stated.
+pub struct Status: pub Type {
+    code: Nat,
+    --- Why the code is three digits.
+    @three: Holds(100 <= code && code <= 999),
+    reason: Value,
+}
+
+satisfy Eql(Status) {
+    ..
+}
+
+satisfy Spell(Status) {
+    ..
+}
+
+--- The reason phrase usually sent with `code`, or the empty phrase for a code this table lacks: HTTP makes the phrase optional, and a client reads the code.
+pub let reason_of(code: Nat) -> Value =
+    match code
+    | 100 => Value/lit("Continue")
+    | 200 => Value/lit("OK")
+    | 201 => Value/lit("Created")
+    | 204 => Value/lit("No Content")
+    | 205 => Value/lit("Reset Content")
+    | 301 => Value/lit("Moved Permanently")
+    | 302 => Value/lit("Found")
+    | 303 => Value/lit("See Other")
+    | 304 => Value/lit("Not Modified")
+    | 307 => Value/lit("Temporary Redirect")
+    | 308 => Value/lit("Permanent Redirect")
+    | 400 => Value/lit("Bad Request")
+    | 404 => Value/lit("Not Found")
+    | 408 => Value/lit("Request Timeout")
+    | 413 => Value/lit("Content Too Large")
+    | 414 => Value/lit("URI Too Long")
+    | 431 => Value/lit("Request Header Fields Too Large")
+    | 500 => Value/lit("Internal Server Error")
+    | 501 => Value/lit("Not Implemented")
+    | 505 => Value/lit("HTTP Version Not Supported")
+    | _ => Value/empty
+    end;
+
+--- The status `code` with its usual reason.
+pub let of(code: Nat, @Holds(100 <= code && code <= 999)) -> Status =
+    Status { code = code, reason = reason_of(code) };

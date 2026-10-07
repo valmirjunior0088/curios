@@ -42,6 +42,13 @@ pub let eq_of_holds(b: Bool, h: Holds(b)) -> Eq()(b, true) =
 pub let holds_of_eq(b: Bool, p: Eq()(b, true)) -> Holds(b) =
     Eq/subst((x: Bool) => Holds(x), Eq/sym(p), True/qed());
 
+--- Two decisions that hold, as one: `a && b` holds where `a` does and `b` does. By cases on `a`, since `&&` reduces at each.
+pub let both(a: Bool, b: Bool, p: Holds(a), q: Holds(b)) -> Holds(a && b) =
+    match a
+    | true => q
+    | false => match p end
+    end;
+
 satisfy Eql(Bool) {
     eql = eql,
     neq = xor,

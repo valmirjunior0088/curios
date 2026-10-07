@@ -1,6 +1,7 @@
 use /std/{Bytes, Byte, Str, Nat, Bool, Option, Result, Try, Async, Io, Parse};
 use /std/tcp/{Socket, Listener};
 use /std/http/{Request, Response};
+use /std/http/Field/{Value};
 
 --- A bound server: the listener its connections arrive on.
 pub struct Server: Type {
@@ -52,7 +53,9 @@ let needed(acc: Bytes, head_end: Nat) -> Option(Nat) =
         | success(request) =>
             let length =
                 Option/unwrap_or(
-                    Option/bind(Request/header(request, "Content-Length"), Nat/of_str),
+                    Option/bind(
+                        Option/bind(Request/header(request, "Content-Length"), Value/to_str),
+                        Nat/of_str),
                     0);
             Option/some(head_len + length)
         end

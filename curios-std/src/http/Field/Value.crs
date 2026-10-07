@@ -1,0 +1,60 @@
+use /std/{Str, Bytes, Byte, Bool, Option, Spell};
+use /std/Bool/{Holds};
+use /std/ops/{Eql};
+
+--- Whether `b` may stand in a field value: the tab, the space, and every octet past them but DEL, obs-text included (RFC 9110 §5.5). No other control octet may, a line's end least of all.
+pub let admits(b: Byte) -> Bool =
+    let n = Byte/to_nat(b);
+    n == '\t' || n >= 32 && n != 127;
+
+--- A field's value: the octets the wire carries, none of them a control octet but the tab, so no value a message holds can end its line. It is octets and not text, since a value may hold obs-text; `to_str` reads one that is. A literal's is decided where it is written, and octets met at run time are read by `of_bytes`.
+pub struct Value: pub Type {
+    --- The octets, as the wire carries them.
+    bytes: Bytes,
+    --- Why every octet may stand in a value.
+    @clean: Holds(Bytes/all(bytes, admits)),
+}
+
+satisfy Eql(Value) {
+    ..
+}
+
+satisfy Spell(Value) {
+    ..
+}
+
+--- The value with no octets.
+pub let empty: Value =
+    Value { bytes = x[] };
+
+--- The value the literal `s` spells.
+pub let lit(s: Str, @Holds(Bytes/all(Str/to_bytes(s), admits))) -> Value =
+    Value { bytes = Str/to_bytes(s) };
+
+--- The value `b` holds, or `none` where an octet of it may not stand in one.
+pub let of_bytes(b: Bytes) -> Option(Value) =
+    match Bytes/all(b, admits)
+    | true => Option/some(Value { bytes = b })
+    | false => Option/none()
+    end;
+
+--- The value `s` spells, or `none` where a character of it may not stand in one.
+pub let of_str(s: Str) -> Option(Value) =
+    of_bytes(Str/to_bytes(s));
+
+--- The value as text, or `none` unless it is UTF-8.
+pub let to_str(v: Value) -> Option(Str) =
+    Str/of_bytes(v.bytes);
+
+--- One octet a value may hold.
+pub struct Octet: pub Type {
+    byte: Byte,
+    @clean: Holds(admits(byte)),
+}
+
+--- `v` with `o` ahead of it: how a value is built an octet at a time, each carrying its own reason.
+pub let cons(o: Octet, v: Value) -> Value =
+    Value {
+        bytes = x[o.byte, ..v.bytes],
+        @Bool/both(admits(o.byte), Bytes/all(v.bytes, admits), o.clean, v.clean),
+    };

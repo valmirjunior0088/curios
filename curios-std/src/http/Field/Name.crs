@@ -1,0 +1,52 @@
+use /std/{Str, Bytes, Byte, Nat, Bool, Option, Spell};
+use /std/Bool/{Holds};
+use /std/ops/{Eql};
+
+--- Whether `b` may stand in a token (RFC 9110 §5.6.2): a letter, a digit, or one of ``!#$%&'*+-.^_`|~``.
+pub let is_tchar(b: Byte) -> Bool =
+    let n = Byte/to_nat(b);
+    Nat/in_range(n, 'a', 'z') || Nat/in_range(n, 'A', 'Z') || Nat/in_range(n, '0', '9') || n == '!'
+        || n == '#'
+        || n == '$'
+        || n == '%'
+        || n == '&'
+        || n == '\''
+        || n == '*'
+        || n == '+'
+        || n == '-'
+        || n == '.'
+        || n == '^'
+        || n == '_'
+        || n == '`'
+        || n == '|'
+        || n == '~';
+
+--- Whether `s` is a token: one character or more, each a token's.
+pub let is_token(s: Str) -> Bool =
+    Bool/not(Str/is_empty(s)) && Bytes/all(Str/to_bytes(s), is_tchar);
+
+--- A field's name: a token, so no name a message holds can end its line or its head. A literal's is decided where it is written, and text met at run time is read by `of_str`.
+pub struct Name: pub Type {
+    --- The name as written, its casing the writer's.
+    text: Str,
+    --- Why the text is a token.
+    @token: Holds(is_token(text)),
+}
+
+--- Names are compared without case, as RFC 9110 §5.1 reads them: `Content-Type` and `content-type` are one name.
+satisfy Eql(Name) {
+    eql(a, b) = Str/eql_ascii_ci(a.text, b.text),
+    neq(a, b) = Bool/not(Str/eql_ascii_ci(a.text, b.text)),
+}
+
+satisfy Spell(Name) {
+    ..
+}
+
+--- The name `s` spells, or `none` where it is no token.
+pub let of_str(s: Str) -> Option(Name) =
+    match is_token(s) | true => Option/some(Name { text = s }) | false => Option/none() end;
+
+--- Whether `n` is the name `text` spells, compared without case.
+pub let is(n: Name, text: Str) -> Bool =
+    Str/eql_ascii_ci(n.text, text);
