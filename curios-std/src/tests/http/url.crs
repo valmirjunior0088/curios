@@ -1,5 +1,5 @@
 -- A URL read into its parts and written back, and its components encoded and decoded.
-use /std/{Str, Option, Result, Test};
+use /std/{Str, Option, Result, Eq, Test};
 use /std/http/{Url};
 
 -- A URL reads into its parts; the fragment is dropped, the port is the scheme's when unwritten, and the path is `/` when empty.
@@ -48,7 +48,10 @@ test components_encode_and_decode =
     Test/all([
         Test/equal(Url/encode("a b/c~d"), "a%20b%2Fc~d"),
         Test/equal(Url/decode("a%20b+c"), Option/some("a b c")),
+        Test/equal(Url/decode("c%C3%A9"), Option/some("cé")),
         Test/equal(Url/decode("%zz"), Option/none()),
+        Test/equal(Url/decode("a%2"), Option/none()),
+        Test/equal(Url/decode("a%"), Option/none()),
         Test/equal(
             Url/query_pairs(Url/with_query(Url/lit("http://h/"), [("q", "a b"), ("n", "1")])),
             Option/some([("q", "a b"), ("n", "1")])),
@@ -58,3 +61,10 @@ test components_encode_and_decode =
         Test/equal(Url/query_pairs(Url/lit("http://h/?")), Option/some([])),
         Test/equal(Url/query_pairs(Url/lit("http://h/?a=%zz&b=2")), Option/none()),
         Test/equal(Url/query_pairs(Url/lit("http://h/?a=%C3&b=2")), Option/none())]);
+
+-- The decoding walk recurses on the bytes it reads, so it is total and a type may run it: what it answers is a proof the kernel discharges, an escape cut short among them.
+let _decodes_in_a_type: Eq()(Url/decode("a%20b+c%C3%A9"), Option/some("a b cé")) =
+    Eq/refl();
+
+let _refuses_a_short_escape_in_a_type: Eq()(Url/decode("a%2"), Option/none()) =
+    Eq/refl();

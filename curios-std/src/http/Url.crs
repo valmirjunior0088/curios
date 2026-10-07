@@ -282,34 +282,35 @@ let hex_value(byte: Byte) -> Option({v: Nat, ok: Holds(v < 16)}) =
     | none() => Option/none()
     end;
 
-let decode_at(b: Bytes, i: Nat, acc: Bytes, fuel: Nat) -> Option(Bytes) =
-    match fuel
-    | 0 => Option/some(acc)
-    | rest + 1 =>
-        match Bytes/try_get(b, i)
-        | none() => Option/some(acc)
-        | some(byte) =>
-            match Byte/to_nat(byte)
-            | '+' => decode_at(b, i + 1, x[..acc, ' '], rest)
-            | '%' =>
-                match (
-                    Option/bind(Bytes/try_get(b, i + 1), hex_value),
-                    Option/bind(Bytes/try_get(b, i + 2), hex_value))
-                | (some(hi), some(lo)) =>
-                    decode_at(b, i + 3, x[..acc, Nat/to_byte(hi.v * 16 + lo.v)], rest)
-                | (some(_), none()) => Option/none()
-                | (none(), _) => Option/none()
+let decode_at(rest: Bytes, acc: Bytes) -> Option(Bytes) =
+    match rest
+    | x[] => Option/some(acc)
+    | x[byte, ..after] =>
+        match Byte/to_nat(byte)
+        | '+' => decode_at(after, x[..acc, ' '])
+        | '%' =>
+            match after
+            | x[] => Option/none()
+            | x[high, ..low_on] =>
+                match low_on
+                | x[] => Option/none()
+                | x[low, ..onward] =>
+                    match (hex_value(high), hex_value(low))
+                    | (some(hi), some(lo)) =>
+                        decode_at(onward, x[..acc, Nat/to_byte(hi.v * 16 + lo.v)])
+                    | (some(_), none()) => Option/none()
+                    | (none(), _) => Option/none()
+                    end
                 end
-            | _ => decode_at(b, i + 1, x[..acc, byte], rest)
             end
+        | _ => decode_at(after, x[..acc, byte])
         end
     end;
 
 --- `component` percent-decoded, `+` read as a space, or `none` when an escape is malformed or the result is not text.
 pub let decode(component: Str) -> Option(Str) =
-    let b = Str/to_bytes(component);
     Option/bind(
-        decode_at(b, 0, x[], Bytes/len(b) + 1),
+        decode_at(Str/to_bytes(component), x[]),
         (decoded) => Result/to_option(Str/of_bytes(decoded)));
 
 --- The query as decoded pairs: `a=1&b=x+y` is `[("a", "1"), ("b", "x y")]`. A pair without `=` is a name with an empty value and an empty piece — `a=1&&b=2`, or a query that is empty — is no pair, as the form encoding reads them; `none` where a name or a value does not decode, since a query read short of a pair is not the query that was sent.
