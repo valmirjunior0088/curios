@@ -4,6 +4,14 @@ use /std/{Nat, Bool, Option, Str, Show, Spell, Monad, Ordering, Ord};
 use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp};
 
+--- That a value is an element of a list, as a proposition, with its laws.
+pub mod Member;
+pub use Member/{let Member};
+
+--- That one list is another rearranged, with its laws.
+pub mod Permutation;
+pub use Permutation/{let Permutation};
+
 --- The element at `i`, or `none` past the end.
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
     match i < len(a) | true => Option/some(get(a, i)) | false => Option/none() end;

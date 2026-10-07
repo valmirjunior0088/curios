@@ -1,0 +1,109 @@
+use /std/{List, Eq};
+use /std/List/{Member};
+
+--- One list is the other rearranged: the same elements, each as many times.
+---
+--- An inductive relation, because it has no decided form: `Eql` owes no proof that its answer is equality, so counting occurrences would state nothing.
+pub induct Permutation(@T: Type): (List(T), List(T)) -> pub Prop
+--- The empty list, of itself.
+| nil(): ([], [])
+--- One element ahead of both.
+| skip(@x: T, @l: List(T), @m: List(T), rest: Permutation()(l, m)): ([x, ..l], [x, ..m])
+--- The first two elements exchanged.
+| swap(@x: T, @y: T, @l: List(T)): ([y, x, ..l], [x, y, ..l])
+--- One rearrangement after another.
+| trans(
+    @l: List(T),
+    @m: List(T),
+    @n: List(T),
+    first: Permutation()(l, m),
+    second: Permutation()(m, n)): (l, n)
+end
+
+pub use Permutation/*;
+
+--- A list is a permutation of itself.
+pub let refl(@T: Type, l: List(T)) -> Permutation()(l, l) =
+    match l: (m) => Permutation()(m, m)
+    | [] => Permutation/nil()
+    | [_, .._]; ih => Permutation/skip(ih)
+    end;
+
+--- A permutation read the other way.
+pub let sym(@T: Type, @l: List(T), @m: List(T), p: Permutation()(l, m)) -> Permutation()(m, l) =
+    match p: (a, b, _) => Permutation()(b, a)
+    | nil() => Permutation/nil()
+    | skip(rest) => Permutation/skip(sym(rest))
+    | swap() => Permutation/swap()
+    | trans(first, second) => Permutation/trans(sym(second), sym(first))
+    end;
+
+--- A permutation behind a shared prefix.
+pub let prefixed(
+    @T: Type,
+    prefix: List(T),
+    @l: List(T),
+    @m: List(T),
+    p: Permutation()(l, m),
+) -> Permutation()([..prefix, ..l], [..prefix, ..m]) =
+    match prefix: (q) => Permutation()([..q, ..l], [..q, ..m])
+    | [] => p
+    | [_, .._]; ih => Permutation/skip(ih)
+    end;
+
+--- A permutation ahead of a shared suffix.
+pub let suffixed(
+    @T: Type,
+    suffix: List(T),
+    @l: List(T),
+    @m: List(T),
+    p: Permutation()(l, m),
+) -> Permutation()([..l, ..suffix], [..m, ..suffix]) =
+    match p: (a, b, _) => Permutation()([..a, ..suffix], [..b, ..suffix])
+    | nil() => refl(suffix)
+    | skip(rest) => Permutation/skip(suffixed(suffix, rest))
+    | swap() => Permutation/swap()
+    | trans(first, second) => Permutation/trans(suffixed(suffix, first), suffixed(suffix, second))
+    end;
+
+--- An element behind a run, moved to its front.
+pub let fronted(
+    @T: Type,
+    y: T,
+    run: List(T),
+    rest: List(T),
+) -> Permutation()([..run, y, ..rest], [y, ..run, ..rest]) =
+    match run: (m) => Permutation()([..m, y, ..rest], [y, ..m, ..rest])
+    | [] => refl([y, ..rest])
+    | [_, .._]; ih => Permutation/trans(Permutation/skip(ih), Permutation/swap())
+    end;
+
+--- A member of a list is a member of its permutation.
+pub let member(
+    @T: Type,
+    @z: T,
+    @l: List(T),
+    @m: List(T),
+    p: Permutation()(l, m),
+    i: Member()(z, l),
+) -> Member()(z, m) =
+    match p: (a, b, _) => (i: Member()(z, a)) -> Member()(z, b)
+    | nil() => (i) => i
+    | skip(@_, @_, @m, rest) =>
+        (i) =>
+            Member/uncons(
+                i,
+                (e) => Eq/subst((k: T) => Member()(z, [k, ..m]), e, Member/here()),
+                (j) => Member/there(member(rest, j)))
+    | swap(@_, @y, @l) =>
+        (i) =>
+            Member/uncons(
+                i,
+                (e) => Member/there(Eq/subst((k: T) => Member()(z, [k, ..l]), e, Member/here())),
+                (j) =>
+                    Member/uncons(
+                        j,
+                        (e) => Eq/subst((k: T) => Member()(z, [k, y, ..l]), e, Member/here()),
+                        (k) => Member/there(Member/there(k))))
+    | trans(first, second) => (i) => member(second, member(first, i))
+    end(i);

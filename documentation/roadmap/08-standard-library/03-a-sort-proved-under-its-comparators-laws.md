@@ -18,7 +18,7 @@ It waits on no other spec.
 - **`List/sort` stops at five thousand elements and costs the square of its input.** `insert_by` (`curios-std/src/List.crs`) recurses under a cons as deep as the place it inserts at: counted at `bf21a9065`, under the stack a program then ran on, 4,500 descending elements sort and 5,000 stop on `wasm trap: call stack exhausted`. Each insertion peels the list the one before it extended, the rope's quadratic alternation, so a list already in order costs what any other does. `sort` has no caller outside `curios-std`'s `tests/`.
 - **What the sort promises is held by eight examples**, four in `tests/aggregates/list.crs` and four in `tests/flt.crs`. Nothing states that its answer is its input rearranged, that it is in order, or that elements the comparator ties keep their order, which its documentation promises.
 - **No comparator in `/std` has a stated law.** That `Nat/ord` answers `gt` one way exactly where it answers `lt` the other is provable and unstated, and [the numeric laws](../04-arithmetic/03-numeric-laws.md) state it at `Nat` and `Int`.
-- **`/std` has no proposition a list's order could be stated in**: no permutation, no membership as a proposition, no decision that a list is in order.
+- **`/std` has no decision that a list is in order**, in which a sort's answer could be stated beside `/std/List/Permutation`.
 
 ## Prior art
 
@@ -40,34 +40,7 @@ It waits on no other spec.
 
 ## Stages
 
-Each lands alone and is one commit.
-
-**Stage 1 — a permutation and membership.** `/std/List/Permutation` and `/std/List/Member`.
-
-```crs
-pub induct Permutation(@T: Type): (List(T), List(T)) -> pub Prop
-| nil(): ([], [])
-| skip(@x: T, @l: List(T), @m: List(T), rest: Permutation()(l, m)): ([x, ..l], [x, ..m])
-| swap(@x: T, @y: T, @l: List(T)): ([y, x, ..l], [x, y, ..l])
-| trans(
-    @l: List(T),
-    @m: List(T),
-    @n: List(T),
-    first: Permutation()(l, m),
-    second: Permutation()(m, n),
-): (l, n)
-end
-
-pub induct Member(@T: Type): (T, List(T)) -> pub Prop
-| here(@x: T, @l: List(T)): (x, [x, ..l])
-| there(@x: T, @y: T, @l: List(T), rest: Member()(x, l)): (x, [y, ..l])
-end
-```
-
-- `Permutation`: `refl`, `sym`, a permutation under a shared prefix and under a shared suffix, an element moved from behind a run to its front, and a member carried across.
-- `Member`: its inversion at a cons, a member of either part of a concatenation as a member of the whole, and the split of a member of a concatenation into its two cases.
-
-Check: `/std` builds, and rows of `curios-std`'s `aggregates` unit state a permutation of a closed list and refuse nothing a reader would write.
+Each lands alone and is one commit. `/std/List/Permutation` and `/std/List/Member` have landed, with their laws.
 
 **Stage 2 — order as a decision.**
 

@@ -1,5 +1,6 @@
 -- The `List` functions every peer ships: structural predicates and searches, the fold-shaped builders, `traverse` over a monad, and the stable sort.
 use /std/{Nat, Str, Bool, List, Option, Eq, Test};
+use /std/List/{Member, Permutation};
 
 test predicates_and_searches_answer_over_the_elements =
     let l = [3, 1, 4, 1, 5];
@@ -70,3 +71,16 @@ let _find_computes_in_a_type: Eq()(List/find([1, 2, 3], (x: Nat) => x > 1), Opti
 
 let _any_computes_in_a_type: Eq()(List/any([1, 2, 3], (x: Nat) => Nat/is_even(x)), true) =
     Eq/refl();
+
+-- Membership and permutation are propositions a proof builds by naming the place or the exchange, and each is stated here of closed lists as a reader would write it, every implicit left to the lists.
+let _the_second_of_three_is_a_member: Member()(2, [1, 2, 3]) =
+    Member/there(Member/here());
+
+let _a_swap_is_a_permutation: Permutation()([2, 1, 3], [1, 2, 3]) =
+    Permutation/swap();
+
+let _a_rotation_is_a_permutation: Permutation()([1, 2, 3], [3, 1, 2]) =
+    Permutation/trans(Permutation/skip(Permutation/swap()), Permutation/swap());
+
+let _a_member_is_carried_across_a_permutation: Member()(1, [3, 1, 2]) =
+    Permutation/member(_a_rotation_is_a_permutation, Member/here());

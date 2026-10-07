@@ -1,0 +1,84 @@
+use /std/{List, Eq};
+use /std/Bool/{True, False};
+
+--- `x` is an element of a list, as a proposition: the place it stands at is the proof.
+---
+--- Where `contains` decides it through an `Eql` witness, this states it of any type, and a proof about a list's elements takes it apart.
+pub induct Member(@T: Type): (T, List(T)) -> pub Prop
+--- At the head.
+| here(@x: T, @l: List(T)): (x, [x, ..l])
+--- In the tail.
+| there(@x: T, @y: T, @l: List(T), rest: Member()(x, l)): (x, [y, ..l])
+end
+
+pub use Member/*;
+
+--- An empty list has no member.
+pub let absent(@T: Type, @x: T, i: Member()(x, [])) -> False =
+    match i end;
+
+--- A member of a cons is its head or a member of its tail, and `P` follows from whichever it is.
+---
+--- The two cases are continuations, `/std` having no disjunction.
+pub let uncons(
+    @T: Type,
+    @P: Prop,
+    @x: T,
+    @h: T,
+    @l: List(T),
+    i: Member()(x, [h, ..l]),
+    head: (Eq()(x, h)) -> P,
+    tail: (Member()(x, l)) -> P,
+) -> P =
+    match i: (y, m, _) =>
+        match m: (_) => Prop
+        | [] => True
+        | [k, ..r] => (head: (Eq()(y, k)) -> P, tail: (Member()(y, r)) -> P) -> P
+        end
+    | here() => (head, _) => head(Eq/refl())
+    | there(rest) => (_, tail) => tail(rest)
+    end(head, tail);
+
+--- A member of `a` is a member of `a` followed by `b`.
+pub let left(
+    @T: Type,
+    @x: T,
+    @a: List(T),
+    b: List(T),
+    i: Member()(x, a),
+) -> Member()(x, [..a, ..b]) =
+    match i: (y, l, _) => Member()(y, [..l, ..b])
+    | here() => Member/here()
+    | there(rest) => Member/there(left(b, rest))
+    end;
+
+--- A member of `b` is a member of `a` followed by `b`.
+pub let right(
+    @T: Type,
+    @x: T,
+    a: List(T),
+    @b: List(T),
+    i: Member()(x, b),
+) -> Member()(x, [..a, ..b]) =
+    match a: (m) => Member()(x, [..m, ..b]) | [] => i | [_, .._]; ih => Member/there(ih) end;
+
+--- A member of `a` followed by `b` is a member of one of the two, and `P` follows from whichever it is.
+pub let split(
+    @T: Type,
+    @P: Prop,
+    @x: T,
+    a: List(T),
+    @b: List(T),
+    i: Member()(x, [..a, ..b]),
+    first: (Member()(x, a)) -> P,
+    second: (Member()(x, b)) -> P,
+) -> P =
+    match a: (m) => (i: Member()(x, [..m, ..b]), first: (Member()(x, m)) -> P) -> P
+    | [] => (i, _) => second(i)
+    | [_, ..t]; ih =>
+        (i, first) =>
+            uncons(
+                i,
+                (e) => first(Eq/subst((k: T) => Member()(x, [k, ..t]), e, Member/here())),
+                (rest) => ih(rest, (j) => first(Member/there(j))))
+    end(i, first);
