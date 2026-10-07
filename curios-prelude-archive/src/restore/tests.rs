@@ -8,7 +8,7 @@ use {
     curios_core::{
         Bound, Cases, Enter, Global, Item, Match, Subterm, Term, Variance, Visit, Zonked,
     },
-    curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedArena, Resumed, erase_unit},
+    curios_elab::{Context, DEFAULT_STEP_BUDGET, Erasures, erase_unit},
     curios_text::SYNTAX,
     curios_unit::{Record, Uncertified, segments},
     curios_utilities::digest,
@@ -156,15 +156,13 @@ fn each_record_digests_the_unit_segment_it_sits_ahead_of() {
     }
 }
 
-/// The last root's, because the arena is cumulative: each unit's erasure resumes over the one before it, so the prefix's whole artifact is the arena the last root carries.
+/// Every root's, because an erased form is its item's: no root holds another's, so each has its own to show.
 #[test]
-fn ersd_clones_are_fresh() {
+fn every_root_holds_its_items_erased_forms() {
     with_prelude(|prelude| {
-        let last = prelude.last().expect("the prelude has roots");
-        let first = last.arena();
-        assert!(!first.is_empty());
-        drop(first);
-        assert!(!last.arena().is_empty());
+        for root in prelude {
+            assert!(!root.erased().is_empty());
+        }
     });
 }
 
@@ -322,7 +320,7 @@ fn kernel_memo_parity() {
 ///
 /// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover is stated where it prints: the elaboration figures come from the build script's own `profile.tsv` and need no probe, and the witness inventory is a term walk this does not do.
 ///
-/// A range is two runs, and the spread between them is part of the figure. The clone alone is averaged, over 100, because at a few milliseconds one sample is inside the noise band.
+/// A range is two runs, and the spread between them is part of the figure.
 ///
 /// # What it last printed
 ///
@@ -330,8 +328,7 @@ fn kernel_memo_parity() {
 ///
 /// | What | Measured | Run |
 /// | --- | --- | --- |
-/// | Cold restore — bytecheck, then deserializing the prepared Text state, the Core and the erased prefix | 34.1–35.3 ms | A |
-/// | Erased-prefix clone, taken once per compile | 2.0–2.1 ms, mean of 100 | A |
+/// | Cold restore — bytecheck, then deserializing the prepared Text state, the Core and the items' erased forms | 34.1–35.3 ms | A |
 /// | Re-erasing one whole unit over the stored Core | 621 ms | B |
 /// | Certifying one whole unit | 12.6 s, 0 refusals | C |
 /// | Heaviest declaration that certification makes | 512 455 units, peak depth 6 | C |
@@ -351,29 +348,16 @@ fn stored_prelude_measurements() {
     .expect("the restoring thread");
 
     with_prelude(|prelude| {
-        // Averaged, because a single shot at this magnitude is not a measurement: the other three take long enough that one sample says something, and this one does not. The last root's arena is the whole prefix's — see `ersd_clones_are_fresh`.
-        const CLONES: u32 = 100;
-        let last = prelude.last().expect("the prelude has roots");
-        let start = Instant::now();
-        for _ in 0..CLONES {
-            drop(last.arena());
-        }
-        let clone = start.elapsed() / CLONES;
-
         println!("\n=== timings, over the stored images ===");
         println!(
             "  cold restore                 {:>10.1?}   (both roots)",
             cold
         );
-        println!(
-            "  erased-prefix clone          {:>10.1?}   (mean of {CLONES})",
-            clone
-        );
 
         // Per root, against the roots before it: the figures are per *unit*, and the prelude is two of them, so summing them would report a cost no single operation has.
         let mut globals = Globals::default();
         let mut cores = Vec::new();
-        let mut arena = ErasedArena::default();
+        let mut units = Vec::new();
 
         for root in prelude {
             let core = root.core();
@@ -386,12 +370,8 @@ fn stored_prelude_measurements() {
 
             let mut erasure_context = Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
             let start = Instant::now();
-            let erased = erase_unit(
-                &mut erasure_context,
-                Resumed::of(&cores, arena.clone()),
-                &zonked,
-            )
-            .expect("a stored prelude root re-erases");
+            erase_unit(&mut erasure_context, Erasures::of(&cores, &units), &zonked)
+                .expect("a stored prelude root re-erases");
             let erasure = start.elapsed();
 
             let start = Instant::now();
@@ -440,7 +420,7 @@ fn stored_prelude_measurements() {
 
             globals.mount(core, &rechecked.certification);
             cores.push(core);
-            arena = erased;
+            units.push(root.erased());
         }
 
         println!(

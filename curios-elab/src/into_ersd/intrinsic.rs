@@ -56,7 +56,7 @@ fn grain_element_type(grain: Grain) -> Term {
     }
 }
 
-impl Lowering {
+impl Lowering<'_> {
     /// Resolve an outcome through the declaration's ordinary registered layout.
     fn outcome_constructor(
         &mut self,
@@ -163,7 +163,7 @@ impl Lowering {
 
 /// Transcribe one intrinsic. Every arm reads its runtime shapes off the types the node itself carries — a list literal included, whose element-type slot elaboration already solved.
 pub(super) fn erase_intrinsic(
-    lowering: &mut Lowering,
+    lowering: &mut Lowering<'_>,
     context: &mut Context,
     intrinsic: &Intrinsic,
     hint: Option<&str>,

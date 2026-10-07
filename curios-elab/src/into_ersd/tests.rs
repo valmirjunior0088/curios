@@ -82,10 +82,10 @@ fn try_erase(
 ) -> Result<curios_ersd::Module, Error> {
     erase_program(
         context,
-        Resumed::of(&[], ErasedArena::default()),
+        Erasures::nothing(),
         &zonked(&stating(program, type_)),
     )
-    .map(ErasedArena::into_module)
+    .map(ErasedProgram::into_module)
 }
 
 fn erase(context: &mut Context, program: &Program, type_: Term) -> curios_ersd::Module {
@@ -323,8 +323,8 @@ fn calls(erased: &curios_ersd::Module) -> usize {
         .count()
 }
 
-/// `identity : (Nat) -> Nat`, stamped `stamp` by elaboration, and an entry applying it — erased through the unit path production takes, as the arena a sealed program is.
-fn identity_arena(stamp: Totality) -> ErasedArena {
+/// `identity : (Nat) -> Nat`, stamped `stamp` by elaboration, and an entry applying it — erased through the path production takes, as the program it links to.
+fn identity_arena(stamp: Totality) -> ErasedProgram {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let nat = Term::intrinsic(Intrinsic::NatType);
@@ -341,7 +341,7 @@ fn identity_arena(stamp: Totality) -> ErasedArena {
 
     erase_program(
         &mut context,
-        Resumed::of(&[], ErasedArena::default()),
+        Erasures::nothing(),
         &zonked(&stating(&module(items, body), nat)),
     )
     .expect("the program erases")
@@ -487,38 +487,86 @@ fn erasure_is_deterministic() {
     assert_eq!(build(&mut context), build(&mut self::context()));
 }
 
-/// What an erasure hands on holds no binder it opened. A binder's identity counts the binders its context had minted before it, so two erasures of one program part on every binder they kept, and a later unit resuming over the arena would hold identities it mints again.
+/// What an item's erasure hands on holds no binder it opened. A binder's identity counts the binders its context had minted before it, so two erasures of one unit would part on every binder they kept, and an item that read the erased form would hold an identity it mints again.
 #[test]
-fn an_arena_keeps_no_binder_its_erasure_opened() {
-    let arena = |context: &mut Context| {
+fn an_erased_form_keeps_no_binder_its_erasure_opened() {
+    let erased = |context: &mut Context| {
         let x = context.fresh(Some("x"));
+        let y = context.fresh(Some("y"));
+        let nat = Term::intrinsic(Intrinsic::NatType);
         // One constant: the module indexes its constants by hash, and two would print in an order of the table's own.
-        let body = Term::let_(
-            &x,
-            Term::intrinsic(Intrinsic::NatType),
-            nat_lit(2),
-            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), Term::free_var(&x))),
+        let body = Term::func(
+            [(y, nat.clone())],
+            Term::let_(
+                &x,
+                nat.clone(),
+                nat_lit(2),
+                Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), Term::free_var(&y))),
+            ),
         );
-        let program = stating(
-            &module(Vec::new(), body),
-            Term::intrinsic(Intrinsic::NatType),
-        );
-
-        erase_program(
-            context,
-            Resumed::of(&[], ErasedArena::default()),
-            &zonked(&program),
+        let unit = module(
+            vec![definition(
+                "bump",
+                Term::func_type([(y, nat.clone())], nat.clone()),
+                body,
+            )],
+            nat_lit(0),
         )
-        .expect("the program erases")
+        .module;
+
+        erase_unit(context, Erasures::nothing(), &zonked(&unit)).expect("the unit erases")
     };
-    let first = arena(&mut context());
+    let first = erased(&mut context());
     let mut later = context();
     for _ in 0..8 {
         later.fresh(None);
     }
-    let second = arena(&mut later);
+    let second = erased(&mut later);
 
     assert_eq!(format!("{first:?}"), format!("{second:?}"));
+}
+
+/// A unit erased over a baseline erases the items it is told to redo and no other. `kept` is given another body since the baseline was erased and is not named among the redone, so what the unit holds for it is still what the baseline erased it to: an item erased again would show the new body, as `redone` does.
+#[test]
+fn a_unit_erased_over_a_baseline_erases_what_it_redoes_and_no_other() {
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let unit = |kept: usize, redone: usize| {
+        zonked(
+            &module(
+                vec![
+                    definition("kept", nat.clone(), nat_lit(kept)),
+                    definition("redone", nat.clone(), nat_lit(redone)),
+                ],
+                nat_lit(0),
+            )
+            .module,
+        )
+    };
+    let form = |unit: &ErasedUnit, name: &str| {
+        format!(
+            "{:?}",
+            unit.find(&nominal(name)).expect("the unit declares it")
+        )
+    };
+
+    let baseline =
+        erase_unit(&mut context(), Erasures::nothing(), &unit(1, 2)).expect("the baseline erases");
+    let edited = unit(3, 4);
+    let whole =
+        erase_unit(&mut context(), Erasures::nothing(), &edited).expect("the unit erases whole");
+    let redone = nominal("redone");
+    let over = erase_unit_over(
+        &mut context(),
+        Erasures::nothing(),
+        &edited,
+        &baseline,
+        &|name| *name == redone,
+    )
+    .expect("the unit erases over its baseline");
+
+    assert_eq!(form(&over, "kept"), form(&baseline, "kept"));
+    assert_ne!(form(&over, "kept"), form(&whole, "kept"));
+    assert_eq!(form(&over, "redone"), form(&whole, "redone"));
 }
 
 #[test]

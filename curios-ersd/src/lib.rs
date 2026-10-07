@@ -2,7 +2,7 @@
 //!
 //! The program is flat, explicit, first-order data: a [`Module`] of arena-allocated blocks of single-operation statements over atomic operands, addressed by typed `u32` identities, with ordered top-level items plus an entry block at its top level. The alphabet is erased Core's vocabulary with its semantic identities intact, as `README.md`'s "Shapes stay distinct" decides. Functions store no capture lists; free values, uses, the call graph, and recursive components are derived on demand ([`Analysis`]).
 //!
-//! `curios_elab`'s `into_ersd` is the sole producer, constructing through the checked [`ErsdBuilder`]. [`optimize`](optimize()) is the Ersd-level optimizer (behavior-summary pruning, closed-term evaluation, literal-spine specialization, monoid worker/wrapper), and [`lower_to_cont`] is the one-way door where every encoding decision is made, lowering the module to a `curios_cont::Module`.
+//! `curios_elab`'s `into_ersd` is the sole producer, constructing through the checked [`ErsdBuilder`]. It erases each declaration into a module of its own, a *fragment*, which declares what another declaration binds as an import ([`Imports`]) and verifies with no entry ([`Module::verify_fragment`]); [`Module::link`] appends fragments into one program under fresh identities, and only a program, which has no import left, is optimized or lowered. [`optimize`](optimize()) is the Ersd-level optimizer (behavior-summary pruning, closed-term evaluation, literal-spine specialization, monoid worker/wrapper), and [`lower_to_cont`] is the one-way door where every encoding decision is made, lowering the module to a `curios_cont::Module`.
 
 mod id;
 pub use id::*;
@@ -53,6 +53,9 @@ pub use summary::*;
 
 mod remap;
 pub(crate) use remap::*;
+
+mod link;
+pub use link::*;
 
 mod optimize;
 pub use optimize::*;

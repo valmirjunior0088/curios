@@ -130,7 +130,7 @@ fn shared() -> Option<PathBuf> {
 /// What version of the verdict family's layout a key names.
 ///
 /// In the key rather than in a file beside it, so an entry written by an older layout is not found rather than found and misread. Bump it whenever what a slot holds, or what a hit is verified against, changes.
-const SCHEMA: &str = "u26";
+const SCHEMA: &str = "u27";
 
 /// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
 const PAYLOAD_SCHEMA: &str = "p6";
@@ -139,7 +139,7 @@ const PAYLOAD_SCHEMA: &str = "p6";
 ///
 /// **No file contents here, deliberately.** This names a *place*, not a version of what lives in it: "the unit for these mounts, by this compiler, after this chain". What was compiled is checked when the slot is opened, against the record of what was read, so a source edit changes the verification and not the address. That is what bounds the store — a project has as many slots as it has units, forever, rather than one per compile, as an address hashed over the unit's source directory, which contains this store, would give.
 ///
-/// **Four parts, and each is load-bearing.** The compiler is who judged it — see [`compiler`](crate::compiler()), and note that a key naming no compiler would be believed on behalf of any. The mounts are how the unit's names are spelled, which the lowering depends on and no read of its files reveals. The predecessors are the part easiest to leave out and the reason this takes a list at all: a unit's erasure resumes over the *cumulative erased arena* the units before it built, so the same source compiled after a different prefix is a different unit, byte for byte. What a predecessor *contains* is verified rather than keyed, for the same reason the unit's own source is.
+/// **Four parts, and each is load-bearing.** The compiler is who judged it — see [`compiler`](crate::compiler()), and note that a key naming no compiler would be believed on behalf of any. The mounts are how the unit's names are spelled, which the lowering depends on and no read of its files reveals. The predecessors are the part easiest to leave out and the reason this takes a list at all: each stage is seeded from every unit placed before it, and a unit stores the spellings it may write for its scope's names, so the same source compiled after a different prefix is a different unit. What a predecessor *contains* is verified rather than keyed, for the same reason the unit's own source is.
 ///
 /// The fourth is what the unit declared it could see: a declared dependency answers "may these names reach that root" per unit, and it is the answer the lowering consults — the same source over the same scope, declaring different prefixes, resolves different names and is a different unit. `None` is its own value, not an empty list: it means the caller declared nothing, which is every open prefix in scope, where an empty list means a unit that asked for none of them.
 ///

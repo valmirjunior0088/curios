@@ -13,7 +13,7 @@ enum Member {
     Computed(curios_ersd::ValueId),
 }
 
-impl Lowering {
+impl Lowering<'_> {
     /// Erase a local `rec` block, then continue with its tail.
     pub(super) fn erase_rec(
         &mut self,
@@ -54,26 +54,13 @@ impl Lowering {
         })
     }
 
-    /// Erase a top-level recursive item. Bindings persist in the base frame (no scoping frame), exactly like `let` items.
+    /// Erase a top-level recursive item as the fragment's item. Its members are defined in the Core context already, as every item's names are.
     pub(super) fn erase_rec_item(
         &mut self,
         context: &mut Context,
         rec: &RecItem,
     ) -> Result<(), Error> {
         let definitions = rec.definitions();
-        for definition in &definitions {
-            let name = Free::from(&definition.name);
-            context.assume(&name, &definition.type_);
-            context.set_assumption_universe_context(&name, rec.group.universe_context().clone());
-        }
-        for (index, definition) in definitions.iter().enumerate() {
-            context.define(
-                &Free::from(&definition.name),
-                &Term::rec_proj(rec.group.clone(), index),
-                Some(&definition.kind),
-            );
-        }
-
         let names = definitions
             .iter()
             .map(|definition| Free::from(&definition.name))

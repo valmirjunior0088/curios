@@ -12,7 +12,7 @@ use {
     curios_core::{DefinitionKind, Global, Lockstep, Step},
 };
 
-impl Lowering {
+impl Lowering<'_> {
     pub(super) fn erase_func(
         &mut self,
         context: &mut Context,

@@ -9,7 +9,7 @@ use {
     },
     curios_core::{Certification, Consumption, Free, Global, Intrinsic, Program, Term},
     curios_elab::{
-        Context, Established, FinalizedProgram, Resumed, Tail, elaborate_and_zonk_program,
+        Context, Erasures, Established, FinalizedProgram, Tail, elaborate_and_zonk_program,
         elaborate_and_zonk_program_reporting, elaborate_and_zonk_unit, erase_program, erase_unit,
     },
     curios_emit::into_wasm,
@@ -619,7 +619,9 @@ struct Judged {
 
 /// The erase step both the check and the compile path take, so neither can hold a verdict the other does not.
 ///
-/// The sealed program's termination flags are marked here, from the record of everything it was erased from — every predecessor and the entry — and nowhere else: erasure marks nothing, and nothing reads a flag before the back half lowers what this returns. See `curios_ersd::Function::total`.
+/// The entry's own items and its final term are erased here, and linked with what they reach of the predecessors' erased forms: the module handed back holds that and no declaration the program does not reach.
+///
+/// The linked program's termination flags are marked here, from the record of everything it was erased from — every predecessor and the entry — and nowhere else: erasure marks nothing, and nothing reads a flag before the back half lowers what this returns. See `curios_ersd::Function::total`.
 fn erase_checked(
     budget: u64,
     predecessors: Predecessors<'_>,
@@ -627,10 +629,11 @@ fn erase_checked(
     judged: &Judged,
 ) -> Result<curios_ersd::Module, CompileError> {
     let cores = predecessors.cores();
+    let erased = predecessors.erased();
 
-    let mut arena = erase_program(
+    let mut linked = erase_program(
         &mut Context::new(budget, *syntax),
-        Resumed::of(&cores, predecessors.arena()),
+        Erasures::of(&cores, &erased),
         &judged.program,
     )
     .map_err(|error| {
@@ -641,11 +644,11 @@ fn erase_checked(
         ))
     })?;
     for unit in predecessors.units() {
-        arena.mark_total(unit.certification());
+        linked.mark_total(unit.certification());
     }
-    arena.mark_total(&judged.certification);
+    linked.mark_total(&judged.certification);
 
-    Ok(arena.into_module())
+    Ok(linked.into_module())
 }
 
 /// [`check_entrypoint`] with the stages it passes observed, and the entry's foreign rows kept for the lowering that follows it.
@@ -904,9 +907,10 @@ pub fn compile_unit(
         return Err(kernel_refusal(verdict, core.as_module(), &cores, syntax));
     }
 
+    let erased = predecessors.erased();
     let ersd = erase_unit(
         &mut Context::new(budget, *syntax),
-        Resumed::of(&cores, predecessors.arena()),
+        Erasures::of(&cores, &erased),
         &core,
     )
     .map_err(|error| CompileError::Failure(error.reports_with(core.as_module(), &cores, syntax)))?;
@@ -1026,7 +1030,7 @@ pub enum Progress<'a> {
 
 /// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the `foreign` declarations of the program and of every predecessor — an embedder that will run the module builds its `ffi`-tier bindings (`curios-runtime`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
 ///
-/// Production erases onto the archived erased prelude: it is restored and replayed, only the entry's own items erase, the Ersd optimizer shrinks and rebases the module, and the lowering into Cont makes every encoding decision once (see `curios_ersd::lower_to_cont`).
+/// Production erases over the archived prelude's erased forms: only the entry's own items erase, the program is linked from what they reach, the Ersd optimizer shrinks and rebases the module, and the lowering into Cont makes every encoding decision once (see `curios_ersd::lower_to_cont`).
 ///
 /// **`loader` is borrowed rather than taken, so the caller still owns it when this returns.** Resolution records what it read through `&self` — the log is interior-mutable precisely so that lowering never has to thread `&mut` — and a caller filing what this compilation produced needs that log *after* the fold, exactly as it needs the cache handle's refusal after the fold. Consuming the loader would put the read set out of reach at the only moment it is worth anything, and nothing here wants ownership of it.
 pub fn compile_entrypoint<O>(

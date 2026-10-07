@@ -115,7 +115,7 @@ fn a_miss_does_not_refuse_the_units_after_it() {
 
 /// A unit compiled after one from unsaved text is not filed, and its slot holds the bytes it held.
 ///
-/// An edited predecessor recompiles the units after it: a unit's arena is the whole prefix's, so its record vouches for the bytes every unit before it contained, and a predecessor that no longer contains them is a disagreement whether or not anything is imported from it. `/beta` is then compiled whole from text the disk holds — and filed, it would take the place of the slot a build filed, chained after an `/alpha` nothing on disk reproduces.
+/// An edited predecessor recompiles the units after it: a unit's scope is the whole prefix, so its record vouches for the bytes every unit before it contained, and a predecessor that no longer contains them is a disagreement whether or not anything is imported from it. `/beta` is then compiled whole from text the disk holds — and filed, it would take the place of the slot a build filed, chained after an `/alpha` nothing on disk reproduces.
 #[test]
 fn a_unit_after_one_compiled_from_unsaved_text_is_not_filed() {
     let root = mounted_project("unsaved-before");

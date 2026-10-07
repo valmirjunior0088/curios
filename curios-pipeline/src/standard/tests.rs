@@ -146,8 +146,8 @@ fn std_unit_reproduction() {
         if stored!(first.text()) != stored!(second.text()) {
             differing.push("the text stage's part".to_string());
         }
-        if stored!(&first.arena()) != stored!(&second.arena()) {
-            differing.push("the erased arena".to_string());
+        if stored!(first.erased()) != stored!(second.erased()) {
+            differing.push("the erased forms".to_string());
         }
         if stored!(first.certification()) != stored!(second.certification()) {
             differing.push("the certifier's record".to_string());

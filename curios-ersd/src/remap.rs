@@ -2,11 +2,14 @@
 //!
 //! Two passes need this and they need it for opposite reasons. Deep-copying a region mints fresh identities for what it duplicates and rewrites references into them, leaving anything outside the region alone. Compaction moves *every* live identity at once and must rewrite all of them. One traversal serves both because the shape being walked is the same; only the maps differ.
 //!
+//! Linking needs it a third way: a fragment appended to a program lands at fresh identities in every arena and at whatever its constants, foreign rows and schemas intern to in the tables beside them, which neither of the other two ever moves. Those tables are a separate set of maps ([`Tables`]), absent for a copy and for compaction.
+//!
 //! **The lookup is deliberately lenient** — an identity absent from a map passes through unchanged. That is what lets a copier hand over partial maps covering only its region. It also means a compaction whose maps are incomplete rewrites nothing and reports nothing, so compaction verifies the module afterwards rather than trusting the walk.
 
 use {
     crate::{
-        Atom, Block, BlockId, FoldNatStep, FoldSequenceStep, Function, FunctionId, NatCase,
+        Atom, Block, BlockId, CellOperation, ChannelOperation, ConstantId, ConstructorId, FamilyId,
+        FoldNatStep, FoldSequenceStep, ForeignId, Function, FunctionId, NatCase, ProductId,
         RecGroup, RecGroupId, RecValue, Rhs, Statement, StatementId, Terminator,
         UnconsSequenceStep, ValueId, VariantArm,
     },
@@ -16,6 +19,16 @@ use {
 /// Look an identity up in a remap expected to contain it, keeping it unchanged when it does not (an identity outside the copied region).
 pub(crate) fn lookup<I: Ord + Copy>(map: &BTreeMap<I, I>, id: I) -> I {
     map.get(&id).copied().unwrap_or(id)
+}
+
+/// Where the identities a module keeps outside its arenas go: constants, foreign rows and schemas, which only linking moves.
+#[derive(Default)]
+pub(crate) struct Tables {
+    pub(crate) constants: BTreeMap<ConstantId, ConstantId>,
+    pub(crate) foreigns: BTreeMap<ForeignId, ForeignId>,
+    pub(crate) products: BTreeMap<ProductId, ProductId>,
+    pub(crate) families: BTreeMap<FamilyId, FamilyId>,
+    pub(crate) constructors: BTreeMap<ConstructorId, ConstructorId>,
 }
 
 pub(crate) struct Remap<'a> {
@@ -28,6 +41,8 @@ pub(crate) struct Remap<'a> {
     pub(crate) substitution: &'a BTreeMap<ValueId, Atom>,
     /// When set, a `Function` atom that would remap to `from` (the copy of the region's root) is kept as `to` (the original) instead. Structural bindings are never redirected.
     pub(crate) redirect: Option<(FunctionId, FunctionId)>,
+    /// The tables' identities, where the rewrite moves them: `None` for a copy within one module and for compaction, which leave every one where it is.
+    pub(crate) tables: Option<&'a Tables>,
 }
 
 impl Remap<'_> {
@@ -50,8 +65,34 @@ impl Remap<'_> {
                 };
                 Atom::Function(mapped)
             }
-            other => other,
+            Atom::Constant(constant) => Atom::Constant(self.constant(constant)),
         }
+    }
+
+    fn constant(&self, constant: ConstantId) -> ConstantId {
+        self.tables
+            .map_or(constant, |tables| lookup(&tables.constants, constant))
+    }
+
+    fn foreign(&self, foreign: ForeignId) -> ForeignId {
+        self.tables
+            .map_or(foreign, |tables| lookup(&tables.foreigns, foreign))
+    }
+
+    pub(crate) fn product(&self, product: ProductId) -> ProductId {
+        self.tables
+            .map_or(product, |tables| lookup(&tables.products, product))
+    }
+
+    pub(crate) fn family(&self, family: FamilyId) -> FamilyId {
+        self.tables
+            .map_or(family, |tables| lookup(&tables.families, family))
+    }
+
+    fn constructor(&self, constructor: ConstructorId) -> ConstructorId {
+        self.tables.map_or(constructor, |tables| {
+            lookup(&tables.constructors, constructor)
+        })
     }
 
     pub(crate) fn value(&self, value: ValueId) -> ValueId {
@@ -84,7 +125,7 @@ impl Remap<'_> {
         match terminator {
             Terminator::Return(atom) => Terminator::Return(self.atom(*atom)),
             Terminator::Halt { foreign, operands } => Terminator::Halt {
-                foreign: *foreign,
+                foreign: self.foreign(*foreign),
                 operands: operands.iter().map(|&atom| self.atom(atom)).collect(),
             },
             Terminator::Unreachable => Terminator::Unreachable,
@@ -114,14 +155,14 @@ impl Remap<'_> {
                 operands: atoms(operands),
             },
             Rhs::Product { schema, fields } => Rhs::Product {
-                schema: *schema,
+                schema: self.product(*schema),
                 fields: atoms(fields),
             },
             Rhs::Construct {
                 constructor,
                 fields,
             } => Rhs::Construct {
-                constructor: *constructor,
+                constructor: self.constructor(*constructor),
                 fields: atoms(fields),
             },
             Rhs::Project {
@@ -129,7 +170,7 @@ impl Remap<'_> {
                 product,
                 field,
             } => Rhs::Project {
-                schema: *schema,
+                schema: self.product(*schema),
                 product: self.atom(*product),
                 field: *field,
             },
@@ -139,12 +180,12 @@ impl Remap<'_> {
                 arms,
                 default,
             } => Rhs::MatchVariant {
-                family: *family,
+                family: self.family(*family),
                 scrutinee: self.atom(*scrutinee),
                 arms: arms
                     .iter()
                     .map(|arm| VariantArm {
-                        constructor: arm.constructor,
+                        constructor: self.constructor(arm.constructor),
                         bindings: arm.bindings.iter().map(|&b| self.value(b)).collect(),
                         block: self.block(arm.block),
                     })
@@ -223,18 +264,44 @@ impl Remap<'_> {
                 operation,
                 operands,
             } => Rhs::Cell {
-                operation: *operation,
+                operation: match *operation {
+                    CellOperation::Poll { some, none } => CellOperation::Poll {
+                        some: self.constructor(some),
+                        none: self.constructor(none),
+                    },
+                    operation @ (CellOperation::New | CellOperation::Fill) => operation,
+                },
                 operands: atoms(operands),
             },
             Rhs::Channel {
                 operation,
                 operands,
             } => Rhs::Channel {
-                operation: *operation,
+                operation: match *operation {
+                    ChannelOperation::Push {
+                        taken,
+                        full,
+                        closed,
+                    } => ChannelOperation::Push {
+                        taken: self.constructor(taken),
+                        full: self.constructor(full),
+                        closed: self.constructor(closed),
+                    },
+                    ChannelOperation::Take { item, empty, ended } => ChannelOperation::Take {
+                        item: self.constructor(item),
+                        empty: self.constructor(empty),
+                        ended: self.constructor(ended),
+                    },
+                    operation @ (ChannelOperation::New
+                    | ChannelOperation::Close
+                    | ChannelOperation::Closed
+                    | ChannelOperation::Count
+                    | ChannelOperation::Capacity) => operation,
+                },
                 operands: atoms(operands),
             },
             Rhs::Foreign { foreign, operands } => Rhs::Foreign {
-                foreign: *foreign,
+                foreign: self.foreign(*foreign),
                 operands: atoms(operands),
             },
             Rhs::Intrinsic {

@@ -1,4 +1,4 @@
-//! What erasure carries into the arena, and what a repeated compilation restores unmutated.
+//! What erasure carries into a program's module, and what a repeated compilation restores unmutated.
 
 use {
     super::test_support::*,
@@ -40,7 +40,7 @@ fn every_stage_is_observed_once_in_names_order() {
 
 #[test]
 fn meta_free_prelude_program_compiles_without_overflow() {
-    // A meta-free entrypoint (no holes) that still pulls in the whole prelude: an N-deep nested term would overflow the stack during construction and in every pass, and the flat `curios_core::Module`/`curios_ersd::Module` representation lowers it end-to-end to wasm without overflow.
+    // A meta-free entrypoint (no holes) compiled over the whole prelude: an N-deep nested term would overflow the stack during construction and in every pass, and the flat `curios_core::Module`/`curios_ersd::Module` representation lowers it end-to-end to wasm without overflow.
     let source = r#"
         let id(A : Type, a : A) -> A = a;
         let subject : /std/Nat = id(/std/Nat, 5);
@@ -65,12 +65,12 @@ fn dead_user_definition_is_still_typechecked() {
 }
 
 #[test]
-fn arena_erasure_covers_the_fixed_prelude() {
-    // The entrypoint pulls in string formatting, so the erased module carries the whole fixed prelude — every construct the corpus uses — replayed onto the erased prefix and verified as one module.
+fn a_program_links_the_library_its_entry_reaches() {
+    // The entrypoint pulls in string formatting, so the program links the library behind it — every construct the corpus uses — and what was erased an item at a time verifies as one module.
     let module = erase_to_ersd(r#"/std/Fmt/print("hello")"#);
     assert!(
         module.functions().len() > 100,
-        "the fixed prelude erased with the program: {} functions",
+        "the program linked the library it reaches: {} functions",
         module.functions().len()
     );
 }
@@ -86,7 +86,7 @@ fn arena_erasure_is_deterministic_across_compiles() {
 
 #[test]
 fn arena_erasure_stores_no_captures_for_the_prelude() {
-    // Functions carry no capture lists anywhere in the erased prelude; free values are derived on demand. The analysis on the full module is the witness that derivation covers every function.
+    // Functions carry no capture lists anywhere in what a program links; free values are derived on demand. The analysis on the linked module is the witness that derivation covers every function.
     let module = erase_to_ersd(
         "let subject : /std/Str = /std/Nat/to_str(7);
 /std/Io/pure(())",
@@ -114,7 +114,7 @@ fn arena_erasure_handles_deep_input_on_the_default_stack() {
     // Printing is half of what must survive the depth, so the deep module is still rendered.
     let _ = module.to_string();
 
-    // What the fixture erased to is asked of the entry block, not of the module: the module carries the whole prelude, so a module-wide scan for an addition answers about `/sys/Nat/succ` and would pass with the fixture erased to nothing. Each binding is still an `Apply` of `/sys/Nat/add` at this rung — inlining is a later stage's — and the statements of the closing `Io/pure(())` follow them.
+    // What the fixture erased to is asked of the entry block, not of the module: the module carries every item the program linked, so a module-wide scan for an addition may answer about one of the library's and pass with the fixture erased to nothing. Each binding is still an `Apply` of `/sys/Nat/add` at this rung — inlining is a later stage's — and the statements of the closing `Io/pure(())` follow them.
     let entry = module
         .block(module.entry().expect("the program has an entry"))
         .expect("the entry block is live");

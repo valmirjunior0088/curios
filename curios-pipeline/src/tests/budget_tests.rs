@@ -6,7 +6,7 @@ use {
     super::test_support::{entrypoint_of, mounted},
     crate::{EntryTail, check_entrypoint, compile_units, elaborate_and_zonk},
     curios_core::Zonked,
-    curios_elab::{Context, Resumed, erase_program},
+    curios_elab::{Context, Erasures, erase_program},
     curios_prelude::with_prelude,
     curios_text::{RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
@@ -112,7 +112,7 @@ fn erases(source: &str, budget: u64) -> bool {
 
         erase_program(
             &mut Context::new(budget, SYNTAX),
-            Resumed::of(&predecessors.cores(), predecessors.arena()),
+            Erasures::of(&predecessors.cores(), &predecessors.erased()),
             &program,
         )
         .is_ok()

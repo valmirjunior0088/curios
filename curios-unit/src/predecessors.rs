@@ -1,7 +1,7 @@
 //! What earlier units established, as the thing a later one is compiled against.
 
 use {
-    crate::Unit, curios_abi::ForeignStore, curios_core::Module, curios_elab::ErasedArena,
+    crate::Unit, curios_abi::ForeignStore, curios_core::Module, curios_elab::ErasedUnit,
     curios_text::PreparedText,
 };
 
@@ -50,11 +50,8 @@ impl<'a> Predecessors<'a> {
         foreigns
     }
 
-    /// The arena every erasure so far has accumulated — **one** value, not one per unit, because each unit's erasure resumes over what the previous one produced. No predecessors yield the empty arena, which `ErsdBuilder::resume` reduces to a fresh builder.
-    pub fn arena(&self) -> ErasedArena {
-        self.units
-            .last()
-            .map(|unit| unit.arena())
-            .unwrap_or_default()
+    /// The erased forms of each predecessor's items, for `curios-elab`'s `Erasures`: one per unit, beside [`Predecessors::cores`], which they were erased from.
+    pub fn erased(&self) -> Vec<&'a ErasedUnit> {
+        self.units.iter().map(|unit| unit.erased()).collect()
     }
 }

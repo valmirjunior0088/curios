@@ -9,7 +9,7 @@ use {
         Atom, BlockId, CycleStep, FunctionId, Intrinsic, Module, Rhs, Statement, ValueId,
         VerifyError,
     },
-    crate::{LocalBehavior, RecValue, Semantics},
+    crate::{Interface, LocalBehavior, RecValue, Semantics},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -29,9 +29,15 @@ fn performs(behavior: &LocalBehavior) -> bool {
 }
 
 /// Check one group's computed members: no initializer evaluates itself, and none performs an effect.
-pub(super) fn check_group(module: &Module, values: &[RecValue]) -> Result<(), VerifyError> {
+///
+/// Hands back the members that read themselves where nothing outside their own initializers reads them — see [`Module::unforced`](super::Module::unforced).
+pub(super) fn check_group(
+    module: &Module,
+    values: &[RecValue],
+) -> Result<Vec<CycleStep>, VerifyError> {
     let computed: Vec<ValueId> = values.iter().map(|member| member.value).collect();
     let mut summaries = Summaries::default();
+    let mut unforced = Vec::new();
     // Each member's evaluation edges to the members it reads, with the callee a read came through.
     let mut evaluates: Vec<BTreeMap<usize, Option<FunctionId>>> = Vec::with_capacity(values.len());
     for member in values {
@@ -52,10 +58,18 @@ pub(super) fn check_group(module: &Module, values: &[RecValue]) -> Result<(), Ve
         // A member nothing outside its own initializer references is never forced, so its reads evaluate nothing: the language's `rec loop = loop`, which the lowering drops. Every read of a member that is used is an edge, its own initializer's included — a used self-read is the cycle forcing meets first.
         let used = module.member_used_outside_init(member.value, member.init);
         for value in evaluation.direct {
-            if let Some(position) = computed.iter().position(|&member| member == value)
-                && (used || computed[position] != member.value)
-            {
-                edges.entry(position).or_insert(None);
+            let Some(position) = computed.iter().position(|&member| member == value) else {
+                continue;
+            };
+            match used || computed[position] != member.value {
+                true => {
+                    edges.entry(position).or_insert(None);
+                }
+                false => unforced.push(CycleStep {
+                    member: value_name(module, member.value),
+                    value: member.value,
+                    through: None,
+                }),
             }
         }
         evaluates.push(edges);
@@ -80,7 +94,49 @@ pub(super) fn check_group(module: &Module, values: &[RecValue]) -> Result<(), Ve
             return Err(VerifyError::EvaluationCycle { steps });
         }
     }
-    Ok(())
+    Ok(unforced)
+}
+
+/// What applying `function` does, as a module that imports it is told: whether it performs, and which of its parameters it applies.
+///
+/// What it reads is left out. A value it reads is one its own module binds, and no initializer of another module is among those, a declaration being erased after everything it names.
+pub(super) fn interface(module: &Module, function: FunctionId) -> Interface {
+    let mut summaries = Summaries::default();
+    summaries.function(module, function);
+    summaries.settle(module);
+    let summary = &summaries.functions[&function];
+    let params = module
+        .function(function)
+        .map(|definition| definition.params.as_slice())
+        .unwrap_or_default();
+
+    Interface {
+        performs: summary.effect.is_some(),
+        applies: params
+            .iter()
+            .enumerate()
+            .filter(|(_, param)| summary.applies.contains(param))
+            .map(|(position, _)| position as u32)
+            .collect(),
+    }
+}
+
+/// The summary an imported function stands under: what its interface says of it, over the stub's own parameters. Its stub body says nothing, and is never read.
+fn imported(module: &Module, function: FunctionId, interface: &Interface) -> Evaluation {
+    let params = module
+        .function(function)
+        .map(|definition| definition.params.as_slice())
+        .unwrap_or_default();
+
+    Evaluation {
+        effect: interface.performs.then_some(None),
+        applies: interface
+            .applies
+            .iter()
+            .filter_map(|&position| params.get(position as usize).copied())
+            .collect(),
+        ..Evaluation::default()
+    }
 }
 
 /// A member by the name its source gave it, which is how a refusal a program earns calls it. One the source never named falls back to its id, so the refusal still says which.
@@ -195,6 +251,10 @@ impl Summaries {
         loop {
             let version = self.version;
             for function in self.functions.keys().copied().collect::<Vec<_>>() {
+                // An imported function's summary is its interface, settled where it was defined.
+                if module.imported(function).is_some() {
+                    continue;
+                }
                 let Some(definition) = module.function(function) else {
                     continue;
                 };
@@ -211,14 +271,18 @@ impl Summaries {
         }
     }
 
-    /// The summary of `function` as settled so far — the bottom, on its first mention.
-    fn function(&mut self, function: FunctionId) -> Evaluation {
+    /// The summary of `function` as settled so far — the bottom, on its first mention, or what its interface says where another module defines it.
+    fn function(&mut self, module: &Module, function: FunctionId) -> Evaluation {
         if let Some(summary) = self.functions.get(&function) {
             return summary.clone();
         }
-        self.functions.insert(function, Evaluation::default());
+        let summary = match module.imported(function) {
+            Some(interface) => imported(module, function, interface),
+            None => Evaluation::default(),
+        };
+        self.functions.insert(function, summary.clone());
         self.version += 1;
-        Evaluation::default()
+        summary
     }
 
     /// Evaluate one eager region — a function body against its `params`, or an initializer against none — descending through control sub-blocks and nested groups' initializers, never into the body of a function the region merely constructs.
@@ -353,7 +417,7 @@ impl Summaries {
         if !scope.evaluated.insert(function) {
             return;
         }
-        let summary = self.function(function);
+        let summary = self.function(module, function);
         for &value in summary.direct.iter().chain(summary.composed.keys()) {
             evaluation.composed.entry(value).or_insert(function);
         }

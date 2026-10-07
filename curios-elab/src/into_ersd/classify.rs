@@ -75,7 +75,7 @@ pub(crate) fn erasure_mask<B: Bound>(
 
 /// The constructor-payload view of a telescope: [`signature_entries`] plus the recorded carrier shape of each kept domain. An erased entry's shape is `Opaque`; nothing reads it.
 pub(crate) fn constructor_entries<B: Bound>(
-    lowering: &mut Lowering,
+    lowering: &mut Lowering<'_>,
     context: &mut Context,
     telescope: Telescope<B>,
 ) -> Result<Vec<(Option<String>, bool, curios_ersd::FieldShape)>, Error> {
@@ -100,7 +100,7 @@ pub(crate) fn constructor_entries<B: Bound>(
 ///
 /// `visited` makes the chain-chasing terminate: a self-referential struct elaborates (it is merely uninhabited), so the recursion through nominal declarations can cycle, and a cycle classifies `Opaque`. The chain recurses into at most one field per level, so the set is the ancestor chain and never needs unwinding.
 pub(crate) fn field_shape(
-    lowering: &mut Lowering,
+    lowering: &mut Lowering<'_>,
     context: &mut Context,
     visited: &mut BTreeSet<Global>,
     type_: &Term,

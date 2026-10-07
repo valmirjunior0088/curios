@@ -404,7 +404,7 @@ entry =
     );
 }
 
-/// The header declares what the program refers to and nothing else — a dense schema arena is never pruned, so without this a five-line program carries the whole standard library's rows.
+/// The header declares what the program refers to and nothing else — a dense schema arena is never pruned, so without this a five-line program carries the rows of everything it linked.
 #[test]
 fn an_unreached_schema_or_foreign_row_is_not_declared() {
     let mut builder = ErsdBuilder::new();

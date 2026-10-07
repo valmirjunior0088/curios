@@ -15,7 +15,7 @@ use super::{Analysis, Module};
 
 /// Run the Ersd transformations in place: prune, evaluate, specialize, rebase, and prune again (evaluation and specialization strand the code they collapse). The module must verify on entry; the compaction after the final prune re-verifies on exit. Taking a match arm during specialization orphans the untaken arms' values until that final prune tombstones them, so no intermediate verify runs after specialization.
 ///
-/// Each prune is followed by a compaction whose [`Compaction`](super::Compaction) is dropped, so this must run on a module nothing else indexes into: the pipeline hands it the module `ErasedArena::into_module` released, after the erased environment — the one outside holder of its identities — is gone.
+/// Each prune is followed by a compaction whose [`Compaction`](super::Compaction) is dropped, so this must run on a module nothing else indexes into: the pipeline hands it the module `ErasedProgram::into_module` released, a linked program no fragment holds an identity of.
 pub fn optimize(module: &mut Module) {
     module
         .verify()
@@ -25,7 +25,7 @@ pub fn optimize(module: &mut Module) {
 
 /// [`optimize`] over a module the caller has just verified, skipping the entry check.
 ///
-/// **The check it skips is a second reading of the same bytes.** A program's module arrives here straight from [`ErsdBuilder::finalize`](crate::ErsdBuilder::finalize), which verifies the whole module and hands it over unmutated; verifying again walks the entire prelude a second time to reach the same verdict. Every other verification stays: erasure's, the one after closed-term evaluation, and the one each prune and compaction ends with.
+/// **The check it skips is a second reading of the same bytes.** A program's module arrives here straight from its link, which verifies the whole module ([`Module::verify`]) and hands it over unmutated; verifying again walks everything it linked a second time to reach the same verdict. Every other verification stays: erasure's, the one after closed-term evaluation, and the one each prune and compaction ends with.
 ///
 /// Not a debug assertion either. Restating the check under `cfg(debug_assertions)` would put the whole cost back exactly where the suite runs, in exchange for a verdict the line above it already gave.
 pub fn optimize_verified(module: &mut Module) {
@@ -51,7 +51,7 @@ pub fn optimize_verified(module: &mut Module) {
 
 /// Compact after a prune, and check the result.
 ///
-/// Pruning tombstones; every later walk then steps over the dead slots, and both the verifier and the analysis walk the whole arena — which, once the prelude a program does not reach is pruned, is almost all tombstones.
+/// Pruning tombstones; every later walk then steps over the dead slots, and both the verifier and the analysis walk the whole arena — which, once what a program links and does not reach is pruned, is mostly tombstones.
 ///
 /// The verification is not belt-and-braces. A compaction that misses an identity rewrites nothing and reports nothing — the stale index still addresses a live slot, just the wrong entity — so this is the one call site where the structural check is the only thing standing between a remap gap and silent miscompilation.
 fn compact(module: &mut Module) {

@@ -1295,6 +1295,13 @@ impl Error {
         Self::NatCaseKeyOverflow { value }
     }
 
+    /// The refusal of a read of `member` from another item, where `member`'s own initializer reads it: the one-step cycle the verifier would name had the two been erased together.
+    pub(crate) fn evaluates_itself(member: String) -> Self {
+        Self::EvaluationCycle {
+            steps: vec![(member, None)],
+        }
+    }
+
     /// The refusal a program earns from the erased verifier, framed at the refused member's initializer when `spans` records one — a cycle at its first member. Only the verifier's recursion rules come back as an error: a malformed module is a compiler fault, which the verifier panics on rather than returning.
     pub(crate) fn refused_by_verifier(
         error: curios_ersd::VerifyError,

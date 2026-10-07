@@ -1,7 +1,7 @@
 use {
     curios_core::{Global, Item, Sharing, Zonked, validate_stored_identities},
     curios_elab::{
-        Context, ErasedArena, Established, Resumed, elaborate_and_zonk_unit, erase_unit,
+        Context, ErasedUnit, Erasures, Established, elaborate_and_zonk_unit, erase_unit,
         validate_lowered_universe_seeds, validate_universes,
     },
     curios_std::std_source,
@@ -41,20 +41,14 @@ fn build() {
     }
 
     // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each image is framed as every store slot is, holding the unit before certification, so the prelude `curios-prelude` certifies and restores is a fold of two units and not a shape of its own.
-    let sys = archive(
-        "sys",
-        sys_text,
-        Established::nothing(),
-        &[],
-        ErasedArena::default(),
-    );
+    let sys = archive("sys", sys_text, Established::nothing(), &[], &[]);
     let std_predecessors = [sys.core()];
     let std = archive(
         "std",
         std_text,
         Established::over(&std_predecessors),
         &std_predecessors,
-        sys.arena(),
+        &[sys.erased()],
     );
 
     // Filed under `OUT_DIR`, where Cargo keeps a build script's outputs, because the crate that includes them is their one reader: nothing outside the build opens an image.
@@ -83,13 +77,13 @@ fn lower(
 
 /// Elaborate, validate, erase and hash-cons one lowered root into the unit its image is, against what the roots before it established.
 ///
-/// `arena` is the previous root's, not a fresh one: each unit's erasure resumes over what the one before it produced, so the arena a unit carries is the whole fold's and the split between images is a split of items rather than of operands.
+/// `erased` are the erased forms of the roots before it, beside `predecessors`, the Core they were erased from: an item of this root reads there how a name of an earlier one is bound, and its own erased form holds nothing of theirs.
 fn archive(
     root: &str,
     mut prepared: PreparedText,
     established: Established<'_>,
     predecessors: &[&curios_core::Module],
-    arena: ErasedArena,
+    erased: &[&ErasedUnit],
 ) -> Uncertified {
     let lowered = prepared.core().clone();
     let mut context = Context::with_default_budget(SYNTAX);
@@ -134,21 +128,18 @@ fn archive(
     let zonked = Zonked::project(&core)
         .unwrap_or_else(|refusal| panic!("elaborated /{root} is not zonked: {refusal}"));
 
-    // No entrypoint, so nothing to seal: this unit's arena stays open, which is what its successors resume over.
-    let mut ersd = erase_unit(
+    // No entrypoint, so nothing to link: each item's erased form is its own, which is what a successor reads and a program links.
+    let ersd = erase_unit(
         &mut Context::with_default_budget(SYNTAX),
-        Resumed::of(predecessors, arena),
+        Erasures::of(predecessors, erased),
         &zonked,
     )
     .unwrap_or_else(|error| {
         panic!(
-            "/{root} failed to erase into the erased prefix: {}",
+            "/{root} failed to erase: {}",
             error.format_with(&core, predecessors, &SYNTAX)
         )
     });
-
-    // Erasure tombstones as it goes, and the image is restored and walked by every compilation that follows — so the dead slots are compacted out here rather than serialized and stepped over forever after.
-    ersd.compact();
 
     // Hash-cons the elaborated module, so each structure it spells is one allocation. Elaboration builds the same types, telescopes, and proof spines independently in definition after definition and nothing deduplicates them, because `Rc` sharing only ever arises from cloning: two definitions that build the same type build it twice. rkyv shares by pointer address, so collapsing them here is also what lets the archive store each distinct structure once.
     //
@@ -156,7 +147,7 @@ fn archive(
     //
     // One table per image, not one across both: rkyv shares by pointer address *within* a single image, so a structure collapsed across the two would still be written into each of them — a shared table would buy nothing and would report a distinct-structure count no image actually has.
     //
-    // `ersd` is deliberately not included: it is a flat, index-addressed arena with no shared pointers to collapse, and it already interns its constants by value.
+    // `ersd` is deliberately not included: an erased form is flat, index-addressed arenas with no shared pointers to collapse, and it already interns its constants by value.
     let sharing = Sharing::new();
     let core = core.shared(&sharing);
     // Plain stdout, not `cargo:warning=`: this is a metric nobody acts on during a build, and a line that shouts on every build of every consumer teaches readers to skim `warning:` — which is the habit that loses a real one later. Cargo captures it to `target/<profile>/build/<pkg>-<hash>/output`, where `-vv` or a reader who went looking will find it.

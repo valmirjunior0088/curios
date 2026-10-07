@@ -22,7 +22,7 @@ fn open_opaque<B: Bound>(context: &mut Context, telescope: Telescope<B>) -> Vec<
     cursor.into_args()
 }
 
-impl Lowering {
+impl Lowering<'_> {
     /// The memoized layout of a registered structure.
     pub(super) fn struct_row(
         &mut self,

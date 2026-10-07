@@ -148,7 +148,7 @@ fn optimized_wat(source: &str) -> String {
 /// cargo test --release --package curios --lib -- --ignored --nocapture field_shape_census
 /// ```
 ///
-/// The schema half is taken over one program's module because a unit's erased arena is cumulative — any entrypoint's module carries the whole prelude roster, so the population is /std-wide however small the program. The static half is per program over the *optimized* WAT.
+/// The schema half is taken over one program's module, which holds the schemas of what that program links, so the population is `spines`' own. The static half is per program over the *optimized* WAT.
 ///
 /// # What it last printed
 ///
@@ -181,7 +181,7 @@ fn field_shape_census() {
         module.families().len(),
         module.constructors().len(),
     );
-    println!("recorded field shapes (whole prelude + program): {classes:?}");
+    println!("recorded field shapes (what the program links): {classes:?}");
 
     for (label, source) in [
         ("spines", SPINES),

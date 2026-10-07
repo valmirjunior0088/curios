@@ -98,7 +98,7 @@ struct InductMatch<'a> {
     actual_indices: &'a [Term],
 }
 
-impl Lowering {
+impl Lowering<'_> {
     /// Erase a match by its elimination form.
     pub(super) fn erase_match(
         &mut self,

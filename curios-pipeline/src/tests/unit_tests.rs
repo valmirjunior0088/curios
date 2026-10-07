@@ -111,9 +111,33 @@ fn the_orphan_rule_fires_across_units_and_not_across_modules() {
         .expect("one unit may satisfy its own concept at its own type");
 }
 
+/// A value whose own initializer reads it is forced by the first declaration that reads it, whichever unit that declaration is in: the unit declaring it compiles, since nothing in it reads the value, and a unit that reads it is refused where it is compiled, at the value's own line, before any program links the two.
+///
+/// The control is the same pair with the read left out: a refusal that fired for it would be the declaring unit's, or the fixture's.
+#[test]
+fn a_unit_that_reads_another_units_self_reading_value_is_refused_where_it_is_compiled() {
+    let knot = mounted("knot", "pub let xs : /std/Nat = /std/Nat/add(xs, 1);");
+    let reader = mounted("reader", "pub let read() -> /std/Nat = /knot/xs;");
+    let idle = mounted("reader", "pub let read() -> /std/Nat = 0;");
+
+    let refusal = compile_each(&[&knot, &reader])
+        .err()
+        .expect("a unit may not read a value that reads itself");
+    assert!(
+        refusal.contains("evaluates itself"),
+        "expected the recursion rule's refusal, got: {refusal}"
+    );
+    assert!(
+        refusal.contains("pub let xs : /std/Nat = /std/Nat/add(xs, 1);"),
+        "expected the refusal framed at the value's own line, got: {refusal}"
+    );
+
+    compile_each(&[&knot, &idle]).expect("a unit that reads no such value compiles");
+}
+
 /// A unit's stored bytes do not change with what was compiled before it.
 ///
-/// `/lib` is compiled twice: with only the prelude beneath it, and after `/pre`, which mints binders and universe metavariables of its own. Nothing a unit mints resumes above a predecessor's count, so the lowered and the elaborated module serialize to the same bytes either way, and the lowering hands elaboration the same counts. What legitimately moves is left out: the spellings a unit may write for its scope's names, which are its scope's interface, and the erased arena, which is cumulative from the first unit.
+/// `/lib` is compiled twice: with only the prelude beneath it, and after `/pre`, which mints binders and universe metavariables of its own. Nothing a unit mints resumes above a predecessor's count, so the lowered and the elaborated module serialize to the same bytes either way, and the lowering hands elaboration the same counts; and an item erases into a fragment of its own, so its erased forms do too. What legitimately moves is left out: the spellings a unit may write for its scope's names, which are its scope's interface.
 #[test]
 fn a_units_stored_bytes_do_not_depend_on_what_was_compiled_before_it() {
     let pre = mounted(
@@ -146,6 +170,11 @@ fn a_units_stored_bytes_do_not_depend_on_what_was_compiled_before_it() {
         "the elaborated module moved with its predecessors"
     );
     assert_eq!(alone.text().minted(), after.text().minted());
+    assert!(
+        curios_archive::to_bytes(alone.erased()).expect("an erased unit serializes")[..]
+            == curios_archive::to_bytes(after.erased()).expect("an erased unit serializes")[..],
+        "the erased forms moved with its predecessors"
+    );
 }
 
 /// A name exported along several paths is stored the same by every compilation.

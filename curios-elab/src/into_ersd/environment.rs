@@ -1,6 +1,6 @@
 //! The erasure environment: the maps from Core identities to the arena identities they lower to.
 //!
-//! Opened binders receive globally fresh Core labels and top-level names are module-unique, so one flat value map is unambiguous without scope save/restore while an erasure runs; what it hands on keeps the top-level names alone ([`Environment::sealed`]). The schema maps memoize the arena identities Core declarations lower to — registered lazily on first use, when the dominance-ordered item chain guarantees the declaration's dependencies are already defined — so a type constructed or matched at many sites shares one schema.
+//! One environment serves one item's erasure, and its identities are that item's fragment's. Opened binders receive fresh Core labels and top-level names are module-unique, so one flat value map is unambiguous without scope save/restore while the erasure runs; what it hands on keeps the names the item declares and no other ([`Environment::exporting`]). The schema maps memoize the fragment's identity for each Core declaration it lowers a row of — registered lazily on first use, from the declaration's registry entry — so a type constructed or matched at many sites of one item shares one schema there, and a program's linker makes one schema of every fragment's by the name the map keys it under.
 
 use {
     curios_core::{Free, Global},
@@ -64,40 +64,14 @@ pub(super) struct Environment {
 }
 
 impl Environment {
-    /// Rewrite every bound atom through a module compaction.
+    /// This environment as an item's erasure hands it on: the bindings of the names the item declares, and its schema maps.
     ///
-    /// The environment is the one thing outside the module that holds arena identities, and it is archived beside it — so a compaction that does not reach here leaves the stored image self-inconsistent in a way nothing would report: a stale index still addresses a live slot, just the wrong entity.
-    ///
-    /// An identity missing from the compaction is a *bug*, not a dead binding: this runs where nothing has been pruned, so every bound atom names something live. Failing loudly is the point — the alternative is passing the stale identity through.
-    pub(super) fn remap(&mut self, compaction: &curios_ersd::Compaction) {
-        for binding in self.values.values_mut() {
-            let Binding::Atom(atom) = binding else {
-                continue;
-            };
-            *atom = match *atom {
-                curios_ersd::Atom::Value(value) => curios_ersd::Atom::Value(
-                    *compaction
-                        .values
-                        .get(&value)
-                        .unwrap_or_else(|| panic!("compaction dropped bound value {value}")),
-                ),
-                curios_ersd::Atom::Function(function) => curios_ersd::Atom::Function(
-                    *compaction
-                        .functions
-                        .get(&function)
-                        .unwrap_or_else(|| panic!("compaction dropped bound function {function}")),
-                ),
-                // Constants are interned in a plain vector that compaction never touches.
-                constant => constant,
-            };
-        }
-    }
-
-    /// This environment as an erasure hands it on: the top-level names' bindings, and no binder's.
-    ///
-    /// A binder is bound while the walk that opened it reads it and by nothing after, so every one is dead once the erasure ends. Kept, it would be an identity a later compilation could mint: a unit resuming over this arena counts its binders from zero, and one it read before binding would find another unit's operand. It would also make the arena follow how the erasure went rather than what it erased, a binder's identity counting the binders minted before it, reduction's among them.
-    pub(super) fn sealed(mut self) -> Self {
-        self.values.retain(|name, _| name.as_global().is_some());
+    /// A binder is bound while the walk that opened it reads it and by nothing after, and a name another item declares is bound here only to the import it is read through, which is this fragment's affair. Kept, either would be an identity the next reader could mistake for a declaration of this item.
+    pub(super) fn exporting(mut self, declared: &[&Global]) -> Self {
+        self.values.retain(|name, _| {
+            name.as_global()
+                .is_some_and(|global| declared.contains(&global))
+        });
 
         self
     }
@@ -114,12 +88,26 @@ impl Environment {
         self.values.get(name).copied()
     }
 
+    /// Every top-level name bound here with what it is bound to, by name.
+    pub(super) fn bindings(&self) -> impl Iterator<Item = (&Global, Binding)> {
+        self.values
+            .iter()
+            .filter_map(|(name, binding)| Some((name.as_global()?, *binding)))
+    }
+
     pub(super) fn struct_row(&self, name: &Global) -> Option<&ProductRow> {
         self.struct_decls.get(name)
     }
 
     pub(super) fn register_struct_row(&mut self, name: &Global, row: ProductRow) {
         self.struct_decls.insert(*name, row);
+    }
+
+    /// Every structure this fragment holds a schema of, by the declaration it is the row of. A newtype's row has none.
+    pub(super) fn struct_schemas(&self) -> impl Iterator<Item = (&Global, curios_ersd::ProductId)> {
+        self.struct_decls
+            .iter()
+            .filter_map(|(name, row)| Some((name, row.schema?)))
     }
 
     pub(super) fn induct_row(&self, name: &Global) -> Option<&FamilyRow> {
@@ -130,11 +118,23 @@ impl Environment {
         self.induct_decls.insert(*name, row);
     }
 
+    /// Every inductive this fragment holds the family of, by its declaration.
+    pub(super) fn families(&self) -> impl Iterator<Item = (&Global, curios_ersd::FamilyId)> {
+        self.induct_decls
+            .iter()
+            .map(|(name, row)| (name, row.family))
+    }
+
     pub(super) fn tuple_schema(&self, width: usize) -> Option<curios_ersd::ProductId> {
         self.tuples.get(&width).copied()
     }
 
     pub(super) fn register_tuple_schema(&mut self, width: usize, schema: curios_ersd::ProductId) {
         self.tuples.insert(width, schema);
+    }
+
+    /// Every anonymous row this fragment holds, by its width.
+    pub(super) fn tuple_schemas(&self) -> impl Iterator<Item = (usize, curios_ersd::ProductId)> {
+        self.tuples.iter().map(|(width, schema)| (*width, *schema))
     }
 }

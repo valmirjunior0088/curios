@@ -11,7 +11,7 @@ use {
     super::{
         Atom, Block, BlockId, Constant, ConstantId, Constructor, ConstructorId, FamilyId, Field,
         ForeignId, Function, FunctionId, ProductId, ProductSchema, RecGroup, RecGroupId, Remap,
-        Statement, StatementId, Terminator, ValueId, VariantFamily,
+        Rhs, Semantics, Statement, StatementId, Terminator, ValueId, VariantFamily, lookup,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Arena,
@@ -37,9 +37,53 @@ pub struct ValueDef {
     pub debug_name: Option<String>,
 }
 
+/// What applying a function does that a caller in another module has to know, beyond how many arguments it takes, which its parameter list says: whether its body performs an effect an initializer may not, and which of its parameters it applies. Computed where the function is defined ([`Module::interface`]) and carried where it is imported, so a module is held to the recursion rules through a callee it does not hold.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[curios_archive::archived]
+pub struct Interface {
+    /// Whether applying it performs a host call, a cell read or write, or an exit, directly or through what it applies.
+    pub performs: bool,
+    /// The positions of the parameters it applies, ascending.
+    pub applies: Vec<u32>,
+}
+
+/// A function a module applies and another defines: its identity here, a live function whose parameters are real and whose body is a stub, and its interface.
+#[derive(Debug, Clone)]
+#[curios_archive::archived]
+pub struct ImportedFunction {
+    pub function: FunctionId,
+    pub interface: Interface,
+}
+
+/// What a module uses and does not define, each in the order it was first used: the place of an import here is how whoever links the module says what it stands for.
+///
+/// A module with imports is a fragment: it verifies with no entry ([`Module::verify_fragment`]), every import bound before its first item, and it is never optimized, analysed or lowered. Linking resolves every one ([`Module::link`]), so the program a back end is handed has none.
+#[derive(Debug, Clone, Default)]
+#[curios_archive::archived]
+pub struct Imports {
+    values: Vec<ValueId>,
+    functions: Vec<ImportedFunction>,
+}
+
+impl Imports {
+    /// The imported values: each a value identity no statement of this module binds.
+    pub fn values(&self) -> &[ValueId] {
+        &self.values
+    }
+
+    /// The imported functions.
+    pub fn functions(&self) -> &[ImportedFunction] {
+        &self.functions
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty() && self.functions.is_empty()
+    }
+}
+
 /// The erased program as flat, first-order data. See the crate documentation for the representation contract.
 ///
-/// Archived (behind the `archive` feature) as the fixed prelude's replayable prefix. The constant interning index is skipped — it is exactly the inverse of the `constants` arena, rebuilt by `reindex_constants` on restore — so the serialized bytes stay deterministic (a hash map's iteration order is not).
+/// Archived (behind the `archive` feature) as what an item of a stored unit erased to. The constant interning index is skipped — it is exactly the inverse of the `constants` arena — so the serialized bytes stay deterministic (a hash map's iteration order is not). A restored module is linked from and never built on, so nothing rebuilds the index: linking interns a fragment's constants into the program that takes them.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived(recursive)]
 pub struct Module {
@@ -56,6 +100,7 @@ pub struct Module {
     foreigns: Vec<Arc<ForeignFunction>>,
     items: Vec<StatementId>,
     entry: Option<BlockId>,
+    imports: Imports,
     #[archived_with(curios_archive::Skip)]
     constant_index: HashMap<Constant, ConstantId>,
 }
@@ -73,6 +118,32 @@ impl Module {
     /// The entry block, evaluated after the items to produce the program's result.
     pub fn entry(&self) -> Option<BlockId> {
         self.entry
+    }
+
+    /// What this module uses and does not define — see [`Imports`].
+    pub fn imports(&self) -> &Imports {
+        &self.imports
+    }
+
+    /// The interface `function` is imported under, where it is an import.
+    pub(crate) fn imported(&self, function: FunctionId) -> Option<&Interface> {
+        self.imports
+            .functions
+            .iter()
+            .find(|import| import.function == function)
+            .map(|import| &import.interface)
+    }
+
+    /// Whether evaluating one of this module's items at initialization could be observable, as far as the item alone says: it applies something, whose behaviour is the callee's and so the linked program's to say, it evaluates blocks of its own, or what it does is observable in itself. A group of functions, a recursive group and a construction over atoms are none of these whatever they name, so a module of nothing else is one no program has to link for its own sake.
+    pub fn computes(&self) -> bool {
+        self.items.iter().any(|&item| match self.statement(item) {
+            Some(Statement::Let { rhs, .. }) => {
+                matches!(rhs, Rhs::Apply { .. } | Rhs::Intrinsic { .. })
+                    || !rhs.sub_blocks().is_empty()
+                    || Semantics::local_behavior(rhs).is_observable()
+            }
+            Some(Statement::Functions { .. } | Statement::Rec { .. }) | None => false,
+        })
     }
 
     pub fn values(&self) -> &[Option<ValueDef>] {
@@ -248,6 +319,39 @@ impl Module {
         self.values.mint(ValueDef { debug_name })
     }
 
+    /// Mint a value another module binds, in scope from this module's first item.
+    pub(crate) fn import_value(&mut self, debug_name: Option<String>) -> ValueId {
+        let value = self.add_value(debug_name);
+        self.imports.values.push(value);
+        value
+    }
+
+    /// Mint a function another module defines, of `arity` parameters and the given interface, in scope from this module's first item. Its body is a stub nothing evaluates: what stands for it is where linking sends the identity.
+    pub(crate) fn import_function(
+        &mut self,
+        debug_name: Option<String>,
+        arity: usize,
+        interface: Interface,
+    ) -> FunctionId {
+        let params = (0..arity).map(|_| self.add_value(None)).collect();
+        let body = self.add_block(Block {
+            statements: Vec::new(),
+            terminator: Terminator::Unreachable,
+        });
+        let function = self.functions.mint(Function {
+            debug_name,
+            params,
+            body,
+            description: false,
+            total: false,
+        });
+        self.imports.functions.push(ImportedFunction {
+            function,
+            interface,
+        });
+        function
+    }
+
     /// Mint a function identity whose definition follows later, so recursive bodies can reference their own or a sibling's identity. A reserved slot is `None` until [`define_function`](Self::define_function) fills it; finalization requires every reservation to have been defined.
     pub(crate) fn reserve_function(&mut self) -> FunctionId {
         self.functions.reserve()
@@ -269,16 +373,6 @@ impl Module {
         self.rec_groups.mint(group)
     }
 
-    /// Rebuild the skipped interning index from the constants arena — the restore path's counterpart to the `archive` skip above.
-    pub(crate) fn reindex_constants(&mut self) {
-        self.constant_index = self
-            .constants
-            .iter()
-            .enumerate()
-            .map(|(index, constant)| (constant.clone(), ConstantId(index as u32)))
-            .collect();
-    }
-
     /// Intern a constant by its exact bitwise identity, returning the shared identity of an equal constant already present.
     pub(crate) fn intern_constant(&mut self, constant: Constant) -> ConstantId {
         if let Some(&id) = self.constant_index.get(&constant) {
@@ -294,6 +388,11 @@ impl Module {
         let id = ProductId(u32::try_from(self.products.len()).expect("product arena exhausted"));
         self.products.push(schema);
         id
+    }
+
+    /// Write the fields of a product schema registered without them — linking registers every schema's place before any schema's fields, since a field's shape names one.
+    pub(crate) fn set_product_fields(&mut self, id: ProductId, fields: Vec<Field>) {
+        self.products[id.index()].fields = fields;
     }
 
     pub(crate) fn add_family(&mut self, debug_name: Option<String>) -> FamilyId {
@@ -362,6 +461,7 @@ impl Module {
             statements: &statements,
             substitution: &std::collections::BTreeMap::new(),
             redirect: None,
+            tables: None,
         };
 
         // The arenas hold their entries at fresh indices now; their *contents* still name the old ones.
@@ -408,6 +508,12 @@ impl Module {
             .map(|&item| remap.statement_id(item))
             .collect();
         self.entry = self.entry.map(|entry| remap.block(entry));
+        for value in &mut self.imports.values {
+            *value = remap.value(*value);
+        }
+        for import in &mut self.imports.functions {
+            import.function = lookup(remap.functions, import.function);
+        }
 
         // Named one by one rather than folded into a loop: the list is the claim. A sixth arena added to this module and not compacted above is the shape this catches, and it catches it only by being written out here too.
         self.values.assert_packed("values");

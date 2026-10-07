@@ -110,7 +110,7 @@ fn proof_in_an_erased_position_is_not_evaluated() {
 
 /// A program pays only for what it names: the standard library's parser web reaches a trivial entry not at all.
 ///
-/// **Pruning is what stands between a program and the whole prelude**, and one spelling can defeat it: `/std/Json/decode/decode` is a top-level `apply` whose callee is an *alias* of `/std/Parse/bind` rather than a bare function atom, and an effect summary taking its conservative top there would read the item as observably effectful and keep it — and with it the recursive parser group it names and the entire `Json`/`Parse`/`Flt/of_str` web, in every program.
+/// **Pruning is what stands between a program and everything the library computes as it is initialized**, and one spelling can defeat it: `/std/Json/decode/decode` is a top-level `apply` whose callee is an *alias* of `/std/Parse/bind` rather than a bare function atom, and an effect summary taking its conservative top there would read the item as observably effectful and keep it — and with it the recursive parser group it names and the entire `Json`/`Parse`/`Flt/of_str` web, in every program.
 ///
 /// Asserted on the *optimized* Cont, which is the last place anything could still drop it, and by name rather than by size, so the reason a regression fails here is legible.
 #[test]

@@ -445,6 +445,31 @@ fn an_unused_direct_self_knot_is_admitted() {
         .expect("the unused self-knot is admitted");
 }
 
+/// A fragment cannot tell whether another module reads a member only its own initializer reads, so it is admitted there and named, for whoever erases a read of it to refuse: with a second member the fragment does read, which is no such knot, left out.
+#[test]
+fn a_fragment_names_the_self_knots_nothing_of_it_forces() {
+    let mut builder = ErsdBuilder::new();
+    let knot = builder.value(Some("knot".into()));
+    let plain = builder.value(Some("plain".into()));
+    builder.open_block();
+    let init_knot = builder.seal_block(Terminator::Return(Atom::Value(knot)));
+    builder.open_block();
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
+    let init_plain = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
+    let group = builder.rec_group(vec![], vec![(knot, init_knot), (plain, init_plain)]);
+    builder.item_rec(group);
+
+    let module = builder.into_module().expect("the fragment verifies");
+    let unforced = module.unforced();
+
+    assert_eq!(unforced.len(), 1, "{unforced:?}");
+    assert_eq!(
+        (unforced[0].member.as_str(), unforced[0].value),
+        ("knot", knot)
+    );
+    assert!(unforced[0].through.is_none());
+}
+
 #[test]
 fn a_used_direct_self_knot_is_rejected() {
     // `rec loop = loop; loop`: forcing `loop` runs an initializer that forces `loop`, the cycle the by-need lowering meets first. A self-read is an edge like any other once something forces the member, so this is refused here rather than admitted with the unused shape to trap as a black hole at runtime.

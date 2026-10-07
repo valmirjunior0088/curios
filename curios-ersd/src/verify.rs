@@ -140,6 +140,7 @@ pub(crate) enum StructuralRule {
     BrokenSchemaLink,
     UnsealedBlock,
     DanglingReservation,
+    UnresolvedImport,
 }
 
 fn fault(rule: StructuralRule, detail: String) -> StructuralFault {
@@ -151,21 +152,31 @@ impl Module {
     pub fn verify(&self) -> Result<(), VerifyError> {
         curios_profile::profile!("verify_module");
         self.assert_structure(Entry::Required);
-        self.check_recursion()
+        // A member only its own initializer reads is read by nothing in a whole program, so it is never forced.
+        self.check_recursion().map(|_| ())
     }
 
-    /// [`verify`](Self::verify) for a *prefix* — a unit that carries no entrypoint, so there is no entry block and its absence is not a fault.
+    /// [`verify`](Self::verify) for a *fragment* — what one item erased to, which carries no entrypoint, so there is no entry block and its absence is not a fault, and whose imports are bound before its first item.
     ///
-    /// Every other rule applies unchanged: an entry contributes no rule of its own, it is one more block walked after the items, so what a prefix cannot be checked against is exactly the one clause that asks for it. That is worth a second entry point rather than a silent skip, because the prefix is the thing that gets *stored*: the fixed prelude's image is erased, compacted and serialized without ever passing through [`ErsdBuilder::finalize`](crate::ErsdBuilder::finalize), and a compaction that misses an identity rewrites nothing and reports nothing — the stale index still addresses a live slot, just the wrong entity. Without this the first walk over those bytes is a later program's own `finalize`, which reports the fault against that program.
+    /// Every other rule applies unchanged: an entry contributes no rule of its own, it is one more block walked after the items, so what a fragment cannot be checked against is exactly the one clause that asks for it. That is worth a second entry point rather than a silent skip, because the fragment is the thing that gets *stored*: a unit's erased forms are serialized without ever passing through [`ErsdBuilder::finalize`](crate::ErsdBuilder::finalize), and without this the first walk over those bytes is the verification of a later program linked from them, which reports the fault against that program.
     ///
-    /// The prelude's own build profile prices it: **76.1 ms against `erase_unit`'s 2344.9 ms**, debug, one call each. Retake with `cargo build --package curios-prelude --features profile` and read `verify_prefix` out of the `curios-prelude-archive/.artifacts/profile.tsv` the elaborating build files.
-    pub fn verify_prefix(&self) -> Result<(), VerifyError> {
-        curios_profile::profile!("verify_prefix");
+    /// What it costs is the `verify_fragment` rows of the profile the prelude's elaborating build files, one for each item: `cargo build --package curios-prelude --features profile`, then `curios-prelude-archive/.artifacts/profile.tsv`.
+    pub fn verify_fragment(&self) -> Result<(), VerifyError> {
+        curios_profile::profile!("verify_fragment");
         self.assert_structure(Entry::Absent);
-        self.check_recursion()
+        self.check_recursion().map(|_| ())
     }
 
-    /// The first structural rule the module breaks as `entry` describes it, if any — what [`verify`](Self::verify) and [`verify_prefix`](Self::verify_prefix) panic on, handed back so a test can read which rule fired.
+    /// The computed members whose initializers read themselves while nothing else of the module reads them, each as the cycle a read of it would close.
+    ///
+    /// Nothing forces such a member, so within the module its read evaluates nothing and the recursion rules admit it. A fragment cannot say the same of a name another module may import: a member one fragment leaves unforced is forced by the first fragment that reads it, and that read is the cycle. So whoever erases a read of a name is told here whether the name is one of these, and refuses the read where it is written — a fragment is then held to the recursion rules where it is erased, and nothing is left for the program linked from it to be refused for.
+    ///
+    /// Empty for a module the recursion rules refuse, which is handed on to no reader.
+    pub fn unforced(&self) -> Vec<CycleStep> {
+        self.check_recursion().unwrap_or_default()
+    }
+
+    /// The first structural rule the module breaks as `entry` describes it, if any — what [`verify`](Self::verify) and [`verify_fragment`](Self::verify_fragment) panic on, handed back so a test can read which rule fired.
     pub(crate) fn structure_fault(&self, entry: Entry) -> Option<StructuralFault> {
         grown(|| Verifier::new(self).run(entry)).err()
     }
@@ -176,16 +187,23 @@ impl Module {
         }
     }
 
-    /// Every recursive group's computed members, against the two rules forcing by need rests on. It runs once the structure holds, so every live group it reads off the arena is one the module owns; it is not inside the walk because the walk is the half that panics.
-    fn check_recursion(&self) -> Result<(), VerifyError> {
+    /// What applying `function` does that a module importing it has to know — see [`Interface`](super::Interface). Read off the same summaries the recursion rules read, so a caller in another module is held to what a caller in this one is.
+    pub fn interface(&self, function: FunctionId) -> super::Interface {
+        interface(self, function)
+    }
+
+    /// Every recursive group's computed members, against the two rules forcing by need rests on, handing back the members [`unforced`](Self::unforced) names. It runs once the structure holds, so every live group it reads off the arena is one the module owns; it is not inside the walk because the walk is the half that panics.
+    fn check_recursion(&self) -> Result<Vec<CycleStep>, VerifyError> {
+        let mut unforced = Vec::new();
         for group in self.rec_groups().iter().flatten() {
-            check_group(self, &group.values)?;
+            unforced.extend(check_group(self, &group.values)?);
         }
-        Ok(())
+
+        Ok(unforced)
     }
 }
 
-/// Whether the module under check is a finished program, which owes an entry block, or a prefix, which does not.
+/// Whether the module under check is a finished program, which owes an entry block, or a fragment, which does not.
 #[derive(Clone, Copy)]
 pub(crate) enum Entry {
     Required,
@@ -230,6 +248,24 @@ impl<'m> Verifier<'m> {
                 ));
             }
         };
+
+        // A program is what a back end lowers, and an import is a name nothing in it defines.
+        if let (Entry::Required, false) = (entry, self.module.imports().is_empty()) {
+            return Err(fault(
+                StructuralRule::UnresolvedImport,
+                "the module is a program and still holds imports".into(),
+            ));
+        }
+        // A fragment's imports are ambient: bound ahead of its first item, as the items that define them would have bound them were the two one module. An imported function's stub is walked as a definition is, so its parameters and its body have their one owner.
+        for &value in self.module.imports().values() {
+            self.bind_value(value)?;
+        }
+        for import in self.module.imports().functions() {
+            self.bind_function(import.function)?;
+        }
+        for import in self.module.imports().functions() {
+            self.walk_function(import.function)?;
+        }
 
         // The module's top level is a virtual block: items in order, then the entry block, with item bindings ambient for everything after them.
         let items = self.module.items().to_vec();

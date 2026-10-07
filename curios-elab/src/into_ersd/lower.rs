@@ -4,8 +4,9 @@
 
 use {
     super::{
-        Binding, Bound, Context, Environment, Error, InductDecl, Intrinsic, Let, Resumed, Subterm,
-        Telescope, Term, emitted, intrinsic, reduce_with,
+        Binding, Bound, Context, Environment, ErasedItem, ErasedUnit, Erasures, Error, Export,
+        InductDecl, Intrinsic, Let, Subterm, Telescope, Term, emitted, intrinsic, link,
+        reduce_with,
     },
     crate::{validate_entry_universes, validate_universes},
     curios_core::{
@@ -26,11 +27,19 @@ pub(super) enum Outcome {
     Diverged(curios_ersd::Terminator),
 }
 
-/// The erasure state: the checked builder constructing the module and the environment mapping Core names to their operands.
-#[derive(Default)]
-pub(super) struct Lowering {
+/// How one item's erasure reads the erased form of another: by a name the other declares.
+pub(super) type Externals<'s> = &'s dyn Fn(&Global) -> Option<&'s ErasedItem>;
+
+/// One item's erasure state: the checked builder constructing its fragment and the environment mapping Core names to their operands there.
+pub(super) struct Lowering<'s> {
     pub(super) builder: curios_ersd::ErsdBuilder,
     pub(super) environment: Environment,
+    /// The erased forms of the items this one may name.
+    externals: Externals<'s>,
+    /// The name each value the fragment imports stands for, in the order the builder minted them.
+    values: Vec<Global>,
+    /// The name each function the fragment imports stands for, in the order the builder minted them.
+    functions: Vec<Global>,
     /// Dropped binder labels referenced from a retained position. Consumed by the function-body collapse: a proof-valued body that dangles a binder its own lambda dropped is replaced by the unit constant.
     pub(super) dangled: BTreeSet<Free>,
     /// The definition each emitted function descends from, innermost last, paired with how many anonymous ones have been minted under it. See [`Lowering::derived_hint`].
@@ -178,13 +187,13 @@ fn seed_registries(context: &mut Context, module: &Module) -> Result<(), Error> 
     Ok(())
 }
 
-/// Erase the entrypoint body into the entry block and finalize the arena — [`erase_unit`]'s tail for the unit that is the entry. The program's own body owns what it mints, the same way an item owns what its body mints: the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from. The verifier is the rejection point for the recursion classes the language does not admit — an evaluation cycle, an initializer that performs an effect — and hands those back as the refusal; a malformed arena is an erasure fault, which the verifier panics on rather than returning here.
+/// Erase the entrypoint body into the entry block of a fragment of its own — [`erase_program`]'s tail. The program's own body owns what it mints, the same way an item owns what its body mints: the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from. The verifier is the rejection point for the recursion classes the language does not admit — an evaluation cycle, an initializer that performs an effect — and hands those back as the refusal; a malformed fragment is an erasure fault, which the verifier panics on rather than returning here.
 fn seal_entry(
-    mut lowering: Lowering,
+    mut lowering: Lowering<'_>,
     context: &mut Context,
     body: &Term,
     expected: &Term,
-) -> Result<ErasedArena, Error> {
+) -> Result<ErasedItem, Error> {
     lowering.types.clear();
     lowering.builder.open_block();
     let outcome = lowering.with_owner("main".to_string(), |lowering| {
@@ -194,26 +203,14 @@ fn seal_entry(
     let entry = lowering.seal(outcome);
     lowering.builder.set_entry(entry);
 
-    let Lowering {
-        builder,
-        environment,
-        spans,
-        ..
-    } = lowering;
-
-    Ok(ErasedArena {
-        module: builder
-            .finalize()
-            .map_err(|error| Error::refused_by_verifier(error, &spans))?,
-        environment: environment.sealed(),
-    })
+    lowering.into_erased(&[])
 }
 
 /// The entrypoint boundary: an `Io(T)` tail is a *description*, and the emitted `func/main` is the one place anything forces one.
 ///
 /// Nothing else in the language may: there is no eliminator from `Io(T)` to `T`, which is what makes every term of non-`Io` type pure by typing. The force is type-directed rather than unconditional so a non-`Io` tail erases unforced — the erasure unit tests state such tails directly. What makes it mandatory in production is `curios-pipeline`, which checks the tail against `Io({})`, so the payload the force yields there is already unit and the entry discards nothing an author wrote. The runtime ignores `func/main`'s result either way: a program's meaning is the effects its description performs.
 fn force_entry(
-    lowering: &mut Lowering,
+    lowering: &mut Lowering<'_>,
     context: &mut Context,
     expected: &Term,
     outcome: Outcome,
@@ -239,7 +236,88 @@ fn force_entry(
     Ok(Outcome::Emitted(lowering.unit()))
 }
 
-impl Lowering {
+impl<'s> Lowering<'s> {
+    /// A fresh erasure, of one item, reading other items' erased forms through `externals`.
+    pub(super) fn over(externals: Externals<'s>) -> Self {
+        Self {
+            builder: curios_ersd::ErsdBuilder::new(),
+            environment: Environment::default(),
+            externals,
+            values: Vec::new(),
+            functions: Vec::new(),
+            dangled: BTreeSet::new(),
+            owners: Vec::new(),
+            pending_families: BTreeMap::new(),
+            in_flight: BTreeSet::new(),
+            types: HashMap::new(),
+            spans: BTreeMap::new(),
+        }
+    }
+
+    /// Close the fragment and hand the item's erased form over: the fragment verified with no entry, its recursion rules included, and of the environment the bindings of `declared`, the names the item declares.
+    pub(super) fn into_erased(self, declared: &[&Global]) -> Result<ErasedItem, Error> {
+        let Self {
+            builder,
+            environment,
+            values,
+            functions,
+            spans,
+            ..
+        } = self;
+        let module = builder
+            .into_module()
+            .map_err(|error| Error::refused_by_verifier(error, &spans))?;
+
+        Ok(ErasedItem::new(
+            module,
+            environment.exporting(declared),
+            values,
+            functions,
+            &spans,
+        ))
+    }
+
+    /// Bind `name`, which another item declares, as this fragment reads it: an erased binding as none, a constant as the constant, and a value or a function as an import, minted the first time the name is used.
+    ///
+    /// A value whose own initializer reads it is refused here: its item could not tell that anything would read it, and this read is what forces it into itself. So the recursion rules are settled for every fragment where it is erased, and a unit that reads such a value of another is refused where it is compiled.
+    fn external(&mut self, name: &Free) -> Result<Option<Binding>, Error> {
+        let Some(global) = name.as_global() else {
+            return Ok(None);
+        };
+        let Some(export) = (self.externals)(global).and_then(|erased| erased.export(global)) else {
+            return Ok(None);
+        };
+        let binding = match export {
+            Export::Unforced { member, span } => {
+                return Err(Error::evaluates_itself(member.to_string()).at_opt(span.cloned()));
+            }
+            Export::Dropped => Binding::Dropped,
+            Export::Constant(constant) => Binding::Atom(curios_ersd::Atom::Constant(
+                self.builder.constant(constant.clone()),
+            )),
+            Export::Value => {
+                self.values.push(*global);
+                Binding::Atom(curios_ersd::Atom::Value(
+                    self.builder.import_value(Some(global.symbol())),
+                ))
+            }
+            Export::Function { arity, interface } => {
+                self.functions.push(*global);
+                Binding::Atom(curios_ersd::Atom::Function(self.builder.import_function(
+                    Some(global.symbol()),
+                    arity,
+                    interface,
+                )))
+            }
+        };
+        match binding {
+            Binding::Atom(atom) => self.environment.bind(name, atom),
+            Binding::Dropped => self.environment.bind_dropped(name),
+        }
+
+        Ok(Some(binding))
+    }
+
     /// Erase `body` with `name` standing as the definition every function minted inside it descends from.
     pub(super) fn with_owner<R>(&mut self, name: String, body: impl FnOnce(&mut Self) -> R) -> R {
         self.owners.push((name, 0));
@@ -378,13 +456,18 @@ impl Lowering {
             }
             Subterm::Var(var) => {
                 let name = var.unwrap();
-                match self.environment.lookup(name) {
-                    Some(Binding::Atom(atom)) => Ok(Outcome::Emitted(atom)),
-                    Some(Binding::Dropped) => {
+                let binding = match self.environment.lookup(name) {
+                    Some(binding) => binding,
+                    None => self
+                        .external(name)?
+                        .unwrap_or_else(|| unreachable!("erase: unbound variable {name}")),
+                };
+                match binding {
+                    Binding::Atom(atom) => Ok(Outcome::Emitted(atom)),
+                    Binding::Dropped => {
                         self.dangled.insert(*name);
                         Ok(Outcome::Emitted(self.unit()))
                     }
-                    None => unreachable!("erase: unbound variable {name}"),
                 }
             }
             Subterm::Let(binding) => self.erase_let(context, binding, expected, hint),
@@ -439,100 +522,120 @@ impl Lowering {
     }
 }
 
-/// What one unit's erasure provides to its successors: its items in an erased module, together with the environment mapping its Core names to erased operands. Archived behind the `archive` feature and restored once per thread; every production compile consumes an owned clone, so a stored unit is never re-erased from source.
-///
-/// `Default` is the empty scope, and it is what makes "erase the first unit" the same call as "erase a later one": `ErsdBuilder::resume` over an empty module reindexes nothing and yields exactly a fresh builder.
-#[derive(Debug, Clone, Default)]
-#[curios_archive::archived(recursive)]
-pub struct ErasedArena {
-    #[archived_omit_bounds]
+/// A program erased and linked: one module holding what its entry reaches, and where each name linked into it landed.
+#[derive(Debug)]
+pub struct ErasedProgram {
     module: curios_ersd::Module,
-    environment: Environment,
+    bound: BTreeMap<Global, curios_ersd::Atom>,
 }
 
-impl ErasedArena {
-    /// Whether this holds any erased items — the freshness probe the archive tests use.
-    pub fn is_empty(&self) -> bool {
-        self.module.items().is_empty()
+impl ErasedProgram {
+    pub(super) fn new(
+        module: curios_ersd::Module,
+        bound: BTreeMap<Global, curios_ersd::Atom>,
+    ) -> Self {
+        Self { module, bound }
     }
 
-    /// Compact the erased arena, rewriting the environment that indexes into it.
+    /// Mark every function a definition `certification` classifies `Total` erased to as total — see [`curios_ersd::Function::total`]. Each is found through where its name was linked, so a definition that erased to anything but a function, or that the program does not reach, has nothing to mark, and a function no record names keeps the conservative `false`.
     ///
-    /// Both halves move together or neither does: the module owns the arenas and the environment owns the only identities held outside them, and they are archived as one value. Run before serialization so a stored image never carries tombstones a consumer would then walk on every compile.
-    pub fn compact(&mut self) {
-        let compaction = self.module.compact();
-        self.environment.remap(&compaction);
-    }
-
-    /// Mark every function a definition `certification` classifies `Total` erased to as total — see [`curios_ersd::Function::total`]. Each is found through the name→operand binding erasure made for it, so a definition that erased to anything but a function has nothing to mark, and a function no record names keeps the conservative `false`.
-    ///
-    /// Run on the sealed program, once per record of what it was erased from: every unit's in scope and the entry's own. The arena is cumulative, so one arena holds every unit's functions, and nothing reads the flag before the back half lowers what this leaves.
+    /// Run on the linked program, once per record of what it was erased from: every unit's in scope and the entry's own. Nothing reads the flag before the back half lowers what this leaves.
     pub fn mark_total(&mut self, certification: &Certification) {
         for (name, totality) in certification.iter() {
             if totality.is_total()
-                && let Some(Binding::Atom(curios_ersd::Atom::Function(id))) =
-                    self.environment.lookup(&Free::from(name))
+                && let Some(curios_ersd::Atom::Function(id)) = self.bound.get(name)
             {
-                self.module.mark_total(id);
+                self.module.mark_total(*id);
             }
         }
     }
 
-    /// The finished erased module, for a unit whose entrypoint was sealed — what the back half of the pipeline lowers. A unit without one is a scope rather than a program, and its arena is resumed over instead.
+    /// The finished erased module — what the back half of the pipeline lowers.
     pub fn into_module(self) -> curios_ersd::Module {
         self.module
     }
 }
 
-/// Erase one unit's items onto what its scope already erased, leaving the arena open for its successors to resume over.
+/// Erase one unit's items, each into a fragment of its own, over what its scope erased to.
 ///
-/// The Core context is re-seeded with the scope's definitions (so the unit's re-derived types reduce through them), the builder resumes over the restored arenas, and the items erase in the order the module stores them, every item after the items it reaches — every reference into the scope is already bound.
+/// The Core context is seeded with the scope's definitions and the unit's own, so every re-derived type reduces through them, and the items erase in the order the module stores them, every item after the items it reaches — so the erased form of every name an item uses is in hand when it is asked for.
 ///
-/// **A unit and a program are erased by one walk, and only a program's is sealed.** The entry is not a unit's to carry: a program is its module and the term it closes with ([`Program`]), so [`erase_program`] runs this same walk and seals the entry at the type it states, which [`Zonked`] holds.
-///
-/// Nothing here is the caller's to guarantee, which is the point: the unit carries its own items alone, and [`Resumed`] pairs the scope's Core with its erased arena, so the two describe one program by construction. What remains is a property of the archive rather than of a caller — its universes are validated at the restore boundary, where untrusted bytes become a `Module`.
+/// **A unit and a program are erased by one walk, and only a program is linked.** The entry is not a unit's to carry: a program is its module and the term it closes with ([`Program`]), so [`erase_program`] runs this same walk, erases the entry at the type it states, which [`Zonked`] holds, and links what the entry reaches.
 pub fn erase_unit(
     context: &mut Context,
-    resumed: Resumed<'_>,
+    scope: Erasures<'_>,
     module: &Zonked<Module>,
-) -> Result<ErasedArena, Error> {
+) -> Result<ErasedUnit, Error> {
     curios_profile::profile!("erase_unit");
-    grown(|| erase_within(context, resumed, module, None))
+    grown(|| {
+        let module = seed(context, scope, module)?;
+        erase_items(context, scope, &module, |_| None)
+    })
 }
 
-/// [`erase_unit`] for a program: its module erased onto its scope, then its entry sealed at the type it states — the arena whose [`ErasedArena::into_module`] the back half lowers.
+/// [`erase_unit`] for a unit compiled over a baseline: an item none of whose names `redone` holds keeps the erased form `baseline` has for it, and every other is erased.
+///
+/// What is redone is closed under what an item's erasure reads — the types and registry entries of the names it reaches, and how each of them is bound — which is the caller's to guarantee, as it is for the items elaborated again.
+pub fn erase_unit_over(
+    context: &mut Context,
+    scope: Erasures<'_>,
+    module: &Zonked<Module>,
+    baseline: &ErasedUnit,
+    redone: &dyn Fn(&Global) -> bool,
+) -> Result<ErasedUnit, Error> {
+    curios_profile::profile!("erase_unit");
+    grown(|| {
+        let module = seed(context, scope, module)?;
+        erase_items(context, scope, &module, |item| {
+            let names = item.declared_names();
+            match names.iter().any(|name| redone(name)) {
+                true => None,
+                false => baseline.find(names.first()?).cloned(),
+            }
+        })
+    })
+}
+
+/// [`erase_unit`] for a program: its module erased over its scope, its entry erased at the type it states, and the two linked with what they reach of the scope — the module whose [`ErasedProgram::into_module`] the back half lowers.
 pub fn erase_program(
     context: &mut Context,
-    resumed: Resumed<'_>,
+    scope: Erasures<'_>,
     program: &Zonked<Program>,
-) -> Result<ErasedArena, Error> {
+) -> Result<ErasedProgram, Error> {
     curios_profile::profile!("erase_unit");
-    grown(|| erase_within(context, resumed, &program.module(), Some(program.entry())))
+    grown(|| {
+        let (body, type_) = program.entry();
+        // The entry's universes are held to its module's schemes before projection erases them.
+        validate_entry_universes(
+            program.module().as_module(),
+            &Entrypoint {
+                body: body.clone(),
+                type_: Some(type_.clone()),
+            },
+        )?;
+        let (body, type_) = (
+            project_erased_universes(body),
+            project_erased_universes(type_),
+        );
+
+        let module = seed(context, scope, &program.module())?;
+        let own = erase_items(context, scope, &module, |_| None)?;
+        let entry = {
+            let externals = |name: &Global| own.find(name).or_else(|| scope.find(name));
+            seal_entry(Lowering::over(&externals), context, &body, &type_)?
+        };
+
+        link(scope, &own, &entry)
+    })
 }
 
-fn erase_within(
+/// Seed the erasure context with what every item's re-derived types reduce through — the scope's registries and definitions, then the unit's own — and hand back the unit projected out of its universes.
+fn seed(
     context: &mut Context,
-    resumed: Resumed<'_>,
+    scope: Erasures<'_>,
     module: &Zonked<Module>,
-    entry: Option<(&Term, &Term)>,
-) -> Result<ErasedArena, Error> {
-    let predecessors = resumed.projected_cores();
-    // The entry's universes are held to its module's schemes before projection erases them.
-    let entry = entry
-        .map(|(body, type_)| {
-            validate_entry_universes(
-                module.as_module(),
-                &Entrypoint {
-                    body: body.clone(),
-                    type_: Some(type_.clone()),
-                },
-            )?;
-            Ok::<_, Error>((
-                project_erased_universes(body),
-                project_erased_universes(type_),
-            ))
-        })
-        .transpose()?;
+) -> Result<Module, Error> {
+    let predecessors = scope.projected_cores();
     let module = UniverseErased::<Zonked<Module>>::project(module)?
         .into_inner()
         .into_module();
@@ -542,61 +645,83 @@ fn erase_within(
     }
     seed_registries(context, &module)?;
 
-    // Re-seed the Core context with the scope's definitions, in dependency order: later items and the entrypoint reduce through them.
-    for item in predecessors.iter().flat_map(|unit| &unit.items) {
-        match item {
-            Item::Let(definition) => {
-                context.define_assuming_scheme(
-                    &Free::from(&definition.name),
-                    &definition.type_,
-                    &definition.body,
-                    Some(&definition.kind),
-                    definition.universe_context.clone(),
-                );
+    // Every definition, the unit's own with the scope's: an item is erased in a fragment of its own, and which of the unit's items are erased at all is the caller's to say, so none of them is defined by the erasure of the one before it.
+    for item in predecessors
+        .iter()
+        .flat_map(|unit| &unit.items)
+        .chain(&module.items)
+    {
+        define(context, item);
+    }
+
+    Ok(module)
+}
+
+/// Define `item`'s names in the Core context: a definition at its type and body, a group's members each at its type and its selection.
+fn define(context: &mut Context, item: &Item) {
+    match item {
+        Item::Let(definition) => {
+            context.define_assuming_scheme(
+                &Free::from(&definition.name),
+                &definition.type_,
+                &definition.body,
+                Some(&definition.kind),
+                definition.universe_context.clone(),
+            );
+        }
+        Item::Rec(rec) => {
+            let definitions = rec.definitions();
+            for definition in &definitions {
+                let name = Free::from(&definition.name);
+                context.assume(&name, &definition.type_);
+                context
+                    .set_assumption_universe_context(&name, rec.group.universe_context().clone());
             }
-            Item::Rec(rec) => {
-                let definitions = rec.definitions();
-                for definition in &definitions {
-                    let name = Free::from(&definition.name);
-                    context.assume(&name, &definition.type_);
-                    context.set_assumption_universe_context(
-                        &name,
-                        rec.group.universe_context().clone(),
-                    );
-                }
-                for (index, definition) in definitions.iter().enumerate() {
-                    context.define(
-                        &Free::from(&definition.name),
-                        &Term::rec_proj(rec.group.clone(), index),
-                        Some(&definition.kind),
-                    );
-                }
+            for (index, definition) in definitions.iter().enumerate() {
+                context.define(
+                    &Free::from(&definition.name),
+                    &Term::rec_proj(rec.group.clone(), index),
+                    Some(&definition.kind),
+                );
             }
         }
     }
+}
 
-    let prefix = resumed.into_arena();
-    let mut lowering = Lowering {
-        builder: curios_ersd::ErsdBuilder::resume(prefix.module),
-        environment: prefix.environment,
-        dangled: Default::default(),
-        owners: Default::default(),
-        pending_families: Default::default(),
-        in_flight: Default::default(),
-        spans: Default::default(),
-        types: Default::default(),
-    };
-    lowering.erase_items(context, &module)?;
-
-    match entry {
-        Some((body, type_)) => seal_entry(lowering, context, &body, &type_),
-        // No entrypoint: the arena stays open, which is exactly what a successor resumes over. The hand-off still checks every rule a prefix can satisfy, so an image reaches the archive walked rather than merely constructed.
-        None => Ok(ErasedArena {
-            module: lowering
-                .builder
-                .into_module()
-                .map_err(|error| Error::refused_by_verifier(error, &lowering.spans))?,
-            environment: lowering.environment.sealed(),
-        }),
+/// Erase `module`'s items in the order it stores them, each into a fragment of its own, but for those `reused` hands an erased form for.
+fn erase_items(
+    context: &mut Context,
+    scope: Erasures<'_>,
+    module: &Module,
+    reused: impl Fn(&Item) -> Option<ErasedItem>,
+) -> Result<ErasedUnit, Error> {
+    let mut unit = ErasedUnit::default();
+    for item in &module.items {
+        let erased = match reused(item) {
+            Some(erased) => erased,
+            None => {
+                let externals = |name: &Global| unit.find(name).or_else(|| scope.find(name));
+                erase_item(context, &externals, item)?
+            }
+        };
+        unit.push(item, erased);
     }
+
+    Ok(unit)
+}
+
+/// Erase one item into a fragment of its own, on a budget restored for it.
+fn erase_item(
+    context: &mut Context,
+    externals: Externals<'_>,
+    item: &Item,
+) -> Result<ErasedItem, Error> {
+    context.restore_budget();
+    let mut lowering = Lowering::over(externals);
+    match item {
+        Item::Let(definition) => lowering.erase_definition(context, definition)?,
+        Item::Rec(rec) => lowering.erase_rec_item(context, rec)?,
+    }
+
+    lowering.into_erased(&item.declared_names())
 }

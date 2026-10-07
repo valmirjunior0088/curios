@@ -5,7 +5,7 @@
 use {
     crate::*,
     curios_core::{Item, Module, Sharing, Variance},
-    curios_elab::{Context, Resumed, erase_program},
+    curios_elab::{Context, Erasures, erase_program},
     curios_prelude::with_prelude,
     curios_text::{Entrypoint, LintKind, RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
@@ -77,9 +77,9 @@ pub(super) fn typecheck(source: &str) -> Result<(), String> {
     .map_err(String::from)
 }
 
-/// Elaborate `source` to its meta-free Core program and erase it as `compile_entrypoint` does — the archived erased prelude replayed, the program's own items erased onto it and its entry sealed — short of marking its functions' termination flags, which takes the kernel's records and is `erase_checked`'s.
+/// Elaborate `source` to its meta-free Core program and erase it as `compile_entrypoint` does — the program's own items erased over the archived prelude's erased forms and linked with what they reach — short of marking its functions' termination flags, which takes the kernel's records and is `erase_checked`'s.
 ///
-/// Replayed rather than erased fresh: a compiled module carries the entry's own items alone, so a from-scratch erasure of it would leave every prelude name unbound. Replaying is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
+/// Over the archive rather than erased fresh: a compiled module carries the entry's own items alone, so a from-scratch erasure of it would leave every prelude name unbound. It is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
 pub(super) fn erase_to_ersd(source: &str) -> curios_ersd::Module {
     let entrypoint = entrypoint_of(source);
     let (program, _foreigns, _records) = with_prelude(|prelude| {
@@ -99,7 +99,7 @@ pub(super) fn erase_to_ersd(source: &str) -> curios_ersd::Module {
         let predecessors = Predecessors::over(prelude);
         erase_program(
             &mut Context::with_default_budget(SYNTAX),
-            Resumed::of(&predecessors.cores(), predecessors.arena()),
+            Erasures::of(&predecessors.cores(), &predecessors.erased()),
             &program,
         )
     })
@@ -232,6 +232,11 @@ pub(super) fn compile_modules(modules: &RootSource) -> Result<Unit, String> {
 
 /// Every unit `sources` holds, compiled in order against the prelude, each after the ones before it.
 pub(super) fn compile_in_order(sources: &[&RootSource]) -> Vec<Unit> {
+    compile_each(sources).expect("the units compile")
+}
+
+/// [`compile_in_order`], handing back what the first unit that does not compile said: no program is compiled over the units, so a refusal is a unit's own.
+pub(super) fn compile_each(sources: &[&RootSource]) -> Result<Vec<Unit>, String> {
     with_prelude(|prelude| {
         compile_units(
             DEFAULT_STEP_BUDGET,
@@ -245,7 +250,7 @@ pub(super) fn compile_in_order(sources: &[&RootSource]) -> Vec<Unit> {
             |_| {},
         )
     })
-    .expect("the units compile")
+    .map_err(String::from)
 }
 
 /// [`recompile_over`] over modules already supplied; the recompiling half of [`compile_modules`]'s differential.
@@ -308,9 +313,9 @@ pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
             consed(whole)[..] == consed(incremental)[..],
         ),
         (
-            "the erased arena",
-            curios_archive::to_bytes(&whole.arena()).unwrap()[..]
-                == curios_archive::to_bytes(&incremental.arena()).unwrap()[..],
+            "the erased forms",
+            curios_archive::to_bytes(whole.erased()).unwrap()[..]
+                == curios_archive::to_bytes(incremental.erased()).unwrap()[..],
         ),
         (
             "the certifier's record",

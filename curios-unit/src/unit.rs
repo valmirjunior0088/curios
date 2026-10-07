@@ -3,7 +3,7 @@
 use {
     curios_abi::ForeignStore,
     curios_core::{Certification, Module},
-    curios_elab::ErasedArena,
+    curios_elab::ErasedUnit,
     curios_text::PreparedText,
     curios_utilities::Mount,
 };
@@ -13,7 +13,7 @@ use curios_core::Sharing;
 
 /// A unit as its compilation produced it, before the kernel has judged it: everything a [`Unit`] holds except the certifier's record.
 ///
-/// Composed of one opaque artifact per stage rather than flattened into their fields. `curios-text`'s resolution tables and `curios-elab`'s erased arena are that crate's business, and widening them to `pub` so this struct could hold them directly would export a resolver's internals for no consumer. What this type adds is the pairing: the three artifacts describe *one* unit, and nothing else says so.
+/// Composed of one opaque artifact per stage rather than flattened into their fields. `curios-text`'s resolution tables and `curios-elab`'s erased forms are that crate's business, and widening them to `pub` so this struct could hold them directly would export a resolver's internals for no consumer. What this type adds is the pairing: the three artifacts describe *one* unit, and nothing else says so.
 ///
 /// A compilation holds one of these only between elaborating a unit and certifying it, and [`Uncertified::certified`] is the one way out. The fixed prelude's images are the one place one is kept: `curios-prelude-archive`'s build script writes them below the certifier by design, framed as a store slot is framed, and `curios-prelude` certifies what they hold and attaches the record its own build filed.
 #[derive(Clone)]
@@ -22,16 +22,14 @@ pub struct Uncertified {
     text: PreparedText,
     /// Elaborated and zonked. This is what the kernel judges and what a successor's elaboration replays.
     core: Module,
-    /// **Not per-unit, despite sitting on a unit** — which is why it is named for what it is rather than for the stage that made it. Each unit's erasure resumes over the previous one's arena — see [`Predecessors::arena`](crate::Predecessors::arena) — so what this holds is the artifact of every unit so far, cumulative from the first unit forward, and never an independent arena numbered from zero.
-    ///
-    /// Why is the crate `README.md`'s "The erased arena is the fold's, not the unit's".
-    arena: ErasedArena,
+    /// What each of the unit's items erased to, in identities of its own and naming what another item binds by its name: this unit's alone, saying nothing of the units before it. Why is the crate `README.md`'s "An erased form is its item's".
+    erased: ErasedUnit,
 }
 
 impl Uncertified {
     /// Assemble a unit from what each stage produced for it.
-    pub fn new(text: PreparedText, core: Module, arena: ErasedArena) -> Self {
-        Self { text, core, arena }
+    pub fn new(text: PreparedText, core: Module, erased: ErasedUnit) -> Self {
+        Self { text, core, erased }
     }
 
     /// This unit with the record the certifier's walk over it left — the only way a [`Unit`] is made.
@@ -57,9 +55,9 @@ impl Uncertified {
         &self.core
     }
 
-    /// This unit's erased arena and environment, as an owned clone: replay consumes it by value, so one compile's mutation of its copy can never poison a later one.
-    pub fn arena(&self) -> ErasedArena {
-        self.arena.clone()
+    /// This unit's items' erased forms — what a later unit's erasure reads how a name is bound from, what a program links, and what a recompile of this unit takes for the items it does not redo.
+    pub fn erased(&self) -> &ErasedUnit {
+        &self.erased
     }
 
     /// The `foreign` rows this unit declares. Disjoint from every other unit's by mount, because an `ffi` import name is the declaration's fully qualified name — so the fold unions them without a collision to resolve.
@@ -73,7 +71,7 @@ impl Uncertified {
         Self {
             text: self.text.clone(),
             core: self.core.shared(&Sharing::new()),
-            arena: self.arena.clone(),
+            erased: self.erased.clone(),
         }
     }
 }
@@ -112,9 +110,9 @@ impl Unit {
         self.unit.core()
     }
 
-    /// See [`Uncertified::arena`].
-    pub fn arena(&self) -> ErasedArena {
-        self.unit.arena()
+    /// See [`Uncertified::erased`].
+    pub fn erased(&self) -> &ErasedUnit {
+        self.unit.erased()
     }
 
     /// See [`Uncertified::foreigns`].

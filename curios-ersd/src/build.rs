@@ -10,8 +10,9 @@ mod tests;
 use {
     super::{
         Block, BlockId, Constant, ConstantId, ConstructorId, FamilyId, Field, ForeignId, Function,
-        FunctionId, Module, ProductId, ProductSchema, RecGroup, RecGroupId, RecValue, Rhs,
-        Statement, StatementId, StructuralFault, StructuralRule, Terminator, ValueId, VerifyError,
+        FunctionId, Interface, Module, ProductId, ProductSchema, RecGroup, RecGroupId, RecValue,
+        Rhs, Statement, StatementId, StructuralFault, StructuralRule, Terminator, ValueId,
+        VerifyError,
     },
     curios_abi::ForeignFunction,
     std::{collections::BTreeSet, sync::Arc},
@@ -33,37 +34,41 @@ impl ErsdBuilder {
         Self::default()
     }
 
-    /// Resume construction over a restored prefix module: the archived prelude's arenas continue growing under the user suffix. The skipped constant-interning index is rebuilt here, and no block is open.
-    pub fn resume(mut module: Module) -> Self {
-        module.reindex_constants();
-        Self {
-            module,
-            open_blocks: Vec::new(),
-            // A resumed prefix has no outstanding reservations: `into_module` is the only way one is handed over, and it takes a finished builder.
-            reserved_functions: BTreeSet::new(),
-        }
-    }
-
     /// Read-only access to the module under construction.
     pub fn module(&self) -> &Module {
         &self.module
     }
 
-    /// Hand the module over as a replayable prefix: no entry block, and every other rule checked. [`resume`](Self::resume) is the inverse.
+    /// Hand the module over as a fragment: no entry block required, and every other rule checked.
     ///
-    /// Verified through [`Module::verify_prefix`], which is [`finalize`](Self::finalize)'s check minus the one clause a prefix cannot satisfy; why a serialized prefix is walked at all is that method's.
+    /// Verified through [`Module::verify_fragment`], which is [`finalize`](Self::finalize)'s check minus the one clause a fragment cannot satisfy; why a stored fragment is walked at all is that method's.
     pub fn into_module(self) -> Result<Module, VerifyError> {
         assert!(
             self.open_blocks.is_empty(),
-            "a prefix hand-off leaves no open block"
+            "a fragment hand-off leaves no open block"
         );
-        self.module.verify_prefix()?;
+        self.module.verify_fragment()?;
         Ok(self.module)
     }
 
     /// Mint a fresh value identity — a parameter, arm binder, or fold binder. Statement results are minted by the emission methods themselves.
     pub fn value(&mut self, debug_name: Option<String>) -> ValueId {
         self.module.add_value(debug_name)
+    }
+
+    /// Mint a value another module binds — see [`Imports`](super::Imports). It is in scope from the first item on, and the order imports are minted in is the order linking resolves them by.
+    pub fn import_value(&mut self, debug_name: Option<String>) -> ValueId {
+        self.module.import_value(debug_name)
+    }
+
+    /// Mint a function another module defines, of `arity` parameters and the interface that module computed for it ([`Module::interface`]).
+    pub fn import_function(
+        &mut self,
+        debug_name: Option<String>,
+        arity: usize,
+        interface: Interface,
+    ) -> FunctionId {
+        self.module.import_function(debug_name, arity, interface)
     }
 
     /// Intern a constant by exact bitwise identity.

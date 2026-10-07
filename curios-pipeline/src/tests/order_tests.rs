@@ -41,14 +41,14 @@ fn elaborated(unit: &Unit) -> Vec<u8> {
         .to_vec()
 }
 
-/// The unit's erased arena, as it is stored.
+/// The unit's items' erased forms, as they are stored.
 fn erased(unit: &Unit) -> Vec<u8> {
-    curios_archive::to_bytes(&unit.arena())
-        .expect("an arena serializes")
+    curios_archive::to_bytes(unit.erased())
+        .expect("an erased unit serializes")
         .to_vec()
 }
 
-/// A unit and the same declarations written in another order store the same elaborated module, the same record and the same erased arena. The order a module's items are stored in is a function of what they declare and reach (`curios_core::Module::ordered`), and nothing a declaration elaborates or erases to follows where it is written. The text stage's part is left out of the comparison, being the text.
+/// A unit and the same declarations written in another order store the same elaborated module, the same record and the same erased forms. The order a module's items are stored in is a function of what they declare and reach (`curios_core::Module::ordered`), and nothing a declaration elaborates or erases to follows where it is written. The text stage's part is left out of the comparison, being the text.
 #[test]
 fn a_unit_stores_the_same_module_wherever_its_declarations_are_written() {
     let written = written_in([0, 1, 2, 3, 4, 5, 6]);
@@ -72,7 +72,7 @@ fn a_unit_stores_the_same_module_wherever_its_declarations_are_written() {
         );
         assert!(
             erased(&written) == erased(&moved),
-            "written as {places:?}, the erased arena differs",
+            "written as {places:?}, the erased forms differ",
         );
     }
 }

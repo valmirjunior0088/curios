@@ -12,7 +12,7 @@
 //!
 //! # What the predecessors hand to each stage
 //!
-//! Not one merged value. Each stage receives every predecessor *borrowed*, as its own opaque type rather than as anything this crate unpacks: `curios-text`'s resolution state and `curios-elab`'s erased arena keep their fields private, so [`Predecessors`] hands each stage a slice of the type that stage owns and lets it build its own view. Why borrowed and why opaque are `README.md`'s decisions.
+//! Not one merged value. Each stage receives every predecessor *borrowed*, as its own opaque type rather than as anything this crate unpacks: `curios-text`'s resolution state and `curios-elab`'s erased unit keep their fields private, so [`Predecessors`] hands each stage a slice of the type that stage owns and lets it build its own view. Why borrowed and why opaque are `README.md`'s decisions.
 
 mod predecessors;
 pub use predecessors::*;

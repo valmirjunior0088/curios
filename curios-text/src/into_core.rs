@@ -81,7 +81,7 @@ mod visibility_tests;
 
 /// Every prefix the compilation mounts, and which of them the unit being compiled may name.
 ///
-/// **Two lists rather than one, because a prefix a unit cannot name still exists.** It is in the fold — it holds the arena the erasure resumes over — and it owns names whose spelling decides which unit declares them. So `mounts` stays complete for every question about *what a name is*, and `visible` answers the one question about *who may write it*. Collapsing them would either hide a mount from `Mount::owning`, which decides coherence, or make an undeclared prefix indistinguishable from a prefix nobody mounted, which is the diagnostic this type exists to keep.
+/// **Two lists rather than one, because a prefix a unit cannot name still exists.** It is in the fold — elaboration and erasure are seeded from it — and it owns names whose spelling decides which unit declares them. So `mounts` stays complete for every question about *what a name is*, and `visible` answers the one question about *who may write it*. Collapsing them would either hide a mount from `Mount::owning`, which decides coherence, or make an undeclared prefix indistinguishable from a prefix nobody mounted, which is the diagnostic this type exists to keep.
 ///
 /// Carried as one value because it is threaded through the whole of resolution: the walk that follows a `use` to its provider asks both questions at every hop, and two parallel parameters through ten functions drift.
 #[derive(Clone, Copy)]

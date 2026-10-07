@@ -274,7 +274,7 @@ pub struct Function {
     ///
     /// **Carried, because below Core there is nothing to derive it from.** Termination is decided by the kernel's walk and filed as its record, and it is already load-bearing above: the obligations that let erasure delete a proof or a type rest on it. A second derivation down here would be a second opinion about a question the trusted base has already answered, and two answers is how the stages come to disagree.
     ///
-    /// **Marked on the sealed program, never by erasure.** Erasure leaves every flag false, so an arena a unit files or the prelude archives carries none; the marks are made once, where the program the back half lowers meets the record of every unit it was erased from and of its entry, by [`Module::mark_total`](crate::Module::mark_total). Nothing reads the flag before then.
+    /// **Marked on the sealed program, never by erasure.** Erasure leaves every flag false, so an erased form a unit files or the prelude archives carries none; the marks are made once, where the program the back half lowers meets the record of every unit it was erased from and of its entry, by [`Module::mark_total`](crate::Module::mark_total). Nothing reads the flag before then.
     ///
     /// False is the safe reading and the default: a definition the certifier did not find total is `Partial`, and so is anything no record classifies.
     pub total: bool,

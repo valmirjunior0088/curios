@@ -17,7 +17,7 @@ use {
     curios_utilities::recurse,
 };
 
-impl Lowering {
+impl Lowering<'_> {
     /// The type `term` has, read at most once for the item being erased.
     pub(super) fn type_of(&mut self, context: &mut Context, term: &Term) -> Result<Term, Error> {
         if let Some(known) = self.types.get(term) {

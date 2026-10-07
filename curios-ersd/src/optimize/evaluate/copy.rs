@@ -73,6 +73,7 @@ pub(super) fn deep_copy_function(
         statements: &statement_remap,
         substitution,
         redirect,
+        tables: None,
     };
 
     let mut statement_ids = BTreeMap::new();

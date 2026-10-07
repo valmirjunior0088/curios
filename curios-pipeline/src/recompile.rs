@@ -1,4 +1,4 @@
-//! One unit compiled over a baseline: the items its new text changed, closed over what the baseline's elaboration reached, elaborated and judged alone, with everything outside the closure replayed from the baseline as a predecessor's items are.
+//! One unit compiled over a baseline: the items its new text changed, closed over what the baseline's elaboration reached, elaborated, judged and erased alone, with everything outside the closure replayed from the baseline as a predecessor's items are and its erased form taken as the baseline holds it.
 //!
 //! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. What a reused item rests on is the verdict recorded when the baseline was judged, exactly as a whole unit taken from a store does, and the argument is [Cached verdicts](../../documentation/design/soundness/cached-verdicts.md) applied per item: the key is the item's lowered form together with everything its reach closure covers. That is why the closure is transitive — conversion unfolds bodies, so a dependent's judgment reaches through what it names, and a closure that stopped one edge short would be a key omitting an input.
 //!
@@ -12,7 +12,7 @@ use {
         Term, Zonked,
     },
     curios_elab::{
-        Context, Established, Recompile, Resumed, elaborate_and_zonk_unit_over, erase_unit,
+        Context, Erasures, Established, Recompile, elaborate_and_zonk_unit_over, erase_unit_over,
     },
     curios_text::{UnitSource, into_core_unit},
     curios_unit::{Predecessors, Uncertified, Unit},
@@ -20,9 +20,9 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Compile one unit against `predecessors` over `baseline`: lower whole, diff, elaborate and judge the closure, erase whole.
+/// Compile one unit against `predecessors` over `baseline`: lower whole, diff, then elaborate, judge and erase the closure.
 ///
-/// The result is a unit like [`compile_unit`](crate::compile_unit)'s — the same lowering, a core module holding every item in the order a module is stored in, the same erasure onto the predecessors' arena — differing in which items were elaborated and judged now and which were taken from the baseline. Erasure is whole because the arena is the fold's and appends.
+/// The result is a unit like [`compile_unit`](crate::compile_unit)'s — the same lowering, a core module holding every item in the order a module is stored in, an erased form for each — differing in which items were elaborated, judged and erased now and which were taken from the baseline. An item's erased form is its own, in identities of its own, so one taken from the baseline is the one a whole compile makes.
 pub fn compile_unit_over(
     budget: u64,
     predecessors: Predecessors<'_>,
@@ -85,10 +85,14 @@ pub fn compile_unit_over(
         .certification
         .extended(baseline.certification(), core.as_module());
 
-    let ersd = erase_unit(
+    // An item's erasure reads the types and registry entries of the names it reaches and how each is bound, every one of which the closure holds where it moved: the closure is the reverse of reaching, and transitive.
+    let erased = predecessors.erased();
+    let ersd = erase_unit_over(
         &mut Context::new(budget, *syntax),
-        Resumed::of(&cores, predecessors.arena()),
+        Erasures::of(&cores, &erased),
         &core,
+        baseline.erased(),
+        &|name| closure.contains(name),
     )
     .map_err(|error| CompileError::Failure(error.reports_with(core.as_module(), &cores, syntax)))?;
 
