@@ -45,12 +45,14 @@ fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
                 default: None,
             },
         }));
-        kernel.define(
-            &h,
-            &Term::func_type([(e, family.clone())], nat_type()),
-            &Term::func([(e, family.clone())], eliminated),
-            &UniverseContext::default(),
-        );
+        kernel
+            .define(
+                &h,
+                &Term::func_type([(e, family.clone())], nat_type()),
+                &Term::func([(e, family.clone())], eliminated),
+                &UniverseContext::default(),
+            )
+            .expect("a name is declared once");
         let (left, right) = (binder(62, "p"), binder(63, "q"));
         kernel.assume(&left, &family);
         kernel.assume(&right, &family);
@@ -95,12 +97,14 @@ fn two_calls_of_one_definition_convert_by_their_spines_at_any_type() {
                     default: None,
                 },
             }));
-            kernel.define(
-                &h,
-                &Term::func_type([(e, family.clone())], result),
-                &Term::func([(e, family.clone())], eliminated),
-                &UniverseContext::default(),
-            );
+            kernel
+                .define(
+                    &h,
+                    &Term::func_type([(e, family.clone())], result),
+                    &Term::func([(e, family.clone())], eliminated),
+                    &UniverseContext::default(),
+                )
+                .expect("a name is declared once");
 
             move |proof: &Free| Term::apply(Term::free_var(&h), [Term::free_var(proof)])
         };
@@ -330,19 +334,21 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
     ]);
     // `induct Ix : (n : Nat) -> Type`, a family with one index and no constructor.
     let indexed = Global::Authored(Qualifier::from(["Ix"]));
-    kernel.declare_induct(
-        &indexed,
-        &InductDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::build([(binder(92, "n"), nat_type())], ())),
-            constructors: Vec::new(),
-            result_sort: Term::type_ground(),
-            module: Qualifier::empty(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_induct(
+            &indexed,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::build([(binder(92, "n"), nat_type())], ())),
+                constructors: Vec::new(),
+                result_sort: Term::type_ground(),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     let mut assumed = |index: u32, hint: &str, type_: &Term| {
         let name = binder(index, hint);
@@ -423,19 +429,21 @@ fn a_constructors_value_is_typed_by_its_declaration() {
                       constructors: Vec<(Atom, InductParam)>,
                       result_sort: Term| {
         let name = Global::Authored(Qualifier::from([path]));
-        kernel.declare_induct(
-            &name,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity,
-                constructors,
-                result_sort,
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
-        );
+        kernel
+            .declare_induct(
+                &name,
+                &InductDecl {
+                    universe_context: UniverseContext::default(),
+                    arity,
+                    constructors,
+                    result_sort,
+                    module: Qualifier::empty(),
+                    rep_public: true,
+                    polarities: Vec::new(),
+                    variances: Vec::new(),
+                },
+            )
+            .expect("a name is declared once");
 
         name
     };
@@ -520,31 +528,33 @@ fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
         let held = declare(&mut kernel, "F", sort);
         // `induct Pair : Type | two(a : F, b : F)`.
         let pair = Global::Authored(Qualifier::from(["Pair"]));
-        kernel.declare_induct(
-            &pair,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::from([(
-                    Atom::from("two"),
-                    InductParam::new(
-                        Telescope::build(
-                            [
-                                (binder(60, "a"), held.clone()),
-                                (binder(61, "b"), held.clone()),
-                            ],
-                            Vec::new(),
+        kernel
+            .declare_induct(
+                &pair,
+                &InductDecl {
+                    universe_context: UniverseContext::default(),
+                    arity: Telescope::done(Telescope::done(())),
+                    constructors: Vec::from([(
+                        Atom::from("two"),
+                        InductParam::new(
+                            Telescope::build(
+                                [
+                                    (binder(60, "a"), held.clone()),
+                                    (binder(61, "b"), held.clone()),
+                                ],
+                                Vec::new(),
+                            ),
+                            vec![Plicity::Explicit, Plicity::Explicit],
                         ),
-                        vec![Plicity::Explicit, Plicity::Explicit],
-                    ),
-                )]),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
-        );
+                    )]),
+                    result_sort: Term::type_ground(),
+                    module: Qualifier::empty(),
+                    rep_public: true,
+                    polarities: Vec::new(),
+                    variances: Vec::new(),
+                },
+            )
+            .expect("a name is declared once");
         let (typed, untyped) = (binder(0, "t"), binder(1, "u"));
         kernel.assume(
             &typed,
@@ -655,24 +665,26 @@ fn a_struct_field_at_a_proposition_is_not_read() {
     let mut kernel = kernel();
     let proposition = declare(&mut kernel, "P", Term::prop());
     let name = curios_core::Global::Authored(Qualifier::from(["Wrap"]));
-    kernel.declare_struct(
-        &name,
-        &StructDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::build(
-                [
-                    (binder(60, "n"), nat_type()),
-                    (binder(61, "p"), proposition.clone()),
-                ],
-                (),
-            )),
-            result_sort: Term::type_ground(),
-            module: Qualifier::empty(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_struct(
+            &name,
+            &StructDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::build(
+                    [
+                        (binder(60, "n"), nat_type()),
+                        (binder(61, "p"), proposition.clone()),
+                    ],
+                    (),
+                )),
+                result_sort: Term::type_ground(),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
     let (p, q) = (binder(62, "p"), binder(63, "q"));
     kernel.assume(&p, &proposition);
     kernel.assume(&q, &proposition);
@@ -700,31 +712,33 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
     let mut kernel = kernel();
     let proposition = declare(&mut kernel, "P", Term::prop());
     let name = curios_core::Global::Authored(Qualifier::from(["Wrap"]));
-    kernel.declare_induct(
-        &name,
-        &InductDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::done(())),
-            constructors: Vec::from([(
-                Atom::from("wrap"),
-                InductParam::new(
-                    Telescope::build(
-                        [
-                            (binder(60, "n"), nat_type()),
-                            (binder(61, "p"), proposition.clone()),
-                        ],
-                        Vec::new(),
+    kernel
+        .declare_induct(
+            &name,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: Vec::from([(
+                    Atom::from("wrap"),
+                    InductParam::new(
+                        Telescope::build(
+                            [
+                                (binder(60, "n"), nat_type()),
+                                (binder(61, "p"), proposition.clone()),
+                            ],
+                            Vec::new(),
+                        ),
+                        vec![Plicity::Explicit, Plicity::Explicit],
                     ),
-                    vec![Plicity::Explicit, Plicity::Explicit],
-                ),
-            )]),
-            result_sort: Term::type_ground(),
-            module: Qualifier::empty(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+                )]),
+                result_sort: Term::type_ground(),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
     let (p, q) = (binder(62, "p"), binder(63, "q"));
     kernel.assume(&p, &proposition);
     kernel.assume(&q, &proposition);
@@ -934,19 +948,21 @@ fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
     let proposition = declare(&mut kernel, "Q", Term::prop());
     // `induct Ix : (R : Prop) -> Type`, a family indexed by a proposition.
     let indexed = Global::Authored(Qualifier::from(["Ix"]));
-    kernel.declare_induct(
-        &indexed,
-        &InductDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::build([(binder(90, "R"), Term::prop())], ())),
-            constructors: Vec::new(),
-            result_sort: Term::type_ground(),
-            module: Qualifier::empty(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_induct(
+            &indexed,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::build([(binder(90, "R"), Term::prop())], ())),
+                constructors: Vec::new(),
+                result_sort: Term::type_ground(),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
     // The names the kernel is not handed sit below the one it is, so no binder it mints meets one of them.
     let (typed, untyped) = (binder(80, "s"), binder(70, "t"));
     kernel.assume(
@@ -1021,22 +1037,24 @@ fn a_struct_parameter_at_a_proposition_is_not_read() {
     let mut kernel = kernel();
     let proposition = declare(&mut kernel, "P", Term::prop());
     let name = curios_core::Global::Authored(Qualifier::from(["Held"]));
-    kernel.declare_struct(
-        &name,
-        &StructDecl {
-            universe_context: UniverseContext::default(),
-            // One parameter at the proposition, and a field that does not mention it.
-            arity: Telescope::build(
-                [(binder(70, "p"), proposition.clone())],
-                Telescope::build([(binder(71, "n"), nat_type())], ()),
-            ),
-            result_sort: Term::type_ground(),
-            module: Qualifier::empty(),
-            rep_public: true,
-            polarities: vec![curios_core::Polarity::Unused],
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_struct(
+            &name,
+            &StructDecl {
+                universe_context: UniverseContext::default(),
+                // One parameter at the proposition, and a field that does not mention it.
+                arity: Telescope::build(
+                    [(binder(70, "p"), proposition.clone())],
+                    Telescope::build([(binder(71, "n"), nat_type())], ()),
+                ),
+                result_sort: Term::type_ground(),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: vec![curios_core::Polarity::Unused],
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
     let (p, q) = (binder(72, "p"), binder(73, "q"));
     kernel.assume(&p, &proposition);
     kernel.assume(&q, &proposition);

@@ -73,7 +73,9 @@ fn beta_equal_terms_convert() {
 fn a_definition_converts_with_its_value() {
     let mut kernel = kernel();
     let f = binder(0, "f");
-    kernel.define(&f, &nat_type(), &nat(3), &UniverseContext::default());
+    kernel
+        .define(&f, &nat_type(), &nat(3), &UniverseContext::default())
+        .expect("a name is declared once");
 
     assert_eq!(
         convert(&mut kernel, &nat_type(), &Term::free_var(&f), &nat(3)),
@@ -303,18 +305,20 @@ fn any_two_terms_converge_at_a_struct_with_one_inhabitant() {
     };
     let (n, m) = (binder(8, "n"), binder(9, "m"));
     let mut over = |path: &str, parameter: Term, fields: Vec<(Free, Term)>| {
-        kernel.declare_struct(
-            &Global::Authored(Qualifier::from([path])),
-            &StructDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::build([(n, parameter)], Telescope::build(fields, ())),
-                result_sort: Term::type_ground(),
-                module: Qualifier::from([path]),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
-        );
+        kernel
+            .declare_struct(
+                &Global::Authored(Qualifier::from([path])),
+                &StructDecl {
+                    universe_context: UniverseContext::default(),
+                    arity: Telescope::build([(n, parameter)], Telescope::build(fields, ())),
+                    result_sort: Term::type_ground(),
+                    module: Qualifier::from([path]),
+                    rep_public: true,
+                    polarities: Vec::new(),
+                    variances: Vec::new(),
+                },
+            )
+            .expect("a name is declared once");
     };
     let after = |path: &str| Term::func_type([(m, nat_type())], at(path)(Term::free_var(&m)));
     // `struct R(n: Nat) { next: (m: Nat) -> R(m) }`, which reaches itself at another parameter each time.
@@ -385,21 +389,23 @@ fn a_goals_type_is_read_forced() {
     // `struct Tagged(n: Nat) { u: {} }` at a variable: a type with one inhabitant that is not closed.
     let over_a_variable = {
         let name = Global::Authored(Qualifier::from(["Tagged"]));
-        kernel.declare_struct(
-            &name,
-            &StructDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::build(
-                    [(binder(11, "n"), nat_type())],
-                    Telescope::build([(a, unit())], ()),
-                ),
-                result_sort: Term::type_ground(),
-                module: Qualifier::from(["Tagged"]),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
-        );
+        kernel
+            .declare_struct(
+                &name,
+                &StructDecl {
+                    universe_context: UniverseContext::default(),
+                    arity: Telescope::build(
+                        [(binder(11, "n"), nat_type())],
+                        Telescope::build([(a, unit())], ()),
+                    ),
+                    result_sort: Term::type_ground(),
+                    module: Qualifier::from(["Tagged"]),
+                    rep_public: true,
+                    polarities: Vec::new(),
+                    variances: Vec::new(),
+                },
+            )
+            .expect("a name is declared once");
 
         Term::from(Subterm::StructType(StructType {
             name,
@@ -638,21 +644,23 @@ fn eta_by_a_literal_is_taken_against_a_neutral_alone() {
 fn a_short_struct_literal_does_not_convert_with_a_neutral() {
     let mut kernel = kernel();
     let name = Global::Authored(Qualifier::from(["S"]));
-    kernel.declare_struct(
-        &name,
-        &StructDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::build(
-                [(binder(8, "a"), nat_type()), (binder(9, "b"), nat_type())],
-                (),
-            )),
-            result_sort: Term::type_ground(),
-            module: Qualifier::from(["S"]),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_struct(
+            &name,
+            &StructDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::build(
+                    [(binder(8, "a"), nat_type()), (binder(9, "b"), nat_type())],
+                    (),
+                )),
+                result_sort: Term::type_ground(),
+                module: Qualifier::from(["S"]),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     let type_ = Term::from(Subterm::StructType(StructType {
         name,
@@ -671,12 +679,14 @@ fn an_intrinsic_is_congruent_in_its_operands() {
     let mut kernel = kernel();
     let n = binder(0, "n");
     let m = binder(1, "m");
-    kernel.define(
-        &m,
-        &nat_type(),
-        &Term::free_var(&n),
-        &UniverseContext::default(),
-    );
+    kernel
+        .define(
+            &m,
+            &nat_type(),
+            &Term::free_var(&n),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
 
     let left = Term::intrinsic(Intrinsic::nat_mul(Term::free_var(&n), nat(3)));
     let right = Term::intrinsic(Intrinsic::nat_mul(Term::free_var(&m), nat(3)));

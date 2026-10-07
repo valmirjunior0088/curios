@@ -87,15 +87,17 @@ fn a_definition_applied_at_two_instances_converts_by_unfolding() {
     let alias = binder(84, "Alias");
     let carrier = binder(85, "A");
     let sort = Term::type_at(Level::param(UniverseParam(0)));
-    kernel.define(
-        &alias,
-        &Term::func_type([(carrier, sort.clone())], sort.clone()),
-        &Term::func([(carrier, sort)], Term::free_var(&carrier)),
-        &UniverseContext {
-            parameter_count: 1,
-            constraints: Vec::new(),
-        },
-    );
+    kernel
+        .define(
+            &alias,
+            &Term::func_type([(carrier, sort.clone())], sort.clone()),
+            &Term::func([(carrier, sort)], Term::free_var(&carrier)),
+            &UniverseContext {
+                parameter_count: 1,
+                constraints: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
     let at = |level: u32| {
         Term::apply(
             Term::instance_of(&alias, vec![Level::constant(level)]),

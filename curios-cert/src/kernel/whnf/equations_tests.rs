@@ -304,12 +304,14 @@ fn a_local_free_term_is_never_refined() {
     let x = binder(3, "x");
 
     let mut kernel = kernel();
-    kernel.define(
-        &konst,
-        &Term::func_type([(x, nat_type())], nat_type()),
-        &Term::func([(x, nat_type())], nat(7)),
-        &monomorphic(),
-    );
+    kernel
+        .define(
+            &konst,
+            &Term::func_type([(x, nat_type())], nat_type()),
+            &Term::func([(x, nat_type())], nat(7)),
+            &monomorphic(),
+        )
+        .expect("a name is declared once");
     kernel.assume(&n, &nat_type());
 
     let open = Term::apply(Term::free_var(&konst), [Term::free_var(&n)]);
@@ -339,12 +341,14 @@ fn a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_kernel_does() {
         // A global, as a top-level definition is: a name `binder` mints is a local, and a term mentioning one is local-bearing however closed it reads.
         let konst = Free::global(Qualifier::from(["konst"]));
         let x = binder(3, "x");
-        kernel.define(
-            &konst,
-            &Term::func_type([(x, nat_type())], nat_type()),
-            &Term::func([(x, nat_type())], nat(7)),
-            &monomorphic(),
-        );
+        kernel
+            .define(
+                &konst,
+                &Term::func_type([(x, nat_type())], nat_type()),
+                &Term::func([(x, nat_type())], nat(7)),
+                &monomorphic(),
+            )
+            .expect("a name is declared once");
         let closed = Term::apply(Term::free_var(&konst), [nat(1)]);
 
         let before = whnf(kernel, closed.clone());
@@ -385,12 +389,14 @@ fn a_reduct_that_drops_a_local_is_still_reached() {
     let y = binder(5, "y");
 
     let mut kernel = kernel();
-    kernel.define(
-        &second,
-        &Term::func_type([(x, nat_type()), (y, nat_type())], nat_type()),
-        &Term::func([(x, nat_type()), (y, nat_type())], Term::free_var(&y)),
-        &monomorphic(),
-    );
+    kernel
+        .define(
+            &second,
+            &Term::func_type([(x, nat_type()), (y, nat_type())], nat_type()),
+            &Term::func([(x, nat_type()), (y, nat_type())], Term::free_var(&y)),
+            &monomorphic(),
+        )
+        .expect("a name is declared once");
     kernel.assume(&n, &nat_type());
     kernel.assume(&m, &nat_type());
 
@@ -514,15 +520,17 @@ fn a_dispatched_guard_answers_its_dual_before_the_procedure_folds_it() {
     let comparison = [(a, nat_type()), (b, nat_type())];
     let method_type = Term::func_type(comparison.clone(), Term::intrinsic(Intrinsic::BoolType));
     let mut kernel = kernel();
-    kernel.define(
-        &witness,
-        &Term::tuple_type([(method, method_type)]),
-        &Term::tuple([Term::func(
-            comparison,
-            Term::intrinsic(Intrinsic::nat_lte(Term::free_var(&a), Term::free_var(&b))),
-        )]),
-        &monomorphic(),
-    );
+    kernel
+        .define(
+            &witness,
+            &Term::tuple_type([(method, method_type)]),
+            &Term::tuple([Term::func(
+                comparison,
+                Term::intrinsic(Intrinsic::nat_lte(Term::free_var(&a), Term::free_var(&b))),
+            )]),
+            &monomorphic(),
+        )
+        .expect("a name is declared once");
     kernel.assume(&n, &nat_type());
 
     let subject = Term::intrinsic(Intrinsic::nat_rem(
@@ -572,15 +580,17 @@ fn a_resolved_spelling_that_drops_its_locals_is_never_recorded() {
     let method_type = Term::func_type(comparison.clone(), Term::intrinsic(Intrinsic::BoolType));
     let mut kernel = kernel();
     // The method reads only its second operand, so the local the guard passes as the first is gone once it is opened.
-    kernel.define(
-        &witness,
-        &Term::tuple_type([(method, method_type)]),
-        &Term::tuple([Term::func(
-            comparison,
-            Term::intrinsic(Intrinsic::nat_lte(Term::free_var(&b), nat(63))),
-        )]),
-        &monomorphic(),
-    );
+    kernel
+        .define(
+            &witness,
+            &Term::tuple_type([(method, method_type)]),
+            &Term::tuple([Term::func(
+                comparison,
+                Term::intrinsic(Intrinsic::nat_lte(Term::free_var(&b), nat(63))),
+            )]),
+            &monomorphic(),
+        )
+        .expect("a name is declared once");
     kernel.assume(&n, &nat_type());
 
     let guard = Term::apply(
@@ -623,15 +633,17 @@ fn resolving_a_dispatched_guard_forces_none_of_its_operands() {
     let method_type = Term::func_type(comparison.clone(), Term::intrinsic(Intrinsic::BoolType));
     let kernel_over = |budget| {
         let mut kernel = Kernel::new(budget, SYNTAX);
-        kernel.define(
-            &witness,
-            &Term::tuple_type([(method, method_type.clone())]),
-            &Term::tuple([Term::func(
-                comparison.clone(),
-                Term::intrinsic(Intrinsic::nat_lte(Term::free_var(&a), Term::free_var(&b))),
-            )]),
-            &monomorphic(),
-        );
+        kernel
+            .define(
+                &witness,
+                &Term::tuple_type([(method, method_type.clone())]),
+                &Term::tuple([Term::func(
+                    comparison.clone(),
+                    Term::intrinsic(Intrinsic::nat_lte(Term::free_var(&a), Term::free_var(&b))),
+                )]),
+                &monomorphic(),
+            )
+            .expect("a name is declared once");
         kernel.assume(&n, &nat_type());
         kernel
     };

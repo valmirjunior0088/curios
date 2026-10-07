@@ -89,14 +89,16 @@ fn a_bool_arm_sees_its_scrutinee_at_the_literal() {
     let motive_binder = binder(51, "x");
 
     let p = binder(2, "P");
-    kernel.declare(
-        &p,
-        &Term::func_type(
-            [(binder(90, "x"), Term::intrinsic(Intrinsic::BoolType))],
-            Term::type_ground(),
-        ),
-        &UniverseContext::default(),
-    );
+    kernel
+        .declare(
+            &p,
+            &Term::func_type(
+                [(binder(90, "x"), Term::intrinsic(Intrinsic::BoolType))],
+                Term::type_ground(),
+            ),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
     let p = Term::free_var(&p);
 
     kernel.assume(&h, &Term::intrinsic(Intrinsic::BoolType));
@@ -361,11 +363,13 @@ fn a_singleton_whose_index_merely_mentions_its_payload_does_not() {
     let blur = binder(1, "blur");
     let arm_binder = binder(10, "a");
 
-    kernel.declare(
-        &blur,
-        &Term::func_type([(binder(2, "n"), nat_type())], nat_type()),
-        &UniverseContext::default(),
-    );
+    kernel
+        .declare(
+            &blur,
+            &Term::func_type([(binder(2, "n"), nat_type())], nat_type()),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
 
     let family = declare(
         &mut kernel,

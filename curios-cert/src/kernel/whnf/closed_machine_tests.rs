@@ -17,30 +17,34 @@ fn the_closed_machine_keeps_a_global_argument_as_a_name() {
     let unary = Term::func_type([(x, nat_type())], nat_type());
 
     let define = |kernel: &mut Kernel| {
-        kernel.define(
-            &g,
-            &unary,
-            &Term::func(
-                [(x, nat_type())],
-                Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(1))),
-            ),
-            &monomorphic(),
-        );
-        kernel.define(
-            &twice,
-            &Term::func_type([(f, unary.clone())], unary.clone()),
-            &Term::func(
-                [(f, unary.clone())],
-                Term::func(
+        kernel
+            .define(
+                &g,
+                &unary,
+                &Term::func(
                     [(x, nat_type())],
-                    Term::apply(
-                        Term::free_var(&f),
-                        [Term::apply(Term::free_var(&f), [Term::free_var(&x)])],
+                    Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(1))),
+                ),
+                &monomorphic(),
+            )
+            .expect("a name is declared once");
+        kernel
+            .define(
+                &twice,
+                &Term::func_type([(f, unary.clone())], unary.clone()),
+                &Term::func(
+                    [(f, unary.clone())],
+                    Term::func(
+                        [(x, nat_type())],
+                        Term::apply(
+                            Term::free_var(&f),
+                            [Term::apply(Term::free_var(&f), [Term::free_var(&x)])],
+                        ),
                     ),
                 ),
-            ),
-            &monomorphic(),
-        );
+                &monomorphic(),
+            )
+            .expect("a name is declared once");
     };
 
     let term = Term::apply(Term::free_var(&twice), [Term::free_var(&g)]);

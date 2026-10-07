@@ -463,7 +463,7 @@ impl Judge for Kernel {
 ///
 /// Deliberately small, and deliberately *composed*. The elaborator's `Context` carries fifteen-odd stores — caches, parked goals, refinement layers, a metavariable heap — and each is a place where an answer can come from something other than the term in hand. Here each independent job is a component that states its own invariants, and what remains is the composition and the couplings that genuinely cross it.
 ///
-/// The one such coupling is worth naming, because it is why `Globals::insert` reports rather than acts: overwriting a definition invalidates every remembered reduct, which is a fact about `Globals` *and* `Memos` and therefore belongs to neither.
+/// One coupling that would cross it does not arise. A definition rewritten under its name would make every remembered reduct stale, which is a fact about `Globals` *and* `Memos`; `Globals` refuses the write, so neither component has to know the other exists.
 ///
 /// Growing this struct is how independence gets lost. A new *component* should have to argue for itself.
 pub struct Kernel {
@@ -520,7 +520,7 @@ impl Kernel {
 
     /// Start this kernel's environment from `globals` — the scope an earlier walk established — rather than from nothing.
     ///
-    /// Set wholesale where [`Kernel::define`] has to report an overwrite, because a kernel is seeded before it has judged anything: there are no remembered reducts yet for a replaced name to invalidate.
+    /// Set wholesale, where [`Kernel::define`] writes one name and refuses a held one: a kernel is seeded before it has judged anything, so what it starts from is what every judgment of its walk reads.
     pub(crate) fn seed(&mut self, globals: &Globals) {
         self.globals = globals.clone();
     }
@@ -747,39 +747,37 @@ impl Kernel {
         Ok(())
     }
 
-    /// Record a top-level name at `type_`, generalized over `universes`, with `value` as its body where it has one.
+    /// Record a top-level definition: `name : type_ = value`, generalized over `universes`.
     ///
-    /// The invalidation clause lives here rather than at either entry point below, and here rather than inside [`Globals`], because it is the one coupling that crosses two components: a redefinition makes every remembered reduct stale. `Globals::insert` reports the overwrite and this applies it, so neither component can forget the other exists.
-    fn insert(
+    /// Refused as [`Error::Redeclared`] where a definition already stands under `name`. The environment is written once, as every entry point below writes it: a judgment made and a reduct remembered are about what a name meant when they were, and nothing here lets it mean anything else afterwards.
+    pub fn define(
         &mut self,
         name: &Free,
         type_: &Term,
-        value: Option<&Term>,
+        value: &Term,
         universes: &UniverseContext,
-    ) {
-        if self.globals.insert(name, type_, value, universes) {
-            self.memos.invalidate();
-        }
+    ) -> Result<(), Error> {
+        self.globals.insert(name, type_, Some(value), universes)
     }
 
-    /// Record a top-level definition: `name : type_ = value`, generalized over `universes`.
-    pub fn define(&mut self, name: &Free, type_: &Term, value: &Term, universes: &UniverseContext) {
-        self.insert(name, type_, Some(value), universes);
+    /// Record a top-level name with a type and no body: an assumption that never unfolds, so a permanent neutral. No walk records one — a module's items are defined with their bodies, and a `foreign` is a term `infer` types rather than a name — so its callers are the fixtures that need an opaque head. Refused where a definition already stands under `name`, as [`Kernel::define`] is.
+    pub fn declare(
+        &mut self,
+        name: &Free,
+        type_: &Term,
+        universes: &UniverseContext,
+    ) -> Result<(), Error> {
+        self.globals.insert(name, type_, None, universes)
     }
 
-    /// Record a top-level name with a type and no body: an assumption that never unfolds, so a permanent neutral. No walk records one — a module's items are defined with their bodies, and a `foreign` is a term `infer` types rather than a name — so its callers are the fixtures that need an opaque head.
-    pub fn declare(&mut self, name: &Free, type_: &Term, universes: &UniverseContext) {
-        self.insert(name, type_, None, universes);
+    /// Register an `induct` declaration's registry entry, refused where one already stands under `name`.
+    pub fn declare_induct(&mut self, name: &Global, declaration: &InductDecl) -> Result<(), Error> {
+        self.globals.declare_induct(name, declaration)
     }
 
-    /// Register an `induct` declaration's registry entry.
-    pub fn declare_induct(&mut self, name: &Global, declaration: &InductDecl) {
-        self.globals.declare_induct(name, declaration);
-    }
-
-    /// Register a `struct` declaration's registry entry.
-    pub fn declare_struct(&mut self, name: &Global, declaration: &StructDecl) {
-        self.globals.declare_struct(name, declaration);
+    /// Register a `struct` declaration's registry entry, refused where one already stands under `name`.
+    pub fn declare_struct(&mut self, name: &Global, declaration: &StructDecl) -> Result<(), Error> {
+        self.globals.declare_struct(name, declaration)
     }
 
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {

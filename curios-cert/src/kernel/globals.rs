@@ -1,6 +1,6 @@
 //! What is in scope beyond the walk: top-level definitions, and the nominal registry.
 //!
-//! This is the one component that exists to answer with something other than the term in hand, which is exactly what a definition store is for. Everything about it is therefore stated rather than assumed: a definition unfolds through a bare occurrence only when it is monomorphic, the registry is data no judgment in this crate types, and overwriting a name is the single event that invalidates a remembered reduct.
+//! This is the one component that exists to answer with something other than the term in hand, which is exactly what a definition store is for. Everything about it is therefore stated rather than assumed: a definition unfolds through a bare occurrence only when it is monomorphic, the registry is data no judgment in this crate types, and a name is written once, every way of writing one refusing a name already held.
 //!
 //! # Two ways to reach a declaration, and they are not the same question
 //!
@@ -13,6 +13,7 @@
 //! [`Globals::of`] builds this from a whole module, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, its nominal registry, and the certifier's record of its definitions' totality. A caller that has one hands it to [`recheck_module_verdicts`](crate::recheck_module_verdicts) and the walk judges what the environment does not already hold. A name is one declaration: a declaration the module carries is the environment's own where its namespace holds the same terms under its name, new where no namespace holds the name, and refused otherwise — which is what the standing questions below answer, and nothing about them identifies an item by where it sits.
 
 use {
+    super::Error,
     curios_core::{
         Certification, Free, Global, InductDecl, Item, Module, StructDecl, Term, Totality,
         UniverseContext,
@@ -141,8 +142,14 @@ impl Globals {
     ///
     /// A definition enters here exactly as a refused item enters a walk's environment: at its declared type, with its real body, unjudged. That is deliberate and it is the whole meaning of this type — an environment records what is in scope, and whether the recording is warranted is the caller's question, answered before it ever built one.
     pub fn of(module: &Module, certification: &Certification) -> Self {
-        // Written straight in rather than through `insert`: a fresh environment has no memos behind it, so the overwrite that method reports has nothing to invalidate.
-        let definitions = module.items.iter().flat_map(entries).collect();
+        // Asserted rather than reported, as `mount` asserts: an environment is built from a unit a walk certified, which declares each name once, so a second entry under one is the builder's fault.
+        let mut definitions = HashMap::new();
+        for (name, entry) in module.items.iter().flat_map(entries) {
+            assert!(
+                definitions.insert(name, entry).is_none(),
+                "a unit put in scope declares one name twice"
+            );
+        }
 
         // Restricted to `module`'s own definitions rather than every name the record classifies: a baseline's record mounted beside the items an item-level recompile reused also classifies the items it is re-judging, and a stale `Partial` seeded for one of those would outlive the walk that reclassifies it.
         let (partial, unclassified) = match certification.covers(module) {
@@ -173,19 +180,32 @@ impl Globals {
 
     /// Add everything a second `module` puts in scope, with the record its walk filed, as [`Globals::of`] reads them.
     ///
-    /// For a compilation whose scope is several units. Names are disjoint by mount, so this cannot overwrite — and it is asserted rather than reported, unlike `Globals::insert`, for a second reason: mounting happens before any walk, so there are no remembered reducts for an overwrite to invalidate. A collision here is a driver that mounted one prefix twice, which is a construction bug and not a program's fault.
+    /// For a compilation whose scope is several units. Names are disjoint by mount, so this writes each once — asserted in every namespace rather than reported, where `Globals::insert` reports to a walk: a collision here is a driver that mounted one name twice, which is a construction bug and not a program's fault.
     pub fn mount(&mut self, module: &Module, certification: &Certification) {
+        const COLLISION: &str = "a mounted unit redeclared a name already in scope";
         let added = Self::of(module, certification);
 
         for (name, definition) in added.definitions {
             assert!(
                 self.definitions.insert(name, definition).is_none(),
-                "a mounted unit redeclared a name already in scope"
+                "{COLLISION}"
             );
         }
-        self.inducts.extend(added.inducts);
-        self.structs.extend(added.structs);
-        self.concepts.extend(added.concepts);
+        for (name, declaration) in added.inducts {
+            assert!(
+                self.inducts.insert(name, declaration).is_none(),
+                "{COLLISION}"
+            );
+        }
+        for (name, declaration) in added.structs {
+            assert!(
+                self.structs.insert(name, declaration).is_none(),
+                "{COLLISION}"
+            );
+        }
+        for name in added.concepts {
+            assert!(self.concepts.insert(name), "{COLLISION}");
+        }
         self.partial.extend(added.partial);
         self.unclassified.extend(added.unclassified);
     }
@@ -274,35 +294,60 @@ impl Globals {
         }
     }
 
-    /// Record `name` at `type_`, generalized over `universes`, with `value` as its body where it has one.
+    /// Record `name` at `type_`, generalized over `universes`, with `value` as its body where it has one — or refuse it, where a definition already stands under `name`.
     ///
-    /// Reports whether it *overwrote* an existing entry, which is the one event that invalidates a remembered reduct. The caller owns that coupling because the memos are a sibling component; returning the fact rather than acting on it is what keeps this one unable to forget it silently.
-    #[must_use = "an overwrite invalidates every remembered reduct"]
+    /// **Written once.** A judgment reads what a name means when it is made, and a remembered reduct is a function of the definitions it unfolded. An entry written over a held name would leave both stating what the environment no longer holds, so the write is refused and neither is ever revisited: the memos, a sibling component, need to know nothing of this one.
     pub(super) fn insert(
         &mut self,
         name: &Free,
         type_: &Term,
         value: Option<&Term>,
         universes: &UniverseContext,
-    ) -> bool {
-        self.definitions
-            .insert(
-                *name,
-                Definition {
-                    type_: type_.clone(),
-                    value: value.cloned(),
-                    universes: universes.clone(),
-                },
-            )
-            .is_some()
+    ) -> Result<(), Error> {
+        if self.definitions.contains_key(name) {
+            return Err(Error::Redeclared(*name));
+        }
+
+        self.definitions.insert(
+            *name,
+            Definition {
+                type_: type_.clone(),
+                value: value.cloned(),
+                universes: universes.clone(),
+            },
+        );
+
+        Ok(())
     }
 
-    pub(super) fn declare_induct(&mut self, name: &Global, declaration: &InductDecl) {
+    /// Register an `induct` registry entry under `name`, or refuse it where one already stands there: written once, as [`Globals::insert`] writes a definition.
+    pub(super) fn declare_induct(
+        &mut self,
+        name: &Global,
+        declaration: &InductDecl,
+    ) -> Result<(), Error> {
+        if self.inducts.contains_key(name) {
+            return Err(Error::Redeclared(Free::from(name)));
+        }
+
         self.inducts.insert(*name, declaration.clone());
+
+        Ok(())
     }
 
-    pub(super) fn declare_struct(&mut self, name: &Global, declaration: &StructDecl) {
+    /// [`Globals::declare_induct`] for a `struct` registry entry.
+    pub(super) fn declare_struct(
+        &mut self,
+        name: &Global,
+        declaration: &StructDecl,
+    ) -> Result<(), Error> {
+        if self.structs.contains_key(name) {
+            return Err(Error::Redeclared(Free::from(name)));
+        }
+
         self.structs.insert(*name, declaration.clone());
+
+        Ok(())
     }
 
     /// An `induct` registry entry, as data. See the module documentation on why a typing rule wants the checked handle instead.

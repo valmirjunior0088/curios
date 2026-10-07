@@ -41,27 +41,29 @@ fn kernel() -> Kernel {
 fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Global {
     let family = Global::Authored(Qualifier::from([path]));
 
-    kernel.declare_induct(
-        &family,
-        &InductDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::done(())),
-            constructors: ["a", "b"]
-                .into_iter()
-                .map(|tag| {
-                    (
-                        Atom::from(tag),
-                        InductParam::new(Telescope::done(Vec::new()), Vec::new()),
-                    )
-                })
-                .collect(),
-            result_sort,
-            module: Qualifier::from([path]),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_induct(
+            &family,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: ["a", "b"]
+                    .into_iter()
+                    .map(|tag| {
+                        (
+                            Atom::from(tag),
+                            InductParam::new(Telescope::done(Vec::new()), Vec::new()),
+                        )
+                    })
+                    .collect(),
+                result_sort,
+                module: Qualifier::from([path]),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     family
 }
@@ -301,7 +303,9 @@ fn a_negative_self_occurrence_is_refused() {
         ),
     );
     for (name, entry) in &inducts {
-        kernel.declare_induct(name, entry);
+        kernel
+            .declare_induct(name, entry)
+            .expect("a name is declared once");
     }
 
     let refusal = positivity_vectors(
@@ -327,12 +331,14 @@ fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
     let bad_type = Term::induct_type(bad_name, Vec::<Term>::new(), Vec::<Term>::new());
 
     let alias = Free::local(1, Some("D"));
-    kernel.define(
-        &alias,
-        &Term::type_ground(),
-        &Term::func_type([(Free::local(2, Some("x")), bad_type)], false_type),
-        &UniverseContext::default(),
-    );
+    kernel
+        .define(
+            &alias,
+            &Term::type_ground(),
+            &Term::func_type([(Free::local(2, Some("x")), bad_type)], false_type),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
 
     let mut inducts = BTreeMap::new();
     inducts.insert(
@@ -347,7 +353,9 @@ fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
         single_payload(Term::free_var(&alias), Term::type_ground()),
     );
     for (name, entry) in &inducts {
-        kernel.declare_induct(name, entry);
+        kernel
+            .declare_induct(name, entry)
+            .expect("a name is declared once");
     }
 
     let refusal = positivity_vectors(
@@ -373,12 +381,14 @@ fn a_strict_payload_the_driver_cannot_reduce_is_refused_for_the_budget() {
         let mut kernel = Kernel::new(budget, SYNTAX);
 
         let alias = Free::local(1, Some("D"));
-        kernel.define(
-            &alias,
-            &Term::type_ground(),
-            &Term::induct_type(good_name, Vec::<Term>::new(), Vec::<Term>::new()),
-            &UniverseContext::default(),
-        );
+        kernel
+            .define(
+                &alias,
+                &Term::type_ground(),
+                &Term::induct_type(good_name, Vec::<Term>::new(), Vec::<Term>::new()),
+                &UniverseContext::default(),
+            )
+            .expect("a name is declared once");
 
         let mut inducts = BTreeMap::new();
         inducts.insert(
@@ -386,7 +396,9 @@ fn a_strict_payload_the_driver_cannot_reduce_is_refused_for_the_budget() {
             single_payload(Term::free_var(&alias), Term::type_ground()),
         );
         for (name, entry) in &inducts {
-            kernel.declare_induct(name, entry);
+            kernel
+                .declare_induct(name, entry)
+                .expect("a name is declared once");
         }
 
         let verdict = positivity_vectors(
@@ -417,7 +429,9 @@ fn a_strict_self_occurrence_is_admitted() {
     let mut inducts = BTreeMap::new();
     inducts.insert(name, single_payload(self_type, Term::type_ground()));
     for (entry_name, entry) in &inducts {
-        kernel.declare_induct(entry_name, entry);
+        kernel
+            .declare_induct(entry_name, entry)
+            .expect("a name is declared once");
     }
 
     let vectors = positivity_vectors(
@@ -438,24 +452,26 @@ fn declare_struct_over_a_number(kernel: &mut Kernel, path: &str, fields: Vec<Ter
         .map(|(field, index)| (Free::local(index, None), field))
         .collect::<Vec<_>>();
 
-    kernel.declare_struct(
-        &name,
-        &StructDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::build(
-                [(
-                    Free::local(0, Some("n")),
-                    Term::intrinsic(Intrinsic::NatType),
-                )],
-                Telescope::build(fields, ()),
-            ),
-            result_sort: Term::type_ground(),
-            module: Qualifier::from([path]),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_struct(
+            &name,
+            &StructDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::build(
+                    [(
+                        Free::local(0, Some("n")),
+                        Term::intrinsic(Intrinsic::NatType),
+                    )],
+                    Telescope::build(fields, ()),
+                ),
+                result_sort: Term::type_ground(),
+                module: Qualifier::from([path]),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     name
 }
@@ -1039,7 +1055,9 @@ fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
     );
 
     for (name, entry) in &inducts {
-        kernel.declare_induct(name, entry);
+        kernel
+            .declare_induct(name, entry)
+            .expect("a name is declared once");
     }
 
     assert!(
@@ -1067,19 +1085,21 @@ fn an_out_of_set_vector_is_believed_only_under_partial_coverage() {
     let outer_type = Term::induct_type(outer_name, Vec::<Term>::new(), Vec::<Term>::new());
 
     // Registered, never analyzed: the lie rides on `polarities` and only a registry lookup can read it.
-    kernel.declare_induct(
-        &wrapper_name,
-        &InductDecl {
-            arity: Telescope::build(
-                [(Free::local(2, Some("A")), Term::type_ground())],
-                Telescope::done(()),
-            ),
-            constructors: Vec::new(),
-            polarities: vec![Polarity::Strict],
-            variances: Vec::new(),
-            ..single_payload(Term::type_ground(), Term::type_ground())
-        },
-    );
+    kernel
+        .declare_induct(
+            &wrapper_name,
+            &InductDecl {
+                arity: Telescope::build(
+                    [(Free::local(2, Some("A")), Term::type_ground())],
+                    Telescope::done(()),
+                ),
+                constructors: Vec::new(),
+                polarities: vec![Polarity::Strict],
+                variances: Vec::new(),
+                ..single_payload(Term::type_ground(), Term::type_ground())
+            },
+        )
+        .expect("a name is declared once");
 
     let mut inducts = BTreeMap::new();
     inducts.insert(
@@ -1090,7 +1110,9 @@ fn an_out_of_set_vector_is_believed_only_under_partial_coverage() {
         ),
     );
     for (name, entry) in &inducts {
-        kernel.declare_induct(name, entry);
+        kernel
+            .declare_induct(name, entry)
+            .expect("a name is declared once");
     }
 
     assert!(
@@ -1155,7 +1177,9 @@ fn a_self_calling_type_level_rec_leaves_the_walk_terminating() {
     let mut inducts = BTreeMap::new();
     inducts.insert(name, single_payload(payload, Term::type_ground()));
     for (entry_name, entry) in &inducts {
-        kernel.declare_induct(entry_name, entry);
+        kernel
+            .declare_induct(entry_name, entry)
+            .expect("a name is declared once");
     }
 
     let vectors = positivity_vectors(
@@ -1177,7 +1201,9 @@ fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
     let nat = || Term::intrinsic(Intrinsic::NatType);
     let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
     let function = || Term::func_type([(Free::local(1, Some("n")), nat())], self_type.clone());
-    kernel.declare_induct(&name, &single_payload(function(), Term::type_ground()));
+    kernel
+        .declare_induct(&name, &single_payload(function(), Term::type_ground()))
+        .expect("a name is declared once");
 
     let f = Free::local(2, Some("f"));
     let a = Free::local(3, Some("a"));
@@ -1230,10 +1256,12 @@ fn a_lambda_applied_to_the_arm_payload_descends() {
     let name = Global::Authored(Qualifier::from(["T"]));
     let self_type = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
     let nat = || Term::intrinsic(Intrinsic::NatType);
-    kernel.declare_induct(
-        &name,
-        &single_payload(self_type.clone(), Term::type_ground()),
-    );
+    kernel
+        .declare_induct(
+            &name,
+            &single_payload(self_type.clone(), Term::type_ground()),
+        )
+        .expect("a name is declared once");
 
     let f = Free::local(2, Some("f"));
     let a = Free::local(3, Some("a"));
@@ -1283,10 +1311,12 @@ fn a_let_alias_of_the_arm_payload_descends() {
     let name = Global::Authored(Qualifier::from(["T"]));
     let self_type = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
     let nat = || Term::intrinsic(Intrinsic::NatType);
-    kernel.declare_induct(
-        &name,
-        &single_payload(self_type.clone(), Term::type_ground()),
-    );
+    kernel
+        .declare_induct(
+            &name,
+            &single_payload(self_type.clone(), Term::type_ground()),
+        )
+        .expect("a name is declared once");
 
     let f = Free::local(2, Some("f"));
     let a = Free::local(3, Some("a"));

@@ -30,21 +30,23 @@ fn dependent_family(kernel: &mut Kernel, name: Free, family: &Global, p: &Term) 
     let n = binder(94, "n");
     let x = binder(95, "x");
     let at = Term::induct_type(*family, Vec::<Term>::new(), [Term::free_var(&n)]);
-    kernel.declare(
-        &name,
-        &Term::func_type(
-            [
-                (n, nat_type()),
-                (x, at),
-                (
-                    binder(96, "p"),
-                    Term::apply(p.clone(), [Term::free_var(&n), Term::free_var(&x)]),
-                ),
-            ],
-            Term::type_ground(),
-        ),
-        &UniverseContext::default(),
-    );
+    kernel
+        .declare(
+            &name,
+            &Term::func_type(
+                [
+                    (n, nat_type()),
+                    (x, at),
+                    (
+                        binder(96, "p"),
+                        Term::apply(p.clone(), [Term::free_var(&n), Term::free_var(&x)]),
+                    ),
+                ],
+                Term::type_ground(),
+            ),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
 
     Term::free_var(&name)
 }
@@ -165,11 +167,13 @@ fn an_ambient_result_over_an_expression_replaces_its_occurrences() {
     let f = binder(62, "f");
     let n = binder(63, "n");
     let at_zero = Term::induct_type(family, Vec::<Term>::new(), [nat(0)]);
-    kernel.declare(
-        &f,
-        &Term::func_type([(binder(64, "k"), nat_type())], at_zero.clone()),
-        &UniverseContext::default(),
-    );
+    kernel
+        .declare(
+            &f,
+            &Term::func_type([(binder(64, "k"), nat_type())], at_zero.clone()),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
     kernel.assume(&n, &nat_type());
     let expression = Term::apply(Term::free_var(&f), [Term::free_var(&n)]);
     let h = binder(65, "h");

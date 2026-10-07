@@ -122,15 +122,17 @@ fn a_guard_behind_a_definition_establishes_what_its_arm_descends_on() {
     let mut kernel = kernel();
     let is_zero = binder(10, "is_zero");
     let x = binder(11, "x");
-    kernel.define(
-        &is_zero,
-        &Term::func_type([(x, nat_type())], Term::intrinsic(Intrinsic::BoolType)),
-        &Term::func(
-            [(x, nat_type())],
-            Term::intrinsic(Intrinsic::NatEql(Term::free_var(&x), nat(0))),
-        ),
-        &UniverseContext::empty(),
-    );
+    kernel
+        .define(
+            &is_zero,
+            &Term::func_type([(x, nat_type())], Term::intrinsic(Intrinsic::BoolType)),
+            &Term::func(
+                [(x, nat_type())],
+                Term::intrinsic(Intrinsic::NatEql(Term::free_var(&x), nat(0))),
+            ),
+            &UniverseContext::empty(),
+        )
+        .expect("a name is declared once");
 
     let (f, signature) = member();
     let n = binder(1, "n");
@@ -155,21 +157,23 @@ fn a_guard_behind_a_definition_establishes_what_its_arm_descends_on() {
 fn a_call_in_a_nominal_values_parameter_is_recorded() {
     let mut kernel = kernel();
     let boxed = Global::Authored(Qualifier::from(["Box"]));
-    kernel.declare_struct(
-        &boxed,
-        &StructDecl {
-            universe_context: UniverseContext::empty(),
-            arity: Telescope::build(
-                [(binder(20, "A"), Term::type_ground())],
-                Telescope::build([(binder(21, "x"), nat_type())], ()),
-            ),
-            result_sort: Term::type_ground(),
-            module: Qualifier::default(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_struct(
+            &boxed,
+            &StructDecl {
+                universe_context: UniverseContext::empty(),
+                arity: Telescope::build(
+                    [(binder(20, "A"), Term::type_ground())],
+                    Telescope::build([(binder(21, "x"), nat_type())], ()),
+                ),
+                result_sort: Term::type_ground(),
+                module: Qualifier::default(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     let (f, signature) = member();
     let n = binder(1, "n");

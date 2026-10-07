@@ -40,45 +40,53 @@ fn kernel_with_bounds() -> Kernel {
 
     let truth = Global::Authored(SYNTAX.proof.true_type.qualifier());
     let falsity = Global::Authored(Qualifier::from(["False"]));
-    kernel.declare_induct(
-        &truth,
-        &family(
-            0,
-            vec![(
-                Atom::from("qed"),
-                InductParam::new(Telescope::done(Vec::new()), Vec::new()),
-            )],
-            Term::prop(),
-        ),
-    );
-    kernel.declare_induct(&falsity, &family(0, Vec::new(), Term::prop()));
+    kernel
+        .declare_induct(
+            &truth,
+            &family(
+                0,
+                vec![(
+                    Atom::from("qed"),
+                    InductParam::new(Telescope::done(Vec::new()), Vec::new()),
+                )],
+                Term::prop(),
+            ),
+        )
+        .expect("a name is declared once");
+    kernel
+        .declare_induct(&falsity, &family(0, Vec::new(), Term::prop()))
+        .expect("a name is declared once");
 
     let decision = binder(0, "b");
-    kernel.define(
-        &Free::global(SYNTAX.proof.holds.qualifier()),
-        &Term::func_type([(binder(1, "b"), bool_type())], Term::prop()),
-        &Term::func(
-            [(decision, bool_type())],
-            Term::bool_match(
-                Term::free_var(&decision),
-                None,
-                Term::prop(),
-                nullary(falsity),
-                nullary(truth),
+    kernel
+        .define(
+            &Free::global(SYNTAX.proof.holds.qualifier()),
+            &Term::func_type([(binder(1, "b"), bool_type())], Term::prop()),
+            &Term::func(
+                [(decision, bool_type())],
+                Term::bool_match(
+                    Term::free_var(&decision),
+                    None,
+                    Term::prop(),
+                    nullary(falsity),
+                    nullary(truth),
+                ),
             ),
-        ),
-        &UniverseContext::default(),
-    );
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
 
     kernel
 }
 
 /// The family a coordination outcome is read through, at the name the registry gives it. Typing an outcome reads its family's arity and sort and never its cases, so it is declared with none.
 fn declare_outcome(kernel: &mut Kernel, name: SyntaxName, parameters: u32) {
-    kernel.declare_induct(
-        &Global::Authored(name.qualifier()),
-        &family(parameters, Vec::new(), Term::type_ground()),
-    );
+    kernel
+        .declare_induct(
+            &Global::Authored(name.qualifier()),
+            &family(parameters, Vec::new(), Term::type_ground()),
+        )
+        .expect("a name is declared once");
 }
 
 /// The one proof of `True`, which closes every bound whose decision reduces to `true` and no other.

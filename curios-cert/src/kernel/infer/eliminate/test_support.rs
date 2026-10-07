@@ -111,28 +111,30 @@ pub(super) fn declare_at(
         })
         .collect();
 
-    kernel.declare_induct(
-        &family,
-        &InductDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::build(
-                index_types
-                    .into_iter()
-                    .enumerate()
-                    .map(|(position, type_)| {
-                        (Free::local(9_000 + position as u32, Some("i")), type_)
-                    })
-                    .collect::<Vec<_>>(),
-                (),
-            )),
-            constructors: entries,
-            result_sort,
-            module: Qualifier::from([path]),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_induct(
+            &family,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::build(
+                    index_types
+                        .into_iter()
+                        .enumerate()
+                        .map(|(position, type_)| {
+                            (Free::local(9_000 + position as u32, Some("i")), type_)
+                        })
+                        .collect::<Vec<_>>(),
+                    (),
+                )),
+                constructors: entries,
+                result_sort,
+                module: Qualifier::from([path]),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     family
 }
@@ -200,31 +202,35 @@ pub(super) fn succ(tail: Term) -> Term {
 /// [`opaque_family`] below can only witness the index half of a motive, and a catch-all refines no index — so nothing built from it can tell the scrutinee instances apart.
 pub(super) fn scrutinee_family(kernel: &mut Kernel, name: Free, family: &Global) -> Term {
     let index = binder(92, "n");
-    kernel.declare(
-        &name,
-        &Term::func_type(
-            [
-                (index, nat_type()),
-                (
-                    binder(93, "x"),
-                    Term::induct_type(*family, Vec::<Term>::new(), [Term::free_var(&index)]),
-                ),
-            ],
-            Term::type_ground(),
-        ),
-        &UniverseContext::default(),
-    );
+    kernel
+        .declare(
+            &name,
+            &Term::func_type(
+                [
+                    (index, nat_type()),
+                    (
+                        binder(93, "x"),
+                        Term::induct_type(*family, Vec::<Term>::new(), [Term::free_var(&index)]),
+                    ),
+                ],
+                Term::type_ground(),
+            ),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
 
     Term::free_var(&name)
 }
 
 /// An opaque `P : (Nat) -> Type`, for observing which instance a term checks at.
 pub(super) fn opaque_family(kernel: &mut Kernel, name: Free) -> Term {
-    kernel.declare(
-        &name,
-        &Term::func_type([(binder(90, "n"), nat_type())], Term::type_ground()),
-        &UniverseContext::default(),
-    );
+    kernel
+        .declare(
+            &name,
+            &Term::func_type([(binder(90, "n"), nat_type())], Term::type_ground()),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
 
     Term::free_var(&name)
 }

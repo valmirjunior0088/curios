@@ -25,19 +25,21 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
     let name = Global::Authored(Qualifier::from(["P"]));
 
     // `induct P : Prop end` — an empty proposition, so `Sort::of` reads `Prop` off its declaration.
-    kernel.declare_induct(
-        &name,
-        &InductDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::done(())),
-            constructors: Vec::new(),
-            result_sort: Term::prop(),
-            module: Qualifier::from(["P"]),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_induct(
+            &name,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: Vec::new(),
+                result_sort: Term::prop(),
+                module: Qualifier::from(["P"]),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
     let proposition = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
 
     let list = Term::intrinsic(Intrinsic::ListType(proposition.clone()));

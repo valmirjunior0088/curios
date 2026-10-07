@@ -38,9 +38,7 @@ pub(crate) fn check_definition(
     infer_type(kernel, type_)?;
     check(kernel, body, type_)?;
 
-    kernel.define(name, type_, body, universes);
-
-    Ok(())
+    kernel.define(name, type_, body, universes)
 }
 
 /// Check every member of `group` against its declared type, then run `within` with the members in scope.
@@ -143,7 +141,7 @@ pub(crate) fn check_rec_group(
             &group.member_type(index),
             &Term::rec_proj(group.clone(), index),
             universes,
-        );
+        )?;
     }
 
     Ok(())

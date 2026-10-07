@@ -20,19 +20,21 @@ fn nominal(path: &str) -> Global {
 fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Term {
     let name = nominal(path);
 
-    kernel.declare_induct(
-        &name,
-        &InductDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::done(())),
-            constructors: Vec::new(),
-            result_sort,
-            module: Qualifier::from([path]),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_induct(
+            &name,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: Vec::new(),
+                result_sort,
+                module: Qualifier::from([path]),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new())
 }
@@ -237,15 +239,17 @@ fn a_universe_instance_over_a_defined_scheme_classifies_at_the_instances_level()
     let scheme = Free::from(&nominal("A"));
     let parameter = Level::param(UniverseParam(0));
 
-    kernel.define(
-        &scheme,
-        &Term::type_at(parameter.checked_add(1).expect("level admits the offset")),
-        &Term::type_at(parameter),
-        &UniverseContext {
-            parameter_count: 1,
-            constraints: Vec::new(),
-        },
-    );
+    kernel
+        .define(
+            &scheme,
+            &Term::type_at(parameter.checked_add(1).expect("level admits the offset")),
+            &Term::type_at(parameter),
+            &UniverseContext {
+                parameter_count: 1,
+                constraints: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     let one = Level::zero().succ().expect("level zero succeeds");
     let two = one.clone().succ().expect("level one succeeds");
@@ -263,14 +267,16 @@ fn a_universe_instance_over_a_bodiless_scheme_classifies_at_the_instances_level(
     let scheme = Free::from(&nominal("A"));
     let parameter = Level::param(UniverseParam(0));
 
-    kernel.declare(
-        &scheme,
-        &Term::type_at(parameter.checked_add(1).expect("level admits the offset")),
-        &UniverseContext {
-            parameter_count: 1,
-            constraints: Vec::new(),
-        },
-    );
+    kernel
+        .declare(
+            &scheme,
+            &Term::type_at(parameter.checked_add(1).expect("level admits the offset")),
+            &UniverseContext {
+                parameter_count: 1,
+                constraints: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     let one = Level::zero().succ().expect("level zero succeeds");
     let two = one.clone().succ().expect("level one succeeds");
@@ -449,11 +455,13 @@ fn family_over_a_proof(kernel: &mut Kernel) -> (Term, Term) {
     let other = declare(kernel, "Q", Term::prop());
     let nat_type = Term::intrinsic(Intrinsic::NatType);
     let g = Free::from(&nominal("g"));
-    kernel.declare(
-        &g,
-        &Term::func_type([(binder(90, "x"), proposition.clone())], nat_type.clone()),
-        &UniverseContext::default(),
-    );
+    kernel
+        .declare(
+            &g,
+            &Term::func_type([(binder(90, "x"), proposition.clone())], nat_type.clone()),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
     let p = binder(1, "p");
     kernel.assume(&p, &proposition);
     let guard = |proof: &Free| {

@@ -32,19 +32,21 @@ pub(super) fn nat_type() -> Term {
 pub(super) fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Term {
     let name = Global::Authored(Qualifier::from([path]));
 
-    kernel.declare_induct(
-        &name,
-        &InductDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::done(())),
-            constructors: Vec::new(),
-            result_sort,
-            module: Qualifier::from([path]),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_induct(
+            &name,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: Vec::new(),
+                result_sort,
+                module: Qualifier::from([path]),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new())
 }
@@ -101,18 +103,20 @@ pub(super) fn polymorphic_fold(level: Level) -> Term {
 /// A struct type declared with `fields` and no parameter, for the goals that need a nominal type.
 pub(super) fn declare_struct(kernel: &mut Kernel, path: &str, fields: Telescope<()>) -> Term {
     let name = Global::Authored(Qualifier::from([path]));
-    kernel.declare_struct(
-        &name,
-        &StructDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(fields),
-            result_sort: Term::type_ground(),
-            module: Qualifier::from([path]),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_struct(
+            &name,
+            &StructDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(fields),
+                result_sort: Term::type_ground(),
+                module: Qualifier::from([path]),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     Term::from(Subterm::StructType(StructType {
         name,
@@ -162,28 +166,30 @@ pub(super) fn declare_wrap(
     let held = binder(81, "a");
     let sort = Term::type_at(level.clone());
 
-    kernel.declare_induct(
-        &name,
-        &InductDecl {
-            universe_context: scheme.clone(),
-            arity: Telescope::build([(carrier, sort.clone())], Telescope::done(())),
-            constructors: vec![(
-                Atom::from("wrap"),
-                InductParam::new(
-                    Telescope::build(
-                        [(carrier, sort.clone()), (held, Term::free_var(&carrier))],
-                        Vec::new(),
+    kernel
+        .declare_induct(
+            &name,
+            &InductDecl {
+                universe_context: scheme.clone(),
+                arity: Telescope::build([(carrier, sort.clone())], Telescope::done(())),
+                constructors: vec![(
+                    Atom::from("wrap"),
+                    InductParam::new(
+                        Telescope::build(
+                            [(carrier, sort.clone()), (held, Term::free_var(&carrier))],
+                            Vec::new(),
+                        ),
+                        vec![Plicity::Implicit, Plicity::Explicit],
                     ),
-                    vec![Plicity::Implicit, Plicity::Explicit],
-                ),
-            )],
-            result_sort: sort.clone(),
-            module: Qualifier::default(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances,
-        },
-    );
+                )],
+                result_sort: sort.clone(),
+                module: Qualifier::default(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances,
+            },
+        )
+        .expect("a name is declared once");
     let type_ = Term::func_type([(carrier, sort.clone())], sort.clone());
     let value = Term::func(
         [(carrier, sort)],
@@ -195,7 +201,9 @@ pub(super) fn declare_wrap(
         ),
     );
     let value = former.spell(binder(87, "Wrap"), &type_, value, &scheme);
-    kernel.define(&Free::from(&name), &type_, &value, &scheme);
+    kernel
+        .define(&Free::from(&name), &type_, &value, &scheme)
+        .expect("a name is declared once");
 
     name
 }
@@ -212,22 +220,24 @@ pub(super) fn declare_leaf(
         constraints: Vec::new(),
     };
 
-    kernel.declare_induct(
-        &name,
-        &InductDecl {
-            universe_context: scheme.clone(),
-            arity: Telescope::done(Telescope::done(())),
-            constructors: vec![(
-                Atom::from("leaf"),
-                InductParam::new(Telescope::done(Vec::new()), Vec::new()),
-            )],
-            result_sort: Term::type_ground(),
-            module: Qualifier::default(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances,
-        },
-    );
+    kernel
+        .declare_induct(
+            &name,
+            &InductDecl {
+                universe_context: scheme.clone(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: vec![(
+                    Atom::from("leaf"),
+                    InductParam::new(Telescope::done(Vec::new()), Vec::new()),
+                )],
+                result_sort: Term::type_ground(),
+                module: Qualifier::default(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances,
+            },
+        )
+        .expect("a name is declared once");
     let type_ = Term::type_ground();
     let node = Term::induct_type_at(
         name,
@@ -236,7 +246,9 @@ pub(super) fn declare_leaf(
         Vec::<Term>::new(),
     );
     let value = former.spell(binder(86, "Leaf"), &type_, node, &scheme);
-    kernel.define(&Free::from(&name), &type_, &value, &scheme);
+    kernel
+        .define(&Free::from(&name), &type_, &value, &scheme)
+        .expect("a name is declared once");
 
     name
 }
@@ -247,28 +259,30 @@ pub(super) fn declare_box(kernel: &mut Kernel, variances: Vec<Variance>) -> Glob
     let level = Level::param(UniverseParam(0));
     let held = binder(82, "T");
 
-    kernel.declare_induct(
-        &name,
-        &InductDecl {
-            universe_context: UniverseContext {
-                parameter_count: 1,
-                constraints: Vec::new(),
+    kernel
+        .declare_induct(
+            &name,
+            &InductDecl {
+                universe_context: UniverseContext {
+                    parameter_count: 1,
+                    constraints: Vec::new(),
+                },
+                arity: Telescope::done(Telescope::done(())),
+                constructors: vec![(
+                    Atom::from("box"),
+                    InductParam::new(
+                        Telescope::build([(held, Term::type_at(level.clone()))], Vec::new()),
+                        vec![Plicity::Explicit],
+                    ),
+                )],
+                result_sort: Term::type_at(level.succ().expect("a parameter has a successor")),
+                module: Qualifier::default(),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances,
             },
-            arity: Telescope::done(Telescope::done(())),
-            constructors: vec![(
-                Atom::from("box"),
-                InductParam::new(
-                    Telescope::build([(held, Term::type_at(level.clone()))], Vec::new()),
-                    vec![Plicity::Explicit],
-                ),
-            )],
-            result_sort: Term::type_at(level.succ().expect("a parameter has a successor")),
-            module: Qualifier::default(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances,
-        },
-    );
+        )
+        .expect("a name is declared once");
 
     name
 }
@@ -280,22 +294,24 @@ pub(super) fn declare_indexed(kernel: &mut Kernel, path: &str, param_sort: Term)
     let name = Global::Authored(Qualifier::from([path]));
     let param = binder(90, "P");
 
-    kernel.declare_induct(
-        &name,
-        &InductDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::build(
-                [(param, param_sort)],
-                Telescope::build([(binder(91, "p"), Term::free_var(&param))], ()),
-            ),
-            constructors: Vec::new(),
-            result_sort: Term::type_ground(),
-            module: Qualifier::from([path]),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_induct(
+            &name,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::build(
+                    [(param, param_sort)],
+                    Telescope::build([(binder(91, "p"), Term::free_var(&param))], ()),
+                ),
+                constructors: Vec::new(),
+                result_sort: Term::type_ground(),
+                module: Qualifier::from([path]),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     name
 }

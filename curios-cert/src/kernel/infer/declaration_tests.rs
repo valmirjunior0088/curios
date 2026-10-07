@@ -20,25 +20,27 @@ fn a_constructor_has_the_type_its_signature_ends_in() {
 
     // `induct Wrapped | mk(value : Nat) end`
     let constructed = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
-    kernel.declare_induct(
-        &name,
-        &InductDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::done(())),
-            constructors: vec![(
-                Atom::from("mk"),
-                InductParam::new(
-                    Telescope::build([(payload, nat_type())], Vec::new()),
-                    vec![Plicity::Explicit],
-                ),
-            )],
-            result_sort: Term::type_ground(),
-            module: Qualifier::from(["Wrapped"]),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_induct(
+            &name,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: vec![(
+                    Atom::from("mk"),
+                    InductParam::new(
+                        Telescope::build([(payload, nat_type())], Vec::new()),
+                        vec![Plicity::Explicit],
+                    ),
+                )],
+                result_sort: Term::type_ground(),
+                module: Qualifier::from(["Wrapped"]),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     let value = Term::variant(name, Vec::<Term>::new(), "mk", [nat(5)]);
     assert_eq!(infer(&mut kernel, &value), Ok(constructed));
@@ -51,25 +53,27 @@ fn a_constructor_payload_of_the_wrong_type_is_refused() {
     let name = Global::Authored(Qualifier::from(["Wrapped"]));
     let payload = binder(0, "value");
 
-    kernel.declare_induct(
-        &name,
-        &InductDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::done(())),
-            constructors: vec![(
-                Atom::from("mk"),
-                InductParam::new(
-                    Telescope::build([(payload, nat_type())], Vec::new()),
-                    vec![Plicity::Explicit],
-                ),
-            )],
-            result_sort: Term::type_ground(),
-            module: Qualifier::from(["Wrapped"]),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_induct(
+            &name,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: vec![(
+                    Atom::from("mk"),
+                    InductParam::new(
+                        Telescope::build([(payload, nat_type())], Vec::new()),
+                        vec![Plicity::Explicit],
+                    ),
+                )],
+                result_sort: Term::type_ground(),
+                module: Qualifier::from(["Wrapped"]),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     let value = Term::variant(
         name,
@@ -169,18 +173,20 @@ fn an_instance_must_satisfy_its_schemes_constraints() {
     let name = binder(1, "bounded");
 
     let mut kernel = kernel();
-    kernel.declare(
-        &name,
-        &Term::type_at(u.clone()),
-        &UniverseContext {
-            parameter_count: 2,
-            constraints: vec![UniverseConstraint {
-                lower: u.succ().expect("level has a successor"),
-                upper: w,
-                origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
-            }],
-        },
-    );
+    kernel
+        .declare(
+            &name,
+            &Term::type_at(u.clone()),
+            &UniverseContext {
+                parameter_count: 2,
+                constraints: vec![UniverseConstraint {
+                    lower: u.succ().expect("level has a successor"),
+                    upper: w,
+                    origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+                }],
+            },
+        )
+        .expect("a name is declared once");
 
     let at = |levels: Vec<Level>| Term::instance_of(&name, levels);
 
@@ -199,19 +205,21 @@ fn an_instance_must_satisfy_its_schemes_constraints() {
 fn a_recursive_proof_that_does_not_descend_is_refused() {
     let mut kernel = kernel();
     let name = Global::Authored(Qualifier::from(["False"]));
-    kernel.declare_induct(
-        &name,
-        &InductDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::done(())),
-            constructors: Vec::new(),
-            result_sort: Term::prop(),
-            module: Qualifier::from(["False"]),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_induct(
+            &name,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: Vec::new(),
+                result_sort: Term::prop(),
+                module: Qualifier::from(["False"]),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
     let false_ = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
 
     let f = binder(0, "f");

@@ -51,7 +51,9 @@ pub(super) fn parameterized_struct(kernel: &mut Kernel) -> Global {
         polarities: vec![Polarity::Strict],
         variances: Vec::new(),
     };
-    kernel.declare_struct(&name, &declaration);
+    kernel
+        .declare_struct(&name, &declaration)
+        .expect("a name is declared once");
 
     name
 }

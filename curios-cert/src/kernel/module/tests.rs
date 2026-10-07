@@ -37,7 +37,9 @@ fn family(kernel: &mut Kernel, result_sort: Term, payload_type: Term) -> InductD
         polarities: Vec::new(),
         variances: Vec::new(),
     };
-    kernel.declare_induct(&fam(), &declaration);
+    kernel
+        .declare_induct(&fam(), &declaration)
+        .expect("a name is declared once");
 
     declaration
 }
@@ -100,7 +102,9 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
         polarities: Vec::new(),
         variances: Vec::new(),
     };
-    kernel.declare_induct(&name, &declaration);
+    kernel
+        .declare_induct(&name, &declaration)
+        .expect("a name is declared once");
 
     assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
 }
@@ -144,7 +148,9 @@ fn a_constructor_telescope_shorter_than_the_parameter_prefix_is_refused() {
         polarities: Vec::new(),
         variances: Vec::new(),
     };
-    kernel.declare_induct(&fam(), &declaration);
+    kernel
+        .declare_induct(&fam(), &declaration)
+        .expect("a name is declared once");
 
     assert!(matches!(
         check_induct_decl(&mut kernel, &declaration),
@@ -185,7 +191,9 @@ fn prefixed(kernel: &mut Kernel, prefix: Term) -> InductDecl {
         polarities: Vec::new(),
         variances: Vec::new(),
     };
-    kernel.declare_induct(&fam(), &declaration);
+    kernel
+        .declare_induct(&fam(), &declaration)
+        .expect("a name is declared once");
 
     declaration
 }
@@ -237,19 +245,21 @@ fn a_proposition_may_carry_a_proof() {
 /// A `Prop`-sorted family with no constructors, so that a field typed by it is a genuine proof rather than a proposition held as data.
 fn proposition(kernel: &mut Kernel, path: &str) -> Term {
     let name = Global::Authored(Qualifier::from([path]));
-    kernel.declare_induct(
-        &name,
-        &InductDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::done(())),
-            constructors: Vec::new(),
-            result_sort: Term::prop(),
-            module: Qualifier::from([path]),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
+    kernel
+        .declare_induct(
+            &name,
+            &InductDecl {
+                universe_context: UniverseContext::default(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: Vec::new(),
+                result_sort: Term::prop(),
+                module: Qualifier::from([path]),
+                rep_public: true,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+            },
+        )
+        .expect("a name is declared once");
 
     Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new())
 }
@@ -269,7 +279,9 @@ fn proposition_with_field(kernel: &mut Kernel, field_type: Term) -> StructDecl {
         polarities: Vec::new(),
         variances: Vec::new(),
     };
-    kernel.declare_struct(&name, &declaration);
+    kernel
+        .declare_struct(&name, &declaration)
+        .expect("a name is declared once");
 
     declaration
 }

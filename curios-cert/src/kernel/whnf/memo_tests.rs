@@ -1,8 +1,8 @@
-//! The evaluation memos: what a hit costs, what clears them, and what a budget restore forgets.
+//! The evaluation memos: what a hit costs, why none goes stale, and what a budget restore forgets.
 
 use {
     super::test_support::*,
-    crate::{Kernel, Sort, check, infer},
+    crate::{Error, Kernel, Sort, check, infer},
     curios_analysis::test_support::SYNTAX,
     curios_core::{Intrinsic, Reducer, Term, UniverseContext},
 };
@@ -12,12 +12,14 @@ use {
 fn a_memoized_unfold_answers_the_same_across_scopes() {
     let mut kernel = kernel();
     let name = binder(0, "two");
-    kernel.define(
-        &name,
-        &nat_type(),
-        &Term::intrinsic(Intrinsic::nat_add(nat(1), nat(1))),
-        &UniverseContext::default(),
-    );
+    kernel
+        .define(
+            &name,
+            &nat_type(),
+            &Term::intrinsic(Intrinsic::nat_add(nat(1), nat(1))),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
 
     let inside = kernel.scoped(|kernel| {
         let binder_ = binder(1, "x");
@@ -35,13 +37,15 @@ fn a_memoized_unfold_answers_the_same_across_scopes() {
     assert_eq!(outside, nat(2));
 }
 
-/// Redefining a name clears every memo, so validity is by construction rather than by an append-only assumption.
+/// A name is written once: a second definition under it is refused and the first stands, so a remembered reduct is never about a definition the environment no longer holds.
 #[test]
-fn a_redefinition_clears_the_memos() {
+fn a_redefinition_is_refused() {
     let mut kernel = kernel();
     let name = binder(0, "n");
 
-    kernel.define(&name, &nat_type(), &nat(1), &UniverseContext::default());
+    kernel
+        .define(&name, &nat_type(), &nat(1), &UniverseContext::default())
+        .expect("a name is declared once");
     assert_eq!(
         kernel
             .reduce_forced(Term::free_var(&name))
@@ -49,12 +53,15 @@ fn a_redefinition_clears_the_memos() {
         nat(1),
     );
 
-    kernel.define(&name, &nat_type(), &nat(2), &UniverseContext::default());
+    assert_eq!(
+        kernel.define(&name, &nat_type(), &nat(2), &UniverseContext::default()),
+        Err(Error::Redeclared(name)),
+    );
     assert_eq!(
         kernel
             .reduce_forced(Term::free_var(&name))
             .expect("reduces"),
-        nat(2),
+        nat(1),
     );
 }
 
@@ -97,7 +104,9 @@ fn what_a_declaration_spends_does_not_depend_on_what_was_reduced_before_it() {
     let occurrence = Term::free_var(&name);
     let defining = || {
         let mut kernel = kernel();
-        kernel.define(&name, &nat_type(), &chain(64), &monomorphic());
+        kernel
+            .define(&name, &nat_type(), &chain(64), &monomorphic())
+            .expect("a name is declared once");
         kernel
     };
 
@@ -156,7 +165,9 @@ fn restoring_the_budget_forgets_a_remembered_sort() {
 
     for type_ in [closed, scoped] {
         let mut kernel = kernel();
-        kernel.define(&alias, &Term::type_ground(), &nat_type(), &monomorphic());
+        kernel
+            .define(&alias, &Term::type_ground(), &nat_type(), &monomorphic())
+            .expect("a name is declared once");
 
         let first = spent_classifying(&mut kernel, &type_);
         let second = spent_classifying(&mut kernel, &type_);
@@ -201,7 +212,9 @@ fn restoring_the_budget_forgets_a_remembered_type_and_a_remembered_check() {
     for judge in [inferring, checking] {
         for term in [&closed, &scoped] {
             let mut kernel = kernel();
-            kernel.define(&alias, &Term::type_ground(), &nat_type(), &monomorphic());
+            kernel
+                .define(&alias, &Term::type_ground(), &nat_type(), &monomorphic())
+                .expect("a name is declared once");
 
             let first = spent_judging(&mut kernel, judge, term);
             let second = spent_judging(&mut kernel, judge, term);

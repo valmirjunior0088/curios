@@ -101,7 +101,9 @@ fn vectors(
     inducts: &BTreeMap<Global, InductDecl>,
 ) -> BTreeMap<Global, String> {
     for (name, entry) in inducts {
-        kernel.declare_induct(name, entry);
+        kernel
+            .declare_induct(name, entry)
+            .expect("a name is declared once");
     }
 
     variance_vectors(kernel, Declarations::of(inducts, &BTreeMap::new()))
@@ -256,7 +258,9 @@ fn a_structs_field_is_read() {
     ]);
     let mut kernel = kernel();
     for (name, entry) in &structs {
-        kernel.declare_struct(name, entry);
+        kernel
+            .declare_struct(name, entry)
+            .expect("a name is declared once");
     }
     let found = variance_vectors(&mut kernel, Declarations::of(&BTreeMap::new(), &structs)).vectors;
 
@@ -321,20 +325,24 @@ fn an_instance_reduction_removes_leaves_no_level() {
 
     for (budget, expected, refused) in [(100_000, "*", false), (0, "=", true)] {
         let mut kernel = Kernel::new(budget, SYNTAX);
-        kernel.define(
-            &alias,
-            &Term::func_type(
-                [(carrier, Term::type_at(level(0)))],
-                Term::type_at(level(0)),
-            ),
-            &Term::func(
-                [(carrier, Term::type_at(level(0)))],
-                Term::free_var(&carrier),
-            ),
-            &scheme(1),
-        );
+        kernel
+            .define(
+                &alias,
+                &Term::func_type(
+                    [(carrier, Term::type_at(level(0)))],
+                    Term::type_at(level(0)),
+                ),
+                &Term::func(
+                    [(carrier, Term::type_at(level(0)))],
+                    Term::free_var(&carrier),
+                ),
+                &scheme(1),
+            )
+            .expect("a name is declared once");
         let inducts = BTreeMap::from([(named("Uses"), uses(&alias))]);
-        kernel.declare_induct(&named("Uses"), &inducts[&named("Uses")]);
+        kernel
+            .declare_induct(&named("Uses"), &inducts[&named("Uses")])
+            .expect("a name is declared once");
         let found = variance_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()));
 
         assert_eq!(spelled(&found.vectors[&named("Uses")]), expected);
@@ -353,14 +361,16 @@ fn a_level_on_an_instance_that_does_not_unfold_is_invariant() {
     let opaque = Free::from(&named("Opaque"));
     let carrier = Free::local(1, Some("A"));
     let mut kernel = kernel();
-    kernel.declare(
-        &opaque,
-        &Term::func_type(
-            [(carrier, Term::type_at(level(0)))],
-            Term::type_at(level(0)),
-        ),
-        &scheme(1),
-    );
+    kernel
+        .declare(
+            &opaque,
+            &Term::func_type(
+                [(carrier, Term::type_at(level(0)))],
+                Term::type_at(level(0)),
+            ),
+            &scheme(1),
+        )
+        .expect("a name is declared once");
     let inducts = BTreeMap::from([(named("Uses"), uses(&opaque))]);
 
     assert_eq!(vectors(&mut kernel, &inducts)[&named("Uses")], "=");
@@ -401,7 +411,9 @@ fn a_family_outside_the_set_answers_from_the_vector_it_carries() {
                 variances: vec![carried],
                 ..boxed()
             };
-            kernel.declare_induct(&named("Box"), &declaration);
+            kernel
+                .declare_induct(&named("Box"), &declaration)
+                .expect("a name is declared once");
         }
         let inducts = BTreeMap::from([(named("Holder"), holder())]);
 

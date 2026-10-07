@@ -616,12 +616,22 @@ fn verdicts_within(
         verdicts.push(Verdict { name: None, error });
     }
 
-    // The nominal registry first: a definition's type may name any declaration in the module, including one whose own definitions come later. The new entries alone: one that is the environment's own stands declared since the seeding.
+    // The nominal registry first: a definition's type may name any declaration in the module, including one whose own definitions come later. The new entries alone: one that is the environment's own stands declared since the seeding. The environment refuses a name it holds, which the standing decided above rules out for every write this walk makes; a refusal is reported all the same, being the one thing a walk makes of a write it cannot perform.
     for (name, declaration) in new_entries(&module.induct_decls, &judged.inducts) {
-        kernel.declare_induct(name, declaration);
+        if let Err(error) = kernel.declare_induct(name, declaration) {
+            verdicts.push(Verdict {
+                name: Some(*name),
+                error,
+            });
+        }
     }
     for (name, declaration) in new_entries(&module.struct_decls, &judged.structs) {
-        kernel.declare_struct(name, declaration);
+        if let Err(error) = kernel.declare_struct(name, declaration) {
+            verdicts.push(Verdict {
+                name: Some(*name),
+                error,
+            });
+        }
     }
 
     // What each judged definition read of other items, taken at each judgment's end so it holds that judgment's reads alone.
@@ -654,12 +664,17 @@ fn verdicts_within(
                         name: Some(definition.name),
                         error,
                     });
-                    kernel.define(
+                    if let Err(error) = kernel.define(
                         &Free::from(&definition.name),
                         &definition.type_,
                         &definition.body,
                         &definition.universe_context,
-                    );
+                    ) {
+                        verdicts.push(Verdict {
+                            name: Some(definition.name),
+                            error,
+                        });
+                    }
                 }
             }
             Item::Rec(rec) => {
@@ -679,12 +694,17 @@ fn verdicts_within(
                     });
                     // The define `check_rec_group` performs on success: each export is the folded selection of the member it names.
                     for (member, name) in names.iter().enumerate() {
-                        kernel.define(
+                        if let Err(error) = kernel.define(
                             name,
                             &rec.group.member_type(member),
                             &Term::rec_proj(rec.group.clone(), member),
                             &universes,
-                        );
+                        ) {
+                            verdicts.push(Verdict {
+                                name: item_name,
+                                error,
+                            });
+                        }
                     }
                 }
             }

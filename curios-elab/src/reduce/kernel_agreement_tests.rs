@@ -221,12 +221,14 @@ fn a_guard_answers_its_definition_one_unfolding_down() {
         nat_type.clone(),
     );
 
-    kernel.define(
-        &small,
-        &small_type,
-        &small_body,
-        &UniverseContext::default(),
-    );
+    kernel
+        .define(
+            &small,
+            &small_type,
+            &small_body,
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
     kernel.assume(&n, &nat_type);
     let split = Term::bool_match(
         guard.clone(),

@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::{Error, Globals, Verdict},
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Free, Global, Level, Term, Totality},
+    curios_core::{Certification, Free, Global, Level, Term, Totality},
 };
 
 /// Whether `verdicts` is the one refusal a module redeclaring `name` meets: standing is decided before anything is judged, so no other verdict stands beside it.
@@ -281,4 +281,25 @@ fn a_name_in_both_registries_is_refused() {
         redeclares(&both, &negative_record_name()),
         "a name in both registries was not refused: {both:?}",
     );
+}
+
+/// A driver mounts a unit once. Mounting one twice is a construction bug in every namespace, a registry entry as much as a definition.
+///
+/// Mutation-checked against the registry's assertion: extended over the entry already there, the second mount returns.
+#[test]
+#[should_panic(expected = "a mounted unit redeclared a name already in scope")]
+fn a_registry_entry_mounted_twice_is_a_construction_bug() {
+    let unit = shadowing_registry(Term::type_ground());
+    let mut globals = already_judged(&unit);
+
+    globals.mount(&unit, &Certification::default());
+}
+
+/// An environment is built from a unit that declares each name once: one declaring a name twice is its builder's fault, and no environment is made of it.
+///
+/// Mutation-checked against the assertion: with the entries collected, the later one standing, an environment is built.
+#[test]
+#[should_panic(expected = "a unit put in scope declares one name twice")]
+fn an_environment_is_not_built_from_a_unit_declaring_a_name_twice() {
+    already_judged(&group_naming_a_member_twice());
 }

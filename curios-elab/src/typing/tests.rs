@@ -117,7 +117,9 @@ fn both_checkers_decide_non_informativeness_alike() {
     context
         .register_induct(&held, declaration.clone())
         .expect("the family registers");
-    kernel.declare_induct(&held, &declaration);
+    kernel
+        .declare_induct(&held, &declaration)
+        .expect("a name is declared once");
     let proof = || Term::induct_type(held, Vec::<Term>::new(), Vec::<Term>::new());
 
     let types = vec![
