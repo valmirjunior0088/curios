@@ -104,7 +104,7 @@ impl Spend {
     /// **What the judgment it closes consumed is sampled under `profile`**, as `budget::consumed` — the profile-side reading of [`Spend::heaviest`], which a fold reports as that sample's `max` beside the elaborator's under the same name — with the nodes its walks looked at beside it, as `term::looks`: the two are sampled at one point, so a declaration whose looks outgrow its units is one a walk paid per path for.
     pub(super) fn restore_budget(&mut self) {
         curios_profile::sample!("budget::consumed", self.consumed().units());
-        curios_profile::sample!("term::looks", curios_core::take_looks());
+        curios_profile::sample!("term::looks", crate::take_looks());
         self.heaviest = self.heaviest.heavier_of(self.consumed());
 
         self.remaining = self.budget;

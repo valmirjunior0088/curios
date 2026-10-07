@@ -19,10 +19,10 @@ mod tests;
 
 use {
     super::{Counted, Error, Kernel, infer_type, whnf},
+    crate::instantiate_universe_levels_scoped,
     curios_core::{
         Bound, Field, FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, Match,
         MatchResult, Proj, Reducer, StructType, Subterm, Telescope, Term, TupleType,
-        instantiate_universe_levels_scoped,
     },
 };
 

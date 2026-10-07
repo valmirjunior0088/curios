@@ -27,10 +27,11 @@ mod tests;
 
 use {
     super::{check, infer},
-    crate::{Counted, Error, InductAt, Kernel, Sort, carries_information},
-    curios_analysis::{
-        Invert, invert_indices, pinned_by_targets, retyped, scrutinee_solution, solve_indices,
+    crate::{
+        Counted, Error, InductAt, Kernel, Sort, carries_information, invert_indices,
+        pinned_by_targets, retyped, scrutinee_solution, solve_indices,
     },
+    curios_analysis::Invert,
     curios_core::{
         Atom, Bound, Free, InductArm, InductType, MatchResult, ReduceError, Subterm, Telescope,
         Term, Variant,

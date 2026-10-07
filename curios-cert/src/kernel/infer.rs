@@ -39,12 +39,12 @@ use {
     super::{
         Counted, Error, Kernel, Sort, as_sort, check_group, convert, infer_sort, synth_neutral,
     },
-    curios_analysis::spine,
+    crate::{foreign_signature, spine},
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance,
         InstanceHead, Intrinsic, Let, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj,
         Rec, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType,
-        Variant, foreign_signature,
+        Variant,
     },
     curios_num::{Binary, Grain, Natural},
     curios_utilities::recurse,

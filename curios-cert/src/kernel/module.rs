@@ -13,7 +13,7 @@ mod tests;
 
 use {
     super::{Counted, Error, Kernel, Sort, carries_information, check, convert, infer_type},
-    curios_analysis::yields_a_sort,
+    crate::yields_a_sort,
     curios_core::{
         Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term, Totality,
         UniverseContext,

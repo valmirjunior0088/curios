@@ -40,12 +40,12 @@ mod variance_tests;
 
 use {
     super::{Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
-    curios_analysis::struct_reaches_itself,
+    crate::{instantiate_universe_levels_scoped, struct_reaches_itself},
     curios_core::{
         Apply, Bound, Carrier, Cases, Classes, Cost, Cursor, Field, Func, FuncType, Global,
         InductType, Instance, InstanceHead, Level, Lockstep, Many, Match, MatchResult, Probe, Proj,
         ReduceError, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple,
-        TupleType, Variant, instantiate_universe_levels_scoped,
+        TupleType, Variant,
     },
     curios_utilities::recurse,
     std::collections::HashSet,

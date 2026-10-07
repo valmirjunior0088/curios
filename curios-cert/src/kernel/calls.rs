@@ -11,7 +11,8 @@ mod tests;
 
 use {
     super::{Error, Kernel},
-    curios_analysis::{Call, SizeContext, decide, grade, member_arities, nonzero_by},
+    crate::{decide, grade, member_arities, nonzero_by},
+    curios_analysis::{Call, SizeContext},
     curios_core::{Free, Intrinsic, RecGroup, Subterm, Term, Totality},
     std::collections::{HashMap, HashSet},
 };

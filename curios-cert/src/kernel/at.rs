@@ -18,10 +18,8 @@
 
 use {
     super::{Counted, Error, Kernel, arity_matches},
-    curios_core::{
-        Atom, Global, InductDecl, InductType, Level, StructDecl, Telescope, Term,
-        instantiate_universe_levels_scoped,
-    },
+    crate::instantiate_universe_levels_scoped,
+    curios_core::{Atom, Global, InductDecl, InductType, Level, StructDecl, Telescope, Term},
 };
 
 /// An `induct` declaration at one occurrence's universes and parameters.

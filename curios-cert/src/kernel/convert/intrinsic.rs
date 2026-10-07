@@ -6,11 +6,11 @@
 
 use {
     super::{History, compare, ground},
-    crate::{Error, Kernel},
-    curios_analysis::{
-        Agreement, Congruence, Driver, Obligation, Outcome, Pass, connectives_agree,
-        connectives_agree_classed, convert_classed, convert_intrinsics,
+    crate::{
+        Error, Kernel, connectives_agree, connectives_agree_classed, convert_classed,
+        convert_intrinsics,
     },
+    curios_analysis::{Agreement, Congruence, Driver, Obligation, Outcome, Pass},
     curios_core::{Classes, Intrinsic, Term},
     curios_utilities::SyntaxRegistry,
 };

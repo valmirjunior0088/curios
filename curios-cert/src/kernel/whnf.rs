@@ -21,13 +21,16 @@ mod test_support;
 
 use {
     super::{Kernel, asked_classes},
-    curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS, answers, answers_classed},
+    crate::{
+        accelerable, answers, answers_classed, atoms_within, classable,
+        instantiate_universe_levels_scoped, probe_spellings, reduce_closed, reduce_intrinsic,
+        refold,
+    },
+    curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS},
     curios_core::{
         Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
         Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe, Proj, Rec,
         RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var, Variant, Visit,
-        accelerable, atoms_within, classable, instantiate_universe_levels_scoped, probe_spellings,
-        reduce_closed, reduce_intrinsic, refold,
     },
     curios_utilities::recurse,
 };

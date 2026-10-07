@@ -5,7 +5,7 @@
 //! `mark` and `retract` are `pub(super)` and `Kernel::scoped` is their only caller anywhere — that is what makes the bracket the one way to open a binder scope, and the reason this component exposes no other way to shrink either stack.
 
 use {
-    curios_analysis::{could_reduce_to, records_case_equation},
+    crate::{could_reduce_to, records_case_equation},
     curios_core::{Bound, Free, Term},
     std::{collections::HashMap, mem},
 };

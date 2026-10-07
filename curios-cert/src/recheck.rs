@@ -49,16 +49,14 @@ use {
     super::{
         Error, Globals, Kernel, Position, Standing, check_definition, check_entrypoint,
         check_induct_decl, check_positions, check_rec_group, check_struct_decl,
-        partial_definitions, satisfiable,
+        free_locals_outside, partial_definitions, positivity_vectors,
+        rewrite_universe_levels_scoped_shared, satisfiable, universe_metas, variance_vectors,
     },
-    curios_analysis::{
-        Coverage, Declarations, PositivityRefusal, positivity_vectors, variance_vectors,
-    },
+    curios_analysis::{Coverage, Declarations, PositivityRefusal},
     curios_core::{
         Bound, Certification, Certified, Definition, Entrypoint, Free, Global, InductDecl, Item,
         Level, MetavarId, Module, Program, Reads, StructDecl, Term, Totality, UniverseContext,
-        Variance, Zonked, free_locals_outside, rewrite_universe_levels_scoped_shared,
-        universe_metas,
+        Variance, Zonked,
     },
     curios_utilities::{SyntaxRegistry, grown},
     std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},

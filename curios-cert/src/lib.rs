@@ -2,7 +2,7 @@
 //!
 //! This crate holds the rules only *this* checker runs: the kernel deciding, from a finished term alone, whether a term is well-typed, the whole-module walk that applies it ([`recheck_module`]), the erasure obligations, and the two decisions over a universe constraint set — the level entailment oracle (`entails`) and satisfiability ([`satisfiable`]) — which sit here rather than with the shared analyses because they take a constraint set rather than an `Env`, so nothing reaches them through the seam, and the kernel is their only caller: `Kernel::level_leq` for the first, the walk's universe verdict for the second. `curios-elab`'s tests call `satisfiable` too, to hold its solver's decision against it.
 //!
-//! What this checker shares with the elaborator is the layer both judge through. `curios-core` holds what a term *is* — the representation, its binder discipline, the intrinsic roster and its folds, the closed machine and the linear views; `curios-num` the carriers' scalar semantics; `curios-algebra` the carriers' algebra; and `curios-analysis` the rules both run behind the `Env`/`Judge` seam — index inversion, what a case's solution re-types, strict positivity, size-change totality's grading of a call and closure of a group's calls, the erasure-shape queries and the chain conversion runs when two intrinsics meet. Which calls a group makes, this kernel records as it types them. `curios-analysis` is a separate crate because `curios-elab` needs it and does not need a kernel, so a kernel edit invalidates this crate and not elaboration. None of the layer is re-exported here; a consumer names the crate it wants a rule from.
+//! What this checker shares with the elaborator is the layer both judge through. `curios-core` holds what a term *is* — the representation, its binder discipline, the intrinsic roster and its folds, the closed machine and the linear views; `curios-num` the carriers' scalar semantics; `curios-algebra` the carriers' algebra; and `curios-analysis` the rules both run behind the `Env`/`Judge` seam — index inversion, what a case's solution re-types, strict positivity, size-change totality's grading of a call and closure of a group's calls, the erasure-shape queries and the chain conversion runs when two intrinsics meet. Which calls a group makes, this kernel records as it types them. `curios-analysis` is a separate crate because `curios-elab` needs it and does not need a kernel, so a kernel edit invalidates this crate and not elaboration. None of the layer is re-exported to a consumer, who names the crate it wants a rule from. Inside this crate, every function of the layer a judgment calls is named in the `shared` module and nowhere else, which that module's test holds.
 //!
 //! So the trusted base is this crate's dependency closure, which `cargo tree -p curios-cert` enumerates, and `documentation/design/soundness/` argues the rules it holds. Sharing the representation is not sharing a judgment.
 //!
@@ -27,6 +27,9 @@ pub use recheck::*;
 
 mod kernel;
 pub use kernel::*;
+
+mod shared;
+pub(crate) use shared::*;
 
 #[cfg(test)]
 mod walk_tests;

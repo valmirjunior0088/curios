@@ -50,12 +50,12 @@ mod whnf;
 pub(crate) use whnf::*;
 
 use {
-    crate::{entails, erased_half},
+    crate::{build_shorten_layered, entails, erased_half},
     curios_analysis::{Env, Erased, Judge},
     curios_core::{
         Advance, Atom, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level, LevelHead,
         Module, Polarity, Probe, Reads, ReduceError, Reducer, Spelling, StructDecl, Term,
-        UniverseConstraint, UniverseContext, UniverseError, Variance, build_shorten_layered,
+        UniverseConstraint, UniverseContext, UniverseError, Variance,
     },
     curios_utilities::{Plicity, SyntaxRegistry},
     std::{fmt, rc::Rc},
