@@ -60,7 +60,7 @@ type Registries<'a> = (
 ///
 /// **Both halves are analyzed, not merely consulted.** A module carries only its own declarations, so the two arrive in separate maps — but that is a fact about where the maps live, never about which of them is believed. Every vector this pass reports it recomputed, the base's included, which is what [`Coverage::Complete`] means and what keeps the kernel from inheriting a conclusion some other pass reached. Reading the base's carried [`InductDecl::polarities`] instead would be exactly the archived-vector trust the two coverage modes exist to keep apart.
 ///
-/// A name in both halves resolves to the unit's own. That cannot arise on any path here — a unit's mounts are disjoint from every predecessor's, so it cannot declare a name one of them holds — and the rule is stated so the type has an answer rather than a precondition.
+/// A name is one declaration, and the set is read by name. A name in both halves resolves to the unit's own, which is the base's too: the kernel passes a declaration over only where its environment holds the same terms under its name, and refuses a module carrying any other under a held name before it analyses anything. A name in both registries would be read as the inductive wherever it is asked for, the record never analysed, so the kernel refuses that module as well, and lowering refuses the declaration that would produce one.
 #[derive(Clone, Copy)]
 pub struct Declarations<'a> {
     /// `None` when nothing is already in scope, which differs from empty maps only in needing no maps to point at: [`Term`] is `Rc`-backed and therefore not `Sync`, so there is no `static` empty registry to borrow.

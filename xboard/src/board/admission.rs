@@ -13,22 +13,22 @@ pub(super) const ADMISSION: Part = Part {
     tickets: &[Ticket {
         title: "A name declared twice means two things to the kernel",
         found_on: Date::new(2026, 10, 6),
-        status: Status::Open,
+        status: Status::Fixed,
         witnesses: &[
             Witness {
                 what: "an inhabited `False` under the prelude's own name",
                 proof: Proof::Module(a_registry_entry_under_the_preludes_false),
-                expect: refused![kernel],
+                expect: refused![kernel: curios_cert::Error::Redeclared(_)],
             },
             Witness {
                 what: "a theorem typed under one definition of its statement and read under another",
                 proof: Proof::Module(a_statement_declared_twice),
-                expect: refused![kernel],
+                expect: refused![kernel: curios_cert::Error::Redeclared(_)],
             },
             Witness {
                 what: "Curry's paradox through a record that shares its name with an inductive",
                 proof: Proof::Module(a_record_under_an_inductives_name),
-                expect: refused![kernel],
+                expect: refused![kernel: curios_cert::Error::Redeclared(_)],
             },
         ],
     }],
@@ -71,7 +71,7 @@ fn family(result_sort: Term, constructors: &[&str]) -> InductDecl {
 
 /// One registry entry, the prelude's `False` holding a constructor `mk`, closed with `False/mk()`.
 ///
-/// The walk declares every registry entry a module carries once its environment is seeded, so the entry overwrites the prelude's and is the one every rule reads. What would check it is passed over for a name already in scope, and would accept it besides: an inhabited proposition is a well-formed declaration, and what is wrong with this one is its name.
+/// Declared over the environment a walk is seeded with, the entry stands where the prelude's did and is the one every rule reads. Checking it would not refuse it: an inhabited proposition is a well-formed declaration, and what is wrong with this one is its name.
 fn a_registry_entry_under_the_preludes_false() -> (Module, Term) {
     let module = Module {
         induct_decls: [(false_name(), family(Term::prop(), &["mk"]))]
@@ -88,7 +88,7 @@ fn a_registry_entry_under_the_preludes_false() -> (Module, Term) {
 
 /// `p : Prop = ((x : Holds) => False)(thm)`, then `thm : p = Holds/qed()`, then `p : Prop = Holds`, closed with `thm`.
 ///
-/// The walk orders items by what each names, and a name's owner is the last item declaring it: `thm` waits for the second `p` alone and is typed while `p` is `Holds`. The first `p` names `thm`, so it is judged after it, and its definition overwrites the one `thm` was typed under. The closing term is then read at a `p` that reduces to `False`.
+/// A walk orders items by what each names, and a name declared twice has two owners: `thm` waits for one `p` and is typed while `p` is `Holds`, and the other `p` names `thm`, so it is judged after it and defined where the first stood. The closing term is then read at a `p` that reduces to `False`.
 fn a_statement_declared_twice() -> (Module, Term) {
     let holds = Global::Authored(Qualifier::from(["Holds"]));
     let statement = Global::Authored(Qualifier::from(["p"]));
@@ -127,7 +127,7 @@ fn a_statement_declared_twice() -> (Module, Term) {
 
 /// `struct Bad { f : (Bad) -> False }` beside an empty `induct Bad`, closed with `w(Bad { w })` for `w = (b) => b.0(b)`.
 ///
-/// Strict positivity runs over the names of both registries and files each declaration under its name, asking the `induct` registry first: the family is analysed twice and the record never, so the negative occurrence in its field is the one the paradox is built from.
+/// Strict positivity runs over the names of both registries and files each declaration under its name, asking the `induct` registry first: of two declarations under one name the family is analysed twice and the record never, so the negative occurrence in its field is the one the paradox is built from.
 fn a_record_under_an_inductives_name() -> (Module, Term) {
     let bad = Global::Authored(Qualifier::from(["Bad"]));
     let bad_type: Term = Subterm::StructType(StructType {

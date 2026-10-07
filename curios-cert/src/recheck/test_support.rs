@@ -9,10 +9,10 @@ use {
     curios_abi::{DeclaredForeign, ForeignFunction, HostOp, WireResults, WireSignature, WireType},
     curios_core::{
         Atom, Certification, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global,
-        InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, Program, RecGroup,
-        RecMemberScopes, Scope, StructDecl, StructType, Subterm, Telescope, Term, Totality,
-        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseParam, Variance,
+        InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, Polarity, Program,
+        RecGroup, RecItem, RecMemberScopes, Scope, StructDecl, StructType, Subterm, Telescope,
+        Term, Totality, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseParam, Variance,
     },
     curios_utilities::{Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -2417,6 +2417,15 @@ pub(super) fn judged_environment() -> Module {
     )
 }
 
+/// `let reader : Nat = shadowed`.
+pub(super) fn reader() -> Item {
+    authored(
+        &reader_name(),
+        Term::intrinsic(Intrinsic::NatType),
+        Term::free_var(&Free::from(&shadowed_name())),
+    )
+}
+
 /// `let shadowed : Bool = true` beside `let reader : Nat = shadowed`.
 pub(super) fn shadowing_items() -> Module {
     collision_module(
@@ -2426,14 +2435,183 @@ pub(super) fn shadowing_items() -> Module {
                 Term::intrinsic(Intrinsic::BoolType),
                 Term::intrinsic(Intrinsic::Bool(true)),
             ),
-            authored(
-                &reader_name(),
-                Term::intrinsic(Intrinsic::NatType),
-                Term::free_var(&Free::from(&shadowed_name())),
-            ),
+            reader(),
         ],
         BTreeMap::new(),
     )
+}
+
+/// `let Shadowed : Nat = 0`: a definition under the name [`judged_environment`] holds as a registry key and under no definition.
+pub(super) fn definition_under_the_family() -> Module {
+    collision_module(
+        vec![authored(
+            &shadowed_family(),
+            Term::intrinsic(Intrinsic::NatType),
+            Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+        )],
+        BTreeMap::new(),
+    )
+}
+
+/// `name : Nat = 0`, as a group states a member.
+fn constant(name: Global) -> Definition {
+    Definition {
+        name,
+        kind: DefinitionKind::Authored,
+        universe_context: UniverseContext::empty(),
+        island: Qualifier::default(),
+        totality: Totality::Total,
+        type_: Term::intrinsic(Intrinsic::NatType),
+        body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+    }
+}
+
+/// One group of two constants, `shadowed` and `fresh`: the first under a name [`judged_environment`] holds, the second under none.
+pub(super) fn group_held_in_part() -> Module {
+    collision_module(
+        vec![Item::Rec(RecItem::new(vec![
+            constant(shadowed_name()),
+            constant(Global::Authored(Qualifier::from(["fresh"]))),
+        ]))],
+        BTreeMap::new(),
+    )
+}
+
+/// One group of two constants, both named `shadowed`.
+pub(super) fn group_naming_a_member_twice() -> Module {
+    collision_module(
+        vec![Item::Rec(RecItem::new(vec![
+            constant(shadowed_name()),
+            constant(shadowed_name()),
+        ]))],
+        BTreeMap::new(),
+    )
+}
+
+/// The name [`statement_declared`] declares once or twice.
+pub(super) fn statement_name() -> Global {
+    Global::Authored(Qualifier::from(["p"]))
+}
+
+/// `thm : p = Holds/qed()` and `p : Prop = Holds`, closed with `thm` stated at `Absurd` — led, when `twice`, by a second `p : Prop = ((x : Holds) => Absurd)(thm)`.
+pub(super) fn statement_declared(twice: bool) -> Program {
+    let holds_name = Global::Authored(Qualifier::from(["Holds"]));
+    let absurd_name = Global::Authored(Qualifier::from(["Absurd"]));
+    let theorem = Global::Authored(Qualifier::from(["thm"]));
+    let holds = Term::induct_type(holds_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let absurd = Term::induct_type(absurd_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let named = |name: &Global| Term::free_var(&Free::from(name));
+
+    let refuted = authored(
+        &statement_name(),
+        Term::prop(),
+        Term::apply(
+            Term::func(
+                [(Free::local(930, Some("x")), holds.clone())],
+                absurd.clone(),
+            ),
+            [named(&theorem)],
+        ),
+    );
+    let proved = authored(
+        &theorem,
+        named(&statement_name()),
+        Term::variant(holds_name, Vec::<Term>::new(), "qed", Vec::<Term>::new()),
+    );
+    let stated = authored(&statement_name(), Term::prop(), holds);
+
+    let qed = (
+        Atom::from("qed"),
+        InductParam::new(Telescope::done(Vec::new()), Vec::new()),
+    );
+
+    Program {
+        module: collision_module(
+            match twice {
+                true => vec![refuted, proved, stated],
+                false => vec![proved, stated],
+            },
+            BTreeMap::from([
+                (holds_name, proposition(vec![qed])),
+                (absurd_name, proposition(Vec::new())),
+            ]),
+        ),
+        entry: Entrypoint {
+            body: named(&theorem),
+            type_: Some(absurd),
+        },
+    }
+}
+
+/// The name [`record_negative_in_itself`] declares.
+pub(super) fn negative_record_name() -> Global {
+    Global::Authored(Qualifier::from(["Bad"]))
+}
+
+/// `struct Bad { f : (Bad) -> Absurd }`, closed with `w(Bad { w })` for `w = (b) => b.0(b)` stated at `Absurd` — beside, when `beside_a_family`, an empty `induct Bad : Type 0`.
+pub(super) fn record_negative_in_itself(beside_a_family: bool) -> Program {
+    let bad = negative_record_name();
+    let absurd_name = Global::Authored(Qualifier::from(["Absurd"]));
+    let absurd = Term::induct_type(absurd_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let bad_type: Term = Subterm::StructType(StructType {
+        name: bad,
+        universes: Vec::new(),
+        params: Vec::new(),
+    })
+    .into();
+
+    let record = StructDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::done(Telescope::build(
+            [(
+                Free::local(931, Some("f")),
+                Term::func_type(
+                    [(Free::local(932, Some("devoured")), bad_type.clone())],
+                    absurd.clone(),
+                ),
+            )],
+            (),
+        )),
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+
+    let mut induct_decls = BTreeMap::from([(absurd_name, proposition(Vec::new()))]);
+    if beside_a_family {
+        induct_decls.insert(
+            bad,
+            InductDecl {
+                result_sort: Term::type_ground(),
+                ..proposition(Vec::new())
+            },
+        );
+    }
+
+    let subject = Free::local(933, Some("b"));
+    let open = Term::func(
+        [(subject, bad_type)],
+        Term::apply(
+            Term::proj(Term::free_var(&subject), 0),
+            [Term::free_var(&subject)],
+        ),
+    );
+
+    Program {
+        module: Module {
+            struct_decls: BTreeMap::from([(bad, record)]),
+            ..collision_module(Vec::new(), induct_decls)
+        },
+        entry: Entrypoint {
+            body: Term::apply(
+                open.clone(),
+                [Term::struct_(bad, Vec::<Term>::new(), [open])],
+            ),
+            type_: Some(absurd),
+        },
+    }
 }
 
 /// `induct Shadowed : Type 0 | mk(a : payload) end`, carried as a registry entry with no items lowering it.
@@ -2460,6 +2638,73 @@ pub(super) fn shadowing_registry(payload: Term) -> Module {
             },
         )]),
     )
+}
+
+/// The record [`two_registry_entries`] declares beside [`shadowed_family`].
+pub(super) fn kept_record() -> Global {
+    Global::Authored(Qualifier::from(["Kept"]))
+}
+
+/// What [`two_registry_entries`] varies of the two entries it declares.
+pub(super) enum Varied {
+    /// Nothing: the entries as an environment holds them.
+    Nothing,
+    /// Elaboration's stamps on both: a polarity vector, the owning module and the representation's privacy.
+    Stamps,
+    /// The family's variance vector.
+    Variance,
+    /// The type of the record's field.
+    Field,
+}
+
+/// `induct Shadowed : Type 0 end` and `struct Kept { held : Nat }`, as registry entries with no items lowering them, differing from the unvaried pair in what `varied` names.
+pub(super) fn two_registry_entries(varied: Varied) -> Module {
+    let stamped = matches!(varied, Varied::Stamps);
+    let polarities = || match stamped {
+        true => vec![Polarity::Mixed],
+        false => Vec::new(),
+    };
+    let owner = || match stamped {
+        true => Qualifier::from(["elsewhere"]),
+        false => Qualifier::default(),
+    };
+
+    let family = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: Vec::new(),
+        result_sort: Term::type_ground(),
+        module: owner(),
+        rep_public: !stamped,
+        polarities: polarities(),
+        variances: match varied {
+            Varied::Variance => vec![Variance::Irrelevant],
+            _ => Vec::new(),
+        },
+    };
+    let record = StructDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::done(Telescope::build(
+            [(
+                Free::local(940, Some("held")),
+                Term::intrinsic(match varied {
+                    Varied::Field => Intrinsic::BoolType,
+                    _ => Intrinsic::NatType,
+                }),
+            )],
+            (),
+        )),
+        result_sort: Term::type_ground(),
+        module: owner(),
+        rep_public: !stamped,
+        polarities: polarities(),
+        variances: Vec::new(),
+    };
+
+    Module {
+        struct_decls: BTreeMap::from([(kept_record(), record)]),
+        ..collision_module(Vec::new(), BTreeMap::from([(shadowed_family(), family)]))
+    }
 }
 
 /// What a fixture puts to the walk: a unit alone, or a program — a unit and the entry it closes with.

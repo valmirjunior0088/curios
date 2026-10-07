@@ -114,6 +114,8 @@ pub enum Error {
     Unbound(Free),
     /// A nominal type with no registry entry, so its fields, constructors, and result sort are all unknown.
     Undeclared(Global),
+    /// A declaration under a name already declared: one the environment holds, where the declaration is not the environment's own; one an earlier item of its module declares; or one its module's other registry holds. A name is one declaration, so the second is refused whatever it is.
+    Redeclared(Free),
     /// A type whose sort the kernel could not determine. Guessing here is the unsound direction, so it refuses. See the module documentation.
     Unclassified(Term),
     /// A term used as a universe that is neither `Type` nor `Prop`.
@@ -265,6 +267,7 @@ impl fmt::Display for Displayed<'_> {
             Error::Undeclared(name) => {
                 write!(formatter, "no declaration registered for `{name}`")
             }
+            Error::Redeclared(name) => write!(formatter, "`{name}` is already declared"),
             Error::Unclassified(type_) => {
                 let type_ = type_.spelled(spelling);
                 write!(formatter, "cannot determine the sort of `{type_}`")

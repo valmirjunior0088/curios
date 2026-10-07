@@ -1029,7 +1029,7 @@ pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
 ///
 /// It lives here by this module's own rule, the one stated at the top: it *describes* rather than judges. Whether a variable is local asks nothing of a kernel — no reduction, no conversion, no `Env` — so it is a property of the data, and a second implementation would be a second run of the same function rather than a second opinion. That is the standing `UniverseContext::is_closed` has for the same reason.
 ///
-/// The predicate is over *names* rather than over a position, which is what lets one environment answer for four namespaces at once: a name identifies one top-level thing within a module, and an environment populates every namespace it holds from the same source. An item is skipped only when *every* name it declares is already answered for, since the walk that answered for it refused a local of its own.
+/// The predicate is over *names* rather than over a position, which is what lets one environment answer for four namespaces at once: a name is one declaration, and the walk handing the predicate in has first confirmed it of the module in hand — every declaration it carries under a name the environment holds is the environment's own, or the module is refused before this is asked. An item is skipped only when *every* name it declares is already answered for, since the walk that answered for it refused a local of its own.
 pub fn free_locals_outside(
     module: &Module,
     in_scope: impl Fn(&Global) -> bool,

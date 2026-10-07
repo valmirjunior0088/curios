@@ -58,19 +58,20 @@ fn holds_a_group(term: &Term) -> bool {
 
 /// Every definition in `module` that is not known to terminate, closed transitively over what each one mentions.
 ///
-/// What `globals` already answers for is read rather than recomputed: its non-total set, which is the certifier's record of each unit it mounted, seeds the closure, and an item it declares is passed over. That is what keeps a compile from re-analyzing the standard library. What it mounted without a covering record is classified here first, from its items, exactly as a judged item is — and a stamp on one of those is not this walk's to compare, since the walk judges nothing of it.
+/// What `globals` already answers for is read rather than recomputed: its non-total set, which is the certifier's record of each unit it mounted, seeds the closure, and of `module`'s items only the `judged` ones are classified — the walk's own answer to which are new, the rest being the environment's own. That is what keeps a compile from re-analyzing the standard library. What it mounted without a covering record is classified here first, from its items, exactly as a judged item is — and a stamp on one of those is not this walk's to compare, since the walk judges nothing of it.
 ///
 /// The stamp comparison on a judged item runs after the closure, against the closed set, because a stamp *asserts* the closure — elaboration's classification closes over mentions as this one does — so a `Total` on a definition partial only through its mentions is exactly as generous as one on a diverging body. No later walk reads a stamp, so a disagreement costs nothing downstream; it is reported because two checkers disagreeing is the signal the second one exists to give.
 ///
 /// **Seeding from the environment is load-bearing rather than an optimization.** The closure is over what a definition *mentions*, and the already-judged items are not carried inside `module`, so nothing else in this walk knows `/std/Async/bind` is partial. A user proof reaching it would then close over a name absent from the set and read as total, which is exactly the identification (T) and (V) exist to prevent.
 ///
-/// The selection is by name for the same reason it is by name in [`recheck_module_verdicts`](crate::recheck_module_verdicts), and skipping is again the direction that needs the argument: an item declaring nothing is recomputed rather than passed over.
+/// The selection is the walk's, made once before anything is judged ([`recheck_module_verdicts`](crate::recheck_module_verdicts)), so the two cannot disagree on which items are this walk's.
 ///
 /// The closure iterates to a fixpoint rather than assuming one pass suffices: items are stored in binding order, and a definition may mention one stored after it.
 pub(crate) fn partial_definitions(
     kernel: &mut Kernel,
     module: &Module,
     globals: &Globals,
+    judged: &[usize],
 ) -> (BTreeSet<Global>, Vec<(Global, Error)>) {
     curios_profile::profile!("partial_definitions");
     let mut mentions: BTreeMap<Global, BTreeSet<Global>> = BTreeMap::new();
@@ -107,11 +108,7 @@ pub(crate) fn partial_definitions(
     for item in globals.unclassified() {
         classify(item, false);
     }
-    for item in &module.items {
-        let names = item.declared_names();
-        if !names.is_empty() && names.into_iter().all(|name| globals.in_scope(name)) {
-            continue;
-        }
+    for item in judged.iter().map(|&index| &module.items[index]) {
         stamped_total.extend(
             item.definitions()
                 .into_iter()

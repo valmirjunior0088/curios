@@ -95,9 +95,9 @@ pub fn compile_unit_over(
     Ok(Uncertified::new(lowered, core.into_module(), ersd).certified(certification))
 }
 
-/// [`recheck`](crate::recheck) with `reused` in scope beside the units: `baseline`'s items an item-level recompile replayed, judged by the walk that filed the baseline, so this walk judges the closure alone — by name, exactly as it skips a mounted unit's items. They are mounted with the baseline's record, whose classifications of them nothing in the closure has moved.
+/// [`recheck`](crate::recheck) with `reused` in scope beside the units: `baseline`'s items an item-level recompile replayed, judged by the walk that filed the baseline, so this walk judges the closure alone. They are mounted with the baseline's record, whose classifications of them nothing in the closure has moved.
 ///
-/// The reused registry entries are both mounted and kept in `module`: the walk declares every entry the module carries, overwriting the mounted copy with an equal one, and its positivity pass extends the environment's registries with the module's, resolving a name in both to the module's own.
+/// The reused items and registry entries are both mounted and kept in `module`, and the walk holds the two to each other: it passes a declaration over only where the mounted one is the same terms — an item's type, body and universe context, a registry entry's terms and its variance vector — and refuses the module for any other under a mounted name. Elaboration's stamps take no part, the polarity vectors this recompile wrote again among them. So the module that is stored, and that a later walk mounts, is one the kernel saw whole.
 pub(crate) fn recheck_over(
     module: &Zonked<Module>,
     budget: u64,

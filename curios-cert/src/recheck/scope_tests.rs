@@ -1,23 +1,28 @@
-//! A name already in scope: replaced rather than judged, and live but unchecked.
+//! A name already declared: the environment's own declaration passed over, any other refused before anything is judged.
 
 use {
     super::test_support::*,
-    crate::{Error, Globals},
+    crate::{Error, Globals, Verdict},
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Free, Level, Term},
+    curios_core::{Free, Global, Level, Term, Totality},
 };
 
-/// The walk judges by name, and a name the handed environment already answers for is judged by nothing.
+/// Whether `verdicts` is the one refusal a module redeclaring `name` meets: standing is decided before anything is judged, so no other verdict stands beside it.
+fn redeclares(verdicts: &[Verdict], name: &Global) -> bool {
+    matches!(
+        verdicts,
+        [Verdict { name: Some(owner), error: Error::Redeclared(redeclared) }]
+            if owner == name && *redeclared == Free::from(name)
+    )
+}
+
+/// A definition under a name the environment holds, differing from the environment's, is refused for the name.
 ///
-/// This is the rule the second boundary of `documentation/design/soundness/the-soundness-board.md` states. `fresh` is `!globals.in_scope(name)`, and an item every one of whose declared names the environment holds is dropped before `dependency_order` ever sees it — so what stands for that name is whatever `Kernel::seed` put there, and the module's own item is neither typed nor consulted. What keeps the collision unspellable is in another crate: mount-set disjointness, checked once in `curios-text`'s `into_core`. Nothing in this one asserts that declining is safe, and every other module in this file is handed `Globals::default()`, where `fresh` is constantly true and the gate is inert.
+/// `shadowed` is `Nat` in the environment and `Bool` in the module, and `reader : Nat = shadowed` reads it. Standing alone the module is refused, `reader` inferring `Bool` where `Nat` was declared. Passed over by name it would be certified, `reader` typed against the environment's `shadowed` while every stage below compiles the body the module holds; so the module is refused for `shadowed`, and `reader` is not judged at all.
 ///
-/// So the collision is built here, to measure what the gate would cost if it ever became spellable. `shadowed` is `Nat` in the environment and `Bool` in the module, and `reader : Nat = shadowed` is judged in both configurations. Standing alone the module is refused — `reader` infers `Bool` where `Nat` was declared — and against the environment it is certified with **zero refusals**, because `reader` was typed against the environment's `shadowed` rather than the one its own module carries.
-///
-/// That is the sharper form of the row's claim, and it is what this fixture adds to it: the skipped item is not merely unjudged, it is *replaced*. The kernel certifies a module in which one name means the environment's definition, while erasure and every stage below it go on compiling the body the module actually holds.
-///
-/// The refusal standing alone is the control, and it is what proves the acceptance comes from the collision rather than from the module being harmless. Mutation-checked against the gate itself: forcing `fresh` to answer `true` fails the acceptance below with the same `Mismatch` the control asserts, so the gate is what admits and nothing beside it.
+/// Mutation-checked against the comparison: answering that the item is the environment's own certifies the module with no refusal.
 #[test]
-fn a_definition_under_a_name_already_in_scope_is_replaced_rather_than_judged() {
+fn a_definition_differing_from_the_environments_is_refused() {
     let module = shadowing_items();
 
     let alone = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
@@ -29,29 +34,25 @@ fn a_definition_under_a_name_already_in_scope_is_replaced_rather_than_judged() {
         "the control stopped refusing: `reader : Nat` must not accept a `Bool`-typed `shadowed`: {alone:?}",
     );
 
-    assert_eq!(
-        fixture_verdicts(
-            &module,
-            1_000_000,
-            &already_judged(&judged_environment()),
-            SYNTAX
-        ),
-        Vec::new(),
-        "the skip is what this measures: a verdict here means the walk no longer drops an item whose name the environment answers for",
+    let verdicts = fixture_verdicts(
+        &module,
+        1_000_000,
+        &already_judged(&judged_environment()),
+        SYNTAX,
+    );
+    assert!(
+        redeclares(&verdicts, &shadowed_name()),
+        "a definition differing from the environment's under its name was not refused for the name: {verdicts:?}",
     );
 }
 
-/// A registry entry resolves the same collision the other way round: the module's declaration is what every rule reads, and the one clause that would check it is what gets skipped.
+/// A registry entry under a name the environment holds, differing from the environment's, is refused for the name.
 ///
-/// `Kernel::declare_induct` runs over `module.induct_decls` unfiltered, after `Kernel::seed`, so a colliding entry *overwrites* the environment's and is live for `infer`, `eliminate` and conversion. `check_induct_decl` is then gated on `fresh` and passes over it. Two opposite resolutions of one collision inside one walk, and the registry's is the worse of the two: an unchecked declaration everything believes, rather than an unread one nothing reaches.
+/// Declared over the environment's it would be the entry every rule reads, with the clauses that check a declaration passed over: a payload at `Type 5` under a family declared at `Type 0` is refused as `Oversized` standing alone, and by name alone it would be certified against an environment holding a benign `Shadowed`.
 ///
-/// What that costs is measured rather than argued. A payload at `Type 5` under a family declared at `Type 0` is refused as `Oversized` standing alone and certified with **zero refusals** against an environment holding a benign `Shadowed`, so the size condition — the clause that keeps an inductive from containing the universe it lives in — is gone for exactly that entry.
-///
-/// **Strict positivity is not, and the row's own example of what an unjudged entry buys is the one thing it does not buy.** `positivity_vectors` runs unfiltered over `Declarations::extending`, whose lookup prefers the module's entry over the base, so `mk(f : (Shadowed) -> Shadowed)` is refused with the environment in place exactly as without it. The row reads that "a non-positive `induct` declared at `Prop` with whatever constructors it likes is a few steps from `False`"; that route is closed by a pass the gate does not reach, and the ones the paragraph above names are the open ones.
-///
-/// The two refusals — `Oversized` standing alone, `NotPositive` with the environment in place — are each other's controls: the first proves the acceptance in between comes from the gate, and the second proves the gate is narrower than the row claims. Mutation-checked the same way as the fixture above: forcing `fresh` to answer `true` fails the acceptance with the `Oversized` the control asserts.
+/// Mutation-checked against the comparison: answering that the entry is the environment's own certifies the module with no refusal.
 #[test]
-fn a_declaration_under_a_name_already_in_scope_is_live_but_unchecked() {
+fn a_registry_entry_differing_from_the_environments_is_refused() {
     let oversized = shadowing_registry(Term::type_at(Level::constant(5)));
 
     let alone = fixture_verdicts(&oversized, 1_000_000, &Globals::default(), SYNTAX);
@@ -62,33 +63,222 @@ fn a_declaration_under_a_name_already_in_scope_is_live_but_unchecked() {
         "the control stopped refusing: a `Type 5` payload exceeds a family declared at `Type 0`: {alone:?}",
     );
 
-    assert_eq!(
-        fixture_verdicts(
-            &oversized,
-            1_000_000,
-            &already_judged(&judged_environment()),
-            SYNTAX,
-        ),
-        Vec::new(),
-        "the skip is what this measures: a verdict here means `check_induct_decl` no longer passes over a colliding entry",
-    );
-
-    let family = Term::induct_type(shadowed_family(), Vec::<Term>::new(), Vec::<Term>::new());
-    let negative = shadowing_registry(Term::func_type(
-        [(Free::local(911, Some("f")), family.clone())],
-        family,
-    ));
-
     let verdicts = fixture_verdicts(
-        &negative,
+        &oversized,
         1_000_000,
         &already_judged(&judged_environment()),
         SYNTAX,
     );
     assert!(
-        verdicts
+        redeclares(&verdicts, &shadowed_family()),
+        "a registry entry differing from the environment's under its name was not refused for the name: {verdicts:?}",
+    );
+}
+
+/// A registry entry is the environment's own by what the certifier reads of it: its terms, and the variance vector a walk answers from. Elaboration's stamps take no part — the polarity vector, which no judgment here reads and which a recompile writes again over the whole module, the owning module and the representation's privacy — so an entry differing from the environment's in those alone is passed over.
+///
+/// Mutation-checked against the comparison: taken over the whole entry, the family and the record are each refused for their name.
+#[test]
+fn a_registry_entry_differing_in_elaborations_stamps_alone_is_passed_over() {
+    assert_eq!(
+        fixture_verdicts(
+            &two_registry_entries(Varied::Stamps),
+            1_000_000,
+            &already_judged(&two_registry_entries(Varied::Nothing)),
+            SYNTAX,
+        ),
+        Vec::new(),
+        "an entry differing from the environment's in elaboration's stamps alone was not passed over",
+    );
+}
+
+/// What the certifier reads of a registry entry is compared in full: a family differing in its variance vector, which a later walk would answer from, and a record differing in a field's type are each refused for the name.
+///
+/// Mutation-checked against each comparison: with the variance vector left out the family is passed over and its carried vector denied instead, and with the arity left out the record is certified.
+#[test]
+fn a_registry_entry_differing_in_what_the_certifier_reads_is_refused() {
+    let environment = already_judged(&two_registry_entries(Varied::Nothing));
+
+    let verdicts = fixture_verdicts(
+        &two_registry_entries(Varied::Variance),
+        1_000_000,
+        &environment,
+        SYNTAX,
+    );
+    assert!(
+        redeclares(&verdicts, &shadowed_family()),
+        "a family differing from the environment's in its variance vector was not refused for the name: {verdicts:?}",
+    );
+
+    let verdicts = fixture_verdicts(
+        &two_registry_entries(Varied::Field),
+        1_000_000,
+        &environment,
+        SYNTAX,
+    );
+    assert!(
+        redeclares(&verdicts, &kept_record()),
+        "a record differing from the environment's in a field's type was not refused for the name: {verdicts:?}",
+    );
+}
+
+/// A declaration equal to the one the environment holds under its name is the environment's own: it is passed over, and the module certified.
+///
+/// The module carries the environment's `shadowed` and `Shadowed`, rebuilt so that neither is the environment's allocation, beside `reader : Nat = shadowed`. The walk's record names `reader` and not `shadowed`, which is what being passed over leaves: the walk that built the environment judged it.
+///
+/// Mutation-checked against the comparison: answering that an equal declaration is redeclared refuses the module.
+#[test]
+fn a_declaration_equal_to_the_environments_is_passed_over() {
+    let mut module = judged_environment();
+    module.items.push(reader());
+
+    let rechecked = fixture_certified(
+        &module,
+        1_000_000,
+        &already_judged(&judged_environment()),
+        SYNTAX,
+    );
+
+    assert_eq!(
+        rechecked.verdicts,
+        Vec::new(),
+        "a module carrying the environment's own declarations beside a new one was refused",
+    );
+    assert_eq!(
+        rechecked.certification.totality(&reader_name()),
+        Some(Totality::Total),
+        "the new item was not judged",
+    );
+    assert_eq!(
+        rechecked.certification.totality(&shadowed_name()),
+        None,
+        "the environment's own item was judged again rather than passed over",
+    );
+}
+
+/// A namespace answers for itself: a definition whose name the environment holds only as a registry key is refused, there being no entry it could be the environment's own by.
+///
+/// The definition is well typed, and standing alone it is certified, so the refusal is the name's.
+///
+/// Mutation-checked against the cross-namespace question: with it removed the definition is judged and the module certified.
+#[test]
+fn a_definition_under_a_name_the_environment_holds_as_a_registry_key_is_refused() {
+    let module = definition_under_the_family();
+
+    assert_eq!(
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
+        Vec::new(),
+        "the control stopped certifying: the definition is well typed standing alone",
+    );
+
+    let verdicts = fixture_verdicts(
+        &module,
+        1_000_000,
+        &already_judged(&judged_environment()),
+        SYNTAX,
+    );
+    assert!(
+        redeclares(&verdicts, &shadowed_family()),
+        "a definition under a name held only as a registry key was not refused for the name: {verdicts:?}",
+    );
+}
+
+/// A group is the environment's whole or new whole: one some of whose names the environment holds is refused, named by its first member as a group is.
+///
+/// Mutation-checked against the comparison: answering that the group is the environment's own certifies the module with no refusal.
+#[test]
+fn a_group_the_environment_holds_in_part_is_refused() {
+    let module = group_held_in_part();
+
+    assert_eq!(
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
+        Vec::new(),
+        "the control stopped certifying: the group is well formed standing alone",
+    );
+
+    let verdicts = fixture_verdicts(
+        &module,
+        1_000_000,
+        &already_judged(&judged_environment()),
+        SYNTAX,
+    );
+    assert!(
+        redeclares(&verdicts, &shadowed_name()),
+        "a group held in part was not refused for the name the environment holds: {verdicts:?}",
+    );
+}
+
+/// A name is declared by one item of a module: a second item under it is refused, and so is a group naming one member twice.
+///
+/// The walk orders items by what each names, and a name declared twice has two owners: `thm : p` is typed while `p` is `Holds`, the other `p` names `thm` and so is judged after it, and its definition would stand where the first did — the closing `thm` then read at a `p` that reduces to `Absurd`. With `p` declared once the closing term is the `Mismatch` it should be.
+///
+/// Mutation-checked against the set of names already declared: with it never consulted the program is certified at `Absurd` with no refusal.
+#[test]
+fn a_name_declared_by_two_items_is_refused() {
+    let once = fixture_verdicts(
+        &statement_declared(false),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        once.iter().any(
+            |verdict| verdict.name.is_none() && matches!(verdict.error, Error::Mismatch { .. })
+        ),
+        "the control stopped refusing: `thm : Holds` does not close a program at `Absurd`: {once:?}",
+    );
+
+    let twice = fixture_verdicts(
+        &statement_declared(true),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        redeclares(&twice, &statement_name()),
+        "a name declared by two items was not refused: {twice:?}",
+    );
+
+    let repeated = fixture_verdicts(
+        &group_naming_a_member_twice(),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        redeclares(&repeated, &shadowed_name()),
+        "a group naming one member twice was not refused: {repeated:?}",
+    );
+}
+
+/// A name is held by one registry of a module: a `struct` and an `induct` under one name are refused.
+///
+/// Every analysis over the declaration set files a declaration under its name, so of two under one name one is never analysed: `struct Bad { f : (Bad) -> Absurd }` beside an empty `induct Bad` is read as the family twice, and the record's negative occurrence closes Curry's paradox. With the record alone it is the `NotPositive` it should be.
+///
+/// Mutation-checked against the question of the other registry: with it removed the program is certified at `Absurd` with no refusal.
+#[test]
+fn a_name_in_both_registries_is_refused() {
+    let alone = fixture_verdicts(
+        &record_negative_in_itself(false),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        alone
             .iter()
             .any(|verdict| matches!(verdict.error, Error::NotPositive { .. })),
-        "strict positivity stopped running over a declaration whose name the environment already holds: {verdicts:?}",
+        "the control stopped refusing: the record names itself to the left of an arrow: {alone:?}",
+    );
+
+    let both = fixture_verdicts(
+        &record_negative_in_itself(true),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        redeclares(&both, &negative_record_name()),
+        "a name in both registries was not refused: {both:?}",
     );
 }
