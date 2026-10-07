@@ -128,8 +128,6 @@ pub enum Error {
     },
     /// A free-monoid fold whose arm reads its induction hypothesis, at an ambient goal. The hypothesis is the fold itself at the tail, and its type is the goal at the tail — an instance only a family can state once the head has been substituted away. A case split, whose arm reads none, takes an ambient goal as any other elimination does.
     AmbientFold(Term),
-    /// A free-monoid fold whose arm reads its induction hypothesis, under a motive that mentions its scrutinee other than through the binder. The hypothesis is typed at the motive opened at the tail, and an arm of a fold is checked with the scrutinee left as it is — so a captured occurrence is the scrutinee itself at every tail, and the motive states one proposition where it was written to state one per tail.
-    FoldMotiveCapturesScrutinee(Term),
     /// A term arrived with a type other than the one required of it.
     Mismatch {
         inferred: Box<Term>,
@@ -293,13 +291,6 @@ impl fmt::Display for Displayed<'_> {
                 write!(
                     formatter,
                     "a fold that reads its induction hypothesis needs a motive to type it, and `{goal}` is an ambient goal",
-                )
-            }
-            Error::FoldMotiveCapturesScrutinee(scrutinee) => {
-                let scrutinee = scrutinee.spelled(spelling);
-                write!(
-                    formatter,
-                    "a fold's motive may only reach its scrutinee `{scrutinee}` through the binder it declares: no arm of a fold refines the scrutinee, so the motive would state one proposition at every tail",
                 )
             }
             Error::Mismatch { inferred, expected } => {

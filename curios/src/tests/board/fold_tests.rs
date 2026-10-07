@@ -1,40 +1,49 @@
-//! A fold's arms learn nothing of its scrutinee, and its motive reaches the scrutinee only through the binder it declares.
+//! A fold's arms learn nothing of its scrutinee: what an arm reads of it, and what a motive that names it states.
 
 use {super::test_support::*, crate::tests::run};
 
-// The induction hypothesis of a fold is typed at the motive opened at the tail, inside an arm where the scrutinee is refined to the cons value. A motive that names the scrutinee instead of binding it has that occurrence refined too, so the hypothesis is assumed at the arm's own goal, and `ih` alone proves `Eq()(k + 1, 0)` from `Eq()(k, 0)`. Without the refusal, every program below compiles, runs, and prints, certifying a closed inhabitant of `Eq()(1, 0)`.
+// The induction hypothesis of a fold is typed at the motive opened at the tail, and no arm of a fold refines the scrutinee. A motive that names the scrutinee instead of binding it therefore states one proposition at every tail, `Eq()(n, 0)` here, and the identity arm's `refl` does not inhabit it. Were the arms typed with the scrutinee at their case, every program below would compile, run, and print, certifying a closed inhabitant of `Eq()(1, 0)`.
 #[test]
-fn a_fold_motive_may_not_capture_its_scrutinee() {
+fn a_fold_motive_that_names_its_scrutinee_states_it_at_every_tail() {
     rejected_by(
-        A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE,
-        "through the binder it declares",
+        A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_STATES_IT_AT_EVERY_TAIL,
+        "expected: Eq(@Nat)(n, 0)",
     );
 }
 
-// The same rule over the `List` carrier, whose cons arm binds the element as well: the carriers share one arm rule, and the refusal sits in front of it.
+// The same over the `List` carrier, whose cons arm binds the element as well: the carriers share one arm rule.
 #[test]
-fn a_list_fold_motive_may_not_capture_its_scrutinee() {
+fn a_list_fold_motive_that_names_its_scrutinee_states_it_at_every_tail() {
     rejected_by(
-        A_LIST_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE,
-        "through the binder it declares",
+        A_LIST_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_STATES_IT_AT_EVERY_TAIL,
+        "expected: Eq(@Nat)(List/len(@Nat, l), 0)",
     );
 }
 
-// An expression scrutinee reaches the arm through a case equation rather than a substitution, and the equation refines every occurrence of its spelling — including the one the motive captured. The occurrence test is syntactic, which is exactly the reach of the equation.
+// An expression scrutinee reaches an arm taken once through a case equation rather than a substitution, and an arm of a fold records none: the occurrence the motive names stays the expression.
 #[test]
-fn a_fold_motive_may_not_capture_its_scrutinee_expression() {
+fn a_fold_motive_that_names_its_scrutinee_expression_states_it_at_every_tail() {
     rejected_by(
-        A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE_EXPRESSION,
-        "through the binder it declares",
+        A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_EXPRESSION_STATES_IT_AT_EVERY_TAIL,
+        "expected: Eq(@Nat)(2 * n, 0)",
     );
 }
 
-// A `let` alias of the scrutinee is a definition the reducer reads through, so the elaborator reads the motive through it as well; the kernel sees the alias substituted away and refuses on the spelling itself.
+// A `let` alias of the scrutinee is a definition the reducer reads through, and the motive that names the alias states the scrutinee as one that names it does.
 #[test]
-fn a_fold_motive_may_not_capture_its_scrutinee_through_an_alias() {
+fn a_fold_motive_that_names_its_scrutinee_through_an_alias_states_it_at_every_tail() {
     rejected_by(
-        A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE_THROUGH_AN_ALIAS,
-        "through the binder it declares",
+        A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_THROUGH_AN_ALIAS_STATES_IT_AT_EVERY_TAIL,
+        "expected: Eq(@Nat)(n, 0)",
+    );
+}
+
+// A motive that names its scrutinee is no mistake where the arms inhabit what it states: the scrutinee is then a parameter of the fold, fixed at every tail.
+#[test]
+fn a_fold_whose_arms_inhabit_a_motive_that_names_its_scrutinee_is_accepted() {
+    assert_eq!(
+        run(A_FOLD_WHOSE_ARMS_INHABIT_A_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_IS_ACCEPTED),
+        b"held"
     );
 }
 

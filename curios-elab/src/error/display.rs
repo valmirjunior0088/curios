@@ -1278,12 +1278,6 @@ impl fmt::Display for Displayed<'_> {
                     "the initializer of `{member}` performs an effect{through}; a recursive value is computed when it is first read, or never, so its initializer may perform none"
                 )
             }
-            Error::FoldMotiveCapturesScrutinee { scrutinee } => {
-                write!(
-                    f,
-                    "a fold's motive may only reach its scrutinee `{scrutinee}` through the binder it declares: no arm of a fold refines the scrutinee, so the motive would state one proposition at every tail"
-                )
-            }
             Error::MotiveBinderCount {
                 name,
                 expected,

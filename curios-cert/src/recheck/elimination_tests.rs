@@ -278,11 +278,11 @@ fn no_type_position_admits_a_lying_motive() {
     }
 }
 
-/// A fold's induction hypothesis is typed at the motive opened at the tail, inside an arm where the scrutinee is specialized to the cons value. A motive that names the scrutinee instead of binding it — `(_) => Eq()(n, 0)` over `match n` — has that occurrence specialized too, so the hypothesis is assumed at `Eq()(k + 1, 0)`, the arm's own goal, and `all_zero(1) : Eq()(1, 0)` would certify. The surface spelling is `let all_zero(n: Nat) -> Eq()(n, 0) = match n: (_) => Eq()(n, 0) | 0 => Eq/refl() | k + 1; ih => ih end;`, and the same shape reaches it over a `List` fold and over an expression scrutinee read through its case equation.
+/// A fold's induction hypothesis is typed at the motive opened at the tail, and its arms learn nothing of the scrutinee. A motive that names the scrutinee instead of binding it — `(_) => Eq()(n, 0)` over `match n` — therefore states `Eq()(n, 0)` at every tail, and the zero arm's `refl(0)` does not inhabit it. The surface spelling is `let all_zero(n: Nat) -> Eq()(n, 0) = match n: (_) => Eq()(n, 0) | 0 => Eq/refl() | k + 1; ih => ih end;`.
 ///
-/// Closed in both checkers by one syntactic test: the motive's body may not mention the scrutinee. The control is the same module with the motive binding `m` and stating `Eq()(m, 0)`, which must be refused for the reason it should be — the successor arm's hypothesis is `Eq()(k, 0)` and its goal `Eq()(k + 1, 0)`.
+/// Mutation-checked: with a fold's arms specialized as a case split's are, the zero arm stands at `Eq()(0, 0)`, the hypothesis at the successor arm's own goal, and `all_zero(1) : Eq()(1, 0)` certifies. The control is the same module with the motive binding `m` and stating `Eq()(m, 0)`, refused at the successor arm instead — its hypothesis is `Eq()(k, 0)` and its goal `Eq()(k + 1, 0)`.
 #[test]
-fn a_fold_motive_that_captures_its_scrutinee_is_refused() {
+fn a_fold_motive_that_names_its_scrutinee_states_it_at_every_tail() {
     let verdicts = fixture_verdicts(
         &fold_motive(FoldMotive::Captured),
         1_000_000,
@@ -290,31 +290,13 @@ fn a_fold_motive_that_captures_its_scrutinee_is_refused() {
         SYNTAX,
     );
 
+    // Refused at the zero arm, whose goal is the motive as it is written: no successor is in it.
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::FoldMotiveCapturesScrutinee(_))),
-        "the kernel typed a fold's hypothesis at the arm's own goal: {verdicts:?}",
-    );
-}
-
-/// The same capture stated through a `let`: `let a = n; match n : (_) => Eq()(a, 0) | …`. The motive spells none of the scrutinee, and the kernel types a `let`'s tail over its binder — so the refusal rests on the elimination reading its scrutinee and its result by value, as a substituted `let` leaves them.
-///
-/// Mutation-checked: with the result read as it is written, the fold is accepted, and `all_zero : (n : Nat) -> Eq()(n, 0)` with it.
-#[test]
-fn a_fold_motive_that_captures_its_scrutinee_through_a_let_is_refused() {
-    let verdicts = fixture_verdicts(
-        &fold_motive(FoldMotive::CapturedThroughLet),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
-
-    assert!(
-        verdicts
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::FoldMotiveCapturesScrutinee(_))),
-        "the kernel typed a fold's hypothesis at the arm's own goal: {verdicts:?}",
+        verdicts.iter().any(|verdict| match &verdict.error {
+            Error::Mismatch { expected, .. } => !expected.to_string().contains("+ 1"),
+            _ => false,
+        }),
+        "the kernel typed a fold's zero arm with its scrutinee at zero: {verdicts:?}",
     );
 }
 

@@ -598,10 +598,6 @@ pub enum Error {
     MissingArmNotImpossible {
         tag: Atom,
     },
-    /// A fold's motive mentions its scrutinee other than through the binder it declares. The induction hypothesis is assumed at the motive opened at the tail, and an arm of a fold learns nothing of the scrutinee — so a captured occurrence is the scrutinee itself at every tail, and the motive states one proposition where it was written to state one per tail.
-    FoldMotiveCapturesScrutinee {
-        scrutinee: Term,
-    },
     /// A witness goal keyed where a refused declaration's witness stood. Never reported: the item that met it is withheld as any dependent of a refusal is, so the one report the reader sees is the refusal's own, and this exists only to carry that verdict out of resolution.
     Poisoned,
     /// A read of a declaration that has not elaborated. Never reported: the attempt that met it is void and is made again once the declaration has, and this exists only to cut the attempt short — what voids it is the need the read recorded (`Context::need`), whatever becomes of this.
@@ -1337,10 +1333,6 @@ impl Error {
             expected,
             written,
         }
-    }
-
-    pub(crate) fn fold_motive_captures_scrutinee(scrutinee: Term) -> Self {
-        Self::FoldMotiveCapturesScrutinee { scrutinee }
     }
 
     pub(crate) fn missing_arm_not_impossible(tag: Atom) -> Self {

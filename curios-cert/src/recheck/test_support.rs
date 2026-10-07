@@ -1003,13 +1003,11 @@ pub(super) enum FoldMotive {
     Honest,
     /// `(m) => Eq()(m, m)`, with `refl(k + 1)` in the successor arm: the same shape at a goal each arm can inhabit, so the module is otherwise well-formed.
     Reflexive,
-    /// `let a = n; … (_) => Eq()(a, 0)`: the capture, with the scrutinee named through a `let` — a motive that spells none of it.
-    CapturedThroughLet,
 }
 
 /// `all_zero : (n : Nat) -> Eq()(n, 0)` (or `Eq()(n, n)` for [`FoldMotive::Reflexive`]) by a `Nat` fold under the given motive, with `refl` in the zero arm.
 ///
-/// Under the captured motive the hypothesis is assumed at `Eq()(n, 0)` inside an arm where `n` is specialized to `k + 1`, which is the arm's own goal, so the successor arm checks and `all_zero(1) : Eq()(1, 0)` follows. The honest motive types the hypothesis at `Eq()(k, 0)`, and the same arm is a mismatch against `Eq()(k + 1, 0)`.
+/// Under the captured motive every arm's goal is `Eq()(n, 0)` as it is written, which the zero arm's `refl(0)` does not inhabit. The honest motive types the hypothesis at `Eq()(k, 0)`, and the successor arm is a mismatch against `Eq()(k + 1, 0)`.
 ///
 /// `Eq` is the two-index equality [`equality_declaration`] declares, at `Nat`, so the module needs nothing from the prelude; its `refl` payload is the value alone, the carrier being the family's parameter.
 pub(super) fn fold_motive(motive: FoldMotive) -> Module {
@@ -1031,8 +1029,6 @@ pub(super) fn fold_motive(motive: FoldMotive) -> Module {
     let bound = Free::local(611, Some("m"));
     let pred = Free::local(612, Some("k"));
     let hypothesis = Free::local(613, Some("ih"));
-    let alias = Free::local(614, Some("a"));
-    let through_let = matches!(motive, FoldMotive::CapturedThroughLet);
     let successor = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&pred), literal(1)));
 
     let (goal, family, step) = match motive {
@@ -1051,14 +1047,9 @@ pub(super) fn fold_motive(motive: FoldMotive) -> Module {
             equal(Term::free_var(&n), Term::free_var(&n)),
             refl(successor),
         ),
-        FoldMotive::CapturedThroughLet => (
-            equal(Term::free_var(&alias), literal(0)),
-            equal(Term::free_var(&n), literal(0)),
-            Term::free_var(&hypothesis),
-        ),
     };
     let motive = Scope::close(Many(1), &[&bound], goal);
-    let fold = Term::nat_match_scoped(
+    let body = Term::nat_match_scoped(
         Term::free_var(&n),
         motive,
         refl(literal(0)),
@@ -1066,10 +1057,6 @@ pub(super) fn fold_motive(motive: FoldMotive) -> Module {
         &hypothesis,
         step,
     );
-    let body = match through_let {
-        true => Term::let_(&alias, nat(), Term::free_var(&n), fold),
-        false => fold,
-    };
 
     let all_zero = authored(
         &Global::Authored(Qualifier::from(["all_zero"])),

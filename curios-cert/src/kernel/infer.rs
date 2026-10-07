@@ -361,7 +361,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
         //
         // Whether the term deserves that type is `eliminate`'s job: each arm must inhabit the result at its own constructor's index targets, and a proposition may not be eliminated into a relevant result unless it carries nothing to extract.
         //
-        // **The scrutinee is typed where it stands and read by value, and so is the result.** The rule decides by the scrutinee's spelling — a variable is solved and the goal read over it, an expression has its equation recorded and an ambient goal's occurrences of it replaced — and it refuses a fold whose motive reaches the scrutinee other than through its binder by looking for it. A `let`-bound name in either would hide what each of those reads: `let m = n; match n : (_) => Eq()(m, 0) | …` states a motive that captures `n` and spells none of it. So both are read as a substituted `let` leaves them, and the arms are typed by name.
+        // **The scrutinee is typed where it stands and read by value, and so is the result.** The rule decides by the scrutinee's spelling — a variable is solved and the goal read over it, an expression has its equation recorded and an ambient goal's occurrences of it replaced. A `let`-bound name in either would hide what each of those reads: under `let m = n`, an arm of `match n` solves `n`, and a goal that spells `m` is one the solution does not reach. So both are read as a substituted `let` leaves them, and the arms are typed by name.
         Subterm::Match(m) => {
             let scrutinee_type = infer(kernel, &m.head)?;
             let scrutinee_type = kernel.reduce_forced(scrutinee_type)?;
@@ -649,7 +649,7 @@ fn reads_hypothesis(carrier: &Carrier) -> bool {
 
 /// The free-monoid arm rule: the identity arm inhabits the result at the carrier's empty value, and the cons arm — under a peeled generator, a tail, and the induction hypothesis at that tail when the arm reads it — inhabits it at one generator prepended to the tail. The case values are spelled exactly as elaboration spelled them (`pred + 1`, the singleton-concat for `List`, the append-to-empty singleton for `Bin`, whose packed literals cannot hold a symbolic atom), and conversion's free-monoid peel is what makes those spellings and reduction's forms one normal form.
 ///
-/// **The hypothesis is assumed exactly when the arm reads it, and only a family types it**, at the motive opened at the tail — the rule erasure's split-or-fold reading and the elaborator's state too. Its two preconditions therefore bind exactly the folds that read it: an ambient goal has no tail to be taken at once the head is substituted away, so it cannot type one ([`Error::AmbientFold`]); and a family that reaches the scrutinee other than through its binder states one proposition at every tail, and is refused as written ([`Error::FoldMotiveCapturesScrutinee`]). An arm that reads none — a case split — is checked as a `Bool` arm is, at its case value under either form of result: its reduct `arm(h, t, fold(t))` never contains the fold at the tail, so nothing needs the type the hypothesis would have had.
+/// **The hypothesis is assumed exactly when the arm reads it, and only a family types it**, at the motive opened at the tail — the rule erasure's split-or-fold reading and the elaborator's state too. Its precondition therefore binds exactly the folds that read it: an ambient goal has no tail to be taken at once the head is substituted away, so it cannot type one ([`Error::AmbientFold`]). A family that names the scrutinee beside its binder states one proposition at every tail, which the arms inhabit as it is written. An arm that reads none — a case split — is checked as a `Bool` arm is, at its case value under either form of result: its reduct `arm(h, t, fold(t))` never contains the fold at the tail, so nothing needs the type the hypothesis would have had.
 ///
 /// **An arm of a fold learns nothing of the scrutinee.** The fold at the tail is the same two arms over the tail, so reduction takes each arm at every tail of the value, where the scrutinee is no case of that arm. An arm typed with the scrutinee at its case would read a hypothesis about the scrutinee at a value the scrutinee never has: under `h : Holds(n == 2)`, `match n : (_) => False | 0 => h | k + 1; ih => ih end` is `h` at `2`, and it was typed at `0`. So each arm of a fold is checked at the motive opened at its case value and under nothing else — no solution, no case equation, no size — and every arm of one is typed, a value of either case taking the identity arm in the end. A hypothesis about the scrutinee rides in the motive, which is abstracted over it and so restates it at each tail. A case split's arm is taken once, at the scrutinee itself, and keeps the specialization every other arm has (`at`).
 ///
@@ -665,13 +665,7 @@ fn check_free_monoid(
     let motive = match (reads_hypothesis(carrier), result) {
         (false, _) => None,
         (true, MatchResult::Ambient(goal)) => return Err(Error::AmbientFold(goal.clone())),
-        // The capture is refused syntactically: `match n : (_) => Eq()(n, 0) | 0 => refl | k + 1; ih => ih end` states `Eq()(n, 0)` at every tail, and no arm of a fold refines `n`.
-        (true, MatchResult::Family(motive)) => {
-            if motive.body().mentions_term(scrutinee) {
-                return Err(Error::FoldMotiveCapturesScrutinee(scrutinee.clone()));
-            }
-            Some(motive)
-        }
+        (true, MatchResult::Family(motive)) => Some(motive),
     };
 
     // The hypothesis at a tail, for an arm that reads one.

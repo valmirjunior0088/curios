@@ -1733,7 +1733,7 @@ pub(super) const DISPATCH_LITERAL_AT_THE_WRONG_VALUE: &str = r#"
     /std/print("FORGED")
     "#;
 
-pub(super) const A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE: &str = r#"
+pub(super) const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_STATES_IT_AT_EVERY_TAIL: &str = r#"
         use /std/{Nat, Eq};
 
         let all_zero(n : Nat) -> Eq()(n, 0) =
@@ -1747,7 +1747,7 @@ pub(super) const A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE: &str = r#"
         /std/print("unreachable")
         "#;
 
-pub(super) const A_LIST_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE: &str = r#"
+pub(super) const A_LIST_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_STATES_IT_AT_EVERY_TAIL: &str = r#"
         use /std/{Nat, Eq, List};
 
         let all_empty(l : List(Nat)) -> Eq()(List/len(l), 0) =
@@ -1761,7 +1761,7 @@ pub(super) const A_LIST_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE: &str = r#"
         /std/print("unreachable")
         "#;
 
-pub(super) const A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE_EXPRESSION: &str = r#"
+pub(super) const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_EXPRESSION_STATES_IT_AT_EVERY_TAIL: &str = r#"
         use /std/{Nat, Eq};
 
         let twice(n : Nat) -> Nat = n + n;
@@ -1777,7 +1777,8 @@ pub(super) const A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE_EXPRESSION: &str = 
         /std/print("unreachable")
         "#;
 
-pub(super) const A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE_THROUGH_AN_ALIAS: &str = r#"
+pub(super) const A_FOLD_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_THROUGH_AN_ALIAS_STATES_IT_AT_EVERY_TAIL:
+    &str = r#"
         use /std/{Nat, Eq};
 
         let all_zero(n : Nat) -> Eq()(n, 0) =
@@ -1790,6 +1791,21 @@ pub(super) const A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE_THROUGH_AN_ALIAS: &
         let boom : Eq()(1, 0) = all_zero(1);
 
         /std/print("unreachable")
+        "#;
+
+pub(super) const A_FOLD_WHOSE_ARMS_INHABIT_A_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_IS_ACCEPTED: &str = r#"
+        use /std/{Nat};
+        use /std/Bool/{True, Holds};
+
+        let bounded(n : Nat, bound : Nat, h : Holds(n <= bound)) -> Holds(n <= bound) =
+            match n : (_) => Holds(n <= bound)
+            | 0 => h
+            | k + 1; ih => ih
+            end;
+
+        let kept : Holds(3 <= 5) = bounded(3, 5, True/qed());
+
+        /std/print("held")
         "#;
 
 pub(super) const A_FOLD_MOTIVE_THAT_BINDS_ITS_SCRUTINEE_STILL_FOLDS: &str = r#"
