@@ -46,6 +46,8 @@ let row(pair: Str) -> Str =
         Nat/to_str(Nat/shl(n, k)),
         Nat/to_str(Nat/shr(n, k)),
         Nat/to_str(Nat/gcd(n, m)),
+        match n | 0 => "-" | np + 1 => Nat/to_str(Nat/trailing_zeros(np + 1)) end,
+        match n | 0 => "-" | np + 1 => Nat/to_str(Nat/odd_part(np + 1)) end,
         bits(Int/to_flt(x)),
         Int/to_str(Option/unwrap_or(Flt/try_to_int(Int/to_flt(x)), +0)),
     ]);
@@ -96,6 +98,21 @@ fn signed(value: &Integer) -> String {
     format!("{value:+}")
 }
 
+/// A positive magnitude's factors of two and what is left with them divided out, by halving while the remainder by two is zero; `None` at zero, which has no count.
+fn scale(n: &Natural) -> Option<(u32, Natural)> {
+    if n.is_zero() {
+        return None;
+    }
+    let (one, two) = (Natural::from(1u32), Natural::from(2u32));
+    let mut odd = n.clone();
+    let mut count = 0;
+    while odd.rem(&two).expect("a nonzero divisor").is_zero() {
+        odd = &odd >> &one;
+        count += 1;
+    }
+    Some((count, odd))
+}
+
 /// What the program should print for one pair, by `curios-num`'s carrier methods — the arithmetic every folder shares.
 fn expected(x: &Integer, y: &Integer) -> String {
     let n = x.magnitude();
@@ -139,6 +156,8 @@ fn expected(x: &Integer, y: &Integer) -> String {
         ),
         format!("{:?}", &n >> &k),
         format!("{:?}", n.gcd(&m)),
+        scale(&n).map_or("-".into(), |(count, _)| count.to_string()),
+        scale(&n).map_or("-".into(), |(_, odd)| format!("{odd:?}")),
         bytes,
         signed(&float.to_integer().expect("a finite float truncates")),
     ]

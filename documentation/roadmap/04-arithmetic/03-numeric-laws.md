@@ -10,11 +10,11 @@ It waits on no other spec.
 - **Conversion decides the carriers' algebra** ([A law is decided where it neither respells nor invents](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md)): the sum normal form, Euclid's identity and the remainder's bound, a comparison through its difference, `Nat/to_int` as an ordered-semiring embedding, `shl(x, k)` as `x * pow(2, k)`, a sum in an exponent as a product, a power of a base at least one as at least one, and what is declared of `min`, `max`, `abs` and `sign`.
 - **The elaborator proves a linear step from the facts in scope** ([A bound that follows from the facts in scope is proved by the elaborator](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)), a quotient's bounds, a product of two facts and the cases of `min`, `max`, `abs` and `sign` among them. Its goal is a `<` or a `<=`, so an equation is `le/antisym` over two of them.
 - **Totality reads an arithmetic descent from a guard** ([Totality of the erased program](../../design/soundness/totality-of-the-erased-program.md)): `n / k` is below `n` where an enclosing arm rules `n`'s zero out, and a hypothesis is no such arm.
-- **The library** has `/std/Nat/DivMod/of`, which hands back `/`'s quotient and `%`'s remainder with Euclid's identity and the bound, and `DivMod/unique`, by which a quotient and a remainder that satisfy both are those two; `/std/Nat/Divides` with `refl`, `trans`, `zero`, `one`, `add`, `mul`, `sub`, `antisym`, its two bridges to a zero remainder, `of_rem` and `to_rem`, the exact quotient `exact` and the remainder's divisor `rem`; `/std/Nat/Gcd`, whose `of` builds a greatest common divisor with its two divisibilities and the property that makes it greatest, with `unique`, `symmetric`, `euclid` and `scaled`, and `Nat/gcd` as its value, which a type may mention; `/std/Nat/Coprime` with its decision `try`, `common` and `of_common`, `quotients`, Euclid's lemma `cancel` and the reduced fraction's `unique`; `/std/WellFounded/recurse` over `WellFounded/lt`; `/std/Int`'s `Sign` view with `trichotomy` and `eq_of_eql`; and the laws a hypothesis decides `min`, `max`, `abs` and `sign` by.
+- **The library** has `/std/Nat/DivMod/of`, which hands back `/`'s quotient and `%`'s remainder with Euclid's identity and the bound, and `DivMod/unique`, by which a quotient and a remainder that satisfy both are those two; `/std/Nat/Divides` with `refl`, `trans`, `zero`, `one`, `add`, `mul`, `sub`, `antisym`, its two bridges to a zero remainder, `of_rem` and `to_rem`, the exact quotient `exact` and the remainder's divisor `rem`; `/std/Nat/Gcd`, whose `of` builds a greatest common divisor with its two divisibilities and the property that makes it greatest, with `unique`, `symmetric`, `euclid` and `scaled`, and `Nat/gcd` as its value, which a type may mention; `/std/Nat/Coprime` with its decision `try`, `common` and `of_common`, `quotients`, Euclid's lemma `cancel` and the reduced fraction's `unique`; `/std/Nat/Scale`, whose `of` writes a positive number as an odd part at a count of factors of two, `n = shl(2 * half + 1, count)`, with `unique`, by which a count and a half that rebuild a number are one pair, and `Nat/trailing_zeros` and `Nat/odd_part` as its count and its odd part; `/std/Nat/pow`'s `of_pow`, `of_mul` and `positive`; `/std/Nat/log2/bounds`, a positive number between the power of two at its `log2` and the next; `/std/Nat/shl/split`, a shift split at a count below its own; `/std/WellFounded/recurse` over `WellFounded/lt`; `/std/Int`'s `Sign` view with `trichotomy` and `eq_of_eql`; and the laws a hypothesis decides `min`, `max`, `abs` and `sign` by.
 
 ## The gap
 
-- **Nothing strips a number's factors of two with a proof.** `/std/Dyadic/normalized` does it with `Nat/and`, `Nat/xor`, `Nat/log2` and `Int/shr`, none of which the logic reads, so the odd mantissa it answers is a fact no type states. `Nat/log2` carries no bound, and a power of a power or of a product has no lemma.
+- **`/std/Dyadic/normalized` strips a mantissa's factors of two with no proof**: with `Nat/and`, `Nat/xor`, `Nat/log2` and `Int/shr`, none of which the logic reads, so the odd mantissa it answers is a fact no type states, where `/std/Nat/Scale/of` states it of a natural.
 - **`ord` carries no law** at `Nat` or at `Int`: that it answers `eq` exactly at an equation, and `lt` and `gt` exactly at their comparisons, is unstated.
 - **`Int` has no multiplicative cancellation**, and `abs` and `sign` of a product are refused rows of the law grid with no lemma beside them.
 - **`Flt`'s identity as bits is unstated**: that `to_le_bytes` is injective, and that the natural `ord` falls back on tells every pattern apart.
@@ -41,23 +41,6 @@ It waits on no other spec.
 
 Each lands alone and is one commit.
 
-**Stage 3 — the binary scale on `Nat`.** Serves [exact rationals](04-exact-rationals.md)' stages 1, 2 and 4, and the rounding [the binary64 conversion proofs](07-binary64-conversion-proofs.md) reason about.
-
-```crs
-pub struct Scale(n: Nat): pub Type {
-    count: Nat,
-    half: Nat,
-    joined: Eq()(n, Nat/shl(2 * half + 1, count)),
-}
-```
-
-- `Scale/of(n, @ok: Holds(0 < n))` builds it by halving, and `Scale/unique` says a `count` and a `half` that rebuild `n` are its own. `trailing_zeros` and `odd_part` are its `count` and `2 * half + 1`. Zero is excluded by the premise and given no conventional count.
-- `pow(pow(x, a), b)` is `pow(x, a * b)`, `pow(x * y, a)` is `pow(x, a) * pow(y, a)`, and `0 < x` gives `0 < pow(x, k)`: each an induction whose step is the declared law at a successor.
-- `log2`'s bounds: for a positive `n`, `pow(2, log2(n)) <= n` and `n < 2 * pow(2, log2(n))`.
-- Two magnitudes at two counts compare as the one shifted by the difference against the other. The lemma is named only where the elaborator does not prove the comparison where it is used.
-
-Check: rows of the `numeric` unit at counts across the i31 and past 64 bits; `trailing_zeros` and `odd_part` against `curios_num` in `tests::numeric::grid_tests`.
-
 **Stage 4 — `Int` through its sign view.** Serves [exact rationals](04-exact-rationals.md)' stage 4.
 
 - `ord`'s laws at `Nat` and at `Int`: reflexive, `eq` exactly at an equation, `lt` and `gt` exactly at their comparisons, the flip, and transitivity.
@@ -82,6 +65,7 @@ Each is a fact a proof might expect a lemma for, most of them rows `curios`'s `t
 
 - `min(a, b) + max(a, b) = a + b`, `(a - b) + b = max(a, b)` and `min(a + c, b + c) = min(a, b) + c`, at `Nat` and at `Int`: `le/antisym` over two `True/proved()`. `+0 - min(i, j) = max(+0 - i, +0 - j)` the same way.
 - `pow(2, y) <= pow(2, y + z)`, `x <= shl(x, y)`, and `shl(x, k) / pow(2, k) = x`: `True/proved()`, the last under `le/antisym`.
+- Two magnitudes at two counts, `shl(a, i) <= shl(b, j)` with `j <= i`, compare as `shl(a, i - j) <= b`: `shl/split` rewrites the first at `j`, and `True/proved()` cancels the shift the two then share.
 - At `Int`: a bound's reversal under negation and its additive cancellation are conversion's; monotonicity under a factor at most zero, the triangle inequality of `abs` and `abs`'s two bounds are `True/proved()`; and `abs(n) == 0` gives `n = +0` by `le/antisym`.
 
 ## Verification

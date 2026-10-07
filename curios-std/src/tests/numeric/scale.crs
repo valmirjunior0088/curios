@@ -1,0 +1,82 @@
+-- The binary scale: a number's factors of two and its odd part, the powers' lemmas, a length in bits, and a shift split at its count, across the i31 and past 64 bits.
+use /std/{Nat, Eq};
+use /std/Nat/{Scale};
+use /std/Bool/{True, Holds};
+
+let _forty_holds_three_factors_of_two: Eq()(Nat/trailing_zeros(40), 3) =
+    Eq/refl();
+
+let _forty_without_them_is_five: Eq()(Nat/odd_part(40), 5) =
+    Eq/refl();
+
+let _an_odd_number_holds_none(n: Nat) -> Eq()(Nat/trailing_zeros(2 * n + 1), 0) =
+    Eq/refl();
+
+let _a_count_past_the_i31_is_counted: Eq()(Nat/trailing_zeros(Nat/shl(5, 31)), 31) =
+    Eq/refl();
+
+let _a_count_past_64_bits_leaves_the_odd_part: Eq()(Nat/odd_part(Nat/shl(3, 70)), 3) =
+    Eq/refl();
+
+let _a_number_is_its_odd_part_at_its_count(
+    n: Nat,
+    @ok: Holds(0 < n),
+) -> Eq()(n, Nat/shl(Nat/odd_part(n), Nat/trailing_zeros(n))) =
+    Scale/of(n).joined;
+
+let _two_odd_parts_at_two_counts_that_rebuild_one_number_are_one(
+    k: Nat,
+    m: Nat,
+    j: Nat,
+    n: Nat,
+    e: Eq()(Nat/shl(2 * m + 1, k), Nat/shl(2 * n + 1, j)),
+) -> {count: Eq()(k, j), half: Eq()(m, n)} =
+    Scale/unique(k, m, j, n, e);
+
+let _a_power_of_a_power_multiplies_the_exponents(
+    x: Nat,
+    b: Nat,
+) -> Eq()(Nat/pow(Nat/pow(x, 3), b), Nat/pow(x, 3 * b)) =
+    Nat/pow/of_pow(x, 3, b);
+
+let _a_power_of_four_is_a_power_of_two(y: Nat) -> Eq()(Nat/pow(4, y), Nat/pow(2, 2 * y)) =
+    Nat/pow/of_pow(2, 2, y);
+
+let _a_power_of_six_factors(y: Nat) -> Eq()(Nat/pow(6, y), Nat/pow(2, y) * Nat/pow(3, y)) =
+    Nat/pow/of_mul(2, 3, y);
+
+let _a_power_of_a_positive_base_is_positive(
+    x: Nat,
+    k: Nat,
+    p: Holds(0 < x),
+) -> Holds(0 < Nat/pow(x, k)) =
+    Nat/pow/positive(x, k, p);
+
+let _a_power_of_two_has_itself_as_its_logarithm: Eq()(Nat/log2(Nat/shl(1, 70)), 70) =
+    Eq/refl();
+
+let _a_positive_number_lies_between_two_powers_of_two(
+    n: Nat,
+    @ok: Holds(0 < n),
+) -> {low: Holds(Nat/pow(2, Nat/log2(n)) <= n), high: Holds(n < 2 * Nat/pow(2, Nat/log2(n)))} =
+    Nat/log2/bounds(n);
+
+let _a_shift_splits_at_a_smaller_count(
+    x: Nat,
+    i: Nat,
+    j: Nat,
+    fits: Holds(j <= i),
+) -> Eq()(Nat/shl(x, i), Nat/shl(Nat/shl(x, i - j), j)) =
+    Nat/shl/split(x, i, j, fits);
+
+let _two_magnitudes_at_two_counts_compare_aligned(
+    a: Nat,
+    b: Nat,
+    i: Nat,
+    j: Nat,
+    fits: Holds(j <= i),
+    h: Holds(Nat/shl(a, i) <= Nat/shl(b, j)),
+) -> Holds(Nat/shl(a, i - j) <= b) =
+    let aligned: Holds(Nat/shl(Nat/shl(a, i - j), j) <= Nat/shl(b, j)) =
+        Eq/subst((x: Nat) => Holds(x <= Nat/shl(b, j)), Nat/shl/split(a, i, j, fits), h);
+    True/proved();

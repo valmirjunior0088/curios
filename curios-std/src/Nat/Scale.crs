@@ -1,0 +1,71 @@
+use /std/{Nat, Eq};
+use /std/Bool/{True, Holds};
+
+--- A positive `n` as an odd number at a binary scale: `n` is `2 * half + 1` shifted left by `count`.
+---
+--- `count` is how many factors of two `n` holds, and `2 * half + 1` is what is left of `n` without them, odd by its shape, so no proposition has to say so. [`of`] finds the two by halving, and [`unique`] says no other pair rebuilds `n`.
+pub struct Scale(n: Nat): pub Type {
+    --- How many factors of two `n` holds.
+    count: Nat,
+    --- Half of the odd part, rounded down: the odd part is `2 * half + 1`.
+    half: Nat,
+    --- `n` is the odd part shifted left by the count.
+    joined: Eq()(n, Nat/shl(2 * half + 1, count)),
+}
+
+--- A positive `n` taken apart into its factors of two and its odd part, by halving while it is even.
+---
+--- Zero has no odd part, and the premise excludes it rather than a conventional answer standing in. The guard on `0 < n` is what totality reads the halving's descent from, so a type may mention the result, and on a closed `n` it computes there.
+pub let of(n: Nat, @ok: Holds(0 < n)) -> Scale(n) =
+    match 0 < n
+    | true =>
+        match 0 < n % 2
+        | true =>
+            Scale {
+                count = 0,
+                half = n / 2,
+                joined = Nat/le/antisym(n, 2 * (n / 2) + 1, True/proved(), True/proved()),
+            }
+        | false =>
+            let inner = of(n / 2);
+            let even: Eq()(n, 2 * (n / 2)) =
+                Nat/le/antisym(n, 2 * (n / 2), True/proved(), True/proved());
+            Scale {
+                count = inner.count + 1,
+                half = inner.half,
+                joined = Eq/subst((q: Nat) => Eq()(n, 2 * q), inner.joined, even),
+            }
+        end
+    | false => match ok end
+    end;
+
+--- One number has one odd part at one count: `2 * m + 1` shifted by `k` and `2 * n + 1` shifted by `j` are one number only where `k` is `j` and `m` is `n`.
+---
+--- By induction on both counts. Where one is zero and the other is not, an odd number would be even, which the comparison refutes by parity; where neither is, both sides halve.
+pub let unique(
+    k: Nat,
+    m: Nat,
+    j: Nat,
+    n: Nat,
+    e: Eq()(Nat/shl(2 * m + 1, k), Nat/shl(2 * n + 1, j)),
+) -> {count: Eq()(k, j), half: Eq()(m, n)} =
+    match k
+    | 0 =>
+        match j
+        | 0 => (count = Eq/refl(), half = Nat/le/antisym(m, n, True/proved(), True/proved()))
+        | _ + 1 => match Eq/subst((t: Nat) => Holds(2 * m + 1 == t), e, True/qed()) end
+        end
+    | kp + 1 =>
+        match j
+        | 0 => match Eq/subst((t: Nat) => Holds(t == 2 * n + 1), Eq/sym(e), True/qed()) end
+        | jp + 1 =>
+            let halved: Eq()(Nat/shl(2 * m + 1, kp), Nat/shl(2 * n + 1, jp)) =
+                Nat/le/antisym(
+                    Nat/shl(2 * m + 1, kp),
+                    Nat/shl(2 * n + 1, jp),
+                    True/proved(),
+                    True/proved());
+            let inner = unique(kp, m, jp, n, halved);
+            (count = Eq/cong((x: Nat) => x + 1, inner.count), half = inner.half)
+        end
+    end;

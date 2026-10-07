@@ -1,0 +1,14 @@
+pub use /sys/Nat/{shl};
+use /std/{Nat, Eq};
+use /std/Bool/{Holds};
+
+--- A shift by `i` is a shift by `i - j` and then by `j`, where `j <= i`.
+---
+--- What aligns two magnitudes held at two counts: with both written as shifts by the smaller count, the comparison of the shifted is the comparison of what was shifted, which the elaborator proves from the facts in scope, a power of two being at least one. Conversion splits a count that is a sum, and `i` is `j + (i - j)` only under the hypothesis.
+pub let split(
+    x: Nat,
+    i: Nat,
+    j: Nat,
+    fits: Holds(j <= i),
+) -> Eq()(shl(x, i), shl(shl(x, i - j), j)) =
+    Eq/cong((count: Nat) => shl(x, count), Eq/sym(Nat/le/add_sub_cancel(j, i, fits)));

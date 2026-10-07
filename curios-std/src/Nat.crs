@@ -1,6 +1,6 @@
 pub use /sys/{Nat};
-pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, gt, ge, and, or, xor, shl, shr, pow,
-    to_int, to_flt, to_byte};
+pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, gt, ge, and, or, xor, shr, to_int,
+    to_flt, to_byte};
 use /std/{Str, Option, Char, Bool, Show, Spell, Ord, Eq};
 use /std/Bool/{Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
@@ -26,6 +26,22 @@ pub use min/{let min};
 --- The larger of two naturals, and the laws a hypothesis decides it by.
 pub mod max;
 pub use max/{let max};
+
+--- A power, and the laws no sum in its exponent states.
+---
+--- Conversion decides `pow` as a morphism of its exponent at a fixed base: a sum there is a product, a literal so many factors, and a power of a base it holds at least one is at least one. A power of a power, a power of a product, and a power of a base only a hypothesis holds positive are the lemmas here.
+pub mod pow;
+pub use pow/{let pow};
+
+--- A left shift, and the split of its count.
+---
+--- Conversion reads a shift as its value times a power of two and splits a count that is a sum; the lemma here splits one at a count below it, which only a hypothesis says.
+pub mod shl;
+pub use shl/{let shl};
+
+--- The exponent of the highest power of two not above a number, with the bounds that make it that.
+pub mod log2;
+pub use log2/{let log2};
 
 satisfy Eql(Nat) {
     eql = eql,
@@ -102,10 +118,6 @@ pub let gcd(a: Nat, b: Nat) -> Nat =
 pub let lcm(a: Nat, b: Nat) -> Nat =
     match gcd(a, b) | 0 => 0 | g + 1 => a * b / (g + 1) end;
 
---- The exponent of the highest power of two not above `n`, and `0` at zero.
-pub let log2(n: Nat) -> Nat =
-    match n < 2 | true => 0 | false => log2(n / 2) + 1 end;
-
 --- The floor of the square root. General recursion, so a type may not mention it.
 ---
 --- Newton's iteration from a power of two above the root, so the cost is the root's bit width rather than the root: counting up to it would take `2⁶⁴` steps for a 128-bit `n`, an input an unbounded `Nat` holds.
@@ -122,6 +134,14 @@ pub let sqrt(n: Nat) -> Nat =
 --- Whether `n` is even.
 pub let is_even(n: Nat) -> Bool =
     n % 2 == 0;
+
+--- How many factors of two a positive `n` holds: [`Scale/of`]'s count.
+pub let trailing_zeros(n: Nat, @ok: Holds(0 < n)) -> Nat =
+    Scale/of(n).count;
+
+--- A positive `n` with its factors of two divided out, which is odd: `2 * half + 1` for [`Scale/of`]'s half.
+pub let odd_part(n: Nat, @ok: Holds(0 < n)) -> Nat =
+    2 * Scale/of(n).half + 1;
 
 --- Whether `lo <= c <= hi`.
 pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =
@@ -173,3 +193,7 @@ pub use Gcd/{let Gcd};
 --- That two numbers share no divisor but one, with Euclid's lemma and the reduced fraction beneath.
 pub mod Coprime;
 pub use Coprime/{let Coprime};
+
+--- A positive number as an odd part at a binary scale, with the proof that no other pair rebuilds it.
+pub mod Scale;
+pub use Scale/{let Scale};

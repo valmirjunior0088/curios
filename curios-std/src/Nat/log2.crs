@@ -1,0 +1,25 @@
+use /std/{Nat, Eq};
+use /std/Bool/{True, Holds};
+
+--- The exponent of the highest power of two not above `n`, and `0` at zero.
+pub let log2(n: Nat) -> Nat =
+    match n < 2 | true => 0 | false => log2(n / 2) + 1 end;
+
+--- A positive `n` lies between the power of two at `log2(n)` and the next: `pow(2, log2(n)) <= n < 2 * pow(2, log2(n))`, so `log2(n) + 1` is `n`'s length in bits.
+---
+--- By the recursion `log2` takes: halving `n` lowers both powers by one factor of two, and a quotient by two is within one of half.
+pub let bounds(
+    n: Nat,
+    @ok: Holds(0 < n),
+) -> {low: Holds(Nat/pow(2, log2(n)) <= n), high: Holds(n < 2 * Nat/pow(2, log2(n)))} =
+    match n < 2
+    | true => (low = True/proved(), high = True/proved())
+    | false =>
+        let inner = bounds(n / 2);
+        let step: Eq()(log2(n / 2) + 1, log2(n)) = Eq/refl();
+        let low: Holds(2 * Nat/pow(2, log2(n / 2)) <= n) = True/proved();
+        let high: Holds(n < 4 * Nat/pow(2, log2(n / 2))) = True/proved();
+        (
+            low = Eq/subst((l: Nat) => Holds(Nat/pow(2, l) <= n), step, low),
+            high = Eq/subst((l: Nat) => Holds(n < 2 * Nat/pow(2, l)), step, high))
+    end;

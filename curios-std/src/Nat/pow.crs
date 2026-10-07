@@ -1,0 +1,24 @@
+pub use /sys/Nat/{pow};
+use /std/{Nat, Eq};
+use /std/Bool/{True, Holds};
+
+--- A power of a power is the power to the product of the exponents.
+---
+--- Conversion decides a sum in an exponent and no product of two, since this law beside `pow(x, 2) = x * x` gives a power of a product, which at two literals factors a base. By induction on `b`, each step the exponent's law at a successor.
+pub let of_pow(x: Nat, a: Nat, b: Nat) -> Eq()(pow(pow(x, a), b), pow(x, a * b)) =
+    match b | 0 => Eq/refl() | bp + 1 => Eq/cong((t: Nat) => pow(x, a) * t, of_pow(x, a, bp)) end;
+
+--- A power of a product is the product of the powers.
+pub let of_mul(x: Nat, y: Nat, a: Nat) -> Eq()(pow(x * y, a), pow(x, a) * pow(y, a)) =
+    match a | 0 => Eq/refl() | ap + 1 => Eq/cong((t: Nat) => x * y * t, of_mul(x, y, ap)) end;
+
+--- A power of a positive base is positive.
+---
+--- Conversion holds a power at least one where it holds the base so as a term, `pow(2, k)` or `pow(x + 1, k)`, and reads no hypothesis: under one this is the step, a product of two positives at each successor.
+pub let positive(x: Nat, k: Nat, p: Holds(0 < x)) -> Holds(0 < pow(x, k)) =
+    match k
+    | 0 => True/qed()
+    | kp + 1 =>
+        let inner: Holds(0 < pow(x, kp)) = positive(x, kp, p);
+        True/proved()
+    end;
