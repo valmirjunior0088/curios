@@ -832,6 +832,84 @@ entry
     );
 }
 
+/// A row is its declaration's. The item declaring `Opt` registers the family, each field's shape with it; an item that constructs an `Opt` holds the family as an import, at its widths and saying nothing of a field; and a program holds one family, the declaration's.
+#[test]
+fn a_row_is_registered_by_the_item_that_declares_it() {
+    let mut induct_decls = BTreeMap::new();
+    induct_decls.insert(nominal("Opt"), opt_induct());
+    let former = Item::Let(Definition {
+        name: nominal("Opt"),
+        kind: DefinitionKind::InductiveType,
+        universe_context: UniverseContext::empty(),
+        island: Qualifier::empty(),
+        totality: Totality::default(),
+        variances: Vec::new(),
+        type_: Term::type_ground(),
+        body: opt_type(),
+    });
+    let six = definition(
+        "six",
+        opt_type(),
+        Term::variant(
+            nominal("Opt"),
+            Vec::<Term>::new(),
+            Atom::from("some"),
+            [nat_lit(6)],
+        ),
+    );
+    let fixture = Program {
+        module: Module {
+            mounts: Vec::new(),
+            items: vec![former, six],
+            induct_decls,
+            struct_decls: BTreeMap::new(),
+            concepts: BTreeMap::new(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        entry: Entrypoint {
+            body: Term::free_var(&global("six")),
+            type_: None,
+        },
+    };
+    // The shapes of `some`'s payload in the one family `module` holds.
+    let payload = |module: &curios_ersd::Module| {
+        let [family] = module.families() else {
+            panic!("the module holds one family");
+        };
+        let [_, some] = family.constructors[..] else {
+            panic!("Opt has two constructors");
+        };
+
+        module
+            .constructor(some)
+            .expect("some is registered")
+            .fields
+            .iter()
+            .map(|field| field.shape)
+            .collect::<Vec<_>>()
+    };
+
+    let unit = erase_unit(
+        &mut context(),
+        Erasures::nothing(),
+        &zonked(&fixture.module),
+    )
+    .expect("the unit erases");
+    let fragment = |name: &str| {
+        unit.find(&nominal(name))
+            .expect("the unit declares it")
+            .module()
+    };
+    assert_eq!(payload(fragment("Opt")), vec![FieldShape::Number]);
+    assert_eq!(payload(fragment("six")), vec![FieldShape::Opaque]);
+
+    assert_eq!(
+        payload(&erase(&mut context(), &fixture, opt_type())),
+        vec![FieldShape::Number]
+    );
+}
+
 #[test]
 fn a_multi_field_tuple_shares_the_width_schema() {
     let mut context = context();

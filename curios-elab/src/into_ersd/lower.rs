@@ -277,6 +277,11 @@ impl<'s> Lowering<'s> {
         ))
     }
 
+    /// The erased form of the item declaring `name`, where another item does.
+    pub(super) fn declaring(&self, name: &Global) -> Option<&'s ErasedItem> {
+        (self.externals)(name)
+    }
+
     /// Bind `name`, which another item declares, as this fragment reads it: an erased binding as none, a constant as the constant, and a value or a function as an import, minted the first time the name is used.
     ///
     /// A value whose own initializer reads it is refused here: its item could not tell that anything would read it, and this read is what forces it into itself. So the recursion rules are settled for every fragment where it is erased, and a unit that reads such a value of another is refused where it is compiled.
@@ -721,6 +726,15 @@ fn erase_item(
     match item {
         Item::Let(definition) => lowering.erase_definition(context, definition)?,
         Item::Rec(rec) => lowering.erase_rec_item(context, rec)?,
+    }
+    // The row of each registry entry the item declares is registered here, whether or not anything of the item constructs or matches it: every other item holds the row as an import of this one.
+    for name in item.declared_names() {
+        if context.struct_decl(name).is_some() {
+            lowering.struct_row(context, name)?;
+        }
+        if context.induct_decl(name).is_some() {
+            lowering.induct_row(context, name)?;
+        }
     }
 
     lowering.into_erased(&item.declared_names())

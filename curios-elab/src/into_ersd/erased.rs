@@ -1,6 +1,6 @@
 //! What an item erases to, what a unit's items erase to together, and the scope both are read through.
 //!
-//! **An item's erased form is its own.** An item erases into a fragment, a [`curios_ersd::Module`] whose identities count from zero for it, so what a unit stores for a declaration says nothing of the declarations erased before it, and an edit to one renumbers no other. A name another item binds is not an identity of the fragment but an *import* of it, known by that name ([`ErasedItem::values`], [`ErasedItem::functions`]), and a schema the fragment constructs or matches is the fragment's copy, known by the declaration it is the row of.
+//! **An item's erased form is its own.** An item erases into a fragment, a [`curios_ersd::Module`] whose identities count from zero for it, so what a unit stores for a declaration says nothing of the declarations erased before it, and an edit to one renumbers no other. A name another item binds is not an identity of the fragment but an *import* of it, known by that name ([`ErasedItem::values`], [`ErasedItem::functions`]), and so is the row of a structure or an inductive another item declares: the fragment holds a schema of its widths, known by the declaration it stands for.
 //!
 //! **A unit holds its items' erased forms and no arena**, which is what lets a unit compiled over a baseline erase the items it redoes and take every other's as it stands, and what leaves nothing for two units to be ordered by.
 //!
@@ -19,7 +19,7 @@ use {
 pub struct ErasedItem {
     #[archived_omit_bounds]
     module: curios_ersd::Module,
-    /// What each name the item declares is bound to, in the fragment's identities, and the fragment's schemas by the declaration each is the row of.
+    /// What each name the item declares is bound to, in the fragment's identities, and the fragment's schemas by the declaration each is the row of, the ones it declares told from the ones it imports.
     environment: Environment,
     /// The name each value the fragment imports stands for, in the fragment's order.
     values: Vec<Global>,

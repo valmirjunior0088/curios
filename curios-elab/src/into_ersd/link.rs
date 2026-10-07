@@ -6,7 +6,7 @@
 //!
 //! **The order is the scope's.** Units in dependency order, each one's items in the order it stores them, then the program's own and its entry: every item after the items it imports from, which is the order their statements evaluate in.
 //!
-//! **A schema is one in a program however many fragments hold it.** A fragment's copy of a structure's or an inductive's row is known by the declaration it is the row of, and an anonymous row by its width; the first fragment linked that holds one registers it, and every later one is resolved to it.
+//! **A schema is its declaration's.** The item that declares a structure or an inductive registers its row, and a fragment that imports the row is linked after that item, its schema resolved to the one the item registered. An anonymous row is declared by no item: the first fragment linked that holds one of a width registers it, and every later one is resolved to it.
 
 use {
     super::{Binding, ErasedItem, ErasedProgram, ErasedUnit, Erasures},
@@ -34,6 +34,17 @@ impl Linking {
             })
         };
         let environment = erased.environment();
+        for name in environment.imported_rows() {
+            // A newtype's row has no schema, so nothing of it is resolved.
+            let held = match environment.struct_row(name) {
+                Some(row) => row.schema.is_none() || self.structs.contains_key(name),
+                None => self.families.contains_key(name),
+            };
+            assert!(
+                held,
+                "the row of {name} is imported before the item that declares it is linked",
+            );
+        }
         let mut resolution = curios_ersd::Resolution {
             values: erased.values().iter().map(bound).collect(),
             functions: erased
@@ -81,7 +92,7 @@ impl Linking {
     }
 }
 
-/// The items of each unit in scope a program links: what `roots` import, transitively, and every item that computes at initialization with what it imports — each unit's as the places of its items, ascending.
+/// The items of each unit in scope a program links: what `roots` import, transitively, the items declaring the rows they import among them, and every item that computes at initialization with what it imports — each unit's as the places of its items, ascending.
 fn reached<'a>(
     scope: Erasures<'_>,
     roots: impl Iterator<Item = &'a ErasedItem>,
@@ -91,7 +102,12 @@ fn reached<'a>(
     let mut pending = Vec::new();
 
     let imports = |erased: &ErasedItem, pending: &mut Vec<(usize, usize)>| {
-        for name in erased.values().iter().chain(erased.functions()) {
+        for name in erased
+            .values()
+            .iter()
+            .chain(erased.functions())
+            .chain(erased.environment().imported_rows())
+        {
             // A name no unit in scope declares is the program's own, and every item of the program is linked.
             if let Some(place) = scope.place(name) {
                 pending.push(place);

@@ -1,6 +1,6 @@
 //! Products, structs, variants, and projections — schema registration and the construction/projection sites.
 //!
-//! Declarations register their post-erasure shape exactly once, lazily on first use (the order a module's items are stored in guarantees their dependencies are defined by then), from the opaque signature view: parameters opened as fresh abstract variables, each field classified against the preceding binders. The mask is therefore fixed per declaration, so construction, matching, and projection agree on the relevant-field arithmetic at every instantiation; a kept slot whose *instantiation* is a proof is filled with the unit constant at the site instead ([`Lowering::kept_operand`]).
+//! A declaration's post-erasure shape is registered once, by the item that declares it, from the opaque signature view: parameters opened as fresh abstract variables, each field classified against the preceding binders. Every other item holds the row as an import, read off that item's erased form (the order a module's items are stored in puts it first): the same mask, and a schema of the same widths that says nothing of its fields, which a program resolves to the declaration's own. The mask is therefore fixed per declaration, so construction, matching, and projection agree on the relevant-field arithmetic at every instantiation; a kept slot whose *instantiation* is a proof is filled with the unit constant at the site instead ([`Lowering::kept_operand`]).
 //!
 //! Collapses: a structure or subset tuple left with a single relevant field erases to that bare field (no product, no projection); anonymous tuples share one interned schema per relevant width.
 
@@ -31,6 +31,9 @@ impl Lowering<'_> {
     ) -> Result<ProductRow, Error> {
         if let Some(row) = self.environment.struct_row(name) {
             return Ok(row.clone());
+        }
+        if let Some(row) = self.imported_struct_row(name) {
+            return Ok(row);
         }
         let struct_decl = context
             .struct_decl(name)
@@ -73,6 +76,9 @@ impl Lowering<'_> {
     ) -> Result<FamilyRow, Error> {
         if let Some(row) = self.environment.induct_row(name) {
             return Ok(row.clone());
+        }
+        if let Some(row) = self.imported_induct_row(name) {
+            return Ok(row);
         }
         let induct_decl = context
             .induct_decl(name)
@@ -119,6 +125,68 @@ impl Lowering<'_> {
         };
         self.environment.register_induct_row(name, row.clone());
         Ok(row)
+    }
+
+    /// The row the item declaring the structure `name` registered, held here as an import: its mask, and a schema of its width whose fields say nothing, since what a field is is the declaration's to say and the row a program holds is the declaration's. `None` where no item in reach declares the row, which is this item declaring it.
+    fn imported_struct_row(&mut self, name: &curios_core::Global) -> Option<ProductRow> {
+        let declaring = self.declaring(name)?;
+        let declared = declaring.environment().declared_struct_row(name)?;
+        let schema = declared.schema.map(|schema| {
+            let held = declaring
+                .module()
+                .product(schema)
+                .expect("a declared row's schema is its fragment's");
+            self.builder.product(curios_ersd::ProductSchema {
+                debug_name: held.debug_name.clone(),
+                fields: vec![curios_ersd::Field::opaque(None); held.width()],
+                shared: held.shared,
+            })
+        });
+        let row = ProductRow {
+            schema,
+            mask: declared.mask.clone(),
+        };
+        self.environment.import_struct_row(name, row.clone());
+
+        Some(row)
+    }
+
+    /// [`imported_struct_row`](Self::imported_struct_row) for the inductive `name`: its family and each constructor at its width, under the declaration's masks.
+    fn imported_induct_row(&mut self, name: &curios_core::Global) -> Option<FamilyRow> {
+        let declaring = self.declaring(name)?;
+        let declared = declaring.environment().declared_induct_row(name)?;
+        let held = declaring.module();
+        let family = self.builder.family(
+            held.family(declared.family)
+                .expect("a declared row's family is its fragment's")
+                .debug_name
+                .clone(),
+        );
+        let constructors = declared
+            .constructors
+            .iter()
+            .map(|constructor| {
+                let held = held
+                    .constructor(constructor.id)
+                    .expect("a declared row's constructor is its fragment's");
+
+                ConstructorRow {
+                    id: self.builder.constructor(
+                        family,
+                        held.debug_name.clone(),
+                        vec![curios_ersd::Field::opaque(None); held.width()],
+                    ),
+                    mask: constructor.mask.clone(),
+                }
+            })
+            .collect();
+        let row = FamilyRow {
+            family,
+            constructors,
+        };
+        self.environment.import_induct_row(name, row.clone());
+
+        Some(row)
     }
 
     /// Whether `name`'s structure row is being registered right now — see [`Lowering::in_flight`].

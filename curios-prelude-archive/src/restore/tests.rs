@@ -166,6 +166,29 @@ fn every_root_holds_its_items_erased_forms() {
     });
 }
 
+/// A registry entry is keyed by a name an item of its root declares, its type former. The row of a structure or an inductive is that item's to register where it is erased (`curios-elab`'s `into_ersd`), so an entry no item declared would have no erased form to hold its row.
+#[test]
+fn every_registry_entry_is_keyed_by_a_name_an_item_of_its_root_declares() {
+    with_prelude(|prelude| {
+        for root in prelude {
+            let core = root.core();
+            let declared = core
+                .items
+                .iter()
+                .flat_map(Item::declared_names)
+                .collect::<BTreeSet<_>>();
+            for name in core
+                .induct_decls
+                .keys()
+                .chain(core.struct_decls.keys())
+                .chain(core.concepts.keys())
+            {
+                assert!(declared.contains(name), "no item declares {name}");
+            }
+        }
+    });
+}
+
 #[test]
 fn every_syntax_target_is_present_after_restore() {
     with_prelude(|prelude| {
