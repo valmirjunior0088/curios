@@ -1,12 +1,9 @@
 use /std/{Str, Bool, Char, Flt, Option, List, Json};
 
+--- A finite number as `Flt/to_str` writes its digits, without the sign that marks a positive one: a positional decimal, which the grammar spells.
 let encode_num(n: Flt) -> Str =
-    match Flt/is_finite(n)
-    | false => "null"
-    | true =>
-        let raw = Flt/to_str(n);
-        match Str/strip_prefix(raw, "+") | some(unsigned) => unsigned | none() => raw end
-    end;
+    let raw = Flt/to_str(n);
+    match Str/strip_prefix(raw, "+") | some(unsigned) => unsigned | none() => raw end;
 
 --- What a character is written as inside a string, when it is not written as itself: the quote, the backslash and the control characters, which JSON escapes.
 let escaped(c: Char) -> Option(Str) =
@@ -34,7 +31,7 @@ let escaped(c: Char) -> Option(Str) =
 let encode_str(s: Str) -> Str =
     Str/flatten(["\"", Str/escape(s, escaped), "\""]);
 
---- `v` as a document on one line. A non-finite number is written as `null`.
+--- `v` as a document on one line.
 pub let encode(v: Json) -> Str =
     match v
     | null() => "null"

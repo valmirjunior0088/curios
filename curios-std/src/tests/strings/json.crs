@@ -1,16 +1,16 @@
--- The JSON codec: escapes, the refusals the grammar names, and what the encoder writes for a number the grammar has no room for.
-use /std/{Json, Parse, Str, Flt, Test};
+-- The JSON codec: escapes, the refusals the grammar names, the numbers RFC 8259 spells and the ones it does not, and that a number is finite.
+use /std/{Json, Parse, Str, Flt, Bool, List, Test};
 
 -- The document decoded and re-encoded, or the refusal that stopped it.
 let decoded(input: Str) -> Str =
-    match Parse/run(Json/decode, Str/to_bytes(input)): (_) => Str
+    match Parse/run(Json/decode, input): (_) => Str
     | success(value) => Json/encode(value)
     | failure(e) => e.message
     end;
 
 -- The string a document carries, for the escape rows below, or the refusal that stopped it.
 let decoded_str(input: Str) -> Str =
-    match Parse/run(Json/decode, Str/to_bytes(input)): (_) => Str
+    match Parse/run(Json/decode, input): (_) => Str
     | success(value) => match value: (_) => Str | str(s) => s | _ => "wrong" end
     | failure(e) => e.message
     end;
@@ -25,6 +25,15 @@ test unicode_escapes_require_well_formed_surrogate_pairs =
             decoded_str("\"\\uDE00\""),
             decoded_str("\"a\\qb\"")]),
         "😀|expected low surrogate|invalid low surrogate|invalid Unicode scalar|unknown escape");
+
+-- A string is read as the text it is: characters of two, three and four bytes stand between the quotes as written, and the pieces on either side of an escape join with the character it names.
+test a_string_holds_multi_byte_characters_as_written =
+    Test/equal(
+        Str/join("|", [
+            decoded_str("\"é→𝄞\""),
+            decoded_str("\"é\\n→\\u00e9𝄞\""),
+            decoded("[\"ü\", {\"é\": \"→\"}]")]),
+        "é→𝄞|é\n→é𝄞|[\"ü\",{\"é\":\"→\"}]");
 
 -- Each refusal is the reason at the point the input stopped being JSON, not the bracket an outer parser failed on afterwards. A comma commits to the element after it and a key to its colon, the byte after an opening bracket decides between the close and the elements, and the primitives name what they expected — `sep_by0`'s backtracking once reported every malformed input as `unexpected byte`, and a bad literal as `unexpected literal`.
 test structural_refusals_name_what_was_expected =
@@ -75,26 +84,152 @@ test a_document_is_refused_when_anything_follows_the_value =
             "expected end of input|expected end of input|expected end of input|",
             "{\"a\":1}|[]"]));
 
--- Every number the encoder writes is a JSON number, so a non-finite one becomes `null` rather than a literal the grammar has no room for. Each row is written *and* read back, so a rendering the grammar does not admit shows up as its refusal rather than as text; the finite tail is the control.
-test a_non_finite_number_encodes_as_null =
-    let written(value: Json) -> Str =
-        let text = Json/encode(value);
-        match Parse/run(Json/decode, Str/to_bytes(text)): (_) => Str
-        | success(_) => text
-        | failure(e) => Str/concat("NOT JSON: ", e.message)
+-- Whether a document reads.
+let reads(input: Str) -> Bool =
+    match Parse/run(Json/decode, input) | success(_) => true | failure(_) => false end;
+
+-- A number is finite, so every number the encoder writes is a JSON number: a literal's proof discharges where it is written, a computed float passes `Flt/finite` or has no `Json/num`, and there is no `null` for the encoder to invent.
+test a_number_is_built_from_a_finite_float_alone =
+    let of_flt(f: Flt) -> Str =
+        match Flt/finite(f)
+        | some(finite) => Json/encode(Json/num(f, @finite))
+        | none() => "no number"
         end;
+    let huge =
+        +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0;
     Test/equal(
         Str/join("|", [
-            written(Json/num(+inf.0)),
-            written(Json/num(-inf.0)),
-            written(Json/num(+nan.0)),
-            written(
-                Json/num(
-                    Flt/mul(
-                        +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0,
-                        +100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0))),
-            written(Json/arr([Json/num(+1.0), Json/num(+inf.0)])),
-            written(Json/num(+1.5)),
-            written(Json/num(-1.5)),
-            written(Json/num(-0.0))]),
-        "null|null|null|null|[1,null]|1.5|-1.5|-0");
+            Json/encode(Json/num(+1.5)),
+            Json/encode(Json/arr([Json/num(+1.0), Json/num(-0.0)])),
+            of_flt(-1.5),
+            of_flt(+inf.0),
+            of_flt(-inf.0),
+            of_flt(+nan.0),
+            of_flt(Flt/mul(huge, huge))]),
+        "1.5|[1,-0]|-1.5|no number|no number|no number|no number");
+
+-- RFC 8259 §6's number rule at its edges: an integer part is `0` or opens with another digit, a point owes a digit and so does an exponent, and no sign but a minus opens a number.
+test a_number_is_read_by_the_grammars_own_rule =
+    Test/equal(
+        Str/join("|", [
+            decoded("0"),
+            decoded("-0"),
+            decoded("1E+2"),
+            decoded("0.5"),
+            decoded("01"),
+            decoded("-01"),
+            decoded("00"),
+            decoded("1."),
+            decoded("1.e5"),
+            decoded(".5"),
+            decoded("-.5"),
+            decoded("+1"),
+            decoded("1e"),
+            decoded("-")]),
+        Str/flatten([
+            "0|-0|100|0.5|expected end of input|expected end of input|expected end of input|",
+            "expected digit|expected digit|expected value|expected number|expected value|",
+            "expected digit|expected number"]));
+
+-- JSONTestSuite's `n_number_*` cases, the documents a parser must refuse, each under the name its file bears. Four more are not UTF-8, so they are no `Str`, and are refused where bytes become text.
+test every_number_the_grammar_does_not_spell_is_refused =
+    let cases: List({Str, Str}) =
+        [
+            ("++", "[++1234]"),
+            ("+1", "[+1]"),
+            ("+Inf", "[+Inf]"),
+            ("-01", "[-01]"),
+            ("-1.0.", "[-1.0.]"),
+            ("-2.", "[-2.]"),
+            ("-NaN", "[-NaN]"),
+            (".-1", "[.-1]"),
+            (".2e-3", "[.2e-3]"),
+            ("0.1.2", "[0.1.2]"),
+            ("0.3e+", "[0.3e+]"),
+            ("0.3e", "[0.3e]"),
+            ("0.e1", "[0.e1]"),
+            ("0_capital_E+", "[0E+]"),
+            ("0_capital_E", "[0E]"),
+            ("0e+", "[0e+]"),
+            ("0e", "[0e]"),
+            ("1.0e+", "[1.0e+]"),
+            ("1.0e-", "[1.0e-]"),
+            ("1.0e", "[1.0e]"),
+            ("1_000", "[1 000.0]"),
+            ("1eE2", "[1eE2]"),
+            ("2.e+3", "[2.e+3]"),
+            ("2.e-3", "[2.e-3]"),
+            ("2.e3", "[2.e3]"),
+            ("9.e+", "[9.e+]"),
+            ("Inf", "[Inf]"),
+            ("NaN", "[NaN]"),
+            ("U+FF11_fullwidth_digit_one", "[１]"),
+            ("expression", "[1+2]"),
+            ("hex_1_digit", "[0x1]"),
+            ("hex_2_digits", "[0x42]"),
+            ("infinity", "[Infinity]"),
+            ("invalid+-", "[0e+-1]"),
+            ("invalid-negative-real", "[-123.123foo]"),
+            ("minus_infinity", "[-Infinity]"),
+            ("minus_sign_with_trailing_garbage", "[-foo]"),
+            ("minus_space_1", "[- 1]"),
+            ("neg_int_starting_with_zero", "[-012]"),
+            ("neg_real_without_int_part", "[-.123]"),
+            ("neg_with_garbage_at_end", "[-1x]"),
+            ("real_garbage_after_e", "[1ea]"),
+            ("real_without_fractional_part", "[1.]"),
+            ("starting_with_dot", "[.123]"),
+            ("with_alpha", "[1.2a-3]"),
+            ("with_alpha_char", "[1.8011670033376514H-308]"),
+            ("with_leading_zero", "[012]")];
+    Test/equal(List/map(List/filter(cases, (c) => reads(c.1)), (c) => c.0), []);
+
+-- JSONTestSuite's `y_number*` cases, the documents a parser must accept.
+test every_number_the_grammar_spells_is_read =
+    let cases: List({Str, Str}) =
+        [
+            ("number", "[123e65]"),
+            ("0e+1", "[0e+1]"),
+            ("0e1", "[0e1]"),
+            ("after_space", "[ 4]"),
+            (
+                "double_close_to_zero",
+                "[-0.000000000000000000000000000000000000000000000000000000000000000000000000000001]\n"),
+            ("int_with_exp", "[20e1]"),
+            ("minus_zero", "[-0]"),
+            ("negative_int", "[-123]"),
+            ("negative_one", "[-1]"),
+            ("negative_zero", "[-0]"),
+            ("real_capital_e", "[1E22]"),
+            ("real_capital_e_neg_exp", "[1E-2]"),
+            ("real_capital_e_pos_exp", "[1E+2]"),
+            ("real_exponent", "[123e45]"),
+            ("real_fraction_exponent", "[123.456e78]"),
+            ("real_neg_exp", "[1e-2]"),
+            ("real_pos_exponent", "[1e+2]"),
+            ("simple_int", "[123]"),
+            ("simple_real", "[123.456789]")];
+    Test/equal(List/map(List/filter(cases, (c) => Bool/not(reads(c.1))), (c) => c.0), []);
+
+-- JSONTestSuite's `i_number_*` cases, which a parser is free to decide: a number past binary64's range is refused, one below it reads as zero of its sign, and an integer past `2^53` reads as the float nearest to it.
+test a_number_past_binary64_is_refused_and_one_below_it_is_zero =
+    Test/equal(
+        Str/join("|", [
+            decoded("[123.456e-789]"),
+            decoded("[123e-10000000]"),
+            decoded("[-1e-400]"),
+            decoded(
+                "[0.4e00669999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999969999999006]"),
+            decoded("[-1e+9999]"),
+            decoded("[1.5e+9999]"),
+            decoded("[-123123e100000]"),
+            decoded("[123123e100000]"),
+            decoded("1e400"),
+            decoded("-1e400"),
+            decoded("[100000000000000000000]"),
+            Bool/to_str(reads("[-123123123123123123123123123123]")),
+            Bool/to_str(reads("[-237462374673276894279832749832423479823246327846]"))]),
+        Str/flatten([
+            "[0]|[0]|[-0]|number out of range|number out of range|number out of range|",
+            "number out of range|number out of range|number out of range|number out of range|",
+            "[100000000000000000000]|true|true"]));

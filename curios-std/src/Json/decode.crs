@@ -1,121 +1,162 @@
-use /std/{Bytes, Byte, Str, Bool, Char, Flt, Nat, Parse, Option, Result, List, Json};
+use /std/{Str, Bool, Char, Flt, Nat, Int, Parse, Option, List, Json};
 
-let is_num_byte(byte: Byte) -> Bool =
-    match Byte/to_nat(byte)
-    | '-' => true
-    | '+' => true
-    | '.' => true
-    | 'e' => true
-    | 'E' => true
-    | _ => Nat/in_range(Byte/to_nat(byte), '0', '9')
-    end;
+let parse_null: Parse(Str, Json) =
+    Parse/map(Parse/text/literal("null"), (_) => Json/null());
 
-let parse_null: Parse(Bytes, Json) =
-    Parse/map(Parse/bytes/literal("null"), (_) => Json/null());
+let parse_true_val: Parse(Str, Json) =
+    Parse/map(Parse/text/literal("true"), (_) => Json/bool(true));
 
-let parse_true_val: Parse(Bytes, Json) =
-    Parse/map(Parse/bytes/literal("true"), (_) => Json/bool(true));
+let parse_false_val: Parse(Str, Json) =
+    Parse/map(Parse/text/literal("false"), (_) => Json/bool(false));
 
-let parse_false_val: Parse(Bytes, Json) =
-    Parse/map(Parse/bytes/literal("false"), (_) => Json/bool(false));
+--- The number a run of decimal digits spells, `0` for an empty one.
+let digits_value(run: Str) -> Nat =
+    Str/fold(run, 0, (c, n) => n * 10 + (Char/to_nat(c) - '0'));
 
-let parse_num: Parse(Bytes, Json) =
-    let chunk = Parse/bytes/take_while(is_num_byte)!;
-    match Flt/of_str(Result/unwrap_or(Str/of_bytes(chunk), ""))
-    | some(value) => Parse/pure(Json/num(value))
+--- A nonempty run of decimal digits, owed once the character before it has been read.
+let digits1: Parse(Str, Str) =
+    let run = Parse/text/take_while(Char/is_digit)!;
+    match Str/is_empty(run) | true => Parse/fail("expected digit") | false => Parse/pure(run) end;
+
+--- The integer part: `0` alone, or a run of digits that does not open with it. A zero ends the part where it stands, so `01` is a zero with a `1` after it, which no document continues with.
+let int_part: Parse(Str, Str) =
+    let first = Parse/text/peek!;
+    match first
+    | some(c) =>
+        choose
+        | c == '0' => Parse/map(Parse/text/char, (_) => "0")
+        | Char/is_digit(c) => Parse/text/take_while(Char/is_digit)
+        | _ => Parse/fail("expected number")
+        end
     | none() => Parse/fail("expected number")
     end;
 
---- Whether `byte` may stand in a string as written: any but the quote, the backslash and the control characters below `0x20`, which the grammar has escaped.
-let is_unescaped(byte: Byte) -> Bool =
-    match Byte/to_nat(byte) | '"' => false | '\\' => false | _ => Byte/to_nat(byte) >= 0x20 end;
+--- The fraction: the digits after a point, or none where no point is written. A point owes a digit.
+let frac_part: Parse(Str, Str) =
+    let point = Parse/optional(Parse/text/expect('.'))!;
+    match point | some(_) => Parse/commit(digits1) | none() => Parse/pure("") end;
 
-let hex_digit: Parse(Bytes, Nat) =
-    let byte = Parse/bytes/byte!;
-    match Option/bind(Char/of_ascii(byte), Char/of_hex_digit)
+let exp_fields: Parse(Str, Int) =
+    let sign = Parse/optional(Parse/text/char_if((c) => c == '+' || c == '-'))!;
+    let run = digits1!;
+    let magnitude = Nat/to_int(digits_value(run));
+    Parse/pure(
+        match sign
+        | some(c) => match c == '-' | true => +0 - magnitude | false => magnitude end
+        | none() => magnitude
+        end);
+
+--- The exponent: what follows an `e` of either case, or zero where none is written. An `e` owes a digit.
+let exp_part: Parse(Str, Int) =
+    let marker = Parse/optional(Parse/text/char_if((c) => c == 'e' || c == 'E'))!;
+    match marker | some(_) => Parse/commit(exp_fields) | none() => Parse/pure(+0) end;
+
+--- A number as RFC 8259 §6 writes one — `-? (0 | [1-9][0-9]*) (\.[0-9]+)? ([eE][+-]?[0-9]+)?` — converted once, through `Flt/of_decimal`. One past binary64's range is refused; one that rounds to zero is zero of its sign.
+let parse_num: Parse(Str, Json) =
+    let minus = Parse/optional(Parse/text/expect('-'))!;
+    let whole = int_part!;
+    let fraction = frac_part!;
+    let exponent = exp_part!;
+    let spelled = Str/concat(whole, fraction);
+    let value =
+        Flt/of_decimal(
+            Option/is_some(minus),
+            digits_value(spelled),
+            exponent - Nat/to_int(Str/len(fraction)),
+            Str/len(spelled));
+    match Flt/finite(value)
+    | some(finite) => Parse/pure(Json/num(value, @finite))
+    | none() => Parse/commit(Parse/fail("number out of range"))
+    end;
+
+--- Whether `c` may stand in a string as written: any but the quote, the backslash and the control characters below `U+0020`, which the grammar has escaped.
+let is_unescaped(c: Char) -> Bool =
+    match Char/to_nat(c) | '"' => false | '\\' => false | _ => Char/to_nat(c) >= 0x20 end;
+
+let hex_digit: Parse(Str, Nat) =
+    let c = Parse/text/char!;
+    match Char/of_hex_digit(c)
     | some(v) => Parse/pure(v)
     | none() => Parse/fail("invalid hex digit")
     end;
 
-let hex4: Parse(Bytes, Nat) =
+let hex4: Parse(Str, Nat) =
     let a = hex_digit!;
     let b = hex_digit!;
     let c = hex_digit!;
     let d = hex_digit!;
     Parse/pure(a * 0x1000 + b * 0x100 + c * 0x10 + d);
 
---- `code` as its UTF-8 bytes, declining a value that is no Unicode scalar.
-let scalar_utf8(code: Nat) -> Parse(Bytes, Bytes) =
+--- The character `code` is, declining a value that is no Unicode scalar.
+let scalar(code: Nat) -> Parse(Str, Str) =
     match Char/of_nat(code)
-    | some(c) => Parse/pure(Char/to_utf8(c))
+    | some(c) => Parse/pure(Str/of_char(c))
     | none() => Parse/fail("invalid Unicode scalar")
     end;
 
-let parse_unicode: Parse(Bytes, Bytes) =
+let parse_unicode: Parse(Str, Str) =
     let hi = hex4!;
     match hi >= 0xD800 && hi <= 0xDBFF
-    | false => scalar_utf8(hi)
+    | false => scalar(hi)
     | true =>
-        let _ = Parse/label(Parse/bytes/expect('\\'), "expected low surrogate")!;
-        let _ = Parse/label(Parse/bytes/expect('u'), "expected low surrogate")!;
+        let _ = Parse/label(Parse/text/expect('\\'), "expected low surrogate")!;
+        let _ = Parse/label(Parse/text/expect('u'), "expected low surrogate")!;
         let lo = hex4!;
         match lo >= 0xDC00 && lo <= 0xDFFF
-        | true => scalar_utf8(0x10000 + (hi - 0xD800) * 0x400 + (lo - 0xDC00))
+        | true => scalar(0x10000 + (hi - 0xD800) * 0x400 + (lo - 0xDC00))
         | false => Parse/fail("invalid low surrogate")
         end
     end;
 
-let escape_fields: Parse(Bytes, Bytes) =
-    let byte = Parse/bytes/byte!;
-    match Byte/to_nat(byte)
-    | '"' => Parse/pure(Str/to_bytes("\""))
-    | '\\' => Parse/pure(Str/to_bytes("\\"))
-    | '/' => Parse/pure(Str/to_bytes("/"))
-    | 'b' => Parse/pure(x['\u{8}'])
-    | 'f' => Parse/pure(x['\u{C}'])
-    | 'n' => Parse/pure(Str/to_bytes("\n"))
-    | 'r' => Parse/pure(Str/to_bytes("\r"))
-    | 't' => Parse/pure(Str/to_bytes("\t"))
+let escape_fields: Parse(Str, Str) =
+    let c = Parse/text/char!;
+    match Char/to_nat(c)
+    | '"' => Parse/pure("\"")
+    | '\\' => Parse/pure("\\")
+    | '/' => Parse/pure("/")
+    | 'b' => Parse/pure("\u{8}")
+    | 'f' => Parse/pure("\u{C}")
+    | 'n' => Parse/pure("\n")
+    | 'r' => Parse/pure("\r")
+    | 't' => Parse/pure("\t")
     | 'u' => parse_unicode
     | _ => Parse/fail("unknown escape")
     end;
 
-let parse_str_escape: Parse(Bytes, Bytes) =
-    let _ = Parse/bytes/expect('\\')!;
+let parse_str_escape: Parse(Str, Str) =
+    let _ = Parse/text/expect('\\')!;
     Parse/commit(escape_fields);
 
-let parse_str_segment: Parse(Bytes, Bytes) =
-    Parse/bytes/take_while(is_unescaped);
+let parse_str_segment: Parse(Str, Str) =
+    Parse/text/take_while(is_unescaped);
 
 --- A raw control character, refused where it stands: declining here would end the string's body, and the report would name the closing quote the string never reached.
-let parse_str_control: Parse(Bytes, Bytes) =
-    let next = Parse/bytes/peek!;
+let parse_str_control: Parse(Str, Str) =
+    let next = Parse/text/peek!;
     match next
-    | some(byte) =>
-        match Byte/to_nat(byte) < 0x20
+    | some(c) =>
+        match Char/to_nat(c) < 0x20
         | true => Parse/commit(Parse/fail("unescaped control character"))
         | false => Parse/fail("no control character")
         end
     | none() => Parse/fail("no control character")
     end;
 
-let parse_str_body: Parse(Bytes, List(Bytes)) =
+let parse_str_body: Parse(Str, List(Str)) =
     Parse/many0(Parse/or(parse_str_escape, Parse/or(parse_str_control, parse_str_segment)));
 
-let parse_raw_str: Parse(Bytes, Str) =
-    let _ = Parse/bytes/expect('"')!;
-    let chunks = parse_str_body!;
-    let _ = Parse/bytes/expect('"')!;
-    match Str/of_bytes(Bytes/flatten(chunks))
-    | success(s) => Parse/pure(s)
-    | failure(_) => Parse/fail("invalid UTF-8 in string")
-    end;
+--- A string: the pieces of the input between its escapes, and the character each escape names, joined. Every piece is text because the input is, so nothing is checked again.
+let parse_raw_str: Parse(Str, Str) =
+    let _ = Parse/text/expect('"')!;
+    let pieces = parse_str_body!;
+    let _ = Parse/text/expect('"')!;
+    Parse/pure(Str/flatten(pieces));
 
-let parse_str_value: Parse(Bytes, Json) =
+let parse_str_value: Parse(Str, Json) =
     Parse/map(parse_raw_str, (s) => Json/str(s));
 
-let is_ws(byte: Byte) -> Bool =
-    match Byte/to_nat(byte)
+let is_ws(c: Char) -> Bool =
+    match Char/to_nat(c)
     | ' ' => true
     | '\t' => true
     | '\n' => true
@@ -123,61 +164,67 @@ let is_ws(byte: Byte) -> Bool =
     | _ => false
     end;
 
-let ws: Parse(Bytes, {}) =
-    Parse/map(Parse/bytes/take_while(is_ws), (_) => ());
+let ws: Parse(Str, {}) =
+    Parse/map(Parse/text/take_while(is_ws), (_) => ());
 
-let symbol(b: Byte) -> Parse(Bytes, Byte) =
+let symbol(c: Char) -> Parse(Str, Char) =
     let _ = ws!;
-    Parse/bytes/expect(b);
+    Parse/text/expect(c);
+
+--- The next character without consuming it; declines at the end of the input.
+let peek_char: Parse(Str, Char) =
+    let next = Parse/text/peek!;
+    match next | some(c) => Parse/pure(c) | none() => Parse/fail("unexpected end of input") end;
 
 let bracketed(
     @A: Type,
-    open: Byte,
-    elem: Parse(Bytes, A),
-    close: Byte,
+    open: Char,
+    elem: Parse(Str, A),
+    close: Char,
     after: Str,
-) -> Parse(Bytes, List(A)) =
+) -> Parse(Str, List(A)) =
     let _ = symbol(open)!;
     let _ = ws!;
-    let byte = Parse/bytes/peek_byte!;
-    match byte == close
-    | true => Parse/map(Parse/bytes/byte, (_) => [])
+    let next = peek_char!;
+    match next == close
+    | true => Parse/map(Parse/text/char, (_) => [])
     | false =>
         let elems = Parse/commit(Parse/sep_by1(elem, symbol(',')))!;
         let _ = Parse/label(symbol(close), after)!;
         Parse/pure(elems)
     end;
 
-let is_num_start(byte: Byte) -> Bool =
-    match Byte/to_nat(byte) | '-' => true | _ => Nat/in_range(Byte/to_nat(byte), '0', '9') end;
-
-let value: Parse(Bytes, Json) =
+let value: Parse(Str, Json) =
     let _ = ws!;
-    let byte = Parse/bytes/peek_byte!;
-    match Byte/to_nat(byte)
+    let next = peek_char!;
+    match Char/to_nat(next)
     | 'n' => parse_null
     | 't' => parse_true_val
     | 'f' => parse_false_val
     | '"' => parse_str_value
     | '[' => parse_arr
     | '{' => parse_obj
-    | _ => match is_num_start(byte) | true => parse_num | false => Parse/fail("expected value") end
+    | _ =>
+        match next == '-' || Char/is_digit(next)
+        | true => parse_num
+        | false => Parse/fail("expected value")
+        end
     end
-and parse_arr: Parse(Bytes, Json) =
+and parse_arr: Parse(Str, Json) =
     Parse/map(bracketed('[', value, ']', "expected ',' or ']'"), (elems) => Json/arr(elems))
-and parse_obj: Parse(Bytes, Json) =
+and parse_obj: Parse(Str, Json) =
     Parse/map(bracketed('{', parse_pair, '}', "expected ',' or '}'"), (pairs) => Json/obj(pairs))
-and parse_pair: Parse(Bytes, {Str, Json}) =
+and parse_pair: Parse(Str, {Str, Json}) =
     let _ = ws!;
     let key = parse_raw_str!;
     Parse/commit(member_value(key))
-and member_value(key: Str) -> Parse(Bytes, {Str, Json}) =
+and member_value(key: Str) -> Parse(Str, {Str, Json}) =
     let _ = symbol(':')!;
     let val = value!;
     Parse/pure((key, val));
 
 --- A whole document, surrounding whitespace included; anything after the value is refused.
-pub let decode: Parse(Bytes, Json) =
+pub let decode: Parse(Str, Json) =
     let parsed = value!;
     let _ = ws!;
     let _ = Parse/eof()!;

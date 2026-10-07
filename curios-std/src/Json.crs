@@ -5,8 +5,8 @@ pub induct Json: pub Type
 | null()
 --- `true` or `false`.
 | bool(Bool)
---- A number.
-| num(Flt)
+--- A number, which is finite: JSON spells no infinity and no NaN, so a float that is one has no `num`. A literal's proof discharges by reduction, and `Flt/finite` answers a computed float's.
+| num(value: Flt, @finite: Flt/Finite(value))
 --- A string.
 | str(Str)
 --- An array, in order.

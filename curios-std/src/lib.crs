@@ -215,7 +215,7 @@ pub use Fmt/{let Fmt};
 pub mod Parse;
 pub use Parse/{let Parse};
 
---- JSON, decoded and encoded through `Parse`. Numbers are binary64 `Flt`: an integer past `2^53` may decode inexactly, and a non-finite value encodes as `null`.
+--- JSON, decoded from text and encoded through `Parse`. Numbers are binary64 `Flt` and finite: an integer past `2^53` may decode inexactly, a number past binary64's range is refused, and a float that is not finite has no JSON value.
 pub mod Json;
 pub use Json/{let Json};
 

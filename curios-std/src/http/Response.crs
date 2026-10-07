@@ -69,9 +69,12 @@ pub let ok(r: Response) -> Bool =
 pub let text(r: Response) -> Result(Nat, Str) =
     Str/of_bytes(r.body);
 
---- The body decoded as JSON, or the decoder's refusal.
+--- The body decoded as JSON, or the decoder's refusal. A body that is not UTF-8 is refused where it stops being text.
 pub let json(r: Response) -> Result(Parse/Error, Json) =
-    Parse/run(Json/decode, r.body);
+    match Str/of_bytes(r.body)
+    | success(text) => Parse/run(Json/decode, text)
+    | failure(at) => Result/failure(Parse/Error/declined("a JSON body is text", at))
+    end;
 
 --- A reply with `code`, its usual reason, `Content-Type` set to `kind`, and `body`. A status that carries no content takes no body but the empty one.
 pub let of(

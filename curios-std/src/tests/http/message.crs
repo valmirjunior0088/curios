@@ -1,5 +1,5 @@
 -- The messages a program makes: the method, the fields, the status, and the bytes a request and a reply are written as.
-use /std/{Str, Bytes, List, Option, Result, Show, Test, Html};
+use /std/{Str, Bytes, List, Option, Result, Parse, Show, Test, Html};
 use /std/http/{Method, Url, Field, Status, Request, Response, Limits};
 use /std/http/Field/{Name, Value};
 use /std/http/Url/{Scheme};
@@ -137,6 +137,24 @@ test a_made_reply_reads_back =
         Test/equal(
             Response/header(Response/redirect(Url/lit("http://h/next")), "Location"),
             Option/some(Value/lit("http://h/next")))]);
+
+-- A body that is not UTF-8 is no JSON text, and `Response/json` refuses it where it stops being text: the four `n_number_*` cases of JSONTestSuite whose bytes are not UTF-8, each at the offset its ill-formed byte stands at, beside a body that reads.
+test a_json_body_that_is_not_text_is_refused_where_it_stops =
+    let answer(body: Bytes) -> Str =
+        match Response/json(Response/of(200, "application/json", body))
+        | success(_) => "read"
+        | failure(why) => Parse/Error/to_str(why)
+        end;
+    Test/equal(
+        Str/join("|", [
+            answer(x['[', '1', '2', '3', 0xE5, ']']),
+            answer(x['[', '1', 'e', '1', 0xE5, ']']),
+            answer(x['[', '0', 0xE5, ']', '\n']),
+            answer(x['[', '1', 'e', 0xE5, ']']),
+            answer(Str/to_bytes("[1, 2]"))]),
+        Str/flatten([
+            "a JSON body is text at byte 4|a JSON body is text at byte 4|",
+            "a JSON body is text at byte 2|a JSON body is text at byte 3|read"]));
 
 -- A name is a token and a value holds no control octet but the tab: text met at run time is read as one or refused, octets past ASCII are a value's to hold, and names are one name whatever their case.
 test a_field_met_at_run_time_is_read_or_refused =
