@@ -1283,12 +1283,12 @@ let input = /std/read()!;
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
-    | some(s) =>
+    | success(s) =>
         match Toml/decode(s): (_) => Io({})
         | success(m) => /std/print(Nat/to_str(Map/len(m)))
         | failure(e) => /std/print(Toml/Error/to_str(e))
         end
-    | none() => /std/print("invalid utf-8")
+    | failure(_) => /std/print("invalid utf-8")
     end
 | none() => /std/print("no input")
 end
@@ -1387,12 +1387,12 @@ fn death_birth_classifier_pins_the_canonical_pair() {
         match input: (_) => Io({})
         | some(bytes) =>
             match Str/of_bytes(bytes): (_) => Io({})
-            | some(s) =>
+            | success(s) =>
                 match Nat/of_str(Str/trim(s)): (_) => Io({})
                 | some(n) => /std/print(Nat/to_str(total(step(build(n, Chain/nil()), Chain/nil()), 0)))
                 | none() => /std/print("bad input")
                 end
-            | none() => /std/print("invalid utf-8")
+            | failure(_) => /std/print("invalid utf-8")
             end
         | none() => /std/print("no input")
         end

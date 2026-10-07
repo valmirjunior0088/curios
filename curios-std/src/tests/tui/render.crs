@@ -1,13 +1,13 @@
 -- The renderer: what a first frame writes, what a diff writes, and what it skips.
-use /std/{Nat, Str, Bytes, Vec, Option, Test, Tui};
+use /std/{Nat, Str, Bytes, Vec, Option, Result, Test, Tui};
 use /std/Tui/{Style, Tile, Frame};
 
 let esc: Str =
-    Option/unwrap_or(Str/of_bytes(x[0x1B]), "");
+    Result/unwrap_or(Str/of_bytes(x[0x1B]), "");
 
 -- The bytes as text, with `ESC` shown as `^[`, so an expectation is readable.
 let shown(b: Bytes) -> Str =
-    Str/replace(Option/unwrap_or(Str/of_bytes(b), "?"), esc, "^[");
+    Str/replace(Result/unwrap_or(Str/of_bytes(b), "?"), esc, "^[");
 
 let none_at: Option({x: Nat, y: Nat}) =
     Option/none();

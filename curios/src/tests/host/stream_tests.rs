@@ -114,7 +114,7 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
     let stream = |answer: &str| {
         format!(
             r#"
-            use /std/{{Nat, Bytes, Str, List, Option, Cell, Async, Io, print}};
+            use /std/{{Nat, Bytes, Str, List, Result, Cell, Async, Io, print}};
             struct Pieces: Type {{ List({{Cell({{}}), Bytes}}) }}
             let next(ps: List({{Cell({{}}), Bytes}})) -> Io(Io/Chunk) =
                 match ps
@@ -138,7 +138,7 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
             let d = piece(Str/to_bytes("\n"))!;
             let r = Async/read_until(@Io, Pieces {{ [a, b, c, d] }}, '\n')!;
             match r
-            | success(bytes) => print(Option/unwrap_or(Str/of_bytes(bytes), "?"))
+            | success(bytes) => print(Result/unwrap_or(Str/of_bytes(bytes), "?"))
             | failure(_) => print("error")
             end
             "#
@@ -162,12 +162,12 @@ fn lines_read_across_the_chunks_a_stream_arrives_in() {
         use /std/{Str, Bytes, Option, Result, Async, Io, print};
         let line(r: Result(Io/Error, Option(Bytes))) -> Str =
             match r
-            | success(some(b)) => Option/unwrap_or(Str/of_bytes(b), "?")
+            | success(some(b)) => Result/unwrap_or(Str/of_bytes(b), "?")
             | success(none()) => "<end>"
             | failure(_) => "<error>"
             end;
         let field(r: Result(Io/Error, Bytes)) -> Str =
-            match r | success(b) => Option/unwrap_or(Str/of_bytes(b), "?") | failure(_) => "<error>" end;
+            match r | success(b) => Result/unwrap_or(Str/of_bytes(b), "?") | failure(_) => "<error>" end;
         let fiber: Async({}) =
             let a = Async/read_line(@Async, Io/stdin)!;
             let b = Async/read_line(@Async, Io/stdin)!;

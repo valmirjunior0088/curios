@@ -1,4 +1,4 @@
-use /std/{Result, Nat, Byte, Bytes, Str, Bool, Option, Parse};
+use /std/{Result, Nat, Byte, Bytes, Char, Str, Bool, Option, Parse};
 use /std/Bool/{True, False, Holds};
 use /std/Parse/{Of, At, Pos, Input, Error};
 
@@ -47,13 +47,14 @@ pub let peek: Parse(Bytes, Option(Byte)) =
     Parse/or(Parse/map(peek_byte, (b) => Option/some(b)), Parse/pure(Option/none()));
 
 let byte_spelling(b: Byte) -> Str =
-    match Str/of_bytes(x[b])
-    | some(s) =>
+    let numbered = Str/concat("byte ", Nat/to_str(Byte/to_nat(b)));
+    match Char/of_ascii(b)
+    | some(c) =>
         match Nat/in_range(Byte/to_nat(b), '!', '~')
-        | true => Str/flatten(["'", s, "'"])
-        | false => Str/concat("byte ", Nat/to_str(Byte/to_nat(b)))
+        | true => Str/flatten(["'", Str/of_char(c), "'"])
+        | false => numbered
         end
-    | none() => Str/concat("byte ", Nat/to_str(Byte/to_nat(b)))
+    | none() => numbered
     end;
 
 --- The byte `expected`; declines on any other.

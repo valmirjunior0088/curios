@@ -86,8 +86,8 @@ match input: (_) => Io({})
     match Parse/run(top, bytes): (_) => Io({})
     | success(out) =>
         match Str/of_bytes(out): (_) => Io({})
-        | some(s) => /std/print(s)
-        | none() => /std/print("invalid utf-8\n")
+        | success(s) => /std/print(s)
+        | failure(_) => /std/print("invalid utf-8\n")
         end
     | failure(e) => /std/print(e.message)
     end

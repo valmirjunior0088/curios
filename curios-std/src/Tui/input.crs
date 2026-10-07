@@ -136,8 +136,8 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
             | none() => Step/cut()
             | some(within) =>
                 match Str/of_bytes(Bytes/slice(input, i, len, @within))
-                | none() => Step/emit(Option/none(), i + 1)
-                | some(s) =>
+                | failure(_) => Step/emit(Option/none(), i + 1)
+                | success(s) =>
                     match Str/At/try_next(s, Str/At/start(s))
                     | none() => Step/emit(Option/none(), i + len)
                     | some(first) => Step/emit(key(Key/plain(Code/char(first.char))), i + len)
@@ -165,8 +165,8 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
         | some(marker) =>
             let before = Bytes/slice(input, 0, marker.at);
             match Str/of_bytes(Bytes/drop(before, start, @marker.onward))
-            | some(s) => Step/emit(Option/some(Event/paste(s)), marker.at + 6)
-            | none() => Step/emit(Option/none(), marker.at + 6)
+            | success(s) => Step/emit(Option/some(Event/paste(s)), marker.at + 6)
+            | failure(_) => Step/emit(Option/none(), marker.at + 6)
             end
         end;
     let csi(i: Nat, j: Nat) -> Step(E) =

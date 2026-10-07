@@ -65,8 +65,8 @@ fn region_mixes_action_types() {
         match Parse/run(parser, /std/Str/to_bytes("AB")) : (_) => /std/Io({})
         | success(s) =>
             match Str/of_bytes(s) : (_) => /std/Io({})
-            | some(t) => /std/print(t)
-            | none() => /std/print("invalid utf-8")
+            | success(t) => /std/print(t)
+            | failure(_) => /std/print("invalid utf-8")
             end
         | failure(e) => /std/print(e.message)
         end

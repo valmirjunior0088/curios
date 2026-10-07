@@ -25,8 +25,8 @@ fn print_partial_evaluation_reduces_residual() {
         match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
         | chunk(bytes, @_) =>
             match Str/of_bytes(bytes) : (_) => /std/Io({})
-            | some(s) => Fmt/print("% is %")(Str/trim(s))(30)
-            | none() => /std/print("invalid input")
+            | success(s) => Fmt/print("% is %")(Str/trim(s))(30)
+            | failure(_) => /std/print("invalid input")
             end
         | eof() => /std/print("invalid input")
         | error(_) => /std/print("invalid input")
@@ -73,8 +73,8 @@ fn print_runtime_args_specializes_spine() {
         match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
         | chunk(bytes, @_) =>
             match Str/of_bytes(bytes) : (_) => /std/Io({})
-            | some(s) => Fmt/print("% is %")(Str/trim(s))(30)
-            | none() => /std/print("invalid input")
+            | success(s) => Fmt/print("% is %")(Str/trim(s))(30)
+            | failure(_) => /std/print("invalid input")
             end
         | eof() => /std/print("invalid input")
         | error(_) => /std/print("invalid input")
@@ -219,8 +219,8 @@ fn a_runtime_format_string_is_refused_by_its_written_type() {
         match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
         | chunk(bytes, @_) =>
             match Str/of_bytes(bytes) : (_) => /std/Io({})
-            | some(s) => Fmt/print(s)(3)
-            | none() => /std/print("invalid input")
+            | success(s) => Fmt/print(s)(3)
+            | failure(_) => /std/print("invalid input")
             end
         | eof() => /std/print("invalid input")
         | error(_) => /std/print("invalid input")

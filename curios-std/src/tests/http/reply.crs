@@ -8,7 +8,9 @@ let read(method: Method, s: Str) -> Result(Refusal, Response) =
 
 -- What a reply to a `GET` that reads is: its code and its body as text.
 let seen(s: Str) -> Result(Refusal, {Nat, Option(Str)}) =
-    Result/map_success(read(Method/get(), s), (r) => (r.status.code, Str/of_bytes(r.body)));
+    Result/map_success(
+        read(Method/get(), s),
+        (r) => (r.status.code, Result/to_option(Str/of_bytes(r.body))));
 
 let is(s: Str, code: Nat, body: Str) -> Test =
     Test/equal(seen(s), Result/success((code, Option/some(body))));
@@ -116,7 +118,7 @@ test a_reply_head_is_read_as_its_grammar_spells_it =
                 read(
                     Method/get(),
                     "HTTP/1.1 200 OK\r\nX-A: one\r\n two\r\n\tthree\r\nContent-Length: 2\r\n\r\nhi"),
-                (r) => (Response/header(r, "x-a"), Str/of_bytes(r.body))),
+                (r) => (Response/header(r, "x-a"), Result/to_option(Str/of_bytes(r.body)))),
             Result/success((Option/some(Value/lit("one two three")), Option/some("hi")))),
         Test/equal(
             Result/map_success(

@@ -29,7 +29,10 @@ let present(headers: List(Field), name: Str) -> Bool =
     List/any(headers, (f: Field) => Name/is(f.name, name));
 
 let is_chunked(coding: Bytes) -> Bool =
-    match Str/of_bytes(coding) | some(s) => Str/eql_ascii_ci(s, "chunked") | none() => false end;
+    match Str/of_bytes(coding)
+    | success(s) => Str/eql_ascii_ci(s, "chunked")
+    | failure(_) => false
+    end;
 
 -- What the transfer codings say: nothing where the field is absent, and otherwise whether they are `chunked` alone, end in `chunked` after another coding, or do not end in it.
 induct Codings: Type

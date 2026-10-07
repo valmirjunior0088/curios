@@ -648,8 +648,8 @@ let decode(raw: List(Bytes)) -> Result(Nat, List(Str)) =
         | [] => Result/success([])
         | [b, ..more] =>
             match Str/of_bytes(b)
-            | none() => Result/failure(at)
-            | some(s) =>
+            | failure(_) => Result/failure(at)
+            | success(s) =>
                 let tail = walk(more, at + 1)!;
                 Result/success([s, ..tail])
             end

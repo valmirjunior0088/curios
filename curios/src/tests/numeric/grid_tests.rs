@@ -56,8 +56,8 @@ let input = /std/read()!;
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
-    | some(s) => print(Str/join("\n", List/map(Str/split(Str/trim(s), ";"), row)))
-    | none() => print("invalid utf-8")
+    | success(s) => print(Str/join("\n", List/map(Str/split(Str/trim(s), ";"), row)))
+    | failure(_) => print("invalid utf-8")
     end
 | none() => print("no input")
 end

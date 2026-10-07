@@ -88,7 +88,7 @@ fn a_collapsed_wrapper_survives_storage_and_retrieval() {
         match input : (_) => Io({})
         | some(bytes) =>
             match Str/of_bytes(bytes) : (_) => Io({})
-            | some(s) =>
+            | success(s) =>
                 match Nat/of_str(Str/trim(s)) : (_) => Io({})
                 | some(d) =>
                     let stored : List(Meters) = [Meters/m(d), Meters/m(d + 1)];
@@ -110,7 +110,7 @@ fn a_collapsed_wrapper_survives_storage_and_retrieval() {
                     /std/print(Nat/to_str(sum + extra + z))
                 | none() => /std/print("bad input")
                 end
-            | none() => /std/print("bad utf8")
+            | failure(_) => /std/print("bad utf8")
             end
         | none() => /std/print("no input")
         end
@@ -146,12 +146,12 @@ fn an_immediate_leaf_tree_builds_and_sums_at_runtime() {
         match input : (_) => Io({})
         | some(bytes) =>
             match Str/of_bytes(bytes) : (_) => Io({})
-            | some(s) =>
+            | success(s) =>
                 match Nat/of_str(Str/trim(s)) : (_) => Io({})
                 | some(d) => /std/print(Nat/to_str(sum(build(d, 1))))
                 | none() => /std/print("bad input")
                 end
-            | none() => /std/print("bad utf8")
+            | failure(_) => /std/print("bad utf8")
             end
         | none() => /std/print("no input")
         end

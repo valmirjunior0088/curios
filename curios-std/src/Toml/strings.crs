@@ -236,8 +236,8 @@ let ml_literal_body(acc: Bytes) -> Parse(Bytes, Bytes) =
 
 let str_of(b: Bytes) -> Parse(Bytes, Str) =
     match Str/of_bytes(b)
-    | some(s) => Parse/pure(s)
-    | none() => Parse/fail("invalid UTF-8 in string")
+    | success(s) => Parse/pure(s)
+    | failure(_) => Parse/fail("invalid UTF-8 in string")
     end;
 
 --- A basic string, delimited by `"`, with its escapes resolved.

@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Bool, Char, Flt, Nat, Parse, Option, List, Json};
+use /std/{Bytes, Byte, Str, Bool, Char, Flt, Nat, Parse, Option, Result, List, Json};
 
 let is_num_byte(byte: Byte) -> Bool =
     match Byte/to_nat(byte)
@@ -21,7 +21,7 @@ let parse_false_val: Parse(Bytes, Json) =
 
 let parse_num: Parse(Bytes, Json) =
     let chunk = Parse/bytes/take_while(is_num_byte)!;
-    match Flt/of_str(Option/unwrap_or(Str/of_bytes(chunk), ""))
+    match Flt/of_str(Result/unwrap_or(Str/of_bytes(chunk), ""))
     | some(value) => Parse/pure(Json/num(value))
     | none() => Parse/fail("expected number")
     end;
@@ -107,8 +107,8 @@ let parse_raw_str: Parse(Bytes, Str) =
     let chunks = parse_str_body!;
     let _ = Parse/bytes/expect('"')!;
     match Str/of_bytes(Bytes/flatten(chunks))
-    | some(s) => Parse/pure(s)
-    | none() => Parse/fail("invalid UTF-8 in string")
+    | success(s) => Parse/pure(s)
+    | failure(_) => Parse/fail("invalid UTF-8 in string")
     end;
 
 let parse_str_value: Parse(Bytes, Json) =

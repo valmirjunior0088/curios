@@ -20,7 +20,7 @@ fn program(body: &str) -> String {
         let show_unit(r: Result(Io/Error, {{}})) -> Str =
             match r | success(_) => "ok" | failure(e) => Show/show(e) end;
         let text(b: Bytes) -> Str =
-            Option/unwrap_or(Str/of_bytes(b), "?");
+            Result/unwrap_or(Str/of_bytes(b), "?");
         let program: Try(Io, Io/Error, Str) =
             {body};
         match Try/run(program)!

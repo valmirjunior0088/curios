@@ -12,7 +12,7 @@ fn run_drains_a_real_child_through_the_scheduler() {
     let source = format!(
         r#"
         use /std/{{Str, Bytes, Option, Result, Show, Try, Async, Io, Path, File, Command}};
-        let text(b: Bytes) -> Str = Option/unwrap_or(Str/of_bytes(b), "?");
+        let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
         let program: Try(Async, Io/Error, {{}}) =
             let e = Command/run(Command/new("/bin/echo", ["hi"]))!;
             let c = Command/run(Command {{ ..Command/new("/bin/cat", []), stdin = Command/Stdio/null() }})!;

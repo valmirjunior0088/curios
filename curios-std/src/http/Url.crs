@@ -47,7 +47,10 @@ let until(stops: List(Byte)) -> (Byte) -> Bool =
     (byte) => Bool/not(List/any(stops, (stop) => byte == stop));
 
 let text(b: Bytes) -> Parse(Bytes, Str) =
-    match Str/of_bytes(b) | some(s) => Parse/pure(s) | none() => Parse/fail("a URL is text") end;
+    match Str/of_bytes(b)
+    | success(s) => Parse/pure(s)
+    | failure(_) => Parse/fail("a URL is text")
+    end;
 
 -- Whether the wire carries `b` as it is: visible ASCII.
 let visible(b: Byte) -> Bool =
@@ -305,7 +308,9 @@ let decode_at(b: Bytes, i: Nat, acc: Bytes, fuel: Nat) -> Option(Bytes) =
 --- `component` percent-decoded, `+` read as a space, or `none` when an escape is malformed or the result is not text.
 pub let decode(component: Str) -> Option(Str) =
     let b = Str/to_bytes(component);
-    Option/bind(decode_at(b, 0, x[], Bytes/len(b) + 1), Str/of_bytes);
+    Option/bind(
+        decode_at(b, 0, x[], Bytes/len(b) + 1),
+        (decoded) => Result/to_option(Str/of_bytes(decoded)));
 
 --- The query as decoded pairs: `a=1&b=x+y` is `[("a", "1"), ("b", "x y")]`. A pair without `=` is a name with an empty value and an empty piece — `a=1&&b=2`, or a query that is empty — is no pair, as the form encoding reads them; `none` where a name or a value does not decode, since a query read short of a pair is not the query that was sent.
 pub let query_pairs(u: Url) -> Option(List({Str, Str})) =

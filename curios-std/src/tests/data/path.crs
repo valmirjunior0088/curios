@@ -30,7 +30,7 @@ test the_extension_follows_the_last_dot_of_a_name =
 test a_path_that_is_not_utf8_is_a_path_like_any_other =
     let odd = Path/of_bytes(x[0xFF, 'a']);
     let full = Path/join(p("dir"), odd);
-    let decodes = match Path/to_str(odd) | some(_) => "text" | none() => "bytes" end;
+    let decodes = match Path/to_str(odd) | success(_) => "text" | failure(_) => "bytes" end;
     Test/all([
         Test/equal(Path/name(full), odd),
         Test/equal(decodes, "bytes"),

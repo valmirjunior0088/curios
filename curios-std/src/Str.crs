@@ -1,4 +1,4 @@
-use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Show, Spell, Ordering, Ord};
+use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Result, Eq, Show, Spell, Ordering, Ord};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql, Cmp};
 
@@ -272,11 +272,25 @@ pub struct Str: pub Type {
 pub let to_bytes(s: Str) -> Bytes =
     s.bytes;
 
---- The text the bytes encode, or `none` unless they are UTF-8.
-pub let of_bytes(b: Bytes) -> Option(Str) =
+--- How many bytes of what a scan has read are text once it has read `rest` from `sc`: `last`, where it last stood between characters, when it meets a byte the encoding does not admit or ends inside a character. `read` is how many bytes lie before `rest`.
+---
+--- Each byte is put to `scan_from` by itself rather than to `step`: only bytes that are not text are read here, and a second caller of `step` would keep it from being folded into the scan every `of_bytes` runs.
+let text_before(sc: Scan, rest: Bytes, read: Nat, last: Nat) -> Nat =
+    match rest
+    | x[] => last
+    | x[h, ..t] =>
+        match scan_from(sc, x[h])
+        | lead() => text_before(Scan/lead(), t, read + 1, read + 1)
+        | cont(rem, lo, hi) => text_before(Scan/cont(rem, lo, hi), t, read + 1, last)
+        | bad() => last
+        end
+    end;
+
+--- The text the bytes encode, or where they stop being text: the length of their longest prefix that is well-formed UTF-8, which is where the first character that is not begins.
+pub let of_bytes(b: Bytes) -> Result(Nat, Str) =
     match Valid/try(Scan/lead(), b)
-    | some(v) => Option/some(Str { bytes = b })
-    | none() => Option/none()
+    | some(v) => Result/success(Str { bytes = b })
+    | none() => Result/failure(text_before(Scan/lead(), b, 0, 0))
     end;
 
 --- The one-character string.

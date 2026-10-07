@@ -38,8 +38,8 @@ fn an_operator_pins_a_character_operand_from_context() {
 fn a_packed_literal_takes_character_atoms() {
     assert_eq!(
         run(r#"
-        use /std/{Bytes, Str, Option, Io};
-        /std/print(Option/unwrap_or(Str/of_bytes(x['H', 'i', '\n']), ""))
+        use /std/{Bytes, Str, Result, Io};
+        /std/print(Result/unwrap_or(Str/of_bytes(x['H', 'i', '\n']), ""))
         "#),
         b"Hi\n"
     );

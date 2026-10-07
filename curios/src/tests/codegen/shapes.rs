@@ -235,12 +235,12 @@ let input = /std/read()!;
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
-    | some(s) =>
+    | success(s) =>
         match Nat/of_str(Str/trim(s)): (_) => Io({})
         | some(r) => /std/print(Str/concat(Nat/to_str(rounds(r, build(65536, []), 0)), "\n"))
         | none() => /std/print("bad\n")
         end
-    | none() => /std/print("utf8\n")
+    | failure(_) => /std/print("utf8\n")
     end
 | none() => /std/print("none\n")
 end
@@ -272,12 +272,12 @@ let input = /std/read()!;
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
-    | some(s) =>
+    | success(s) =>
         match Nat/of_str(Str/trim(s)): (_) => Io({})
         | some(r) => /std/print(Str/concat(Nat/to_str(rounds(r, build(65536, []), 0)), "\n"))
         | none() => /std/print("bad\n")
         end
-    | none() => /std/print("utf8\n")
+    | failure(_) => /std/print("utf8\n")
     end
 | none() => /std/print("none\n")
 end

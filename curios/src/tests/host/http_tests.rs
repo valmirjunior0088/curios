@@ -359,10 +359,10 @@ fn a_reply_is_written_finished_and_read_past_before_the_close(server: &Compiled)
 
 /// A client that asks `example.com` with `GET` and `head.example` with `HEAD`, and says of each what came of it on a line of its own: the status and the content, or the failure with what it carries.
 const CLIENT: &str = r#"
-    use /std/{Str, Bytes, Nat, Option, Show, Try, Async, http};
+    use /std/{Str, Bytes, Nat, Option, Result, Show, Try, Async, http};
     use /std/http/{Method, Url, Request};
     let text(b: Bytes) -> Str =
-        Option/unwrap_or(Str/of_bytes(b), "not text");
+        Result/unwrap_or(Str/of_bytes(b), "not text");
     let told(method: Method, url: Url) -> Async(Str) =
         let r =
             Try/run(http/perform(Request { method = method, url = url, headers = [], body = x[] }))!;

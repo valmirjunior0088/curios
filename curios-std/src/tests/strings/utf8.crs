@@ -3,12 +3,12 @@ use /std/{Str, Char, Nat, Bool, Bytes, List, Test};
 
 -- Whether `of_bytes` refuses these bytes, which is what every rejection below asks.
 let rejected(bytes: Bytes) -> Bool =
-    match Str/of_bytes(bytes) | some(_) => false | none() => true end;
+    match Str/of_bytes(bytes) | success(_) => false | failure(_) => true end;
 
 test of_bytes_accepts_multibyte_utf8 =
     match Str/of_bytes(x[0xC3, 0xA9]): (_) => Test
-    | some(s) => Test/equal(s, "é")
-    | none() => Test/assert(false)
+    | success(s) => Test/equal(s, "é")
+    | failure(_) => Test/assert(false)
     end;
 
 -- An invalid lead byte fails `is_utf8`, so `of_bytes` answers `none`.
@@ -25,6 +25,34 @@ test of_bytes_rejects_every_invalid_shape =
                     0x80,
                     0x80], x[0x80], x[0xC2], x[0xE2,
                     0x82], x[0xF0, 0x9F, 0x98]], true, (bytes, ok) => ok && rejected(bytes)));
+
+-- Where text stops: `of_bytes` answers the length of the longest valid prefix, which is where the first character that is not text begins, as Rust's `Utf8Error::valid_up_to` does. Each shape — a truncated sequence, two overlong ones, a surrogate, a value past `U+10FFFF` and a stray continuation byte — stands at the start, between two characters and at the end, after a two-byte character; two more cut a four-byte character short and run one byte past it.
+test of_bytes_answers_where_text_stops =
+    let stops(bytes: Bytes) -> Str =
+        match Str/of_bytes(bytes) | success(_) => "text" | failure(at) => Nat/to_str(at) end;
+    let around(bad: Bytes) -> Str =
+        Str/join(",", [stops(bad), stops(x['a', ..bad, 'b']), stops(x[0xC3, 0xA9, 'b', ..bad])]);
+    let truncated = around(x[0xE2, 0x82]);
+    let overlong_two = around(x[0xC0, 0xAF]);
+    let overlong_three = around(x[0xE0, 0x80, 0x80]);
+    let surrogate = around(x[0xED, 0xA0, 0x80]);
+    let past_the_last = around(x[0xF4, 0x90, 0x80, 0x80]);
+    let continuation = around(x[0x80]);
+    let cut_short = stops(x['a', 0xF0, 0x9F, 0x98, 'b']);
+    let one_past = stops(x[0xF0, 0x9F, 0x98, 0x80, 0x80]);
+    let whole = stops(x['a', 0xC3, 0xA9]);
+    Test/equal(
+        Str/join("|", [
+            truncated,
+            overlong_two,
+            overlong_three,
+            surrogate,
+            past_the_last,
+            continuation,
+            cut_short,
+            one_past,
+            whole]),
+        "0,1,3|0,1,3|0,1,3|0,1,3|0,1,3|0,1,3|1|4|text");
 
 -- The surrogate range and everything above `U+10FFFF` are excluded, and the scalars either side of each boundary are admitted.
 test char_of_nat_accepts_exact_unicode_scalar_boundaries =

@@ -188,7 +188,7 @@ fn child_program(body: &str) -> String {
         r#"
         use /std/{{Str, Bytes, Nat, Option, Result, Show, Try, Async, Io, Path, Command}};
         use /std/Command/{{Child}};
-        let text(b: Bytes) -> Str = Option/unwrap_or(Str/of_bytes(b), "?");
+        let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
         let program: Try(Async, Io/Error, Str) =
             {body};
         let fiber: Async({{}}) =

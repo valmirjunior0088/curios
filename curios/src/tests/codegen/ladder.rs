@@ -433,9 +433,9 @@ let answer: Str =
         | none() => "0"
         | some(s) =>
             match Str/of_bytes(m)
-            | none() => "0"
-            | some(decoder) =>
-                match Option/bind(Str/of_bytes(s), Nat/of_str)
+            | failure(_) => "0"
+            | success(decoder) =>
+                match Option/bind(Result/to_option(Str/of_bytes(s)), Nat/of_str)
                 | none() => "0"
                 | some(n) => Nat/to_str(work(decoder, n))
                 end

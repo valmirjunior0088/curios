@@ -596,7 +596,7 @@ fn an_implicit_born_under_an_arms_binder_is_re_expressed_over_the_match_to_type_
                 end;
             let out = read!;
             let bytes = out!;
-            Try/pure(Option/unwrap_or(Str/of_bytes(bytes), "?"));
+            Try/pure(Result/unwrap_or(Str/of_bytes(bytes), "?"));
 
         let fiber: Async({}) =
             let r = Try/run(program(Result/success(Str/to_bytes("read"))))!;

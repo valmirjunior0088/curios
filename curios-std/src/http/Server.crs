@@ -30,8 +30,8 @@ let expects_continue(head: Request/Head) -> Bool =
             Field/members(head.headers, "Expect"),
             (member) =>
                 match Str/of_bytes(member)
-                | some(expectation) => Str/eql_ascii_ci(expectation, "100-continue")
-                | none() => false
+                | success(expectation) => Str/eql_ascii_ci(expectation, "100-continue")
+                | failure(_) => false
                 end);
 
 -- How reading a request ended with none for the handler: with the refusal the server answers; with a question about the server itself, `OPTIONS *`, which it answers too; or with nothing to answer — a peer that connected and sent nothing, or a wire that failed.

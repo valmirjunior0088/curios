@@ -40,14 +40,14 @@ let input = /std/read()!;
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
-    | some(s) =>
+    | success(s) =>
         match Nat/of_str(Str/trim(s)): (_) => Io({})
         | some(n) =>
             let r = walk(n, 0, (n + 1) % 65537, Churn { a = 1, b = 2, c = 3, d = 4, e = 5, f = 6 });
             /std/print(Str/concat(Nat/to_str(r.a), "\n"))
         | none() => /std/print("bad input\n")
         end
-    | none() => /std/print("invalid utf-8\n")
+    | failure(_) => /std/print("invalid utf-8\n")
     end
 | none() => /std/print("no input\n")
 end

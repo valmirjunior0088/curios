@@ -107,8 +107,8 @@ satisfy Spell(Head) {
 -- The method `b` spells: malformed where it is no token, and not implemented where it is one this library does not name.
 let method_of(b: Bytes) -> Result(Refusal, Method) =
     match Str/of_bytes(b)
-    | none() => Result/failure(Refusal/malformed("a method is a token"))
-    | some(spelled) =>
+    | failure(_) => Result/failure(Refusal/malformed("a method is a token"))
+    | success(spelled) =>
         match Name/is_token(spelled)
         | false => Result/failure(Refusal/malformed("a method is a token"))
         | true =>
@@ -129,10 +129,10 @@ pub let head_of(bytes: Bytes) -> Result(Refusal, Head) =
         let method = method_of(parts.method)!;
         let headers = syntax/fields(rest, false)!;
         match Str/of_bytes(parts.target)
-        | some(target) =>
+        | success(target) =>
             Result/success(
                 Head { method = method, target = target, version = version, headers = headers })
-        | none() => Result/failure(Refusal/malformed("a request target is text"))
+        | failure(_) => Result/failure(Refusal/malformed("a request target is text"))
         end
     end;
 

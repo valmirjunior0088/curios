@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, Option, List, Show, Spell};
+use /std/{Bytes, Byte, Str, Nat, Bool, Option, Result, List, Show, Spell};
 use /std/ops/{Eql};
 
 --- A path as the host holds it.
@@ -18,8 +18,8 @@ pub let of_str(s: Str) -> Path =
 pub let to_bytes(p: Path) -> Bytes =
     p.0;
 
---- The path as text, or `none` when it is not UTF-8.
-pub let to_str(p: Path) -> Option(Str) =
+--- The path as text, or where it stops being UTF-8, as `Str/of_bytes` answers.
+pub let to_str(p: Path) -> Result(Nat, Str) =
     Str/of_bytes(p.0);
 
 --- Whether the path has no bytes.
@@ -93,13 +93,13 @@ satisfy Eql(Path) {
 
 --- The text when the bytes are UTF-8, the bytes otherwise.
 satisfy Show(Path) {
-    show(p) = match Str/of_bytes(p.0) | some(s) => s | none() => Show/show(p.0) end,
+    show(p) = match Str/of_bytes(p.0) | success(s) => s | failure(_) => Show/show(p.0) end,
 }
 
 satisfy Spell(Path) {
     spell(p) =
         match Str/of_bytes(p.0)
-        | some(s) => Str/flatten(["Path/of_str(", Spell/spell(s), ")"])
-        | none() => Str/flatten(["Path/of_bytes(", Spell/spell(p.0), ")"])
+        | success(s) => Str/flatten(["Path/of_str(", Spell/spell(s), ")"])
+        | failure(_) => Str/flatten(["Path/of_bytes(", Spell/spell(p.0), ")"])
         end,
 }

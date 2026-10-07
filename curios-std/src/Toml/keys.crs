@@ -8,8 +8,8 @@ let key_bare: Parse(Bytes, Str) =
     | true => Parse/fail("expected key")
     | false =>
         match Str/of_bytes(chunk)
-        | some(s) => Parse/pure(s)
-        | none() => Parse/fail("expected key")
+        | success(s) => Parse/pure(s)
+        | failure(_) => Parse/fail("expected key")
         end
     end;
 

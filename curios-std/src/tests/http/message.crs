@@ -26,7 +26,7 @@ test a_method_spells_and_reads =
         Test/equal(Method/of_str("BREW"), Option/none())]);
 
 let wire(b: Bytes) -> Option(Str) =
-    Str/of_bytes(b);
+    Result/to_option(Str/of_bytes(b));
 
 -- A request is written with its target, `Host`, `Connection: close`, and a length only where it has a body or its method always states one; what is written reads back as the request, the fields its renderer wrote beside its own.
 test a_request_is_written_and_reads_back =
@@ -125,7 +125,7 @@ test a_made_reply_reads_back =
                             Response/header(d, "content-length"),
                             Response/header(d, "Content-Type")))),
             Result/success((
-                (Status/of(200), Option/some("hello")),
+                (Status/of(200), Result/success("hello")),
                 (
                     Option/some(Value/lit("5")),
                     Option/some(Value/lit("text/plain; charset=utf-8")))))),
@@ -162,7 +162,9 @@ test a_lists_members_are_read_across_its_lines =
             Field/of("accept", " , c;q=\"1,2\" ,")];
     Test/all([
         Test/equal(
-            List/map(Field/members(fields, "Accept"), Str/of_bytes),
+            List/map(
+                Field/members(fields, "Accept"),
+                (member) => Result/to_option(Str/of_bytes(member))),
             [Option/some("a"), Option/some("b"), Option/some("c;q=\"1,2\"")]),
         Test/equal(Field/members(fields, "Expect"), [])]);
 

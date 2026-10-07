@@ -61,7 +61,7 @@ let input = /std/read()!;
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
-    | some(s) =>
+    | success(s) =>
         match Nat/of_str(Str/trim(s)): (_) => Io({})
         | some(k) =>
             let ballast = total(build(ballast_cells, (k + 2) % 65537, Chain/nil()), 0);
@@ -69,7 +69,7 @@ match input: (_) => Io({})
             /std/print(Str/concat(Nat/to_str((ballast + total(chain, 0)) % 1000003), "\n"))
         | none() => /std/print("bad input\n")
         end
-    | none() => /std/print("invalid utf-8\n")
+    | failure(_) => /std/print("invalid utf-8\n")
     end
 | none() => /std/print("no input\n")
 end
@@ -250,7 +250,7 @@ let input = /std/read()!;
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
-    | some(s) =>
+    | success(s) =>
         match Nat/of_str(Str/trim(s)): (_) => Io({})
         | some(n) =>
             let ballast = drain(build(ballast_cells, (n + 2) % 65537, Chain/nil()), 0);
@@ -258,7 +258,7 @@ match input: (_) => Io({})
             /std/print(Str/concat(Nat/to_str((ballast + Map/fold(m, 0, (_, v, acc) => (acc + v) % 1000003)) % 1000003), "\n"))
         | none() => /std/print("bad input\n")
         end
-    | none() => /std/print("invalid utf-8\n")
+    | failure(_) => /std/print("invalid utf-8\n")
     end
 | none() => /std/print("no input\n")
 end

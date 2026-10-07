@@ -107,7 +107,7 @@ let field(line: Bytes) -> Result(Refusal, Field) =
     | none() => Result/failure(Refusal/malformed("a field line is a name, a colon and a value"))
     | some(at) =>
         match Option/bind(
-            Str/of_bytes(octets/front(line, at)),
+            Result/to_option(Str/of_bytes(octets/front(line, at))),
             (name) => Field/read(name, octets/trim(octets/past(line, at + 1))))
         | some(read) => Result/success(read)
         | none() =>

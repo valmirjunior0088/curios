@@ -9,7 +9,9 @@ let read(s: Str) -> Result(Refusal, Request) =
 
 -- What a request that reads is: its method, its URL, and its body as text.
 let seen(s: Str) -> Result(Refusal, {Method, Str, Option(Str)}) =
-    Result/map_success(read(s), (r) => (r.method, Url/to_str(r.url), Str/of_bytes(r.body)));
+    Result/map_success(
+        read(s),
+        (r) => (r.method, Url/to_str(r.url), Result/to_option(Str/of_bytes(r.body))));
 
 let is(s: Str, method: Method, url: Str, body: Str) -> Test =
     Test/equal(seen(s), Result/success((method, url, Option/some(body))));

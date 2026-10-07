@@ -1,4 +1,4 @@
-use /std/{Str, Bytes, Byte, Bool, Option, Spell};
+use /std/{Str, Bytes, Byte, Bool, Option, Result, Spell};
 use /std/Bool/{Holds};
 use /std/ops/{Eql};
 
@@ -44,7 +44,7 @@ pub let of_str(s: Str) -> Option(Value) =
 
 --- The value as text, or `none` unless it is UTF-8.
 pub let to_str(v: Value) -> Option(Str) =
-    Str/of_bytes(v.bytes);
+    Result/to_option(Str/of_bytes(v.bytes));
 
 --- One octet a value may hold.
 pub struct Octet: pub Type {

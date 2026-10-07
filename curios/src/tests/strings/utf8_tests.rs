@@ -614,3 +614,62 @@ fn slice_closed_peels_codepoints() {
         "#;
     assert_eq!(run(source), b"ok");
 }
+
+/// Where `Str/of_bytes` says text stops is where Rust says it does: its failure is `Utf8Error::valid_up_to`, the length of the longest prefix that is valid text. Each ill-formed shape — a truncated sequence, an overlong one of two bytes and of three, a surrogate, a value past `U+10FFFF` and a stray continuation byte — stands at the start, between two characters and at the end, after a character of two bytes; two more cut a four-byte character short and run one byte past it.
+#[test]
+fn of_bytes_stops_where_rust_says_valid_text_ends() {
+    let shapes: [&[u8]; 6] = [
+        &[0xE2, 0x82],
+        &[0xC0, 0xAF],
+        &[0xE0, 0x80, 0x80],
+        &[0xED, 0xA0, 0x80],
+        &[0xF4, 0x90, 0x80, 0x80],
+        &[0x80],
+    ];
+    let cases = shapes
+        .iter()
+        .flat_map(|shape| {
+            [
+                shape.to_vec(),
+                [b"a", *shape, b"b"].concat(),
+                [&[0xC3, 0xA9, b'b'], *shape].concat(),
+            ]
+        })
+        .chain([
+            vec![b'a', 0xF0, 0x9F, 0x98, b'b'],
+            vec![0xF0, 0x9F, 0x98, 0x80, 0x80],
+            vec![b'a', 0xC3, 0xA9],
+        ])
+        .collect::<Vec<_>>();
+
+    let literals = cases
+        .iter()
+        .map(|case| {
+            let bytes = case
+                .iter()
+                .map(|byte| format!("0x{byte:02X}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("x[{bytes}]")
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let source = format!(
+        r#"
+        use /std/{{Str, Nat, Bytes, List}};
+        let stops(bytes : Bytes) -> Str =
+            match Str/of_bytes(bytes) | success(_) => "text" | failure(at) => Nat/to_str(at) end;
+        /std/print(Str/join(",", List/map([{literals}], stops)))
+        "#
+    );
+
+    let expected = cases
+        .iter()
+        .map(|case| match std::str::from_utf8(case) {
+            Ok(_) => "text".to_string(),
+            Err(error) => error.valid_up_to().to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    assert_eq!(String::from_utf8(run(&source)).unwrap(), expected);
+}

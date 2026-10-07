@@ -65,8 +65,8 @@ pub let with_header(
 pub let ok(r: Response) -> Bool =
     Nat/in_range(r.status.code, 200, 299);
 
---- The body as text, or `none` unless it is UTF-8.
-pub let text(r: Response) -> Option(Str) =
+--- The body as text, or where it stops being UTF-8, as `Str/of_bytes` answers.
+pub let text(r: Response) -> Result(Nat, Str) =
     Str/of_bytes(r.body);
 
 --- The body decoded as JSON, or the decoder's refusal.

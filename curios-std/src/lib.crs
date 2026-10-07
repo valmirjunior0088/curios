@@ -66,7 +66,7 @@ pub use Char/{let Char};
 
 --- Text as certified UTF-8.
 ---
---- It is addressed by position — a byte offset at which a character begins, so a piece cut between two is whole characters — and counted in Unicode scalar values where a count is what is meant. Validity is checked once, where bytes become text through `of_bytes`, and every operation carries it from there, so nothing downstream checks it again. Comparison is code-point order.
+--- It is addressed by position — a byte offset at which a character begins, so a piece cut between two is whole characters — and counted in Unicode scalar values where a count is what is meant. Validity is checked once, where bytes become text through `of_bytes`, which answers where they stop being text when they are not, and every operation carries it from there, so nothing downstream checks it again. Comparison is code-point order.
 pub mod Str;
 pub use Str/{let Str};
 

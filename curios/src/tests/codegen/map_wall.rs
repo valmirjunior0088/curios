@@ -111,12 +111,12 @@ let input = /std/read()!;
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
-    | some(str) =>
+    | success(str) =>
         match Nat/of_str(Str/trim(str)): (_) => Io({})
         | some(n) => /std/print(Str/concat(Nat/to_str(walk(n, (n + 1) % 65537, 0)), "\n"))
         | none() => /std/print("bad input\n")
         end
-    | none() => /std/print("invalid utf-8\n")
+    | failure(_) => /std/print("invalid utf-8\n")
     end
 | none() => /std/print("no input\n")
 end
@@ -137,12 +137,12 @@ let input = /std/read()!;
 match input: (_) => Io({})
 | some(bytes) =>
     match Str/of_bytes(bytes): (_) => Io({})
-    | some(str) =>
+    | success(str) =>
         match Nat/of_str(Str/trim(str)): (_) => Io({})
         | some(n) => /std/print(Str/concat(Nat/to_str(walk(n, (n + 1) % 65537, 0)), "\n"))
         | none() => /std/print("bad input\n")
         end
-    | none() => /std/print("invalid utf-8\n")
+    | failure(_) => /std/print("invalid utf-8\n")
     end
 | none() => /std/print("no input\n")
 end

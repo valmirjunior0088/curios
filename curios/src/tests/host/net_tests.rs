@@ -251,7 +251,7 @@ fn listen_and_accept_serve_one_connection_by_hand() {
 
 /// `http/perform` against `example.com:80`, the status, content type and body printed, or the failure's arm.
 const HTTP_GET: &str = r#"
-    use /std/{Str, Nat, Option, Try, Async, http, Io};
+    use /std/{Str, Nat, Option, Result, Try, Async, http, Io};
     let fiber: Async({}) =
         let r = Try/run(http/perform(http/get(http/Url/lit("http://example.com/"))))!;
         match r
@@ -260,7 +260,7 @@ const HTTP_GET: &str = r#"
                 Option/unwrap_or(
                     Option/bind(http/Response/header(response, "Content-Type"), http/Field/Value/to_str),
                     "none");
-            let body = Option/unwrap_or(Str/of_bytes(response.body), "bad body");
+            let body = Result/unwrap_or(Str/of_bytes(response.body), "bad body");
             /std/print(Str/flatten([Nat/to_str(response.status.code), " ", ct, " ", body]))
         | failure(e) =>
             match e

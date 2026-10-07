@@ -26,8 +26,8 @@ let flush(bytes: Bytes, start: Nat, count: Nat, rest: Fmt) -> Fmt =
     | none() => Fmt/nil()
     | some(within) =>
         match Str/of_bytes(Bytes/slice(bytes, start, count, @within))
-        | some(piece) => Fmt/lit(piece, rest)
-        | none() => Fmt/nil()
+        | success(piece) => Fmt/lit(piece, rest)
+        | failure(_) => Fmt/nil()
         end
     end;
 

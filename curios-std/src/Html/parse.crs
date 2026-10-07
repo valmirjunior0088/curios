@@ -15,7 +15,7 @@ let ws: Parse(Bytes, {}) =
     Parse/map(Parse/bytes/take_while(is_ws), (_) => ());
 
 let text(b: Bytes) -> Str =
-    Option/unwrap_or(Str/of_bytes(b), "");
+    Result/unwrap_or(Str/of_bytes(b), "");
 
 let is_name_byte(b: Byte) -> Bool =
     let n = Byte/to_nat(b);

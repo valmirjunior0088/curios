@@ -591,8 +591,8 @@ fn program() -> String {
         let hexs(b : Bytes) -> Str =
             Bytes/fold(b, "", (byte, acc) =>
                 let n = Byte/to_nat(byte);
-                let hi = Option/unwrap_or(Str/of_bytes(Char/to_utf8(Char/hex_digit(n / 16))), "");
-                let lo = Option/unwrap_or(Str/of_bytes(Char/to_utf8(Char/hex_digit(n % 16))), "");
+                let hi = Result/unwrap_or(Str/of_bytes(Char/to_utf8(Char/hex_digit(n / 16))), "");
+                let lo = Result/unwrap_or(Str/of_bytes(Char/to_utf8(Char/hex_digit(n % 16))), "");
                 Str/flatten([acc, hi, lo]));
         let fbits(input : Str) -> Str =
             match Toml/decode(input)
@@ -612,7 +612,7 @@ fn program() -> String {
             | eof() => x[]
             | error(_) => x[]
             end;
-        let row = Option/unwrap_or(Nat/of_str(Str/trim(Option/unwrap_or(Str/of_bytes(line), ""))), 999);
+        let row = Option/unwrap_or(Nat/of_str(Str/trim(Result/unwrap_or(Str/of_bytes(line), ""))), 999);
         match row
         {arms}
         | _ => /std/print("no such row")
