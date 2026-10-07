@@ -1,0 +1,10 @@
+-- `/std/http`: a URL read and written, the messages a program makes, a request and a reply as they are read, and the pieces a message is read in.
+mod url;
+
+mod message;
+
+mod request;
+
+mod reply;
+
+mod cuts;

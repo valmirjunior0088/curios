@@ -1,0 +1,192 @@
+-- A request as a server reads it: the head, the framing its fields state, the body, and where it is addressed.
+use /std/{Str, Nat, Option, Result, Test};
+use /std/http/{Method, Url, Request, Limits, Refusal};
+use /std/http/Field/{Value};
+use /std/http/Url/{Scheme};
+
+let read(s: Str) -> Result(Refusal, Request) =
+    Request/of_bytes(Limits/server, Scheme/http(), Str/to_bytes(s));
+
+-- What a request that reads is: its method, its URL, and its body as text.
+let seen(s: Str) -> Result(Refusal, {Method, Str, Option(Str)}) =
+    Result/map_success(read(s), (r) => (r.method, Url/to_str(r.url), Str/of_bytes(r.body)));
+
+let is(s: Str, method: Method, url: Str, body: Str) -> Test =
+    Test/equal(seen(s), Result/success((method, url, Option/some(body))));
+
+-- The status a server answers `s` with, or `none` where it reads.
+let refused(s: Str) -> Option(Nat) =
+    match read(s)
+    | success(_) => Option/none()
+    | failure(why) => Option/some(Refusal/code(why))
+    end;
+
+let answers(s: Str, code: Nat) -> Test =
+    Test/equal(refused(s), Option/some(code));
+
+-- A request reads by its length, by its chunks, or as bodiless where it states neither, and what follows it is left alone.
+test a_request_reads_by_the_framing_it_states =
+    Test/all([
+        is(
+            "GET /x?y=1 HTTP/1.1\r\nHost: example.com\r\n\r\n",
+            Method/get(),
+            "http://example.com/x?y=1",
+            ""),
+        is("GET / HTTP/1.1\r\nHost: h\r\n\r\nleft alone", Method/get(), "http://h/", ""),
+        is(
+            "POST / HTTP/1.1\r\nHost: h:81\r\nContent-Length: 2\r\n\r\nhi and more",
+            Method/post(),
+            "http://h:81/",
+            "hi"),
+        is(
+            "POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n1;ext=1\r\n!\r\n0\r\nExpires: never\r\n\r\n",
+            Method/post(),
+            "http://h/",
+            "hello!"),
+        is(
+            "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n",
+            Method/post(),
+            "http://h/",
+            "hello"),
+        is(
+            "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 5, 5\r\n\r\nhello",
+            Method/post(),
+            "http://h/",
+            "hello"),
+        is(
+            "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\nContent-Length: 5\r\n\r\nhello",
+            Method/post(),
+            "http://h/",
+            "hello"),
+        is("\r\n\r\nGET / HTTP/1.1\r\nHost: h\r\n\r\n", Method/get(), "http://h/", ""),
+        is("GET / HTTP/1.0\r\nHost: h\r\n\r\n", Method/get(), "http://h/", "")]);
+
+-- A request whose framing cannot be read is answered 400, a coding before `chunked` 501, and one that has not all arrived is cut short.
+test a_request_that_cannot_be_framed_is_refused =
+    Test/all([
+        answers("POST / HTTP/1.1\r\nHost: h\r\nContent-Length: abc\r\n\r\nhello", 400),
+        answers("POST / HTTP/1.1\r\nHost: h\r\nContent-Length: +5\r\n\r\nhello", 400),
+        answers("POST / HTTP/1.1\r\nHost: h\r\nContent-Length:\r\n\r\nhello", 400),
+        answers("POST / HTTP/1.1\r\nHost: h\r\nContent-Length: \u{B}5\u{B}\r\n\r\nhello", 400),
+        answers(
+            "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 2\r\nContent-Length: 5\r\n\r\nhello",
+            400),
+        answers("POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 2, 5\r\n\r\nhello", 400),
+        answers("POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: gzip\r\n\r\nxxxx", 400),
+        answers("POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked, gzip\r\n\r\nxxxx", 400),
+        answers(
+            "POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: gzip, chunked\r\n\r\n0\r\n\r\n",
+            501),
+        answers(
+            "POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: gzip\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
+            501),
+        answers("POST / HTTP/1.0\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n", 400),
+        answers(
+            "POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n5 xyz\r\nhello\r\n0\r\n\r\n",
+            400),
+        answers(
+            "POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhelloXX0\r\n\r\n",
+            400),
+        Test/equal(
+            read("POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 50\r\n\r\nhello"),
+            Result/failure(Refusal/incomplete())),
+        Test/equal(
+            read("POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhel"),
+            Result/failure(Refusal/incomplete())),
+        Test/equal(read("GET / HTTP/1.1\r\nHost: h\r\n"), Result/failure(Refusal/incomplete())),
+        Test/equal(read(""), Result/failure(Refusal/incomplete()))]);
+
+-- A request line is a method, a target and a version between single spaces: a method the library does not name is not implemented, a major version other than 1 not supported, and any other line that is none is malformed.
+test a_request_line_is_a_method_a_target_and_a_version =
+    Test/all([
+        answers("OPTIONS / HTTP/1.1\r\nHost: h\r\n\r\n", 501),
+        answers("get / HTTP/1.1\r\nHost: h\r\n\r\n", 501),
+        answers("G(E)T / HTTP/1.1\r\nHost: h\r\n\r\n", 400),
+        answers("GET / HTTP/2.0\r\nHost: h\r\n\r\n", 505),
+        answers("GET / FOO\r\nHost: h\r\n\r\n", 400),
+        answers("GET / HTTP/1.1 \r\nHost: h\r\n\r\n", 400),
+        answers("GET /a b HTTP/1.1\r\nHost: h\r\n\r\n", 400),
+        answers("GET  / HTTP/1.1\r\nHost: h\r\n\r\n", 400),
+        answers("GET / HTTP/1.1\nHost: h\n\n", 400)]);
+
+-- A request is addressed to the authority its one `Host` states, or to its target's where that is a whole URL: none, two, or one that is no authority is refused at either version, as is a target that is neither a path nor a URL.
+test a_request_is_addressed_by_its_host_or_its_target =
+    Test/all([
+        is("GET http://a/b HTTP/1.1\r\nHost: h\r\n\r\n", Method/get(), "http://a/b", ""),
+        is(
+            "GET https://a:8443/b?c HTTP/1.1\r\nHost: h\r\n\r\n",
+            Method/get(),
+            "https://a:8443/b?c",
+            ""),
+        is("GET http://a/b HTTP/1.0\r\n\r\n", Method/get(), "http://a/b", ""),
+        answers("GET http://a/b HTTP/1.1\r\n\r\n", 400),
+        answers("GET /x HTTP/1.1\r\n\r\n", 400),
+        answers("GET /x HTTP/1.0\r\n\r\n", 400),
+        answers("GET /x HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n", 400),
+        answers("GET /x HTTP/1.1\r\nHost:\r\n\r\n", 400),
+        answers("GET /x HTTP/1.1\r\nHost: a/b\r\n\r\n", 400),
+        answers("GET /x HTTP/1.1\r\nHost: user@h\r\n\r\n", 400),
+        answers("GET /x HTTP/1.1\r\nHost: h:port\r\n\r\n", 400),
+        answers("GET foo HTTP/1.1\r\nHost: example.com\r\n\r\n", 400),
+        answers("GET :81/x HTTP/1.1\r\nHost: h\r\n\r\n", 400),
+        answers("GET @evil.example/ HTTP/1.1\r\nHost: good.example\r\n\r\n", 400),
+        answers("GET /x#frag HTTP/1.1\r\nHost: h\r\n\r\n", 400),
+        answers("GET ftp://a/b HTTP/1.1\r\nHost: h\r\n\r\n", 400)]);
+
+-- A field line is a token, a colon and a value: one that is not is refused, not repaired, and a value's octets past ASCII are the value.
+test a_request_field_line_is_refused_or_read_as_it_is =
+    Test/all([
+        answers("POST / HTTP/1.1\r\nHost: h\r\nContent-Length : 2\r\n\r\nhi", 400),
+        answers("GET / HTTP/1.1\r\n X-A: one\r\nHost: h\r\n\r\n", 400),
+        answers("GET / HTTP/1.1\r\nHost: h\r\nX-A: one\r\n two\r\n\r\n", 400),
+        answers("GET / HTTP/1.1\r\nHost: h\r\nX (A): one\r\n\r\n", 400),
+        answers("GET / HTTP/1.1\r\nHost: h\r\nX-A: one\ntwo\r\n\r\n", 400),
+        answers("GET / HTTP/1.1\r\nHost: h\r\nX-A: one\u{0}two\r\n\r\n", 400),
+        answers("GET / HTTP/1.1\r\nHost: h\r\nno colon here\r\n\r\n", 400),
+        Test/equal(
+            Result/map_success(
+                Request/of_bytes(
+                    Limits/server,
+                    Scheme/http(),
+                    x[
+                        ..Str/to_bytes("GET / HTTP/1.1\r\nHost: h\r\nX-A: \t caf"),
+                        0xE9,
+                        ..Str/to_bytes(" \r\n\r\n")]),
+                (r) => Request/header(r, "x-a")),
+            Result/success(Value/of_bytes(x['c', 'a', 'f', 0xE9])))]);
+
+-- A request line past its bound is answered 414, a head past its own 431, and content past its own 413, the last before any of it is read.
+test a_request_past_a_bound_is_refused_by_the_bound =
+    let small = Limits { line = 32, head = 64, content = 4, chunk_line = 8 };
+    let under(s: Str) -> Option(Nat) =
+        match Request/of_bytes(small, Scheme/http(), Str/to_bytes(s))
+        | success(_) => Option/none()
+        | failure(why) => Option/some(Refusal/code(why))
+        end;
+    Test/all([
+        Test/equal(under("GET / HTTP/1.1\r\nHost: h\r\n\r\n"), Option/none()),
+        Test/equal(
+            under(Str/flatten(["GET /", Str/repeat("a", 40), " HTTP/1.1\r\nHost: h\r\n\r\n"])),
+            Option/some(414)),
+        Test/equal(under(Str/flatten(["GET /", Str/repeat("a", 40)])), Option/some(414)),
+        Test/equal(
+            under(
+                Str/flatten([
+                    "GET / HTTP/1.1\r\nHost: h\r\nX-A: ",
+                    Str/repeat("a", 60),
+                    "\r\n\r\n"])),
+            Option/some(431)),
+        Test/equal(
+            under(Str/flatten(["GET / HTTP/1.1\r\nHost: h\r\nX-A: ", Str/repeat("a", 60)])),
+            Option/some(431)),
+        Test/equal(
+            under("POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\n"),
+            Option/some(413)),
+        Test/equal(
+            under(
+                "POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n3\r\ndef\r\n0\r\n\r\n"),
+            Option/some(413)),
+        Test/equal(
+            under(
+                "POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n3;extension=long\r\nabc\r\n0\r\n\r\n"),
+            Option/some(400))]);

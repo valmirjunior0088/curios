@@ -1,4 +1,4 @@
-use /std/{Nat, Try, Async, Io, Parse};
+use /std/{Nat, Try, Async, Io};
 
 --- The request's method.
 pub mod Method;
@@ -11,6 +11,31 @@ pub use Field/{let Field};
 --- A reply's status: its three-digit code and its reason phrase, and which codes carry content.
 pub mod Status;
 pub use Status/{let Status};
+
+--- The version an HTTP/1 message states.
+pub mod Version;
+pub use Version/{let Version};
+
+--- How much of a message a reader takes before it refuses the rest.
+pub mod Limits;
+pub use Limits/{let Limits};
+
+--- Why a message is not read, and the status a server answers each reason with.
+pub mod Refusal;
+pub use Refusal/{let Refusal};
+
+--- How a message's body is delimited, read from its start line and its fields.
+pub mod Framing;
+pub use Framing/{let Framing};
+
+--- The pieces a message is read in — its head, a body of a stated length, a chunked body — each a function of the bytes held that answers the piece, a refusal, or that more is wanted. They hold no stream: a program with a transport of its own reads HTTP through them as the server and the client do.
+pub mod read;
+
+--- A head's lines: the start line of each direction and the field lines after it.
+mod syntax;
+
+--- Octets as a head's grammar reads them: optional whitespace, lists and decimal numbers.
+mod octets;
 
 --- Where a request goes, read from text and refused at a literal that does not read.
 pub mod Url;
@@ -32,12 +57,12 @@ pub use Client/{let Client};
 pub mod Server;
 pub use Server/{let Server};
 
---- Why an exchange failed: the wire, a reply the decoder refuses, the deadline, or a redirect chain past the client's limit.
+--- Why an exchange failed: the wire, a reply that is not read, the deadline, or a redirect chain past the client's limit.
 pub induct Error: pub Type
 --- The wire failed.
 | net(Io/Error)
---- A reply the decoder refuses.
-| malformed(Parse/Error)
+--- The reply is not one a client reads; why.
+| malformed(Refusal)
 --- The deadline passed.
 | timeout()
 --- The redirect chain ran past the client's limit, after this many.

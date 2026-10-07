@@ -7,8 +7,7 @@ It is independent of every other spec. [Text read as text](02-text-read-as-text.
 ## What this builds on
 
 - **A hidden field carries a decided proposition.** A structure's `@Holds(…)` field is filled by reduction where the value is a literal and by the guard of the arm it is built in otherwise, is a fact wherever the value is in scope, and takes no part in a derived `Eql` or `Spell`, as `Char`'s `@valid` shows (`Char.crs`). A literal that fails it is refused where it is written, by the proposition it states.
-- **Reading is generic over the monad it happens in.** `Async/drain`, `read_until` and `read_line` take their `Monad(M)` and a read answering `M(Io/Chunk)` (`Async.crs`), so one reader runs over a socket in `Async` and over a list of segments in `State`.
-- **`Parse(Bytes, A)` reads a piece that has arrived whole**, with its refusal's offset (`Parse.crs`, `Parse/bytes.crs`).
+- **One framing core reads a message, and holds no stream.** `http/read`'s pieces — a head, a body of a stated length, a chunked body — each answer the piece and the bytes after it, a refusal, or that more is wanted, with where to resume. `http/Framing` reads how a body is delimited by RFC 9112 §6.3's rules in order, one function per direction; a head's lines are read to a `Request/Head` or a `Response/Head`; a refusal is a value of `http/Refusal`, with the status a server owes it; and `Request/of_bytes` and `Response/of_bytes` read a message held entire, within `http/Limits`. The library's tests ask the pieces at every cut of a message (`curios-std/src/tests/http/cuts.crs`).
 - **A made message is one a wire can carry.** A `Field` is a `Name`, a token, and a `Value`, octets with no control octet among them but the tab, each by a hidden proposition its literal discharges and its run-time reader answers as an `Option` (`http/Field.crs`); a `Status`'s code is three digits, and a `Response` holds content only where its status carries any (`http/Status.crs`, `http/Response.crs`). Both renderers write the framing fields, `Connection: close` and a request's `Host` themselves and skip a caller's, and a URL is written percent-encoded (`Url/escaped`), so `render` is total and refuses nothing.
 - **A stream's sending half can be ended.** `Handle/finish` ends it and leaves the receiving half as it is — a socket's write side shut down, a TLS stream's closure alert ahead of it — answering `would_block` as `Handle/flush` does and parked on the same way (`Handle.crs`; [Only a fiber waits](../../design/standard-library/only-a-fiber-waits.md)). `tcp/Socket/with` and `tcp/Listener/serve` call it before they close, and a peer that resets is `Io/Error/reset()`.
 - **The hosts are scriptable at both ends.** The mock host serves inbound connections whole or in segments (`inbound_chunks`) and outbound replies (`net`, `net_chunks`), a peer that keeps its sending half open until the server finishes its own (`inbound_waiting`) and one that resets (`net_reset`), and records each connection's writes, end, finish and close in order (`socket_events`); one compiled program runs under many of them (`curios/src/tests.rs`'s `Compiled`), and the native host's own tests reach a real peer on a loopback port the kernel picks (`curios-runtime/src/os_host/tests.rs`'s `loopback_listener`).
@@ -16,61 +15,25 @@ It is independent of every other spec. [Text read as text](02-text-read-as-text.
 
 ## The gap
 
-**HTTP reads as values what it says to refuse, sends a body in reply to `HEAD`, and closes a connection under its answer.** Read from the decoders, the server's read loop and the client, against RFC 9112 — a bare § is its — and RFC 9110, and run through this tree's compiler wherever a whole message or a loopback peer shows the row. No test drives `http/Server`.
+**HTTP reads as values what it says to refuse, sends a body in reply to `HEAD`, and closes a connection under its answer.** Read from the server's read loop and the client, against RFC 9112 — a bare § is its — and RFC 9110, and run through this tree's compiler wherever a whole message or a loopback peer shows the row. No test drives `http/Server`.
 
-A request, as `Request/decode` and `http/Server` read it:
+A request, as `http/Server` reads it:
 
 | Input | The library | The RFCs |
 | --- | --- | --- |
-| `Content-Length` not a number | no body (`body_of`'s `none()` arm); the server's `needed` reads it as `0` | an unrecoverable framing error, answered 400 (§6.3 rule 5) |
-| Two `Content-Length` values that differ, on two lines or in one list | the first line's; a list is not a number, so no body | 400 (§6.3 rule 5) |
-| `Content-Length` between whitespace that is no SP or HTAB, a vertical tab say | that number: `Str/trim` trims every whitespace character | 400: optional whitespace is SP and HTAB (RFC 9110 §5.6.3) |
-| A body shorter than its `Content-Length` | the bytes that arrived, as the whole body: `Parse/bytes/take` clamps, and the read loop hands on what arrived when the peer closes | incomplete; a server may answer 400 before closing, and does not hand it on as complete (§8) |
-| `Transfer-Encoding: chunked` | no body: the field is not read | the chunked body decoded, overriding any `Content-Length` (§6.3 rules 3 and 4) |
-| Codings ending in `chunked` with another before it | no body | 501 (§6.1) |
-| Codings not ending in `chunked` | no body | 400 (§6.3 rule 4) |
-| `Transfer-Encoding` in an HTTP/1.0 request | read as in HTTP/1.1: the version is discarded | faulty framing, 400 (§6.1) |
-| HTTP/1.1 without `Host` | addressed to `"localhost"` (`url_of`) | 400 (§3.2) |
-| HTTP/1.0 without `Host` | addressed to `"localhost"` | refused, or a configured default applied (§3.3) |
-| Two `Host` lines | the first | 400 (§3.2) |
-| A `Host` that is no `uri-host [":" port]`, `a/b` say | spliced into the URL, so what follows its slash becomes the path | 400 (§3.2) |
-| An absolute-form target, `GET http://a/b HTTP/1.1` | `http://`, the `Host` value and the target spliced into one URL, whose host is then `Host`'s with `http` appended | the target's authority, `Host` ignored (§3.2.2) |
-| A target that is neither origin-form nor absolute-form, `foo` or `:81/x` | spliced after `Host`, so it extends the host or sets the port | 400 (§3.2) |
-| A field value holding octets past ASCII | 400: a field value is read as `Str` (`text`), so obs-text that is not UTF-8 refuses the request | opaque data (RFC 9110 §5.5) |
-| An unrecognized method | 400 | 501 (RFC 9110 §9.1) |
-| A malformed version, or whitespace inside the target | accepted: what follows the target's first space is not read | 400 (§2.3, §3.2) |
-| A major version other than 1 | accepted: it is not read | 505 (RFC 9110 §15.6.6) |
-| An empty line before the request line | 400 | skipped (§2.2) |
+| A request the reader refuses for more than its grammar: a request line, a head or content past its bound, a method or a coding not implemented, a major version other than 1 | 400: the server answers every refusal alike (`answer`) | 414 (§3), 431 (RFC 6585 §5) and 413 (RFC 9110 §15.5.14); 501 (RFC 9110 §9.1; §6.1); 505 (RFC 9110 §15.6.6) |
 | `Expect: 100-continue` | not answered, so the peer waits out its own patience before it sends its content | 100, or a final status, before the content is read (RFC 9110 §10.1.1) |
-| A request past the read limit | what arrived within 1 024 reads (`request_bytes`), as the whole request | a target too long, 414 (§3); a header section too large, 431 (RFC 6585 §5); content too large, 413 (RFC 9110 §15.5.14) |
+| A request that arrives in more than 1 024 reads | what arrived within them, read as the request (`request_bytes`) | read to its end, within its bounds in octets |
 | A peer that stops sending and stays | waited on with no end | 408 (RFC 9110 §15.5.9) |
 
-A request without `Content-Length` or `Transfer-Encoding` has no body (§6.3 rule 7), which is specified.
-
-A reply, as `Response/decode` and `http/Client` read it:
+A reply, as `http/Client` reads it:
 
 | Input | The library | The RFCs |
 | --- | --- | --- |
-| `Content-Length` not a number, or two values that differ | everything the peer sent, or the first line's value | an unrecoverable error: the reply discarded (§6.3 rule 5) |
-| A `Content-Length` list of one repeated value, `5, 5` | everything the peer sent | that value (§6.3 rule 5) |
-| Shorter than its `Content-Length` | the bytes that arrived, documented as clamped | recorded as incomplete (§8) |
-| Chunked, ending before its last chunk, or with a size line that is no size | refused as malformed, by whichever primitive met it | recorded as incomplete (§8) |
-| Ending inside its head, or empty | refused as malformed | incomplete (§8) |
-| A size line with more after its digits than an extension, `5 xyz`, or a bare LF inside one | ignored up to the line's end (`chunk_size`) | no chunk (§7.1, §7.1.1) |
-| A last coding other than `chunked` | decoded as chunked, since `chunked` is looked for anywhere in the list | framed by the connection's close (§6.3 rule 4) |
-| Any coding besides `chunked` | the body returned still coded | unacceptable: the client sends no `TE`, which leaves `chunked` the only acceptable coding (§7.4) |
-| `Transfer-Encoding` on two field lines | the first line's alone | one list, the lines joined (RFC 9110 §5.2) |
-| `Transfer-Encoding` in an HTTP/1.0 reply | decoded as chunked | faulty framing (§6.1) |
-| A reply to `HEAD` with a nonzero `Content-Length` | no body, by the accident that `take` clamps to what arrived | no body, whatever the fields say (§6.3 rule 1) |
-| A 1xx reply ahead of the final one | taken as the reply | skipped (RFC 9110 §15.2) |
-| A version that is no HTTP version | accepted: `FOO 200 OK` reads | a status line begins with its `HTTP-version` (§4, §2.3) |
-| A folded field line | refused as malformed: the fold begins with whitespace, so the name read from it is no token | each fold read as a space (§5.2) |
-| A field value holding octets past ASCII | refused as malformed: a field line is read as `Str` (`as_text`) | opaque data (RFC 9110 §5.5) |
+| Shorter than its `Content-Length`, chunked without its last chunk or with a size line that is none, or ending inside its head | refused as `malformed`, with nothing of what arrived | recorded as incomplete (§8) |
 | A peer that answers and keeps the connection open | the deadline, with the reply it sent lost: the client reads to the close (`Socket/call`) | whole where its framing ends (§6.3) |
-| A reply of any size | held whole, with no bound | — |
+| A reply of any size | read whole into memory, and only then held to its bound | — |
 | Framed by the close, over TLS, ending without a closure alert | whole: the host reads a missing alert as the end of the stream | incomplete (§9.8) |
-
-The `HEAD` row matters beyond itself: refusing a short body, as the row on a reply shorter than its `Content-Length` asks, would refuse every well-formed reply to `HEAD` that states its length, so the reply's reader must know the request's method.
 
 A reply, as the server writes it:
 
@@ -103,7 +66,7 @@ The last row of the reply table is the host's to answer: it is the entry of [the
 
 Taken before the first stage, each with its reason, so a stage meets none of them as a fork.
 
-1. **One framing core reads both directions, and holds no IO.** Its pieces are pure functions from the bytes held to a piece and what follows it, or to "more": a head once its blank line has arrived, parsed once by `Parse(Bytes, A)`; a chunk's size line once its line end has; a chunk once its size and its line end have; the trailer section once its blank line has. One driver, generic over its monad as `Async/drain` is, asks a `fill` for more bytes and runs the pieces: over a socket for the server and the client, and over a list of segments for `Request/of_bytes`, `Response/of_bytes` and the library's own tests, which therefore read every message at every cut with no host. `Request/decode` and `Response/decode`, parsers over a whole message, go: a parser cannot say that its input has not all arrived.
+1. **One framing core reads both directions, and holds no IO.** Its pieces are pure functions from the bytes held to the piece and the bytes after it, to a refusal, or to "more" with where to resume: a head once its empty line has arrived, split into its lines and read once; a body of a stated length once that many octets have; a chunk once its size line and its own line end have; the trailer section once its empty line has. Whoever owns a stream asks a piece again when more octets have arrived, and decides what a stream that ended means: a socket reader shared by the server and the client asks until the piece is whole, and `Request/of_bytes` and `Response/of_bytes` ask once, of a message they hold entire. The library's own tests ask the pieces over every cut of a message, with no host. A head's lines are read by plain functions that answer a refusal as a value, so a method not implemented and a version not spoken are told from a line that is none. `Request/decode` and `Response/decode`, parsers over a whole message, go: a parser cannot say that its input has not all arrived.
 2. **Framing is read once, by §6.3's rules in order.** One function per direction answers no body, a length, chunked or, for a reply, the connection's close, or says why it cannot. `Transfer-Encoding` is every line of that name joined; its codings must be exactly `chunked`, with a last coding that is another answering a request 400 and a coding before `chunked` 501; beside `Content-Length` it is read alone, which §6.1 lets a server choose; and in an HTTP/1.0 message it is faulty framing. A `Content-Length` is digits between SP and HTAB, and a list of one repeated value is that value. A reply that cannot be framed is malformed.
 3. **A message a program makes is one a wire can carry, by its type.** A field is a `Name` and a `Value`: a name's text is a token and a value's bytes hold no control octet but the tab, each a hidden proposition its literal discharges by reduction and a run-time one by the check that answers it as an `Option`. A status's code is three digits and its reason phrase a value's bytes; a reply holds content only where its status carries any, so a body on a 1xx, 204, 205 or 304 reply is not written anywhere. `render` is therefore total and refuses nothing. A name is kept as written and compared without case, since the wire's is the sender's to choose and its meaning is not. Field values and the reason phrase are the octets the wire carried, as RFC 9110 §5.5 asks a recipient to treat obs-text, and a caller wanting text reads one through `Str/of_bytes`.
 4. **A URL reaches the wire percent-encoded.** `Url/of_str` refuses a control octet, a space and an octet past ASCII in any part, and the writers of a request line, a `Host` and a `Location` percent-encode any such octet of a `Url` a program built by hand, which is what the encoding is for. `Url` stays a record a program reads by field.
@@ -121,15 +84,13 @@ Taken before the first stage, each with its reason, so a stage meets none of the
 
 Each lands alone, and its commit removes from the tables the rows it gave their RFC's answer.
 
-1. **The framing core.** `http/Version`, `http/Framing`, `http/Limits`, `http/Refusal`, the head grammar under decisions 8 and 9, the chunk reader and the driver; `Request/of_bytes` and `Response/of_bytes` over it, in place of both `decode`s and of the `lookup`, `render_header` and `until` each message defines. The request and reply tables' rows that a whole message shows.
-2. **The server.** `http/Server`'s connection handler over the driver under decisions 6, 7, 10 and 11, with `serve` and `serve_tls` over it; `Server`, `listen`, `close`, `needed`, `blank_line` and the count of reads go. The request table's remaining rows and the connection table's.
-3. **The client.** `http/Client`'s exchange over the driver under decisions 6 and 12, `http/Error`'s `incomplete` and its bound's arm, and decision 13 in the native host. The reply table's remaining rows.
+1. **The server.** `http/Server`'s connection handler over the driver under decisions 6, 7, 10 and 11, with `serve` and `serve_tls` over it; `Server`, `listen`, `close`, `needed`, `blank_line` and the count of reads go. The request table's remaining rows and the connection table's.
+2. **The client.** `http/Client`'s exchange over the driver under decisions 6 and 12, `http/Error`'s `incomplete` and its bound's arm, and decision 13 in the native host. The reply table's remaining rows.
 
 ## Verification
 
-- Stage 1: each row of the request and reply tables that a whole message shows, read by `Request/of_bytes` or `Response/of_bytes`, gives the answer the decisions take. A well-formed request and reply, by length and by chunks, read whole at every two-way cut of their bytes and want more at every truncation. A request and a reply whose field value holds octets past ASCII read, the value the octets sent, as does a reply whose reason phrase holds them. `Request/render` then `Request/of_bytes` gives the request back with the fields the renderer owns beside its own.
-- Stage 2: a server compiled once and run over a scripted inbound host per row answers each with its status — 400, 408, 413, 414, 431, 500, 501 and 505 — reads whole a chunked request sent in segments cut inside a size line, inside a chunk and inside the trailer section, stops reading at the frame's end before a peer that stays open, answers `100 Continue` before it reads an expected body, sends a reply to `HEAD` as its head alone, and writes, finishes, drains and closes in that order.
-- Stage 3: `http/perform` over a scripted reply raises `incomplete` with the part that arrived, for a short length, a missing last chunk and a head cut short; reads a reply to `HEAD` that states a length as whole; skips a `100 Continue`; returns a reply whose peer stays open; and reports a reset as `net(reset())`. The native host answers a TLS stream ended without its alert as `tls`.
+- Stage 1: a server compiled once and run over a scripted inbound host per row answers each with its status — 400, 408, 413, 414, 431, 500, 501 and 505 — reads whole a chunked request sent in segments cut inside a size line, inside a chunk and inside the trailer section, stops reading at the frame's end before a peer that stays open, answers `100 Continue` before it reads an expected body, sends a reply to `HEAD` as its head alone, and writes, finishes, drains and closes in that order.
+- Stage 2: `http/perform` over a scripted reply raises `incomplete` with the part that arrived, for a short length, a missing last chunk and a head cut short; reads a reply to `HEAD` that states a length as whole; skips a `100 Continue`; returns a reply whose peer stays open; and reports a reset as `net(reset())`. The native host answers a TLS stream ended without its alert as `tls`.
 - Every stage: the prelude build is measured before and after, naming the stage, its rows read from `curios-prelude-archive/.artifacts/profile.tsv` (elaboration) and `curios-prelude/.artifacts/profile.tsv` (certification) after `cargo xtask clippy`, folded by `target/debug/curios profile <file>`, whose first data row is the total.
 
 ## Rejected
@@ -138,6 +99,7 @@ Each lands alone, and its commit removes from the tables the rows it gave their 
 - **Reading an HTTP head as text.** A header may carry obsolete octets outside UTF-8, and the head's framing is bytes; text is what a body declared to be text is.
 - **Clamping a short body as the operation's contract.** `Parse/take`'s "everything that remains" is a fine answer for a parser primitive and the wrong one for a framed message, where the length is a promise the peer broke.
 - **Reading the whole message again until a refusal says the input ended**, as nom's `Incomplete` would have it. Every primitive would have to mark the end of its input, and each read would parse the message again from its start, quadratic up to the size limit.
+- **One driver generic over the monad it reads in**, a socket in `Async` and a list of segments in `State`, as `Async/drain` is generic. The read of a list can fail in its type and never in fact, which is a branch nothing reaches and nothing proves away; pieces that answer "more" leave the loop, and the failure, to whoever owns a stream.
 - **A machine indexed by its direction, emitting events**, as Lean's and h11's are. Each serves bodies in pieces and connections kept alive, neither of which `/std` has; two drivers over shared pieces say what this library does, and the pieces are what a streaming body would read through.
 - **`render` answering a `Result`, or a server answering 500 for a reply it cannot write.** Either reports where the message is sent a mistake made where it was built, to a caller that did not build it.
 - **A field value as bare `Bytes`.** It says what a value read off the wire is and nothing of what one about to be written must be, which is what hyper's `HeaderValue` and Lean's `Header.Value` are for.

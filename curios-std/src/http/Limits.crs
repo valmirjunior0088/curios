@@ -1,0 +1,26 @@
+use /std/{Nat, Spell};
+use /std/ops/{Eql};
+
+--- How much of a message a reader takes before it refuses the rest, in octets: its start line, its head — the start line and the fields — its content, and one chunk's size line. A chunked body's trailer section is held to the head's bound.
+pub struct Limits: pub Type {
+    line: Nat,
+    head: Nat,
+    content: Nat,
+    chunk_line: Nat,
+}
+
+satisfy Eql(Limits) {
+    ..
+}
+
+satisfy Spell(Limits) {
+    ..
+}
+
+--- What a server reads of a request: a request line within 8 KiB, which RFC 9112 §3 asks every server to support, a head within 64 KiB, content within 4 MiB, and a size line within 4 KiB.
+pub let server: Limits =
+    Limits { line = 8192, head = 65536, content = 4194304, chunk_line = 4096 };
+
+--- What a client reads of a reply: a server's bounds, with content within 64 MiB.
+pub let client: Limits =
+    Limits { line = 8192, head = 65536, content = 67108864, chunk_line = 4096 };

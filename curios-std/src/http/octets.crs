@@ -1,0 +1,67 @@
+use /std/{Bytes, Byte, Nat, Bool, List, Option};
+
+--- Whether `b` is optional whitespace, a space or a tab (RFC 9110 §5.6.3): the whitespace a field line's value and a list's members are trimmed of, and no other.
+pub let is_ows(b: Byte) -> Bool =
+    let n = Byte/to_nat(b);
+    n == ' ' || n == '\t';
+
+--- Whether `b` is a decimal digit.
+pub let is_digit(b: Byte) -> Bool =
+    Nat/in_range(Byte/to_nat(b), '0', '9');
+
+--- Whether the byte of `b` at `i` is `byte`; `false` past its end.
+pub let at(b: Bytes, i: Nat, byte: Byte) -> Bool =
+    match Bytes/try_get(b, i) | some(found) => found == byte | none() => false end;
+
+--- The first `n` bytes of `b`, or all of it where it holds fewer.
+pub let front(b: Bytes, n: Nat) -> Bytes =
+    match Nat/le/try(n, Bytes/len(b))
+    | some(within) => Bytes/slice(b, 0, n, @within)
+    | none() => b
+    end;
+
+--- `b` past its first `n` bytes, or nothing where it holds no more.
+pub let past(b: Bytes, n: Nat) -> Bytes =
+    match Nat/le/try(n, Bytes/len(b))
+    | some(within) => Bytes/drop(b, n, @within)
+    | none() => x[]
+    end;
+
+--- How many bytes `b` holds once the optional whitespace at its end is left out.
+let trimmed_len(b: Bytes) -> Nat =
+    let (_, kept): {Nat, Nat} =
+        Bytes/fold(
+            b,
+            (0, 0),
+            (byte, (seen, kept)) =>
+                match is_ows(byte) | true => (seen + 1, kept) | false => (seen + 1, seen + 1) end);
+    kept;
+
+--- How many bytes of optional whitespace `b` begins with.
+let leading(b: Bytes) -> Nat =
+    Option/unwrap_or(Bytes/find_index(b, (byte) => Bool/not(is_ows(byte))), Bytes/len(b));
+
+--- `b` without the optional whitespace at either end.
+pub let trim(b: Bytes) -> Bytes =
+    let ended = front(b, trimmed_len(b));
+    past(ended, leading(ended));
+
+--- The pieces of `b` between each `sep`, in order: one more than the separators it holds.
+pub let split(b: Bytes, sep: Byte) -> List(Bytes) =
+    let (pieces, last): {List(Bytes), Bytes} =
+        Bytes/fold(
+            b,
+            ([], x[]),
+            (byte, (pieces, current)) =>
+                match byte == sep
+                | true => ([..pieces, current], x[])
+                | false => (pieces, x[..current, byte])
+                end);
+    [..pieces, last];
+
+--- The number `b` spells in decimal digits, one or more and nothing else, or `none`.
+pub let number(b: Bytes) -> Option(Nat) =
+    match Bytes/len(b) != 0 && Bytes/all(b, is_digit)
+    | true => Option/some(Bytes/fold(b, 0, (byte, n) => n * 10 + (Byte/to_nat(byte) - '0')))
+    | false => Option/none()
+    end;

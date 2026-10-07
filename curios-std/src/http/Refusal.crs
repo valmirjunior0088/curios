@@ -1,0 +1,63 @@
+use /std/{Str, Nat, Show, Spell};
+use /std/ops/{Eql};
+
+--- Why a message is not read. Each is a reason a peer can be told: a server answers a refused request under `code`, and a client reports a refused reply as malformed.
+pub induct Refusal: pub Type
+--- The message is not one HTTP's grammar or its framing admits; what was wrong.
+| malformed(Str)
+--- The stream ended before the message did.
+| incomplete()
+--- The start line is longer than the reader takes.
+| line_too_long()
+--- The head is larger than the reader takes.
+| head_too_large()
+--- The content is larger than the reader takes.
+| content_too_large()
+--- A method or a transfer coding the library does not implement; which.
+| not_implemented(Str)
+--- A major version other than 1.
+| version_not_supported()
+--- The message did not arrive within the time allowed.
+| timed_out()
+end
+
+pub use Refusal/*;
+
+satisfy Eql(Refusal) {
+    ..
+}
+
+satisfy Spell(Refusal) {
+    ..
+}
+
+--- The refusal as a line: what the reply to a refused request says in its body.
+pub let to_str(r: Refusal) -> Str =
+    match r
+    | malformed(why) => Str/concat("malformed: ", why)
+    | incomplete() => "the message ended before it was whole"
+    | line_too_long() => "the start line is too long"
+    | head_too_large() => "the header section is too large"
+    | content_too_large() => "the content is too large"
+    | not_implemented(what) => Str/concat("not implemented: ", what)
+    | version_not_supported() => "only HTTP/1 is spoken here"
+    | timed_out() => "the message did not arrive in time"
+    end;
+
+--- Shown as `to_str` spells it.
+satisfy Show(Refusal) {
+    show = to_str,
+}
+
+--- The status a server answers a refused request with: 400 for one that is malformed or cut short, 414 for a request line too long (RFC 9112 §3), 431 for a head too large (RFC 6585 §5), 413 for content too large, 501 for what is not implemented, 505 for a version not spoken and 408 for one that did not arrive in time.
+pub let code(r: Refusal) -> Nat =
+    match r
+    | malformed(_) => 400
+    | incomplete() => 400
+    | line_too_long() => 414
+    | head_too_large() => 431
+    | content_too_large() => 413
+    | not_implemented(_) => 501
+    | version_not_supported() => 505
+    | timed_out() => 408
+    end;

@@ -1,0 +1,153 @@
+use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result};
+use /std/http/{Field, Status, Version, Refusal, read, octets};
+use /std/http/Field/{Value};
+
+--- The lines of a head's bytes, in order, their line ends left out: the start line first.
+pub let lines(head: Bytes) -> List(Bytes) =
+    let go(from: Nat, found: List(Bytes)) -> List(Bytes) =
+        match read/line_end(head, from)
+        | some(at) => go(at + 2, [octets/front(octets/past(head, from), at - from), ..found])
+        | none() => List/reverse([octets/past(head, from), ..found])
+        end;
+    go(0, []);
+
+-- The digit `b` holds at `i`, or `none`.
+let digit(b: Bytes, i: Nat) -> Option(Nat) =
+    match Bytes/try_get(b, i)
+    | none() => Option/none()
+    | some(byte) =>
+        match octets/is_digit(byte)
+        | true => Option/some(Byte/to_nat(byte) - '0')
+        | false => Option/none()
+        end
+    end;
+
+--- The version `b` spells, `HTTP/` then a digit, a dot and a digit (RFC 9112 §2.3): malformed where it spells none, and not supported where its major number is not 1.
+pub let version(b: Bytes) -> Result(Refusal, Version) =
+    let unspelled: Result(Refusal, Version) =
+        Result/failure(Refusal/malformed("a version is HTTP, a slash, a digit, a dot and a digit"));
+    let shaped =
+        Bytes/len(b) == 8 && octets/at(b, 0, 'H') && octets/at(b, 1, 'T') && octets/at(b, 2, 'T')
+            && octets/at(b, 3, 'P')
+            && octets/at(b, 4, '/')
+            && octets/at(b, 6, '.');
+    match shaped
+    | false => unspelled
+    | true =>
+        match digit(b, 5)
+        | none() => unspelled
+        | some(major) =>
+            match digit(b, 7)
+            | none() => unspelled
+            | some(minor) =>
+                match major == 1
+                | false => Result/failure(Refusal/version_not_supported())
+                | true =>
+                    match minor <= 9
+                    | true => Result/success(Version { minor = minor })
+                    | false => unspelled
+                    end
+                end
+            end
+        end
+    end;
+
+--- A request line's three parts, as they stand between its two spaces: the method, the target and the version (RFC 9112 §3). A line with fewer or more spaces is malformed, since a target holds none.
+pub let request_line(
+    line: Bytes,
+) -> Result(Refusal, {method: Bytes, target: Bytes, version: Bytes}) =
+    let unspelled: Result(Refusal, {method: Bytes, target: Bytes, version: Bytes}) =
+        Result/failure(Refusal/malformed("a request line is a method, a target and a version"));
+    match octets/split(line, ' ')
+    | [] => unspelled
+    | [method, ..after_method] =>
+        match after_method
+        | [] => unspelled
+        | [target, ..after_target] =>
+            match after_target
+            | [] => unspelled
+            | [version, ..after_version] =>
+                match List/len(after_version) == 0 && Bytes/len(method) != 0
+                    && Bytes/len(target) != 0
+                | true => Result/success((method = method, target = target, version = version))
+                | false => unspelled
+                end
+            end
+        end
+    end;
+
+--- A status line's parts: the version, the code and the reason phrase (RFC 9112 §4). The code is three digits between two spaces, and the phrase is every octet after the second, none of them a control octet but the tab.
+pub let status_line(line: Bytes) -> Result(Refusal, {Version, Status}) =
+    let unspelled: Result(Refusal, {Version, Status}) =
+        Result/failure(
+            Refusal/malformed(
+                "a status line is a version, a three-digit code and a reason phrase"));
+    let stated = version(octets/front(line, 8))!;
+    let digits = octets/front(octets/past(line, 9), 3);
+    match octets/at(line, 8, ' ') && octets/at(line, 12, ' ') && Bytes/len(digits) == 3
+    | false => unspelled
+    | true =>
+        match octets/number(digits)
+        | none() => unspelled
+        | some(code) =>
+            match Value/of_bytes(octets/past(line, 13))
+            | none() => unspelled
+            | some(reason) =>
+                match 100 <= code && code <= 999
+                | true => Result/success((stated, Status { code = code, reason = reason }))
+                | false => unspelled
+                end
+            end
+        end
+    end;
+
+-- One field line: a name, a colon, and a value trimmed of the optional whitespace around it. No whitespace stands before the colon, since the name it would end is no token.
+let field(line: Bytes) -> Result(Refusal, Field) =
+    match Bytes/index_of(line, ':')
+    | none() => Result/failure(Refusal/malformed("a field line is a name, a colon and a value"))
+    | some(at) =>
+        match Option/bind(
+            Str/of_bytes(octets/front(line, at)),
+            (name) => Field/read(name, octets/trim(octets/past(line, at + 1))))
+        | some(read) => Result/success(read)
+        | none() =>
+            Result/failure(
+                Refusal/malformed(
+                    "a field's name is a token, and its value holds no control octet"))
+        end
+    end;
+
+-- Whether `line` begins with a space or a tab: a fold of the line before it, or nothing a head may hold.
+let indented(line: Bytes) -> Bool =
+    match Bytes/try_get(line, 0) | some(byte) => octets/is_ows(byte) | none() => false end;
+
+-- `f` with the fold `line` read as a space and what follows it, as RFC 9112 §5.2 has a user agent read one.
+let folded(f: Field, line: Bytes) -> Result(Refusal, Field) =
+    match Value/of_bytes(x[..f.value.bytes, ' ', ..octets/trim(line)])
+    | some(value) => Result/success(Field { name = f.name, value = value })
+    | none() => Result/failure(Refusal/malformed("a field's value holds no control octet"))
+    end;
+
+--- The fields `lines` hold, in order. A line that begins with whitespace is refused, or, where `folding`, read as a space and the rest of the line before it, which a head's first field line has none of.
+pub let fields(lines: List(Bytes), folding: Bool) -> Result(Refusal, List(Field)) =
+    let go(rest: List(Bytes), found: List(Field)) -> Result(Refusal, List(Field)) =
+        match rest
+        | [] => Result/success(List/reverse(found))
+        | [line, ..more] =>
+            match indented(line)
+            | false =>
+                let read = field(line)!;
+                go(more, [read, ..found])
+            | true =>
+                match (folding, found)
+                | (true, [last, ..before]) =>
+                    let joined = folded(last, line)!;
+                    go(more, [joined, ..before])
+                | (true, []) =>
+                    Result/failure(Refusal/malformed("a field line begins with whitespace"))
+                | (false, _) =>
+                    Result/failure(Refusal/malformed("a field line begins with whitespace"))
+                end
+            end
+        end;
+    go(lines, []);

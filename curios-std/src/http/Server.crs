@@ -1,7 +1,6 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, Option, Result, Try, Async, Io, Parse};
+use /std/{Bytes, Str, Nat, Bool, Option, Result, Try, Async, Io};
 use /std/tcp/{Socket, Listener};
-use /std/http/{Request, Response};
-use /std/http/Field/{Value};
+use /std/http/{Url, Request, Response, Limits};
 
 --- A bound server: the listener its connections arrive on.
 pub struct Server: Type {
@@ -21,59 +20,17 @@ pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Server) =
 pub let close(s: Server) -> Io({}) =
     Listener/close(s.0);
 
---- Where the blank line ending the headers begins in `b`, if it has arrived.
-let blank_line(b: Bytes) -> Option(Nat) =
-    let n = Bytes/len(b);
-    let at(i: Nat, byte: Nat) -> Bool =
-        match Bytes/try_get(b, i) | some(x) => Byte/to_nat(x) == byte | none() => false end;
-    let go(i: Nat, fuel: Nat) -> Option(Nat) =
-        match fuel
-        | 0 => Option/none()
-        | rest + 1 =>
-            match i + 3 < n
-            | false => Option/none()
-            | true =>
-                match at(i, '\r') && at(i + 1, '\n') && at(i + 2, '\r') && at(i + 3, '\n')
-                | true => Option/some(i)
-                | false => go(i + 1, rest)
-                end
-            end
-        end;
-    go(0, n + 1);
-
---- How many bytes the request needs in all once its headers are in hand: the head, then `Content-Length` bytes. A request without the header has no body, as HTTP specifies; one whose value is not a number is read the same way, where HTTP asks for a refusal.
-let needed(acc: Bytes, head_end: Nat) -> Option(Nat) =
-    let head_len = head_end + 4;
-    match Nat/le/try(head_len, Bytes/len(acc))
-    | none() => Option/none()
-    | some(within) =>
-        let head = Bytes/slice(acc, 0, head_len, @within);
-        match Parse/run(Request/decode, head)
-        | failure(_) => Option/none()
-        | success(request) =>
-            let length =
-                Option/unwrap_or(
-                    Option/bind(
-                        Option/bind(Request/header(request, "Content-Length"), Value/to_str),
-                        Nat/of_str),
-                    0);
-            Option/some(head_len + length)
-        end
+--- Whether the bytes held are a request that has all arrived, or one that never will be a request: anything but one that is only cut short so far.
+let settled(held: Bytes) -> Bool =
+    match Request/of_bytes(Limits/server, Url/Scheme/http(), held)
+    | failure(incomplete()) => false
+    | _ => true
     end;
 
---- The bytes `c` sends, read until the headers and the body they state have arrived, or the peer closes.
+--- The bytes `c` sends, read until they hold a whole request or one that is refused, or the peer closes.
 let request_bytes(c: Socket) -> Async(Result(Io/Error, Bytes)) =
     let go(acc: Bytes, fuel: Nat) -> Async(Result(Io/Error, Bytes)) =
-        let complete =
-            match blank_line(acc)
-            | none() => false
-            | some(head_end) =>
-                match needed(acc, head_end)
-                | some(total) => total <= Bytes/len(acc)
-                | none() => true
-                end
-            end;
-        match complete || fuel == 0
+        match settled(acc) || fuel == 0
         | true => Async/pure(Result/success(acc))
         | false =>
             let next = Socket/read(c, 4096)!;
@@ -89,7 +46,7 @@ let request_bytes(c: Socket) -> Async(Result(Io/Error, Bytes)) =
 pub let read_request(c: Socket) -> Try(Async, Io/Error, Option(Request)) =
     let bytes = Try/attempt(request_bytes(c))!;
     Try/pure(
-        match Parse/run(Request/decode, bytes)
+        match Request/of_bytes(Limits/server, Url/Scheme/http(), bytes)
         | success(request) => Option/some(request)
         | failure(_) => Option/none()
         end);

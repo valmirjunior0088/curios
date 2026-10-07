@@ -1,0 +1,60 @@
+-- A URL read into its parts and written back, and its components encoded and decoded.
+use /std/{Str, Option, Result, Test};
+use /std/http/{Url};
+
+-- A URL reads into its parts; the fragment is dropped, the port is the scheme's when unwritten, and the path is `/` when empty.
+test a_url_reads_into_its_parts =
+    match Url/of_str("https://example.com:8443/a/b?x=1&y=two+words#frag")
+    | failure(why) => Test/assert(Str/is_empty(why.message))
+    | success(u) =>
+        Test/all([
+            Test/equal(u.scheme, Url/Scheme/https()),
+            Test/equal(u.host, "example.com"),
+            Test/equal(u.port, 8443),
+            Test/equal(u.path, "/a/b"),
+            Test/equal(u.query, Option/some("x=1&y=two+words")),
+            Test/equal(Url/segments(u), ["a", "b"]),
+            Test/equal(Url/query_pairs(u), Option/some([("x", "1"), ("y", "two words")]))])
+    end;
+
+-- The default port is the scheme's, and is not written back.
+test a_url_takes_and_omits_its_default_port =
+    Test/all([
+        Test/equal(Url/to_str(Url/lit("http://example.com/")), "http://example.com/"),
+        Test/equal(Url/lit("http://example.com").port, 80),
+        Test/equal(Url/lit("https://example.com").port, 443),
+        Test/equal(Url/lit("https://example.com").path, "/"),
+        Test/equal(Url/to_str(Url/lit("http://h:8080/p?q=1")), "http://h:8080/p?q=1"),
+        Test/equal(Url/lit("http://h:/").port, 80),
+        Test/equal(Url/lit("https://h:/").port, 443),
+        Test/equal(Url/to_str(Url/lit("http://h:/p")), "http://h/p"),
+        Test/equal(Url/lit("http://h:65535/").port, 65535)]);
+
+-- A literal that does not read is refused where it is written; a string that does not read says why. A space, a control octet and an octet past ASCII have no place in a URL, each being written percent-encoded.
+test a_url_that_does_not_read_says_why =
+    Test/all([
+        Test/assert(Result/is_failure(Url/of_str("ftp://example.com/"))),
+        Test/assert(Result/is_failure(Url/of_str("http:///nohost"))),
+        Test/assert(Result/is_failure(Url/of_str("http://h:port/"))),
+        Test/assert(Result/is_failure(Url/of_str("http://h:65536/"))),
+        Test/assert(Result/is_failure(Url/of_str("http://h:80x/"))),
+        Test/assert(Result/is_failure(Url/of_str("http://h/a b"))),
+        Test/assert(Result/is_failure(Url/of_str("http://h/a\r\nX-Injected: two"))),
+        Test/assert(Result/is_failure(Url/of_str("http://h/?q=café"))),
+        Test/assert(Result/is_failure(Url/of_str("http://h\u{1}/")))]);
+
+-- Percent-encoding leaves the unreserved characters and spells every other byte; decoding reads `+` as a space and refuses a broken escape.
+test components_encode_and_decode =
+    Test/all([
+        Test/equal(Url/encode("a b/c~d"), "a%20b%2Fc~d"),
+        Test/equal(Url/decode("a%20b+c"), Option/some("a b c")),
+        Test/equal(Url/decode("%zz"), Option/none()),
+        Test/equal(
+            Url/query_pairs(Url/with_query(Url/lit("http://h/"), [("q", "a b"), ("n", "1")])),
+            Option/some([("q", "a b"), ("n", "1")])),
+        Test/equal(
+            Url/query_pairs(Url/lit("http://h/?a=1&&b=2&c")),
+            Option/some([("a", "1"), ("b", "2"), ("c", "")])),
+        Test/equal(Url/query_pairs(Url/lit("http://h/?")), Option/some([])),
+        Test/equal(Url/query_pairs(Url/lit("http://h/?a=%zz&b=2")), Option/none()),
+        Test/equal(Url/query_pairs(Url/lit("http://h/?a=%C3&b=2")), Option/none())]);

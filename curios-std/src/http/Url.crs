@@ -168,7 +168,8 @@ pub let lit(s: Str, @ok: Valid(s)) -> Url =
     | failure(_) => (absent) => match absent end
     end(ok);
 
-let scheme_str(s: Scheme) -> Str =
+--- The scheme as a URL spells it.
+pub let scheme_str(s: Scheme) -> Str =
     match s | http() => "http" | https() => "https" end;
 
 let port_str(u: Url) -> Str =

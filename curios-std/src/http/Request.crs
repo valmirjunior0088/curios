@@ -1,8 +1,9 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Parse, Spell};
+use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result, Spell};
 use /std/Bool/{Holds};
 use /std/ops/{Eql};
-use /std/http/{Method, Url, Field};
+use /std/http/{Method, Url, Field, Version, Limits, Refusal, Framing, read, syntax};
 use /std/http/Field/{Name, Value};
+use /std/http/Url/{Scheme};
 
 --- What is sent: the method, where to, the headers and the body. Where to is the URL, whose scheme decides the connection and whose host and port the `Host` header.
 pub struct Request: pub Type {
@@ -87,73 +88,129 @@ pub let render(r: Request) -> Bytes =
         '\n',
         ..r.body];
 
-let until(target: Byte) -> (Byte) -> Bool =
-    (byte) => Bool/not(byte == target);
+--- A request's head as it is read: the method, the target as its request line spells it, the version it states and its headers.
+pub struct Head: pub Type {
+    method: Method,
+    target: Str,
+    version: Version,
+    headers: List(Field),
+}
 
-let text(b: Bytes) -> Parse(Bytes, Str) =
+satisfy Eql(Head) {
+    ..
+}
+
+satisfy Spell(Head) {
+    ..
+}
+
+-- The method `b` spells: malformed where it is no token, and not implemented where it is one this library does not name.
+let method_of(b: Bytes) -> Result(Refusal, Method) =
     match Str/of_bytes(b)
-    | some(s) => Parse/pure(s)
-    | none() => Parse/fail("a request is text before its body")
+    | none() => Result/failure(Refusal/malformed("a method is a token"))
+    | some(spelled) =>
+        match Name/is_token(spelled)
+        | false => Result/failure(Refusal/malformed("a method is a token"))
+        | true =>
+            match Method/of_str(spelled)
+            | some(method) => Result/success(method)
+            | none() => Result/failure(Refusal/not_implemented(Str/concat("the method ", spelled)))
+            end
+        end
     end;
 
-let request_line: Parse(Bytes, {Method, Str}) =
-    let m = Parse/bytes/take_while(until(' '))!;
-    let _ = Parse/bytes/expect(' ')!;
-    let t = Parse/bytes/take_while(until(' '))!;
-    let _ = Parse/bytes/expect(' ')!;
-    let _ = Parse/bytes/take_while(until('\r'))!;
-    let _ = Parse/bytes/literal("\r\n")!;
-    let spelled = text(m)!;
-    let target = text(t)!;
-    match Method/of_str(spelled)
-    | some(method) => Parse/pure((method, target))
-    | none() => Parse/fail(Str/flatten(["unknown method '", spelled, "'"]))
+--- The head `bytes` spell, the bytes of a request line and its field lines: a request line of a method, a target and a version between single spaces, and field lines none of which begins with whitespace (RFC 9112 §3, §5). A method this library does not name is not implemented, a major version other than 1 not supported, and anything else that is no head malformed.
+pub let head_of(bytes: Bytes) -> Result(Refusal, Head) =
+    match syntax/lines(bytes)
+    | [] => Result/failure(Refusal/malformed("a request begins with its request line"))
+    | [first, ..rest] =>
+        let parts = syntax/request_line(first)!;
+        let version = syntax/version(parts.version)!;
+        let method = method_of(parts.method)!;
+        let headers = syntax/fields(rest, false)!;
+        match Str/of_bytes(parts.target)
+        | some(target) =>
+            Result/success(
+                Head { method = method, target = target, version = version, headers = headers })
+        | none() => Result/failure(Refusal/malformed("a request target is text"))
+        end
     end;
 
-let guard_header: Parse(Bytes, {}) =
-    let next = Parse/bytes/peek!;
-    match next
-    | none() => Parse/fail("unexpected end of headers")
-    | some(byte) =>
-        match byte == '\r' | true => Parse/fail("end of header block") | false => Parse/pure(()) end
+-- Whether `host` is what a `Host` field holds: a host and, after a colon, a port, with none of what would begin a path, a query, a fragment or user information.
+let is_authority(host: Str) -> Bool =
+    Bool/not(Str/is_empty(host))
+        && Bytes/all(
+            Str/to_bytes(host),
+            (b) =>
+                let n = Byte/to_nat(b);
+                Nat/in_range(n, 33, 126) && n != '/' && n != '?' && n != '#' && n != '@');
+
+-- The authority a request's `Host` fields state: the one field's value, where there is one field and its value is an authority.
+let host_of(headers: List(Field)) -> Result(Refusal, Option(Str)) =
+    let stated(one: Field) -> Result(Refusal, Option(Str)) =
+        match Value/to_str(one.value)
+        | some(host) =>
+            match is_authority(host)
+            | true => Result/success(Option/some(host))
+            | false =>
+                Result/failure(Refusal/malformed("Host is a host and, after a colon, a port"))
+            end
+        | none() => Result/failure(Refusal/malformed("Host is a host and, after a colon, a port"))
+        end;
+    match List/filter(headers, (f: Field) => Name/is(f.name, "Host"))
+    | [] => Result/success(Option/none())
+    | [one, ..others] =>
+        match others
+        | [] => stated(one)
+        | _ => Result/failure(Refusal/malformed("a request states one Host"))
+        end
     end;
 
---- One `name: value` line; the value is trimmed. A name that is no token and a value holding a control octet are refused.
-pub let header_line: Parse(Bytes, Field) =
-    let _ = guard_header!;
-    let name = Parse/bytes/take_while(until(':'))!;
-    let _ = Parse/bytes/expect(':')!;
-    let value = Parse/bytes/take_while(until('\r'))!;
-    let _ = Parse/bytes/literal("\r\n")!;
-    let n = text(name)!;
-    let v = text(value)!;
-    match Field/read(n, Str/to_bytes(Str/trim(v)))
-    | some(field) => Parse/pure(field)
-    | none() =>
-        Parse/commit(Parse/fail("a field's name is a token, and its value holds no control octet"))
+let read_url(text: Str) -> Result(Refusal, Url) =
+    match Url/of_str(text)
+    | success(url) => Result/success(url)
+    | failure(why) => Result/failure(Refusal/malformed(why.message))
     end;
 
-let lookup(headers: List(Field), name: Str) -> Option(Str) =
-    Option/bind(Field/find(headers, name), Value/to_str);
-
-let body_of(headers: List(Field)) -> Parse(Bytes, Bytes) =
-    match Option/bind(lookup(headers, "Content-Length"), Nat/of_str)
-    | some(n) => Parse/bytes/take(n)
-    | none() => Parse/pure(x[])
+--- Where the request `head` is addressed, over a connection of `scheme` (RFC 9112 §3.2, §3.3). A target in origin-form, a path and its query, is joined to the authority its one `Host` field states; one in absolute-form, a whole URL, is the address, with `Host` ignored though HTTP/1.1 still owes one. A request with no authority, with two `Host` fields or one that is no authority, or with a target of neither form, is malformed.
+pub let url_of(scheme: Scheme, head: Head) -> Result(Refusal, Url) =
+    let host = host_of(head.headers)!;
+    match (Str/contains(head.target, '#'), Str/starts_with(head.target, "/"))
+    | (true, _) => Result/failure(Refusal/malformed("a request target has no fragment"))
+    | (false, true) =>
+        match host
+        | some(authority) =>
+            read_url(Str/flatten([Url/scheme_str(scheme), "://", authority, head.target]))
+        | none() => Result/failure(Refusal/malformed("a request names its host"))
+        end
+    | (false, false) =>
+        match (Url/of_str(head.target), Option/is_none(host) && Version/is_1_1(head.version))
+        | (failure(_), _) =>
+            Result/failure(Refusal/malformed("a request target is a path or a whole URL"))
+        | (success(_), true) =>
+            Result/failure(Refusal/malformed("an HTTP/1.1 request states its Host"))
+        | (success(url), false) => Result/success(url)
+        end
     end;
 
-let url_of(headers: List(Field), target: Str) -> Parse(Bytes, Url) =
-    let authority = Option/unwrap_or(lookup(headers, "Host"), "localhost");
-    match Url/of_str(Str/flatten(["http://", authority, target]))
-    | success(u) => Parse/pure(u)
-    | failure(why) => Parse/fail(why.message)
-    end;
+--- How the body of the request `head` is delimited.
+pub let framing(head: Head) -> Result(Refusal, Framing) =
+    Framing/of_request(head.version, head.headers);
 
---- A whole request as a server reads it: the request line, the headers, then `Content-Length` bytes of body or none. The URL is rebuilt from `Host` and the target, under `http`, since the wire does not say.
-pub let decode: Parse(Bytes, Request) =
-    let (method, target) = request_line!;
-    let headers = Parse/many0(header_line)!;
-    let _ = Parse/bytes/literal("\r\n")!;
-    let body = body_of(headers)!;
-    let url = url_of(headers, target)!;
-    Parse/pure(Request { method = method, url = url, headers = headers, body = body });
+--- The request `head` and `body` make, over a connection of `scheme`.
+pub let from_head(scheme: Scheme, head: Head, body: Bytes) -> Result(Refusal, Request) =
+    let url = url_of(scheme, head)!;
+    Result/success(
+        Request { method = head.method, url = url, headers = head.headers, body = body });
+
+--- A whole request read from `bytes`, as a server over a connection of `scheme` reads it within `limits`: the head, the framing its fields state, the body that framing delimits, and the URL its target and its `Host` address. What follows the request is not read. A request that has not all arrived is `incomplete`.
+pub let of_bytes(limits: Limits, scheme: Scheme, bytes: Bytes) -> Result(Refusal, Request) =
+    match read/head(limits, true, 0, bytes)
+    | more(_, _) => Result/failure(Refusal/incomplete())
+    | refused(why) => Result/failure(why)
+    | took(lines, rest) =>
+        let head = head_of(lines)!;
+        let delimited = framing(head)!;
+        let (body, _) = read/whole(limits, delimited, rest)!;
+        from_head(scheme, head, body)
+    end;

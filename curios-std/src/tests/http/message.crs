@@ -1,0 +1,169 @@
+-- The messages a program makes: the method, the fields, the status, and the bytes a request and a reply are written as.
+use /std/{Str, Bytes, List, Option, Result, Show, Test, Html};
+use /std/http/{Method, Url, Field, Status, Request, Response, Limits};
+use /std/http/Field/{Name, Value};
+use /std/http/Url/{Scheme};
+
+-- A method spells as the wire does and reads back.
+test a_method_spells_and_reads =
+    Test/all([
+        Test/equal(Show/show(Method/post()), "POST"),
+        Test/equal(Method/of_str("DELETE"), Option/some(Method/delete())),
+        Test/equal(Method/of_str("BREW"), Option/none())]);
+
+let wire(b: Bytes) -> Option(Str) =
+    Str/of_bytes(b);
+
+-- A request is written with its target, `Host`, `Connection: close`, and a length only where it has a body or its method always states one; what is written reads back as the request, the fields its renderer wrote beside its own.
+test a_request_is_written_and_reads_back =
+    let r =
+        Request/with_header(
+            Request/get(Url/lit("http://example.com/x?y=1")),
+            "Accept",
+            "text/plain");
+    Test/all([
+        Test/equal(
+            wire(Request/render(r)),
+            Option/some(
+                "GET /x?y=1 HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\nAccept: text/plain\r\n\r\n")),
+        Test/equal(
+            Result/map_success(
+                Request/of_bytes(Limits/server, Scheme/http(), Request/render(r)),
+                (d) =>
+                    (
+                        (d.method, Url/to_str(d.url)),
+                        List/map(d.headers, (f: Field) => (f.name.text, f.value)))),
+            Result/success((
+                (Method/get(), "http://example.com/x?y=1"),
+                [
+                    ("Host", Value/lit("example.com")),
+                    ("Connection", Value/lit("close")),
+                    ("Accept", Value/lit("text/plain"))]))),
+        Test/equal(
+            wire(Request/render(Request/post(Url/lit("http://h:81/"), Str/to_bytes("hi")))),
+            Option/some(
+                "POST / HTTP/1.1\r\nHost: h:81\r\nConnection: close\r\nContent-Length: 2\r\n\r\nhi")),
+        Test/equal(
+            wire(Request/render(Request/post(Url/lit("http://h/"), x[]))),
+            Option/some(
+                "POST / HTTP/1.1\r\nHost: h\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")),
+        Test/equal(
+            wire(
+                Request/render(
+                    Request/with_header(
+                        Request/with_header(
+                            Request/post(Url/lit("http://h/"), Str/to_bytes("hi")),
+                            "Content-Length",
+                            "99"),
+                        "host",
+                        "elsewhere"))),
+            Option/some(
+                "POST / HTTP/1.1\r\nHost: h\r\nConnection: close\r\nContent-Length: 2\r\n\r\nhi"))]);
+
+-- A reply is written as HTTP/1.1 and says `close`; it states its length unless its status is 1xx, 204 or 304, a 205's being zero; and a caller's own framing field is not sent.
+test a_reply_is_written_with_its_own_framing =
+    Test/all([
+        Test/equal(
+            wire(Response/render(Response/of_text(200, "hello"))),
+            Option/some(
+                "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 5\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nhello")),
+        Test/equal(
+            wire(Response/render(Response/empty(204))),
+            Option/some("HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n")),
+        Test/equal(
+            wire(Response/render(Response/empty(304))),
+            Option/some("HTTP/1.1 304 Not Modified\r\nConnection: close\r\n\r\n")),
+        Test/equal(
+            wire(Response/render(Response/empty(205))),
+            Option/some(
+                "HTTP/1.1 205 Reset Content\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")),
+        Test/equal(
+            wire(
+                Response/render(
+                    Response/with_header(
+                        Response/with_header(
+                            Response/with_header(
+                                Response/of_text(200, "hi"),
+                                "Content-Length",
+                                "99"),
+                            "transfer-encoding",
+                            "chunked"),
+                        "X-A",
+                        "one"))),
+            Option/some(
+                "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\nContent-Type: text/plain; charset=utf-8\r\nX-A: one\r\n\r\nhi")),
+        Test/equal(
+            wire(Response/render_head(Response/of_text(200, "hello"), Str/to_bytes("hello"))),
+            Option/some(
+                "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 5\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"))]);
+
+-- A made reply reads back as itself, and its readers find a header without regard to case, its body as text, and whether its status is a success.
+test a_made_reply_reads_back =
+    let r = Response/of_text(200, "hello");
+    Test/all([
+        Test/equal(
+            Result/map_success(
+                Response/of_bytes(Limits/client, Method/get(), Response/render(r)),
+                (d) =>
+                    (
+                        (d.status, Response/text(d)),
+                        (
+                            Response/header(d, "content-length"),
+                            Response/header(d, "Content-Type")))),
+            Result/success((
+                (Status/of(200), Option/some("hello")),
+                (
+                    Option/some(Value/lit("5")),
+                    Option/some(Value/lit("text/plain; charset=utf-8")))))),
+        Test/assert(Response/ok(r)),
+        Test/equal(Response/not_found.status.code, 404),
+        Test/equal(
+            Response/header(Response/of_html(200, Html/text("x")), "Content-Type"),
+            Option/some(Value/lit("text/html; charset=utf-8"))),
+        Test/equal(
+            Response/header(Response/redirect(Url/lit("http://h/next")), "Location"),
+            Option/some(Value/lit("http://h/next")))]);
+
+-- A name is a token and a value holds no control octet but the tab: text met at run time is read as one or refused, octets past ASCII are a value's to hold, and names are one name whatever their case.
+test a_field_met_at_run_time_is_read_or_refused =
+    Test/all([
+        Test/equal(Name/of_str("X-Run-Time"), Option/some(Name { text = "x-run-time" })),
+        Test/equal(Name/of_str("X (A)"), Option/none()),
+        Test/equal(Name/of_str(""), Option/none()),
+        Test/equal(Name/of_str("one\r\nX-Injected"), Option/none()),
+        Test/equal(Value/of_str("one\r\nX-Injected: two"), Option/none()),
+        Test/equal(Value/of_bytes(x['o', 0, 'k']), Option/none()),
+        Test/assert(Option/is_some(Value/of_bytes(x['c', 'a', 'f', 0xE9, '\t', ' ']))),
+        Test/assert(Option/is_some(Value/of_str(Str/repeat("x", 65536)))),
+        Test/equal(Field/read("X-A", Str/to_bytes("one")), Option/some(Field/of("X-A", "one"))),
+        Test/equal(Field/read("X A", Str/to_bytes("one")), Option/none()),
+        Test/equal(Field/read("X-A", Str/to_bytes("one\ntwo")), Option/none())]);
+
+-- A `Url` built by hand is written percent-encoded wherever the wire cannot carry an octet of it, in a request line and in a `Location` alike, and text `Url/of_str` read is written as it is.
+test a_url_reaches_the_wire_percent_encoded =
+    let built =
+        Url {
+            ..Url/lit("http://h/"),
+            path = "/a b\r\nX-Injected: two",
+            query = Option/some("q=café"),
+        };
+    Test/all([
+        Test/equal(
+            wire(Request/render(Request/get(built))),
+            Option/some(
+                "GET /a%20b%0D%0AX-Injected:%20two?q=caf%C3%A9 HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")),
+        Test/equal(
+            Response/header(Response/redirect(built), "Location"),
+            Option/some(Value/lit("http://h/a%20b%0D%0AX-Injected:%20two?q=caf%C3%A9"))),
+        Test/equal(Url/escaped("/x?y=1%20z"), Value/lit("/x?y=1%20z"))]);
+
+-- A status carries content unless it is 1xx, 204, 205 or 304, and a reply of all but the 205 among those ends at its head whatever its fields say.
+test a_status_says_whether_it_carries_content =
+    let codes = [100, 200, 204, 205, 304, 404];
+    Test/all([
+        Test/equal(
+            List/map(codes, Status/carries_content),
+            [false, true, false, false, false, true]),
+        Test/equal(List/map(codes, Status/bodiless), [true, false, true, false, true, false]),
+        Test/equal(Status/of(404).reason, Value/lit("Not Found")),
+        Test/equal(Status/of(299).reason, Value/empty)]);

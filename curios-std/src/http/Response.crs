@@ -1,7 +1,7 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result, Parse, Json, Html, Spell};
+use /std/{Bytes, Str, Nat, Bool, List, Option, Result, Parse, Json, Html, Spell};
 use /std/Bool/{Holds};
 use /std/ops/{Eql};
-use /std/http/{Url, Field, Status};
+use /std/http/{Method, Url, Field, Status, Version, Limits, Refusal, Framing, read, syntax};
 use /std/http/Field/{Name, Value};
 
 --- What came back: the status, the headers and the body. A reply holds content only where its status carries any, so one built with a body on a 1xx, 204, 205 or 304 status is refused where it is built, and every reply is one `render` can write.
@@ -20,144 +20,6 @@ satisfy Eql(Response) {
 satisfy Spell(Response) {
     ..
 }
-
-let until(target: Byte) -> (Byte) -> Bool =
-    (byte) => Bool/not(byte == target);
-
-let is_digit(byte: Byte) -> Bool =
-    Nat/in_range(Byte/to_nat(byte), '0', '9');
-
-let as_text(b: Bytes) -> Parse(Bytes, Str) =
-    match Str/of_bytes(b)
-    | some(s) => Parse/pure(s)
-    | none() => Parse/fail("a reply is text before its body")
-    end;
-
---- The status line: the version, the code and the reason. A code that is not three digits is a refusal, and so is a reason holding a control octet.
-pub let status_line: Parse(Bytes, Status) =
-    let _ = Parse/bytes/take_while(until(' '))!;
-    let _ = Parse/bytes/expect(' ')!;
-    let digits = Parse/bytes/take_while(is_digit)!;
-    let _ = Parse/bytes/expect(' ')!;
-    let reason = Parse/bytes/take_while(until('\r'))!;
-    let _ = Parse/bytes/literal("\r\n")!;
-    let spelled = as_text(digits)!;
-    match Nat/of_str(spelled)
-    | none() => Parse/fail("a status code is a number")
-    | some(code) =>
-        match 100 <= code && code <= 999
-        | false => Parse/fail("a status code is three digits")
-        | true =>
-            match Value/of_bytes(reason)
-            | some(phrase) => Parse/pure(Status { code = code, reason = phrase })
-            | none() => Parse/fail("a reason phrase holds no control octet")
-            end
-        end
-    end;
-
-let guard_header: Parse(Bytes, {}) =
-    let next = Parse/bytes/peek!;
-    match next
-    | none() => Parse/fail("unexpected end of headers")
-    | some(byte) =>
-        match byte == '\r' | true => Parse/fail("end of header block") | false => Parse/pure(()) end
-    end;
-
-let header_line: Parse(Bytes, Field) =
-    let _ = guard_header!;
-    let name = Parse/bytes/take_while(until(':'))!;
-    let _ = Parse/bytes/expect(':')!;
-    let value = Parse/bytes/take_while(until('\r'))!;
-    let _ = Parse/bytes/literal("\r\n")!;
-    let n = as_text(name)!;
-    let v = as_text(value)!;
-    match Field/read(n, Str/to_bytes(Str/trim(v)))
-    | some(field) => Parse/pure(field)
-    | none() =>
-        Parse/commit(Parse/fail("a field's name is a token, and its value holds no control octet"))
-    end;
-
-let lookup(headers: List(Field), name: Str) -> Option(Str) =
-    Option/bind(Field/find(headers, name), Value/to_str);
-
-let hex_value(byte: Byte) -> Option(Nat) =
-    let n = Byte/to_nat(byte);
-    choose
-    | Nat/in_range(n, '0', '9') => Option/some(n - '0')
-    | Nat/in_range(n, 'a', 'f') => Option/some(n - 'a' + 10)
-    | Nat/in_range(n, 'A', 'F') => Option/some(n - 'A' + 10)
-    | _ => Option/none()
-    end;
-
---- One hexadecimal digit's value; declines, consuming nothing, at anything else.
-let hex_digit: Parse(Bytes, Nat) =
-    Parse/bind(Parse/bytes/byte, (byte) =>
-        match hex_value(byte)
-        | some(v) => Parse/pure(v)
-        | none() => Parse/fail("a hexadecimal digit")
-        end);
-
---- One chunk's size line: the hexadecimal size, any extension after `;` ignored, then the line's end.
-let chunk_size: Parse(Bytes, Nat) =
-    let digits = Parse/label(Parse/many1(hex_digit), "a chunk states its size")!;
-    let _ = Parse/bytes/take_while(until('\r'))!;
-    let _ = Parse/bytes/literal("\r\n")!;
-    Parse/pure(List/fold(digits, 0, (digit, acc) => acc * 16 + digit));
-
---- The chunks until the empty one, then any trailers, then the block's end; `acc` is what has arrived.
-let chunks(acc: Bytes) -> Parse(Bytes, Bytes) =
-    let n = chunk_size!;
-    match n
-    | 0 =>
-        let _ = Parse/many0(header_line)!;
-        let _ = Parse/bytes/literal("\r\n")!;
-        Parse/pure(acc)
-    | _ =>
-        let chunk = Parse/bytes/take(n)!;
-        let _ = Parse/bytes/literal("\r\n")!;
-        chunks(x[..acc, ..chunk])
-    end;
-
---- Whether the transfer encoding lists `chunked`, compared without case, wherever it stands in the list.
-let chunked(headers: List(Field)) -> Bool =
-    match lookup(headers, "Transfer-Encoding")
-    | some(value) =>
-        List/any(Str/split(value, ","), (coding) => Str/eql_ascii_ci(Str/trim(coding), "chunked"))
-    | none() => false
-    end;
-
-let body_of(headers: List(Field)) -> Parse(Bytes, Bytes) =
-    match chunked(headers)
-    | true => chunks(x[])
-    | false =>
-        match Option/bind(lookup(headers, "Content-Length"), Nat/of_str)
-        | some(n) => Parse/bytes/take(n)
-        | none() => Parse/bytes/rest
-        end
-    end;
-
---- The reply `status`, `headers` and `body` make: the body dropped where the status has none whatever its fields say, and a refusal where a 205 reply carries content.
-let framed(status: Status, headers: List(Field), body: Bytes) -> Parse(Bytes, Response) =
-    match Status/carries_content(status.code)
-    | true => Parse/pure(Response { status = status, headers = headers, body = body })
-    | false =>
-        match Status/bodiless(status.code)
-        | true => Parse/pure(Response { status = status, headers = headers, body = x[] })
-        | false =>
-            match Bytes/len(body) == 0
-            | true => Parse/pure(Response { status = status, headers = headers, body = body })
-            | false => Parse/fail("a 205 reply carries no content")
-            end
-        end
-    end;
-
---- A whole reply: the status line, the headers, then the body — the chunks when the transfer encoding is chunked, `Content-Length` bytes when the header is there, clamped to what arrived, and everything the peer sent otherwise. A 1xx, 204 or 304 reply has no body.
-pub let decode: Parse(Bytes, Response) =
-    let status = status_line!;
-    let headers = Parse/many0(header_line)!;
-    let _ = Parse/bytes/literal("\r\n")!;
-    let body = body_of(headers)!;
-    framed(status, headers, body);
 
 --- Whether a reply's renderer writes the field named `name` itself: the framing fields and `Connection`. A caller's own field of one of these names is not sent.
 pub let owned(name: Name) -> Bool =
@@ -273,3 +135,60 @@ pub let redirect(url: Url) -> Response =
 --- A `404 Not Found` with an empty body.
 pub let not_found: Response =
     Response { status = Status/of(404), headers = [], body = x[] };
+
+--- A reply's head as it is read: its status, the version it states and its headers.
+pub struct Head: pub Type {
+    status: Status,
+    version: Version,
+    headers: List(Field),
+}
+
+satisfy Eql(Head) {
+    ..
+}
+
+satisfy Spell(Head) {
+    ..
+}
+
+--- The head `bytes` spell, the bytes of a status line and its field lines: a status line of a version, a three-digit code and a reason phrase (RFC 9112 §4), and field lines, a fold among them read as a space and what follows it (§5.2). Anything else is malformed.
+pub let head_of(bytes: Bytes) -> Result(Refusal, Head) =
+    match syntax/lines(bytes)
+    | [] => Result/failure(Refusal/malformed("a reply begins with its status line"))
+    | [first, ..rest] =>
+        let (version, status) = syntax/status_line(first)!;
+        let headers = syntax/fields(rest, true)!;
+        Result/success(Head { status = status, version = version, headers = headers })
+    end;
+
+--- How the body of the reply `head` is delimited, given the method of the request it answers.
+pub let framing(method: Method, head: Head) -> Result(Refusal, Framing) =
+    Framing/of_reply(method, head.status.code, head.version, head.headers);
+
+--- The reply `head` and `body` make. A 205 reply that carries content is malformed, since its server sends none (RFC 9110 §15.3.6), and a 1xx, 204 or 304 reply has no body to be given.
+pub let from_head(head: Head, body: Bytes) -> Result(Refusal, Response) =
+    match Status/carries_content(head.status.code)
+    | true => Result/success(Response { status = head.status, headers = head.headers, body = body })
+    | false =>
+        match Bytes/len(body) == 0
+        | true =>
+            Result/success(Response { status = head.status, headers = head.headers, body = body })
+        | false => Result/failure(Refusal/malformed("a reply of this status carries no content"))
+        end
+    end;
+
+--- A whole reply read from `bytes`, as a client that sent a request of `method` reads it within `limits`: every 1xx reply ahead of the final one passed over (RFC 9110 §15.2), then the head, the framing its fields state, and the body that framing delimits — none in reply to `HEAD` or under a 1xx, 204 or 304 status, the chunks where it is chunked, `Content-Length` octets where the field is there, and everything the peer sent otherwise. A reply that has not all arrived is `incomplete`.
+pub let of_bytes(limits: Limits, method: Method, bytes: Bytes) -> Result(Refusal, Response) =
+    match read/head(limits, false, 0, bytes)
+    | more(_, _) => Result/failure(Refusal/incomplete())
+    | refused(why) => Result/failure(why)
+    | took(lines, rest) =>
+        let head = head_of(lines)!;
+        match head.status.code < 200
+        | true => of_bytes(limits, method, rest)
+        | false =>
+            let delimited = framing(method, head)!;
+            let (body, _) = read/whole(limits, delimited, rest)!;
+            from_head(head, body)
+        end
+    end;

@@ -1,0 +1,119 @@
+use /std/{Bytes, Str, Nat, Bool, List, Option, Result, Spell};
+use /std/ops/{Eql};
+use /std/http/{Method, Field, Status, Version, Refusal, octets};
+use /std/http/Field/{Name};
+
+--- How a message's body is delimited, read from its start line and its fields by RFC 9112 §6.3's rules in order.
+pub induct Framing: pub Type
+--- No body: the message ends with its head.
+| none()
+--- A body of this many octets, as `Content-Length` states.
+| length(Nat)
+--- A chunked body, which says itself where it ends.
+| chunked()
+--- A reply's body that runs to the connection's close.
+| close()
+end
+
+pub use Framing/*;
+
+satisfy Eql(Framing) {
+    ..
+}
+
+satisfy Spell(Framing) {
+    ..
+}
+
+-- The members of the lists the fields named `name` hold, every line's joined as RFC 9110 §5.2 joins them, each trimmed and the empty ones left out as §5.6.1 has a recipient do.
+let members(headers: List(Field), name: Str) -> List(Bytes) =
+    List/filter(
+        List/flatten(
+            List/map(
+                List/filter(headers, (f: Field) => Name/is(f.name, name)),
+                (f: Field) => List/map(octets/split(f.value.bytes, ','), octets/trim))),
+        (member) => Bytes/len(member) != 0);
+
+let present(headers: List(Field), name: Str) -> Bool =
+    List/any(headers, (f: Field) => Name/is(f.name, name));
+
+let is_chunked(coding: Bytes) -> Bool =
+    match Str/of_bytes(coding) | some(s) => Str/eql_ascii_ci(s, "chunked") | none() => false end;
+
+-- What the transfer codings say: nothing where the field is absent, and otherwise whether they are `chunked` alone, end in `chunked` after another coding, or do not end in it.
+induct Codings: Type
+| absent()
+| chunked_alone()
+| chunked_last()
+| other_last()
+end
+
+let codings(headers: List(Field)) -> Codings =
+    match present(headers, "Transfer-Encoding")
+    | false => Codings/absent()
+    | true =>
+        match List/reverse(members(headers, "Transfer-Encoding"))
+        | [] => Codings/other_last()
+        | [last, ..before] =>
+            match is_chunked(last)
+            | false => Codings/other_last()
+            | true => match before | [] => Codings/chunked_alone() | _ => Codings/chunked_last() end
+            end
+        end
+    end;
+
+-- The length `Content-Length` states: none where the field is absent, the number where every member of its list is that one number, and a refusal otherwise.
+let stated(headers: List(Field)) -> Result(Refusal, Option(Nat)) =
+    match present(headers, "Content-Length")
+    | false => Result/success(Option/none())
+    | true =>
+        match List/traverse(members(headers, "Content-Length"), octets/number)
+        | some([first, ..rest]) =>
+            match List/all(rest, (n) => n == first)
+            | true => Result/success(Option/some(first))
+            | false => Result/failure(Refusal/malformed("Content-Length states two lengths"))
+            end
+        | _ => Result/failure(Refusal/malformed("Content-Length is no number"))
+        end
+    end;
+
+--- How a request's body is delimited. `Transfer-Encoding` is read ahead of `Content-Length`, and alone where both are there; its codings are `chunked` and nothing else, one that does not end in `chunked` being unframeable and one that has another coding before it not implemented; and in an HTTP/1.0 request it is faulty framing. A request with neither field has no body.
+pub let of_request(version: Version, headers: List(Field)) -> Result(Refusal, Framing) =
+    match codings(headers)
+    | absent() =>
+        let length = stated(headers)!;
+        Result/success(match length | some(n) => Framing/length(n) | none() => Framing/none() end)
+    | chunked_alone() =>
+        match Version/is_1_1(version)
+        | true => Result/success(Framing/chunked())
+        | false => Result/failure(Refusal/malformed("Transfer-Encoding in an HTTP/1.0 message"))
+        end
+    | chunked_last() =>
+        Result/failure(Refusal/not_implemented("a transfer coding other than chunked"))
+    | other_last() =>
+        Result/failure(Refusal/malformed("a transfer coding that is not chunked ends the list"))
+    end;
+
+--- How a reply's body is delimited, given the method it answers. A reply to `HEAD` and a 1xx, 204 or 304 reply have no body whatever their fields say. Past those, `Transfer-Encoding` is read as a request's is, any coding but `chunked` being one the client did not say it accepts; then `Content-Length`; and a reply with neither runs to the connection's close.
+pub let of_reply(
+    method: Method,
+    code: Nat,
+    version: Version,
+    headers: List(Field),
+) -> Result(Refusal, Framing) =
+    match method == Method/head() || Status/bodiless(code)
+    | true => Result/success(Framing/none())
+    | false =>
+        match codings(headers)
+        | absent() =>
+            let length = stated(headers)!;
+            Result/success(
+                match length | some(n) => Framing/length(n) | none() => Framing/close() end)
+        | chunked_alone() =>
+            match Version/is_1_1(version)
+            | true => Result/success(Framing/chunked())
+            | false => Result/failure(Refusal/malformed("Transfer-Encoding in an HTTP/1.0 message"))
+            end
+        | _ => Result/failure(Refusal/malformed("a transfer coding other than chunked"))
+        end
+    end;

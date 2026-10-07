@@ -1,0 +1,133 @@
+-- A reply as a client reads it: the head, the framing its fields and the request's method state, and the body.
+use /std/{Str, Bytes, Nat, Option, Result, Test};
+use /std/http/{Method, Response, Limits, Refusal};
+use /std/http/Field/{Value};
+
+let read(method: Method, s: Str) -> Result(Refusal, Response) =
+    Response/of_bytes(Limits/client, method, Str/to_bytes(s));
+
+-- What a reply to a `GET` that reads is: its code and its body as text.
+let seen(s: Str) -> Result(Refusal, {Nat, Option(Str)}) =
+    Result/map_success(read(Method/get(), s), (r) => (r.status.code, Str/of_bytes(r.body)));
+
+let is(s: Str, code: Nat, body: Str) -> Test =
+    Test/equal(seen(s), Result/success((code, Option/some(body))));
+
+let malformed(s: Str) -> Test =
+    Test/assert(
+        match read(Method/get(), s)
+        | failure(why) => match why | malformed(_) => true | _ => false end
+        | success(_) => false
+        end);
+
+let incomplete(s: Str) -> Test =
+    Test/equal(read(Method/get(), s), Result/failure(Refusal/incomplete()));
+
+-- A reply reads by its chunks, by its length, or to the close where it states neither, and what follows a length is left alone.
+test a_reply_reads_by_the_framing_it_states =
+    Test/all([
+        is("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello AND MORE", 200, "hello"),
+        is(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\nE\r\n in\r\n\r\nchunks.\r\n0\r\nExpires: never\r\n\r\n",
+            200,
+            "Wikipedia in\r\n\r\nchunks."),
+        is("HTTP/1.1 200 OK\r\n\r\neverything to the close", 200, "everything to the close"),
+        is(
+            "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n",
+            200,
+            "hello"),
+        is("HTTP/1.1 200 OK\r\nContent-Length: 5, 5\r\n\r\nhello and more", 200, "hello"),
+        is(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n000\r\n\r\n",
+            200,
+            "hello"),
+        is("HTTP/1.0 200 OK\r\n\r\nto the close", 200, "to the close"),
+        is("HTTP/1.1 200 \r\nContent-Length: 2\r\n\r\nhi", 200, "hi")]);
+
+-- A reply has no body where its status carries none or its request was a `HEAD`, whatever its fields say, and a 1xx reply ahead of the final one is passed over.
+test a_reply_has_the_body_its_status_and_its_request_allow =
+    Test/all([
+        is("HTTP/1.1 204 No Content\r\n\r\nextra", 204, ""),
+        is("HTTP/1.1 304 Not Modified\r\nContent-Length: 5\r\n\r\nhello", 304, ""),
+        Test/equal(
+            Result/map_success(
+                read(Method/head(), "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n"),
+                (r) => (r.status.code, Bytes/len(r.body))),
+            Result/success((200, 0))),
+        is(
+            "HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi",
+            200,
+            "hi"),
+        is(
+            "HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 103 Early Hints\r\nLink: </a>\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi",
+            200,
+            "hi"),
+        is("HTTP/1.1 205 Reset Content\r\nContent-Length: 0\r\n\r\n", 205, ""),
+        malformed("HTTP/1.1 205 Reset Content\r\nContent-Length: 5\r\n\r\nhello"),
+        incomplete("HTTP/1.1 100 Continue\r\n\r\n")]);
+
+-- A reply whose framing cannot be read, or whose coding is not `chunked` alone, is malformed, and one that has not all arrived is cut short.
+test a_reply_that_cannot_be_framed_is_refused =
+    Test/all([
+        malformed("HTTP/1.1 200 OK\r\nContent-Length: abc\r\n\r\nhello"),
+        malformed("HTTP/1.1 200 OK\r\nContent-Length: +5\r\n\r\nhello"),
+        malformed("HTTP/1.1 200 OK\r\nContent-Length: \u{B}2\u{B}\r\n\r\nhi"),
+        malformed("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Length: 5\r\n\r\nhello"),
+        malformed(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked, gzip\r\n\r\n5\r\nhello\r\n0\r\n\r\n"),
+        malformed(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip, chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n"),
+        malformed(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n"),
+        malformed("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked, chunked\r\n\r\n0\r\n\r\n"),
+        malformed("HTTP/1.0 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n"),
+        malformed(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5 xyz\r\nhello\r\n0\r\n\r\n"),
+        malformed(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5;a=b\nc\r\nhello\r\n0\r\n\r\n"),
+        malformed(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\nZZ\r\nworld\r\n0\r\n\r\n"),
+        malformed("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhelloXX0\r\n\r\n"),
+        incomplete("HTTP/1.1 200 OK\r\nContent-Length: 50\r\n\r\nhello"),
+        incomplete("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n5\r\nwor"),
+        incomplete("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n"),
+        incomplete("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n"),
+        incomplete("HTTP/1.1 200 OK\r\nContent-Le"),
+        incomplete("")]);
+
+-- A status line is a version, a three-digit code and a reason phrase, and a field line a token, a colon and a value: a fold is read as a space, octets past ASCII are a value's and a phrase's to hold, and anything else is malformed.
+test a_reply_head_is_read_as_its_grammar_spells_it =
+    Test/all([
+        malformed("HTTP/1.1 20 OK\r\nContent-Length: 2\r\n\r\nhi"),
+        malformed("HTTP/1.1 2000 OK\r\nContent-Length: 2\r\n\r\nhi"),
+        malformed("FOO 200 OK\r\nContent-Length: 2\r\n\r\nhi"),
+        Test/equal(
+            read(Method/get(), "HTTP/2.0 200 OK\r\nContent-Length: 2\r\n\r\nhi"),
+            Result/failure(Refusal/version_not_supported())),
+        malformed("HTTP/1.1 200\r\nContent-Length: 2\r\n\r\nhi"),
+        malformed("HTTP/1.1 OK\r\n\r\n"),
+        malformed("HTTP/1.1 200 OK\r\nContent-Length : 2\r\n\r\nhi"),
+        malformed("HTTP/1.1 200 OK\r\n X-A: one\r\nContent-Length: 2\r\n\r\nhi"),
+        malformed("HTTP/1.1 200 OK\r\nX (A): one\r\nContent-Length: 2\r\n\r\nhi"),
+        malformed("HTTP/1.1 200 OK\r\nX-A: one\ntwo\r\nContent-Length: 2\r\n\r\nhi"),
+        malformed("HTTP/1.1 200 OK\r\nX-A: one\u{0}two\r\nContent-Length: 2\r\n\r\nhi"),
+        Test/equal(
+            Result/map_success(
+                read(
+                    Method/get(),
+                    "HTTP/1.1 200 OK\r\nX-A: one\r\n two\r\n\tthree\r\nContent-Length: 2\r\n\r\nhi"),
+                (r) => (Response/header(r, "x-a"), Str/of_bytes(r.body))),
+            Result/success((Option/some(Value/lit("one two three")), Option/some("hi")))),
+        Test/equal(
+            Result/map_success(
+                Response/of_bytes(
+                    Limits/client,
+                    Method/get(),
+                    x[
+                        ..Str/to_bytes("HTTP/1.1 404 Introuvabl"),
+                        0xE9,
+                        ..Str/to_bytes("\r\nX-A: caf"),
+                        0xE9,
+                        ..Str/to_bytes("\r\nContent-Length: 2\r\n\r\nhi")]),
+                (r) => (Bytes/len(r.status.reason.bytes), Response/header(r, "X-A"))),
+            Result/success((11, Value/of_bytes(x['c', 'a', 'f', 0xE9]))))]);
