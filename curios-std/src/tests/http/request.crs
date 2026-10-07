@@ -99,7 +99,7 @@ test a_request_that_cannot_be_framed_is_refused =
 -- A request line is a method, a target and a version between single spaces: a method the library does not name is not implemented, a major version other than 1 not supported, and any other line that is none is malformed.
 test a_request_line_is_a_method_a_target_and_a_version =
     Test/all([
-        answers("OPTIONS / HTTP/1.1\r\nHost: h\r\n\r\n", 501),
+        answers("TRACE / HTTP/1.1\r\nHost: h\r\n\r\n", 501),
         answers("get / HTTP/1.1\r\nHost: h\r\n\r\n", 501),
         answers("G(E)T / HTTP/1.1\r\nHost: h\r\n\r\n", 400),
         answers("GET / HTTP/2.0\r\nHost: h\r\n\r\n", 505),
@@ -190,3 +190,23 @@ test a_request_past_a_bound_is_refused_by_the_bound =
             under(
                 "POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n3;extension=long\r\nabc\r\n0\r\n\r\n"),
             Option/some(400))]);
+
+let addressed(head: Str) -> Result(Refusal, Request/Address) =
+    Result/bind(
+        Request/head_of(Str/to_bytes(head)),
+        (read) => Request/address_of(Scheme/http(), read));
+
+-- `OPTIONS` asks about a resource as any method does, and about the server itself where its target is `*`, which no other method's is and under which HTTP/1.1 still owes its `Host`. A request for the server is no `Request`, since it has no URL.
+test options_is_asked_of_a_resource_or_of_the_server =
+    Test/all([
+        is("OPTIONS /x HTTP/1.1\r\nHost: h\r\n\r\n", Method/options(), "http://h/x", ""),
+        Test/equal(
+            addressed("OPTIONS * HTTP/1.1\r\nHost: h"),
+            Result/success(Request/Address/server())),
+        Test/equal(addressed("OPTIONS * HTTP/1.0"), Result/success(Request/Address/server())),
+        Test/equal(
+            addressed("GET /x HTTP/1.1\r\nHost: h"),
+            Result/success(Request/Address/resource(Url/lit("http://h/x")))),
+        Test/assert(Result/is_failure(addressed("GET * HTTP/1.1\r\nHost: h"))),
+        Test/assert(Result/is_failure(addressed("OPTIONS * HTTP/1.1"))),
+        Test/assert(Result/is_failure(read("OPTIONS * HTTP/1.1\r\nHost: h\r\n\r\n")))]);

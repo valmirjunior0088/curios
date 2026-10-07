@@ -1,8 +1,8 @@
 use /std/{Bytes, Str, Nat, Bool, List, Result, Try, Async, Io};
 use /std/time/{Duration};
 use /std/tcp/{Socket, Listener};
-use /std/http/{Method, Url, Field, Request, Response, Version, Limits, Refusal, Framing, read,
-    stream};
+use /std/http/{Method, Url, Field, Status, Request, Response, Version, Limits, Refusal, Framing,
+    read, stream};
 use /std/http/Url/{Scheme};
 
 --- How a server reads a request and ends a connection: how much of a request it takes, how long a request may take to arrive whole, and how long it reads on from a peer that has gone quiet once it has answered.
@@ -34,9 +34,10 @@ let expects_continue(head: Request/Head) -> Bool =
                 | none() => false
                 end);
 
--- How reading a request stopped short of one: with the refusal the server answers, or with nothing to answer — a peer that connected and sent nothing, or a wire that failed.
+-- How reading a request ended with none for the handler: with the refusal the server answers; with a question about the server itself, `OPTIONS *`, which it answers too; or with nothing to answer — a peer that connected and sent nothing, or a wire that failed.
 induct Unread: Type
 | refused(Refusal)
+| of_server()
 | silent()
 end
 
@@ -47,11 +48,25 @@ struct Opened: Type {
     framing: Framing,
 }
 
-let opened(scheme: Scheme, lines: Bytes) -> Result(Refusal, Opened) =
+-- What a request's head alone decides, read from its lines: how its body is delimited and what it is addressed to.
+let decided(
+    scheme: Scheme,
+    lines: Bytes,
+) -> Result(Refusal, {Request/Head, Framing, Request/Address}) =
     let head = Request/head_of(lines)!;
     let framing = Request/framing(head)!;
-    let url = Request/url_of(scheme, head)!;
-    Result/success(Opened { head = head, url = url, framing = framing });
+    let address = Request/address_of(scheme, head)!;
+    Result/success((head, framing, address));
+
+let opened(scheme: Scheme, lines: Bytes) -> Result(Unread, Opened) =
+    match decided(scheme, lines)
+    | failure(why) => Result/failure(Unread/refused(why))
+    | success((head, framing, address)) =>
+        match address
+        | resource(url) => Result/success(Opened { head = head, url = url, framing = framing })
+        | server() => Result/failure(Unread/of_server())
+        end
+    end;
 
 -- `100 Continue` written to `c` where the request expects it and its body is still to arrive: one whose head already refuses it, or whose content came with its head, is not invited to send it.
 let invite(limits: Limits, c: Socket, o: Opened, held: Bytes) -> Async(Result(Io/Error, {})) =
@@ -87,7 +102,7 @@ let request(limits: Limits, scheme: Scheme, c: Socket) -> Async(Result(Unread, R
                 end))
     | success((lines, rest)) =>
         match opened(scheme, lines)
-        | failure(why) => Async/pure(Result/failure(Unread/refused(why)))
+        | failure(why) => Async/pure(Result/failure(why))
         | success(o) =>
             let invited = invite(limits, c, o, rest)!;
             match invited
@@ -149,7 +164,15 @@ let send(s: Server, c: Socket, method: Method, reply: Response) -> Async({}) =
         drain(c, s.quiet, s.limits.head + s.limits.content)
     end;
 
---- What a server does with one connection of `scheme`: read a request as its framing delimits it, hand it to `handler`, write the reply, and end the connection as HTTP asks — the sending half ended, what the peer still sends read until it closes or falls quiet, and the close left to whoever opened the connection. A request the reader refuses is answered with the status its refusal names, one that has not arrived whole within `s.deadline` 408, and a handler that fails 500; a peer that sends nothing is told nothing. `serve` and `serve_tls` run it over a listener of their own, and a program with a listener of its own hands it each socket it accepts.
+-- What the server answers a question about itself with: the methods it reads, and no content, which a reply to `OPTIONS` says by a length of zero (RFC 9110 §9.3.7).
+let allowed: Response =
+    Response {
+        status = Status/of(200),
+        headers = [Field/of("Allow", "GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS")],
+        body = x[],
+    };
+
+--- What a server does with one connection of `scheme`: read a request as its framing delimits it, hand it to `handler`, write the reply, and end the connection as HTTP asks — the sending half ended, what the peer still sends read until it closes or falls quiet, and the close left to whoever opened the connection. A request the reader refuses is answered with the status its refusal names, one that has not arrived whole within `s.deadline` 408, and a handler that fails 500; `OPTIONS *`, which asks about the server and no resource, is answered by the server with the methods it reads, and no handler sees it; a peer that sends nothing is told nothing. `serve` and `serve_tls` run it over a listener of their own, and a program with a listener of its own hands it each socket it accepts.
 pub let answer(s: Server, scheme: Scheme, handler: Handler) -> (Socket) -> Async({}) =
     (c) =>
         let arrived = Async/timeout(s.deadline, request(s.limits, scheme, c))!;
@@ -160,6 +183,7 @@ pub let answer(s: Server, scheme: Scheme, handler: Handler) -> (Socket) -> Async
             | failure(why) =>
                 match why
                 | refused(reason) => send(s, c, Method/get(), Response/of_refusal(reason))
+                | of_server() => send(s, c, Method/options(), allowed)
                 | silent() => Async/pure(())
                 end
             | success(asked) =>

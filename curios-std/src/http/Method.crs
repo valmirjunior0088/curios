@@ -9,6 +9,7 @@ pub induct Method: pub Type
 | put()
 | delete()
 | patch()
+| options()
 end
 
 pub use Method/*;
@@ -30,6 +31,7 @@ pub let to_str(m: Method) -> Str =
     | put() => "PUT"
     | delete() => "DELETE"
     | patch() => "PATCH"
+    | options() => "OPTIONS"
     end;
 
 --- Shown as the wire spells it.
@@ -46,5 +48,6 @@ pub let of_str(s: Str) -> Option(Method) =
     | Str/eql(s, "PUT") => Option/some(Method/put())
     | Str/eql(s, "DELETE") => Option/some(Method/delete())
     | Str/eql(s, "PATCH") => Option/some(Method/patch())
+    | Str/eql(s, "OPTIONS") => Option/some(Method/options())
     | _ => Option/none()
     end;

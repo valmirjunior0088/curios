@@ -172,9 +172,8 @@ let read_url(text: Str) -> Result(Refusal, Url) =
     | failure(why) => Result/failure(Refusal/malformed(why.message))
     end;
 
---- Where the request `head` is addressed, over a connection of `scheme` (RFC 9112 §3.2, §3.3). A target in origin-form, a path and its query, is joined to the authority its one `Host` field states; one in absolute-form, a whole URL, is the address, with `Host` ignored though HTTP/1.1 still owes one. A request with no authority, with two `Host` fields or one that is no authority, or with a target of neither form, is malformed.
-pub let url_of(scheme: Scheme, head: Head) -> Result(Refusal, Url) =
-    let host = host_of(head.headers)!;
+-- Where a request whose target is a path or a whole URL is addressed, `host` being the authority its `Host` field states.
+let resource_of(scheme: Scheme, head: Head, host: Option(Str)) -> Result(Refusal, Url) =
     match (Str/contains(head.target, '#'), Str/starts_with(head.target, "/"))
     | (true, _) => Result/failure(Refusal/malformed("a request target has no fragment"))
     | (false, true) =>
@@ -191,6 +190,43 @@ pub let url_of(scheme: Scheme, head: Head) -> Result(Refusal, Url) =
             Result/failure(Refusal/malformed("an HTTP/1.1 request states its Host"))
         | (success(url), false) => Result/success(url)
         end
+    end;
+
+--- What a request is addressed to: a resource, by its URL, or the server as a whole, which is what `OPTIONS *` asks about (RFC 9112 §3.2.4).
+pub induct Address: pub Type
+| resource(Url)
+| server()
+end
+
+satisfy Eql(Address) {
+    ..
+}
+
+satisfy Spell(Address) {
+    ..
+}
+
+--- What the request `head` is addressed to, over a connection of `scheme` (RFC 9112 §3.2, §3.3). A target in origin-form, a path and its query, is joined to the authority its one `Host` field states; one in absolute-form, a whole URL, is the address, with `Host` ignored though HTTP/1.1 still owes one; and `*` is the server itself, which only `OPTIONS` is asked of, an HTTP/1.1 request still owing its `Host`. A request for a resource with no authority, one with two `Host` fields or one that is no authority, and one with a target of none of those forms, is malformed.
+pub let address_of(scheme: Scheme, head: Head) -> Result(Refusal, Address) =
+    let host = host_of(head.headers)!;
+    match Str/eql(head.target, "*")
+    | false => Result/map_success(resource_of(scheme, head, host), (url) => Address/resource(url))
+    | true =>
+        choose
+        | head.method != Method/options() =>
+            Result/failure(Refusal/malformed("only OPTIONS is asked of the server itself"))
+        | Option/is_none(host) && Version/is_1_1(head.version) =>
+            Result/failure(Refusal/malformed("an HTTP/1.1 request states its Host"))
+        | _ => Result/success(Address/server())
+        end
+    end;
+
+--- The URL of the resource the request `head` is addressed to, as `address_of` reads it. A request for the server itself has none and is refused: a `Request` is addressed to a resource.
+pub let url_of(scheme: Scheme, head: Head) -> Result(Refusal, Url) =
+    let address = address_of(scheme, head)!;
+    match address
+    | resource(url) => Result/success(url)
+    | server() => Result/failure(Refusal/malformed("a request for the server itself has no URL"))
     end;
 
 --- How the body of the request `head` is delimited.

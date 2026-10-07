@@ -118,6 +118,7 @@ fn a_server_answers_a_connection_as_http_asks() {
     a_request_that_stops_arriving_is_answered_408(&server);
     an_expectation_is_answered_from_the_head(&server);
     a_reply_to_head_is_its_head_alone(&server);
+    options_is_asked_of_a_resource_or_of_the_server(&server);
     a_reply_is_written_finished_and_read_past_before_the_close(&server);
 }
 
@@ -262,6 +263,29 @@ fn a_reply_to_head_is_its_head_alone(server: &Compiled) {
     assert_eq!(status(&reply), "HTTP/1.1 200 OK");
     assert!(reply.contains("\r\nContent-Length: 9\r\n"), "{reply}");
     assert_eq!(body(&reply), "");
+}
+
+// `OPTIONS` reaches the handler as any method does where it asks about a resource. Asked of the server itself, by a target of `*`, it is answered by the server with the methods it reads and a length of zero, and no handler runs; `*` under any other method is no target.
+fn options_is_asked_of_a_resource_or_of_the_server(server: &Compiled) {
+    let asked = reply(server, "OPTIONS /x HTTP/1.1\r\nHost: h\r\n\r\n");
+
+    assert_eq!(status(&asked), "HTTP/1.1 200 OK");
+    assert_eq!(body(&asked), "OPTIONS /x 0");
+
+    let general = reply(server, "OPTIONS * HTTP/1.1\r\nHost: h\r\n\r\n");
+
+    assert_eq!(status(&general), "HTTP/1.1 200 OK");
+    assert!(
+        general.contains("\r\nAllow: GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS\r\n"),
+        "{general}"
+    );
+    assert!(general.contains("\r\nContent-Length: 0\r\n"), "{general}");
+    assert_eq!(body(&general), "");
+
+    assert_eq!(
+        status(&reply(server, "GET * HTTP/1.1\r\nHost: h\r\n\r\n")),
+        "HTTP/1.1 400 Bad Request"
+    );
 }
 
 // A connection is ended as the protocol asks: the reply written, the sending half finished, what the peer still sends read until the peer closes, and only then the close. A refusal sent before the request's content is read reaches a peer that is still sending it; and a peer that neither sends nor closes is closed on once it has been quiet.

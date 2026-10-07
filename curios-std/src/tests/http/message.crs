@@ -4,11 +4,25 @@ use /std/http/{Method, Url, Field, Status, Request, Response, Limits};
 use /std/http/Field/{Name, Value};
 use /std/http/Url/{Scheme};
 
--- A method spells as the wire does and reads back.
+-- A method spells as the wire does and reads back, each of the seven, and a token that is none of them is no method.
 test a_method_spells_and_reads =
+    let methods =
+        [
+            Method/get(),
+            Method/head(),
+            Method/post(),
+            Method/put(),
+            Method/delete(),
+            Method/patch(),
+            Method/options()];
     Test/all([
+        Test/equal(
+            List/map(methods, Method/to_str),
+            ["GET", "HEAD", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]),
+        Test/equal(
+            List/map(methods, (m) => Method/of_str(Method/to_str(m))),
+            List/map(methods, (m) => Option/some(m))),
         Test/equal(Show/show(Method/post()), "POST"),
-        Test/equal(Method/of_str("DELETE"), Option/some(Method/delete())),
         Test/equal(Method/of_str("BREW"), Option/none())]);
 
 let wire(b: Bytes) -> Option(Str) =
