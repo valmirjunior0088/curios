@@ -2,7 +2,7 @@
 //!
 //! **The readers key atoms on spelling.** Cancellation, a monomial's factors, a connective's leaves, the truth table, the linear views and the symmetric peel each identify two atoms by identity ([`Atoms`](crate::Atoms), the truth table's own table), so two atoms that convert without being identical — two calls differing in a proof of one bound, in a function argument whose body commutes a sum, in a stuck `match`'s arm — are two atoms to every one of them. With one such atom on each side a reader hands the pair on as a residual; with two it pairs nothing.
 //!
-//! **Which atoms are one is not decided here.** [`atoms_of`] hands out the atoms of a pair, a checker says of two of them whether they convert ([`Classes::of`]), and [`classed`] hands the pair back with each atom spelled as its class's representative, so every reader pairs them by the identity it already reads. Nothing here asks a judgment: the question is the caller's closure, asked by the checker that holds the answer.
+//! **Which atoms are one is not decided here.** [`atoms_of`] hands out the atoms of a pair, a checker says of two of them whether they convert ([`Classes::of`]), and [`classed`] hands the pair back with each atom spelled as its class's representative, so every reader pairs them by the identity it already reads. Nothing here asks a judgment: the question is the caller's closure, asked by the checker that holds the answer. A reader that reads its terms one at a time and compares none of them with another asks the same of each ([`atoms_in`], [`Classes::join`], [`classed_in`]).
 //!
 //! **A node is forced before it is read, as the truth table forces it.** A stuck connective keeps its right operand as written, and an operand written as a call — a negation, an operator still spelled through its witness — is an operation only once it is reduced, so each node is reduced as a [`Probe`] before the walk asks whether the readers read through it. An atom is therefore handed out in weak-head form, which is what lets its head say whether it may be another's.
 //!
@@ -18,10 +18,12 @@ use {
     std::{collections::HashMap, mem},
 };
 
-/// Which atoms of one pair are one: each atom that converts with an earlier one, under the earlier one, its class's representative.
+/// Which atoms are one: each atom that converts with an earlier one, under the earlier one, its class's representative.
 #[derive(Debug, Default)]
 pub struct Classes {
     representatives: HashMap<Term, Term>,
+    /// Each class's representative, in the order its class was opened.
+    opened: Vec<Term>,
 }
 
 impl Classes {
@@ -33,29 +35,42 @@ impl Classes {
     pub fn of<E>(
         atoms: &[Term],
         asked: Option<&(Term, Term)>,
-        mut same: impl FnMut(&Term, &Term) -> Result<bool, E>,
+        same: impl FnMut(&Term, &Term) -> Result<bool, E>,
     ) -> Result<Self, E> {
-        let mut opened: Vec<&Term> = Vec::new();
-        let mut representatives = HashMap::new();
+        let mut classes = Classes::default();
+        classes.join(atoms, asked, same)?;
+        Ok(classes)
+    }
+
+    /// `atoms` classed among the classes already made, by the rule [`Classes::of`] states: what a reader asks that meets its atoms a term at a time and keeps its classes from one term to the next, so an atom is in one class wherever it was read. An atom already classed is asked about no more.
+    pub fn join<E>(
+        &mut self,
+        atoms: &[Term],
+        asked: Option<&(Term, Term)>,
+        mut same: impl FnMut(&Term, &Term) -> Result<bool, E>,
+    ) -> Result<(), E> {
         for atom in atoms {
             if asked.is_some_and(|asked| !stands_inside(atom, asked)) {
                 continue;
             }
+            if self.representatives.contains_key(atom) || self.opened.contains(atom) {
+                continue;
+            }
             let mut joined = None;
-            for representative in &opened {
+            for representative in &self.opened {
                 if may_be_one(representative, atom) && same(representative, atom)? {
-                    joined = Some(*representative);
+                    joined = Some(representative.clone());
                     break;
                 }
             }
             match joined {
                 Some(representative) => {
-                    representatives.insert(atom.clone(), representative.clone());
+                    self.representatives.insert(atom.clone(), representative);
                 }
-                None => opened.push(atom),
+                None => self.opened.push(atom.clone()),
             }
         }
-        Ok(Classes { representatives })
+        Ok(())
     }
 
     /// Whether no atom joined another's class, so the pair reads as it did.
@@ -84,6 +99,19 @@ pub fn atoms_of(
     });
     walk.spine(this)?;
     walk.spine(that)?;
+    Ok(atoms)
+}
+
+/// The atoms the readers read in `term`, each once, in the order a walk meets them, and `term` itself, forced, where they do not read through it: [`atoms_of`] for a term read with nothing beside it, which a reader asks that compares the term with none and classes its atoms among those of every term it read before ([`Classes::join`]).
+pub fn atoms_in(reducer: &mut impl Reducer, term: &Term) -> Result<Vec<Term>, ReduceError> {
+    let mut atoms = Vec::new();
+    let mut walk = Walk::new(reducer, |atom: &Term| {
+        if !atoms.contains(atom) {
+            atoms.push(atom.clone());
+        }
+        atom.clone()
+    });
+    walk.spine(term)?;
     Ok(atoms)
 }
 
@@ -179,6 +207,25 @@ pub fn classed(
     let built = walk.built;
     reducer.spend(Cost::term(built))?;
     Ok(Some((classed_this, classed_that)))
+}
+
+/// `term` as the readers read it under `classes` — every node forced, every atom spelled as its class's representative — handed back whether or not an atom joined a class: [`classed`] for a term read with nothing beside it, so a reader that keeps its classes holds one spelling of a term from one reading to the next. Each rebuilt node is charged as the term it is.
+pub fn classed_in(
+    reducer: &mut impl Reducer,
+    term: &Term,
+    classes: &Classes,
+) -> Result<Term, ReduceError> {
+    let mut walk = Walk::new(reducer, |atom: &Term| {
+        classes
+            .representatives
+            .get(atom)
+            .cloned()
+            .unwrap_or_else(|| atom.clone())
+    });
+    let classed = walk.spine(term)?;
+    let built = walk.built;
+    reducer.spend(Cost::term(built))?;
+    Ok(classed)
 }
 
 /// Whether `atom` stands inside one of the two atoms `asked` about and is neither of them.

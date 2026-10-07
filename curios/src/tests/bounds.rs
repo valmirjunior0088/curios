@@ -382,6 +382,43 @@ const ROWS: &[Row] = &[
         "Nat",
         "let inner: Holds(f(n / 2) <= n / 2) = g(n / 2); let doubled: Holds(2 * f(n / 2) <= n) = True/proved(); 0",
     ),
+    // One call under two spellings only conversion holds one: an argument a statement writes as a sum beside the successor an arm refined a variable to, in a proof by induction whose step is stated at `k + 1`; two orders of one sum; and a quotient over each.
+    body(
+        "f: (Nat) -> Nat, step: (k: Nat) -> Holds(f(k) <= f(k + 1)), n: Nat",
+        "Holds(f(0) <= f(n))",
+        "match n | 0 => True/qed() | p + 1; ih => let prior = ih; let stepped = step(p); True/proved() end",
+    ),
+    claim(
+        "f: (Nat) -> Nat, a: Nat, b: Nat, m: Nat, h: Holds(f(a + b) <= m)",
+        "Holds(f(b + a) <= m + 1)",
+    ),
+    claim(
+        "f: (Nat) -> Nat, a: Nat, b: Nat, m: Nat, h: Holds(2 * m <= f(a + b))",
+        "Holds(m <= f(b + a) / 2)",
+    ),
+    // Two operations whose guards are one comparison to conversion, `a + c <= b + c` and `a <= b`, opened as one split: a second split inside the first would have a case no value reaches.
+    claim(
+        "a: Nat, b: Nat, c: Nat",
+        "Holds(Nat/min(a + c, b + c) <= Nat/min(a, b) + c)",
+    ),
+    claim(
+        "a: Nat, b: Nat, c: Nat",
+        "Holds(Nat/max(a, b) + c <= Nat/max(a + c, b + c))",
+    ),
+    claim(
+        "a: Int, b: Int, c: Int",
+        "Holds(Int/min(a + c, b + c) <= Int/min(a, b) + c)",
+    ),
+    // And two whose guards are each other's negation, `+0 <= a` of the magnitude and `a < +0` of the sign, joined with their cases exchanged.
+    claim(
+        "a: Int",
+        "Holds(+0 <= Int/sign(a) + Nat/to_int(Int/abs(a)))",
+    ),
+    // A factor below zero cancelled: the product of `k + 1 <= +0` and the negated bound is a product of two sums, which the fold leaves standing and the reader distributes.
+    claim(
+        "a: Int, b: Int, k: Int, p: Holds(b * k <= a * k), q: Holds(k < +0)",
+        "Holds(a <= b)",
+    ),
 ];
 
 /// What the procedure must refuse.

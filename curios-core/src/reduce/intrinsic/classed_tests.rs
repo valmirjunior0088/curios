@@ -2,8 +2,8 @@
 
 use {
     super::{
-        Classes, atoms_of, atoms_within, classable, classed, reduce_intrinsic, refold,
-        test_support::*,
+        Classes, atoms_in, atoms_of, atoms_within, classable, classed, classed_in,
+        reduce_intrinsic, refold, test_support::*,
     },
     crate::{Free, Intrinsic, Nat, Subterm, Term, int_same},
     std::convert::Infallible,
@@ -163,6 +163,68 @@ fn a_partition_that_joins_nothing_hands_nothing_back() {
     let classes = classes(&atoms(&this, &that));
     assert!(classes.is_empty());
     assert_eq!(classed(&mut Inert, &this, &that, &classes), Ok(None));
+}
+
+/// A term read with nothing beside it is its own atom where the readers do not read through it, which is the pair `atoms_of` hands nothing back for.
+#[test]
+fn a_term_read_alone_is_its_own_atom_where_it_is_not_read_through() {
+    let (a, b, c) = (sym(1, "a"), sym(2, "b"), sym(3, "c"));
+    let call = applied(10, "f", add(a, b));
+    let alone = |term: &Term| atoms_in(&mut Inert, term).expect("the inert reducer spends nothing");
+    assert_eq!(alone(&call), vec![call.clone()]);
+    assert_eq!(alone(&add(call.clone(), c.clone())), vec![call, c]);
+}
+
+/// A reader that keeps its classes meets an atom a second time in another term: it joins the class the first reading opened, and a term read after is spelled with that class's representative whether it is read through or is the atom itself.
+///
+/// Mutation-checked: a `join` that opens its classes afresh at each call leaves the second call an atom of its own.
+#[test]
+fn an_atom_read_later_joins_the_class_an_earlier_reading_opened() {
+    let (a, b, c) = (sym(1, "a"), sym(2, "b"), sym(3, "c"));
+    let first = applied(10, "f", add(a.clone(), b.clone()));
+    let second = applied(10, "f", add(b, a));
+    let alone = |term: &Term| atoms_in(&mut Inert, term).expect("the inert reducer spends nothing");
+    let read = |term: &Term, classes: &Classes| {
+        classed_in(&mut Inert, term, classes).expect("the inert reducer spends nothing")
+    };
+
+    let mut classes = Classes::default();
+    let Ok(()) = classes.join(&alone(&add(first.clone(), c.clone())), None, commuted);
+    assert!(classes.is_empty());
+    assert_eq!(
+        read(&add(first.clone(), c.clone()), &classes),
+        add(first.clone(), c.clone())
+    );
+
+    let Ok(()) = classes.join(&alone(&second), None, commuted);
+    assert!(!classes.is_empty());
+    assert_eq!(read(&second, &classes), first);
+    assert_eq!(
+        read(&add(c.clone(), second), &classes),
+        add(c, first.clone())
+    );
+    // The representative reads as itself.
+    assert_eq!(read(&first, &classes), first);
+}
+
+/// An atom the classes already hold is asked about no more, neither a representative nor an atom that joined one, so reading a term again costs no question.
+///
+/// Mutation-checked: a `join` that skips nothing asks about the second call against the first once more.
+#[test]
+fn an_atom_already_classed_is_asked_about_no_more() {
+    let (a, b) = (sym(1, "a"), sym(2, "b"));
+    let first = applied(10, "f", add(a.clone(), b.clone()));
+    let second = applied(10, "f", add(b, a));
+
+    let mut asked = 0;
+    let mut counted = |this: &Term, that: &Term| {
+        asked += 1;
+        commuted(this, that)
+    };
+    let mut classes = Classes::default();
+    let Ok(()) = classes.join(&[first.clone(), second.clone()], None, &mut counted);
+    let Ok(()) = classes.join(&[second, first], None, &mut counted);
+    assert_eq!(asked, 1);
 }
 
 /// `operation` as its fold leaves it stuck, folded once more over its atoms as `commuted` classes them: what a checker's reducer does at a stuck fold, with the judge standing for its conversion.

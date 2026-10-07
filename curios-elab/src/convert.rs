@@ -126,10 +126,22 @@ pub(crate) fn same_uncommitted(
 pub(crate) fn classing(
     context: &mut Context,
     atoms: &[Term],
-    mut same: impl FnMut(&mut Context, &Term, &Term) -> Result<bool, ReduceError>,
+    same: impl FnMut(&mut Context, &Term, &Term) -> Result<bool, ReduceError>,
 ) -> Result<Classes, ReduceError> {
+    let mut classes = Classes::default();
+    classing_among(context, &mut classes, atoms, same)?;
+    Ok(classes)
+}
+
+/// [`classing`] among the classes `classes` already holds (`curios-core`'s `Classes::join`): what a reader asks that meets its atoms a term at a time, as the reader of the facts a bound follows from does.
+pub(crate) fn classing_among(
+    context: &mut Context,
+    classes: &mut Classes,
+    atoms: &[Term],
+    mut same: impl FnMut(&mut Context, &Term, &Term) -> Result<bool, ReduceError>,
+) -> Result<(), ReduceError> {
     let within = context.asked().cloned();
-    Classes::of(atoms, within.as_ref(), |this, that| {
+    classes.join(atoms, within.as_ref(), |this, that| {
         let stood = context.ask(Some((this.clone(), that.clone())));
         let same = recurse(|| same(context, this, that));
         context.ask(stood);

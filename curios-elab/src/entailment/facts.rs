@@ -7,14 +7,14 @@
 //! - A hypothesis or a field whose statement the arm's refinements reduce to an empty proposition — `in_range(n, 128, 191)` where a guard holds `n <= 127` — which refutes the scope by itself: read as `1 <= 0`, proved by its own zero-arm match.
 //! - A guard of an arm the hole sits in — the arm's at insertion, and at a retry the ones the hole was born under: a comparison scrutinee with the case it took, an `==` scrutinee's true arm, and a range check's true arm, through `le/of_in_range`, since a split in the guard's own arm meets the guard's key, which answers `true` for the whole check and never unfolds it. Its proof is stated over the operands the guard spells ([`Reader::guards`]), and a guard recorded under two spellings is one fact.
 //! - What an operation a fact or the goal is read over defines: a quotient's bounds, a truncated subtraction's cases, a `min`'s and a `max`'s, an `abs`'s and a `sign`'s, and that a power of a base conversion holds at least one is at least one ([`Reader::definitions`]).
-//! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs.
+//! - Where linear arithmetic over those finds an assignment, the product of each pair of them and the negated goal ([`products`]): what `nlinarith` adds, and what a multiplier that is no literal needs. A product of two sums, which the fold leaves standing, is read distributed ([`Reader::side`]).
 //! - That every monomial over naturals is at least zero, which conversion decides.
 //!
 //! A local definition and a variable a match refined need no reading of their own: every statement is read reduced, so a fact stated over a `let` meets a goal stated over its value, and one over `k` meets one over the successor an arm refined `k` to.
 //!
 //! **A remainder by a literal is lifted away.** Conversion reads `k * (x / k) + x % k` as `x` wherever one side of a comparison holds both, so a sum of facts that holds a remainder beside its quotient's multiple is not the sum of their views. Every fact over `x % k` is therefore raised by the multiple on both sides, which conversion reads as a fact over `x` ([`Lift`]), and the remainder stays out of every form the search reads.
 //!
-//! **A statement is written as it is stated and read as it reduces.** A hypothesis, a field, a guard and the goal are opened by their heads alone, as a guard's resolved spelling is, to the comparison, range check or conjunction they state ([`opened`]), and their sides are the operands as stated; only the view reads their reducts, each with the metavariables elaboration has solved substituted, so an operator's witness is one term wherever it was resolved. A reduct is no spelling to write: a call reduced to the body it unfolds to carries that body's own arms, which elaborate only where they were written, and a local definition reduced to its value names locals the arm's key does not. What the facts invent over atoms is written through the spellings the atoms were read from ([`Facts::respell`]). Where opening reaches none of the three, the statement is read reduced.
+//! **A statement is written as it is stated and read as it reduces.** A hypothesis, a field, a guard and the goal are opened by their heads alone, as a guard's resolved spelling is, to the comparison, range check or conjunction they state ([`opened`]), and their sides are the operands as stated; only the view reads their reducts, each with the metavariables elaboration has solved substituted and its atoms classed by the elaborator's conversion among those of every operand read before it ([`Reader::reading`]), so a call is one atom however each statement spells it. A reduct is no spelling to write: a call reduced to the body it unfolds to carries that body's own arms, which elaborate only where they were written, and a local definition reduced to its value names locals the arm's key does not. What the facts invent over atoms is written through the spellings the atoms were read from ([`Facts::respell`]). Where opening reaches none of the three, the statement is read reduced.
 //!
 //! **A fact is `left <= right` at its carrier**, as the proof's lemmas take it: a strict fact is the loose one of its successor, which conversion reads as one proposition at `Nat` as at `Int`, and an equation is two facts. Its form is `left - right` aligned to `<=`, read by the one reader every fact and the goal share, so their atoms are one table's.
 //!
@@ -22,12 +22,15 @@
 
 use {
     super::{decision_of, global, in_scope, is_empty},
-    crate::{Context, Error, open_layer, reduce_with, zonk_solved_term_metas},
+    crate::{
+        Context, Error, classing_among, open_layer, reduce_with, same_uncommitted,
+        zonk_solved_term_metas,
+    },
     curios_algebra::{Carrier, Lattice, LinearForm, Monomial, Operation},
     curios_analysis::RESOLVED_SPELLING_LAYERS,
     curios_core::{
-        Apply, Cases, Extremum, Free, Global, InductType, Intrinsic, LinearViews, Match, Nat,
-        StructType, Subterm, Term, TupleType,
+        Apply, Cases, Classes, Extremum, Free, Global, InductType, Intrinsic, LinearViews, Match,
+        Nat, Probe, StructType, Subterm, Term, TupleType, atoms_in, classed_in, int_normalize,
     },
     curios_num::{Integer, Natural},
     curios_utilities::{OrderSyntax, Plicity, SyntaxName},
@@ -157,19 +160,22 @@ impl Facts {
     }
 }
 
-/// A case split an operation defines on an order of its operands, with the facts each case adds: a truncated subtraction `a - b` on `b <= a`, a `min` or a `max` over `a` and `b` on `a <= b`, an `abs` on `+0 <= a`, and a `sign` on each of `+0 < a` and `a < +0`.
+/// A case split an operation defines on an order of its operands, with the facts each case adds: a truncated subtraction `a - b` on `b <= a`, a `min` or a `max` over `a` and `b` on `a <= b`, an `abs` on `+0 <= a`, and a `sign` on each of `+0 < a` and `a < +0`. Operations whose guards are one comparison to conversion share one split ([`Reader::open`]).
 pub(super) struct Split {
     /// The comparison the proof splits on.
     pub(super) guard: Term,
+    /// The guard as the view reads it where it holds and where it fails, by which a second guard is told to be this one or its negation; `None` where the view does not read it.
+    read: Option<(LinearForm, LinearForm)>,
     /// Where it holds: the guard, and for a subtraction `b + (a - b) = a` by `le/add_sub_cancel`, for a `min` or a `max` the operand it is there.
     pub(super) holds: Vec<Fact>,
     /// Where it fails: the guard's strict dual, and for a subtraction `a - b <= 0` by `le/sub_zero`, which conversion does not decide there, for a `min` or a `max` the other operand.
     pub(super) fails: Vec<Fact>,
 }
 
-/// One reading of a scope: the reader every fact and the goal share, what it has read so far, and the operations whose definitions it has read.
+/// One reading of a scope: the reader every fact and the goal share, which of the atoms it has read are one, what it has read so far, and the operations whose definitions it has read.
 pub(super) struct Reader<'a> {
     views: &'a mut LinearViews,
+    classes: &'a mut Classes,
     read: Facts,
     divided: Vec<Division>,
     subtracted: Vec<(Term, Term)>,
@@ -179,9 +185,11 @@ pub(super) struct Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
-    pub(super) fn new(views: &'a mut LinearViews) -> Self {
+    /// A reader over `views`, classing its atoms among `classes`: every reader of one bound is handed the same two, so the goal, the facts, the negated goal and the facts' products are read over one table of atoms and one partition of them.
+    pub(super) fn new(views: &'a mut LinearViews, classes: &'a mut Classes) -> Self {
         Reader {
             views,
+            classes,
             read: Facts {
                 facts: Vec::new(),
                 splits: Vec::new(),
@@ -619,23 +627,7 @@ impl<'a> Reader<'a> {
                     let fails = self.apart(context, |reader, context| {
                         reader.kept(context, extremum, &a, &b, false)
                     })?;
-                    // A `min` and a `max` of one pair split on one guard, and so are one split: what the search opens for either it has for both.
-                    match self
-                        .read
-                        .splits
-                        .iter_mut()
-                        .find(|split| split.guard == guard)
-                    {
-                        Some(split) => {
-                            split.holds.extend(holds);
-                            split.fails.extend(fails);
-                        }
-                        None => self.read.splits.push(Split {
-                            guard,
-                            holds,
-                            fails,
-                        }),
-                    }
+                    self.open(context, guard, holds, fails)?;
                 }
             }
         }
@@ -759,12 +751,7 @@ impl<'a> Reader<'a> {
             _ => {
                 let holds = self.apart(context, |reader, context| case(reader, context, true))?;
                 let fails = self.apart(context, |reader, context| case(reader, context, false))?;
-                self.read.splits.push(Split {
-                    guard,
-                    holds,
-                    fails,
-                });
-                Ok(())
+                self.open(context, guard, holds, fails)
             }
         }
     }
@@ -1007,11 +994,7 @@ impl<'a> Reader<'a> {
                         self.apart(context, |reader, context| reader.exact(context, &a, &b))?;
                     let fails =
                         self.apart(context, |reader, context| reader.truncated(context, &a, &b))?;
-                    self.read.splits.push(Split {
-                        guard,
-                        holds,
-                        fails,
-                    });
+                    self.open(context, guard, holds, fails)?;
                 }
             }
         }
@@ -1044,6 +1027,70 @@ impl<'a> Reader<'a> {
         let subtracted = Term::intrinsic(Intrinsic::NatSub(a.clone(), b.clone()));
         let truncation = Intrinsic::NatLe(subtracted, literal(Carrier::Natural, 0u32));
         self.admit(context, truncation, zero, Origin::Definition)
+    }
+
+    /// The split on `guard`, with the facts each of its cases adds: opened, or joined to the split already open on the comparison the view reads `guard` as, its cases exchanged where the view reads `guard` as that comparison's negation.
+    ///
+    /// **Two guards that are one comparison to conversion are one split.** An arm of a split on `a + c <= b + c` decides `a <= b`: the equation the arm records answers every term conversion holds equal to its scrutinee, or to its negation. A second split opened inside it would have a case no value reaches, and there its guard's fact is not `qed`'s to prove, the outer equation answering the inner guard. So a `min` and a `max` over one pair, two over pairs one summand apart, and a truncated subtraction over the same operands share one split, and what the search opens for one it has for all.
+    fn open(
+        &mut self,
+        context: &mut Context,
+        guard: Term,
+        holds: Vec<Fact>,
+        fails: Vec<Fact>,
+    ) -> Result<(), Error> {
+        let read = self.decided(context, &guard)?;
+        let joined = read.as_ref().and_then(|(held, failed)| {
+            self.read.splits.iter_mut().find_map(|split| {
+                let (known_held, known_failed) = split.read.as_ref()?;
+                if known_held == held && known_failed == failed {
+                    Some((split, false))
+                } else if known_held == failed && known_failed == held {
+                    Some((split, true))
+                } else {
+                    None
+                }
+            })
+        });
+        match joined {
+            Some((split, false)) => {
+                split.holds.extend(holds);
+                split.fails.extend(fails);
+            }
+            Some((split, true)) => {
+                split.holds.extend(fails);
+                split.fails.extend(holds);
+            }
+            None => self.read.splits.push(Split {
+                guard,
+                read,
+                holds,
+                fails,
+            }),
+        }
+        Ok(())
+    }
+
+    /// `guard` as the view reads it where it holds and where it fails — a `<` or a `<=` and its dual with the operands exchanged — or `None` where it is no comparison the view reads.
+    fn decided(
+        &mut self,
+        context: &mut Context,
+        guard: &Term,
+    ) -> Result<Option<(LinearForm, LinearForm)>, Error> {
+        let Subterm::Intrinsic(comparison) = &**guard else {
+            return Ok(None);
+        };
+        let Some((carrier, relation, left, right)) = sides(comparison) else {
+            return Ok(None);
+        };
+        let dual = match relation {
+            Operation::Less => Operation::AtMost,
+            Operation::AtMost => Operation::Less,
+            _ => return Ok(None),
+        };
+        let held = self.form(context, carrier, relation, &left, &right)?;
+        let failed = self.form(context, carrier, dual, &right, &left)?;
+        Ok(held.zip(failed))
     }
 
     /// The facts `read` admits, kept apart from the scope's: one case of a split, lifted as every fact is.
@@ -1096,7 +1143,10 @@ impl<'a> Reader<'a> {
         left: &Term,
         right: &Term,
     ) -> Result<Option<LinearForm>, Error> {
-        let read = Intrinsic::NatLe(as_read(context, left)?, as_read(context, right)?);
+        let read = Intrinsic::NatLe(
+            self.side(context, Carrier::Natural, left)?,
+            self.side(context, Carrier::Natural, right)?,
+        );
         Ok(self
             .views
             .read(&read)
@@ -1188,7 +1238,7 @@ impl<'a> Reader<'a> {
         Ok(())
     }
 
-    /// The form of `left ⋈ right` at `carrier`, aligned to `<=`: its operands read reduced — in the fold's normal form, a local definition unfolded, a refined variable read as what its arm refined it to — so its view is the one conversion computes, and each reduct recorded beside the spelling it was read from ([`Reader::spell`]). `None` where the view does not read it.
+    /// The form of `left ⋈ right` at `carrier`, aligned to `<=`: its operands read reduced — in the fold's normal form, a local definition unfolded, a refined variable read as what its arm refined it to, an atom as the one conversion holds it one with, a product of two sums distributed ([`Reader::side`]) — so its view is the one conversion computes, and each reduct recorded beside the spelling it was read from ([`Reader::spell`]). `None` where the view does not read it.
     fn form(
         &mut self,
         context: &mut Context,
@@ -1202,8 +1252,8 @@ impl<'a> Reader<'a> {
         let read = comparison_of(
             carrier,
             relation,
-            &as_read(context, left)?,
-            &as_read(context, right)?,
+            &self.side(context, carrier, left)?,
+            &self.side(context, carrier, right)?,
         );
         let Some((_, view)) = self.views.read(&read) else {
             return Ok(None);
@@ -1220,16 +1270,59 @@ impl<'a> Reader<'a> {
             }
             return Ok(());
         }
-        let reduct = as_read(context, stated)?;
+        let reduct = solved(context, stated)?;
         if reduct != *stated && !self.read.spelled.iter().any(|(known, _)| *known == reduct) {
             self.read.spelled.push((reduct, stated.clone()));
         }
         Ok(())
     }
+
+    /// One side of a comparison at `carrier` as the view reads it: its reading ([`Reader::reading`]) with every product of two sums distributed. The fold leaves such a product standing until a comparison asks, and the view distributes none and reads a standing product's sums as two atoms, so the reader asks by name, as a comparison does and as conversion's own linear solving does.
+    fn side(
+        &mut self,
+        context: &mut Context,
+        carrier: Carrier,
+        term: &Term,
+    ) -> Result<Term, Error> {
+        let read = self.reading(context, term)?;
+        let distributed = match carrier {
+            Carrier::Natural => Nat::normalize(context, read.clone()),
+            _ => int_normalize(context, read.clone()),
+        };
+        match distributed.probed() {
+            Ok(distributed) => Ok(distributed.unwrap_or(read)),
+            Err(error) => Err(Error::from_reduce(error, |refusal| {
+                Error::reduce_exhausted(term.clone(), refusal)
+            })),
+        }
+    }
+
+    /// `term` as the view reads it: reduced, the reduct with the metavariables elaboration has solved substituted, and each of its atoms spelled as the first atom read that the elaborator's conversion holds it one with, nothing committed (`same_uncommitted`).
+    ///
+    /// The view pairs atoms by identity, and which atoms are one is conversion's to say (`documentation/design/arithmetic/a-term-is-one-where-conversion-says-so.md`): a call whose argument one statement writes as a sum and another reads as the successor an arm refined a variable to is one number, and reduction opens neither inside the stuck call. So the atoms of every operand are classed among those read before it, and the operand is handed to the view one spelling to a class, as the conversion chain hands a pair's to its readers. The substitution comes first, as the chain prepares a pair: an operator's witness stands in a signature as the metavariable its resolution solved and in a bound as the witness itself, and a recursive member's slot stands where its name does, which is a spelling and no question. A comparison with no value at the type level is that the two are not known to be one.
+    fn reading(&mut self, context: &mut Context, term: &Term) -> Result<Term, Error> {
+        curios_profile::profile!("entailment::reading");
+        let solved = solved(context, term)?;
+        let classes = &mut *self.classes;
+        let classed = atoms_in(context, &solved)
+            .and_then(|atoms| {
+                classing_among(context, classes, &atoms, |context, this, that| {
+                    Ok(same_uncommitted(context, this, that)
+                        .probed()?
+                        .unwrap_or(false))
+                })
+            })
+            .and_then(|()| classed_in(context, &solved, classes));
+        classed.map_err(|error| {
+            Error::from_reduce(error, |refusal| {
+                Error::reduce_exhausted(term.clone(), refusal)
+            })
+        })
+    }
 }
 
-/// `term` as the view reads it: reduced, and the reduct with the metavariables elaboration has solved substituted. An operator's witness stands in a signature as the metavariable its resolution solved and in a bound as the witness itself, a recursive member's slot stands where its name does, and reduction opens neither inside a stuck call, so a reduct read as it stands would make one call two atoms.
-fn as_read(context: &mut Context, term: &Term) -> Result<Term, Error> {
+/// `term` reduced, and the reduct with the metavariables elaboration has solved substituted: an operand's own reduct, before its atoms are classed, which is what [`Facts::respell`] writes the operand in place of.
+fn solved(context: &mut Context, term: &Term) -> Result<Term, Error> {
     let reduced = reduce_with(context, term)?;
     Ok(zonk_solved_term_metas(context, &reduced))
 }
@@ -1306,6 +1399,7 @@ pub(super) fn statements(
 pub(super) fn negated(
     context: &mut Context,
     views: &mut LinearViews,
+    classes: &mut Classes,
     target: &Target,
     lifts: &[Lift],
 ) -> Result<Option<Fact>, Error> {
@@ -1330,7 +1424,7 @@ pub(super) fn negated(
     }
     let arguments = [target.left.clone(), target.right.clone(), qed(context)];
     let proof = Term::apply(global(name), arguments);
-    let mut reader = Reader::new(views);
+    let mut reader = Reader::new(views, classes);
     reader.admit(context, statement, proof, Origin::Negated)?;
     let mut negation = reader.read.facts.pop();
     for lift in lifts {
@@ -1345,6 +1439,7 @@ pub(super) fn negated(
 pub(super) fn products(
     context: &mut Context,
     views: &mut LinearViews,
+    classes: &mut Classes,
     facts: &Facts,
     negated: Option<&Fact>,
 ) -> Result<Vec<Fact>, Error> {
@@ -1361,7 +1456,7 @@ pub(super) fn products(
                     .all(|(_, monomial)| monomial.atoms().len() == 1)
         })
         .collect::<Vec<_>>();
-    let mut reader = Reader::new(views);
+    let mut reader = Reader::new(views, classes);
     for (index, first) in factors.iter().enumerate() {
         for second in &factors[index + 1..] {
             if first.origin == Origin::Natural && second.origin == Origin::Natural {

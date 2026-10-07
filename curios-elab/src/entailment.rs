@@ -33,8 +33,10 @@ use search::*;
 mod tests;
 
 use {
-    crate::{Context, Error, Mode, elaborate, reduce_with, same_uncommitted},
-    curios_core::{Cases, Free, Global, LinearViews, Match, Probe, Subterm, Term, Var},
+    crate::{
+        Context, Error, Mode, elaborate, reduce_with, same_uncommitted, zonk_solved_term_metas,
+    },
+    curios_core::{Cases, Classes, Free, Global, LinearViews, Match, Probe, Subterm, Term, Var},
     curios_utilities::SyntaxName,
 };
 
@@ -157,7 +159,8 @@ fn linear(
     bound: &Term,
 ) -> Result<Entailed, Error> {
     let mut views = LinearViews::default();
-    let mut reader = Reader::new(&mut views);
+    let mut classes = Classes::default();
+    let mut reader = Reader::new(&mut views, &mut classes);
     // A decision that is no `Nat` or `Int` `<` or `<=` is not a goal of the fragment: an equality's negation is a disjunction, and nothing else is a comparison the view reads. The goal is read first, so its atoms are handed out before any fact's.
     let target = match goal {
         Goal::Decision(decision) => match reader.target(context, stated, decision)? {
@@ -168,7 +171,7 @@ fn linear(
     };
     let mut facts = reader.collect(context, target.as_ref())?;
     let negated = match &target {
-        Some(target) => negated(context, &mut views, target, &facts.lifts)?,
+        Some(target) => negated(context, &mut views, &mut classes, target, &facts.lifts)?,
         None => None,
     };
     let absurd = target.is_none();
@@ -180,7 +183,7 @@ fn linear(
         // Where linear arithmetic finds an assignment, the facts' products are asked, under what is left of the cap. The linear assignment is the one reported: a product search reads a product as an unknown, so its own assignment may be no values of the atoms at all.
         Plan::Satisfied(assignment) => {
             let linear = SearchOutcome::Counterexample(assignment);
-            let products = products(context, &mut views, &facts, negated.as_ref())?;
+            let products = products(context, &mut views, &mut classes, &facts, negated.as_ref())?;
             if products.is_empty() {
                 Err(linear)
             } else {
@@ -212,7 +215,8 @@ fn linear(
         &certificate,
     );
     let candidate = match written {
-        Written::Proof(candidate) => facts.respell(&candidate),
+        // In one spelling: the operands a proof names come from the bound and the hypotheses as stated, where an operator's witness may still stand as the metavariable its resolution solved, and from the reducts the facts were read through, where it is the witness. A fold pairs by identity — Euclid's recombination pairs a quotient with a remainder of one dividend — so a proof naming one call both ways would not check.
+        Written::Proof(candidate) => zonk_solved_term_metas(context, &facts.respell(&candidate)),
         Written::Unwritten => return refused(&views, SearchOutcome::Unwritten),
     };
     // What a written proof costs its checkers grows with its size: the nodes of each proof, as written and before either checks it.

@@ -80,8 +80,7 @@ Check: `curios-std`'s `flt` unit holds `ord` to the key's order at the zeros, th
 
 Each is a fact a proof might expect a lemma for, most of them rows `curios`'s `tests::laws::written` refuses as lemmas, and none is a lemma here.
 
-- `min(a, b) + max(a, b) = a + b` and `(a - b) + b = max(a, b)`, at `Nat` and at `Int`: `le/antisym` over two `True/proved()`. `+0 - min(i, j) = max(+0 - i, +0 - j)` the same way.
-- `min(a + c, b + c) = min(a, b) + c`: a match on `a <= b` naming `min/of_le` and `min/of_ge` in its arms, since one direction meets [a finding](00-findings.md) of the procedure that proves a bound.
+- `min(a, b) + max(a, b) = a + b`, `(a - b) + b = max(a, b)` and `min(a + c, b + c) = min(a, b) + c`, at `Nat` and at `Int`: `le/antisym` over two `True/proved()`. `+0 - min(i, j) = max(+0 - i, +0 - j)` the same way.
 - `pow(2, y) <= pow(2, y + z)`, `x <= shl(x, y)`, and `shl(x, k) / pow(2, k) = x`: `True/proved()`, the last under `le/antisym`.
 - At `Int`: a bound's reversal under negation and its additive cancellation are conversion's; monotonicity under a factor at most zero, the triangle inequality of `abs` and `abs`'s two bounds are `True/proved()`; and `abs(n) == 0` gives `n = +0` by `le/antisym`.
 
