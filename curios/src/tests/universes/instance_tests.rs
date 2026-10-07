@@ -1,7 +1,7 @@
 //! Two instances of one name: the levels an occurrence carries, and what two of them compare as.
 
 use {
-    super::test_support::{family_variances, universe_parameters},
+    super::test_support::{family_variances, signatures, universe_parameters},
     crate::tests::{error, run, typecheck, typecheck_within},
     curios_pipeline::DEFAULT_STEP_BUDGET,
 };
@@ -168,4 +168,49 @@ fn a_bare_former_passed_as_a_family_is_held_at_one_instance() {
     ] {
         assert_eq!(typecheck(&expanded), Ok(()));
     }
+}
+
+// **An ordinary function passed bare is held at one instance, as a former is.** `through(const_nat, …)` states `p` over `G(Nat, 0)`, which is `const_nat(Nat, 0)` at the instance `G` was passed at, a level above zero since `G` is applied to `Type` as well. `witness()` proves it over `const_nat` at zero, and the two spellings, apart in a level alone, are committed equal before `const_nat` unfolds to a `0` that holds none. Eta-expanded, `G(Nat, 0)` is a redex and both sides are reduced. The roadmap's *A universe level settled before its evidence is in* owns the refusal.
+#[test]
+fn an_ordinary_function_passed_bare_is_held_at_one_instance() {
+    let through = |function: &str| {
+        format!(
+            r#"
+            use /std/{{Nat, Eq}};
+            let const_nat(A: Type, x: A) -> Nat = 0;
+            let witness() -> Eq()(const_nat(Nat, 0), const_nat(Nat, 0)) = Eq/refl();
+            let through(G: (A: Type, x: A) -> Nat, p: Eq()(G(Nat, 0), G(Nat, 0)), q: Eq()(G(Type, Nat), G(Type, Nat))) -> Nat = 0;
+            let probe() -> Nat = through({function}, witness(), Eq/refl());
+            /std/print("held")
+            "#
+        )
+    };
+
+    let message =
+        typecheck(&through("const_nat")).expect_err("a bare function is held at one instance");
+    assert!(message.contains("strictly below itself"), "got: {message}");
+
+    assert_eq!(typecheck(&through("(A, x) => const_nat(A, x)")), Ok(()));
+}
+
+// **Both checkers hold the pair a bare former is refused on to be one type.** `first`'s body is `x.0`, at `Io` over `Nat` at the level `Both` passes its family at, one above zero since `Both` applies it to `Type` as well, and its declared type is `Io(Nat)` at zero. The body's type arrives as a projection's, a spelling apart from the declared one in more than levels, so both sides are reduced, nothing is committed, and the kernel certifies the definition by unfolding `Io` on both sides.
+#[test]
+fn two_instances_of_a_former_convert_where_their_spellings_differ_in_more_than_levels() {
+    let source = r#"
+        use /std/{Nat, Bool, Io};
+        let small(n: Nat) -> Io(Nat) = Io/pure(n);
+        let Both(F: (Type) -> Type) -> Type = {F(Nat), F(Type)};
+        let first(x: Both(Io)) -> Io(Nat) = x.0;
+        pub let pick(b: Bool, n: Nat, x: Both(Io)) -> Io(Nat) =
+            match b | true => small(n) | false => first(x) end;
+        /std/print("picked")
+        "#;
+
+    let signatures = signatures(source);
+    let first = &signatures["/first"];
+    assert!(
+        first.contains("Io.{1}") && first.contains("Io.{0}"),
+        "the two instances no longer sit at two decided levels, so the program holds nothing: {first}",
+    );
+    assert_eq!(run(source), b"picked");
 }

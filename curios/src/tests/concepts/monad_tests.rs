@@ -214,6 +214,15 @@ const TRY_LAMBDA: Region = Region {
     bind: "Try/bind",
 };
 
+// `Try` over a bare nominal former: two instances of `Option` meet as `Try`'s parameter, each a projection of its group.
+const TRY_OPTION: Region = Region {
+    uses: "Str, Nat, Bool, Option, Try, Monad",
+    small: "Try(Option, Str, Nat)",
+    large: "Try(Option, Str, Type)",
+    pure: "Try/pure",
+    bind: "Try/bind",
+};
+
 const REGIONS: [&Region; 5] = [&RESULT, &OPTION, &STATE, &IO, &TRY];
 
 // How a cell sequences its action: `!`, `Monad/bind` written out, or the monad's own function, which names no witness.
@@ -460,8 +469,33 @@ fn a_written_bind_sequences_a_decided_action_below_its_region() {
     }
 }
 
-// A bare `Io` is no nominal instance: its level is compared, and the levels-only shortcut commits the region's to the action's before either is unfolded. The refusal is the one the roadmap's *A universe level settled before its evidence is in* owns, reached through `Try`; the same region bound by `Try/bind` or by `Monad/bind` written out is accepted above.
+// A bare former's levels are compared every one where two of them meet as a transformer's parameter, `Io`'s as two instances of its name and `Option`'s as two projections of its group apart in their binders' annotations, and the levels-only shortcut commits the region's to the action's before either is applied. The refusal is the one the roadmap's *A universe level settled before its evidence is in* owns, reached through `Try`; over `Io` the same region bound by `Try/bind` or by `Monad/bind` written out is accepted above.
 #[test]
 fn a_bang_over_a_bare_base_monad_holds_its_region_at_a_decided_actions_level() {
-    refused(&TRY.huge(Spelling::Bang), BELOW_ITSELF);
+    for region in [&TRY, &TRY_OPTION] {
+        refused(&region.huge(Spelling::Bang), BELOW_ITSELF);
+    }
+}
+
+// Over a bare nominal former the region is held whichever side names the monad: the two projections are identified where `Try`'s parameters are compared, in the monad's own function and in `Monad/bind` written out as under `!`. A small action below its region is the control, its level being its caller's.
+#[test]
+fn a_transformer_over_a_bare_nominal_base_monad_holds_its_region_in_every_spelling() {
+    for spelling in [Spelling::Own, Spelling::Written] {
+        refused(&TRY_OPTION.huge(spelling), BELOW_ITSELF);
+    }
+
+    accepted(&TRY_OPTION.big(Spelling::Bang));
+}
+
+// The refusal needs the action's level to have been decided. `large_at`'s is its caller's, a `Type` written as a parameter's, and the same region over it is accepted: what decides `large`'s is a result settling at its floor.
+#[test]
+fn a_bang_over_a_bare_base_monad_takes_an_action_whose_level_its_caller_chooses() {
+    let source = r#"
+        use /std/{Str, Nat, Io, Try};
+        let large_at(K: Type, k: K, n: Nat) -> Try(Io, Str, K) = Try/pure(k);
+        pub let huge(n: Nat) -> Try(Io, Str, Type) = let _ = large_at(Type, Nat, n)!; Try/pure(Type);
+        /std/print("bound")
+        "#;
+
+    accepted(source);
 }

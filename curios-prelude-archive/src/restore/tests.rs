@@ -490,17 +490,25 @@ fn the_restored_prelude_pairs_every_arm_mark_with_its_binder() {
     });
 }
 
-/// Every prelude definition's finalized universe parameter count, printed rather than asserted: a change to how conversion identifies levels can merge two of a declaration's parameters into one, and the archive build reports only refusals, so a drop is invisible unless it is measured. Take it before and after such a change and diff the two.
+/// Every prelude definition's finalized universe scheme, printed rather than asserted: its parameter count, then its constraints and its type. A change to how conversion identifies levels, or to where a level settles, moves a signature without refusing anything, and the archive build reports only refusals. A count alone hides a move that keeps it, two parameters merged where a third appears, so the lines of two commits are compared by name.
 #[test]
 #[ignore = "inventory: measures the prelude's universe polymorphism rather than asserting it"]
 fn universe_parameter_census() {
     with_prelude(|prelude| {
         for item in items(prelude) {
-            let described = item.describe();
             for definition in item.definitions() {
+                let context = &definition.universe_context;
+                let constraints = context
+                    .constraints
+                    .iter()
+                    .map(|constraint| format!("{} ≤ {}", constraint.lower, constraint.upper))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let type_ = definition.type_.to_string().replace('\n', " ");
+
                 println!(
-                    "{described}\t{}",
-                    definition.universe_context.parameter_count
+                    "{}\t{}\t{constraints}\t{type_}",
+                    definition.name, context.parameter_count
                 );
             }
         }

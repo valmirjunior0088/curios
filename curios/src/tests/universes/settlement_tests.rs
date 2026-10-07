@@ -1,6 +1,9 @@
 //! Which of a declaration's levels its callers choose, and where every other one lands.
 
-use {super::test_support::universe_parameters, crate::tests::run};
+use {
+    super::test_support::universe_parameters,
+    crate::tests::{run, typecheck},
+};
 
 // A universe parameter is minted only from a declaration's *interface* — its type and the registry signatures a use site instantiates. A level reachable only through the body is minimized to a constant instead (`UniverseSolver::finalize`'s `internal` set, which no occurrence could choose a value for), so `carrier`, whose sole sort occurrence is the `Type` it stores, is monomorphic, while `holder`, whose level is tied to a `Type`-sorted parameter, generalizes.
 //
@@ -265,4 +268,127 @@ fn a_level_bounded_through_a_witnesses_side_condition_settles_at_zero() {
         Some(&1),
         "a witness alone took the level, so the control no longer separates the two: {parameters:?}",
     );
+}
+
+// **A result settles at its floor where conversion compares its level.** A tuple type's field, a former's argument and a level a family is invariant in are compared for equality, so no rule lifts `small()` to the type `big()` answers at, and a function answering either is refused. Written as a parameter's type the same level is the declaration's: `takes` is the control. The roadmap's *A universe level settled before its evidence is in* owns the refusal, and this pins the loss so that closing it flips a fixture.
+#[test]
+fn a_result_at_a_compared_position_settles_at_its_floor() {
+    let value = "pub struct Value: pub Type { A: Type, read: (Str) -> Result(Str, A) }";
+    let rows = [
+        ("", "{A: Type, a: A}", "(Nat, 0)", "(Type, Nat)"),
+        ("", "List(Type)", "[Nat]", "[Type]"),
+        (
+            value,
+            "Value",
+            "Value { A = Nat, read = (_) => Result/success(0) }",
+            "Value { A = Type, read = (_) => Result/success(Nat) }",
+        ),
+    ];
+    let program = |declarations: &str, type_: &str, small: &str, big: &str, pick: &str| {
+        format!(
+            r#"
+            use /std/{{Bool, Nat, Str, List, Result}};
+            {declarations}
+            pub let small() -> {type_} = {small};
+            pub let big() -> {type_} = {big};
+            pub let takes(p: {type_}) -> Nat = 0;
+            {pick}
+            /std/print("settled")
+            "#
+        )
+    };
+
+    for (declarations, type_, small, big) in rows {
+        let parameters = universe_parameters(&program(declarations, type_, small, big, ""));
+        assert_eq!(
+            parameters.get("/small"),
+            Some(&0),
+            "a result at a compared position kept its caller's choice, so the gap this pins has closed: {type_}: {parameters:?}",
+        );
+        assert_eq!(
+            parameters.get("/takes"),
+            Some(&1),
+            "the same type as a parameter's lost its level, so the control no longer separates the two: {type_}: {parameters:?}",
+        );
+
+        let pick = format!(
+            "pub let pick(b: Bool) -> {type_} = match b | true => small() | false => big() end;"
+        );
+        let message = typecheck(&program(declarations, type_, small, big, &pick))
+            .expect_err("two producers at two floors do not meet");
+        assert!(message.contains("strictly below itself"), "got: {message}");
+    }
+}
+
+// **A type-valued definition's body level settles at zero.** `Holder`'s body names `Value` at an occurrence of its own, which nothing in the source ties to its parameter's, and a level only a body mentions is minimized: the alias unfolds to a record over `Value` at zero, and `hold`, which builds one, is held there with it. `Types` and the recursive `Tower` settle the same way, `top` following `Tower`. The roadmap's *A universe level settled before its evidence is in* owns the gap.
+#[test]
+fn a_type_valued_definitions_body_level_settles_at_zero() {
+    let program = |use_: &str| {
+        format!(
+            r#"
+            use /std/{{Str, Nat, List, Result}};
+            pub struct Value: pub Type {{ A: Type, read: (Str) -> Result(Str, A) }}
+            pub let Holder(v: Value) -> Type = {{held: Value, tag: Nat}};
+            pub let hold(v: Value) -> Holder(v) = (held = v, tag = 0);
+            pub let Types: Type = List(Type);
+            pub let Tower(n: Nat) -> Type = match n | 0 => Value | k + 1 => {{head: Value, rest: Tower(k)}} end;
+            pub let top(v: Value) -> Tower(0) = v;
+            {use_}
+            /std/print("held")
+            "#
+        )
+    };
+
+    let parameters = universe_parameters(&program(""));
+    for (name, count) in [
+        ("/Holder", 1),
+        ("/hold", 0),
+        ("/Types", 0),
+        ("/Tower", 0),
+        ("/top", 0),
+    ] {
+        assert_eq!(
+            parameters.get(name),
+            Some(&count),
+            "a type-valued definition's body level moved, so the gap this pins has moved with it: {parameters:?}",
+        );
+    }
+
+    let large = r#"let large: Value = Value { A = Type, read = (_) => Result/success(Nat) };
+        pub let held: Holder(large) = hold(large);"#;
+    let message = typecheck(&program(large)).expect_err("an alias's body holds its users at zero");
+    assert!(message.contains("strictly below itself"), "got: {message}");
+}
+
+// **The library's instances.** `/std/Cli` describes a spec at any level and parses at one: `help` prints a spec whose reader answers a type, and `parse` refuses that spec, its walk held at the zeros its private `Claim` alias's body settles at and its `fill` at the zero a witness's side condition leaves `field`. The stock readers settle at their floor, so a spec holding `nat` beside a reader of a type is refused where it is built. The roadmap's *A universe level settled before its evidence is in* owns all three.
+#[test]
+fn the_command_line_parser_is_held_at_one_universe_instance() {
+    let program = |body: &str| {
+        format!(
+            r#"
+            use /std/{{Str, Nat, List, Result, Option, Io}};
+            use /std/Cli/{{Value, Arg, Cli, Outcome, reader, option, nat, parse, help}};
+            let large: Value = reader(@Type, "T", (_) => Result/success(Nat));
+            let spec: List(Arg) = [option("t", large, "a type")];
+            {body}
+            "#
+        )
+    };
+
+    let described = program(
+        r#"let cli: Cli = Cli/leaf("probe", "a probe", Option/none(), spec, (_) => Io/pure(()));
+        /std/print(help([], cli))"#,
+    );
+    let printed = String::from_utf8(run(&described)).expect("help prints text");
+    assert!(printed.contains("--t <T>"), "got: {printed}");
+
+    for refused in [
+        r#"pub let parsed: Outcome(spec) = parse(spec, [], Option/none());
+        /std/print("parsed")"#,
+        r#"pub let mixed: List(Arg) = [option("n", nat, "a number"), option("t", large, "a type")];
+        /std/print("mixed")"#,
+    ] {
+        let message = typecheck(&program(refused)).expect_err("the parser sits at one instance");
+        assert!(message.contains("strictly below itself"), "got: {message}");
+    }
 }

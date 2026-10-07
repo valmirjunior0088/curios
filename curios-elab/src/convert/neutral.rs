@@ -35,6 +35,10 @@ pub(super) fn identify_universe_levels(
         Alignment::GroundUnequal => return Ok(Identification::GroundUnequal),
     };
 
+    // How many pairs an identification equates and how many it records weak, per call that identifies: the magnitudes a change to what it commits moves.
+    curios_profile::sample!("identify::equated", compared.len());
+    curios_profile::sample!("identify::weak", irrelevant.len());
+
     for (this_level, that_level) in compared {
         context
             .universes_mut()

@@ -56,3 +56,24 @@ pub(super) fn family_variances(source: &str) -> BTreeMap<String, String> {
         })
         .collect()
 }
+
+/// Every definition's finalized type as it prints, universe instances included, keyed as [`universe_parameters`] keys it.
+pub(super) fn signatures(source: &str) -> BTreeMap<String, String> {
+    let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
+    let program: Program =
+        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+            .expect("the fixture type-checks")
+            .program;
+
+    program
+        .module
+        .items
+        .iter()
+        .flat_map(|item| {
+            let described = item.describe();
+            item.definitions()
+                .into_iter()
+                .map(move |definition| (described.clone(), definition.type_.to_string()))
+        })
+        .collect()
+}
