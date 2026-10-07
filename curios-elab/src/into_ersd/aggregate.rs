@@ -1,6 +1,6 @@
 //! Products, structs, variants, and projections — schema registration and the construction/projection sites.
 //!
-//! Declarations register their post-erasure shape exactly once, lazily on first use (the dominance-ordered item chain guarantees their dependencies are defined by then), from the opaque signature view: parameters opened as fresh abstract variables, each field classified against the preceding binders. The mask is therefore fixed per declaration, so construction, matching, and projection agree on the relevant-field arithmetic at every instantiation; a kept slot whose *instantiation* is a proof is filled with the unit constant at the site instead ([`Lowering::kept_operand`]).
+//! Declarations register their post-erasure shape exactly once, lazily on first use (the order a module's items are stored in guarantees their dependencies are defined by then), from the opaque signature view: parameters opened as fresh abstract variables, each field classified against the preceding binders. The mask is therefore fixed per declaration, so construction, matching, and projection agree on the relevant-field arithmetic at every instantiation; a kept slot whose *instantiation* is a proof is filled with the unit constant at the site instead ([`Lowering::kept_operand`]).
 //!
 //! Collapses: a structure or subset tuple left with a single relevant field erases to that bare field (no product, no projection); anonymous tuples share one interned schema per relevant width.
 

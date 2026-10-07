@@ -221,10 +221,10 @@ entry
     );
 }
 
+/// Erasure takes a module's items as they are stored, every item after the items it reaches: `a` is written before the `b` it names, and the order a module is stored in puts `b` first.
 #[test]
-fn items_erase_in_dominance_order() {
+fn items_erase_in_the_order_the_module_stores_them() {
     let mut context = context();
-    // `a` references `b`, which is declared after it; the item chain must reorder so every reference is backward.
     let items = vec![
         definition(
             "a",
@@ -233,11 +233,9 @@ fn items_erase_in_dominance_order() {
         ),
         definition("b", Term::intrinsic(Intrinsic::NatType), nat_lit(2)),
     ];
-    let erased = erase(
-        &mut context,
-        &module(items, Term::free_var(&global("a"))),
-        Term::intrinsic(Intrinsic::NatType),
-    );
+    let mut program = module(items, Term::free_var(&global("a")));
+    program.module = program.module.ordered();
+    let erased = erase(&mut context, &program, Term::intrinsic(Intrinsic::NatType));
     assert_eq!(
         shape(&erased),
         "\

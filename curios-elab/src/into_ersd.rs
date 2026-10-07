@@ -16,7 +16,6 @@ use {
         Telescope, Term, Three, Tuple, TupleType, Two, Variant,
     },
     curios_num::Natural,
-    std::collections::{BTreeMap, BTreeSet},
 };
 
 mod classify;

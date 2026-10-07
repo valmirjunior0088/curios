@@ -11,12 +11,13 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 - **An item can be undone, and elaborated apart from its unit.** `ItemMark::undo` and `ItemMark::void` (`curios-elab/src/elaborate/module/recovery.rs`) take a refused item and a void attempt out of every store another item reads, and `elaborate_and_zonk_unit_over` elaborates a set of items against the rest of their unit replayed as a predecessor.
 - **The elaborator writes a declaration's cells once, each on a budget of its own** (the same decision). `settle_published` (`curios-elab/src/elaborate/module.rs`) decides a declaration's polarity vectors, holds its variance vectors to its final telescopes, stamps its totality and decides its erasure obligations as it is published; no pass runs over a unit after its items, a recompile writes none of a reused declaration's cells, and erasure and the replay of a scope's witnesses restore their budget for each item and each witness. `curios-pipeline`'s `tests::budget_tests` hold a unit to the budget one of its declarations takes.
 - **A proof's lemmas are a function of what the vocabulary reads** (the same decision). The walk asks for the declarations of the prover's vocabulary first, which brings in every declaration they read, with no lemma of the unit on offer, and offers all of them from then on (`Demand::all`, `Context::proof_may_apply`); compiled over a baseline, it asks with them for what the vocabulary reads through a reused item (`vocabulary_reach`, `curios-elab/src/elaborate/module.rs`). The lowering still orders every item after the vocabulary (`order_after_entailment`), which no proof reads.
+- **A unit's items are stored in one order** (the same decision). `curios_core::Module::ordered` puts a module's items each after the items it reaches and otherwise by name, once, where the elaborator makes the module, whole or over a baseline; the certifier and erasure walk the items as stored, and neither sorts.
 - **The kernel judges a declaration, and files its polarity vector** (the same decision). `verdicts_within` (`curios-cert/src/recheck.rs`) checks an item, classifies it and holds its erased positions, then accepts the registry entries it declares, their positivity, their variance and their sizing each on a budget restored for it and over those entries alone. Each unit carries `curios_core::Certification`: per definition, its totality and what judging it read, and per family, the polarity vector a later walk composes through ([Cached verdicts](../../design/soundness/cached-verdicts.md)). The walk that files it decides where every declaration of a module stands before it judges any, and writes its environment once ([An independent kernel re-checks what the elaborator accepts](../../design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md)).
 - **A top-level definition writes its type** ([Top-level definitions](../../syntax.md#top-level-definitions)), so its universe levels are all a signature leaves open.
 
 ## The gap
 
-**The items are sorted three times, each on the order before it.** The lowering sorts by the names an item writes (`order_flat_items`, `curios-text/src/into_core/order.rs`), with soft edges from a use to its concept's witnesses for a deferred store elaboration no longer has, and hard edges from every item to the prover's vocabulary. The kernel sorts again over the elaborated terms (`dependency_order`) and erasure a third time (`dominance_order`, `curios-elab/src/into_ersd/binding.rs`), since elaboration adds 3,018 edges to the 6,488 the lowered forms of `/std`'s 1,926 declarations name, 1,881 of them to a witness; each breaks its ties on the order it was handed. So where a declaration is written reaches the items a unit stores and the module a program compiles to. `Demand::settle` and the recompile's closure walk the graph twice more. Counted at `0283c7242`, as *Verification* states.
+**The lowering sorts what the elaborator's walk orders by demand.** The lowering sorts a unit's items by the names each writes (`order_flat_items`, `curios-text/src/into_core/order.rs`), with soft edges from a use to its concept's witnesses for a deferred store elaboration no longer has, and hard edges from every item to the prover's vocabulary, and refuses a written cycle in words of its own (`Error::UndeclaredCycle`). The elaborator's walk asks for each declaration when it is read, and the module it makes is stored in an order of its own (`Module::ordered`), so what the lowering's sort still decides is the order the walk asks in, which is the order refusals are reported in, and which of two refusals a written cycle gets.
 
 ## What bounds the design
 
@@ -55,20 +56,18 @@ It needs [the rule that no memo outlives its declaration](../../design/soundness
 
 | Component | Treatment | Stage |
 | --- | --- | --- |
-| Item order | One function of a module in `curios-core`; `dependency_order` and `dominance_order` are deleted | 5 |
 | The lowering | Hands its items on as written; its sort, its soft and vocabulary edges and its cycle refusal are deleted | 6 |
 
 ## Stages
 
 Each lands alone, on its own check, and says what it expects to move; a move outside that is a finding.
 
-5. **One stored order.** Decision 13 for the kernel and erasure. Expected to move, once: the item order of every stored unit and of every program's emitted module. No verdict moves.
 6. **The lowering stops sorting.** Decisions 5 and 13 for the lowering. Expected to move: the text stage's part of a stored unit, the order refusals are reported in, which is then the order they are written in, and the wording of a written cycle's refusal, which is the elaborator's. A unit's core module, its record and its arena are the bytes stage 5 left.
 
 ## Verification
 
 - **Budget independence.** `curios-pipeline/src/tests/budget_tests.rs`, each fixture finding the smallest budget one declaration is accepted under, by doubling and then halving to within a sixteenth, and putting many to it, so none states a figure the library's growth would move: sixteen independent families are checked, by the elaborator and the kernel together, under the budget one of them is; a program is checked under the budget it takes once its scope holds a unit of witnesses it never asks for; and sixteen values, each at a type of its own that costs to read, erase under the budget one of them does.
-- **Order independence.** A unit and the same named declarations written in another order, its witnesses kept in theirs, store the same core module, record and arena, as a fixture in `curios-pipeline/src/tests/`, from stage 5.
+- **Order independence.** `curios-pipeline`'s `tests::order_tests`: a unit and the same named declarations written in another order store the same elaborated module, record and erased arena.
 - **The replay.** `curios-pipeline`'s `std_replay_census`, an ignored measurement: for each declaration of `/std`, `elaborate_and_zonk_unit_over` with its closure that declaration as the unit's sources lower it and its reused items the archived unit less it, compared with the archived unit's; then again with unrelated authored definitions added to the closure, which elaborate first. Counted.
 - **Whole and over a baseline.** `curios-pipeline/src/tests/incremental_tests.rs` holds a unit compiled over a baseline to the bytes it is compiled whole, and `std_recompile_reproduction` the standard library.
 - **The differential.** Before and after each stage: by name, every prelude item's universe context, type, body and totality, every registry entry with its vectors, and the certifier's record, digested; `curios-prelude-archive`'s `universe_parameter_census`; and the module each program of `programs/` compiles to. A difference outside what the stage expects is a finding, never a fixture update.
@@ -83,8 +82,6 @@ Each lands alone, on its own check, and says what it expects to move; a move out
 - **Lean's signature rule**, that a signature alone fixes a declaration's universe parameters: it needs level syntax the surface does not have.
 - **Opaque proof bodies**, the reason Lean's theorem bodies and Rocq's proofs parallelize freely: Curios reduces proofs where it eliminates `Accessible` and matches on `refl`.
 - **Publishing a signature speculatively and rolling back dependents** when the body disagrees: the answer would be deterministic and the work would not, and a dependent's diagnostics would be computed against a signature that never existed.
-- **An order kept by where a declaration is written**, as the tie among items that do not name one another: a unit would store another module for the same declarations moved, and [a stored unit says what its items mean, not where they were written](../../../curios-unit/README.md#a-stored-unit-says-what-its-items-mean-not-where-they-were-written-or-how-they-were-come-by).
-- **An order read off a record of what elaboration read**: what the elaborated terms name is enough to order them, is in the module a baseline already holds, and needs nothing stored beside it.
 
 ## Completion and retirement
 

@@ -158,6 +158,7 @@ fn inductive_constructor_ownership_is_explicit() {
         })
         .collect::<Vec<_>>();
 
+    // In the order the module stores them: the family, then its constructors by name, neither reaching the other.
     assert_eq!(
         schemes,
         vec![
@@ -167,18 +168,18 @@ fn inductive_constructor_ownership_is_explicit() {
                 2,
             ),
             (
-                global_name("/Result/success"),
-                curios_core::DefinitionKind::InductiveConstructor {
-                    owner: Qualifier::from(["Result"]),
-                    tag: curios_core::Atom::from("success"),
-                },
-                2,
-            ),
-            (
                 global_name("/Result/failure"),
                 curios_core::DefinitionKind::InductiveConstructor {
                     owner: Qualifier::from(["Result"]),
                     tag: curios_core::Atom::from("failure"),
+                },
+                2,
+            ),
+            (
+                global_name("/Result/success"),
+                curios_core::DefinitionKind::InductiveConstructor {
+                    owner: Qualifier::from(["Result"]),
+                    tag: curios_core::Atom::from("success"),
                 },
                 2,
             ),

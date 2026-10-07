@@ -2,7 +2,7 @@
 //!
 //! This is what a checker is handed. Elaboration produces it and erasure consumes it, but the shape itself is representation — a [`Definition`] is a name, a universe context, a type, and a body, and a [`RecItem`] is the same for a recursive group whose members reference each other through one shared [`RecGroup`] binder rather than through free names. Both checkers walk this structure, which is why it lives here rather than beside either of them.
 //!
-//! Items are stored in binding order and read in dependency order. A [`Module`] additionally carries the registries an item's types may name ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]), the witness set, and the binder high-water mark a checker must seed above. The one compilation with an entrypoint holds a [`Program`], the module beside the entry's type and body.
+//! Items are stored in dependency order, every item after the items it reaches and otherwise by name ([`Module::ordered`]), and every walk reads them as stored. A [`Module`] additionally carries the registries an item's types may name ([`InductDecl`], [`StructDecl`], [`ConceptDecl`]), the witness set, and the binder high-water mark a checker must seed above. The one compilation with an entrypoint holds a [`Program`], the module beside the entry's type and body.
 //!
 //! Well-formedness that *judges* rather than describes is not decided here. Whether a universe context is satisfiable is decided by each checker for itself, the elaborator's solver and the certifier's loop check; whether a definition terminates runs the size-change engine in `curios-analysis`, which both checkers drive. [`Totality`] is the classification those judgments record onto a definition, and the enum lives here because the field does.
 
@@ -15,7 +15,7 @@ use {
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
-        fmt,
+        fmt, mem,
         rc::Rc,
     },
 };
@@ -595,6 +595,79 @@ impl Module {
         }
 
         names
+    }
+
+    /// This module with its items in the order a unit is stored in: every item after the items it [reaches](Self::reaches), and where that leaves a choice, the one whose first declared name is least.
+    ///
+    /// The order is a function of what the items declare and name, and of nowhere they were written: a unit holds the same module wherever its declarations sit in its sources, and whether it was compiled whole or over a baseline. It is given once, where a module is made, and every walk after that takes the items as they come: the certifier, which refuses a name an item reaches before it is defined, and erasure. A witness is named by its place among its module's witnesses, so witnesses keep the order their module writes them in.
+    ///
+    /// Items that reach one another have no such order. The least-named of what is left then goes first, so the walk ends, and the certifier refuses the name it finds unbound.
+    pub fn ordered(mut self) -> Self {
+        let count = self.items.len();
+        let owner = self
+            .items
+            .iter()
+            .enumerate()
+            .flat_map(|(index, item)| {
+                item.declared_names()
+                    .into_iter()
+                    .map(move |name| (*name, index))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut waiting = vec![0usize; count];
+        let mut dependents = vec![Vec::new(); count];
+        for (index, item) in self.items.iter().enumerate() {
+            let reached = self
+                .reaches(item)
+                .into_iter()
+                .filter_map(|name| owner.get(&name).copied())
+                .filter(|dependency| *dependency != index)
+                .collect::<BTreeSet<_>>();
+            waiting[index] = reached.len();
+            for dependency in reached {
+                dependents[dependency].push(index);
+            }
+        }
+
+        // By first name, then by place for items that declare none or share one, which no stored unit holds.
+        let ranks = self
+            .items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| (item.declared_names().first().map(|name| **name), index))
+            .collect::<Vec<_>>();
+        let mut left = ranks.iter().copied().collect::<BTreeSet<_>>();
+        let mut ready = ranks
+            .iter()
+            .copied()
+            .filter(|(_, index)| waiting[*index] == 0)
+            .collect::<BTreeSet<_>>();
+        let mut order = Vec::with_capacity(count);
+        while !left.is_empty() {
+            // Nothing ready with items left is a cycle, which the least-named of them breaks.
+            let next = ready
+                .pop_first()
+                .unwrap_or_else(|| *left.first().expect("an item is left"));
+            left.remove(&next);
+            order.push(next.1);
+            for dependent in &dependents[next.1] {
+                waiting[*dependent] -= 1;
+                if waiting[*dependent] == 0 && left.contains(&ranks[*dependent]) {
+                    ready.insert(ranks[*dependent]);
+                }
+            }
+        }
+
+        let mut items = mem::take(&mut self.items)
+            .into_iter()
+            .map(Some)
+            .collect::<Vec<_>>();
+        self.items = order
+            .into_iter()
+            .map(|index| items[index].take().expect("an item is ordered once"))
+            .collect();
+
+        self
     }
 
     /// This module narrowed to the names `keep` admits: the items every one of whose declared names it admits, the registry entries keyed by such a name, and the witness and test markers naming one, with the mounts, the seed table, the floor and the entry carried whole.

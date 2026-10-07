@@ -16,6 +16,7 @@ mod incremental_tests;
 mod inductive_tests;
 mod inference_tests;
 mod lint_tests;
+mod order_tests;
 mod paste_back_tests;
 mod suggestion_tests;
 mod tuple_tests;

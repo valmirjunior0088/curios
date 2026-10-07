@@ -62,66 +62,6 @@ use {
     std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
 };
 
-/// `module`'s items in dependency order: every item after the ones it reaches, by a name it mentions, a nominal head it builds or takes apart, and the telescopes of a registry entry it declares, which is accepted with it.
-///
-/// The kernel checks items in sequence, defining each as it goes, so an item that mentions a name defined later is `Unbound`. `Module::items` is *not* in that order. `into_core` does sort topologically, but it sorts the surface program — and a concept-dispatched call names a *method*, not the witness that satisfies it: a use of `<` at `Nat` reaches the witness carrying that `Cmp` instance through an edge witness resolution creates during elaboration, long after the lowering sort could have seen it. So the sort has to be redone here, over the elaborated module, where the edge exists.
-///
-/// `judged` names the items to order, as indices into `module.items`; it is expected in ascending order, which is what makes the tie-break below the lowest-index one.
-///
-/// Deterministic: the lowest-index ready item goes first. On a cycle the lowest remaining item breaks the deadlock, matching `into_core`'s sort — the kernel then refuses it as `Unbound`, which is the correct outcome for a genuinely circular non-recursive item and needs no separate error.
-fn dependency_order(module: &Module, judged: &[usize]) -> Vec<usize> {
-    let mut owner: HashMap<&Global, usize> = HashMap::new();
-    for &index in judged {
-        for name in module.items[index].declared_names() {
-            owner.insert(name, index);
-        }
-    }
-
-    // A recursive group mentions its own members; that is what makes it a group, not a dependency on something earlier.
-    let dependencies = judged
-        .iter()
-        .map(|&index| {
-            let item = &module.items[index];
-            let names = module.reaches(item);
-
-            let targets = names
-                .iter()
-                .filter_map(|name| owner.get(name).copied())
-                .filter(|&target| target != index)
-                .collect::<HashSet<usize>>();
-
-            (index, targets)
-        })
-        .collect::<HashMap<usize, HashSet<usize>>>();
-
-    let mut emitted: HashSet<usize> = HashSet::with_capacity(judged.len());
-    let mut order = Vec::with_capacity(judged.len());
-
-    while order.len() < judged.len() {
-        let ready = judged
-            .iter()
-            .copied()
-            .find(|index| {
-                !emitted.contains(index)
-                    && dependencies[index]
-                        .iter()
-                        .all(|target| emitted.contains(target))
-            })
-            .or_else(|| {
-                judged
-                    .iter()
-                    .copied()
-                    .find(|index| !emitted.contains(index))
-            })
-            .expect("an item remains while the order is incomplete");
-
-        emitted.insert(ready);
-        order.push(ready);
-    }
-
-    order
-}
-
 /// One refusal the kernel reached.
 ///
 /// **Not one per item, and not always an item.** A declaration is judged several ways, so one failing two of them yields two verdicts; and a registry entry is refused under its own name, which is no item of [`Module::items`]. A caller counting these against `items.len()` is comparing two different rosters.
@@ -385,7 +325,7 @@ struct Judged {
 impl Judged {
     /// Decide where every declaration of `module` stands toward `globals`, before anything is judged — or refuse the module, once for each name it declares a second time.
     ///
-    /// **A name is one declaration.** [`dependency_order`] gives a name one owner, the kernel's environment holds one entry under it, and every analysis over the declaration set files a declaration under its name. A second declaration under a name is therefore never one more thing to judge: written over the first it changes what an accepted declaration states, and filed beside it in the other registry it leaves one of the two unanalysed. So a module is refused for a name an earlier item or member declares, for a name both registries hold, and for a declaration under a name the environment holds that is not the environment's own ([`Standing`]).
+    /// **A name is one declaration.** The walk defines a name once, the kernel's environment holds one entry under it, and every analysis over the declaration set files a declaration under its name. A second declaration under a name is therefore never one more thing to judge: written over the first it changes what an accepted declaration states, and filed beside it in the other registry it leaves one of the two unanalysed. So a module is refused for a name an earlier item or member declares, for a name both registries hold, and for a declaration under a name the environment holds that is not the environment's own ([`Standing`]).
     ///
     /// **Refused whole.** A module that redeclares offers the rest of itself no environment to be judged in, so nothing of it is: the verdicts handed back are its redeclarations and nothing else, each naming its declaration, a group by its first member as everywhere.
     fn of(module: &Module, globals: &Globals) -> Result<Self, Vec<Verdict>> {
@@ -633,8 +573,8 @@ fn verdicts_within(
     let mut unaccepted = (judged.inducts.clone(), judged.structs.clone());
     let mut polarities: BTreeMap<Global, Vec<Polarity>> = BTreeMap::new();
 
-    for index in dependency_order(module, &judged.items) {
-        let item = &module.items[index];
+    // The items as the module stores them, which is every item after the items it reaches where the module was made by the elaborator (`Module::ordered`). The walk sorts nothing: an item that names one stored after it finds the name unbound, and a family it stores in one accepted after it finds no vector filed, each of which refuses.
+    for item in judged.items.iter().map(|&index| &module.items[index]) {
         // One span per judged item, grouped as the elaborator's `declaration` span is, so an item's cost in the kernel is read beside its cost in the elaborator by the same key.
         curios_profile::profile!("certify_declaration", group = %item.describe());
         let item_name = item.declared_names().first().map(|&name| *name);

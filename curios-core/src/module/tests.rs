@@ -352,3 +352,80 @@ fn restriction_drops_the_registry_entries_witnesses_and_tests_of_excluded_names(
     assert!(kept.witnesses.is_empty());
     assert_eq!(kept.tests, vec![authored("probe")]);
 }
+
+/// `name`, whose body mentions each of `mentioned`.
+fn reading(name: &str, mentioned: &[&str]) -> Item {
+    let mut reading = definition(name, UniverseContext::empty());
+    reading.body = Term::tuple(
+        mentioned
+            .iter()
+            .map(|mentioned| Term::free_var(&Free::Global(authored(mentioned)))),
+    );
+
+    Item::Let(reading)
+}
+
+/// The first name of each item, in the order the module holds them.
+fn names(module: &Module) -> Vec<String> {
+    module.items.iter().map(Item::describe).collect()
+}
+
+/// A module's stored order is every item after what it reaches and otherwise by name, whatever order the items were handed in.
+#[test]
+fn items_are_ordered_by_what_they_reach_and_then_by_name() {
+    let written = [
+        reading("d", &["b"]),
+        reading("c", &[]),
+        reading("b", &["z"]),
+        reading("a", &["d"]),
+        reading("z", &[]),
+    ];
+
+    let stored = names(&over(written.to_vec()).ordered());
+    assert_eq!(stored, ["/c", "/z", "/b", "/d", "/a"]);
+
+    for turn in 1..written.len() {
+        let mut turned = written.to_vec();
+        turned.rotate_left(turn);
+        turned.swap(0, 1);
+        assert_eq!(names(&over(turned).ordered()), stored);
+    }
+}
+
+/// An item follows what the registry entries it declares reach, which no term of its own names.
+#[test]
+fn an_item_follows_what_its_registry_entry_reaches() {
+    let mut module = over(vec![reading("Box", &[]), reading("Payload", &[])]);
+    module.struct_decls.insert(
+        authored("Box"),
+        StructDecl {
+            universe_context: UniverseContext::empty(),
+            arity: Telescope::done(Telescope::build(
+                [(
+                    Free::local(0, Some("value")),
+                    Term::free_var(&Free::Global(authored("Payload"))),
+                )],
+                (),
+            )),
+            result_sort: Term::type_ground(),
+            module: Qualifier::empty(),
+            rep_public: true,
+            polarities: Vec::new(),
+            variances: Vec::new(),
+        },
+    );
+
+    assert_eq!(names(&module.ordered()), ["/Payload", "/Box"]);
+}
+
+/// Items that reach one another have no order to be stored in: the least-named of them goes first, and every item is still stored once.
+#[test]
+fn items_that_reach_one_another_are_broken_at_the_least_named() {
+    let module = over(vec![
+        reading("c", &["b"]),
+        reading("b", &["a"]),
+        reading("a", &["b"]),
+    ]);
+
+    assert_eq!(names(&module.ordered()), ["/a", "/b", "/c"]);
+}

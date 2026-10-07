@@ -184,9 +184,9 @@ fn a_withheld_declaring_item_takes_its_registry_entry_out_of_the_module() {
     assert!(context.induct_decl(&nominal("T")).is_none());
 }
 
-/// An item elaborates after what it reads, wherever each was written: the module keeps the order it was handed.
+/// An item elaborates after what it reads, wherever each was written, and is stored after it: the module is put in the one order its items are stored in.
 #[test]
-fn an_item_written_before_what_it_reads_elaborates_after_it() {
+fn an_item_written_before_what_it_reads_elaborates_and_is_stored_after_it() {
     let module = module(vec![
         let_item("b", nat(), mention("a")),
         let_item("a", nat(), nat_lit(1)),
@@ -201,7 +201,7 @@ fn an_item_written_before_what_it_reads_elaborates_after_it() {
             .iter()
             .map(Item::describe)
             .collect::<Vec<_>>(),
-        ["/b", "/a"]
+        ["/a", "/b"]
     );
 }
 

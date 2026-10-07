@@ -1,14 +1,14 @@
-//! Top-level items: the dominance-ordered item chain.
+//! Top-level items: the item chain, in the order the module stores them.
 //!
 //! Items become statements of the module's top-level item list, evaluated eagerly in emission order. Bindings persist in the Core base frame (no scoping frame), so later items and the entrypoint reduce through them — top-level cross-references are already free names.
 
 use {
-    super::{BTreeMap, BTreeSet, Bound, Context, Error, Lowering, Outcome, Subterm},
+    super::{Context, Error, Lowering, Outcome, Subterm},
     curios_core::{Free, Item, Module},
 };
 
 impl Lowering {
-    /// Erase every top-level item, in dominance order among themselves (see [`dominance_order`]).
+    /// Erase every top-level item, in the order the module stores them: every item after the items it reaches ([`Module::ordered`]), which is what lets each reference resolve to an operand already bound.
     ///
     /// A module carries only its own items: what an earlier erasure established arrives as bindings the environment already holds, so there is no prefix here to start past.
     ///
@@ -18,8 +18,7 @@ impl Lowering {
         context: &mut Context,
         module: &Module,
     ) -> Result<(), Error> {
-        for index in dominance_order(module) {
-            let item = &module.items[index];
+        for item in &module.items {
             context.restore_budget();
             self.types.clear();
             match item {
@@ -70,78 +69,4 @@ impl Lowering {
         }
         Ok(())
     }
-}
-
-/// The module's top-level items in dominance order — every item precedes the items that reference it — as indices into `module.items`.
-///
-/// The surface-to-core lowering already sorts the items it can see, but a witness reference is only spliced into its consumer during elaboration, after that sort has run — so a witness definition can sit after a consumer in the flat list. Eager erasure resolves every reference to an already-bound operand as it threads the chain, so it needs a true dominance order: the same Kahn sort, re-run over the elaborated terms whose free variables now include the spliced witness references.
-///
-/// Independent items keep their flat order (lowest-index-ready tiebreak). A value cycle across top-level items is unexpressible, so the stall fallback that emits the lowest remaining item only guarantees termination.
-fn dominance_order(module: &Module) -> Vec<usize> {
-    let items = &module.items;
-    let count = items.len();
-
-    let owner = items
-        .iter()
-        .enumerate()
-        .flat_map(|(index, item)| {
-            item.declared_names()
-                .into_iter()
-                .map(move |name| (Free::from(name), index))
-        })
-        .collect::<BTreeMap<Free, usize>>();
-
-    // A reference to something the environment already binds carries no edge; only references among these items order the sort.
-    let dependencies = items
-        .iter()
-        .enumerate()
-        .map(|(index, item)| {
-            item_reference_names(item, module)
-                .iter()
-                .filter_map(|name| owner.get(name).copied())
-                .filter(|&dependency| dependency != index)
-                .collect::<BTreeSet<usize>>()
-        })
-        .collect::<Vec<_>>();
-
-    let mut emitted = vec![false; count];
-    let mut order = Vec::with_capacity(count);
-    while order.len() < count {
-        let ready = (0..count)
-            .find(|&n| !emitted[n] && dependencies[n].iter().all(|dep| emitted[*dep]))
-            .or_else(|| (0..count).find(|&n| !emitted[n]))
-            .expect("an item remains while the order is incomplete");
-        emitted[ready] = true;
-        order.push(ready);
-    }
-    order
-}
-
-/// Every global name an item references: the free variables of its types and bodies, plus — for an item declaring a registered inductive or struct — the free variables of that registry entry's telescopes, whose field and index types live nowhere in the type former's own normal-form body.
-fn item_reference_names(item: &Item, module: &Module) -> BTreeSet<Free> {
-    let mut names = BTreeSet::new();
-    match item {
-        Item::Let(definition) => {
-            names.extend(definition.type_.free_vars());
-            names.extend(definition.body.free_vars());
-        }
-        Item::Rec(rec) => {
-            for definition in rec.definitions() {
-                names.extend(definition.type_.free_vars());
-                names.extend(definition.body.free_vars());
-            }
-        }
-    }
-    for name in item.declared_names() {
-        if let Some(induct_decl) = module.induct_decls.get(name) {
-            names.extend(induct_decl.arity.free_vars());
-            for parameter in induct_decl.signatures() {
-                names.extend(parameter.telescope.free_vars());
-            }
-        }
-        if let Some(struct_decl) = module.struct_decls.get(name) {
-            names.extend(struct_decl.arity.free_vars());
-        }
-    }
-    names
 }

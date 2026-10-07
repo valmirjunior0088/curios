@@ -485,7 +485,7 @@ impl ErasedArena {
 
 /// Erase one unit's items onto what its scope already erased, leaving the arena open for its successors to resume over.
 ///
-/// The Core context is re-seeded with the scope's definitions (so the unit's re-derived types reduce through them), the builder resumes over the restored arenas, and the items erase in dominance order among themselves — every reference into the scope is already bound.
+/// The Core context is re-seeded with the scope's definitions (so the unit's re-derived types reduce through them), the builder resumes over the restored arenas, and the items erase in the order the module stores them, every item after the items it reaches — every reference into the scope is already bound.
 ///
 /// **A unit and a program are erased by one walk, and only a program's is sealed.** The entry is not a unit's to carry: a program is its module and the term it closes with ([`Program`]), so [`erase_program`] runs this same walk and seals the entry at the type it states, which [`Zonked`] holds.
 ///

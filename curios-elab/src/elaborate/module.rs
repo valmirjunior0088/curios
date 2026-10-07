@@ -1781,7 +1781,8 @@ fn finalize_and_check(
         )));
     }
 
-    let module = zonk_module(context, &module)?;
+    // The order the unit is stored in, given once: every walk after this one takes the items as they come.
+    let module = zonk_module(context, &module)?.ordered();
     let entry = entry
         .map(|entry| zonk_entry(context, &module, &entry))
         .transpose()?;
@@ -2021,7 +2022,7 @@ fn elaborate_and_zonk(
     })
 }
 
-/// What an item-level recompile hands elaboration: the baseline's items it reuses, replayed as one more predecessor; the closure it re-elaborates, restricted out of the new lowering, whose seeds come beside it in the whole unit's [`Minted`]; and that lowering, whose item order the two are reassembled in.
+/// What an item-level recompile hands elaboration: the baseline's items it reuses, replayed as one more predecessor; the closure it re-elaborates, restricted out of the new lowering, whose seeds come beside it in the whole unit's [`Minted`]; and that lowering, which says which items the unit holds.
 ///
 /// The closure is closed under reverse reachability over the baseline's elaborated graph — the caller's obligation. A reused declaration's cells stand as the baseline published them — its vectors, its totality — and nothing here writes one again: nothing a reused declaration read is in the closure, so what decided them has not moved.
 pub struct Recompile<'a> {
@@ -2030,7 +2031,7 @@ pub struct Recompile<'a> {
     pub lowered: &'a Module,
 }
 
-/// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the closure alone is elaborated, against the scope with the reused items replayed as one more predecessor, and the result is reassembled with them into one module in the new lowering's order.
+/// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the closure alone is elaborated, against the scope with the reused items replayed as one more predecessor, and the result is reassembled with them into one module, put in the order a whole compile stores it in (`Module::ordered`).
 ///
 /// Everything decided of a declaration narrows to the closure by construction: each of its declarations decides its own vectors, totality and erasure obligations as it is published, reading a reused declaration's as the baseline left them, and a reused item is zonked and stamped already. A cycle is met among the closure's items as they are asked for: one through a reused witness would need that witness to reach a closure item, which contradicts the closure being closed, and a cycle among reused witnesses was refused when the baseline compiled.
 ///
@@ -2079,7 +2080,7 @@ fn elaborate_and_zonk_unit_over_within(
         ..
     } = finalized?;
 
-    let module = reassemble(&recompile, closure, &elaborated.dropped);
+    let module = reassemble(&recompile, closure, &elaborated.dropped).ordered();
 
     raise(Finalized {
         module,
@@ -2089,7 +2090,7 @@ fn elaborate_and_zonk_unit_over_within(
     .map(|(module, _)| module)
 }
 
-/// The reused items and the re-elaborated closure as one module, in the lowering's item order, over the union of their registries.
+/// The reused items and the re-elaborated closure as one module, over the union of their registries. The items come out in the lowering's order, and the caller puts them in the order a module is stored in.
 ///
 /// `dropped` is what the closure's elaboration produced no item for. A lowered item whose names are all in it is left out, exactly as the whole-unit path leaves a withheld item out of its module, and nothing dangles behind it: the closure is closed under reverse reachability, so no reused item reaches one of its names. A lowered item missing for any other reason is the contract broken and says so.
 ///
