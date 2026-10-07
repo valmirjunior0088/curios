@@ -3,9 +3,10 @@
 //! Everything here is registry state — inductive, struct, and concept declarations, the witness table, and per-definition totality verdicts and variance vectors. None of it is lexically scoped: `enter_frame`/`leave_frame` never touch these stores, and entries are only ever added or refined in place, never popped — except a refused declaration's, which the item loop takes out whole (`remove_induct` and its siblings, `remove_witness`) so nothing a later item reads was written by an item that failed. The writes that must reach the cache stamps (`insert_witness`, `update_witness_scheme`, the removals) are stamped by the `Context` façade, which alone holds the [`Caches`](super::Caches).
 
 use {
-    crate::{Error, HeadKey, Witness, WitnessKey},
+    crate::{Error, Witness},
     curios_core::{
-        ConceptDecl, Global, InductDecl, StructDecl, Term, Totality, UniverseContext, Variance,
+        ConceptDecl, Global, HeadKey, InductDecl, StructDecl, Term, Totality, UniverseContext,
+        Variance, WitnessKey,
     },
     curios_utilities::{Mount, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
@@ -14,7 +15,7 @@ use {
 /// A witness the unit declares, as it is known before it elaborates.
 #[derive(Debug)]
 pub(crate) struct Declared {
-    /// The concept and the key its signature is spelled at ([`Spelled`](crate::Spelled)). `None` where the spelling decides neither: no question is answered by it, and its registration refuses it.
+    /// The concept and the key its signature is spelled at ([`Keying`](curios_core::Keying)). `None` where the spelling decides neither: no question is answered by it, and its registration refuses it.
     pub(crate) spelled: Option<(Global, WitnessKey)>,
     /// The module declaring it, the coordinate a report names an anonymous witness by.
     pub(crate) module: Qualifier,
@@ -192,7 +193,7 @@ impl Program {
 
     /// The witness registered under `(concept, key)`, if any.
     pub(crate) fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<&Witness> {
-        self.witness_table.get(&(*concept, key.clone()))
+        self.witness_table.get(&(*concept, *key))
     }
 
     /// Every registered witness with its concept and key — the raw material for reachability questions over one concept's edges (the missing-embedding chain report).
@@ -211,7 +212,7 @@ impl Program {
         key: WitnessKey,
         witness: Witness,
     ) -> Option<Qualifier> {
-        match self.witness_table.get(&(concept, key.clone())) {
+        match self.witness_table.get(&(concept, key)) {
             Some(existing) => Some(existing.module),
             None => {
                 self.witness_table.insert((concept, key), witness);
@@ -226,7 +227,7 @@ impl Program {
             .witness_table
             .iter()
             .filter(|(_, witness)| witness.name == *name)
-            .map(|(key, _)| key.clone())
+            .map(|(key, _)| *key)
             .collect::<Vec<_>>();
         for key in &keys {
             self.witness_table.remove(key);
@@ -283,7 +284,7 @@ impl Program {
     }
 
     pub(crate) fn is_poisoned_witness(&self, concept: &Global, key: &WitnessKey) -> bool {
-        self.poisoned_witnesses.contains(&(*concept, key.clone()))
+        self.poisoned_witnesses.contains(&(*concept, *key))
     }
 
     /// Rewrite a registered witness's generalized scheme once its signature finalizes. Panics if `name` was never registered. The façade stamps the write.

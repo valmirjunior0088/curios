@@ -11,7 +11,7 @@ It rests on [A declaration is a function of what it reads](../../design/compilat
 - **A declaration is the unit of work** ([A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md)): lowered in identities of its own, elaborated on demand in a state of its own, deciding its vectors, totality and erasure obligations as it is published, judged by the kernel alone, and stored in one order.
 - **The accessors that record a need** (`Context::assumption`, `definition_body`, `var_reduct`, `induct_decl`, `struct_decl`, `concept`, `witness_unfinished`, `curios-elab/src/context.rs`): every read of another declaration's name, body or registry entry passes one of them, and a read of one not yet finished is recorded there.
 - **The certifier records what it read.** `curios_core::Reads` holds, per definition, the items whose type, universe scheme or registry entry a judgment read and the bodies it asked for, and `curios-pipeline`'s `the_prelude_reads_along_the_graph_its_definitions_reach` holds the reads inside the elaborated graph. Every unit files them, and no stage reads them.
-- **A witness is known by the key its signature is spelled at** before anything elaborates (`curios-elab/src/concept/spelled.rs`), and registration refuses one whose elaborated signature keys anywhere else.
+- **A witness is named by its module, its concept and the key its signature is spelled at** (`curios-core/src/witness.rs`), which the lowering reads before anything elaborates, and registration refuses one whose elaborated signature keys anywhere else.
 - **An erased form is its item's, and a program links what it reaches**, decisions 7 and 8 ([`curios-unit`'s README](../../../curios-unit/README.md#an-erased-form-is-its-items), `curios-elab/src/into_ersd/erased.rs`, `link.rs`, `curios_ersd::Module::link`): each item erases into a fragment on a budget restored for it, a unit compiled over a baseline erases the items it elaborates again (`erase_unit_over`), and the optimizer's prune decides what a linked program keeps (`prune_unreachable`, `curios-ersd/src/optimize/prune.rs`).
 - **A file is parsed once for each text a process holds of it** (`parsed`, `curios-text/src/root_source.rs`), and the lowering reads its predecessors as layers, copying none (`Scoped`, `curios-text/src/into_core/scoped.rs`).
 
@@ -34,8 +34,6 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 **Nothing records what the elaborator read.** The kernel's reads are its own judgment's. What elaboration read and left no name for — a body unfolded while a candidate was tried, a key at which no witness stands, whether a proof was offered the unit's lemmas — is in no term, and elaboration adds 3,018 edges to the 6,488 the lowered forms of `/std`'s declarations name, 1,881 of them to a witness, so the lowered graph is not the record either. Counted at `0283c7242`. One question a recompile answers from its baseline instead: whether the prover's vocabulary reads a declaration is read off the baseline's elaborated graph (`vocabulary_reach`, `curios-elab/src/elaborate/module.rs`), so an edit that changes what the vocabulary reads leaves a reused declaration elaborated under the other answer.
 
 **A reused verdict rests on a closure the certifier does not check.** The kernel passes a reused declaration over where its terms are the mounted ones (`recheck_over`, `Judged::of`), and which declarations are reused is the pipeline's closure: one cut short files the baseline's verdict beside a declaration it no longer describes, the finding in [`01-soundness`](../01-soundness/00-findings.md).
-
-**A witness is named by its place.** `WitnessId` is the declaring module and an ordinal, so a witness inserted ahead of another renames every witness after it in its module, and every declaration that resolves through one of them reads another name.
 
 **Every compile brings in its whole scope.** Elaboration defines every definition of every predecessor and registers each witness again by reducing its signature to a key the unit that declared it had in hand (`Established::replay_definitions`); `Globals::of` copies each registry and maps each definition, and the kernel copies the result again (`Kernel::seed`); erasure projects every predecessor's Core and defines it a third time (`seed`, `curios-elab/src/into_ersd/lower.rs`); and before any of it a process validates and restores both of the prelude's images whole. Compiling `programs/hello_world.crs` makes 0.13 M allocations elaborating and 0.06 M in the kernel, after it restores the prelude.
 
@@ -88,7 +86,6 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 | Component | Treatment | Stage |
 | --- | --- | --- |
 | Lowering | Per module where its text and the unit's interfaces stand; unit-wide passes over the modules' parts | Lowering |
-| Witness names | Module, concept and spelled key; the key's types in `curios-core` | Witnesses |
 | Reads | Recorded where the environment is asked, per cell and per key, in order, hits as misses, and stored with the unit | Records |
 | Invalidation | By recorded reads, revalidated in order, stopping where a cell comes out equal; `invalidated`'s reverse closure and `vocabulary_reach` are deleted | Records |
 | Verdicts | Adopted by the certifier from the baseline by its own reads | Records |
@@ -100,16 +97,14 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 Each lands alone, on its own check, and says what it expects to move; a move outside that is a finding.
 
 1. **Lowering.** Decision 9. Expected to move: a recompile's lowering.
-2. **Witnesses.** Decision 10. Expected to move: a stored unit's bytes, by its witnesses' names and the order they give, and every report that names a witness.
-3. **Records.** Decisions 1 to 6. Expected to move: a stored unit's bytes, by its records; what elaboration costs, by the recording; and which declarations a recompile redoes.
-4. **Views.** Decision 11. Expected to move: what a compile costs before its first declaration.
-5. **Addresses.** Decisions 12 and 13. Expected to move: every slot's address, and which units an edit to a dependency compiles.
+2. **Records.** Decisions 1 to 6. Expected to move: a stored unit's bytes, by its records; what elaboration costs, by the recording; and which declarations a recompile redoes.
+3. **Views.** Decision 11. Expected to move: what a compile costs before its first declaration.
+4. **Addresses.** Decisions 12 and 13. Expected to move: every slot's address, and which units an edit to a dependency compiles.
 
 ## Verification
 
 - **The cost rows.** `cargo xtask profile programs/hello_world.crs --profile release` builds the compiler and files the program's rows. For the library, a copy of `curios-std/src` with no `.curios` beside it, and `target/release/curios --profile <stream> wonder diagnostics <copy>/Nat.crs`, folded by `curios profile <stream>`: as it is; with `pub let _census_probe(a: Nat) -> Nat = a;` appended to `Nat.crs`; and with `xor(b, true)` respelled `xor(true, b)` in `Bool.crs`, asked of `Bool.crs`. The rows are `parse` over its modules, `into_core_unit` less it, `elaborate_and_zonk_unit_over`, `recheck_module`, `erase_unit`, `verdicts::put`, `restore_archives`, and for the program `compile_entrypoint`, `elaborate_and_zonk`, `recheck`, `erase_unit`, `link_program` and `lower_from_ersd`, each by its allocations. Counted. Their durations are a second measurement, timed, the median of repeated readings on a quiet machine, and no stage quotes one it has not taken so.
 - **Lowering.** A unit lowered over a baseline is the unit lowered whole, its lints and reports with it, held by `incremental_tests` over an edited body, an added declaration and a changed interface.
-- **Witnesses.** A unit and the same witnesses written in another order store the same module, and a moved witness's dependents are reused.
 - **The record is complete.** An ignored measurement beside `std_replay_census`: each declaration of `/std` elaborated against the declarations its record names and no other gives the declaration the library holds. Counted.
 - **Invalidation.** A recompile over a baseline redoes exactly the declarations whose recorded reads changed, held by fixtures over a signature change, a body change, a witness added at a key a goal found empty, and a declaration moved into what the prover's vocabulary reaches; a module handed to the certifier with a changed dependency is judged again where it read it; a unit compiled over a baseline is still the bytes it is compiled whole; and `std_recompile_closure_census` is retaken for its hub.
 - **Views.** `budget_tests` holds a program to the budget it takes whatever its scope holds, and the program's rows are retaken.
@@ -124,7 +119,7 @@ Each lands alone, on its own check, and says what it expects to move; a move out
 - [Cached verdicts](../../design/soundness/cached-verdicts.md): the per-item argument restated over the certifier's record, and the address's ordered predecessors. Records, Addresses.
 - [An independent kernel re-checks what the elaborator accepts](../../design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md): which declarations a walk passes over. Records.
 - [Reused payloads](../../design/soundness/reused-payloads.md): the ordered slots of a payload's predecessors. Addresses.
-- [A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md): a witness named by its place, and what a recompile asks for with the vocabulary. Witnesses, Records.
+- [A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md): what a recompile asks for with the vocabulary. Records.
 - [A module is a compilation unit, and the prelude is an environment](../../design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md): a compilation as units folded over one order. Addresses.
 - [`curios-unit`'s README](../../../curios-unit/README.md): *Predecessors are borrowed, per stage*, with `Predecessors`' own documentation. Views.
 
@@ -139,7 +134,6 @@ Each lands alone, on its own check, and says what it expects to move; a move out
 - **An erased arena for each unit, relocated where units meet.** Two arenas both count from zero, so every identity a unit hands on would be rewritten by every unit that reads it, where a name is the same in all of them.
 - **Linking every declaration in scope and pruning**: a program's first analysis walks the library to drop nearly all of it.
 - **Evaluating a top-level value only where it is read.** It is the language's meaning that moves, a declaration whose initialization is observable running or not by what a program names.
-- **A witness named by its concept and key alone.** Two units declaring one witness would hold one name, and what refuses them is the elaborator's coherence check, which runs after names are stored by mount.
 - **Erasure per declaration left to [item tasks](04-item-tasks.md).** An arena every unit's erasure resumes over orders the units and is what a recompile pays most for, and neither waits on a second worker.
 
 ## Completion and retirement

@@ -16,7 +16,7 @@ mod span;
 pub use span::*;
 
 mod interner;
-use interner::*;
+pub use interner::*;
 
 mod qualifier;
 pub use qualifier::*;

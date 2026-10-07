@@ -1,6 +1,6 @@
 use {
-    super::{HeadKey, WitnessKey},
-    curios_core::{Free, Global, Term},
+    super::{HeadKey, WitnessId, WitnessKey},
+    crate::{Free, Global, Term},
     curios_num::Grain,
     curios_utilities::{Plicity, Qualifier},
 };
@@ -32,13 +32,13 @@ fn func_type(marks: &[Plicity], name: &str) -> Term {
 // Arity one displays bare, so a single-parameter diagnostic spells a bare head ("for head 'Nat'", never "for head '(Nat)'").
 #[test]
 fn witness_key_displays_bare_for_arity_one() {
-    let key = WitnessKey(vec![HeadKey::Nat]);
+    let key = WitnessKey::from([HeadKey::Nat]);
     assert_eq!(key.to_string(), "Nat");
 }
 
 #[test]
 fn witness_key_displays_as_a_tuple_for_higher_arities() {
-    let key = WitnessKey(vec![
+    let key = WitnessKey::from([
         HeadKey::Nat,
         HeadKey::Nominal(Global::Authored(Qualifier::from(["std", "Str", "Str"]))),
     ]);
@@ -48,9 +48,84 @@ fn witness_key_displays_as_a_tuple_for_higher_arities() {
 // Tuple keys are compared componentwise: same first head, different second head is a different table entry.
 #[test]
 fn witness_keys_differ_beyond_the_first_head() {
-    let a = WitnessKey(vec![HeadKey::Nat, HeadKey::Bool]);
-    let b = WitnessKey(vec![HeadKey::Nat, HeadKey::Bin(Grain::X)]);
+    let a = WitnessKey::from([HeadKey::Nat, HeadKey::Bool]);
+    let b = WitnessKey::from([HeadKey::Nat, HeadKey::Bin(Grain::X)]);
     assert_ne!(a, b);
+}
+
+// A key is an identity: built twice from equal heads it is one key, and two keys order as their heads do, whichever was named first.
+#[test]
+fn a_key_is_one_identity_for_equal_heads_and_orders_by_them() {
+    let later = WitnessKey::from([HeadKey::Bool]);
+    let earlier = WitnessKey::from([HeadKey::Nat]);
+
+    assert_eq!(later, WitnessKey::from(vec![HeadKey::Bool]));
+    assert_eq!(later.heads(), [HeadKey::Bool]);
+    assert!(earlier < later);
+}
+
+fn witness(module: &str, concept: &str, key: WitnessKey, place: u32) -> WitnessId {
+    WitnessId::Spelled {
+        concept: Qualifier::from(["std", concept]),
+        key,
+        module: Qualifier::from(["std", module]),
+        place,
+    }
+}
+
+// A witness's name says what it witnesses and where: its module, then its concept applied to its key, and nothing of where it sits in its module.
+#[test]
+fn a_witness_is_displayed_by_its_module_concept_and_key() {
+    let lift = WitnessKey::from([
+        HeadKey::Nominal(Global::Authored(Qualifier::from(["std", "Option"]))),
+        HeadKey::Nat,
+    ]);
+
+    assert_eq!(
+        witness("Nat", "Show", WitnessKey::from([HeadKey::Nat]), 0).to_string(),
+        "/std/Nat/witness@/std/Show(Nat)"
+    );
+    assert_eq!(
+        witness("Option", "Lift", lift, 0).to_string(),
+        "/std/Option/witness@/std/Lift(/std/Option, Nat)"
+    );
+    // A second witness of one module at one concept and key is the duplicate the elaborator refuses, and needs a name to be refused under.
+    assert_eq!(
+        witness("Nat", "Show", WitnessKey::from([HeadKey::Nat]), 1).to_string(),
+        "/std/Nat/witness@/std/Show(Nat)#1"
+    );
+    assert_eq!(
+        WitnessId::Unspelled {
+            module: Qualifier::from(["std", "Nat"]),
+            place: 3,
+        }
+        .to_string(),
+        "/std/Nat/witness@3"
+    );
+}
+
+// The concept and the key lead the order, so the witnesses a unit declares at one concept and key are neighbours whichever modules declare them.
+#[test]
+fn witnesses_order_by_concept_and_key_before_their_module() {
+    let nat = WitnessKey::from([HeadKey::Nat]);
+    let bool_ = WitnessKey::from([HeadKey::Bool]);
+    let mut names = [
+        witness("Zeta", "Show", bool_, 0),
+        witness("Alpha", "Show", nat, 0),
+        witness("Alpha", "Show", bool_, 0),
+        witness("Alpha", "Eq", nat, 0),
+    ];
+    names.sort();
+
+    assert_eq!(
+        names,
+        [
+            witness("Alpha", "Eq", nat, 0),
+            witness("Alpha", "Show", nat, 0),
+            witness("Alpha", "Show", bool_, 0),
+            witness("Zeta", "Show", bool_, 0),
+        ]
+    );
 }
 
 // The shape is the label at each position, so a positional tuple type keys on one empty label per field and on nothing about the field types.

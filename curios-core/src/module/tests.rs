@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::{NumLit, Subterm, Transient, WitnessId},
+    crate::{HeadKey, NumLit, Subterm, Transient, WitnessId, WitnessKey},
     curios_utilities::{RootKind, Sign},
 };
 
@@ -148,12 +148,15 @@ fn a_stored_unit_may_not_carry_a_metavariable() {
 
 /// A witness declared here, scoped to a mount this module does not own.
 ///
-/// A witness's ordinal counts *within* the module that declares it, so a module declaring a witness under somebody else's mount is claiming an ordinal in a space it does not own, which two compilations would both hand out.
+/// A witness's name holds the module that declares it, so a module declaring a witness under somebody else's mount is claiming a name in a space it does not own, which two units could both declare.
 #[test]
 fn a_stored_unit_may_not_declare_a_witness_under_a_mount_it_does_not_own() {
     let mut module = stored(Term::intrinsic(crate::Intrinsic::NatType));
     module.mounts = vec![Mount::new(Qualifier::from(["mine"]), RootKind::Ordinary)];
-    let witness = Global::Witness(WitnessId::new(Qualifier::from(["theirs", "Shape"]), 0));
+    let witness = Global::Witness(WitnessId::Unspelled {
+        module: Qualifier::from(["theirs", "Shape"]),
+        place: 0,
+    });
     module.witnesses.insert(witness);
 
     assert_eq!(
@@ -162,13 +165,43 @@ fn a_stored_unit_may_not_declare_a_witness_under_a_mount_it_does_not_own() {
     );
 }
 
+/// A witness declared here under its place among its module's witnesses: the name a signature that spells no key is lowered under, which the same text written in another order gives to another declaration.
+#[test]
+fn a_stored_unit_may_not_declare_a_witness_under_its_place() {
+    let mut module = stored(Term::intrinsic(crate::Intrinsic::NatType));
+    module.mounts = vec![Mount::new(Qualifier::from(["mine"]), RootKind::Ordinary)];
+    let witness = Global::Witness(WitnessId::Unspelled {
+        module: Qualifier::from(["mine", "Shape"]),
+        place: 0,
+    });
+    module.witnesses.insert(witness);
+
+    assert_eq!(
+        validate_stored_identities(&module),
+        Err(Positional::PlacedWitness { witness })
+    );
+
+    let spelled = Global::Witness(WitnessId::Spelled {
+        concept: Qualifier::from(["mine", "Show"]),
+        key: WitnessKey::from([HeadKey::Nat]),
+        module: Qualifier::from(["mine", "Shape"]),
+        place: 0,
+    });
+    module.witnesses = BTreeSet::from([spelled]);
+
+    assert_eq!(validate_stored_identities(&module), Ok(()));
+}
+
 /// The control that keeps the refusal about *declaring*, not about mentioning.
 ///
 /// A stored unit legitimately names witnesses its predecessors declared, scoped to their mounts — every unit compiled against `/std` does. Reading this question off the terms instead of off the declarations would refuse all of them, which is why it is asked over `Module::witnesses` and deliberately not through the position walk.
 #[test]
 fn a_stored_unit_may_name_a_witness_another_mount_declared() {
     let mut module = stored(Term::free_var(&Free::Global(Global::Witness(
-        WitnessId::new(Qualifier::from(["theirs", "Shape"]), 3),
+        WitnessId::Unspelled {
+            module: Qualifier::from(["theirs", "Shape"]),
+            place: 3,
+        },
     ))));
     module.mounts = vec![Mount::new(Qualifier::from(["mine"]), RootKind::Ordinary)];
 

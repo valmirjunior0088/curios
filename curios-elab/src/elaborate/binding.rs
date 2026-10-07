@@ -1,14 +1,14 @@
 use {
     super::{Misaligned, align, check_witness_domain, insert_auto_argument, stands_at},
     crate::{
-        BinderSite, Context, DomainScope, EmbeddingSite, Error, HeadKey, Mode, ParkedWork,
-        SlotPositions, WitnessKey, attempt_witness_goal, check, check_is_sort, check_rec_totality,
-        convert, display_mismatch, elaborate, expect, reduce_with, written_monad,
-        zonk_solved_term_metas,
+        BinderSite, Context, DomainScope, EmbeddingSite, Error, Mode, ParkedWork, SlotPositions,
+        attempt_witness_goal, check, check_is_sort, check_rec_totality, convert, display_mismatch,
+        elaborate, expect, reduce_with, written_monad, zonk_solved_term_metas,
     },
     curios_core::{
-        Advance, Bang, Bound, CalleeId, Free, Func, Global, Infix, Intrinsic, Let, Metavar,
-        MetavarId, Nat, NumLit, Probe, Rec, Subterm, Telescope, Term, Transient, WitnessOrigin,
+        Advance, Bang, Bound, CalleeId, Free, Func, Global, HeadKey, Infix, Intrinsic, Let,
+        Metavar, MetavarId, Nat, NumLit, Probe, Rec, Subterm, Telescope, Term, Transient,
+        WitnessKey, WitnessOrigin,
     },
     curios_num::{Floating, Integer, Rounding},
     curios_utilities::{InfixOp, Plicity, Span},
@@ -718,7 +718,7 @@ pub(crate) fn embeds(region: &MonadShape, action: &MonadShape) -> bool {
 /// Whether a `Monad` witness is declared under `key`, elaborated or not — the concept's name derives from the registry's bind wrapper, whose namespace is the concept. Asked of every witness the unit declares, so where the witness is written does not decide whether an action is embedded.
 pub(crate) fn is_monad(context: &Context, key: &HeadKey) -> bool {
     let monad = Global::Authored(context.syntax().monad.bind.qualifier().without_last());
-    context.witness_declared(&monad, &WitnessKey(vec![key.clone()]))
+    context.witness_declared(&monad, &WitnessKey::from([key.clone()]))
 }
 
 /// Whether the region's weak-head form is still headed by an unsolved metavariable — including a stuck application of one, the higher-kinded case.

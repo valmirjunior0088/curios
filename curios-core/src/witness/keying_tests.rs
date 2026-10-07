@@ -1,8 +1,8 @@
 //! What a witness signature spells before anything elaborates: the key each written shape gives, and the shapes that give none.
 
 use {
-    super::{HeadKey, Spelled, WitnessKey, Written},
-    curios_core::{Free, Global, Intrinsic, Term},
+    super::{HeadKey, Keying, WitnessKey, Written},
+    crate::{Free, Global, Intrinsic, Term},
     curios_utilities::{Plicity, Qualifier},
     std::collections::BTreeMap,
 };
@@ -65,7 +65,7 @@ impl Unit {
             _ => None,
         };
 
-        Spelled {
+        Keying {
             written: &written,
             marks: &marks,
         }
@@ -76,9 +76,11 @@ impl Unit {
     fn head(&self, parameter: Term) -> Option<HeadKey> {
         let (concept, key) = self.key(&Term::apply(mention("Show"), [parameter]))?;
         assert_eq!(concept, named("Show"));
-        let [head] = key.0.try_into().expect("one parameter, one head");
+        let [head] = key.heads() else {
+            panic!("one parameter, one head");
+        };
 
-        Some(head)
+        Some(head.clone())
     }
 }
 
@@ -193,7 +195,7 @@ fn a_signature_spells_its_concept_and_every_parameter_behind_its_premises() {
         unit.key(&behind_premises),
         Some((
             named("Lift"),
-            WitnessKey(vec![HeadKey::Nominal(named("Option")), HeadKey::Nat])
+            WitnessKey::from([HeadKey::Nominal(named("Option")), HeadKey::Nat])
         ))
     );
 }
@@ -206,7 +208,7 @@ fn a_parameter_is_spelled_under_the_mark_its_concept_declares() {
 
     assert_eq!(
         unit.key(&marked("Named", Plicity::Implicit)),
-        Some((named("Named"), WitnessKey(vec![HeadKey::Nat])))
+        Some((named("Named"), WitnessKey::from([HeadKey::Nat])))
     );
     assert_eq!(unit.key(&marked("Named", Plicity::Explicit)), None);
     assert_eq!(unit.key(&marked("Show", Plicity::Implicit)), None);

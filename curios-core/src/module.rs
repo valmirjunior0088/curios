@@ -10,7 +10,8 @@ use {
     super::{
         Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Many,
         Polarity, RecGroup, RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm,
-        Telescope, Term, UniverseContext, UniverseError, Variance, WitnessSpelling, build_shorten,
+        Telescope, Term, UniverseContext, UniverseError, Variance, WitnessId, WitnessSpelling,
+        build_shorten,
     },
     curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -1045,8 +1046,10 @@ pub enum Positional {
     FreeLocal { owner: Option<Global>, index: u32 },
     /// A term metavariable. Zonking is contracted to substitute every solution and to refuse an unsolved hole, so one reaching here is that contract broken rather than a hole still to be solved.
     Metavar { owner: Option<Global> },
-    /// A witness this module declares, scoped to a mount it does not own. Its ordinal counts *within* a mount, so one carrying somebody else's is an ordinal two compilations can both hand out — the aliasing that would silently rebind a coherence-table entry.
+    /// A witness this module declares, scoped to a mount it does not own. Its name holds the module that declares it, so one carrying somebody else's is a name two units can both declare — the aliasing that would silently rebind a coherence-table entry.
     UnscopedWitness { witness: Global },
+    /// A witness this module declares under its place among its module's witnesses ([`WitnessId::Unspelled`]): its signature spelled no key, which registration refuses, so one reaching a store is a name the same text written in another order gives to another declaration.
+    PlacedWitness { witness: Global },
 }
 
 impl fmt::Display for Positional {
@@ -1058,6 +1061,12 @@ impl fmt::Display for Positional {
                 return write!(
                     formatter,
                     "{witness} is declared here and scoped to a mount this module does not own"
+                );
+            }
+            Positional::PlacedWitness { witness } => {
+                return write!(
+                    formatter,
+                    "{witness} is declared here under its place in its module, its signature spelling no key"
                 );
             }
         };
@@ -1073,9 +1082,9 @@ impl fmt::Display for Positional {
 ///
 /// **A unit may be stored only if it carries no positional identity.** Storing one is how rustc came to need `cnum_map` — an index another compilation reads and then has to remap — and it is the property deciding whether a stored unit is portable at all.
 ///
-/// Three of the classes are refused here. The remaining one, an unsolved universe metavariable, is refused at the same seam by `curios-elab`'s `validate_universes`, which names it in as many words; restating it would be a second implementation of one predicate rather than a second opinion about it, which is the standing [`UniverseContext::is_closed`] holds for the same reason.
+/// Four of the classes are refused here. The remaining one, an unsolved universe metavariable, is refused at the same seam by `curios-elab`'s `validate_universes`, which names it in as many words; restating it would be a second implementation of one predicate rather than a second opinion about it, which is the standing [`UniverseContext::is_closed`] holds for the same reason.
 ///
-/// The witness class is asked differently from the other two, and deliberately. Those are read off the module's *terms*, because a metavariable or a free local anywhere in one is disqualifying. A witness reference is not: a stored unit legitimately mentions witnesses its predecessors declared, scoped to *their* mounts. What must hold is that every witness this module **declares** is scoped to a mount it owns, which is a question about `Module::witnesses` rather than about any position — so it is asked over the declarations and not through the walk.
+/// The two witness classes are asked differently from the other two, and deliberately. Those are read off the module's *terms*, because a metavariable or a free local anywhere in one is disqualifying. A witness reference is not: a stored unit legitimately mentions witnesses its predecessors declared, scoped to *their* mounts. What must hold is that every witness this module **declares** is scoped to a mount it owns and named by what it witnesses, which are questions about `Module::witnesses` rather than about any position — so they are asked over the declarations and not through the walk.
 ///
 /// It refuses the free locals [`free_locals_outside`] reports, over the same positions, at the other seam: the kernel refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
 pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
@@ -1115,6 +1124,13 @@ pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
         Global::Authored(_) => false,
     }) {
         return Err(Positional::UnscopedWitness { witness: *witness });
+    }
+    if let Some(witness) = module
+        .witnesses
+        .iter()
+        .find(|witness| matches!(witness, Global::Witness(WitnessId::Unspelled { .. })))
+    {
+        return Err(Positional::PlacedWitness { witness: *witness });
     }
 
     found.map_or(Ok(()), Err)

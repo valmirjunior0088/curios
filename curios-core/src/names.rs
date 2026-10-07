@@ -4,51 +4,18 @@
 //!
 //! The rule holds because the *capability* is absent, not because every site remembers it. A spelling carrying structured facts is an undocumented wire format between stages, each fact recovered by a hand-rolled parser whose correctness rests on an invariant stated nowhere near the parse; `README.md` records what that cost. The types below unmerge the facts: [`Free`] discriminates global from local, [`Global`] discriminates an authored path from an anonymous witness, and [`Mint`] separates a binder's identity from its display hint. No path leads from a `Free` to a `&str` except through the printer, so reintroducing behavior-from-spelling means adding a method to a name type — which cannot happen by accident and appears in review as what it is. That is the property to preserve when extending this vocabulary.
 //!
-//! **A minted identity is private to the declaration that minted it.** A local's index and a metavariable's id are positions in counters that start at zero for each source declaration ([`Minted`]); a witness's ordinal counts within the module that declares it ([`WitnessId`]). So none may outlive the compilation that assigned it: a scope remembers a binder's hint and never its identity (`Label`), a stored term carries no local and no metavariable (`validate_stored_identities`), and the kernel refuses a module mentioning a local it was not handed (`free_locals_outside`). What crosses from one compilation to another is a [`Global`], whose meaning is its path.
+//! **A minted identity is private to the declaration that minted it.** A local's index and a metavariable's id are positions in counters that start at zero for each source declaration ([`Minted`]); and the place a witness whose signature spells no key is lowered under counts within the module that declares it ([`WitnessId`]). So none may outlive the compilation that assigned it: a scope remembers a binder's hint and never its identity (`Label`), a stored term carries no local and no metavariable (`validate_stored_identities`), and the kernel refuses a module mentioning a local it was not handed (`free_locals_outside`). What crosses from one compilation to another is a [`Global`], whose meaning is its path.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::UniverseSeed,
+    crate::{UniverseSeed, WitnessId},
     curios_utilities::{InfixOp, Qualifier, Symbol, name},
     std::{cmp::Ordering, collections::BTreeMap, fmt, hash},
 };
 
 name!(Atom; archive);
-
-/// A witness's identity: the module that declares it, and its ordinal within that module.
-///
-/// **Not a program-global counter, and that is the point.** Two units elaborated in separate compilations both mint from zero, so a bare ordinal means something only in the compilation that assigned it — the positional identity a stored unit may not carry. Pairing the ordinal with its declaring module makes two witnesses disjoint by the argument mount disjointness already carries: modules are disjoint within a mount and mounts are disjoint across units, so restoring two independently compiled units together cannot alias one onto the other.
-///
-/// It also needs no floor: a counter seeded above the archived prelude's watermark would tie a unit's identities to *where it sat*, where per-module ordinals depend on nothing but the unit itself.
-///
-/// **The module rather than the mount, which is finer than disjointness needs.** It is what lets a witness be *placed*: `by_item` keys an import scope by `Global`, and a documentation page asks which declarations belong to the module it is rendering. A mount answers `/std` for every witness in the standard library, which is no answer at all; the declaring module answers `/std/Tuple`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
-pub struct WitnessId {
-    module: Qualifier,
-    ordinal: u32,
-}
-
-impl WitnessId {
-    /// The `ordinal`th witness declared in `module`.
-    pub fn new(module: Qualifier, ordinal: u32) -> Self {
-        Self { module, ordinal }
-    }
-
-    /// The module that declares it.
-    pub fn module(&self) -> &Qualifier {
-        &self.module
-    }
-}
-
-impl fmt::Display for WitnessId {
-    /// Module-qualified, naming the module a reader would look in rather than the mount.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}/witness@{}", self.module.join(), self.ordinal)
-    }
-}
 
 /// A local binder's identity: a dense index, plus the hint it renders under — what its author called it, and none where the compiler introduced the binder or its author left it unnamed.
 ///
@@ -125,7 +92,7 @@ pub enum Global {
     Authored(Qualifier),
     /// A `satisfy` declaration. Witnesses are anonymous by design, so this is an identity rather than a manufactured name; the declaring module a diagnostic reports comes from `Definition::island`.
     ///
-    /// The identity is the declaring module and an ordinal within it — see [`WitnessId`]. Nothing else distinguishes two witnesses, which is why the module has to be part of it: two units minting bare ordinals from zero would alias, and aliasing one would silently rebind a coherence-table entry.
+    /// The identity is the declaring module with what the declaration witnesses there, its concept and the key its signature is spelled at — see [`WitnessId`].
     Witness(WitnessId),
 }
 

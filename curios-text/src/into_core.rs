@@ -5,8 +5,9 @@
 //! 1. **Discovery** (`Resolved::of`): the prefixes the unit claims checked disjoint from the predecessors', then every module they declare loaded through its source.
 //! 2. **Interface resolution** (`interface::resolve_unit`): each module's declarations seeded into its interface, then every `pub use` resolved to a fixed point, before any body is lowered.
 //! 3. **Lowering** (`process_items`): each item's names resolved against those interfaces, its sugar undone and its matches compiled (`match_compile`), then the entry's final term.
-//! 4. **Audit** (`audit`, `lint`): what the public interface exposes, and the declarations nothing reaches.
-//! 5. **Documentation** (`document`): the unit's documentation record, where it documents a mount.
+//! 4. **Witness names** (`witness`): each witness given the name its signature spells, which is read through the unit's definitions and so only once every item is lowered.
+//! 5. **Audit** (`audit`, `lint`): what the public interface exposes, and the declarations nothing reaches.
+//! 6. **Documentation** (`document`): the unit's documentation record, where it documents a mount.
 
 mod audit;
 use audit::*;
@@ -34,6 +35,10 @@ use scoped::*;
 
 mod document;
 use document::*;
+
+mod witness;
+use witness::*;
+
 use {
     crate::{
         Apply, Argument, Entrypoint, Error, FuncTypeParam, GroupItem, Label, LetSignature, Lint,
@@ -1353,7 +1358,7 @@ fn process_items(
                     _ => FlatItem::Rec(formers),
                 });
             }
-            // A witness desugars to an anonymous top-level definition satisfy (tele) -> C(args) = C { f = e, … }; and marks it for registration in the program-wide witness table. It gets an *identity*, not a manufactured name: a `satisfy` block has no name a programmer wrote, and the module a diagnostic reports for it comes from `Definition::island`.
+            // A witness desugars to an anonymous top-level definition satisfy (tele) -> C(args) = C { f = e, … }; and marks it for registration in the program-wide witness table. It gets an *identity*, not a manufactured name: a `satisfy` block has no name a programmer wrote, and the module a diagnostic reports for it comes from `Definition::island`. The identity it is lowered under is its place in its module; the one it keeps is what its signature spells, read once every item is lowered (`name_witnesses`).
             // A group `satisfy … and …` lowers to one `rec` item, so its members' anonymous names are bound in one another; a lone witness stays a `let` item, and may still resolve through its own entry — that repair is elaboration's, since a witness references itself by resolution rather than by name.
             TopItem::Witness(group) => {
                 let mut items = group
@@ -1693,7 +1698,7 @@ fn into_core_unit_within(
     let universes = Entropy::<usize>::new();
     let binders = Entropy::<usize>::new();
     let minted = RefCell::new(curios_core::Minted::default());
-    // No floor: a witness's ordinal is scoped to its declaring module, which lies within this unit's mounts, and those are disjoint from every predecessor's, so nothing it mints can collide with anything already stored.
+    // How many witnesses each module has declared so far: the place a witness is lowered under, until its signature is read for the name it keeps.
     let witness_ids = RefCell::new(BTreeMap::new());
     let unbound = RefCell::new(BTreeMap::new());
     let imports = RefCell::new(curios_core::Imports::default());
@@ -1778,6 +1783,20 @@ fn into_core_unit_within(
             &modules,
         ))?;
     }
+
+    // Every item is lowered, so every definition a witness's signature may name is at hand.
+    name_witnesses(
+        Named {
+            items: &mut flat_items,
+            witnesses: &mut witnesses,
+            minted: &mut minted.borrow_mut(),
+            imports: &mut imports.borrow_mut(),
+            lints: &mut lints.borrow_mut(),
+        },
+        &struct_decls,
+        &concepts,
+        &predecessor_modules,
+    );
 
     // The entrypoint, for the one unit that has one. Its tail closes the root body, so the imports in scope there are the last the root saw.
     context.record_import_scope(None);

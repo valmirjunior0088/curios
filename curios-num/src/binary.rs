@@ -9,7 +9,7 @@ use crate::BufferBytes;
 
 /// The closed logical grain of a packed binary sequence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[curios_archive::archived]
+#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub enum Grain {
     /// One logical atom per bit.
     B,

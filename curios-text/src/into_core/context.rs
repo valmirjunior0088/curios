@@ -84,6 +84,14 @@ impl FlatItem {
         }
     }
 
+    /// [`FlatItem::lets`], to rename a member.
+    pub(super) fn lets_mut(&mut self) -> &mut [FlatLet] {
+        match self {
+            FlatItem::Let(let_) => std::slice::from_mut(let_),
+            FlatItem::Rec(lets) => lets.as_mut_slice(),
+        }
+    }
+
     /// Every global this item names — the reachability prune's edges (see [`FlatItem::names`]). Locals are dropped: an item's binders are its own business, and reachability is a question about definitions.
     pub(super) fn free_vars(&self) -> HashSet<curios_core::Global> {
         let lets = match self {
@@ -478,18 +486,21 @@ impl<'a> Context<'a> {
         result
     }
 
-    /// Mint a witness identity in the module that declares it.
+    /// The identity a witness is lowered under: its place among the witnesses of the module that declares it.
     ///
-    /// A `satisfy` declaration is anonymous by design, so it gets an identity rather than a manufactured name — see [`curios_core::Global::Witness`]. The ordinal is per module rather than per program: two units both counting from zero is exactly what makes a bare ordinal unstorable, and the module is what makes the pair disjoint without either unit knowing the other exists — modules are disjoint within a mount, and mounts across units.
+    /// A `satisfy` declaration is anonymous by design, so it gets an identity rather than a manufactured name — see [`curios_core::Global::Witness`]. This one tells it from its module's others while the unit is lowered and no longer: the name it keeps is what its signature spells (`name_witnesses`), and a witness whose signature spells nothing keeps this one only as far as the refusal that names it.
     ///
     /// The module is this context's own prefix rather than the mount it lies within, which would be disjoint enough to be sound and too coarse to be *placed*: an import scope is keyed by `Global`, and a page asks which declarations belong to the module it renders, to which every witness in the standard library would answer `/std`.
     pub(super) fn fresh_witness(&self) -> curios_core::WitnessId {
         let module = self.prefix;
 
         let mut witnesses = self.witnesses.borrow_mut();
-        let ordinal = witnesses.entry(module).or_default();
-        let minted = curios_core::WitnessId::new(module, *ordinal);
-        *ordinal += 1;
+        let place = witnesses.entry(module).or_default();
+        let minted = curios_core::WitnessId::Unspelled {
+            module,
+            place: *place,
+        };
+        *place += 1;
 
         minted
     }

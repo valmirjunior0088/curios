@@ -18,7 +18,7 @@ mod universe_solver;
 pub use universe_solver::*;
 
 mod concept;
-pub use concept::*;
+pub(crate) use concept::*;
 
 mod derive;
 pub(crate) use derive::*;

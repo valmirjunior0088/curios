@@ -2,9 +2,9 @@ use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        ConceptDecl, Free, Global, InductDecl, Intrinsic, Level, MetavarId, Minted, Mints, Nat,
-        StructDecl, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseMetaId, UniverseRole,
+        ConceptDecl, Free, Global, HeadKey, InductDecl, Intrinsic, Level, MetavarId, Minted, Mints,
+        Nat, StructDecl, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseMetaId, UniverseRole, WitnessKey,
     },
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
@@ -80,28 +80,17 @@ fn removing_a_witness_hands_back_every_key_it_held() {
         universe_context: UniverseContext::empty(),
         signature: Term::type_ground(),
     };
-    let nat = WitnessKey(vec![HeadKey::Nat]);
-    let bool_ = WitnessKey(vec![HeadKey::Bool]);
-    assert!(
-        context
-            .insert_witness(concept, nat.clone(), witness())
-            .is_none()
-    );
-    assert!(
-        context
-            .insert_witness(concept, bool_.clone(), witness())
-            .is_none()
-    );
+    let nat = WitnessKey::from([HeadKey::Nat]);
+    let bool_ = WitnessKey::from([HeadKey::Bool]);
+    assert!(context.insert_witness(concept, nat, witness()).is_none());
+    assert!(context.insert_witness(concept, bool_, witness()).is_none());
 
     let removed = context
         .remove_witness(&name)
         .into_iter()
         .collect::<BTreeSet<_>>();
 
-    assert_eq!(
-        removed,
-        BTreeSet::from([(concept, nat.clone()), (concept, bool_.clone())])
-    );
+    assert_eq!(removed, BTreeSet::from([(concept, nat), (concept, bool_)]));
     assert!(context.witness(&concept, &nat).is_none());
     assert!(context.witness(&concept, &bool_).is_none());
     assert!(context.remove_witness(&name).is_empty());
@@ -352,7 +341,7 @@ fn declare(context: &mut Context, path: &str, position: usize) -> Global {
     context.declare_witness(
         name,
         Declared {
-            spelled: Some((named("Show"), WitnessKey(vec![HeadKey::Nat]))),
+            spelled: Some((named("Show"), WitnessKey::from([HeadKey::Nat]))),
             module: Qualifier::empty(),
             position,
         },
@@ -368,11 +357,11 @@ fn a_declared_witness_stands_at_the_key_it_is_spelled_at_before_it_elaborates() 
     let show = named("Show");
     declare(&mut context, "w", 0);
 
-    assert!(context.witness_declared(&show, &WitnessKey(vec![HeadKey::Nat])));
-    assert!(!context.witness_declared(&show, &WitnessKey(vec![HeadKey::Bool])));
+    assert!(context.witness_declared(&show, &WitnessKey::from([HeadKey::Nat])));
+    assert!(!context.witness_declared(&show, &WitnessKey::from([HeadKey::Bool])));
     assert_eq!(
         context.witness_keys(&show),
-        [(WitnessKey(vec![HeadKey::Nat]), Qualifier::empty())]
+        [(WitnessKey::from([HeadKey::Nat]), Qualifier::empty())]
     );
     assert!(context.take_needs().is_empty());
 }
@@ -381,13 +370,13 @@ fn a_declared_witness_stands_at_the_key_it_is_spelled_at_before_it_elaborates() 
 fn a_goal_at_the_key_of_a_witness_that_has_not_elaborated_needs_it() {
     let mut context = context();
     let show = named("Show");
-    let key = WitnessKey(vec![HeadKey::Nat]);
+    let key = WitnessKey::from([HeadKey::Nat]);
     let witness = declare(&mut context, "w", 0);
     context.attempt(&[&named("user")]);
 
     assert!(context.witness_unfinished(&show, &key));
     assert_eq!(context.take_needs(), BTreeSet::from([witness]));
-    assert!(!context.witness_unfinished(&show, &WitnessKey(vec![HeadKey::Bool])));
+    assert!(!context.witness_unfinished(&show, &WitnessKey::from([HeadKey::Bool])));
     assert!(context.take_needs().is_empty());
 }
 
@@ -398,7 +387,7 @@ fn a_witness_does_not_need_itself() {
     let witness = declare(&mut context, "w", 0);
     context.attempt(&[&witness]);
 
-    assert!(!context.witness_unfinished(&named("Show"), &WitnessKey(vec![HeadKey::Nat])));
+    assert!(!context.witness_unfinished(&named("Show"), &WitnessKey::from([HeadKey::Nat])));
     assert!(context.take_needs().is_empty());
 }
 
@@ -410,7 +399,7 @@ fn of_two_witnesses_spelled_alike_a_goal_needs_the_first_as_written() {
     let first = declare(&mut context, "b", 2);
     context.attempt(&[&named("user")]);
 
-    assert!(context.witness_unfinished(&named("Show"), &WitnessKey(vec![HeadKey::Nat])));
+    assert!(context.witness_unfinished(&named("Show"), &WitnessKey::from([HeadKey::Nat])));
     assert_eq!(context.take_needs(), BTreeSet::from([first]));
 }
 
@@ -419,7 +408,7 @@ fn of_two_witnesses_spelled_alike_a_goal_needs_the_first_as_written() {
 fn a_withdrawn_witness_poisons_the_key_it_is_spelled_at() {
     let mut context = context();
     let show = named("Show");
-    let key = WitnessKey(vec![HeadKey::Nat]);
+    let key = WitnessKey::from([HeadKey::Nat]);
     let refused = declare(&mut context, "w", 0);
 
     context.withdraw_declared_witness(&refused);

@@ -15,8 +15,8 @@ mod tests;
 
 use {
     super::{
-        Error, HeadKey, Provenance, UniverseMark, UniverseSolver, UniverseStateToken, Witness,
-        WitnessKey, zonk_universe_levels_scoped,
+        Error, Provenance, UniverseMark, UniverseSolver, UniverseStateToken, Witness,
+        zonk_universe_levels_scoped,
     },
     crate::{
         Published, Refusal, Sort, hold_at_one_instance, key_spelling, shallow_scrutinee, zonk,
@@ -25,10 +25,11 @@ use {
     curios_analysis::{Unfolding, records_case_equation},
     curios_core::{
         Advance, Bound, ConceptDecl, Consumption, Cost, Definition, DefinitionKind, Free, FuncType,
-        Global, HeadTag, ImplicitOrigin, Imports, InductDecl, Item, Level, Metavar, MetavarId,
-        MetavarOrigin, Minted, Mints, Probe, RecGroup, ReduceError, StructDecl, Subterm, Term,
-        Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
-        UniverseMetaId, UniverseRole, Variance, WitnessOrigin, instantiate_universe_levels_scoped,
+        Global, HeadKey, HeadTag, ImplicitOrigin, Imports, InductDecl, Item, Level, Metavar,
+        MetavarId, MetavarOrigin, Minted, Mints, Probe, RecGroup, ReduceError, StructDecl, Subterm,
+        Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseError, UniverseMetaId, UniverseRole, Variance, WitnessKey, WitnessOrigin,
+        instantiate_universe_levels_scoped,
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, Span, SyntaxRegistry},
     std::{
@@ -1865,12 +1866,12 @@ impl Context {
             .program
             .witness_keyed_entries()
             .filter(|(registered, _, _)| *registered == concept)
-            .map(|(_, key, witness)| (key.clone(), witness.module));
+            .map(|(_, key, witness)| (*key, witness.module));
         let declared = self
             .program
             .declared_keys(concept)
             .filter(|(key, _)| self.program.witness(concept, key).is_none())
-            .map(|(key, module)| (key.clone(), *module));
+            .map(|(key, module)| (*key, *module));
 
         registered.chain(declared).collect()
     }

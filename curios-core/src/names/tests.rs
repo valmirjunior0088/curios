@@ -12,26 +12,35 @@ fn authored(segments: [&str; 2]) -> Global {
 #[test]
 fn a_witness_is_not_the_definition_named_after_its_module() {
     let module_definition = authored(["std", "Nat"]);
-    let witness_declared_there =
-        Global::Witness(WitnessId::new(Qualifier::from(["std", "Nat"]), 0));
+    let witness_declared_there = Global::Witness(WitnessId::Unspelled {
+        module: Qualifier::from(["std", "Nat"]),
+        place: 0,
+    });
 
     assert_ne!(module_definition, witness_declared_there);
 }
 
-// Two witnesses in one module are distinct without either carrying a manufactured name to tell them apart. `/std/Nat` declares nine `satisfy` blocks, which is the situation that forced the `witness@N` spelling.
+// Two witnesses in one module are distinct without either carrying a manufactured name to tell them apart: nine whose signatures spell no key are nine names, by the place each was lowered under.
 #[test]
 fn witnesses_sharing_a_module_stay_distinct() {
     let module = Qualifier::from(["std", "Nat"]);
-    let witnesses = (0..9).map(|n| Free::Global(Global::Witness(WitnessId::new(module, n))));
+    let witnesses =
+        (0..9).map(|n| Free::Global(Global::Witness(WitnessId::Unspelled { module, place: n })));
 
     assert_eq!(witnesses.collect::<HashSet<_>>().len(), 9);
 }
 
-// The collision a module-scoped ordinal removes: two units elaborated in separate compilations both mint from zero, so the ordinal alone cannot tell their witnesses apart. The declaring module is what does — and two modules of two units are disjoint by the same argument two mounts are, since a module lies within a mount.
+// The collision the declaring module removes: two units lowered in separate compilations both count from zero, so a place alone cannot tell their witnesses apart. The declaring module is what does — and two modules of two units are disjoint by the same argument two mounts are, since a module lies within a mount.
 #[test]
-fn one_ordinal_under_two_modules_is_two_witnesses() {
-    let here = Global::Witness(WitnessId::new(Qualifier::from(["std", "Nat"]), 0));
-    let there = Global::Witness(WitnessId::new(Qualifier::from(["json", "Value"]), 0));
+fn one_place_under_two_modules_is_two_witnesses() {
+    let here = Global::Witness(WitnessId::Unspelled {
+        module: Qualifier::from(["std", "Nat"]),
+        place: 0,
+    });
+    let there = Global::Witness(WitnessId::Unspelled {
+        module: Qualifier::from(["json", "Value"]),
+        place: 0,
+    });
 
     assert_ne!(here, there);
     assert_eq!(here.to_string(), "/std/Nat/witness@0");

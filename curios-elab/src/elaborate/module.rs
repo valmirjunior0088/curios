@@ -10,11 +10,11 @@ mod tests;
 use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
-        Declared, Established, GoalReport, GoalSite, Published, ScheduledTest, Spelled, Written,
-        Zonked, body_levels, check_concept_registry, check_is_sort, check_proof_totality,
-        check_rec_item_totality, check_type_totality, check_written_type_totality, compared_levels,
-        decide_polarities, definition_variances, family_levels, goal_sites, hold_variances,
-        is_prop, record_definition_totality, record_superclasses, record_variances, reduce_with,
+        Declared, Established, GoalReport, GoalSite, Published, ScheduledTest, Zonked, body_levels,
+        check_concept_registry, check_is_sort, check_proof_totality, check_rec_item_totality,
+        check_type_totality, check_written_type_totality, compared_levels, decide_polarities,
+        definition_variances, family_levels, goal_sites, hold_variances, is_prop,
+        record_definition_totality, record_superclasses, record_variances, reduce_with,
         register_witness, report_goals, sort_term, stamp_totality, superclass_targets,
         test_program_tail, zonk, zonk_arity, zonk_entry, zonk_module, zonk_published,
         zonk_solved_term_metas,
@@ -1400,73 +1400,20 @@ fn alone(context: &Context, item: &Item) -> Module {
     module
 }
 
-/// Each witness `module` declares, as its signature spells it ([`Spelled`]), at the place `order` gives its name. A name of the unit is read by its lowered form in `lowered`, which holds every item of the unit, the ones a recompile reuses among them, so a whole compile and a recompile read one key; any other name is read by what the context holds of it.
-fn spelled_witnesses(
-    context: &Context,
-    module: &Module,
-    lowered: &Module,
-    order: &BTreeMap<Global, usize>,
-) -> Vec<(Global, Declared)> {
-    if module.witnesses.is_empty() {
-        return Vec::new();
-    }
-
-    let mut unit = BTreeMap::<Global, (&DefinitionKind, Option<&Term>)>::new();
-    for item in &lowered.items {
-        match item {
-            Item::Let(definition) => {
-                unit.insert(definition.name, (&definition.kind, Some(&definition.body)));
-            }
-            Item::Rec(rec) => {
-                for definition in &rec.definitions {
-                    unit.insert(definition.name, (&definition.kind, None));
-                }
-            }
-        }
-    }
-    let written = |name: &Global| {
-        let (kind, body) = match unit.get(name) {
-            Some((kind, body)) => (Some(*kind), *body),
-            None => {
-                let name = Free::from(name);
-                (
-                    context.definition_kind(&name),
-                    context.definition_body(&name),
-                )
-            }
-        };
-        match (kind, body) {
-            (
-                Some(
-                    DefinitionKind::InductiveType
-                    | DefinitionKind::StructType
-                    | DefinitionKind::ConceptType,
-                ),
-                _,
-            ) => Written::Former,
-            (Some(DefinitionKind::Authored), Some(body)) => Written::Defined(body),
-            _ => Written::Opaque,
-        }
-    };
-    // A concept's parameters are its record entry's, whose arity states the mark each is declared under.
-    let marks = |name: &Global| {
-        context.concept(name)?;
-
-        Some(context.struct_decl(name)?.arity.marks())
-    };
-    let spelled = Spelled {
-        written: &written,
-        marks: &marks,
-    };
-
+/// Each witness `module` declares, under the concept and the key its name states ([`WitnessId`](curios_core::WitnessId)), at the place `order` gives its name. The lowering read both off how the signature is spelled, over every item of the unit, so a whole compile and a recompile hold one key.
+fn declared_witnesses(module: &Module, order: &BTreeMap<Global, usize>) -> Vec<(Global, Declared)> {
     module
         .items
         .iter()
         .flat_map(Item::definitions)
         .filter(|definition| module.witnesses.contains(&definition.name))
         .map(|definition| {
+            let spelled = match &definition.name {
+                Global::Witness(id) => id.spelled(),
+                Global::Authored(_) => None,
+            };
             let declared = Declared {
-                spelled: spelled.key(&definition.type_),
+                spelled,
                 module: definition.island,
                 position: order[&definition.name],
             };
@@ -1586,7 +1533,7 @@ fn elaborate_module_suffix(
     // Elaboration goes on minting in the spaces the unit's lowering minted in, so each counter starts above the lowering's count: a lowered hole and an inserted implicit are distinct metavariables, and an unbound name — a free local the lowering minted — is never an elaborated binder, which would find it bound instead of reporting it. The scope's terms carry neither, so nothing a predecessor minted can meet these.
     context.seed(minted);
 
-    // Where each name of the unit is written — every item's, the ones a recompile reuses among them — and which of them this elaboration's own items declare: what an item reads of a declaration that has not elaborated is then a need, never an absence. Every witness among them goes in under the key its signature is spelled at, which is what a question about its concept is answered by until it elaborates.
+    // Where each name of the unit is written — every item's, the ones a recompile reuses among them — and which of them this elaboration's own items declare: what an item reads of a declaration that has not elaborated is then a need, never an absence. Every witness among them goes in under the key its name states, which is what a question about its concept is answered by until it elaborates.
     let order = lowered
         .items
         .iter()
@@ -1597,7 +1544,7 @@ fn elaborate_module_suffix(
                 .map(move |name| (*name, position))
         })
         .collect::<BTreeMap<_, _>>();
-    for (name, declared) in spelled_witnesses(context, module, lowered, &order) {
+    for (name, declared) in declared_witnesses(module, &order) {
         context.declare_witness(name, declared);
     }
     let vocabulary = vocabulary_reach(context, established, &order);

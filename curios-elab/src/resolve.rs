@@ -5,7 +5,7 @@
 //! 3. **Global table** — pure lookup by `(concept, tuple of the rigid heads of every parameter)`; a hit instantiates the witness's telescope (fresh metavariables for `@` binders, recursive goals for `use` premises) and unifies its result type against the goal. No projections here.
 //! 4. **Flex head** — any parameter still headed by a metavariable parks the goal, woken when a watched metavariable solves.
 //!
-//! A rigid, keyable head with no table entry is asked of the witnesses the unit declares, each known before it elaborates by the key its signature is spelled at ([`Spelled`](crate::Spelled)): where one is spelled there and has not elaborated, the attempt needs it and is void ([`Context::need`]); where none is, the goal has no witness, and says so where it stands.
+//! A rigid, keyable head with no table entry is asked of the witnesses the unit declares, each known before it elaborates by the key its signature is spelled at ([`Keying`](curios_core::Keying)): where one is spelled there and has not elaborated, the attempt needs it and is void ([`Context::need`]); where none is, the goal has no witness, and says so where it stands.
 //!
 //! **A goal is attempted only while its slot is open.** The slot is a metavariable like any other, so unification may solve it first — against an expected type or an argument's type that names a dictionary, as a type declared under a `use` premise does — and that solution is the answer: a value built under one dictionary is read under the same one. Resolving the goal anyway would write the table's entry over it, which the elaborator would accept and the kernel refuse, the argument's type no longer converting with the parameter's. Every door that commits a resolution asks first: the first attempt and a parked retry.
 //!
@@ -13,15 +13,15 @@
 
 use {
     super::{
-        Callee, Context, EmbeddingDiagnosis, Error, FrozenFrame, HeadKey, Outcome, ParkedWork,
-        ShapeDiagnosis, Witness, WitnessKey, attempt_discharge, convert_outcome, reduce_with,
+        Callee, Context, EmbeddingDiagnosis, Error, FrozenFrame, Outcome, ParkedWork,
+        ShapeDiagnosis, Witness, attempt_discharge, convert_outcome, reduce_with,
         resolved_for_display,
     },
     crate::{SlotPositions, is_prop, premise_label},
     curios_core::{
-        Advance, CalleeId, ConceptDecl, Enter, Field, Free, Global, ImplicitOrigin, Instance,
-        InstanceHead, Level, Metavar, MetavarId, StructType, Subterm, Term, UniverseContext,
-        WitnessOrigin,
+        Advance, CalleeId, ConceptDecl, Enter, Field, Free, Global, HeadKey, ImplicitOrigin,
+        Instance, InstanceHead, Level, Metavar, MetavarId, StructType, Subterm, Term,
+        UniverseContext, WitnessKey, WitnessOrigin,
     },
     curios_utilities::{Mount, Plicity, Qualifier, Span},
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
@@ -60,7 +60,7 @@ pub(crate) fn callee(context: &Context, func: &CalleeId) -> Callee {
             .find(|(_, _, witness)| &witness.name == name)
             .map(|(concept, key, _)| Callee::Witness {
                 concept: *concept,
-                key: key.clone(),
+                key: *key,
             })
             .unwrap_or_else(|| Callee::Function(Free::Global(*name))),
         CalleeId::Constructor { owner, tag } => Callee::Constructor {
@@ -114,13 +114,13 @@ pub(crate) fn diagnose_shape(context: &mut Context, goal: &Term) -> Option<Box<S
         return None;
     }
 
-    let bare = WitnessKey(bare);
+    let bare = WitnessKey::from(bare);
     context
         .witness_declared(&concept_name, &bare)
         .then_some(())?;
 
     Some(Box::new(ShapeDiagnosis {
-        wanted: WitnessKey(wanted),
+        wanted: WitnessKey::from(wanted),
         bare,
     }))
 }
@@ -150,7 +150,7 @@ pub(crate) fn diagnose_embedding(
     // Monad-hood of the source: any registered Monad witness under its head. The concept's name derives from the registry's bind wrapper — its namespace is the concept.
     let monad_concept = Global::Authored(context.syntax().monad.bind.qualifier().without_last());
     let source_is_monad = match &source_key {
-        Some(key) => context.witness_declared(&monad_concept, &WitnessKey(vec![key.clone()])),
+        Some(key) => context.witness_declared(&monad_concept, &WitnessKey::from([key.clone()])),
         None => false,
     };
 
@@ -252,7 +252,7 @@ fn lift_chain(
 ) -> Vec<(String, Qualifier)> {
     let mut edges: Vec<(HeadKey, HeadKey, String, Qualifier)> = Vec::new();
     for (key, module) in context.witness_keys(lift) {
-        let [m, n] = key.0.as_slice() else {
+        let [m, n] = key.heads() else {
             continue;
         };
         edges.push((m.clone(), n.clone(), key.to_string(), module));
@@ -498,7 +498,7 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
             false => Resolution::NoMatch,
         });
     }
-    let key = WitnessKey(heads);
+    let key = WitnessKey::from(heads);
 
     let Some(witness) = context.witness(&concept_name, &key).cloned() else {
         if context.is_poisoned_witness(&concept_name, &key) {
@@ -878,7 +878,7 @@ pub(crate) fn read_witness_signature(
         binders,
         concept: *concept_name,
         params: params.clone(),
-        key: WitnessKey(heads),
+        key: WitnessKey::from(heads),
     })
 }
 
@@ -900,9 +900,9 @@ pub(crate) fn register_witness(
     // A witness the unit declares answers questions under the key its signature is spelled at before it elaborates, so the key it registers under is that one or it is refused: a goal resolved against the spelling would otherwise wait on a witness that registers somewhere else.
     let spelled = context
         .spelled_witness(name)
-        .map(|spelled| spelled.cloned());
+        .map(|spelled| spelled.copied());
     if let Some(spelled) = spelled
-        && spelled.as_ref() != Some(&(concept_name, key.clone()))
+        && spelled != Some((concept_name, key))
     {
         return Err(Error::witness_key_not_spelled(
             concept_name,
@@ -960,14 +960,17 @@ pub(crate) fn register_witness(
         _ => false,
     };
     if !owns(context.mount_of(&concept_name))
-        && !key.0.iter().any(|head| owns(context.mount_of_head(head)))
+        && !key
+            .heads()
+            .iter()
+            .any(|head| owns(context.mount_of_head(head)))
     {
         return Err(Error::orphan_witness(concept_name, key, *module));
     }
 
     if let Some(first_module) = context.insert_witness(
         concept_name,
-        key.clone(),
+        key,
         Witness {
             name: *name,
             module: *module,

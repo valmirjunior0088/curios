@@ -156,6 +156,42 @@ pub let twice: Nat = double(2);
     assert_stored_alike(&unit_of(moved), &incremental);
 }
 
+/// A witness is named by what it witnesses, so one written ahead of another renames nothing: the witness after it and the declaration that resolves through that one are reused. Named by its place among its module's witnesses, the second would be another name once one is written ahead of it, and `measured`, whose term names it, would be elaborated again.
+#[test]
+fn a_witness_written_ahead_of_another_leaves_its_dependents_reused() {
+    let base = "use /std/{Nat};
+
+pub concept Measured(A: Type): pub Type {
+    measure(A) -> Nat,
+}
+
+satisfy Measured(Nat) {
+    measure(n) = n,
+}
+
+pub let measured: Nat = Measured/measure(2);
+";
+    let inserted = base.replace(
+        "satisfy Measured(Nat)",
+        "satisfy Measured(/std/Bool) {\n    measure(_) = 1,\n}\n\nsatisfy Measured(Nat)",
+    );
+    let baseline = unit_of(base);
+
+    let incremental = recompile_over(&inserted, &baseline).unwrap();
+
+    assert!(
+        reuses_body(&baseline, &incremental, "measured"),
+        "a declaration that resolves through a witness was elaborated again when another was written ahead of it"
+    );
+    assert_eq!(
+        incremental.core().witnesses.len(),
+        2,
+        "the unit declares both witnesses"
+    );
+    assert_modules_agree(unit_of(&inserted).core(), incremental.core());
+    assert_stored_alike(&unit_of(&inserted), &incremental);
+}
+
 /// A lowering numbers its universe metavariables and holes in lowering order, so an item inserted ahead renumbers every polymorphic item after it; the diff identifies them by position and leaves those items reused.
 #[test]
 fn inserting_a_polymorphic_item_leaves_the_items_after_it_unchanged() {

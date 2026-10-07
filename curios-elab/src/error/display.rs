@@ -8,11 +8,13 @@ mod tests;
 use {
     super::{
         BinderSite, Callee, CycleMember, Declined, Erased, Error, GoalReport, ShapeDiagnosis,
-        Underivable, WitnessKey,
+        Underivable,
     },
     crate::{Conclusion, Origin, Refusal, ordinal},
     curios_algebra::BOOL_ATOM_CAP,
-    curios_core::{CalleeId, Free, Level, ReaderPosition, Spelling, Subterm, Term, UniverseMetaId},
+    curios_core::{
+        CalleeId, Free, Level, ReaderPosition, Spelling, Subterm, Term, UniverseMetaId, WitnessKey,
+    },
     curios_num::Grain,
     curios_utilities::{Plicity, Qualifier},
     std::{collections::HashMap, fmt, rc::Rc},
@@ -97,7 +99,7 @@ fn declaring_module(module: &Qualifier) -> String {
 
 /// What a diagnostic calls a witness key: a head when it has one parameter, a key when it has several.
 fn key_noun(key: &WitnessKey) -> &'static str {
-    match key.0.len() {
+    match key.heads().len() {
         1 => "head",
         _ => "key",
     }

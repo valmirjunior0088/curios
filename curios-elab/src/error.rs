@@ -5,11 +5,11 @@ use display::*;
 mod tests;
 
 use {
-    super::{Erased, Refusal, WitnessKey},
+    super::{Erased, Refusal},
     curios_core::{
         Atom, CalleeId, DefinitionKind, DisplayNames, Exhaustion, Free, Global, Item, Level,
         Module, Polarity, ReaderNames, ReaderPosition, ReduceError, Rename, Spelling, Spellings,
-        Subterm, Term, UniverseConstraintOrigin, UniverseError, build_rename,
+        Subterm, Term, UniverseConstraintOrigin, UniverseError, WitnessKey, build_rename,
         build_shorten_layered,
     },
     curios_num::{Grain, Integer, Natural},
