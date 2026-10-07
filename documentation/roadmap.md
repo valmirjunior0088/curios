@@ -28,7 +28,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Theory
 
-- [ ] [A subsumption blocked on a metavariable waits as a subsumption](roadmap/02-theory/03-blocked-subsumption.md) — the elaborator hands a pair blocked on a metavariable to conversion as an equation, and solves a metavariable met in one by equality, so one call is admitted or refused by the order of its arguments
+- [ ] [A subsumption blocked on a metavariable waits as a subsumption](roadmap/02-theory/03-blocked-subsumption.md) — the elaborator hands a pair blocked on a metavariable to conversion as an equation, solves a metavariable met in one by equality and leaves a family applied to its binder unsolved, so a call, a list literal or a match is admitted or refused by the order of its parts, and a declaration keeps that order in its scheme
 - [ ] [Flex–flex problems with distinct heads](roadmap/02-theory/04-flex-flex-intersection.md) — not refined yet; `?0(x) ~ ?1(x)` parks undecided, with no intersection
 - [ ] [Strict positivity through a type-former parameter](roadmap/02-theory/05-positivity-through-type-formers.md) — not refined yet; `induct Mu(F : (Type) -> Type)` is refused, since its body cannot say how `F` uses its argument
 - [ ] [K-like reduction](roadmap/02-theory/06-k-reduction.md) — not refined yet; a relevant match on a stuck `Eq` proof does not reduce; waits for a program that needs it
