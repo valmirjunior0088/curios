@@ -102,7 +102,7 @@ pub let cons_inj_tail(
 let no_empty(k: Byte, p: Bytes, e: Eq()(x[], x[k, ..p])) -> False =
     Eq/subst((m) => Holds(0 == m), Eq/cong(len, e), True/qed());
 
---- Distinct numbers encode distinctly, which is what makes the encoding a key.
+--- Distinct numbers encode distinctly.
 ---
 --- Course-of-values induction, because the recursion divides rather than decrements. Each step takes the encoding apart at its first byte, the digit and the rest by the cons's two injections, recovers the two numbers' high parts from the induction hypothesis and their low digits from the byte round trip, and rejoins both by Euclid's recombination.
 pub let of_nat_injective(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq()(a, b) =

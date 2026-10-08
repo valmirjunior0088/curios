@@ -11,6 +11,9 @@ pub concept Hash(T: Type): pub Type {
 
 pub use Hash/*;
 
+--- A natural's encoding in the order of the numbers, with the laws that say so.
+pub mod nat;
+
 --- `b` ahead of enough zero bytes to reach `width`, or `b` itself when it is already that long.
 ---
 --- Trailing rather than leading, and that is not a preference. `Bytes/of_nat` writes its least significant byte first, so a zero byte *after* the run is a higher place worth nothing, while one before it would multiply the value by 256: padding `5` and `1280` on the wrong side gives both `x[0,0,0,5]`, and two distinct numbers sharing an encoding is exactly what every user of this function exists to prevent. `Key`'s law would refuse its own case at the witness; `framed`, `tagged` and `digest` carry no law and would collide in silence.
@@ -69,9 +72,9 @@ satisfy Hash(Str) {
     hash = Str/to_bytes,
 }
 
---- The minimal encoding, least-significant byte first as the carrier reads.
+--- The code of [`nat`]: in the order of the numbers, so a smaller number's is before a larger one's.
 satisfy Hash(Nat) {
-    hash = Bytes/of_nat,
+    hash = nat/code,
 }
 
 --- A sign byte before the magnitude.

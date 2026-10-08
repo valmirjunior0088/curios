@@ -22,9 +22,9 @@ satisfy Key(Str) {
     injective(a, b, same) = Str/eq_of_bytes(a, b, same),
 }
 
---- The minimal encoding, least-significant byte first, whose injectivity is `/std/Bytes`'s to prove.
+--- The code in the order of the numbers, whose injectivity is that order's.
 satisfy Key(Nat) {
-    injective = Bytes/of_nat_injective,
+    injective = Hash/nat/injective,
 }
 
 --- The one byte itself, a cons onto no bytes, which is injective in its head.

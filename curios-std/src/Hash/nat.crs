@@ -1,0 +1,437 @@
+use /std/{Nat, Bytes, Eq, Ordering};
+use /std/Bool/{True, False, Holds};
+use /std/Bytes/ord/{below};
+
+-- How many bytes follow a number's first.
+let rank(n: Nat) -> Nat =
+    match n < 16 | true => 0 | false => 1 + rank(n / 256) end;
+
+-- What a number's `rank` bytes leave of it: its top four bits.
+let top(n: Nat) -> Nat =
+    match n < 16 | true => n | false => top(n / 256) end;
+
+let top_below(n: Nat) -> Holds(top(n) < 16) =
+    Nat/descend(
+        (m: Nat) => m,
+        (m) => Holds(top(m) < 16),
+        (m, ih) => match m < 16 | true => True/proved() | false => ih(m / 256, True/proved()) end,
+        n);
+
+-- The first byte of a number of rank `l` and top `t`, behind a `0xFF` for every seven of its rank past six.
+let first(l: Nat, t: Nat, @fits: Holds(t < 16)) -> Bytes =
+    match l < 7
+    | true => x[Nat/to_byte(0x80 + 16 * l + t)]
+    | false => x[0xFF, ..first(l - 7, t)]
+    end;
+
+-- The bytes after a number's first, most significant first.
+let rest(n: Nat) -> Bytes =
+    match n < 16 | true => x[] | false => x[..rest(n / 256), Nat/to_byte(n % 256)] end;
+
+-- The code in one walk: the rank counted on the way down, the first byte written where the top is left, and the bytes appended on the way back.
+let from(n: Nat, l: Nat) -> Bytes =
+    match n < 16
+    | true => first(l, n)
+    | false => x[..from(n / 256, l + 1), Nat/to_byte(n % 256)]
+    end;
+
+--- A natural's encoding, in the order of the numbers: a smaller number's is before a larger one's as `Bytes/ord` reads them, and no number's begins another's.
+---
+--- The first byte is `0x80 + 16 * rank + top`, where `rank` is how many bytes follow it, below seven, and `top` the number those bytes leave, below sixteen; then the `rank` bytes, most significant first. A rank of seven or more writes a `0xFF` for every seven and then the same. So a number below 16 is one byte, below 4 096 two and below `2^20` three.
+pub let code(n: Nat) -> Bytes =
+    from(n, 0);
+
+-- The walk from a count writes the first byte of that count past the number's rank, and then the number's bytes.
+let from_count(
+    n: Nat,
+    l: Nat,
+) -> Eq()(from(n, l), x[..first(l + rank(n), top(n), @top_below(n)), ..rest(n)]) =
+    Nat/descend(
+        (m: Nat) => m,
+        (m) =>
+            (l: Nat) -> Eq()(from(m, l), x[..first(l + rank(m), top(m), @top_below(m)), ..rest(m)]),
+        (m, ih) =>
+            (l) =>
+                match m < 16
+                | true => Eq/refl()
+                | false =>
+                    Eq/cong(
+                        (z: Bytes) => x[..z, Nat/to_byte(m % 256)],
+                        ih(m / 256, True/proved())(l + 1))
+                end,
+        n)(l);
+
+-- A smaller number has no more bytes.
+let rank_mono(a: Nat, b: Nat, le: Holds(a <= b)) -> Holds(rank(a) <= rank(b)) =
+    Nat/descend(
+        (m: Nat) => m,
+        (m) => (b: Nat, le: Holds(m <= b)) -> Holds(rank(m) <= rank(b)),
+        (m, ih) =>
+            (b, le) =>
+                match m < 16
+                | true => True/proved()
+                | false =>
+                    match b < 16
+                    | true => match False/refuted() end
+                    | false =>
+                        let inner: Holds(rank(m / 256) <= rank(b / 256)) =
+                            ih(m / 256, True/proved())(b / 256, True/proved());
+                        True/proved()
+                    end
+                end,
+        a)(b, le);
+
+-- Of two numbers of one rank, the smaller has no greater a top.
+let top_mono(
+    a: Nat,
+    b: Nat,
+    le: Holds(a <= b),
+    ranks: Holds(rank(a) == rank(b)),
+) -> Holds(top(a) <= top(b)) =
+    Nat/descend(
+        (m: Nat) => m,
+        (m) =>
+            (b: Nat, le: Holds(m <= b), ranks: Holds(rank(m) == rank(b))) -> Holds(
+                top(m) <= top(b)),
+        (m, ih) =>
+            (b, le, ranks) =>
+                match m < 16
+                | true =>
+                    match b < 16
+                    | true => True/proved()
+                    | false => match ranks end
+                    end
+                | false =>
+                    match b < 16
+                    | true => match False/refuted() end
+                    | false => ih(m / 256, True/proved())(b / 256, True/proved(), True/proved())
+                    end
+                end,
+        a)(b, le, ranks);
+
+-- A first byte of a lower rank is below one of a higher, whatever follows each.
+let first_ranks(
+    la: Nat,
+    ta: Nat,
+    lb: Nat,
+    tb: Nat,
+    s: Bytes,
+    u: Bytes,
+    @fa: Holds(ta < 16),
+    @fb: Holds(tb < 16),
+    under: Holds(la < lb),
+) -> Holds(below(x[..first(la, ta), ..s], x[..first(lb, tb), ..u])) =
+    Nat/descend(
+        (m: Nat) => m,
+        (l) =>
+            (lb: Nat, under: Holds(l < lb)) -> Holds(
+                below(x[..first(l, ta), ..s], x[..first(lb, tb), ..u])),
+        (l, ih) =>
+            (lb, under) =>
+                match l < 7
+                | true =>
+                    match lb < 7
+                    | true =>
+                        below/of_heads(
+                            Nat/to_byte(0x80 + 16 * l + ta),
+                            Nat/to_byte(0x80 + 16 * lb + tb),
+                            s,
+                            u,
+                            True/proved())
+                    | false =>
+                        below/of_heads(
+                            Nat/to_byte(0x80 + 16 * l + ta),
+                            0xFF,
+                            s,
+                            x[..first(lb - 7, tb), ..u],
+                            True/proved())
+                    end
+                | false =>
+                    match lb < 7
+                    | true => match False/refuted() end
+                    | false => ih(l - 7, True/proved())(lb - 7, True/proved())
+                    end
+                end,
+        la)(lb, under);
+
+-- Of two first bytes of one rank, the one of the lower top is below the other, whatever follows each.
+let first_tops(
+    la: Nat,
+    ta: Nat,
+    lb: Nat,
+    tb: Nat,
+    s: Bytes,
+    u: Bytes,
+    @fa: Holds(ta < 16),
+    @fb: Holds(tb < 16),
+    ranks: Holds(la == lb),
+    under: Holds(ta < tb),
+) -> Holds(below(x[..first(la, ta), ..s], x[..first(lb, tb), ..u])) =
+    Nat/descend(
+        (m: Nat) => m,
+        (l) =>
+            (lb: Nat, ranks: Holds(l == lb)) -> Holds(
+                below(x[..first(l, ta), ..s], x[..first(lb, tb), ..u])),
+        (l, ih) =>
+            (lb, ranks) =>
+                match l < 7
+                | true =>
+                    match lb < 7
+                    | true =>
+                        below/of_heads(
+                            Nat/to_byte(0x80 + 16 * l + ta),
+                            Nat/to_byte(0x80 + 16 * lb + tb),
+                            s,
+                            u,
+                            True/proved())
+                    | false => match False/refuted() end
+                    end
+                | false =>
+                    match lb < 7
+                    | true => match False/refuted() end
+                    | false =>
+                        ih(l - 7, True/proved())(
+                            lb - 7,
+                            Eq/subst(
+                                (v: Nat) => Holds(l - 7 == v - 7),
+                                Nat/eq_of_eql(l, lb, ranks),
+                                True/qed()))
+                    end
+                end,
+        la)(lb, ranks);
+
+-- Two first bytes of one rank and one top are one, so what follows them decides.
+let first_same(
+    la: Nat,
+    ta: Nat,
+    lb: Nat,
+    tb: Nat,
+    s: Bytes,
+    u: Bytes,
+    @fa: Holds(ta < 16),
+    @fb: Holds(tb < 16),
+    ranks: Holds(la == lb),
+    tops: Holds(ta == tb),
+    parted: Holds(below(s, u)),
+) -> Holds(below(x[..first(la, ta), ..s], x[..first(lb, tb), ..u])) =
+    Nat/descend(
+        (m: Nat) => m,
+        (l) =>
+            (lb: Nat, ranks: Holds(l == lb)) -> Holds(
+                below(x[..first(l, ta), ..s], x[..first(lb, tb), ..u])),
+        (l, ih) =>
+            (lb, ranks) =>
+                match l < 7
+                | true =>
+                    match lb < 7
+                    | true =>
+                        Eq/subst(
+                            (o: Ordering) =>
+                                Holds(
+                                    match o
+                                    | eq() => below(s, u)
+                                    | lt() => true
+                                    | gt() => false
+                                    end),
+                            Eq/sym(
+                                Nat/ord/of_eq(
+                                    0x80 + 16 * l + ta,
+                                    0x80 + 16 * lb + tb,
+                                    Nat/le/antisym(
+                                        0x80 + 16 * l + ta,
+                                        0x80 + 16 * lb + tb,
+                                        True/proved(),
+                                        True/proved()))),
+                            parted)
+                    | false => match False/refuted() end
+                    end
+                | false =>
+                    match lb < 7
+                    | true => match False/refuted() end
+                    | false =>
+                        ih(l - 7, True/proved())(
+                            lb - 7,
+                            Eq/subst(
+                                (v: Nat) => Holds(l - 7 == v - 7),
+                                Nat/eq_of_eql(l, lb, ranks),
+                                True/qed()))
+                    end
+                end,
+        la)(lb, ranks);
+
+-- Of two numbers of one rank and one top, the smaller's bytes are below the larger's.
+let tails(
+    a: Nat,
+    b: Nat,
+    under: Holds(a < b),
+    ranks: Holds(rank(a) == rank(b)),
+    tops: Holds(top(a) == top(b)),
+) -> Holds(below(rest(a), rest(b))) =
+    Nat/descend(
+        (m: Nat) => m,
+        (m) =>
+            (
+                b: Nat,
+                under: Holds(m < b),
+                ranks: Holds(rank(m) == rank(b)),
+                tops: Holds(top(m) == top(b))) -> Holds(below(rest(m), rest(b))),
+        (m, ih) =>
+            (b, under, ranks, tops) =>
+                match m < 16
+                | true =>
+                    match b < 16
+                    | true => match False/refuted() end
+                    | false => match ranks end
+                    end
+                | false =>
+                    match b < 16
+                    | true => match False/refuted() end
+                    | false =>
+                        match m / 256 < b / 256
+                        | true =>
+                            below/onto(
+                                rest(m / 256),
+                                rest(b / 256),
+                                x[Nat/to_byte(m % 256)],
+                                x[Nat/to_byte(b % 256)],
+                                ih(m / 256, True/proved())(
+                                    b / 256,
+                                    True/qed(),
+                                    True/proved(),
+                                    tops))
+                        | false =>
+                            Eq/subst(
+                                (q: Nat) =>
+                                    Holds(
+                                        below(
+                                            x[..rest(m / 256), Nat/to_byte(m % 256)],
+                                            x[..rest(q), Nat/to_byte(b % 256)])),
+                                Nat/le/antisym(m / 256, b / 256, True/proved(), True/proved()),
+                                below/past(
+                                    rest(m / 256),
+                                    x[Nat/to_byte(m % 256)],
+                                    x[Nat/to_byte(b % 256)],
+                                    below/of_heads(
+                                        Nat/to_byte(m % 256),
+                                        Nat/to_byte(b % 256),
+                                        x[],
+                                        x[],
+                                        True/proved())))
+                        end
+                    end
+                end,
+        a)(b, under, ranks, tops);
+
+-- Two numbers each at most the other are equal, as the decision an arithmetic fact is read from.
+let level(x: Nat, y: Nat, le: Holds(x <= y), ge: Holds(y <= x)) -> Holds(x == y) =
+    Eq/subst((v: Nat) => Holds(x == v), Nat/le/antisym(x, y, le, ge), True/qed());
+
+-- A code read as its first byte and then its bytes, on both sides of a comparison.
+let split(
+    a: Nat,
+    b: Nat,
+    parted: Holds(
+        below(
+            x[..first(rank(a), top(a), @top_below(a)), ..rest(a)],
+            x[..first(rank(b), top(b), @top_below(b)), ..rest(b)])),
+) -> Holds(below(code(a), code(b))) =
+    Eq/subst(
+        (z: Bytes) => Holds(below(z, code(b))),
+        Eq/sym(from_count(a, 0)),
+        Eq/subst(
+            (z: Bytes) => Holds(below(x[..first(rank(a), top(a), @top_below(a)), ..rest(a)], z)),
+            Eq/sym(from_count(b, 0)),
+            parted));
+
+--- `a < b` gives `a`'s code below `b`'s at a byte: by their first bytes where the ranks or the tops differ, and by the bytes after them where both agree.
+pub let of_lt(a: Nat, b: Nat, under: Holds(a < b)) -> Holds(below(code(a), code(b))) =
+    let top_a: Holds(top(a) < 16) = top_below(a);
+    let top_b: Holds(top(b) < 16) = top_below(b);
+    let ranks: Holds(rank(a) <= rank(b)) = rank_mono(a, b, True/proved());
+    split(
+        a,
+        b,
+        match rank(a) < rank(b)
+        | true => first_ranks(rank(a), top(a), rank(b), top(b), rest(a), rest(b), True/qed())
+        | false =>
+            let same_rank: Holds(rank(a) == rank(b)) =
+                level(rank(a), rank(b), ranks, True/proved());
+            let tops: Holds(top(a) <= top(b)) = top_mono(a, b, True/proved(), same_rank);
+            match top(a) < top(b)
+            | true =>
+                first_tops(
+                    rank(a),
+                    top(a),
+                    rank(b),
+                    top(b),
+                    rest(a),
+                    rest(b),
+                    True/proved(),
+                    True/qed())
+            | false =>
+                let same_top: Holds(top(a) == top(b)) = level(top(a), top(b), tops, True/proved());
+                first_same(
+                    rank(a),
+                    top(a),
+                    rank(b),
+                    top(b),
+                    rest(a),
+                    rest(b),
+                    True/proved(),
+                    True/proved(),
+                    tails(a, b, under, True/proved(), True/proved()))
+            end
+        end);
+
+--- The order of two numbers is the order of their codes.
+pub let monotone(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(code(a), code(b))) =
+    match a < b
+    | true => Eq/sym(below/lt(code(a), code(b), of_lt(a, b, True/qed())))
+    | false =>
+        match b < a
+        | true =>
+            Eq/trans(
+                Nat/ord/of_gt(a, b, True/qed()),
+                Eq/sym(
+                    Eq/trans(
+                        Bytes/ord/flips(code(b), code(a)),
+                        Eq/cong(
+                            Ordering/flip,
+                            below/lt(code(b), code(a), of_lt(b, a, True/qed()))))))
+        | false =>
+            Eq/subst(
+                (y: Nat) => Eq()(Nat/ord(a, y), Bytes/ord(code(a), code(y))),
+                Nat/le/antisym(a, b, True/proved(), True/proved()),
+                Eq/sym(Bytes/ord/refl(code(a))))
+        end
+    end;
+
+--- Distinct numbers have distinct codes: two with one code are `eq` in their order, which is equality.
+pub let injective(a: Nat, b: Nat, same: Eq()(code(a), code(b))) -> Eq()(a, b) =
+    Nat/ord/eq(
+        a,
+        b,
+        Eq/trans(
+            monotone(a, b),
+            Eq/subst(
+                (z: Bytes) => Eq()(Bytes/ord(code(a), z), Ordering/eq()),
+                same,
+                Bytes/ord/refl(code(a)))));
+
+--- A code leads with a byte in the upper half: the one byte `0x7F` is below every code, which is what leaves the lower half to the complements an integer below zero is written as.
+pub let leads(n: Nat) -> Holds(below(x[0x7F], code(n))) =
+    let fits: Holds(top(n) < 16) = top_below(n);
+    Eq/subst(
+        (z: Bytes) => Holds(below(x[0x7F], z)),
+        Eq/sym(from_count(n, 0)),
+        match rank(n) < 7
+        | true =>
+            below/of_heads(
+                0x7F,
+                Nat/to_byte(0x80 + 16 * rank(n) + top(n)),
+                x[],
+                rest(n),
+                True/proved())
+        | false =>
+            below/of_heads(0x7F, 0xFF, x[], x[..first(rank(n) - 7, top(n)), ..rest(n)], True/qed())
+        end);
