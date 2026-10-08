@@ -40,6 +40,9 @@ use scoped::*;
 mod document;
 use document::*;
 
+mod head;
+use head::*;
+
 mod witness;
 use witness::*;
 
@@ -247,8 +250,45 @@ fn claims(source: &UnitSource<'_>, own: &[Mount]) -> Vec<(String, Qualifier)> {
     mounts.chain(modules).collect()
 }
 
+/// One file-backed module as a lowering holds it: what its items declare, and their trees.
+pub(super) struct Loaded {
+    pub heads: Vec<Headed>,
+    pub tree: Module,
+}
+
+impl Loaded {
+    fn of(tree: Module) -> Self {
+        Self {
+            heads: Headed::of(&tree),
+            tree,
+        }
+    }
+}
+
+/// Where the trees of a run of heads are: a module's items, or an inline module's, at its place among its parent's. Asked only where a declaration is lowered.
+#[derive(Clone, Copy)]
+enum Body<'a> {
+    Items(&'a [TopItem]),
+    Inline(&'a Body<'a>, usize),
+}
+
+impl<'a> Body<'a> {
+    fn items(&self) -> &'a [TopItem] {
+        match self {
+            Body::Items(items) => items,
+            Body::Inline(parent, index) => match &parent.items()[*index] {
+                TopItem::Mod(crate::TopMod {
+                    module: Some(module),
+                    ..
+                }) => &module.items,
+                _ => unreachable!("an inline module's head stands where its tree does"),
+            },
+        }
+    }
+}
+
 struct Resolved<'a> {
-    modules: HashMap<Qualifier, Rc<Module>>,
+    modules: HashMap<Qualifier, Rc<Loaded>>,
     /// Where each `mod` the unit declares was written, by the module it declares — what the `unused-declaration` lint underlines for a whole dead module.
     mod_spans: HashMap<Qualifier, Span>,
     /// This unit's own module graph, over what the units in scope established. Every insertion below targets a module the unit declares; reads cross the boundary, which is why this is layered rather than copied. See [`Scoped`].
@@ -458,6 +498,7 @@ impl<'a> Resolved<'a> {
     /// No synthesized `mod sys;`-style declarations here: the compilation root's own `ModuleInfo` is built from the entry's raw items, then every mounted prefix is registered as its child *explicitly* — a deliberate fact, not something recovered later by pattern-matching a qualifier's leading string segment. `insert_child` (which rejects any collision, not just pub/pub) is what catches a user's own `mod std` colliding with that registration, in either direction.
     fn of(
         source: &UnitSource<'_>,
+        root: &[Headed],
         predecessor_tables: &'a [&'a BTreeMap<Qualifier, ModuleInfo>],
         predecessor_mounts: &[Mount],
         own: &[Mount],
@@ -472,19 +513,19 @@ impl<'a> Resolved<'a> {
         // The compilation root: the entry's own module when the entry is what is being lowered, and otherwise a synthetic one belonging to no unit — which is why its children are *every* mounted prefix rather than only this unit's.
         //
         // Writing it lands in this unit's own layer, which shadows whatever the predecessors' layer said, so listing only `own` here would silently hide the predecessors' mounts — `/std` among them — from a unit being compiled against them, which the test that says a unit reaches a mounted name holds.
-        let mut root_info = scan_module_info(source.root_items())?;
+        let mut root_info = scan_module_info(root)?;
         for child in mounted_children(predecessor_mounts.iter().chain(own)) {
             root_info.insert_child(&Label::from(child), true)?;
         }
         resolved.table.insert(Qualifier::empty(), root_info);
 
         // The entry's children hang off the root, whose `ModuleInfo` was just built by hand; a mounted unit has no root items, so this recurses over nothing for it.
-        resolved.discover_children(source.root_items(), &Qualifier::empty(), source)?;
+        resolved.discover_children(root, &Qualifier::empty(), source)?;
 
         for mount in own.iter().filter(|mount| !mount.prefix.is_root()) {
-            let header = Rc::new(source.source.load(&mount.prefix)?);
+            let header = Rc::new(Loaded::of(source.source.load(&mount.prefix)?));
             resolved.modules.insert(mount.prefix, Rc::clone(&header));
-            resolved.discover(&header.items, &mount.prefix, source)?;
+            resolved.discover(&header.heads, &mount.prefix, source)?;
         }
 
         Ok(resolved)
@@ -493,40 +534,45 @@ impl<'a> Resolved<'a> {
     // `mod` declarations only name children, so the module graph is a tree: every qualifier is reached exactly once and no cycles are possible. Hence the walk needs neither a visited-set nor a cache hit-check — just load each file module once and recurse.
     fn discover(
         &mut self,
-        items: &[TopItem],
+        heads: &[Headed],
         prefix: &Qualifier,
         source: &UnitSource<'_>,
     ) -> Result<(), Error> {
-        self.table.insert(*prefix, scan_module_info(items)?);
-        self.discover_children(items, prefix, source)
+        self.table.insert(*prefix, scan_module_info(heads)?);
+        self.discover_children(heads, prefix, source)
     }
 
     // The child-recursion half of `discover`, split out so `of` can build the compilation root's `ModuleInfo` itself (with every mounted prefix pre-registered as a child) and recurse into its children without a second, unconditional `scan_module_info` call clobbering that registration.
     fn discover_children(
         &mut self,
-        items: &[TopItem],
+        heads: &[Headed],
         prefix: &Qualifier,
         source: &UnitSource<'_>,
     ) -> Result<(), Error> {
-        for item in items {
-            if let TopItem::Mod(module_item) = item {
-                let path = prefix.with(&module_item.label);
-                if let Some(span) = module_item.label.span() {
-                    self.mod_spans.insert(path, span.clone());
+        for headed in heads {
+            if let Head::Mod {
+                label,
+                span,
+                inline,
+                ..
+            } = &headed.head
+            {
+                let path = prefix.with(label);
+                if let Some(written) = label.span() {
+                    self.mod_spans.insert(path, written.clone());
                 }
 
-                match &module_item.module {
-                    Some(module) => self.discover(&module.items, &path, source)?,
+                match inline {
+                    Some(heads) => self.discover(heads, &path, source)?,
                     None => {
-                        let module = Rc::new(source.source.load(&path).map_err(|error| {
-                            match &module_item.span {
-                                Some(span) => error.at(span.clone()),
-                                None => error,
-                            }
-                        })?);
+                        let module = source.source.load(&path).map_err(|error| match span {
+                            Some(span) => error.at(span.clone()),
+                            None => error,
+                        })?;
+                        let module = Rc::new(Loaded::of(module));
 
                         self.modules.insert(path, Rc::clone(&module));
-                        self.discover(&module.items, &path, source)?;
+                        self.discover(&module.heads, &path, source)?;
                     }
                 }
             }
@@ -536,49 +582,49 @@ impl<'a> Resolved<'a> {
     }
 }
 
-fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
+fn scan_module_info(heads: &[Headed]) -> Result<ModuleInfo, Error> {
     let mut info = ModuleInfo::new();
 
-    for item in items {
-        match item {
-            TopItem::Mod(m) => info.insert_child(&m.label, m.vis_pub)?,
-            TopItem::Let(ls) => {
-                for l in ls {
-                    info.insert_binding(&l.label, l.vis_pub)?;
+    for headed in heads {
+        match &headed.head {
+            Head::Mod { label, vis_pub, .. } => info.insert_child(label, *vis_pub)?,
+            Head::Let(group) => {
+                for let_ in group {
+                    info.insert_binding(&let_.label, let_.vis_pub)?;
                 }
             }
-            TopItem::Induct(group) => {
-                for u in group {
-                    info.insert_induct_child(&u.label, u.vis_pub, u.rep_pub)?;
-                    info.insert_binding(&u.label, u.vis_pub)?;
+            Head::Induct(group) => {
+                for induct in group {
+                    info.insert_induct_child(&induct.label, induct.vis_pub, induct.rep_pub)?;
+                    info.insert_binding(&induct.label, induct.vis_pub)?;
                 }
             }
             // A struct declares one binding (the type-former), like a `let` — there are no value constructors and no nested namespace, so no child module.
-            TopItem::Struct(group) => {
-                for s in group {
-                    info.insert_binding(&s.label, s.vis_pub)?;
+            Head::Struct(group) => {
+                for struct_ in group {
+                    info.insert_binding(&struct_.label, struct_.vis_pub)?;
                 }
             }
             // A concept declares the type-former binding *and* a nested namespace (its method wrappers), like an inductive.
-            TopItem::Concept(group) => {
-                for c in group {
-                    info.insert_child(&c.label, c.vis_pub)?;
-                    info.insert_binding(&c.label, c.vis_pub)?;
+            Head::Concept(group) => {
+                for concept in group {
+                    info.insert_child(&concept.label, concept.vis_pub)?;
+                    info.insert_binding(&concept.label, concept.vis_pub)?;
                 }
             }
             // A witness is anonymous: it declares no binding and occupies no lexical scope — its backing definition gets a compiler name.
-            TopItem::Witness(_) => {}
+            Head::Witness => {}
             // A `foreign` declaration is an ordinary binding, like a `let` — it has no body of its own, but it is called the same way.
-            TopItem::Foreign(f) => info.insert_binding(&f.label, f.vis_pub)?,
+            Head::Foreign(foreign) => info.insert_binding(&foreign.label, foreign.vis_pub)?,
             // A test binds its name privately — referable within its subtree, colliding with a like-named sibling, never `pub`.
-            TopItem::Test(t) => info.insert_binding(&t.label, false)?,
+            Head::Test(label) => info.insert_binding(label, false)?,
             // A broken item binds the name its head declared, public so a reference from anywhere resolves to it and is withheld rather than reported unbound; nothing can use the binding.
-            TopItem::Broken(b) => {
-                if let Some(label) = &b.declares {
+            Head::Broken { declares, .. } => {
+                if let Some(label) = declares {
                     info.insert_binding(label, true)?;
                 }
             }
-            _ => {}
+            Head::Use(_) => {}
         }
     }
 
@@ -626,18 +672,18 @@ fn constructor_plicity(declared: Plicity) -> Plicity {
 }
 
 /// What `top_item`'s text is anchored as: the declaration of the first name it declares, or one of its module's unnamed declarations where it declares none. `None` for an item no term is lowered from.
-fn anchored(top_item: &TopItem, context: &Context) -> Option<curios_core::Anchored> {
+fn anchored(head: &Head, context: &Context) -> Option<curios_core::Anchored> {
     let named = |label: &Label| curios_core::Anchored::Declaration(context.prefixed(label));
 
-    match top_item {
-        TopItem::Let(group) => group.first().map(|let_| named(&let_.label)),
-        TopItem::Induct(group) => group.first().map(|induct| named(&induct.label)),
-        TopItem::Struct(group) => group.first().map(|struct_| named(&struct_.label)),
-        TopItem::Concept(group) => group.first().map(|concept| named(&concept.label)),
-        TopItem::Witness(_) => Some(curios_core::Anchored::Unnamed(context.island())),
-        TopItem::Foreign(foreign) => Some(named(&foreign.label)),
-        TopItem::Test(test) => Some(named(&test.label)),
-        TopItem::Mod(_) | TopItem::Use(_) | TopItem::Broken(_) => None,
+    match head {
+        Head::Let(group) => group.first().map(|let_| named(&let_.label)),
+        Head::Induct(group) => group.first().map(|induct| named(&induct.label)),
+        Head::Struct(group) => group.first().map(|struct_| named(&struct_.label)),
+        Head::Concept(group) => group.first().map(|concept| named(&concept.label)),
+        Head::Witness => Some(curios_core::Anchored::Unnamed(context.island())),
+        Head::Foreign(foreign) => Some(named(&foreign.label)),
+        Head::Test(label) => Some(named(label)),
+        Head::Mod { .. } | Head::Use(_) | Head::Broken { .. } => None,
     }
 }
 
@@ -684,67 +730,78 @@ impl Lowering<'_> {
 }
 
 fn process_items(
-    module: &Module,
+    heads: &[Headed],
+    body: Body<'_>,
     context: &mut Context,
     lowered: &mut Lowering,
-    modules: &HashMap<Qualifier, Rc<Module>>,
+    modules: &HashMap<Qualifier, Rc<Loaded>>,
 ) -> Result<(), Error> {
-    for top_item in &module.items {
-        match top_item {
-            TopItem::Mod(m) => {
-                context.insert_scope(m.label.to_string(), context.prefixed(&m.label))?
+    for headed in heads {
+        match &headed.head {
+            Head::Mod { label, .. } => {
+                context.insert_scope(label.to_string(), context.prefixed(label))?
             }
-            TopItem::Broken(b) => {
-                if let Some(label) = &b.declares {
+            Head::Broken { declares, .. } => {
+                if let Some(label) = declares {
                     context.insert_binding(label.to_string(), context.prefixed(label))?;
                 }
             }
-            TopItem::Let(labels) => {
-                for l in labels {
-                    context.insert_binding(l.label.to_string(), context.prefixed(&l.label))?;
+            Head::Let(group) => {
+                for let_ in group {
+                    context
+                        .insert_binding(let_.label.to_string(), context.prefixed(&let_.label))?;
                 }
             }
-            TopItem::Induct(group) => {
-                for u in group {
-                    context.insert_scope(u.label.to_string(), context.prefixed(&u.label))?;
-                    context.insert_binding(u.label.to_string(), context.prefixed(&u.label))?;
+            Head::Induct(group) => {
+                for induct in group {
+                    context
+                        .insert_scope(induct.label.to_string(), context.prefixed(&induct.label))?;
+                    context.insert_binding(
+                        induct.label.to_string(),
+                        context.prefixed(&induct.label),
+                    )?;
                 }
             }
             // The type-former binding only — like a `let` (no constructor namespace).
-            TopItem::Struct(group) => {
-                for s in group {
-                    context.insert_binding(s.label.to_string(), context.prefixed(&s.label))?;
+            Head::Struct(group) => {
+                for struct_ in group {
+                    context.insert_binding(
+                        struct_.label.to_string(),
+                        context.prefixed(&struct_.label),
+                    )?;
                 }
             }
             // A concept declares its type-former binding and a nested namespace for the method wrappers, like an inductive.
-            TopItem::Concept(group) => {
-                for c in group {
-                    context.insert_scope(c.label.to_string(), context.prefixed(&c.label))?;
-                    context.insert_binding(c.label.to_string(), context.prefixed(&c.label))?;
+            Head::Concept(group) => {
+                for concept in group {
+                    context.insert_scope(
+                        concept.label.to_string(),
+                        context.prefixed(&concept.label),
+                    )?;
+                    context.insert_binding(
+                        concept.label.to_string(),
+                        context.prefixed(&concept.label),
+                    )?;
                 }
             }
             // A witness is anonymous — no binding, no scope entry.
-            TopItem::Witness(_) => {}
-            TopItem::Foreign(f) => {
-                context.insert_binding(f.label.to_string(), context.prefixed(&f.label))?
+            Head::Witness | Head::Use(_) => {}
+            Head::Foreign(foreign) => context
+                .insert_binding(foreign.label.to_string(), context.prefixed(&foreign.label))?,
+            Head::Test(label) => {
+                context.insert_binding(label.to_string(), context.prefixed(label))?
             }
-            TopItem::Test(t) => {
-                context.insert_binding(t.label.to_string(), context.prefixed(&t.label))?
-            }
-            _ => {}
         }
     }
 
-    for (index, top_item) in module.items.iter().enumerate() {
+    for (index, headed) in heads.iter().enumerate() {
         // A source declaration mints in a space of its own, shared by every item it lowers to; a nested module's declarations each take theirs.
-        let declares = !matches!(top_item, TopItem::Mod(_));
+        let declares = !matches!(headed.head, Head::Mod { .. });
         let lowered_from = lowered.items.len();
         if declares {
             context.begin_declaration();
             // And is written in a text of its own: what it lowers to holds positions in that text, wherever the file holds it. A module built rather than parsed has no text, and its terms no position.
-            if let (Some(anchored), Some(span)) =
-                (anchored(top_item, context), module.spans.get(index))
-            {
+            if let (Some(anchored), Some(span)) = (anchored(&headed.head, context), &headed.own) {
                 context.anchor(anchored, span);
             }
             // A declaration the baseline lowered from this text, every name it resolved standing, is the baseline's.
@@ -755,38 +812,43 @@ fn process_items(
                 continue;
             }
         }
-        match top_item {
+        match &headed.head {
             // Nothing lowers: the item is carried as its report, under the name it declared, for the compile boundary to refuse the unit by and the elaborator to withhold dependents of.
-            TopItem::Broken(b) => lowered.broken.push(BrokenItem {
-                declares: b
-                    .declares
-                    .as_ref()
-                    .map(|label| curios_core::Global::Authored(context.prefixed(label))),
-                report: b.report.clone(),
-            }),
-            TopItem::Mod(mod_item) => match &mod_item.module {
-                Some(module) => {
-                    process_items(
-                        module,
-                        &mut context.nested(&mod_item.label),
+            Head::Broken { declares, report } => {
+                lowered.broken.push(BrokenItem {
+                    declares: declares
+                        .as_ref()
+                        .map(|label| curios_core::Global::Authored(context.prefixed(label))),
+                    report: report.clone(),
+                });
+                continue;
+            }
+            Head::Mod { label, inline, .. } => {
+                match inline {
+                    Some(heads) => process_items(
+                        heads,
+                        Body::Inline(&body, index),
+                        &mut context.nested(label),
                         lowered,
                         modules,
-                    )?;
-                }
-                None => {
-                    let path = context.prefixed(&mod_item.label);
-                    // Discovery is exhaustive over this same tree, so every file-backed module is already cached under this qualifier.
-                    let module = modules.get(&path).expect("module loaded during discovery");
+                    )?,
+                    None => {
+                        let path = context.prefixed(label);
+                        // Discovery is exhaustive over this same tree, so every file-backed module is already cached under this qualifier.
+                        let module = modules.get(&path).expect("module loaded during discovery");
 
-                    process_items(
-                        module,
-                        &mut context.nested(&mod_item.label),
-                        lowered,
-                        modules,
-                    )?;
+                        process_items(
+                            &module.heads,
+                            Body::Items(&module.tree.items),
+                            &mut context.nested(label),
+                            lowered,
+                            modules,
+                        )?;
+                    }
                 }
-            },
-            TopItem::Use(use_item) => {
+                continue;
+            }
+            Head::Use(use_item) => {
                 curios_profile::profile!("resolve_use");
                 // The lexical import effect of `use`/`pub use`: source-ordered, point-of-use scoping. The interface (export) effect of `pub use` is precomputed by the `pub use` fixed point (`interface::resolve_unit`), not here.
                 match &use_item.group {
@@ -825,6 +887,14 @@ fn process_items(
                         context.close_site();
                     }
                 }
+                continue;
+            }
+            _ => {}
+        }
+        // Only a declaration reaches here, and only here is its tree read.
+        match &body.items()[index] {
+            TopItem::Broken(_) | TopItem::Mod(_) | TopItem::Use(_) => {
+                unreachable!("a head stands where its item does")
             }
             // A `let` item is a group of one or more definitions. It lowers to a `rec` item when it is a declared group or when its one member names itself — read off the lowered terms, so a definition's own name is in scope of its type and body without anything said in the source — and to a plain `let` item otherwise. The kernel needs the distinction and the programmer does not: a `Rec` binds its members' names, a `Let` leaves a self-reference unbound.
             TopItem::Let(ls) => {
@@ -1816,11 +1886,23 @@ fn into_core_unit_within(
         }
     }
 
+    // What the entry's own items declare: the compilation root's, and none for a unit with no entrypoint.
+    let root = source
+        .entrypoint()
+        .map(|entrypoint| Headed::of(&entrypoint.module))
+        .unwrap_or_default();
+
     let Resolved {
         mut table,
         modules,
         mod_spans,
-    } = Resolved::of(source, &predecessor_tables, &predecessor_mounts, &own)?;
+    } = Resolved::of(
+        source,
+        &root,
+        &predecessor_tables,
+        &predecessor_mounts,
+        &own,
+    )?;
 
     // Every prefix this compilation mounts — the predecessors', then this unit's. Resolution asks the whole set; the lowered module records only `own`, because a module states what its own unit provides.
     let mounts = predecessor_mounts
@@ -1833,7 +1915,7 @@ fn into_core_unit_within(
     let reach = Reach::over(&mounts, &visible_mounts);
 
     let public = interface::resolve_unit(
-        source,
+        &root,
         &own,
         &modules,
         &mut table,
@@ -1896,7 +1978,8 @@ fn into_core_unit_within(
     // The compilation root's own items — the entry's, and none for a unit with no entrypoint — then one pass per prefix this unit claims. Exactly one of the two does any work, because owning the empty prefix is what makes a unit the entry.
     if let Some(entrypoint) = source.entrypoint() {
         curios_profile::profile!("process_items" => process_items(
-            &entrypoint.module,
+            &root,
+            Body::Items(&entrypoint.module.items),
             &mut context,
             &mut lowered,
             &modules,
@@ -1911,7 +1994,8 @@ fn into_core_unit_within(
         let mut nested = context.nested(mount.prefix.head());
 
         curios_profile::profile!("process_items" => process_items(
-            content,
+            &content.heads,
+            Body::Items(&content.tree.items),
             &mut nested,
             &mut lowered,
             &modules,
@@ -2095,10 +2179,19 @@ pub fn document_unit(
     // The surface tree alone is taken of this: the tables are the ones the lowering stored, which the export view's fixed point wrote into after discovery had built them.
     let Resolved { modules, .. } = Resolved::of(
         source,
+        &[],
         &predecessor_tables,
         &predecessor_mounts,
         &unit.mounts,
     )?;
+    let modules = modules
+        .into_iter()
+        .map(|(module, loaded)| {
+            let loaded = Rc::into_inner(loaded).expect("discovery hands its modules over whole");
+
+            (module, Rc::new(loaded.tree))
+        })
+        .collect::<HashMap<_, _>>();
 
     // The unit's own tables as the nearest base, where the lowering held them as the layer it wrote: every read answers alike, since mount sets are disjoint.
     let tables = predecessor_tables

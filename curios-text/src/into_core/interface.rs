@@ -1,6 +1,6 @@
 use {
-    super::{ModuleInfo, Reach, Scoped, UnitSource},
-    crate::{Error, GroupItem, Module, Name, TopItem, UseGroup},
+    super::{Head, Headed, Loaded, ModuleInfo, Reach, Scoped},
+    crate::{Error, GroupItem, Name, UseGroup},
     curios_utilities::{Mount, Qualifier},
     std::{
         collections::{HashMap, HashSet},
@@ -217,9 +217,9 @@ pub(crate) fn visible_binding(
 ///
 /// **One resolution for every unit.** What differs is which items are seeded at which prefix: the entry's at the empty qualifier, a mounted unit's under each prefix it claims — with the synthetic compilation root seeded empty in that case, since absolute references resolve through it even though it has no source items of its own. Each prefix takes an explicit `seed` call, since `seed`'s own recursion follows only the `TopItem::Mod` items it is handed.
 pub(super) fn resolve_unit<'a>(
-    source: &UnitSource<'_>,
+    root: &[Headed],
     own: &[Mount],
-    modules: &HashMap<Qualifier, Rc<Module>>,
+    modules: &HashMap<Qualifier, Rc<Loaded>>,
     table: &mut Scoped<'_, ModuleInfo>,
     reach: Reach<'_>,
     scope: Scoped<'a, PublicInterface>,
@@ -230,7 +230,7 @@ pub(super) fn resolve_unit<'a>(
 
     // The compilation root: the entry's own items, or — for a unit that carries no entrypoint — a root belonging to no unit, seeded empty because absolute references resolve through it regardless, its public children being the mounted prefixes.
     seed(
-        source.root_items(),
+        root,
         &Qualifier::empty(),
         modules,
         table,
@@ -243,7 +243,7 @@ pub(super) fn resolve_unit<'a>(
             .get(&mount.prefix)
             .expect("a mounted prefix was loaded during discovery");
         seed(
-            &content.items,
+            &content.heads,
             &mount.prefix,
             modules,
             table,
@@ -259,9 +259,9 @@ pub(super) fn resolve_unit<'a>(
 
 // Walk the module tree (mirroring `discover`/`process_items`): for each module, seed its `PublicInterface` from the direct interface already in `table`; materialize each inductive's constructor module; and collect every `pub use`.
 fn seed(
-    items: &[TopItem],
+    heads: &[Headed],
     prefix: &Qualifier,
-    modules: &HashMap<Qualifier, Rc<Module>>,
+    modules: &HashMap<Qualifier, Rc<Loaded>>,
     table: &mut Scoped<'_, ModuleInfo>,
     public: &mut Scoped<'_, PublicInterface>,
     pub_uses: &mut Vec<PubUse>,
@@ -297,9 +297,9 @@ fn seed(
 
     // Attach declaration provenance to directly exposed nominal bindings. The fixed point copies this bit alongside the canonical target.
     if let Some(interface) = public.get_mut(prefix) {
-        for item in items {
-            match item {
-                TopItem::Struct(group) => {
+        for headed in heads {
+            match &headed.head {
+                Head::Struct(group) => {
                     for item in group.iter().filter(|item| item.vis_pub && item.rep_pub) {
                         interface
                             .bindings
@@ -308,7 +308,7 @@ fn seed(
                             .representation = Some(prefix.with(&item.label));
                     }
                 }
-                TopItem::Induct(group) => {
+                Head::Induct(group) => {
                     for item in group.iter().filter(|item| item.vis_pub && item.rep_pub) {
                         interface
                             .bindings
@@ -317,7 +317,7 @@ fn seed(
                             .representation = Some(prefix.with(&item.label));
                     }
                 }
-                TopItem::Concept(group) => {
+                Head::Concept(group) => {
                     for item in group.iter().filter(|item| item.vis_pub) {
                         interface
                             .bindings
@@ -331,31 +331,31 @@ fn seed(
         }
     }
 
-    for item in items {
-        match item {
-            TopItem::Use(use_item) if use_item.vis_pub => {
+    for headed in heads {
+        match &headed.head {
+            Head::Use(use_item) if use_item.vis_pub => {
                 pub_uses.push(PubUse {
                     module: *prefix,
                     name: use_item.name.clone(),
                     group: use_item.group.clone(),
                 });
             }
-            TopItem::Induct(group) => {
-                for induct_decl in group {
-                    let ctor = prefix.with(&induct_decl.label);
+            Head::Induct(group) => {
+                for induct in group {
+                    let ctor = prefix.with(&induct.label);
 
                     // Constructor bindings are public within their synthetic namespace. The parent's child bit, seeded separately as `vis_pub && rep_pub`, gates all external walks while the declaring module retains direct access.
                     let mut direct = ModuleInfo::new();
-                    for case in &induct_decl.cases {
-                        direct.insert_binding(&case.label, true)?;
+                    for case in &induct.cases {
+                        direct.insert_binding(case, true)?;
                     }
                     table.insert(ctor, direct);
 
                     let mut interface = PublicInterface::new();
-                    for case in &induct_decl.cases {
-                        let target = ctor.with(&case.label);
+                    for case in &induct.cases {
+                        let target = ctor.with(case);
                         interface.bindings.insert(
-                            case.label.to_string(),
+                            case.to_string(),
                             Entry {
                                 target,
                                 representation: None,
@@ -365,28 +365,20 @@ fn seed(
                     public.insert(ctor, interface);
                 }
             }
-            TopItem::Concept(group) => {
+            Head::Concept(group) => {
                 for concept in group {
                     // A concept's method wrappers live in a nested namespace, exactly like an inductive's constructors: seed both the direct info and the public interface of that module unconditionally (the fields are always public within it), so `Show/show` resolves. The concept's own visibility gates the walk from outside via the parent's child-module flag.
                     let namespace = prefix.with(&concept.label);
 
                     let mut direct = ModuleInfo::new();
                     // A superclass edge has no label — a positional slot with no name to reach it by, and no wrapper (`into_core` leaves it out of wrapper generation the same way) — so only the methods declare a binding.
-                    for label in concept
-                        .fields
-                        .iter()
-                        .filter_map(|field| field.label.as_ref())
-                    {
+                    for label in &concept.fields {
                         direct.insert_binding(label, true)?;
                     }
                     table.insert(namespace, direct);
 
                     let mut interface = PublicInterface::new();
-                    for label in concept
-                        .fields
-                        .iter()
-                        .filter_map(|field| field.label.as_ref())
-                    {
+                    for label in &concept.fields {
                         let target = namespace.with(label);
                         interface.bindings.insert(
                             label.to_string(),
@@ -399,15 +391,15 @@ fn seed(
                     public.insert(namespace, interface);
                 }
             }
-            TopItem::Mod(mod_item) => {
-                let path = prefix.with(&mod_item.label);
-                let child = match &mod_item.module {
-                    Some(module) => &module.items,
+            Head::Mod { label, inline, .. } => {
+                let path = prefix.with(label);
+                let child = match inline {
+                    Some(heads) => heads,
                     None => {
                         &modules
                             .get(&path)
                             .expect("module loaded during discovery")
-                            .items
+                            .heads
                     }
                 };
 
