@@ -77,8 +77,6 @@ For the CLI, this drops it into `~/.local/bin`:
 curl -fsSL https://github.com/valmirjunior0088/curios/releases/latest/download/install.sh | sh
 ```
 
-No options, and it checks what it downloaded against the release's `checksums.txt` before installing it. Linux x86-64, Linux aarch64, and Apple Silicon have prebuilt binaries — anywhere else, [build from source](#build-from-source).
-
 Then save this as `hello.crs`:
 
 ```crs
