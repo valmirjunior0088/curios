@@ -57,6 +57,13 @@ impl Pinned {
     }
 }
 
+/// Whether the targets determine every one of `binders`: the one shape of a proposition's constructor a match may take apart into data, since a value of the family then holds nothing its indices do not state. A payload that is itself a proof is no exception: the arm would be handed the proof the match was given, and a match that hands its proof on has read it.
+pub fn wholly_pinned(binders: &[Free], targets: &[Term]) -> bool {
+    let pinned = pinned_by_targets(targets);
+
+    binders.iter().all(|binder| pinned.contains(binder))
+}
+
 /// The outcome of inversion: either every index position decomposed (or refused) cleanly, yielding the forced arm-binder solutions, or some position clashed definitely and the arm is unreachable.
 pub enum Invert {
     Solved(Vec<(Free, Term)>),

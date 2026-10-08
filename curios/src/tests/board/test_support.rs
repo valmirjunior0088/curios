@@ -1310,8 +1310,8 @@ pub(super) const A_RECURSIVE_FUNCTION_MATCHING_ITS_PROOF_CONVERTS: &str = r#"
         /std/print(Nat/to_str(1))
         "#;
 
-pub(super) const TWO_ACCESSIBILITY_PROOFS_AT_ONE_RECURSIVE_CALL_CONVERT: &str = r#"
-        use /std/{Eq, Nat};
+pub(super) const A_PROPOSITION_HOLDING_A_PROOF_CANNOT_BE_ELIMINATED_INTO_DATA: &str = r#"
+        use /std/{Nat};
         use /std/Bool/{Holds};
 
         induct Accessible(@A : Type, R : (A, A) -> Prop) : (A) -> Prop
@@ -1323,13 +1323,36 @@ pub(super) const TWO_ACCESSIBILITY_PROOFS_AT_ONE_RECURSIVE_CALL_CONVERT: &str = 
         let f(n : Nat, lt : (k : Nat) -> Holds(k < k + 1), a : Accessible(R)(n)) -> Nat =
             match a | intro(@_, below) => f(n + 1, lt, below(n + 1, lt(n))) end;
 
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const A_PROPOSITION_HOLDING_A_PROOF_STILL_ELIMINATES_INTO_A_PROPOSITION: &str = r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+
+        induct Accessible(@A : Type, R : (A, A) -> Prop) : (A) -> Prop
+        | intro(@x : A, below : (y : A, r : R(y, x)) -> Accessible(R)(y)) : (x)
+        end
+
+        let R(y : Nat, x : Nat) -> Prop = Holds(x < y);
+
         let inv(n : Nat, a : Accessible(R)(n)) -> (y : Nat, r : R(y, n)) -> Accessible(R)(y) =
             (y, r) => match a | intro(@_, below) => below(y, r) end;
 
-        let same(lt : (k : Nat) -> Holds(k < k + 1), a : Accessible(R)(0), x : Eq()(f(0, lt, a), 0))
-            -> Eq()(f(0, lt, Accessible/intro(inv(0, a))), 0) = x;
-
         /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const A_CONSTRUCTOR_AN_INDEX_RULES_OUT_STILL_COUNTS: &str = r#"
+        use /std/{Nat};
+
+        induct Side : (Nat, Nat) -> pub Prop
+        | left(@a : Nat) : (a, 0)
+        | right(@a : Nat) : (a, 1)
+        end
+
+        let which(@n : Nat, p : Side(n, 0)) -> Nat = match p | left(@a) => a + 1 end;
+
+        /std/print(Nat/to_str(which(Side/left(@41))))
         "#;
 
 pub(super) const AN_INFERRED_VALUE_UNDER_A_REFINED_PROOF_KEEPS_ITS_UNIVERSE_INSTANCE: &str = r#"

@@ -10,7 +10,7 @@ It amends [`Prop` is strict, proof-irrelevant, and definitionally K](../../desig
 | --- | --- | --- |
 | `Prop u : Type (u + 1)`, below `Prop v` and `Type v` where `u ≤ v`, and a function type into it sits at the join of its domains' levels and its own | In the tree | [`Prop` is strict, proof-irrelevant, and definitionally K](../../design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md) |
 | A declaration at `Prop u` bounds every payload and field at `u`, and a proof counts at its proposition's level in any family | In the tree | the same decision; `check_signature` (`curios-cert/src/kernel/module.rs`) |
-| A proposition eliminates into data where it is empty or has one constructor whose every payload is a proof or pinned by the indices | To change | `guard_large_elimination` (`curios-cert/src/kernel/infer/eliminate.rs`), `singleton_eliminable` (`curios-elab/src/elaborate/match_.rs`) |
+| A proposition reaches data by a match with no arm, or where its family declares one constructor whose every payload its indices pin | In the tree | [`Prop` is strict, proof-irrelevant, and definitionally K](../../design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md); `wholly_pinned` (`curios-analysis/src/invert.rs`) |
 | That elimination reduces by forcing the proof to its constructor | To change | the `Match` arm of `whnf` (`curios-cert/src/kernel/whnf.rs`), `reduce_match` (`curios-elab/src/reduce.rs`), the machine's `Cases::Induct` step (`curios-core/src/machine.rs`) |
 | An application of a constructor's payload is graded a child of the constructor | Stands, on sizing | `curios-analysis/src/totality.rs` |
 | `/std` recurses on a bound where a measure descends, and declares no accessibility predicate | In the tree | [`curios-std`'s README](../../../curios-std/README.md#a-measure-descends-on-a-bound) |
@@ -23,7 +23,7 @@ What `/std` uses of all this, counted over `/sys` and `/std` by the protocol und
 
 ## The gap
 
-**A checker reduces proofs.** Eliminating `Accessible` or `Eq` into data forces the proof, so a proof body is never opaque ([A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md)), and the evaluator a type runs still demands a proof where an elimination reads one ([The closed machine binds a proof unreduced](../../design/compilation/the-closed-machine-binds-a-proof-unreduced.md)).
+**A checker reduces proofs.** Eliminating `Eq` into data forces the proof, so a proof body is never opaque ([A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md)), and the evaluator a type runs still demands a proof where an elimination reads one ([The closed machine binds a proof unreduced](../../design/compilation/the-closed-machine-binds-a-proof-unreduced.md)).
 
 **The algebra and a cast disagree.** `Eq/subst(P, p, v)` along a hypothesis `p: Eq()(a + b, b + a)` is stuck, where conversion already holds `P(a + b)` and `P(b + a)` one type: the cast is the identity to every judgment but reduction.
 
@@ -53,9 +53,8 @@ What `/std` uses of all this, counted over `/sys` and `/std` by the protocol und
 
 ## Stages
 
-Each is one commit on its own check, and none waits for a later one. The first two, a level on `Prop` with the sizing it brings and `/std`'s recursion on a bound, are in the tree.
+Each is one commit on its own check, and none waits for a later one. The first three are in the tree: a level on `Prop` with the sizing it brings, `/std`'s recursion on a bound, and the guard that lets a proposition reach data only where it is empty or wholly pinned.
 
-3. **A proposition reaches data only where empty or wholly pinned.** One classifier in `curios-analysis` beside `pinned_by_targets`, called by both guards; the clause admitting a proof payload goes, and erasure's branch for an unpinned payload with it. Check: the elimination, erasure and board suites.
 4. **The match fires without reading its proof.** The elaborator writes the arm free of its binders and the kernel's guard refuses one that is not; the rule enters both reducers through one function of `curios-analysis` and the closed machine by its own; nothing forces a proposition's proof any longer. Check: rows for a cast between algebra-equal ends, a cast along a hypothesis whose ends differ and a closed cast along a lemma, put to each checker alone; `kernel_memo_parity`; the respelling grid.
 
 ## Verification

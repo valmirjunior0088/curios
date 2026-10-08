@@ -6,7 +6,7 @@ use {
         same_uncommitted, stuck_on_metavar, unreachable_arm,
     },
     curios_analysis::{
-        Invert, invert_indices, pinned_by_targets, retyped, scrutinee_solution, solve_indices,
+        Invert, invert_indices, retyped, scrutinee_solution, solve_indices, wholly_pinned,
     },
     curios_core::{
         Advance, Arity, Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic,
@@ -828,33 +828,24 @@ fn elaborate_bool_match(
     Ok((rebuilt, result_type))
 }
 
-/// Whether a single-constructor proposition admits large elimination: every payload binder must be non-informative — a proposition itself, or *pinned* by the constructor's index targets (matching a value against a target recovers the binder, as `Eq`'s `refl(z) : (z, z)` recovers `z`), decided by the walk both checkers share. Occurrence is not determination: `blur(a)` mentions `a` and pins nothing, since `blur` need not be injective.
-fn singleton_eliminable(
-    context: &mut Context,
-    induct_decl: &InductDecl,
-    tag: &Atom,
-    params: &[Term],
-) -> Result<bool, Error> {
+/// Whether a proposition may be matched into data: it declares one constructor, and that constructor's index targets pin every payload binder (matching a value against a target recovers the binder, as `Eq`'s `refl(z) : (z, z)` recovers `z`), decided by the walk both checkers share. Occurrence is not determination: `blur(a)` mentions `a` and pins nothing, since `blur` need not be injective. A payload that is a proof is not excused, since the arm would be handed the proof the match was given; and a second constructor the scrutinee's indices rule out is one the kernel counts all the same.
+fn singleton_eliminable(context: &mut Context, induct_decl: &InductDecl, params: &[Term]) -> bool {
+    let [(tag, _)] = induct_decl.constructors.as_slice() else {
+        return false;
+    };
     let Some(payload) = induct_decl.instantiate(tag, params) else {
-        return Ok(false);
+        return false;
     };
 
-    // Open the payload telescope under fresh binders, collecting each binder's (name, type) and the terminal whose indices are the constructor's targets.
-    let mut binders: Vec<(Free, Term)> = Vec::new();
+    // Open the payload telescope under fresh binders; the terminal's indices are the constructor's targets.
+    let mut binders: Vec<Free> = Vec::new();
     let mut cursor = payload.cursor();
-    while let Some((_, ty)) = cursor.entry() {
-        binders.push((cursor.advance_fresh(|hint| context.fresh(hint)), ty));
+    while cursor.entry().is_some() {
+        binders.push(cursor.advance_fresh(|hint| context.fresh(hint)));
     }
     let terminal = cursor.body().expect("a cursor past every entry");
 
-    // A binder is forced iff the index targets the signature terminates in pin it.
-    let forced = pinned_by_targets(&terminal);
-    for (name, ty) in &binders {
-        if !forced.contains(name) && !is_prop(context, ty)? {
-            return Ok(false);
-        }
-    }
-    Ok(true)
+    wholly_pinned(&binders, &terminal)
 }
 
 /// The intrinsic eliminator's typing rule. Arm binders are typed directly from the constructor's registry telescope instantiated at the scrutinee type's parameters — no projections from a stuck payload — and each arm's written binders are aligned to that telescope's marks, a hidden payload left out bound all the same.
@@ -936,18 +927,11 @@ fn elaborate_induct_match(
         expect(context, term, &result_type, expected)?;
     }
 
-    // Large-elimination guard: a strict proposition may not be eliminated into a relevant (data) result — observing which inhabitant it was would break proof irrelevance. Permitted only by *empty* elimination (no constructors) or *singleton* elimination (one constructor whose payload is entirely non-informative: each binder a proposition, or forced by the indices).
+    // Large-elimination guard: a strict proposition may not be eliminated into a relevant (data) result — observing which inhabitant it was would break proof irrelevance. Permitted only by *empty* elimination (no arm, every constructor ruled out) or by the elimination of a family with one constructor whose every payload its indices pin.
     if is_prop(context, &head_type)? && !is_prop(context, &result_type)? {
-        // Count the *covered* constructors (the written arms), not the inductive's global ones: index inversion may leave only one applicable — an inductive order at `(a + 1, b + 1)` admits only its successor constructor — making an otherwise multi-constructor proposition singleton in this context. (An under-covered match is still caught by the coverage check below.) A catch-all default stands in for more than one constructor — a relevant result branching on an erased scrutinee's tag is exactly what this guard forbids — so it is never permitted here. (A prop-into-prop defaulted match never reaches this branch.)
+        // A match with no arm is vacuous: the coverage check below proves every constructor ruled out at the scrutinee's indices, so nothing is eliminated. Any other is judged by the family's declared constructors, as the kernel judges it, so a second constructor the indices rule out here counts all the same. A catch-all default stands in for more than one constructor — a relevant result branching on an erased scrutinee's tag is exactly what this guard forbids — so it is never permitted here. (A prop-into-prop defaulted match never reaches this branch.)
         let permitted = default.is_none()
-            && match cases.len() {
-                0 => true,
-                1 => {
-                    let (tag, _) = cases.first().expect("one covered constructor");
-                    singleton_eliminable(context, &induct_decl, tag, &params)?
-                }
-                _ => false,
-            };
+            && (cases.is_empty() || singleton_eliminable(context, &induct_decl, &params));
         if !permitted {
             return Err(Error::large_elim_of_prop(name.symbol()));
         }

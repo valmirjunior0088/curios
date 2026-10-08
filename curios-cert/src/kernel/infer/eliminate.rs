@@ -16,7 +16,7 @@
 //!
 //! Proof irrelevance says any two inhabitants of a proposition are interchangeable. If a program could eliminate a proposition into a relevant result, it could extract *which* proof it received, and the two facts together are inconsistent. So the elimination is allowed only when the proposition carries no information to extract: when it has no constructors at all, or exactly one whose every payload component is already determined.
 //!
-//! "Already determined" is the load-bearing phrase, and [`pinned_by_targets`] is where it is decided. A component is determined when the constructor's index targets *pin* it — when matching the target against a value recovers the component. Occurring in a target is not the same thing: `mk(a : Nat) : (blur(a))` mentions `a` in its index, but `blur` is an arbitrary function and knowing `blur(a)` recovers nothing. Reading occurrence as determination is precisely how a proposition with a real payload gets eliminated into a relevant type, and from there `False` follows.
+//! "Already determined" is the load-bearing phrase, and [`wholly_pinned`] is where it is decided, over the walk `curios_analysis::pinned_by_targets` shares with erasure. A component is determined when the constructor's index targets *pin* it — when matching the target against a value recovers the component. Occurring in a target is not the same thing: `mk(a : Nat) : (blur(a))` mentions `a` in its index, but `blur` is an arbitrary function and knowing `blur(a)` recovers nothing. Reading occurrence as determination is precisely how a proposition with a real payload gets eliminated into a relevant type, and from there `False` follows.
 
 #[cfg(test)]
 mod ambient_tests;
@@ -28,10 +28,10 @@ mod test_support;
 mod tests;
 
 use {
-    super::{check, infer},
+    super::check,
     crate::{
-        Counted, Error, InductAt, Kernel, Sort, carries_information, invert_indices,
-        pinned_by_targets, retyped, scrutinee_solution, solve_indices,
+        Counted, Error, InductAt, Kernel, Sort, invert_indices, retyped, scrutinee_solution,
+        solve_indices, wholly_pinned,
     },
     curios_analysis::Invert,
     curios_core::{
@@ -326,7 +326,7 @@ fn open_payload<T, B: Bound>(
     body(kernel, &binders, &payload, &constructed)
 }
 
-/// Refuse eliminating a proposition into a relevant result unless the proposition is empty or a singleton.
+/// Refuse eliminating a proposition into a relevant result unless the family declares no constructor, or one whose every payload its index targets pin.
 ///
 /// The guard fires only when both halves hold: the scrutinee's family is `Prop`-sorted, and the motive lands in `Type`. A proposition eliminated into another proposition is always fine — irrelevance makes the result indistinguishable either way.
 pub(super) fn guard_large_elimination(
@@ -348,40 +348,19 @@ pub(super) fn guard_large_elimination(
     match at.declaration().constructors.as_slice() {
         // Empty: there is nothing to have received, so nothing to extract.
         [] => Ok(()),
-        // Singleton: allowed exactly when every payload component is already determined, so knowing the value tells a program nothing it did not already know.
+        // One constructor: allowed exactly where the indices determine every payload component, so knowing the value tells a program nothing its type had not said. A component that is a proof is not excused: the arm would be handed the proof this match was given.
         [(tag, _)] => {
             let signature = at
                 .signature(tag)
                 .ok_or_else(|| Error::Undeclared(family.name))?;
 
-            let outcome = kernel.scoped(|kernel| {
-                open_payload(kernel, signature, |kernel, _binders, payload, targets| {
-                    let determined = pinned_by_targets(targets);
-
-                    for component in payload {
-                        // Loud rather than a `continue`, because the quiet skip fails open: a component this loop passed over would stand exempt from the information check.
-                        let Subterm::Var(var) = &**component else {
-                            unreachable!("open_payload mints a variable occurrence per binder")
-                        };
-                        let name = var.unwrap();
-
-                        if determined.contains(name) {
-                            continue;
-                        }
-                        // A component that is itself a proof carries no information a relevant result could depend on: irrelevance makes any two of them interchangeable. A *type*-valued component does not qualify, however completely erasure deletes it — see `carries_information`.
-                        let type_ = infer(kernel, component)?;
-                        if !carries_information(kernel, &type_)? {
-                            continue;
-                        }
-
-                        return Ok(false);
-                    }
-
-                    Ok(true)
+            let pinned = kernel.scoped(|kernel| {
+                open_payload(kernel, signature, |_kernel, binders, _payload, targets| {
+                    Ok(wholly_pinned(binders, targets))
                 })
             });
 
-            match outcome? {
+            match pinned? {
                 true => Ok(()),
                 false => Err(Error::LargeElimination(family.name)),
             }

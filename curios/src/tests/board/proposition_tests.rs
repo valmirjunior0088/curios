@@ -25,6 +25,33 @@ fn a_proposition_still_eliminates_into_another_proposition() {
     );
 }
 
+// The guard's other refusal: one constructor, holding a proof no index pins. Nothing a program computes could tell which proof it was handed, but the arm is handed the proof the match was given, and a recursion along it has a type reduce the lemma that built it. `f` is that recursion on an accessibility proof, the elimination whose conversion Carneiro (*The Type Theory of Lean*, 2019, §3.1) shows no checker decides transitively: two proofs at one recursive call reduce through different eliminations, and nothing reconciles the calls one step further on.
+#[test]
+fn a_proposition_holding_a_proof_cannot_be_eliminated_into_data() {
+    rejected_by(
+        A_PROPOSITION_HOLDING_A_PROOF_CANNOT_BE_ELIMINATED_INTO_DATA,
+        "cannot eliminate the proposition",
+    );
+}
+
+// The control: the same proposition is taken apart into a proposition, which is how an accessibility proof is inverted.
+#[test]
+fn a_proposition_holding_a_proof_still_eliminates_into_a_proposition() {
+    assert_eq!(
+        run(A_PROPOSITION_HOLDING_A_PROOF_STILL_ELIMINATES_INTO_A_PROPOSITION),
+        b"1"
+    );
+}
+
+// The guard counts the constructors a family declares, in the elaborator as in the kernel. `Side(n, 0)` leaves `left` alone and its payload is the index, so a guard that counted the arms the index left would admit `which`, which the kernel refuses. The refusal is the elaborator's own.
+#[test]
+fn a_constructor_an_index_rules_out_still_counts() {
+    rejected_by(
+        A_CONSTRUCTOR_AN_INDEX_RULES_OUT_STILL_COUNTS,
+        "cannot eliminate the proposition '/Side'",
+    );
+}
+
 // `Prop` non-informativeness, which is what makes proof irrelevance safe: a proposition whose inhabitants differ observably is not a subsingleton, so identifying them would identify the data they carry.
 #[test]
 fn a_proposition_may_not_carry_informative_fields() {

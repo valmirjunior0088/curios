@@ -115,7 +115,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 ## Theory
 
 - [x] [A subsumption is decided as one wherever a metavariable stands](design/theory/subsumption-is-a-relation-not-a-traversal-order.md): a conversion problem carries the relation it is asked at through its park and its retry, a metavariable met at a `Type` takes a level of its own and one met at `Prop` waits for the term that minted it, so a call, a list literal or a match is admitted whichever of its parts is read first and a declaration keeps no such order in its scheme; a goal is offered what checks at it
-- [ ] [A proposition is sized as a type is, and its proof is never read](roadmap/theory/01-a-proposition-is-sized-and-its-proof-is-never-read.md) — a proposition whose constructor holds a proof reaches data by reducing that proof, and a relevant match on a stuck `Eq` proof does not reduce
+- [ ] [A proposition is sized as a type is, and its proof is never read](roadmap/theory/01-a-proposition-is-sized-and-its-proof-is-never-read.md) — a relevant match on an `Eq` proof reduces the proof to fire, and on a stuck one does not reduce
 - [ ] [Flex–flex problems with distinct heads](roadmap/theory/04-flex-flex-intersection.md) — not refined yet; `?0(x) ~ ?1(x)` parks undecided, with no intersection
 - [ ] [Strict positivity through a type-former parameter](roadmap/theory/05-positivity-through-type-formers.md) — not refined yet; `induct Mu(F : (Type) -> Type)` is refused, since its body cannot say how `F` uses its argument
 - [x] Π- and Σ-types with eta for both, named tuple fields, and `let` bindings recursive by their body, with `let … and …;` groups

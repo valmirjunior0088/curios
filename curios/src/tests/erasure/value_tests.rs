@@ -4,7 +4,7 @@ use crate::tests::run;
 
 /// Every row states its value twice — as a proof both checkers must accept, and as the printed result of the same expression — so a row fails exactly when the compiled program disagrees with a theorem the compiler certified.
 ///
-/// Erasure is the one stage below Core with no semantic check, so this is the ledger for it: a deletion site that drops the wrong thing leaves the proof standing and changes the print. The first three rows are pinned payloads of a `Prop` family, whose constructor is itself deleted, so the value survives only as the scrutinee's index; binding those payloads to the unit constant would print `1`, `1` and `0` where the checkers prove `42`, `42` and `21`. The remaining rows are the other deletion sites `documentation/design/soundness/totality-of-the-erased-program.md` names: an erased parameter, an erased field beside a kept one, and a proof-valued callee applied and dropped.
+/// Erasure is the one stage below Core with no semantic check, so this is the ledger for it: a deletion site that drops the wrong thing leaves the proof standing and changes the print. The first two rows are pinned payloads of a `Prop` family, whose constructor is itself deleted, so the value survives only as the scrutinee's index; binding those payloads to the unit constant would print `1` and `0` where the checkers prove `42` and `21`. The remaining rows are the other deletion sites `documentation/design/soundness/totality-of-the-erased-program.md` names: an erased parameter, an erased field beside a kept one, and a proof-valued callee applied and dropped.
 #[test]
 fn every_printed_value_is_the_one_its_proof_states() {
     let source = r#"
@@ -14,12 +14,6 @@ fn every_printed_value_is_the_one_its_proof_states() {
 
         -- `refl(@z) : (z, z)` pins its payload twice; the payload is the index.
         let z_of(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Nat = match e | refl(@z) => z + 1 end;
-
-        -- A pinned payload beside a proof payload: `small` erases, `w` is the index.
-        induct Marked: (Nat) -> pub Prop
-        | mark(@w: Nat, small: Holds(w < 100)): (w)
-        end
-        let point(@x: Nat, m: Marked(x)) -> Nat = match m | mark(@w, _small) => w + 1 end;
 
         -- Targets that swap their binders: each payload is read from its own position.
         induct Swap: (Nat, Nat) -> pub Prop
@@ -38,7 +32,6 @@ fn every_printed_value_is_the_one_its_proof_states() {
         let keep(n: Nat, _p: Holds(n <= n)) -> Nat = n + 1;
 
         let _refl_payload: Eq()(z_of(Eq/refl(@Nat, @41)), 42) = Eq/refl();
-        let _marked_payload: Eq()(point(Marked/mark(@41, /std/Bool/True/qed())), 42) = Eq/refl();
         let _swapped_payloads: Eq()(digits(Swap/mk(@2, @1)), 21) = Eq/refl();
         let _erased_parameters: Eq()(pick(Nat, Eq/refl(), 41), 42) = Eq/refl();
         let _erased_field: Eq()(Bounded { n = 41, ok = /std/Bool/True/qed() }.n + 1, 42) = Eq/refl();
@@ -47,7 +40,6 @@ fn every_printed_value_is_the_one_its_proof_states() {
         let show(n: Nat) -> Io({}) = print(Str/concat(Nat/to_str(n), "\n"));
 
         let _ = show(z_of(Eq/refl(@Nat, @41)))!;
-        let _ = show(point(Marked/mark(@41, /std/Bool/True/qed())))!;
         let _ = show(digits(Swap/mk(@2, @1)))!;
         let _ = show(pick(Nat, Eq/refl(), 41))!;
         let _ = show(Bounded { n = 41, ok = /std/Bool/True/qed() }.n + 1)!;
@@ -56,6 +48,6 @@ fn every_printed_value_is_the_one_its_proof_states() {
 
     assert_eq!(
         String::from_utf8_lossy(&run(source)),
-        "42\n42\n21\n42\n42\n42\n"
+        "42\n21\n42\n42\n42\n"
     );
 }

@@ -13,8 +13,8 @@ pub(crate) use {
     curios_analysis::{
         answers, answers_classed, connectives_agree, connectives_agree_classed, convert_classed,
         convert_intrinsics, could_reduce_to, decide, grade, invert_indices, member_arities,
-        nonzero_by, pinned_by_targets, positivity_vectors, records_case_equation, retyped,
-        scrutinee_solution, solve_indices, spine, struct_reaches_itself, variance_vectors,
+        nonzero_by, positivity_vectors, records_case_equation, retyped, scrutinee_solution,
+        solve_indices, spine, struct_reaches_itself, variance_vectors, wholly_pinned,
         yields_a_sort,
     },
     curios_core::{

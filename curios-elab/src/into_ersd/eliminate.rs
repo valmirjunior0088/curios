@@ -792,7 +792,7 @@ impl Lowering<'_> {
         self.open_arm(context, &expected, default)
     }
 
-    /// A match on an erasable (proof/type) scrutinee: no runtime tag, so the subsingleton elimination reduces to its single live arm, erased inline in the current block. The head is never erased (it is a dropped value), and neither is the constructor it stood for, so a payload binder resolves to what the large-elimination guard let it be: the unit constant for a proof, and for a binder the index targets pin, the scrutinee's actual index at the position that pins it.
+    /// A match on an erasable (proof/type) scrutinee: no runtime tag, so the subsingleton elimination reduces to its single live arm, erased inline in the current block. The head is never erased (it is a dropped value), and neither is the constructor it stood for, so a payload binder the index targets pin resolves to the scrutinee's actual index at the position that pins it, which is every payload of a match into data. One no index pins is met only in a match into a proposition, whose value nothing reads, and is the unit constant.
     fn erase_erasable_scrutinee(
         &mut self,
         context: &mut Retyping,

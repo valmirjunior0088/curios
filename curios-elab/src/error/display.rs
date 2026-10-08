@@ -606,7 +606,7 @@ impl fmt::Display for Displayed<'_> {
             Error::LargeElimOfProp { name } => {
                 write!(
                     f,
-                    "cannot eliminate the proposition '{name}' into a relevant result\n  a strict proposition admits large elimination only when empty or singleton"
+                    "cannot eliminate the proposition '{name}' into a relevant result\n  a proposition is matched into data only where no constructor applies, or where it declares one whose every payload its indices determine"
                 )
             }
             Error::InformativePropStruct {

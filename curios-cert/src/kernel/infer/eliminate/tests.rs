@@ -459,13 +459,11 @@ fn a_singleton_carrying_a_proposition_does_not_eliminate_into_a_type() {
     );
 }
 
-/// The accepting half of that same clause. A payload whose type is a `Prop`-sorted *family* is a proof rather than data: irrelevance makes any two of them interchangeable, so handing one back tells a program nothing it did not already know, and the singleton stays eliminable into a relevant result.
+/// A payload that is itself a proof is not excused. Irrelevance makes any two of them interchangeable, so nothing a program computes could tell which it was handed; but the arm is handed the proof the match was given, and a recursion along such a payload has a type reduce the lemma that built it. A proposition holding a proof no index pins is taken apart only into a proposition.
 ///
-/// The distinction from the fixture above is the whole clause. There the payload's type is `Prop` itself, so the payload *is* a proposition carried as data and `Sort::of` reports `Type 0`; here the payload's type is a family declared at `Prop`, so the payload inhabits a proposition. Only the second is excused.
-///
-/// It needs its own fixture because it is the only route through `carries_information` that accepts, and no program reaches it: every accepting decision the guard makes over the prelude and `curios`'s test corpus is `pinned_by_targets` excusing `Eq/refl`'s `z`. Without it, refusing every proof-carrying singleton would pass the whole suite.
+/// The distinction from the fixture above is what the payload is. There its type is `Prop` itself, so the payload *is* a proposition carried as data; here its type is a family declared at `Prop`, so the payload inhabits one. Neither is a payload an index pins, which is the one thing the guard asks.
 #[test]
-fn a_singleton_carrying_a_proof_still_eliminates_into_a_type() {
+fn a_singleton_carrying_a_proof_does_not_eliminate_into_a_type() {
     let mut kernel = kernel();
     let p = binder(0, "p");
     let arm_binder = binder(10, "p");
@@ -493,7 +491,10 @@ fn a_singleton_carrying_a_proof_still_eliminates_into_a_type() {
         vec![("mk", vec![arm_binder], nat(0))],
     );
 
-    assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
+    assert_eq!(
+        infer(&mut kernel, &term),
+        Err(Error::LargeElimination(family)),
+    );
 }
 
 /// An empty proposition eliminates into anything: there is nothing to have received, so nothing to extract.
