@@ -20,7 +20,7 @@ use {
     },
     curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::{Qualifier, Report, SyntaxRegistry},
-    std::{cell::LazyCell, collections::BTreeSet, fmt},
+    std::{cell::LazyCell, collections::BTreeSet, fmt, rc::Rc},
 };
 
 /// What a unit's lowering decided beside its module: its lints, and the prefix of every mount some reference of it resolved into — see [`Lint`]. Taken off the lowering before elaboration consumes it and credited with the binders elaboration's proofs read however elaboration ended, so a question about a program has them whether or not elaboration accepted it.
@@ -510,7 +510,7 @@ where
         .chain(scope.iter().map(|text| text.anchors()))
         .collect::<Vec<_>>();
     // Made by the first report that spells a name, and by no elaboration that reports nothing.
-    let spellings = LazyCell::new(|| names.spellings(scope));
+    let spellings = LazyCell::new(|| Rc::new(names.spellings(scope)));
 
     // A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules; the elaborator states the synthesized entry's `Io({})` type, as this stage states an authored entry's below. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
     let scheduled = match tail {
@@ -923,7 +923,7 @@ pub fn compile_unit(
         lowered.broken(),
         elaborate_and_zonk_unit(&mut context, &established, lowered.core(), lowered.minted())
             .map_err(|error| {
-                let spellings = lowered.spellings(&text);
+                let spellings = Rc::new(lowered.spellings(&text));
                 CompileError::of(&error, |member| {
                     member.reports_with_hints(
                         lowered.core(),

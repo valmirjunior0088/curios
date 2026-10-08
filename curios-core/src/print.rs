@@ -90,7 +90,7 @@ pub struct ReaderPosition {
 
 /// What axis (b) spells a global by for a reader: the unit's [`Spellings`] and the module each of its definitions sits in, with the spellings already asked for.
 pub struct ReaderNames {
-    spellings: Spellings,
+    spellings: Rc<Spellings>,
     islands: BTreeMap<Global, Qualifier>,
     memo: RefCell<Asked>,
 }
@@ -99,7 +99,7 @@ pub struct ReaderNames {
 type Asked = HashMap<(Option<Global>, Global), Option<String>>;
 
 impl ReaderNames {
-    pub fn new(spellings: Spellings, islands: BTreeMap<Global, Qualifier>) -> Self {
+    pub fn new(spellings: Rc<Spellings>, islands: BTreeMap<Global, Qualifier>) -> Self {
         Self {
             spellings,
             islands,

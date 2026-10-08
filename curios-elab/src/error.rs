@@ -1492,14 +1492,14 @@ impl Error {
         )
     }
 
-    /// [`Error::format_with`], with two tables of the text stage's. `unbound` is what each unresolved bare name could have meant — keyed by the binder the name lowered to, valued by the absolute paths of the public bindings in scope that carry it; an `unbound variable` report whose binder the table knows gets a line per candidate, and every other error ignores it. `spellings` is how each of the unit's names can be written and where — the imports each definition's `use` lines brought into scope, and the absolute paths each global is reachable by with who may write them — so a global displays as resolution would find it from where the report's reader stands rather than as its shortest unambiguous suffix, which is not always a name in scope (`/sys/Nat/add` shortens to `add`, which nothing imported). Both tables are the text stage's because only it sees re-exports — `/std/Bool` is a `pub use`, and Core holds the `/sys/Bool/Bool` it stands for — and they arrive here rather than on the error because the error records what was written and nothing about where.
+    /// [`Error::format_with`], with two tables of the text stage's. `unbound` is what each unresolved bare name could have meant — keyed by the binder the name lowered to, valued by the absolute paths of the public bindings in scope that carry it; an `unbound variable` report whose binder the table knows gets a line per candidate, and every other error ignores it. `spellings` is how each of the unit's names can be written and where — the imports each definition's `use` lines brought into scope, and the absolute paths each global is reachable by with who may write them — so a global displays as resolution would find it from where the report's reader stands rather than as its shortest unambiguous suffix, which is not always a name in scope (`/sys/Nat/add` shortens to `add`, which nothing imported). Both tables are the text stage's because only it sees re-exports — `/std/Bool` is a `pub use`, and Core holds the `/sys/Bool/Bool` it stands for — and they arrive here rather than on the error because the error records what was written and nothing about where, the second by pointer, since every member of a batch is rendered against the one table.
     pub fn format_with_hints(
         &self,
         module: &Module,
         predecessors: &[&Module],
         syntax: &SyntaxRegistry,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
-        spellings: &Spellings,
+        spellings: &Rc<Spellings>,
         anchors: &[&Anchors],
     ) -> String {
         Report::render_all(&self.reports_with_hints(
@@ -1519,7 +1519,7 @@ impl Error {
         predecessors: &[&Module],
         syntax: &SyntaxRegistry,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
-        spellings: &Spellings,
+        spellings: &Rc<Spellings>,
         anchors: &[&Anchors],
     ) -> Vec<Report> {
         // A report's reader stands in one of this unit's definitions, and resolution reads that definition's module.
@@ -1529,7 +1529,7 @@ impl Error {
             .flat_map(Item::definitions)
             .map(|definition| (definition.name, definition.island))
             .collect();
-        let names = ReaderNames::new(spellings.clone(), islands);
+        let names = ReaderNames::new(Rc::clone(spellings), islands);
         let spelling =
             report_spelling(module, predecessors, syntax).with_reader_names(Rc::new(names));
         self.reports(&Rc::new(spelling), unbound, anchors)

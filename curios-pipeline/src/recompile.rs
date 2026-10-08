@@ -17,7 +17,10 @@ use {
     curios_text::{UnitSource, into_core_unit},
     curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::{SyntaxRegistry, grown},
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        rc::Rc,
+    },
 };
 
 /// Compile one unit against `predecessors` over `baseline`: lower whole, diff, then elaborate, judge and erase the closure.
@@ -64,7 +67,7 @@ pub fn compile_unit_over(
             lowered.minted(),
         )
         .map_err(|error| {
-            let spellings = lowered.spellings(&text);
+            let spellings = Rc::new(lowered.spellings(&text));
             CompileError::of(&error, |member| {
                 member.reports_with_hints(
                     lowered.core(),
