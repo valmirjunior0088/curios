@@ -39,14 +39,14 @@ const PARSE_DIGITS: &str = include_str!(concat!(
     "/../programs/parse_digits.crs"
 ));
 
-/// The recorder's end-to-end pin: the shapes erasure records on `/std/Map/Node` survive to the schema a compiled program's module carries. `leaf(key: K, value: V)` reads polymorphic-opaque twice; `fork(crit: Nat, zero: Node(K, V), one: Node(K, V))` reads immediate and family. The names are the schema's qualified debug names, per `curios_ersd::test_support`'s convention.
+/// The recorder's end-to-end pin: the shapes erasure records on `/std/Map/Node/Node` survive to the schema a compiled program's module carries. `leaf(key: K, value: V)` reads polymorphic-opaque twice; `fork(crit: Nat, zero: Node(K, V), one: Node(K, V))` reads immediate and family. The names are the schema's qualified debug names, per `curios_ersd::test_support`'s convention.
 #[test]
 fn a_recorded_shape_survives_to_the_program_schema() {
     let module = ersd_optm(SPINES);
     let family = module
         .families()
         .iter()
-        .find(|family| family.debug_name.as_deref() == Some("/std/Map/Node"))
+        .find(|family| family.debug_name.as_deref() == Some("/std/Map/Node/Node"))
         .expect("the program module carries the prelude's Node family");
 
     let shapes: BTreeMap<&str, Vec<FieldShape>> = family
@@ -84,7 +84,7 @@ fn a_recorded_shape_survives_to_the_program_schema() {
             .expect("live family")
             .debug_name
             .as_deref(),
-        Some("/std/Map/Node"),
+        Some("/std/Map/Node/Node"),
         "and it is Node's own, recorded through the self-reference",
     );
 }
@@ -355,7 +355,7 @@ fn boxed_field_read_measurements() {
 /// families holding a family-typed field: 18
 ///   free: 12 families, 12 slots typed at no width cost
 ///   paid: 6 families, 9 slots typed for 8 slots of width
-///   /std/Map/Node                4 slots -> 5 slots, 0 typed -> 2 typed   PAID
+///   /std/Map/Node/Node           4 slots -> 5 slots, 0 typed -> 2 typed   PAID
 ///   /std/Io/Chunk/Chunk          2 slots -> 2 slots, 0 typed -> 0 typed   FREE
 ///   /std/Flt/exact/Mode          2 slots -> 2 slots, 0 typed -> 1 typed   FREE
 ///   /std/Async/Step              3 slots -> 3 slots, 0 typed -> 1 typed   FREE
@@ -375,7 +375,7 @@ fn boxed_field_read_measurements() {
 ///   /std/Toml/decode/Stmt        3 slots -> 3 slots, 1 typed -> 2 typed   FREE
 /// ```
 ///
-/// **What the figures decide.** `/std/Map/Node` — the family a typed fork's children `(ref null $node)` would serve — is the *worst* row in this table: four slots to six, a half again as much live memory on the corpus's hottest allocated structure, to replace two casts that are already exact compares against a final type. Against the `trees` finding that live bytes convert to time under an all-live collector, that is a trade to decline, and the door declines it.
+/// **What the figures decide.** `/std/Map/Node/Node` — the family a typed fork's children `(ref null $node)` would serve — is the *worst* row in this table: four slots to six, a half again as much live memory on the corpus's hottest allocated structure, to replace two casts that are already exact compares against a final type. Against the `trees` finding that live bytes convert to time under an all-live collector, that is a trade to decline, and the door declines it.
 ///
 /// What the door does instead is admit the free column, by an exact criterion rather than a judgement: type a family's reference slots iff the row's width is unchanged. Eight slots qualify here, on the command-line, formatting, scheduler, layout and TOML families rather than on anything the corpus allocates in bulk, so **the corpus gain is nil** and this rule is not justified by a measurement — it is justified by generalizing to code the corpus does not contain, at a runtime cost that is zero by construction. A product needs no such test: one writer can never widen a row, so its reference fields always type.
 #[test]

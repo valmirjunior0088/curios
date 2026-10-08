@@ -256,7 +256,7 @@ impl<'a> Layout<'a> {
         };
         // Both layouts, and the typed one only where it is free.
         //
-        // A family-typed slot cannot share the uniform range, so a family whose constructors disagree pays width for it — `/std/Map/Node` goes four slots to six to make its two children concrete, on the corpus's hottest allocated row, and what that buys is the *cheap* kind of cast: an exact compare against a final type, not the `is_subtype` libcall a list or closure slot deletes. Weighed against the `trees` finding that live bytes convert to time under an all-live collector, that trade is declined. The criterion is exact rather than a heuristic — the row widens or it does not — so every free win is still taken; `family_slot_probe` in `curios`'s codegen tests is its figure.
+        // A family-typed slot cannot share the uniform range, so a family whose constructors disagree pays width for it — `/std/Map/Node/Node` goes four slots to six to make its two children concrete, on the corpus's hottest allocated row, and what that buys is the *cheap* kind of cast: an exact compare against a final type, not the `is_subtype` libcall a list or closure slot deletes. Weighed against the `trees` finding that live bytes convert to time under an all-live collector, that trade is declined. The criterion is exact rather than a heuristic — the row widens or it does not — so every free win is still taken; `family_slot_probe` in `curios`'s codegen tests is its figure.
         let typed = self.row_writers(module, family, bare, true);
         let uniform = self.row_writers(module, family, bare, false);
         let (typed_slots, typed_places) = lay_out(tagged, &typed);

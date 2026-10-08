@@ -1,0 +1,56 @@
+use /std/{Nat, Byte, Bytes, Bool};
+
+--- The bit of `k` in its byte `g` at place `o` of nine: place zero says the byte is there, and the eight after it are the byte's own from its top. A byte the run does not have has every place clear, so a run that ends is below every run that goes on.
+pub let at_place(k: Bytes, g: Nat, o: Nat) -> Bool =
+    match g < Bytes/len(k)
+    | false => false
+    | true =>
+        match o == 0
+        | true => true
+        | false => Nat/and(Nat/shr(Byte/to_nat(Bytes/get(k, g)), 8 - o), 1) != 0
+        end
+    end;
+
+--- The bit of `k` at `j`, nine to a byte.
+pub let bit(k: Bytes, j: Nat) -> Bool =
+    at_place(k, j / 9, j % 9);
+
+--- Where two runs part: nowhere, or at a bit.
+pub induct Parted: pub Type
+| same()
+| at(Nat)
+end
+
+-- The place, of a byte's eight from its top, at which two bytes that differ first do: a ladder of shifts, each by a literal.
+let place(x: Nat, y: Nat) -> Nat =
+    choose
+    | Nat/shr(x, 7) != Nat/shr(y, 7) => 1
+    | Nat/shr(x, 6) != Nat/shr(y, 6) => 2
+    | Nat/shr(x, 5) != Nat/shr(y, 5) => 3
+    | Nat/shr(x, 4) != Nat/shr(y, 4) => 4
+    | Nat/shr(x, 3) != Nat/shr(y, 3) => 5
+    | Nat/shr(x, 2) != Nat/shr(y, 2) => 6
+    | Nat/shr(x, 1) != Nat/shr(y, 1) => 7
+    | _ => 8
+    end;
+
+-- Where `a` and `b` first differ, their bytes counted from `g`.
+let parts(a: Bytes, b: Bytes, g: Nat) -> Parted =
+    match a
+    | x[] => match b | x[] => Parted/same() | x[_, .._] => Parted/at(9 * g) end
+    | x[h, ..t] =>
+        match b
+        | x[] => Parted/at(9 * g)
+        | x[k, ..r] =>
+            match h == k
+            | true => parts(t, r, g + 1)
+            | false => Parted/at(9 * g + place(Byte/to_nat(h), Byte/to_nat(k)))
+            end
+        end
+    end;
+
+--- The first bit two runs differ at, or that they are one run: the place a byte is there in one and not in the other, or the place two bytes first differ at.
+---
+--- A walk on the two runs' structure, so a type may name it.
+pub let crit(a: Bytes, b: Bytes) -> Parted =
+    parts(a, b, 0);

@@ -1,14 +1,16 @@
-use /std/{Bytes, Byte, Nat, Bool, Str, List, Option, Hash, Show, Spell};
+use /std/{Nat, Bool, Str, List, Option, Hash, Show, Spell};
 use /std/ops/{Eql};
 
 --- How a key type encodes to the byte string that identifies it, in its own order: the concept, a witness for each key type the library has, and the laws every key has from it.
 pub mod Key;
 pub use Key/{let Key};
 
-induct Node(K: Type, V: Type): Type
-| leaf(key: K, value: V)
-| fork(crit: Nat, zero: Node(K, V), one: Node(K, V))
-end
+--- A key's encoding read a bit at a time, nine to a byte, and where two encodings first differ.
+mod bits;
+
+--- The trie under a map: its nodes, and an insertion, a removal and a rewriting of the values under one.
+mod Node;
+use Node/{let Node};
 
 --- A map from keys of type `K` to values, built and read under one `Key(K)` dictionary, which its type names.
 ---
@@ -17,128 +19,6 @@ pub struct Map(K: Type, use Key(K), V: Type): Type {
     size: Nat,
     root: Option(Node(K, V)),
 }
-
-let bit(k: Bytes, j: Nat) -> Bool =
-    let g = j / 9;
-    let o = j % 9;
-    match g < Bytes/len(k)
-    | false => false
-    | true =>
-        match o == 0
-        | true => true
-        | false => Nat/and(Nat/shr(Byte/to_nat(Bytes/get(k, g)), 8 - o), 1) != 0
-        end
-    end;
-
-let crit(a: Bytes, b: Bytes) -> Nat =
-    let bits(x: Nat, y: Nat, g: Nat, o: Nat) -> Nat =
-        match Nat/and(Nat/shr(x, 8 - o), 1) == Nat/and(Nat/shr(y, 8 - o), 1)
-        | true => bits(x, y, g, o + 1)
-        | false => g * 9 + o
-        end;
-    let bytes(g: Nat) -> Nat =
-        match g < Bytes/len(a)
-        | false => g * 9
-        | true =>
-            match g < Bytes/len(b)
-            | false => g * 9
-            | true =>
-                let x = Byte/to_nat(Bytes/get(a, g));
-                let y = Byte/to_nat(Bytes/get(b, g));
-                match x == y | true => bytes(g + 1) | false => bits(x, y, g, 1) end
-            end
-        end;
-    bytes(0);
-
--- The leaf a walk by `k`'s bits ends at. Its key is the one to compare: a fork tests one bit, so only the whole encoding says whether the walk was a hit.
-let lookup(@K: Type, @V: Type, t: Node(K, V), k: Bytes) -> {K, V} =
-    match t
-    | leaf(k0, v0) => (k0, v0)
-    | fork(c, z, o) => match bit(k, c) | false => lookup(z, k) | true => lookup(o, k) end
-    end;
-
-let wedge(@K: Type, @V: Type, c: Nat, b: Bool, key: K, v: V, t: Node(K, V)) -> Node(K, V) =
-    match b
-    | false => Node/fork(c, Node/leaf(key, v), t)
-    | true => Node/fork(c, t, Node/leaf(key, v))
-    end;
-
--- How an insertion under a node ended: the node with the key's leaf added, the node with the value of a leaf it held replaced, or the node as it was beside the bit the key first parts from its keys at, where its leaf is still to be wedged in above.
-induct Inserted(K: Type, V: Type): Type
-| added(Node(K, V))
-| replaced(Node(K, V))
-| parted(Node(K, V), Nat)
-end
-
--- `key` is the key and `k` its encoding, computed once by the caller; a leaf's is derived here, where it is compared.
-let insert1(
-    @K: Type,
-    use Key(K),
-    @V: Type,
-    t: Node(K, V),
-    key: K,
-    k: Bytes,
-    v: V,
-) -> Inserted(K, V) =
-    match t
-    | leaf(k0, _) =>
-        let e0 = Hash/hash(k0);
-        match e0 == k
-        | true => Inserted/replaced(Node/leaf(key, v))
-        | false => Inserted/parted(t, crit(k, e0))
-        end
-    | fork(tc, z, o) =>
-        match bit(k, tc)
-        | false =>
-            match insert1(z, key, k, v)
-            | added(z2) => Inserted/added(Node/fork(tc, z2, o))
-            | replaced(z2) => Inserted/replaced(Node/fork(tc, z2, o))
-            | parted(z2, c) =>
-                match tc < c
-                | true => Inserted/added(Node/fork(tc, wedge(c, bit(k, c), key, v, z2), o))
-                | false => Inserted/parted(t, c)
-                end
-            end
-        | true =>
-            match insert1(o, key, k, v)
-            | added(o2) => Inserted/added(Node/fork(tc, z, o2))
-            | replaced(o2) => Inserted/replaced(Node/fork(tc, z, o2))
-            | parted(o2, c) =>
-                match tc < c
-                | true => Inserted/added(Node/fork(tc, z, wedge(c, bit(k, c), key, v, o2)))
-                | false => Inserted/parted(t, c)
-                end
-            end
-        end
-    end;
-
--- How a removal under a node ended: the key was not there, the node was its leaf and nothing is left of it, or what is left of the node.
-induct Removed(K: Type, V: Type): Type
-| absent()
-| gone()
-| kept(Node(K, V))
-end
-
-let remove1(@K: Type, use Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Removed(K, V) =
-    match t
-    | leaf(k0, _) =>
-        match Hash/hash(k0) == k | true => Removed/gone() | false => Removed/absent() end
-    | fork(c, z, o) =>
-        match bit(k, c)
-        | false =>
-            match remove1(z, k)
-            | absent() => Removed/absent()
-            | gone() => Removed/kept(o)
-            | kept(z2) => Removed/kept(Node/fork(c, z2, o))
-            end
-        | true =>
-            match remove1(o, k)
-            | absent() => Removed/absent()
-            | gone() => Removed/kept(z)
-            | kept(o2) => Removed/kept(Node/fork(c, z, o2))
-            end
-        end
-    end;
 
 --- The empty map.
 pub let empty(@K: Type, use Key(K), @V: Type) -> Map(K, V) =
@@ -154,7 +34,7 @@ pub let get(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Option(V) =
     match m.root
     | none() => Option/none()
     | some(n) =>
-        let (k0, v0) = lookup(n, k);
+        let (k0, v0) = Node/lookup(n, k);
         match Hash/hash(k0) == k | true => Option/some(v0) | false => Option/none() end
     end;
 
@@ -168,10 +48,10 @@ pub let insert(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K, v: V) -> Ma
     match m.root
     | none() => Map { size = 1, root = Option/some(Node/leaf(key, v)) }
     | some(n) =>
-        match insert1(n, key, k, v)
+        match Node/insert(n, key, k, v)
         | replaced(n2) => Map { size = m.size, root = Option/some(n2) }
         | parted(n2, c) =>
-            Map { size = m.size + 1, root = Option/some(wedge(c, bit(k, c), key, v, n2)) }
+            Map { size = m.size + 1, root = Option/some(Node/wedge(c, bits/bit(k, c), key, v, n2)) }
         | added(n2) => Map { size = m.size + 1, root = Option/some(n2) }
         end
     end;
@@ -182,7 +62,7 @@ pub let remove(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Map(K, V
     match m.root
     | none() => m
     | some(n) =>
-        match remove1(n, k)
+        match Node/remove(n, k)
         | gone() => Map { size = m.size - 1, root = Option/none() }
         | kept(n2) => Map { size = m.size - 1, root = Option/some(n2) }
         | absent() => m
@@ -238,15 +118,9 @@ pub let update(
 ) -> Map(K, V) =
     match f(get(m, key)) | some(v) => insert(m, key, v) | none() => remove(m, key) end;
 
-let map_node(@K: Type, @V: Type, @W: Type, t: Node(K, V), f: (V) -> W) -> Node(K, W) =
-    match t
-    | leaf(k, v) => Node/leaf(k, f(v))
-    | fork(c, z, o) => Node/fork(c, map_node(z, f), map_node(o, f))
-    end;
-
 --- `f` on every value. The keys and their dictionary stay, so the trie keeps its shape.
 pub let map(@K: Type, use Key(K), @V: Type, @W: Type, m: Map(K, V), f: (V) -> W) -> Map(K, W) =
-    Map { size = m.size, root = Option/map(m.root, (n: Node(K, V)) => map_node(n, f)) };
+    Map { size = m.size, root = Option/map(m.root, (n: Node(K, V)) => Node/map(n, f)) };
 
 --- The entries `pred` accepts.
 pub let filter(@K: Type, use Key(K), @V: Type, m: Map(K, V), pred: (K, V) -> Bool) -> Map(K, V) =

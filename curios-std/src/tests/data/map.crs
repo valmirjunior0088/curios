@@ -117,6 +117,12 @@ let _a_smaller_integer_encodes_before_a_larger(
 ) -> Eq()(Bytes/ord(Hash/hash(a), Hash/hash(b)), Ordering/lt()) =
     Bytes/ord/below/lt(Hash/hash(a), Hash/hash(b), Hash/int/of_lt(a, b, under));
 
+-- An insert stands in a type, everything it reaches being known to terminate: what three inserts leave is decided by reduction, in the order of the numbers.
+let _an_insert_stands_in_a_type: Eq()(
+    Map/keys(Map/insert(Map/insert(Map/insert(Map/empty(), 256, "a"), 1, "b"), 0, "c")),
+    [0, 1, 256]) =
+    Eq/refl();
+
 -- Setting an existing key goes down the `replace` path: same size, new value, no duplicate leaf.
 test insert_replaces_without_growing =
     let m: Map(Str, Nat) = Map/insert(Map/insert(Map/empty(), "k", 1), "k", 2);
