@@ -66,27 +66,25 @@ let no_empty(k: Byte, r: Bytes, e: Eq()(x[], x[k, ..r])) -> False =
 --
 -- Structural induction on the left run, carrying the claim for every right run: `Hash(Bits)` states its encoding through the packed eliminator, so `hash(b[h, ..t])` *is* `x[<h>, ..hash(t)]`, and the two sides come apart with `/std/Bytes`'s cons injections. A run against a run of another length is refuted on the encoding's own length, which the byte-per-bit reading makes the run's.
 let bits_injective(a: Bits, b: Bits, same: Eq()(Hash/hash(a), Hash/hash(b))) -> Eq()(a, b) =
-    let go(x: Bits) -> (y: Bits, e: Eq()(Hash/hash(x), Hash/hash(y))) -> Eq()(x, y) =
-        match x: (m) => (y: Bits, e: Eq()(Hash/hash(m), Hash/hash(y))) -> Eq()(m, y)
-        | b[] =>
-            (y, e) =>
-                match y
-                | b[] => Eq/refl()
-                | b[k, ..r] => match no_empty(byte_of_bit(k), Hash/hash(r), e) end
-                end
-        | b[h, ..t]; ih =>
-            (y, e) =>
-                match y
-                | b[] => match no_empty(byte_of_bit(h), Hash/hash(t), Eq/sym(e)) end
-                | b[k, ..r] =>
-                    Bits/cong_cons2(
-                        Eq/trans(
-                            Eq/sym(bit_round(h)),
-                            Eq/trans(Eq/cong(bit_of, Bytes/cons_inj_head(e)), bit_round(k))),
-                        ih(r, Bytes/cons_inj_tail(e)))
-                end
-        end;
-    go(a)(b, same);
+    match a: (m) => (y: Bits, e: Eq()(Hash/hash(m), Hash/hash(y))) -> Eq()(m, y)
+    | b[] =>
+        (y, e) =>
+            match y
+            | b[] => Eq/refl()
+            | b[k, ..r] => match no_empty(byte_of_bit(k), Hash/hash(r), e) end
+            end
+    | b[h, ..t]; ih =>
+        (y, e) =>
+            match y
+            | b[] => match no_empty(byte_of_bit(h), Hash/hash(t), Eq/sym(e)) end
+            | b[k, ..r] =>
+                Bits/cong_cons2(
+                    Eq/trans(
+                        Eq/sym(bit_round(h)),
+                        Eq/trans(Eq/cong(bit_of, Bytes/cons_inj_head(e)), bit_round(k))),
+                    ih(r, Bytes/cons_inj_tail(e)))
+            end
+    end(b, same);
 
 --- One byte per bit, so a run's length is its encoding's and no two runs share one.
 satisfy Key(Bits) {
