@@ -30,6 +30,7 @@ pub(super) fn authored(name: &Global, type_: Term, body: Term) -> Item {
         island: Qualifier::default(),
         // Non-recursive and free of diverging host calls, so the honest flag; `Totals::classify` recomputes it.
         totality: Totality::Total,
+        proof: false,
         variances: Vec::new(),
         type_,
         body,
@@ -41,6 +42,17 @@ pub(super) fn authored_partial(name: &Global, type_: Term, body: Term) -> Item {
     match authored(name, type_, body) {
         Item::Let(definition) => Item::Let(Definition {
             totality: Totality::Partial,
+            ..definition
+        }),
+        item => item,
+    }
+}
+
+/// [`authored`] for a proof a declaration wrote, marked as elaboration marks one where its item is published.
+pub(super) fn authored_proof(name: &Global, type_: Term, body: Term) -> Item {
+    match authored(name, type_, body) {
+        Item::Let(definition) => Item::Let(Definition {
+            proof: true,
             ..definition
         }),
         item => item,
@@ -388,6 +400,7 @@ pub(super) fn level_definition(level: &Level) -> Module {
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
         totality: Totality::Total,
+        proof: false,
         variances: Vec::new(),
         type_: Term::type_at(level.clone()),
         body: Term::intrinsic(Intrinsic::NatType),
@@ -738,6 +751,7 @@ pub(super) fn scheme_definition(level: &Level, parameter_count: usize) -> Module
         },
         island: Qualifier::default(),
         totality: Totality::Total,
+        proof: false,
         variances: Vec::new(),
         type_: Term::type_at(level.clone()),
         body: Term::intrinsic(Intrinsic::NatType),
@@ -811,6 +825,7 @@ pub(super) fn instance_of_width(width: usize) -> Module {
         },
         island: Qualifier::default(),
         totality: Totality::Total,
+        proof: false,
         variances: Vec::new(),
         type_: Term::type_at(Level::param(UniverseParam(0))),
         body: Term::induct_type_at(family, levels, Vec::<Term>::new(), Vec::<Term>::new()),
@@ -849,6 +864,7 @@ pub(super) fn foreign_held_at(row: ForeignFunction, claimed: &Term, false_name: 
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
         totality: Totality::Total,
+        proof: false,
         variances: Vec::new(),
         type_: claimed.clone(),
         body: Term::foreign(row, Vec::new()),
@@ -893,6 +909,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
         },
         island: Qualifier::default(),
         totality: Totality::Total,
+        proof: false,
         variances: Vec::new(),
         type_: Term::type_at(Level::param(UniverseParam(0))),
         body: Term::induct_type_at(
@@ -2161,6 +2178,7 @@ pub(super) fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> M
         universe_context: scheme_context(),
         island: Qualifier::default(),
         totality: Totality::Total,
+        proof: false,
         variances: Vec::new(),
         type_: Term::type_at(Level::param(UniverseParam(1))),
         body: Term::type_at(Level::param(UniverseParam(0))),
@@ -2174,6 +2192,7 @@ pub(super) fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> M
             universe_context,
             island: Qualifier::default(),
             totality: Totality::Total,
+            proof: false,
             variances: Vec::new(),
             type_: Term::type_at(Level::param(UniverseParam(1))),
             body,
@@ -2288,6 +2307,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
         },
         island: Qualifier::default(),
         totality: Totality::Total,
+        proof: false,
         variances: Vec::new(),
         type_: Term::func_type(
             [(
@@ -2486,10 +2506,21 @@ fn constant(name: Global) -> Definition {
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
         totality: Totality::Total,
+        proof: false,
         variances: Vec::new(),
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
     }
+}
+
+/// A group of one member, `name : type_ = body`, marked a proof: how a lemma proved by its own recursion is stored.
+pub(super) fn proof_group(name: &Global, type_: Term, body: Term) -> Item {
+    Item::Rec(RecItem::new(vec![Definition {
+        proof: true,
+        type_,
+        body,
+        ..constant(*name)
+    }]))
 }
 
 /// One group of two constants, `shadowed` and `fresh`: the first under a name [`judged_environment`] holds, the second under none.
@@ -3119,6 +3150,7 @@ pub(super) fn alias_module(variances: Vec<Variance>) -> (Global, Module) {
         universe_context: scheme.clone(),
         island: Qualifier::default(),
         totality: Totality::Total,
+        proof: false,
         variances: Vec::new(),
         type_: Term::func_type([(carrier, sort.clone())], sort.clone()),
         body: Term::func([(carrier, sort.clone())], Term::free_var(&carrier)),

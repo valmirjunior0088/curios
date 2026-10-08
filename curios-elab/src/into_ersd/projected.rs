@@ -57,6 +57,7 @@ fn project_definition(definition: &Definition) -> Definition {
         island: definition.island,
         // Carried as every field is, and read by nothing below: the erased functions' termination flags are marked from the certifier's record where the linked program meets it (see `curios_ersd::Function::total`), never from this stamp.
         totality: definition.totality,
+        proof: definition.proof,
         variances: Vec::new(),
         type_: project_erased_universes(&definition.type_),
         body: project_erased_universes(&definition.body),
@@ -158,7 +159,7 @@ impl<'a> Unit<'a> {
 
         Some(Defined {
             type_: &definition.type_,
-            body,
+            body: (!definition.proof).then_some(body),
             kind: &definition.kind,
             universe_context,
             totality: definition.totality,

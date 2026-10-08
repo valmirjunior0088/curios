@@ -1,10 +1,13 @@
 //! Which parts of a declaration elaborated again are the parts its baseline holds, as a unit stores them.
 //!
-//! A declaration kept over a baseline asked parts of the declarations around it, and stands where each is as it was; so does an erased form, by what its erasure asked. Of a declaration that was itself kept, every part is. Of one elaborated again, a part is where it came out equal — which is what lets an edit stop at the declarations that read what it changed: a body respelled to the same signature moves no declaration that read the signature alone.
+//! A declaration kept over a baseline asked parts of the declarations around it, and stands where each is as it was; so does an erased form, by what its erasure asked. Of a declaration that was itself kept, every part is. Of one elaborated again, a part is where it came out equal — which is what lets an edit stop at the declarations that read what it changed: a body respelled to the same signature moves no declaration that read the signature alone, and a proof proved another way moves none that asked what it unfolds to, which is nothing whatever its body ([`curios_core::Definition::proof`]).
 //!
 //! **Equal as stored, so by spelling.** A binder's name moves no judgment, and a term's equality reads none; it is in what a unit stores all the same, the declaration's own and a dependent's that was handed its signature. So a part is compared under its binders' names ([`Term::equal_modulo_metas`], over terms that hold no metavariable), and a parameter renamed is a signature changed. A position is in no comparison: a declaration moved, or respaced, has moved no part.
 //!
 //! **A group is compared whole.** Its members share one knot, each one's type and body scoped over all of them, so a member of a group that moved anywhere has moved.
+
+#[cfg(test)]
+mod tests;
 
 use {
     crate::Question,
@@ -46,8 +49,11 @@ impl Same {
 
         Self {
             signature,
-            // What a name unfolds to is read with what it is and whether it is total.
-            body: signature && totality && spelled_alike(&made.body, &held.body),
+            // What a name unfolds to is read with what it is and whether it is total. A proof unfolds to nothing, so it moves with the mark and never with the body.
+            body: signature
+                && totality
+                && made.proof == held.proof
+                && (made.proof || spelled_alike(&made.body, &held.body)),
             kind,
             totality,
             variances: made.variances == held.variances,
@@ -68,7 +74,7 @@ impl Same {
 
         Self {
             signature: group,
-            body: group && totality,
+            body: group && totality && mine.proof == theirs.proof,
             kind,
             totality,
             // A group's member files no vector.

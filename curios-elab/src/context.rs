@@ -449,7 +449,7 @@ impl<'s> Context<'s> {
             Item::Let(definition) => {
                 let name = Free::from(&definition.name);
                 self.reassume(&name, &definition.type_);
-                self.define(&name, &definition.body, Some(&definition.kind));
+                self.define_published(&name, &definition.body, &definition.kind, definition.proof);
                 self.set_assumption_universe_context(&name, definition.universe_context.clone());
                 self.record_definition_variances(definition);
                 if self.is_witness_declaration(&definition.name) {
@@ -469,10 +469,11 @@ impl<'s> Context<'s> {
                         &name,
                         rec.group.universe_context().clone(),
                     );
-                    self.define(
+                    self.define_published(
                         &name,
                         &Term::rec_proj(rec.group.clone(), index),
-                        Some(&definition.kind),
+                        &definition.kind,
+                        definition.proof,
                     );
                     if self.is_witness_declaration(&definition.name) {
                         self.update_witness_scheme(
@@ -1280,6 +1281,14 @@ impl<'s> Context<'s> {
     /// Define `name`. `kind` is the declaring module item's [`DefinitionKind`], or `None` for a local binding no item declared.
     pub(crate) fn define(&mut self, name: &Free, term: &Term, kind: Option<&DefinitionKind>) {
         self.define_entry(*name, DefEntry::new(term.clone(), kind.cloned()));
+    }
+
+    /// Define `name` as a published item binds it: [`Context::define`], and where `proof`, to a term no reduction unfolds it to ([`curios_core::Definition::proof`]). Until its item is published a proof unfolds as any definition does, which is what its own check reads it by.
+    fn define_published(&mut self, name: &Free, term: &Term, kind: &DefinitionKind, proof: bool) {
+        self.define_entry(
+            *name,
+            DefEntry::published(term.clone(), kind.clone(), proof),
+        );
     }
 
     pub(crate) fn define_assuming(

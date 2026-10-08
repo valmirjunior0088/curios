@@ -1,4 +1,5 @@
 use {
+    super::Projected,
     crate::{reduce::test_support::qed, *},
     curios_abi::{ForeignFunction, HostOp},
     curios_analysis::test_support::SYNTAX,
@@ -41,6 +42,7 @@ fn definition(name: &str, type_: Term, body: Term) -> Item {
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
         totality: Totality::default(),
+        proof: false,
         variances: Vec::new(),
         type_,
         body,
@@ -657,6 +659,7 @@ fn universe_erasure_is_a_validated_structural_projection() {
         },
         island: Qualifier::empty(),
         totality: Totality::default(),
+        proof: false,
         variances: Vec::new(),
         type_: Term::type_at(parameter.succ().unwrap()),
         body: Term::induct_type_at(
@@ -908,6 +911,7 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
         totality: Totality::default(),
+        proof: false,
         variances: Vec::new(),
         type_: Term::type_ground(),
         body: opt_type(),
@@ -1389,6 +1393,7 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
         totality: Totality::default(),
+        proof: false,
         variances: Vec::new(),
         type_: func_type.clone(),
         body: Term::func(
@@ -1687,4 +1692,34 @@ fn a_curried_call_chain_erases_in_work_proportional_to_its_depth() {
         long < 2 * short,
         "a 512-deep chain spent {long} where a 256-deep one spent {short}",
     );
+}
+
+/// Erasure's reader is handed no proof's body either: out of its universes a definition marked a proof unfolds to nothing, and the definition beside it to its body.
+#[test]
+fn a_proofs_body_is_withheld_from_erasures_reader() {
+    let marked = |item| match item {
+        Item::Let(definition) => Item::Let(Definition {
+            proof: true,
+            ..definition
+        }),
+        item => item,
+    };
+    let unit = module(
+        vec![
+            marked(definition("lemma", Term::prop(), Term::prop())),
+            definition("two", Term::intrinsic(Intrinsic::NatType), nat_lit(2)),
+        ],
+        nat_lit(0),
+    )
+    .module;
+
+    let view = Projected::over(&[], &unit);
+    let unfolds = |path| {
+        view.definition(&nominal(path))
+            .expect("the unit declares it")
+            .body
+            .is_some()
+    };
+    assert!(!unfolds("lemma"));
+    assert!(unfolds("two"));
 }

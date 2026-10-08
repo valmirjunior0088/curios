@@ -32,12 +32,12 @@ use {
 #[derive(Clone, Copy)]
 pub(crate) struct Held<'a> {
     pub(crate) type_: &'a Term,
-    /// `None` for something with a type and no body — a name deliberately kept opaque.
+    /// `None` for something with a type and no body: a definition marked a proof ([`curios_core::Definition::proof`]), whose body its own check read and no judgment after it does, and a fixture's opaque head.
     pub(crate) value: Option<&'a Term>,
     pub(crate) universes: &'a UniverseContext,
 }
 
-/// What `module` holds `name` at, where it defines it, by the place its unit keeps for the name: a `let` at its declared type with its body, a group's member at its opened type with its folded selection.
+/// What `module` holds `name` at, where it defines it, by the place its unit keeps for the name: a `let` at its declared type with its body, a group's member at its opened type with its folded selection, and either with nothing to unfold to where it is marked a proof.
 ///
 /// One function, read wherever a finished module answers for a name — a unit in scope, a baseline — so no two readers can hold an item two ways.
 pub(crate) fn held<'a>(module: &'a Module, places: &'a Places, name: &Global) -> Option<Held<'a>> {
@@ -45,7 +45,7 @@ pub(crate) fn held<'a>(module: &'a Module, places: &'a Places, name: &Global) ->
         Place::Let(item) => match &module.items[item as usize] {
             Item::Let(definition) => Some(Held {
                 type_: &definition.type_,
-                value: Some(&definition.body),
+                value: (!definition.proof).then_some(&definition.body),
                 universes: &definition.universe_context,
             }),
             Item::Rec(_) => unreachable!("a definition's place is a definition's"),
@@ -56,7 +56,7 @@ pub(crate) fn held<'a>(module: &'a Module, places: &'a Places, name: &Global) ->
 
                 Some(Held {
                     type_,
-                    value: Some(body),
+                    value: (!rec.definitions[member as usize].proof).then_some(body),
                     universes: rec.group.universe_context(),
                 })
             }
@@ -176,7 +176,7 @@ pub struct Globals<'s> {
 }
 
 impl<'s> Globals<'s> {
-    /// Put the unit `module` in scope — its definitions at their declared types with their real bodies, and its nominal registry — read by the `places` its unit keeps for it, with the record the certifier's walk over it filed.
+    /// Put the unit `module` in scope — its definitions at their declared types with their real bodies, a proof's withheld, and its nominal registry — read by the `places` its unit keeps for it, with the record the certifier's walk over it filed.
     ///
     /// Where `certification` covers `module`, its classifications are the environment's; where it does not, `module`'s items are a walk's to classify. Each registry entry answers its polarity from the vector the record files for it, and one it files none for is a walk's to compute. An environment built by hand, with no walk behind it, passes an empty record, which covers nothing a unit declares.
     ///

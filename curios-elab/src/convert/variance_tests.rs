@@ -54,6 +54,7 @@ fn define_pick(context: &mut Context, variance: Variance) {
         },
         island: Qualifier::empty(),
         totality: Totality::Total,
+        proof: false,
         variances: vec![variance],
         type_: Term::func_type([(carrier, sort.clone())], nat_type()),
         body: Term::func([(carrier, sort)], nat(3)),

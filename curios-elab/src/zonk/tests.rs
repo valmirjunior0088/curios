@@ -31,6 +31,7 @@ fn lowered_module(body: Term) -> Module {
             universe_context: UniverseContext::empty(),
             island: Qualifier::empty(),
             totality: Totality::default(),
+            proof: false,
             variances: Vec::new(),
             type_: nat(),
             body,

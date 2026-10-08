@@ -19,8 +19,8 @@ use {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Defined<'a> {
     pub(crate) type_: &'a Term,
-    /// What the name unfolds to: a definition's body, a group's member as the group's projection.
-    pub(crate) body: &'a Term,
+    /// What the name unfolds to: a definition's body, a group's member as the group's projection, and nothing where the definition is a proof ([`curios_core::Definition::proof`]).
+    pub(crate) body: Option<&'a Term>,
     pub(crate) kind: &'a DefinitionKind,
     pub(crate) universe_context: &'a UniverseContext,
     pub(crate) totality: Totality,

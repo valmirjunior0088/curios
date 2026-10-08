@@ -63,6 +63,7 @@ fn let_item(path: &str, type_: Term, body: Term) -> Item {
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
         totality: Totality::default(),
+        proof: false,
         variances: Vec::new(),
         type_,
         body,
@@ -235,4 +236,52 @@ fn a_refused_item_leaves_no_binding_parked_work_need_or_constraint_behind() {
     assert_eq!(context.parked_len(), 0);
     assert!(context.take_needs().is_empty());
     assert_eq!(context.universes().constraint_count(), 0);
+}
+
+/// A proof a declaration writes is published marked, and from then on its name unfolds to nothing, in the unit that declares it and in one that mounts it: `same : (P: Prop, p: P) -> P` is a function into a proposition, and `two : Nat` beside it is published as it always was.
+#[test]
+fn a_published_proof_is_marked_and_unfolds_to_nothing() {
+    let mut context = context();
+    let proposition = Free::local(0, Some("P"));
+    let proof = Free::local(1, Some("p"));
+    let binders = [
+        (proposition, Term::prop()),
+        (proof, Term::free_var(&proposition)),
+    ];
+    let module = module(vec![
+        let_item(
+            "same",
+            Term::func_type(binders.clone(), Term::free_var(&proposition)),
+            Term::func(binders, Term::free_var(&proof)),
+        ),
+        let_item("two", nat(), nat_lit(2)),
+    ]);
+
+    let elaborated = elaborate_and_zonk_module(&mut context, &module, &Minted::default())
+        .expect("nothing was refused");
+
+    let marked = elaborated
+        .items
+        .iter()
+        .flat_map(Item::definitions)
+        .filter(|definition| definition.proof)
+        .map(|definition| definition.name)
+        .collect::<Vec<_>>();
+    assert_eq!(marked, [nominal("same")]);
+
+    let (same, two) = (Free::from(&nominal("same")), Free::from(&nominal("two")));
+    assert!(context.definition_body(&same).is_none());
+    assert!(context.var_reduct_at(&same).is_none());
+    assert!(context.definition_body(&two).is_some());
+
+    let scope = Established::over(&[&elaborated]);
+    let unfolds = |path| {
+        scope
+            .definition(&nominal(path))
+            .expect("the unit declares it")
+            .body
+            .is_some()
+    };
+    assert!(!unfolds("same"));
+    assert!(unfolds("two"));
 }

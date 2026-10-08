@@ -81,6 +81,8 @@ impl FlatLet {
             universe_context: curios_core::UniverseContext::empty(),
             // Lowering cannot know this. Elaboration computes the definition's totality over its final terms, as its item is published, and writes it here.
             totality: curios_core::Totality::default(),
+            // Nor this: elaboration states it as the item is published, with its binders' marks.
+            proof: false,
             variances: Vec::new(),
             type_: self.type_,
             body: self.body,

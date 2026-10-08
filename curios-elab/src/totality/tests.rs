@@ -18,6 +18,7 @@ fn mentioning(path: &str, mentions: &str) -> Item {
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
         totality: Totality::default(),
+        proof: false,
         variances: Vec::new(),
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::free_var(&Free::from(&name(mentions))),

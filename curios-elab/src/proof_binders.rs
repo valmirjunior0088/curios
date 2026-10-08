@@ -1,12 +1,14 @@
-//! Which binders of a published item bind a proof, stated on the binder.
+//! Which binders of a published item bind a proof, stated on the binder, and which of the names it declares is one, stated on its definition.
 //!
 //! No judgment reads a proof's value, so the closed machine leaves one as it is written ([`is_proof_in`]). It needs to know which where it substitutes, with a value and a closed body in hand and no type, so the answer is taken once, here, over an item's final terms as the item is published, and kept on each binder ([`curios_core::Scope::binds_proof`]). A binder is asked at its declared type with the binders before it opaque, and a `true` there holds at every instantiation, so no reading of the binder computes what it binds. A binder a substitution makes a proof — a `Type` variable instantiated at a proposition — is left unmarked, which costs a reduction and changes no reduct. A binder at a type is unmarked too: a type is evaluated before it is bound, since conversion and the levels it settles read the reduct they are handed.
 //!
 //! **It decides no runtime shape and no judgment.** A function has a parameter for each binder whatever a binder states, a declaration's stored fields are classified by erasure against its signature, and a term bound unreduced is the same term to conversion. `curios-core`'s marking walk states what is asked and what is crossed; this module is the checker's half of it.
+//!
+//! **A name the item declares is the one binder its terms do not hold.** It is asked here with them, at its declared type, and the answer is kept on its definition ([`curios_core::Definition::proof`]): a proof a declaration wrote is bound, from its publication on, to a body no judgment unfolds it to. That mark does decide a judgment, which a binder's never does, since a name that does not unfold is a constant to conversion. It refuses nothing a body unfolded would admit, because conversion holds two proofs of one proposition equal before it reduces either.
 
 use {
     crate::{Context, Error, Published, is_proof_in},
-    curios_core::{Advance, Bound, Free, Item, ProofBinders, Telescope, Term},
+    curios_core::{Advance, Bound, DefinitionKind, Free, Item, ProofBinders, Telescope, Term},
 };
 
 /// The marking walk's questions, answered by the engine's rule under the binders the walk has entered.
@@ -72,7 +74,12 @@ fn stated_telescope<B: Bound>(
     Ok(telescope.clone().with_proofs(&proofs))
 }
 
-/// State, on every binder of `published`, whether it binds a proof: each function literal's and each `let`'s in the item's terms, and each constructor's payloads in the registry entries the item declares, which an arm then binds under.
+/// Whether the definition `kind` introduced at `type_` is a proof a declaration wrote ([`curios_core::Definition::proof`]). A generated definition is left what it unfolds to: a constructor of a proposition and a law's projection are terms the compiler writes, one node deep.
+fn proves(context: &mut Context, kind: &DefinitionKind, type_: &Term) -> Result<bool, Error> {
+    Ok(matches!(kind, DefinitionKind::Authored) && is_proof_in(context, &mut Vec::new(), type_)?)
+}
+
+/// State, on every binder of `published`, whether it binds a proof: each function literal's and each `let`'s in the item's terms, each constructor's payloads in the registry entries the item declares, which an arm then binds under, and each name the item declares, on its definition.
 ///
 /// **Before the item is published**, so no declaration reads a binder that has not said. A recursive item's members are walked under the names they are published as, their bodies closed throughout, as [`curios_core::RecGroup::map_members`] rewrites them.
 ///
@@ -87,6 +94,7 @@ pub(crate) fn state_proof_binders(
         Item::Let(definition) => {
             definition.type_ = stated(context, &definition.type_, &[])?;
             definition.body = stated(context, &definition.body, &[])?;
+            definition.proof = proves(context, &definition.kind, &definition.type_)?;
         }
         Item::Rec(rec) => {
             let members = rec
@@ -105,6 +113,11 @@ pub(crate) fn state_proof_binders(
                 return Err(error);
             }
             rec.group = group;
+
+            let names = members.iter().collect::<Vec<_>>();
+            for (definition, member) in rec.definitions.iter_mut().zip(rec.group.iter()) {
+                definition.proof = proves(context, &definition.kind, &member.type_.open(&names))?;
+            }
         }
     }
 

@@ -50,7 +50,7 @@ mod universes_tests;
 use {
     super::{
         Adopting, Baseline, Error, Globals, Kernel, Totals, check_definition, check_entrypoint,
-        check_induct_decl, check_positions, check_rec_group, check_struct_decl,
+        check_induct_decl, check_positions, check_rec_group, check_struct_decl, define_as_stated,
         free_locals_outside, positivity_vectors, rewrite_universe_levels_scoped_shared,
         satisfiable, universe_metas, variance_vectors,
     },
@@ -633,6 +633,7 @@ fn verdicts_within<'s>(
                     &Free::from(&definition.name),
                     &definition.type_,
                     &definition.body,
+                    definition.proof,
                     &definition.universe_context,
                 );
                 // Whether the definition holds a group that does not descend, noted where the group was typed — see `Kernel::definition_encloses_partial`.
@@ -645,10 +646,12 @@ fn verdicts_within<'s>(
                         name: Some(definition.name),
                         error,
                     });
-                    if let Err(error) = kernel.define(
+                    if let Err(error) = define_as_stated(
+                        kernel,
                         &Free::from(&definition.name),
                         &definition.type_,
                         &definition.body,
+                        definition.proof,
                         &definition.universe_context,
                     ) {
                         verdicts.push(Verdict {
@@ -659,14 +662,14 @@ fn verdicts_within<'s>(
                 }
             }
             Item::Rec(rec) => {
-                let names = item
-                    .declared_names()
-                    .into_iter()
-                    .map(Free::from)
+                let members = rec
+                    .definitions
+                    .iter()
+                    .map(|definition| (Free::from(&definition.name), definition.proof))
                     .collect::<Vec<_>>();
                 let universes = rec.group.universe_context().clone();
 
-                let outcome = check_rec_group(kernel, &names, &rec.group, &universes);
+                let outcome = check_rec_group(kernel, &members, &rec.group, &universes);
 
                 if let Err(error) = outcome {
                     verdicts.push(Verdict {
@@ -674,11 +677,13 @@ fn verdicts_within<'s>(
                         error,
                     });
                     // The define `check_rec_group` performs on success: each export is the folded selection of the member it names.
-                    for (member, name) in names.iter().enumerate() {
-                        if let Err(error) = kernel.define(
+                    for (member, (name, proof)) in members.iter().enumerate() {
+                        if let Err(error) = define_as_stated(
+                            kernel,
                             name,
                             &rec.group.member_type(member),
                             &Term::rec_proj(rec.group.clone(), member),
+                            *proof,
                             &universes,
                         ) {
                             verdicts.push(Verdict {

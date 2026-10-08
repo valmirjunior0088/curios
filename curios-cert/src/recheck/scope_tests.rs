@@ -4,7 +4,9 @@ use {
     super::test_support::*,
     crate::{Error, Globals, Verdict},
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Certification, Free, Global, Level, Places, Term},
+    curios_core::{Certification, Free, Global, Intrinsic, Level, Nat, Places, Term},
+    curios_utilities::Qualifier,
+    std::collections::BTreeMap,
 };
 
 /// Whether `verdicts` is the one refusal a module redeclaring `name` meets: a redeclaration is refused before anything is judged, so no other verdict stands beside it.
@@ -304,4 +306,39 @@ fn a_registry_entry_mounted_twice_is_a_construction_bug() {
     let mut globals = judged.globals();
 
     globals.mount(&unit, &places, &certification);
+}
+
+/// A definition's mark is read where its unit is mounted, as it is where a walk brings the definition into scope. `alias : Type = Nat` is no proof, and a walk over its unit refuses the mark; mounted by hand with the mark on, it is a constant, and `three : alias = 3` is refused where the unmarked unit has it accepted. The lie is what makes the reading visible: of a real proof no judgment asks anything its body would answer.
+#[test]
+fn a_mounted_definition_marked_a_proof_unfolds_to_nothing() {
+    let alias = Global::Authored(Qualifier::from(["alias"]));
+    let three = Global::Authored(Qualifier::from(["three"]));
+    let module = collision_module(
+        vec![authored(
+            &three,
+            Term::free_var(&Free::from(&alias)),
+            Term::intrinsic(Intrinsic::Nat(Nat::new(3usize))),
+        )],
+        BTreeMap::new(),
+    );
+    let mounted = |unit: Vec<_>| {
+        let unit = collision_module(unit, BTreeMap::new());
+
+        fixture_verdicts(&module, 1_000_000, &already_judged(&unit).globals(), SYNTAX)
+    };
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+
+    assert_eq!(
+        mounted(vec![authored(&alias, Term::type_ground(), nat())]),
+        Vec::new(),
+    );
+
+    let verdicts = mounted(vec![authored_proof(&alias, Term::type_ground(), nat())]);
+    assert!(
+        matches!(
+            verdicts.as_slice(),
+            [Verdict { name: Some(refused), error: Error::Mismatch { .. } }] if *refused == three
+        ),
+        "a mounted definition marked a proof was unfolded: {verdicts:?}",
+    );
 }

@@ -26,11 +26,26 @@ use {
 pub(crate) struct DefEntry {
     term: Term,
     kind: Option<DefinitionKind>,
+    /// Whether the name is a proof its item published ([`curios_core::Definition::proof`]): it stays bound to `term`, which is what says which group it is a member of, and unfolds to nothing.
+    proof: bool,
 }
 
 impl DefEntry {
     pub(crate) fn new(term: Term, kind: Option<DefinitionKind>) -> Self {
-        Self { term, kind }
+        Self {
+            term,
+            kind,
+            proof: false,
+        }
+    }
+
+    /// The entry a published item's name is bound by: `term`, and a proof where `proof`.
+    pub(crate) fn published(term: Term, kind: DefinitionKind, proof: bool) -> Self {
+        Self {
+            term,
+            kind: Some(kind),
+            proof,
+        }
     }
 
     pub(crate) fn body(&self) -> &Term {
@@ -39,6 +54,11 @@ impl DefEntry {
 
     pub(crate) fn kind(&self) -> Option<&DefinitionKind> {
         self.kind.as_ref()
+    }
+
+    /// What the name unfolds to: its term, and nothing where it is a proof.
+    fn reduct(&self) -> Option<&Term> {
+        (!self.proof).then_some(&self.term)
     }
 }
 
@@ -594,13 +614,18 @@ impl<'s> Frames<'s> {
     }
 
     /// What `name` unfolds to through its *definition* alone — never through a refinement. The shared analyses read through this: a definitions-only lookup needs no invariant about when the refinement store happens to be empty, where [`Frames::var_reduct_at`] would silently mean something else inside a match arm.
+    ///
+    /// A proof a declaration published unfolds to nothing, in a frame as in a unit in scope: this is the one place a definition's body is handed out, so no reader of one is handed a proof's.
     pub(crate) fn definition_body(&self, name: &Free) -> Option<&Term> {
-        self.definitions
+        match self
+            .definitions
             .iter()
             .rev()
             .find_map(|definitions| definitions.get(name))
-            .map(|entry| &entry.term)
-            .or_else(|| self.in_scope(name).map(|defined| defined.body))
+        {
+            Some(entry) => entry.reduct(),
+            None => self.in_scope(name).and_then(|defined| defined.body),
+        }
     }
 
     /// Every top-level `rec` group defined in any frame, each with its members' global names in member order. A member's definition is the group with a projecting tail, so the groups are read off the members and their names gathered by index; a group read only partially — a member never defined — is dropped, since a spelling with a gap is no spelling.
@@ -642,12 +667,7 @@ impl<'s> Frames<'s> {
             return Some(term);
         }
 
-        self.definitions
-            .iter()
-            .rev()
-            .find_map(|definitions| definitions.get(name))
-            .map(|entry| &entry.term)
-            .or_else(|| self.in_scope(name).map(|defined| defined.body))
+        self.definition_body(name)
     }
 
     /// Reduce a bare variable only when its definition is monomorphic.

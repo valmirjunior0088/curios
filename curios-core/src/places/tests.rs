@@ -13,6 +13,7 @@ fn definition(name: &str) -> Definition {
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
         totality: Totality::default(),
+        proof: false,
         variances: Vec::new(),
         type_: Term::type_ground(),
         body: Term::free_var(&Free::from(&global)),

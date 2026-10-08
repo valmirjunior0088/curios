@@ -1,9 +1,9 @@
 use {
-    crate::{Error, Kernel, check_induct_decl, check_struct_decl},
+    crate::{Error, Kernel, check_definition, check_induct_decl, check_struct_decl},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, StructDecl, Telescope, Term,
-        UniverseContext,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Nat, StructDecl, Telescope,
+        Term, UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -326,4 +326,91 @@ fn proposition_with_field(kernel: &mut Kernel, field_type: Term) -> StructDecl {
         .expect("a name is declared once");
 
     declaration
+}
+
+/// The name the definitions below are checked under.
+fn lemma() -> Free {
+    Free::from(&Global::Authored(Qualifier::from(["lemma"])))
+}
+
+/// A definition marked a proof is checked as any other and brought into scope with nothing to unfold to: its body is its own check's to read, and no judgment's after it. Left unmarked, the same definition unfolds.
+#[test]
+fn a_definition_marked_a_proof_unfolds_to_nothing() {
+    for proof in [true, false] {
+        let mut kernel = kernel();
+        family(&mut kernel, Term::prop(), Term::tuple_type_unit());
+        let statement = Term::induct_type(fam(), Vec::<Term>::new(), Vec::<Term>::new());
+        let body = Term::variant(
+            fam(),
+            Vec::<Term>::new(),
+            "mk",
+            [Term::tuple(Vec::<Term>::new())],
+        );
+
+        assert_eq!(
+            check_definition(
+                &mut kernel,
+                &lemma(),
+                &statement,
+                &body,
+                proof,
+                &UniverseContext::empty(),
+            ),
+            Ok(()),
+        );
+        assert_eq!(kernel.value(&lemma()), (!proof).then_some(&body));
+    }
+}
+
+/// The mark is held to the sort of the type it is stated at. A number that unfolded to nothing would be one no judgment could compute with, so a definition marked a proof at `Nat` is refused.
+#[test]
+fn a_definition_marked_a_proof_at_no_proposition_is_refused() {
+    let mut kernel = kernel();
+
+    assert!(matches!(
+        check_definition(
+            &mut kernel,
+            &lemma(),
+            &Term::intrinsic(Intrinsic::NatType),
+            &Term::intrinsic(Intrinsic::Nat(Nat::new(2usize))),
+            true,
+            &UniverseContext::empty(),
+        ),
+        Err(Error::NoProof(_)),
+    ));
+}
+
+/// A statement declared at a `Type` may reduce to a proposition, which subsumption admits there, and its proof is one: the mark is read off what the statement reduces to wherever the sort it is typed at is not `Prop`. `((T: Type) => T)(Fam)` is typed at `Type` and is `Fam`.
+#[test]
+fn a_definition_marked_a_proof_at_a_type_that_reduces_to_a_proposition_is_admitted() {
+    let mut kernel = kernel();
+    family(&mut kernel, Term::prop(), Term::tuple_type_unit());
+    let t = Free::local(1, Some("T"));
+    let statement = Term::apply(
+        Term::func([(t, Term::type_ground())], Term::free_var(&t)),
+        [Term::induct_type(
+            fam(),
+            Vec::<Term>::new(),
+            Vec::<Term>::new(),
+        )],
+    );
+    let body = Term::variant(
+        fam(),
+        Vec::<Term>::new(),
+        "mk",
+        [Term::tuple(Vec::<Term>::new())],
+    );
+
+    assert_eq!(
+        check_definition(
+            &mut kernel,
+            &lemma(),
+            &statement,
+            &body,
+            true,
+            &UniverseContext::empty(),
+        ),
+        Ok(()),
+    );
+    assert_eq!(kernel.value(&lemma()), None);
 }

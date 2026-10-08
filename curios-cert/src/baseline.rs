@@ -47,7 +47,7 @@ impl<'a> Baseline<'a> {
         inducts && structs
     }
 
-    /// Whether `item`, of `module`, is the baseline's own: the same names bound to the same terms under the same universe context, a group being its members' one fixed point, and the same registry entries under each name. Elaboration's stamps take no part, as they take none where an environment is asked whether a declaration is its own.
+    /// Whether `item`, of `module`, is the baseline's own: the same names bound to the same terms under the same universe context, a group being its members' one fixed point, each marked a proof or not as the baseline's is, and the same registry entries under each name. Elaboration's other stamps take no part, as they take none where an environment is asked whether a declaration is its own; the proof mark does, being the one an environment reads a name by.
     pub(crate) fn holds(&self, item: &Item, module: &Module) -> bool {
         let names = item.declared_names();
         let Some(place) = names.first().and_then(|name| self.places.place(name)) else {
@@ -59,6 +59,7 @@ impl<'a> Baseline<'a> {
                     && this.universe_context == that.universe_context
                     && this.type_ == that.type_
                     && this.body == that.body
+                    && this.proof == that.proof
             }
             (Item::Rec(this), Item::Rec(that)) => {
                 this.group == that.group
@@ -67,7 +68,7 @@ impl<'a> Baseline<'a> {
                         .definitions
                         .iter()
                         .zip(&that.definitions)
-                        .all(|(this, that)| this.name == that.name)
+                        .all(|(this, that)| this.name == that.name && this.proof == that.proof)
             }
             _ => false,
         };
@@ -76,7 +77,7 @@ impl<'a> Baseline<'a> {
     }
 }
 
-/// How a declaration a walk has settled came out against the baseline's under its name: whether everything a signature read reads of it is the baseline's — its type, its universe context, its registry entries and the certifier's verdict on it — and whether its body is.
+/// How a declaration a walk has settled came out against the baseline's under its name: whether everything a signature read reads of it is the baseline's — its type, its universe context, its registry entries and the certifier's verdict on it — and whether what it unfolds to is. A proof unfolds to nothing whatever its body, so an edit to one moves no read of it.
 #[derive(Clone, Copy)]
 struct Stood {
     signature: bool,
@@ -179,12 +180,14 @@ impl<'a> Adopting<'a> {
                     let (same_type, same_body, same_universes) = match item {
                         Item::Let(definition) => (
                             definition.type_ == *held.type_,
-                            Some(&definition.body) == held.value,
+                            (!definition.proof).then_some(&definition.body) == held.value,
                             definition.universe_context == *held.universes,
                         ),
                         Item::Rec(rec) => (
                             rec.group.member_type(index) == *held.type_,
-                            Some(&Term::rec_proj(rec.group.clone(), index)) == held.value,
+                            (!rec.definitions[index].proof)
+                                .then_some(&Term::rec_proj(rec.group.clone(), index))
+                                == held.value,
                             rec.group.universe_context() == held.universes,
                         ),
                     };

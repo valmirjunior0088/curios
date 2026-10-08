@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::{Error, Globals},
     curios_analysis::{Erased, test_support::SYNTAX},
-    curios_core::{Atom, Global, InductParam, Module, Telescope, Term},
+    curios_core::{Atom, Free, Global, InductParam, Intrinsic, Module, Nat, Telescope, Term},
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -153,5 +153,51 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
     assert_eq!(
         fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new()
+    );
+}
+
+/// A group's member is held to its mark as a definition is: one marked a proof at a proposition is accepted and read, by its type, by the declaration after it, and one marked at `Nat` is refused.
+#[test]
+fn a_groups_member_marked_a_proof_is_held_to_a_proposition() {
+    let (vouched_name, declaration) = vouched_declaration();
+    let vouched = Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let qed = Term::variant(
+        vouched_name,
+        Vec::<Term>::new(),
+        "qed",
+        [Term::tuple(Vec::<Term>::new())],
+    );
+    let lemma = Global::Authored(Qualifier::from(["lemma"]));
+
+    let honest = collision_module(
+        vec![
+            proof_group(&lemma, vouched.clone(), qed),
+            authored(
+                &Global::Authored(Qualifier::from(["corollary"])),
+                vouched,
+                Term::free_var(&Free::from(&lemma)),
+            ),
+        ],
+        BTreeMap::from([(vouched_name, declaration)]),
+    );
+    assert_eq!(
+        fixture_verdicts(&honest, 1_000_000, &Globals::default(), SYNTAX),
+        Vec::new(),
+    );
+
+    let lying = collision_module(
+        vec![proof_group(
+            &lemma,
+            Term::intrinsic(Intrinsic::NatType),
+            Term::intrinsic(Intrinsic::Nat(Nat::new(2usize))),
+        )],
+        BTreeMap::new(),
+    );
+    let verdicts = fixture_verdicts(&lying, 1_000_000, &Globals::default(), SYNTAX);
+    assert!(
+        verdicts.iter().any(
+            |verdict| verdict.name == Some(lemma) && matches!(verdict.error, Error::NoProof(_))
+        ),
+        "a member marked a proof at `Nat` was not refused for its mark: {verdicts:?}",
     );
 }

@@ -807,6 +807,7 @@ fn zonk_definition(context: &Zonk, def: &Definition) -> Result<Definition, Error
         universe_context: def.universe_context.clone(),
         island: def.island,
         totality: def.totality,
+        proof: def.proof,
         variances: def.variances.clone(),
         type_,
         body,

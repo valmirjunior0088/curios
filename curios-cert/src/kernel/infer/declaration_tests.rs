@@ -150,7 +150,7 @@ fn a_definition_checks_under_its_own_constraints() {
     };
     let mut kernel = kernel();
     assert_eq!(
-        check_definition(&mut kernel, &name, &type_, &body, &constrained),
+        check_definition(&mut kernel, &name, &type_, &body, false, &constrained),
         Ok(()),
     );
 
@@ -160,7 +160,7 @@ fn a_definition_checks_under_its_own_constraints() {
     };
     let mut kernel = self::kernel();
     assert!(matches!(
-        check_definition(&mut kernel, &name, &type_, &body, &unconstrained),
+        check_definition(&mut kernel, &name, &type_, &body, false, &unconstrained),
         Err(Error::Mismatch { .. }),
     ));
 }

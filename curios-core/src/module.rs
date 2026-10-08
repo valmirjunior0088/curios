@@ -173,6 +173,10 @@ pub struct Definition {
     ///
     /// The elaborator's level alignment is its one reader. The kernel compares two instances of a definition by their spines and levels and unfolds where that decides nothing, so it holds none of this: a vector claiming an irrelevance the body denies costs a kernel refusal and admits nothing.
     pub variances: Vec<Variance>,
+    /// Whether this definition is a proof a declaration wrote: one introduced as [`DefinitionKind::Authored`] whose type is a proposition, or a function into one. Its body is then read by its own check and by nothing after it: a judgment that asks what the name unfolds to is answered with nothing, in both checkers, so the name stands for a constant of its type. No judgment reads a proof's value, which is what a binder's mark rests on too ([`Scope::binds_proof`](super::Scope::binds_proof)), so a body withheld refuses nothing a body unfolded would admit, and what a later declaration reads of this one is its type.
+    ///
+    /// Written by `curios-elab` as the definition's item is published, with its binders' marks, and `false` until then. A constructor of a proposition and a law's projection are the compiler's own terms and stay what they unfold to. The certifier holds the mark one way, as it holds a binder's: a definition marked at a type it reads as no proposition is refused, and one left unmarked unfolds and is refused nowhere.
+    pub proof: bool,
     pub type_: Term,
     pub body: Term,
 }
@@ -186,6 +190,8 @@ pub struct RecDefinition {
     pub island: Qualifier,
     /// Per member, not per group. The group's *descent* is decided once for all of them, but the transitive closure is not: an accepted group can still have one member that reaches something partial while its sibling does not. See [`Definition::totality`].
     pub totality: Totality,
+    /// Per member, as [`Definition::proof`] is: a group may hold a lemma beside the function it is about, and the function still unfolds.
+    pub proof: bool,
 }
 
 /// A flat top-level recursive item backed by the same structural fixed-point representation as a local [`super::Rec`]. Keeping the export metadata separate preserves the module's flat architecture without retaining a second, free-name copy of each recursive type and body.
@@ -245,6 +251,7 @@ impl RecItem {
                 kind: definition.kind,
                 island: definition.island,
                 totality: definition.totality,
+                proof: definition.proof,
             })
             .collect();
 
@@ -271,6 +278,7 @@ impl RecItem {
                 universe_context: self.group.universe_context().clone(),
                 island: definition.island,
                 totality: definition.totality,
+                proof: definition.proof,
                 variances: Vec::new(),
                 type_: member.type_.open(&name_refs),
                 body: member.body.open(&name_refs),
@@ -429,6 +437,7 @@ impl Module {
             universe_context: definition.universe_context.unplaced(),
             island: definition.island,
             totality: definition.totality,
+            proof: definition.proof,
             variances: definition.variances.clone(),
             type_: sharing.share(&definition.type_),
             body: sharing.share(&definition.body),
@@ -449,6 +458,7 @@ impl Module {
                                 kind: member.kind.clone(),
                                 island: member.island,
                                 totality: member.totality,
+                                proof: member.proof,
                             })
                             .collect(),
                         // Mapped in place rather than opened and re-closed: the round trip rebuilds every node twice and drops every memoized derivation with it, and the rebuilt nodes would escape this very pass.

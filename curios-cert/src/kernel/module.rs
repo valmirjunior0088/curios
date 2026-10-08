@@ -25,20 +25,41 @@ use {
 /// The budget is restored first: each item gets the whole of it, so one expensive definition cannot starve the next.
 ///
 /// A universe-polymorphic definition is checked *generically*, at its own parameters rather than at any instance. That is the right reading — a scheme is valid exactly when its body checks with its parameters held abstract — and it is also the only one available, since the kernel sees no use sites.
+///
+/// `proof` is the definition's mark ([`curios_core::Definition::proof`]), held to its type one way, as a binder's is ([`hold_proof`]): a name marked a proof at a type that is no proposition is refused, since a judgment reads what such a name unfolds to, and one left unmarked unfolds and is refused nowhere. The sort this check types the statement at answers where it is `Prop`, with nothing run. A statement declared at a `Type` may still reduce to a proposition, which subsumption admits there, so any other sort is read as a binder's type is.
 pub(crate) fn check_definition(
     kernel: &mut Kernel,
     name: &Free,
     type_: &Term,
     body: &Term,
+    proof: bool,
     universes: &UniverseContext,
 ) -> Result<(), Error> {
     kernel.restore_budget();
     kernel.assume_universes(universes);
 
-    infer_type(kernel, type_)?;
+    let sort = infer_type(kernel, type_)?;
+    if !sort.is_prop() {
+        hold_proof(kernel, proof, type_)?;
+    }
     check(kernel, body, type_)?;
 
-    kernel.define(name, type_, body, universes)
+    define_as_stated(kernel, name, type_, body, proof, universes)
+}
+
+/// Bring `name : type_` into scope as its definition states it: unfolding to `body`, or to nothing where it is marked a proof, whose body its own check read and no judgment after it does. A refused definition stands the same way, so what a name is to the rest of a walk is what it is to a walk over a unit that mounts this one.
+pub(crate) fn define_as_stated(
+    kernel: &mut Kernel,
+    name: &Free,
+    type_: &Term,
+    body: &Term,
+    proof: bool,
+    universes: &UniverseContext,
+) -> Result<(), Error> {
+    match proof {
+        true => kernel.declare(name, type_, universes),
+        false => kernel.define(name, type_, body, universes),
+    }
 }
 
 /// Check every member of `group` against its declared type, then run `within` with the members in scope.
@@ -113,33 +134,37 @@ pub(crate) fn check_group<R>(
 
 /// Check a top-level recursive group, then bring every member into scope under the name it is exported as.
 ///
-/// Each member is assumed at its declared type while every body is checked, so a member may call itself and its siblings. `names` parallels the group's members positionally; an export is defined as the folded selection of the member it names, which is what a later item's occurrence of it reduces through.
+/// Each member is assumed at its declared type while every body is checked, so a member may call itself and its siblings. `members` parallels the group's members positionally, each the name it is exported as with its mark ([`curios_core::RecDefinition::proof`]); an export is defined as the folded selection of the member it names, which is what a later item's occurrence of it reduces through, and one marked a proof is held to its type as a binder is ([`hold_proof`]) and reduces through nothing.
 ///
 /// Totality is not decided here. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/soundness/totality-of-the-erased-program.md`.
 pub(crate) fn check_rec_group(
     kernel: &mut Kernel,
-    names: &[Free],
+    members: &[(Free, bool)],
     group: &RecGroup,
     universes: &UniverseContext,
 ) -> Result<(), Error> {
     kernel.restore_budget();
     kernel.assume_universes(universes);
 
-    if names.len() != group.length() {
+    if members.len() != group.length() {
         return Err(Error::Arity {
             counted: Counted::GroupMembers,
             expected: group.length(),
-            actual: names.len(),
+            actual: members.len(),
         });
     }
 
     check_group(kernel, group, |_, _| Ok(()))?;
 
-    for (index, name) in names.iter().enumerate() {
-        kernel.define(
+    for (index, (name, proof)) in members.iter().enumerate() {
+        let type_ = group.member_type(index);
+        hold_proof(kernel, *proof, &type_)?;
+        define_as_stated(
+            kernel,
             name,
-            &group.member_type(index),
+            &type_,
             &Term::rec_proj(group.clone(), index),
+            *proof,
             universes,
         )?;
     }

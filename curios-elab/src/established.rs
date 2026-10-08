@@ -81,7 +81,7 @@ impl<'a> Standing<'a> {
 
                 Some(Defined {
                     type_: &definition.type_,
-                    body: &definition.body,
+                    body: (!definition.proof).then_some(&definition.body),
                     kind: &definition.kind,
                     universe_context: &definition.universe_context,
                     totality: definition.totality,
@@ -96,7 +96,7 @@ impl<'a> Standing<'a> {
 
                 Some(Defined {
                     type_,
-                    body,
+                    body: (!definition.proof).then_some(body),
                     kind: &definition.kind,
                     universe_context: rec.group.universe_context(),
                     totality: definition.totality,

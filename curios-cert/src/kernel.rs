@@ -150,7 +150,7 @@ pub enum Error {
         declared: Plicity,
         written: Plicity,
     },
-    /// A binder that states it binds a proof, at a type that is no proposition and no function into one. A mark is what the closed machine reads to bind a substituend unreduced, so one is held to what no judgment reads the value of.
+    /// A binder that states it binds a proof, or a definition marked one, at a type that is no proposition and no function into one. A mark is what the closed machine reads to bind a substituend unreduced, and what an environment reads to hold a name with nothing to unfold to, so one is held to what no judgment reads the value of.
     NoProof(Term),
     /// A proposition eliminated into a relevant result while carrying something a program could read back. Permitted only for an empty proposition or a singleton whose payload is entirely determined.
     LargeElimination(Global),
@@ -782,7 +782,7 @@ impl<'s> Kernel<'s> {
         self.globals.insert(name, type_, Some(value), universes)
     }
 
-    /// Record a top-level name with a type and no body: an assumption that never unfolds, so a permanent neutral. No walk records one — a module's items are defined with their bodies, and a `foreign` is a term `infer` types rather than a name — so its callers are the fixtures that need an opaque head. Refused where a definition already stands under `name`, as [`Kernel::define`] is.
+    /// Record a top-level name with a type and no body: an assumption that never unfolds, so a permanent neutral. A walk records a definition marked a proof so ([`curios_core::Definition::proof`]), once its body is checked; every other item is defined with its body, and a `foreign` is a term `infer` types rather than a name, so the other callers are the fixtures that need an opaque head. Refused where a definition already stands under `name`, as [`Kernel::define`] is.
     pub fn declare(
         &mut self,
         name: &Free,

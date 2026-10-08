@@ -262,3 +262,115 @@ fn a_registry_entry_is_the_baselines_by_what_the_certifier_reads_of_it() {
         "a record differing from the baseline's in a field's type is the baseline's",
     );
 }
+
+/// `Vouched`, the proposition the lemma below states.
+fn vouched() -> Term {
+    Term::induct_type(
+        vouched_declaration().0,
+        Vec::<Term>::new(),
+        Vec::<Term>::new(),
+    )
+}
+
+/// `Vouched/qed(())`, its proof.
+fn qed() -> Term {
+    Term::variant(
+        vouched_declaration().0,
+        Vec::<Term>::new(),
+        "qed",
+        [Term::tuple(Vec::<Term>::new())],
+    )
+}
+
+/// `lemma : Vouched = <proof>`, marked a proof where `marked`, `spare : Vouched = qed(())`, and `corollary : Vouched = lemma`.
+fn proving_module(proof: Term, marked: bool) -> Module {
+    let (vouched_name, declaration) = vouched_declaration();
+    let lemma = match marked {
+        true => authored_proof(&global("lemma"), vouched(), proof),
+        false => authored(&global("lemma"), vouched(), proof),
+    };
+
+    collision_module(
+        vec![
+            lemma,
+            authored(&global("spare"), vouched(), qed()),
+            authored(
+                &global("corollary"),
+                vouched(),
+                Term::free_var(&Free::from(&global("lemma"))),
+            ),
+        ],
+        BTreeMap::from([(vouched_name, declaration)]),
+    )
+}
+
+/// `qed(())` reached through a redex: another proof of the same statement.
+fn proved_otherwise() -> Term {
+    let u = Free::local(12, Some("u"));
+
+    Term::apply(Term::func([(u, vouched())], Term::free_var(&u)), [qed()])
+}
+
+/// A record of `module` in which `corollary` asked for `lemma`'s body, marked as [`marked`] marks `five`: its reads hold `spare`'s signature, which no judgment of `corollary` reads, so a walk that hands the entry back adopted it.
+fn asking(module: &Module) -> Certification {
+    doctored(&walked(module).certification, "corollary", |certified| {
+        Certified {
+            reads: Reads {
+                signatures: BTreeSet::from([global("lemma"), global("spare")]),
+                bodies: BTreeSet::from([global("lemma")]),
+            },
+            ..certified
+        }
+    })
+}
+
+/// A proof unfolds to nothing whatever its body, so an edit to one moves no read of it: `lemma` proved another way is judged, and `corollary`, whose record says it asked for `lemma`'s body, takes the baseline's verdict.
+#[test]
+fn a_read_of_a_proofs_body_stands_through_an_edit_to_it() {
+    let baseline = proving_module(qed(), true);
+    let certification = asking(&baseline);
+    let edited = proving_module(proved_otherwise(), true);
+
+    let rechecked = walked_over(&edited, &baseline, &certification);
+
+    assert_eq!(rechecked.verdicts, Vec::new());
+    assert_eq!(
+        rechecked.certification.reads(&global("corollary")),
+        certification.reads(&global("corollary")),
+    );
+}
+
+/// The control: left unmarked, the same statement unfolds to its body, and the same edit has `corollary` judged again.
+#[test]
+fn a_read_of_an_unmarked_proofs_body_falls_with_an_edit_to_it() {
+    let baseline = proving_module(qed(), false);
+    let certification = asking(&baseline);
+    let edited = proving_module(proved_otherwise(), false);
+
+    let rechecked = walked_over(&edited, &baseline, &certification);
+
+    assert_eq!(rechecked.verdicts, Vec::new());
+    assert_ne!(
+        rechecked.certification.reads(&global("corollary")),
+        certification.reads(&global("corollary")),
+    );
+}
+
+/// What a name unfolds to moves with its mark though no term does: a `lemma` that starts or stops being a proof is no longer the baseline's, and `corollary`, which asked for its body, is judged again.
+#[test]
+fn a_read_of_a_body_falls_where_its_definition_starts_or_stops_being_a_proof() {
+    for marked in [true, false] {
+        let baseline = proving_module(qed(), marked);
+        let certification = asking(&baseline);
+        let edited = proving_module(qed(), !marked);
+
+        let rechecked = walked_over(&edited, &baseline, &certification);
+
+        assert_eq!(rechecked.verdicts, Vec::new());
+        assert_ne!(
+            rechecked.certification.reads(&global("corollary")),
+            certification.reads(&global("corollary")),
+            "marked in the baseline: {marked}",
+        );
+    }
+}
