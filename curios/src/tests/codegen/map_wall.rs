@@ -75,7 +75,7 @@ pub(super) fn timed(cwasm: &[u8], n: u64) -> f64 {
 /// - **The key rides the i31.** Small-canonical `Bytes` — length in the top 2 payload bits, bytes LSB-first below — deletes the dependent loads of the key's bytes, which are the wall.
 /// - **The leaf split is the emitter's.** At Binaryen optimize 3 / shrink 0 the optimized `spines` module still carries all 15 `call $bytes/read` sites, so no level produces the call-site leaf split (`emit_seq_get`) and the invariant is written in the emitter. The read protocol's *call* component is not the wall, so a wider split answering cached nodes inline is not worth its ~15 instructions per site.
 /// - **The crit-bit trie stands.** An immediate key's bit test costs a few register ops, so seventeen cheap levels beat a qp-trie's four or five, each paying an O(width) child copy per rebuild.
-/// - **The map walks once.** `insert1`/`remove1` descend once and decide on the way back up.
+/// - **The map walks once.** `Node/insert` and `Node/remove` descend once and decide on the way back up.
 #[test]
 #[ignore = "measurement, timed: reports timings rather than asserting"]
 fn map_wall_spines_slope() {
@@ -158,7 +158,7 @@ end
 ///
 /// The control folds a constant where the probe folds the lengths of `Hash/hash` of this step's key and of the last's, so the delta is two encodings and two immediate `len`s — read it as a slight upper bound on the key class. An insert into a `Map(Nat, V)` builds those two, the map holding its keys and deriving their encodings where it compares them, so the share arithmetic is direct against `map_wall_spines_slope`'s figure read in the same sitting.
 ///
-/// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`), and the optimized `spines` module's surviving `br_table`s all sit in string/UTF-8 decoding and `main`, none in `insert1`, `bit`, `crit`, `lookup`, `wedge`, or the fold, so the descent has no table left to replace. What remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
+/// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`), and the optimized `spines` module's surviving `br_table`s all sit in string/UTF-8 decoding and `main`, none in `Node/insert`, `bits/bit`, `bits/crit`, `Node/lookup`, `Node/wedge`, or the fold, so the descent has no table left to replace. What remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
 #[test]
 #[ignore = "measurement, timed: reports timings rather than asserting"]
 fn map_wall_key_share() {
