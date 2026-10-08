@@ -22,7 +22,7 @@ use {
 #[curios_archive::archived]
 pub enum Subterm {
     Type(Level),
-    Prop,
+    Prop(Level),
     Intrinsic(Intrinsic),
     /// A store-described host call: the row's [`WireSignature`](curios_abi::WireSignature) fixes the operand types checked at elaboration and the result shape (unit, bare value, or named record). Effectful, so reducing one at the type level is an error; it becomes a host call only at erasure.
     ///
@@ -106,7 +106,7 @@ impl Subterm {
                 })
             };
         match self {
-            Subterm::Type(level) => level_matches(level),
+            Subterm::Type(level) | Subterm::Prop(level) => level_matches(level),
             Subterm::Intrinsic(intrinsic) => intrinsic.result_universes().iter().any(level_matches),
             // A projection head's group context is this node's own data, the head being typed rather than a child term, so its constraints are direct here exactly as `Rec`'s are below.
             Subterm::Instance(Instance { head, levels }) => {
@@ -179,7 +179,7 @@ impl Subterm {
 
     pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         match self {
-            Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => {}
+            Subterm::Type(_) | Subterm::Prop(_) | Subterm::Var(_) => {}
             Subterm::Instance(Instance { head, .. }) => match head {
                 InstanceHead::Var(_) => {}
                 InstanceHead::RecProj(group, _) => {
@@ -350,7 +350,7 @@ impl Subterm {
     pub fn any_child_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Subterm::Metavar(Metavar { spine, .. }) => spine.iter().any(&mut *pred),
-            Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => false,
+            Subterm::Type(_) | Subterm::Prop(_) | Subterm::Var(_) => false,
             // A variable head is this node's own data, like `Var`'s identity; a projection head's children are its group's scope bodies, exactly `Rec`'s minus the tail (a projection's tail is a bare member variable, which contributes to no child predicate).
             Subterm::Instance(Instance { head, .. }) => match head {
                 InstanceHead::Var(_) => false,
@@ -486,7 +486,7 @@ impl Subterm {
     pub fn shows_its_type(&self, syntax: &SyntaxRegistry) -> bool {
         match self {
             Subterm::Type(_)
-            | Subterm::Prop
+            | Subterm::Prop(_)
             | Subterm::Foreign(..)
             | Subterm::FuncType(_)
             | Subterm::Func(_)
@@ -529,7 +529,7 @@ impl Subterm {
     pub(crate) fn has_universe_meta(&self) -> bool {
         let level_has_meta = |level: &Level| level.metas().next().is_some();
         match self {
-            Subterm::Type(level) => level_has_meta(level),
+            Subterm::Type(level) | Subterm::Prop(level) => level_has_meta(level),
             Subterm::Intrinsic(intrinsic) => {
                 intrinsic.result_universes().iter().any(level_has_meta)
                     || self.any_child_term(&mut |term| term.has_universe_meta())
@@ -551,7 +551,7 @@ impl Subterm {
 
     pub(crate) fn has_universe_data(&self) -> bool {
         match self {
-            Subterm::Type(level) => level != &Level::zero(),
+            Subterm::Type(level) | Subterm::Prop(level) => level != &Level::zero(),
             Subterm::Intrinsic(intrinsic) => {
                 !intrinsic.result_universes().is_empty()
                     || self.any_child_term(&mut |term| term.has_universe_data())
@@ -628,7 +628,7 @@ impl Bound for Subterm {
     {
         match self {
             Subterm::Type(level) => Subterm::Type(visit.visit_level(level)),
-            Subterm::Prop => Subterm::Prop,
+            Subterm::Prop(level) => Subterm::Prop(visit.visit_level(level)),
             Subterm::Intrinsic(intrinsic) => Subterm::Intrinsic(intrinsic.traverse(visit)),
             Subterm::Foreign(function, args) => Subterm::Foreign(
                 Arc::clone(function),
@@ -896,7 +896,7 @@ impl Bound for Subterm {
     fn reach(&self) -> usize {
         match self {
             Subterm::Type(_) => 0,
-            Subterm::Prop => 0,
+            Subterm::Prop(_) => 0,
             Subterm::Transient(transient) => transient
                 .subterms()
                 .map(|child| child.reach())

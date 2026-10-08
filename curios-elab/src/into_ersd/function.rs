@@ -231,6 +231,6 @@ fn is_proof_constructor(context: &mut Retyping, head: &Term) -> Result<bool, Err
 
     Ok(matches!(
         &*context.reduce_with(&declaration.result_sort)?,
-        Subterm::Prop
+        Subterm::Prop(_)
     ))
 }

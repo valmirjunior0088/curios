@@ -59,7 +59,7 @@ fn former(parent: &Subterm) -> Option<Former> {
         // A local recursive group and a host call: `tests::recursion` and `tests::host` hold what conversion makes of them.
         Subterm::Rec(_) | Subterm::Foreign(..) => None,
         // No term beneath it.
-        Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) | Subterm::Instance(_) => None,
+        Subterm::Type(_) | Subterm::Prop(_) | Subterm::Var(_) | Subterm::Instance(_) => None,
         // No part of a finished term.
         Subterm::Metavar(_) | Subterm::Transient(_) => None,
     }
@@ -468,7 +468,7 @@ fn parents_of(term: &Term, marker: &Term, parents: &mut Vec<Term>) {
 
 /// The terms `term` holds directly, as Core's own masking stands them down.
 fn children_of(term: &Term) -> Vec<Term> {
-    let mut visit = Visit::masking(|_, _| None, Term::from(Subterm::Prop));
+    let mut visit = Visit::masking(|_, _| None, Term::prop());
     let _ = (**term).traverse(&mut visit);
     visit.take_masked_children()
 }

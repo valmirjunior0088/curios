@@ -539,7 +539,7 @@ fn the_restored_prelude_marks_binders_and_none_at_a_sort() {
                     while let Telescope::Cons(_, type_, rest) = telescope {
                         if rest.binds_proof(0) {
                             counter.set(counter.get() + 1);
-                            if matches!(&**type_, Subterm::Type(_) | Subterm::Prop) {
+                            if matches!(&**type_, Subterm::Type(_) | Subterm::Prop(_)) {
                                 sink.borrow_mut().push(term.clone());
                             }
                         }

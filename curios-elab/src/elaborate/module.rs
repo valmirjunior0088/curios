@@ -377,7 +377,7 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
 
     let declared_prop = matches!(
         &*reduce_with(context, &struct_decl.result_sort)?,
-        Subterm::Prop
+        Subterm::Prop(_)
     );
 
     // Open the parameters, then check the field telescope they terminate in against `Type` under the binders before it.

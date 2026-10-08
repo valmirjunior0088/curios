@@ -357,7 +357,7 @@ impl<E: Env> Walk<'_, E> {
         match &*term {
             Subterm::Type(level) => self.level(level),
             // A parameter, a local or a monomorphic name carries no level.
-            Subterm::Prop | Subterm::Var(_) => {}
+            Subterm::Prop(_) | Subterm::Var(_) => {}
 
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 self.telescope(telescope, |walk, codomain| walk.walk(&codomain));

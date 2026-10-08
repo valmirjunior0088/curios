@@ -255,7 +255,7 @@ pub(crate) fn erased_half(kernel: &mut Kernel, type_: &Term) -> Result<Option<Er
 
     let reduced = kernel.reduce_forced(type_.clone())?;
     // A term at a sort is a type, and erasure deletes it wholesale. This is the one question the structural test answers — what the *runtime* observes — and it is not the question [`carries_information`](crate::Sort) asks, which is what *conversion* observes and where a type counts in full. Reading the two as one predicate would certify a closed inhabitant of `False`.
-    if matches!(&*reduced, Subterm::Type(_) | Subterm::Prop) {
+    if matches!(&*reduced, Subterm::Type(_) | Subterm::Prop(_)) {
         return Ok(Some(Erased::Type));
     }
 

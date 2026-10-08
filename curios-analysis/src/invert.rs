@@ -272,7 +272,7 @@ fn unify_index<J: Judge>(
             let Some(declaration) = judge.induct_decl(&a.name) else {
                 return Ok(Step::Refuse);
             };
-            if matches!(&*declaration.result_sort, Subterm::Prop) {
+            if matches!(&*declaration.result_sort, Subterm::Prop(_)) {
                 return Ok(Step::Ok);
             }
             if a.tag != t.tag {

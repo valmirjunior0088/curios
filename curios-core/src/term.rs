@@ -385,7 +385,7 @@ impl Term {
 
         match Rc::try_unwrap(this.inner) {
             // Swapped out rather than moved out: [`Node`] dismantles itself on drop, and a type with a `Drop` impl cannot have a field moved away. The husk left behind is childless, so dropping it is free.
-            Ok(mut node) => mem::replace(&mut node.subterm, Subterm::Prop),
+            Ok(mut node) => mem::replace(&mut node.subterm, Subterm::Prop(Level::zero())),
             Err(shared) => shared.subterm.clone(),
         }
     }
@@ -699,9 +699,14 @@ impl Term {
         Self::from(Subterm::Type(level))
     }
 
-    /// The universe of strict propositions, `Prop`.
+    /// Ground `Prop 0`, the level of a decided proposition.
     pub fn prop() -> Self {
-        Self::from(Subterm::Prop)
+        Self::prop_at(Level::zero())
+    }
+
+    /// `Prop` at a known internal level.
+    pub fn prop_at(level: Level) -> Self {
+        Self::from(Subterm::Prop(level))
     }
 
     /// An intrinsic term — any literal or intrinsic operation that converts into [`Intrinsic`].
@@ -1337,7 +1342,7 @@ impl Term {
 ///
 /// Every child is cloned into `work` *before* the old value is released, so releasing it can only decrement — the reference `work` now holds is what stops the drop cascading. What is left behind is `Prop`: no children, and no allocation, because it is a variant with no payload.
 fn detach_children(subterm: &mut Subterm, work: &mut Vec<Term>) {
-    let detached = mem::replace(subterm, Subterm::Prop);
+    let detached = mem::replace(subterm, Subterm::Prop(Level::zero()));
     detached.any_child_term(&mut |child| {
         work.push(child.clone());
         false
@@ -1402,7 +1407,7 @@ impl PartialEq for Term {
             None => {}
         }
         // One visit for the whole comparison: the placeholder is allocated once, and each node's children are taken off it in turn.
-        let mut visit = Visit::masking(|_, _| None, Term::from(Subterm::Prop));
+        let mut visit = Visit::masking(|_, _| None, Term::prop());
         // Entering as a `Subterm` is what keeps the node itself unmasked — the hook fires per `Term`, and the node being compared is not one.
         let mut mask = |subterm: &Subterm| {
             let masked = subterm.traverse(&mut visit);
@@ -1451,7 +1456,7 @@ impl Eq for Term {}
 impl Term {
     /// Structural equality with some subterms standing for anything: `self` and `other` are equal up to `is_wildcard` when they agree at every position where neither side is a wildcard. This is [`PartialEq`]'s masking walk without its hash shortcut, which a wildcard invalidates — a wildcard's hash says nothing about what it stands for.
     pub fn equal_up_to(&self, other: &Term, mut is_wildcard: impl FnMut(&Term) -> bool) -> bool {
-        let mut visit = Visit::masking(|_, _| None, Term::from(Subterm::Prop));
+        let mut visit = Visit::masking(|_, _| None, Term::prop());
         let mut mask = |subterm: &Subterm| {
             let masked = subterm.traverse(&mut visit);
             (masked, visit.take_masked_children())
@@ -1500,7 +1505,7 @@ impl Term {
         mut is_wildcard: impl FnMut(&Term) -> bool,
         families: &impl Families,
     ) -> Option<LevelDifferences> {
-        let mut visit = Visit::masking_levels(|_, _| None, Term::from(Subterm::Prop));
+        let mut visit = Visit::masking_levels(|_, _| None, Term::prop());
         let mut mask = |subterm: &Subterm| {
             let masked = subterm.traverse(&mut visit);
             let MaskedLevels { children, levels } = visit.take_masked_levels();
@@ -1904,7 +1909,7 @@ impl Term {
     ///
     /// [`PartialEq`]'s masking walk with two cases decided ahead of the mask, and one read beside it. Two `Type`s are equal when their levels are under the renaming, and two metavariables when their origins agree, their ids bind, and their spines are pairwise equal. The read is each node's binder names, which `PartialEq` leaves out since a name moves no judgment: it moves what is stored, a term elaborated from this one carrying its binders' names and so does a dependent handed its signature. Every other payload compares exactly, extents excepted as in `PartialEq`. No pointer or hash shortcut: one allocation on both sides still carries ids the renaming has to see.
     pub fn equal_modulo_metas(&self, other: &Term, renaming: &mut MetaRenaming) -> bool {
-        let mut visit = Visit::masking_labels(|_, _| None, Term::from(Subterm::Prop));
+        let mut visit = Visit::masking_labels(|_, _| None, Term::prop());
         let mut mask = |subterm: &Subterm| {
             let masked = subterm.traverse(&mut visit);
             (
@@ -1926,7 +1931,8 @@ impl Term {
             }
 
             match (this.look(), that.look()) {
-                (Subterm::Type(this_level), Subterm::Type(that_level)) => {
+                (Subterm::Type(this_level), Subterm::Type(that_level))
+                | (Subterm::Prop(this_level), Subterm::Prop(that_level)) => {
                     if !renaming.levels_equal(this_level, that_level) {
                         return false;
                     }

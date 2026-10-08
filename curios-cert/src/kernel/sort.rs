@@ -69,7 +69,7 @@ pub(crate) fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, Erro
     let reduced = whnf(kernel, universe.clone())?;
 
     match &*reduced {
-        Subterm::Prop => Ok(Sort::Prop),
+        Subterm::Prop(_) => Ok(Sort::Prop),
         Subterm::Type(level) => Ok(Sort::Type(level.clone())),
         _ => Err(Error::NotASort(reduced.clone())),
     }
@@ -161,7 +161,7 @@ impl Sort {
 
             // `Type u : Type (u + 1)`, and `Prop : Type 0`.
             Subterm::Type(level) => Ok(Sort::Type(level.succ()?)),
-            Subterm::Prop => Ok(Sort::Type(Level::zero())),
+            Subterm::Prop(_) => Ok(Sort::Type(Level::zero())),
 
             _ => Err(Error::Unclassified(reduced.clone())),
         }
@@ -183,7 +183,7 @@ pub(crate) fn declared_into_prop(kernel: &mut Kernel, type_: &Term) -> Result<bo
         return Ok(false);
     };
 
-    Ok(matches!(&*whnf(kernel, declared)?, Subterm::Prop))
+    Ok(matches!(&*whnf(kernel, declared)?, Subterm::Prop(_)))
 }
 
 /// Whether the spine `term` is headed by a name this kernel defined, which no binder in scope shadows.

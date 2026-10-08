@@ -142,7 +142,7 @@ fn compare(
         }
 
         // Where the goal's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand. What a type directs between two neutrals is then asked of the type a lookup gives both sides.
-        let untyped = matches!(&**type_, Subterm::Type(_) | Subterm::Prop);
+        let untyped = matches!(&**type_, Subterm::Type(_) | Subterm::Prop(_));
         if untyped && by_their_own_type(kernel, history, this, that)? {
             return Ok(true);
         }
@@ -213,7 +213,7 @@ fn by_the_type(
             }
 
             // A side that was a redex as posed is a neutral a lookup types only now.
-            if matches!(&*at, Subterm::Type(_) | Subterm::Prop)
+            if matches!(&*at, Subterm::Type(_) | Subterm::Prop(_))
                 && (forced_this != *this || forced_that != *that)
                 && by_their_own_type(kernel, history, &forced_this, &forced_that)?
             {
@@ -500,7 +500,7 @@ fn structural(
     match (&**this, &**that) {
         // Levels compare under the item's assumed constraints: two levels the hypotheses force equal are equal in every instance that satisfies them, which is what checking generically means.
         (Subterm::Type(left), Subterm::Type(right)) => Ok(kernel.level_eq(left, right)),
-        (Subterm::Prop, Subterm::Prop) => Ok(true),
+        (Subterm::Prop(_), Subterm::Prop(_)) => Ok(true),
 
         (Subterm::Intrinsic(left), Subterm::Intrinsic(right)) => {
             convert_intrinsic(kernel, history, left, right)

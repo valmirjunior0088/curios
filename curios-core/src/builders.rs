@@ -200,7 +200,7 @@ impl Term {
     pub fn direct_type_alias_target(&self, declared_type: &Term) -> Option<&Free> {
         fn ends_in_literal_sort(term: &Term) -> bool {
             match &**term {
-                Subterm::Type(_) | Subterm::Prop => true,
+                Subterm::Type(_) | Subterm::Prop(_) => true,
                 Subterm::FuncType(FuncType { telescope, .. }) => {
                     ends_in_literal_sort(telescope.terminal())
                 }

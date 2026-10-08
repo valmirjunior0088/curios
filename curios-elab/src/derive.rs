@@ -144,7 +144,7 @@ fn subject(context: &mut Context, site: &Site<'_>) -> Result<Subject, Error> {
                 .instantiate_induct_decl_at(&decl, universes)
                 .map_err(Error::from)?;
             transparent(context, site, name, &decl.module, decl.rep_public)?;
-            if matches!(&*decl.result_sort, Subterm::Prop) {
+            if matches!(&*decl.result_sort, Subterm::Prop(_)) {
                 return Err(site.refuse(Underivable::Proposition));
             }
             Ok(Subject::Induct {
@@ -168,7 +168,7 @@ fn subject(context: &mut Context, site: &Site<'_>) -> Result<Subject, Error> {
                 .instantiate_struct_decl_at(&decl, universes)
                 .map_err(Error::from)?;
             transparent(context, site, name, &decl.module, decl.rep_public)?;
-            if matches!(&*decl.result_sort, Subterm::Prop) {
+            if matches!(&*decl.result_sort, Subterm::Prop(_)) {
                 return Err(site.refuse(Underivable::Proposition));
             }
             Ok(Subject::Struct {
@@ -288,7 +288,7 @@ fn classify(
     type_: &Term,
 ) -> Result<Classified, Error> {
     let reduced = reduce_with(context, type_)?;
-    if matches!(&*reduced, Subterm::Type(_) | Subterm::Prop) {
+    if matches!(&*reduced, Subterm::Type(_) | Subterm::Prop(_)) {
         return Err(site.refuse(Underivable::TypeValued {
             constructor: payload.constructor,
             payload: payload.described,

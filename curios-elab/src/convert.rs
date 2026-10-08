@@ -602,7 +602,7 @@ impl Convert {
         let upper = reduce_forced(context, that.clone())?;
 
         match (&*lower, &*upper) {
-            (Subterm::Prop | Subterm::Type(_), Subterm::Type(upper)) => {
+            (Subterm::Prop(_) | Subterm::Type(_), Subterm::Type(upper)) => {
                 let lower = match &*lower {
                     Subterm::Type(lower) => lower.clone(),
                     _ => Level::zero(),
@@ -2137,7 +2137,7 @@ impl Convert {
     fn ends_in_prop(context: &mut Context, term: &Term) -> Result<bool, ReduceError> {
         let forced = reduce_forced(context, term.clone())?;
         match &*forced {
-            Subterm::Prop => Ok(true),
+            Subterm::Prop(_) => Ok(true),
             Subterm::FuncType(FuncType { telescope }) => {
                 let mut cursor = telescope.cursor();
                 while cursor.entry().is_some() {
@@ -2553,7 +2553,7 @@ impl Convert {
             }
 
             // Where the problem's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand — a stuck elimination's scrutinee, a projection's head. What a type directs between two neutrals is then asked of the type a lookup gives both sides, as the kernel asks it.
-            if matches!(&*type_, Subterm::Type(_) | Subterm::Prop)
+            if matches!(&*type_, Subterm::Type(_) | Subterm::Prop(_))
                 && by_their_own_type(context, &posed, &this, &that)?
             {
                 continue;

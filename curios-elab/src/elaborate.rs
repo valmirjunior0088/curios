@@ -149,7 +149,7 @@ fn elaborate_subterm(
             term.clone(),
             Term::type_at(level.succ().map_err(Error::from)?),
         ),
-        Subterm::Prop => (term.clone(), Term::type_ground()),
+        Subterm::Prop(_) => (term.clone(), Term::type_ground()),
         // A host call, elaborated through the same walk an intrinsic is: each operand against what `foreign_operands` demands of it, and the result — unit, a bare value, or a named record, inside `Io` — read off the same row. The arity is an invariant of construction (the prelude builds the argument list from the same signature).
         Subterm::Foreign(function, args) => {
             let demands = foreign_operands(function);

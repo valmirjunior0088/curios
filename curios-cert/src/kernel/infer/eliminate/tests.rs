@@ -431,7 +431,7 @@ fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
 
 /// The other half of the same clause: a payload whose type is `Prop` holds a proposition *as data* rather than proving one. `Sort::of(Prop)` is `Type 0`, so the component is informative for exactly the reason above — `mk(True)` and `mk(False)` are convertible at a `Prop`-sorted family while this eliminator tells them apart, and transporting a proof of `True` along the resulting equality inhabits `False`.
 ///
-/// Worth its own fixture: a clause excusing universe-typed components would name both `Subterm::Type(_)` and `Subterm::Prop`, and dropping only the first would leave this open.
+/// Worth its own fixture: a clause excusing universe-typed components would name both `Subterm::Type(_)` and `Subterm::Prop(_)`, and dropping only the first would leave this open.
 #[test]
 fn a_singleton_carrying_a_proposition_does_not_eliminate_into_a_type() {
     let mut kernel = kernel();

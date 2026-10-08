@@ -1948,7 +1948,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 pure(format!("Type.{{{level}}}"))
             }
         }
-        Subterm::Prop => pure("Prop"),
+        Subterm::Prop(_) => pure("Prop"),
         Subterm::Instance(instance) => flat([
             sub(instance.head.to_term(), frame),
             pure(universe_suffix(&instance.levels, frame.spelling)),

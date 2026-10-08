@@ -25,13 +25,13 @@ impl ProofBinders for Sorts {
             .filter(|(_, type_)| {
                 type_
                     .as_ref()
-                    .is_some_and(|type_| matches!(&**type_, Subterm::Prop))
+                    .is_some_and(|type_| matches!(&**type_, Subterm::Prop(_)))
             })
             .map(|(binder, _)| (*binder, ()))
             .collect::<BTreeMap<_, _>>();
 
         Ok(match &**type_ {
-            Subterm::Type(_) | Subterm::Prop => true,
+            Subterm::Type(_) | Subterm::Prop(_) => true,
             Subterm::Var(var) => var
                 .as_free()
                 .is_some_and(|free| propositions.contains_key(free)),

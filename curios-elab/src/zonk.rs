@@ -1250,7 +1250,9 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
         Subterm::Type(level) => {
             Subterm::Type(context.universes().zonk(level).map_err(Error::from)?)
         }
-        Subterm::Prop => Subterm::Prop,
+        Subterm::Prop(level) => {
+            Subterm::Prop(context.universes().zonk(level).map_err(Error::from)?)
+        }
         Subterm::Foreign(function, args) => {
             Subterm::Foreign(Arc::clone(function), zonk_terms(context, args)?)
         }

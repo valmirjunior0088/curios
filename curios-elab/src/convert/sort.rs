@@ -323,7 +323,7 @@ impl Sort {
                     .metavar_entry(metavar.id)
                     .map(|entry| entry.result.clone());
                 let proposition = match result {
-                    Some(result) => matches!(&*reduce(context, result)?, Subterm::Prop),
+                    Some(result) => matches!(&*reduce(context, result)?, Subterm::Prop(_)),
                     None => false,
                 };
                 match proposition {
@@ -336,7 +336,7 @@ impl Sort {
             }
             // `Prop` reaches here too, and `Prop : Type 0` is exactly right, so it is not a fallback and is not worth reporting.
             _ => {
-                if !matches!(&*reduced, Subterm::Prop) {
+                if !matches!(&*reduced, Subterm::Prop(_)) {
                     probe_level_fallback("unclassified shape", &reduced);
                 }
                 Sort::Type(Level::zero())
@@ -371,7 +371,7 @@ impl Sort {
         }
 
         Ok(match synth_neutral(context, binders, opened, type_)? {
-            Some(declared) => matches!(&*reduce(context, declared)?, Subterm::Prop),
+            Some(declared) => matches!(&*reduce(context, declared)?, Subterm::Prop(_)),
             None => false,
         })
     }
@@ -388,7 +388,7 @@ impl Sort {
     fn from_universe(context: &mut Context, universe: &Term) -> Result<Sort, ReduceError> {
         let reduced = reduce(context, universe.clone())?;
         Ok(match &*reduced {
-            Subterm::Prop => Sort::Prop,
+            Subterm::Prop(_) => Sort::Prop,
             Subterm::Type(level) => Sort::Type(level.clone()),
             _ => {
                 probe_level_fallback("universe term is not a sort", &reduced);

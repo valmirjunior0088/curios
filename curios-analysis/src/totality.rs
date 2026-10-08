@@ -419,7 +419,7 @@ impl<E: Env> Walk<'_, E> {
 
         match &**term {
             // Nothing here can contain a call.
-            Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) | Subterm::Metavar(_) => Ok(()),
+            Subterm::Type(_) | Subterm::Prop(_) | Subterm::Var(_) | Subterm::Metavar(_) => Ok(()),
 
             // A member reference at the head of a spine is a call with those arguments; anywhere else it is a call the analysis cannot grade, which an all-unknown matrix records faithfully. The guard names *this* group alone: a projection of any other group is that group's only appearance in the term, so it falls through to the general `rec` arm and its bodies are walked like any nested group's.
             Subterm::Rec(_)
@@ -588,7 +588,7 @@ pub fn yields_a_sort<E: Env>(env: &mut E, type_: &Term) -> Result<bool, E::Error
         };
 
         match &*reduced {
-            Subterm::Type(_) | Subterm::Prop => return Ok(true),
+            Subterm::Type(_) | Subterm::Prop(_) => return Ok(true),
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 let mut cursor = telescope.cursor();
                 while !cursor.is_done() {

@@ -178,7 +178,7 @@ impl Lowering<'_> {
                 Ok(type_)
             }
             Subterm::Type(_)
-            | Subterm::Prop
+            | Subterm::Prop(_)
             | Subterm::FuncType(_)
             | Subterm::TupleType(_)
             | Subterm::InductType(_)

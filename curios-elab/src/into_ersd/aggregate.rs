@@ -90,7 +90,7 @@ impl Lowering<'_> {
         // A `Prop`-sorted family is proof-irrelevant, so erasure drops its inhabitants wholesale — payloads included. Classifying each payload on its own type would keep a `Type`-sorted one (`Eq`'s `refl(@z : A)` has an abstract `A`, which is neither prop nor universe), leaving a live field inside an erased proof: rebuilding the constructor would then compute that field from binders the same erasure had dropped. `Prop` structures already guarantee this by declaration — their fields must be non-informative — so this aligns inductives with them.
         let proof_family = matches!(
             &*context.reduce_with(&induct_decl.result_sort)?,
-            Subterm::Prop
+            Subterm::Prop(_)
         );
         let mut constructors = Vec::new();
         for tag in induct_decl.constructor_order() {

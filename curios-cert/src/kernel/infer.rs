@@ -113,7 +113,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
     match &**term {
         // `Type u : Type (u + 1)`, and `Prop : Type 0`. The hierarchy is what makes `Type : Type` — and Girard's paradox with it — unstatable.
         Subterm::Type(level) => Ok(Term::type_at(level.succ()?)),
-        Subterm::Prop => Ok(Term::type_ground()),
+        Subterm::Prop(_) => Ok(Term::type_ground()),
 
         Subterm::Intrinsic(intrinsic) => infer_intrinsic(kernel, intrinsic),
 
@@ -1085,7 +1085,7 @@ fn subsumes(kernel: &mut Kernel, inferred: &Term, expected: &Term) -> Result<boo
     match (&*lower, &*upper) {
         (Subterm::Type(lower), Subterm::Type(upper)) => return Ok(kernel.level_leq(lower, upper)),
         // `Prop : Type 0`, and a proposition is admitted wherever a type is.
-        (Subterm::Prop, Subterm::Type(_)) => return Ok(true),
+        (Subterm::Prop(_), Subterm::Type(_)) => return Ok(true),
         // Plicity is part of a function type's identity, exactly as in `convert`: `(A) -> A` and `(@A) -> A` have different calling conventions, so a difference there is a mismatch and not a codomain question.
         (Subterm::FuncType(lower), Subterm::FuncType(upper))
             if lower.telescope.same_marks(&upper.telescope) =>

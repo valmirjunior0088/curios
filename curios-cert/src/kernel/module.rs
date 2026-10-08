@@ -201,12 +201,12 @@ pub(crate) fn check_induct_decl(
 
 /// The declared result sort is a *literal* sort, not a term that reduces to one.
 ///
-/// Every other consumer of this field reduces before reading it — `Sort::of` through `as_sort`, `check_signature` and `check_non_informative` through `Reducer::reduce_forced` — and exactly one does not: the `Prop`-valued index guard in [`invert_indices`](curios_analysis::invert_indices) matches `Subterm::Prop` on the nose. So a `result_sort` that unfolds to `Prop` would make the family a proposition to every reader but that one, which is the reader whose silence is unsound: inversion would tell a proposition's constructors apart, and the arm it excused as impossible would be reachable. Requiring the field to be literal is what makes that syntactic match correct rather than lucky; teaching each reader to reduce would instead leave the next syntactic reader to rediscover the same hole.
+/// Every other consumer of this field reduces before reading it — `Sort::of` through `as_sort`, `check_signature` and `check_non_informative` through `Reducer::reduce_forced` — and exactly one does not: the `Prop`-valued index guard in [`invert_indices`](curios_analysis::invert_indices) matches `Subterm::Prop(_)` on the nose. So a `result_sort` that unfolds to `Prop` would make the family a proposition to every reader but that one, which is the reader whose silence is unsound: inversion would tell a proposition's constructors apart, and the arm it excused as impossible would be reachable. Requiring the field to be literal is what makes that syntactic match correct rather than lucky; teaching each reader to reduce would instead leave the next syntactic reader to rediscover the same hole.
 ///
 /// Nothing legitimate is refused: the surface grammar admits only the keywords `Type` and `Prop` after a declaration's `:`, so an entry the elaborator builds satisfies this by construction.
 fn check_declared_sort(result_sort: &Term) -> Result<(), Error> {
     match &**result_sort {
-        Subterm::Prop | Subterm::Type(_) => Ok(()),
+        Subterm::Prop(_) | Subterm::Type(_) => Ok(()),
         _ => Err(Error::NotASort(result_sort.clone())),
     }
 }
@@ -371,7 +371,7 @@ pub(crate) fn check_struct_decl(
 fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Result<(), Error> {
     if !matches!(
         &*kernel.reduce_forced(declaration.result_sort.clone())?,
-        Subterm::Prop
+        Subterm::Prop(_)
     ) {
         return Ok(());
     }
