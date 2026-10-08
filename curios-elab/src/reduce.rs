@@ -27,7 +27,7 @@ use {
         reduce_closed, reduce_intrinsic, refold,
     },
     curios_utilities::{SyntaxRegistry, recurse},
-    std::collections::HashMap,
+    std::collections::{BTreeSet, HashMap},
 };
 
 /// The elaborator's side of the closed-machine seam: the same delta `reduce_var` and `reduce_instance` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
@@ -44,6 +44,54 @@ impl ClosedHost for Context<'_> {
 /// Whether the closed machine may take `term` in this context: the representation-side gate ([`accelerable`]) plus the judgment-side one — no refinement of any kind registered, suppressed or live, because a refined closed scrutinee *is* the arm's assumed value, a refined projection is its recorded reduct, and a *suppressed* key must stay withheld rather than be evaluated.
 fn machine_admissible(context: &Context, term: &Term) -> bool {
     accelerable(term) && !context.any_refinements_registered()
+}
+
+/// `term` as its solutions spell it, where that is a term the closed machine takes and `term` as written is not: closed, and every metavariable it holds solved.
+///
+/// **A solved metavariable is not an open one.** A hidden member unification has solved — the `@A` of `/std/Parse/run`, of `/std/Eq` — is spelled as its metavariable until its declaration is zonked, and the kernel is handed the term with the solution in its place. Asked of the term as written, the gate declines every closed claim that leaves a member to inference: the recursive strategy reduces it from the top, the machine run on each closed piece it meets under a memo of its own, and answers by name where the machine answers by value, a constructor over everything it left unentered, which the solver then commits a metavariable to and re-validation types whole.
+///
+/// **Substituted only where a run or a remembered reduct follows.** A term over a free variable, or over a metavariable left open, is the recursive strategy's as written, and [`solved_through`] tells before anything is substituted, so the walk that writes the solutions in is paid by a term the machine then takes.
+fn solved_spelling(context: &Context, term: &Term) -> Option<Term> {
+    let closed_but_for_solutions = term.has_metavar()
+        && !term.has_local_free()
+        && !context.any_refinements_registered()
+        && solved_through(context, term);
+    if !closed_but_for_solutions {
+        return None;
+    }
+
+    Some(zonk_solved_term_metas(context, term)).filter(|solved| machine_admissible(context, solved))
+}
+
+/// Whether every metavariable `term` holds is solved, and every one its solution holds, through to terms that hold none: what substitution turns into a term with no metavariable. Each solution is read once, and the reading stops at the first metavariable left open.
+///
+/// **A recursive slot is left open here.** Substitution spells a filled slot by its member's name ([`Context::rec_slot_name`]), and the name is defined as the slot, so the spelling [`solved_spelling`] would hand over unfolds to the term it was taken from and the gate would be asked again for as long as the budget lasts. Reduction is what opens a slot into its body, in the recursive strategy.
+fn solved_through(context: &Context, term: &Term) -> bool {
+    let mut read = BTreeSet::new();
+    let mut pending = vec![term.clone()];
+
+    while let Some(next) = pending.pop() {
+        let open = next.any_metavar(&mut |id| {
+            if !read.insert(id) {
+                return false;
+            }
+
+            match context.metavar_solution(id) {
+                Some(solution) if !context.is_rec_slot(id) => {
+                    if solution.has_metavar() {
+                        pending.push(solution.clone());
+                    }
+                    false
+                }
+                _ => true,
+            }
+        });
+        if open {
+            return false;
+        }
+    }
+
+    true
 }
 
 /// The elaborator's reduction strategy, supplied to `curios-core`'s intrinsic folds. It is the full-strength one: definitions unfold, metavariables resolve, scrutinee refinements fire, and every step is charged against the declaration's budget.
@@ -226,6 +274,11 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
         }
 
         return Ok(result);
+    }
+
+    // The same demand of the term as its solutions spell it ([`solved_spelling`]), which the gate above takes.
+    if let Some(solved) = solved_spelling(context, &term) {
+        return force_rec(context, solved);
     }
 
     let folded = term.clone();
@@ -1083,6 +1136,14 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
         let entry = term.clone();
         let result = reduce_closed(context, term, Demand::Whnf)?;
         context.reduce(entry, &result);
+
+        return Ok(result);
+    }
+
+    // The term as its solutions spell it takes the machine where the term as written does not ([`solved_spelling`]). Remembered under both spellings, so asking again of the written one is a lookup and not the walk that spells the other.
+    if let Some(solved) = solved_spelling(context, &term) {
+        let result = reduce_within(context, solved)?;
+        context.reduce(term, &result);
 
         return Ok(result);
     }

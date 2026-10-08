@@ -883,6 +883,46 @@ fn a_bytes_walk_is_run_once_however_many_follow_it() {
     );
 }
 
+/// A program stating a claim over one parse: a literal of `letters` letters read by `/std/Parse/text/literal` of the same text, which `claim` is handed as written and answers the declarations for.
+///
+/// `/std/Parse/run` takes its result's type as a hidden member, which unification solves and the term spells as a metavariable until its declaration is zonked: a claim holding the parse holds that metavariable, and a claim over a declaration bound to the parse holds none.
+fn parse_claim(letters: usize, claim: impl FnOnce(&str) -> String) -> String {
+    let literal = "a".repeat(letters);
+    let claim = claim(&format!(
+        "Parse/run(Parse/text/literal(\"{literal}\"), \"{literal}\")"
+    ));
+
+    format!(
+        "use /std/{{Str, Parse, Result, Bool, Eq}};\nuse /std/Bool/{{Holds, True}};\n\nlet ok(r: Result(Parse/Error, {{}})) -> Bool =\n    match r\n    | success(_) => true\n    | failure(_) => false\n    end;\n\n{claim}\n\n/std/print(\"ok\")\n"
+    )
+}
+
+/// A claim over a declaration bound to the parse: `prove` is the claim's own declaration, stated over `read`.
+fn over_read(prove: &str) -> impl FnOnce(&str) -> String {
+    move |parse| format!("let read: Result(Parse/Error, {{}}) = {parse};\n\n{prove}")
+}
+
+/// A closed claim costs the elaborator what it costs with nothing left to inference. Reduced as its solutions spell it, the claim holding a solved metavariable is one run of the closed machine, as the claim over `read` is; declined at the gate for the metavariable, it is taken apart by the recursive strategy, each closed piece a run of its own, at several times the cost and growing faster than the text.
+#[test]
+fn a_claim_over_a_solved_metavariable_costs_what_the_claim_written_out_costs() {
+    for letters in [16, 32] {
+        let (inline, ..) = declaration_cost(&parse_claim(letters, |parse| {
+            format!("let _claim: Holds(ok({parse})) = True/qed();")
+        }));
+        let (named, ..) = declaration_cost(&parse_claim(
+            letters,
+            over_read("let _claim: Holds(ok(read)) = True/qed();"),
+        ));
+
+        assert!(
+            inline.units() * 4 <= named.units() * 5,
+            "at {letters} letters the claim costs {} units with the parse inline and {} with it named",
+            inline.units(),
+            named.units()
+        );
+    }
+}
+
 /// What each claim of the type-level benchmark set costs each checker: an equality a type states and `Eq/refl()` proves, so that checking the program is reducing the claim's left side to its right. Six take a `Str` apart, one reads a `Flt`, one searches a `Str` and maps the position found.
 ///
 /// ```sh
