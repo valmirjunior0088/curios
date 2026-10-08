@@ -127,7 +127,7 @@ fn a_miss_without_a_baseline_compiles_whole() {
     assert_eq!(*stub.put.borrow(), [false]);
 }
 
-/// An offered baseline is the cache's to take, and the fold takes nothing without one: the store's own cache declines an offer so a build compiles the unit whole, and a fold with no cache compiles every unit whole whatever it was offered.
+/// An offered baseline is the cache's to take, and the fold takes nothing without one: a fold with no cache compiles every unit whole whatever it was offered.
 #[test]
 fn an_offered_baseline_is_taken_by_a_cache_and_by_nothing_else() {
     let offered = unit_of(BASE);

@@ -348,6 +348,17 @@ impl Cache for Verdicts {
         self.hit(source, None)
     }
 
+    /// The nearest earlier compilation of the unit there is: what a session attached to this cache last had in hand for it, then the slot this tree filed for it however its files have moved since, then whatever the scope offered.
+    ///
+    /// Nearest first, because the order decides how much a compile over one redoes and nothing else — every one of the three is a unit judged when it was made, so the answer is the same over any of them. The session's is the last keystroke's, which is nearer the text being asked about than anything a build filed; a filed unit is nearer than the archived image; and the image is what is there when nothing else is.
+    ///
+    /// **A build takes one as a question does.** A unit compiled over a baseline is stored as the bytes a whole compile of the same text stores, so what a build files is what it would have filed compiling whole, and it elaborates, judges and erases what its edit moved.
+    fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
+        self.kept(source)
+            .or_else(|| self.earlier(source))
+            .or_else(|| offered.cloned())
+    }
+
     /// Filed and placed whether anything follows or not: filing is the point of this cache, and [`Verdicts::payload_put`] files a payload under the whole chain the fold placed.
     fn put(&self, source: &UnitSource<'_>, unit: &Unit, _followed: bool) {
         curios_profile::profile!("verdicts::put");

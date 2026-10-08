@@ -465,7 +465,7 @@ fn a_kept_unit_is_refused_once_a_predecessor_the_store_could_not_take_has_change
 
 /// A declaration the parser cannot read answers with its own record, over a baseline as with none.
 ///
-/// **Recovery and the item-level recompile meet here.** A question takes a baseline where a build compiles whole, so this path is the editor's and `curios lint`'s alone. A broken item withholds its dependents, and a withheld item leaves no refusal behind it — so a recompile that expected an item of every declaration would look for items its own elaboration deliberately did not produce, and a keystroke leaving a half-written declaration with a dependent would kill the analyst instead of answering.
+/// **Recovery and the item-level recompile meet here.** A question compiles over a baseline, the session's or the store's. A broken item withholds its dependents, and a withheld item leaves no refusal behind it — so a recompile that expected an item of every declaration would look for items its own elaboration deliberately did not produce, and a keystroke leaving a half-written declaration with a dependent would kill the analyst instead of answering.
 ///
 /// Two declarations are the smallest shape that shows it: one broken, and one naming it, which is the one that goes missing.
 #[test]

@@ -369,9 +369,9 @@ fn slots(root: &Path) -> Vec<Vec<u8>> {
     slots
 }
 
-/// A slot whose files were edited since it was filed is a baseline for a query, which compiles the unit over it, and a whole compile for a build, which compiles the unit from nothing and files it.
+/// A slot whose files were edited since it was filed is a baseline, for a query and for a build alike: each compiles the unit over it.
 #[test]
-fn an_edited_slot_is_a_baseline_for_a_query_and_a_whole_compile_for_a_build() {
+fn an_edited_slot_is_a_baseline_for_a_query_and_for_a_build() {
     let root = project("baseline-edited");
     reused(&root);
 
@@ -381,7 +381,7 @@ fn an_edited_slot_is_a_baseline_for_a_query_and_a_whole_compile_for_a_build() {
         folded_overlaid(&root, &Overlay::default()),
         ["recompiling /shape"]
     );
-    assert_eq!(folded(&root), ["compiling /shape"]);
+    assert_eq!(folded(&root), ["recompiling /shape"]);
 }
 
 /// A unit placed without being filed leaves its slot holding what it held; a build files what it compiled.
@@ -399,7 +399,7 @@ fn a_unit_placed_without_being_filed_leaves_the_slot_as_it_was() {
     );
     assert_eq!(slots(&root), before, "placing a unit moved its slot");
 
-    assert_eq!(folded(&root), ["compiling /shape"]);
+    assert_eq!(folded(&root), ["recompiling /shape"]);
     assert_ne!(slots(&root), before, "a build files what it compiled");
 }
 

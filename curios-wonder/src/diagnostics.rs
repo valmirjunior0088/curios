@@ -313,16 +313,9 @@ impl Cache for Overlaid<'_> {
         self.cache.get_overlaid(source, self.overlay)
     }
 
-    /// The nearest earlier compilation of the unit there is: what this session last compiled for it, then the slot this tree filed for it however its files have moved since, then whatever the scope offered.
-    ///
-    /// Nearest first, because the order decides how much a recompile re-elaborates and nothing else — every one of the three is a unit judged when it was made, so the answer is the same over any of them. The session's is the last keystroke's, which is nearer the text being asked about than anything a build filed; a filed unit is nearer than the archived image; and the image is what is there when nothing else is. A build run in another terminal mid-session can leave the store nearer than the session, and then the recompile over the session's unit is merely larger than it had to be.
-    ///
-    /// A question is what takes a baseline: the store's own cache offers none, and a build compiles a moved unit whole. Each files the unit the other would have.
+    /// The store's own answer ([`Verdicts`]' `Cache::baseline`): the session's last unit, then the slot this tree filed, then what the scope offered. A build run in another terminal mid-session can leave the store nearer than the session, and then the recompile redoes more than it had to and answers the same.
     fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
-        self.cache
-            .kept(source)
-            .or_else(|| self.cache.earlier(source))
-            .or_else(|| offered.cloned())
+        Cache::baseline(self.cache, source, offered)
     }
 
     /// Kept, then filed where the disk holds every text the fold has read, and otherwise placed where something follows. This is why the store itself is held rather than a `dyn Cache`, which cannot place a unit without filing it.

@@ -973,9 +973,9 @@ pub trait Cache {
 
     /// A unit to compile `source` over when it is not a hit: one this cache holds from an earlier text of the same sources, or `offered`, which whoever assembled the fold offers for this source — the archived unit, for a package taking a prelude root's place. `None`, the default, is a whole compile, whatever was offered.
     ///
-    /// **Offered rather than imposed, and lent rather than handed over.** The cache decides whether the unit is compiled over the offer, so a question takes the archived unit while a build compiles the package whole and files it as any unit — and a cache holding something nearer copies nothing. Whatever tree the package is, the offer is a correct baseline: an item is reused only where its lowered form matches the offered one and nothing it reaches changed, so a tree far from the archive's is simply a larger closure.
+    /// **Offered rather than imposed, and lent rather than handed over.** The cache decides whether the unit is compiled over the offer, and a cache holding something nearer copies nothing. Whatever tree the package is, the offer is a correct baseline: an item is reused only where its lowered form matches the offered one and nothing it reaches changed, so a tree far from the archive's is simply a larger closure.
     ///
-    /// **What came of a baseline is handed to `put` like any other unit**, and is one: a unit compiled over a baseline is stored as the bytes a whole compile of the same text stores, so a cache that answers may file it where it would file the other. The store's own cache keeps the default; the `wonder` engine's cache answers.
+    /// **What came of a baseline is handed to `put` like any other unit**, and is one: a unit compiled over a baseline is stored as the bytes a whole compile of the same text stores, so a cache that answers may file it where it would file the other. The store's own cache answers, for a build and for a question alike; a cache that keeps the default compiles whole.
     fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
         let _ = (source, offered);
         None
