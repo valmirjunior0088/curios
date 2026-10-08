@@ -14,7 +14,7 @@ test roundtrips_prefix_related_keys =
         Str/join(",", [at(""), at("a"), at("ab"), at("abc"), at("b"), at("c")]),
         "nil,A,AB,ABC,B,?");
 
--- An integer key encodes its sign before its magnitude, so a negative key, its negation and zero are three entries, and a key never inserted is absent.
+-- An integer below zero encodes as a complement, so a negative key, its negation and zero are three entries, and a key never inserted is absent.
 test integer_keys_keep_their_signs_apart =
     let m: Map(Int, Str) = Map/of([(-2, "minus two"), (+0, "zero"), (+2, "two")]);
     let at(k: Int) -> Str = Option/unwrap_or(Map/get(m, k), "?");
@@ -67,6 +67,55 @@ let _a_smaller_natural_encodes_before_a_larger(
     under: Bool/Holds(a < b),
 ) -> Eq()(Bytes/ord(Hash/hash(a), Hash/hash(b)), Ordering/lt()) =
     Bytes/ord/below/lt(Hash/hash(a), Hash/hash(b), Hash/nat/of_lt(a, b, under));
+
+-- An integer at or above zero encodes as its natural, and one below as the complement of the natural `-1 - i`'s, so no byte is spent on the sign.
+test an_integer_encodes_as_its_natural_or_as_a_complement =
+    Test/equal(
+        [
+            Hash/hash(+0),
+            Hash/hash(+15),
+            Hash/hash(+1048576),
+            Hash/hash(Nat/to_int(4096)),
+            Hash/hash(-1),
+            Hash/hash(-16),
+            Hash/hash(-17),
+            Hash/hash(-1048576)],
+        [x[0x80], x[0x8F], x[0xB0, 0x10, 0x00, 0x00], Hash/hash(4096), x[0x7F], x[0x70], x[0x6F,
+                0xEF], x[0x50, 0x00, 0x00]]);
+
+-- A map of integers enumerates them in their order: every boundary of a natural's first byte, and the `-1 - n` that mirrors each below zero.
+test integer_keys_enumerate_in_number_order =
+    let edge(rank: Nat) -> Nat = 16 * Nat/pow(256, rank);
+    let naturals: List(Nat) =
+        [
+            256,
+            1,
+            2,
+            65536,
+            255,
+            257,
+            0,
+            513,
+            15,
+            16,
+            4095,
+            4096,
+            1048575,
+            1048576,
+            edge(6) - 1,
+            edge(6),
+            edge(13),
+            edge(14)];
+    let keys: List(Int) = List/concat_map(naturals, (n) => [Nat/to_int(n), -1 - Nat/to_int(n)]);
+    Test/equal(Set/to_list(Set/of(keys)), List/sort(keys));
+
+-- A smaller integer's encoding is before a larger one's, by the law beside the code.
+let _a_smaller_integer_encodes_before_a_larger(
+    a: Int,
+    b: Int,
+    under: Bool/Holds(a < b),
+) -> Eq()(Bytes/ord(Hash/hash(a), Hash/hash(b)), Ordering/lt()) =
+    Bytes/ord/below/lt(Hash/hash(a), Hash/hash(b), Hash/int/of_lt(a, b, under));
 
 -- Setting an existing key goes down the `replace` path: same size, new value, no duplicate leaf.
 test insert_replaces_without_growing =

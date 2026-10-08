@@ -91,46 +91,9 @@ satisfy Key(Bits) {
     injective = bits_injective,
 }
 
--- The two sign bytes are no one byte: the comparison deciding them refutes it.
-let signs_differ(e: Eq(@Byte)(0x0, 0x1)) -> False =
-    Eq/subst((m: Byte) => Holds(0x0 == m), e, True/qed());
-
--- Distinct integers encode distinctly.
---
--- `Hash(Int)` writes a sign byte before the magnitude, so an encoding is a cons and `/std/Bytes`'s cons injections take it apart. Where the signs differ the heads do, which no equation of the encodings allows; where they agree the tails are the magnitudes' encodings, `Bytes/of_nat` is injective, and an integer is its magnitude widened, or that negated.
-let int_injective(a: Int, b: Int, same: Eq()(Hash/hash(a), Hash/hash(b))) -> Eq()(a, b) =
-    match a >= +0
-    | true =>
-        match b >= +0
-        | true =>
-            let magnitudes =
-                Eq/cong(
-                    (n: Nat) => Nat/to_int(n),
-                    Bytes/of_nat_injective(Int/abs(a), Int/abs(b), Bytes/cons_inj_tail(same)));
-            Eq/trans(
-                Eq/sym(Int/abs/of_non_neg(a, True/proved())),
-                Eq/trans(magnitudes, Int/abs/of_non_neg(b, True/proved())))
-        | false => match signs_differ(Bytes/cons_inj_head(same)) end
-        end
-    | false =>
-        match b >= +0
-        | true => match signs_differ(Eq/sym(Bytes/cons_inj_head(same))) end
-        | false =>
-            let magnitudes =
-                Eq/cong(
-                    (n: Nat) => Nat/to_int(n),
-                    Bytes/of_nat_injective(Int/abs(a), Int/abs(b), Bytes/cons_inj_tail(same)));
-            Eq/cong(
-                (i: Int) => +0 - i,
-                Eq/trans(
-                    Eq/sym(Int/abs/of_neg(a, True/proved())),
-                    Eq/trans(magnitudes, Int/abs/of_neg(b, True/proved()))))
-        end
-    end;
-
---- A sign byte before the magnitude, so an integer and its negation never share an encoding.
+--- The code in the order of the numbers, whose injectivity is that order's.
 satisfy Key(Int) {
-    injective = int_injective,
+    injective = Hash/int/injective,
 }
 
 induct Node(K: Type, V: Type): Type

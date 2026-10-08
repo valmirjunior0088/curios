@@ -14,6 +14,9 @@ pub use Hash/*;
 --- A natural's encoding in the order of the numbers, with the laws that say so.
 pub mod nat;
 
+--- An integer's encoding in the order of the numbers, with the laws that say so.
+pub mod int;
+
 --- `b` ahead of enough zero bytes to reach `width`, or `b` itself when it is already that long.
 ---
 --- Trailing rather than leading, and that is not a preference. `Bytes/of_nat` writes its least significant byte first, so a zero byte *after* the run is a higher place worth nothing, while one before it would multiply the value by 256: padding `5` and `1280` on the wrong side gives both `x[0,0,0,5]`, and two distinct numbers sharing an encoding is exactly what every user of this function exists to prevent. `Key`'s law would refuse its own case at the witness; `framed`, `tagged` and `digest` carry no law and would collide in silence.
@@ -77,12 +80,9 @@ satisfy Hash(Nat) {
     hash = nat/code,
 }
 
---- A sign byte before the magnitude.
+--- The code of [`int`]: its natural's at or above zero and a complement below, so a smaller integer's is before a larger one's.
 satisfy Hash(Int) {
-    hash(i) =
-        Bytes/flatten([
-            match i >= +0 | true => x[0x0] | false => x[0x1] end,
-            Bytes/of_nat(Int/abs(i))]),
+    hash = int/code,
 }
 
 --- The one byte itself.

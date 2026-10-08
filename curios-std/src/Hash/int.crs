@@ -1,0 +1,142 @@
+use /std/{Nat, Int, Byte, Bytes, Eq, Ordering};
+use /std/Bool/{True, False, Holds};
+use /std/Bytes/ord/{below};
+use /std/Hash/{nat};
+
+-- A run with every byte complemented, a byte at a time so that conversion carries it across a cons.
+let flipped(b: Bytes) -> Bytes =
+    match b | x[] => x[] | x[h, .._]; rest => x[Byte/not(h), ..rest] end;
+
+-- A complement reverses two runs that part at a byte.
+let reversed(
+    a: Bytes,
+    b: Bytes,
+    parted: Holds(below(a, b)),
+) -> Holds(below(flipped(b), flipped(a))) =
+    match a: (m) => (b: Bytes, parted: Holds(below(m, b))) -> Holds(below(flipped(b), flipped(m)))
+    | x[] => (_, parted) => match parted end
+    | x[h, ..t]; ih =>
+        (b, parted) =>
+            match b
+            | x[] => match parted end
+            | x[k, ..r] =>
+                let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
+                match Nat/ord(hn, kn)
+                | gt() => match parted end
+                | lt() =>
+                    let under: Holds(hn < kn) = Nat/ord/lt(hn, kn, Eq/refl());
+                    below/of_heads(Byte/not(k), Byte/not(h), flipped(r), flipped(t), True/proved())
+                | eq() =>
+                    let same: Eq()(hn, kn) = Nat/ord/eq(hn, kn, Eq/refl());
+                    Eq/subst(
+                        (o: Ordering) =>
+                            Holds(
+                                match o
+                                | eq() => below(flipped(r), flipped(t))
+                                | lt() => true
+                                | gt() => false
+                                end),
+                        Eq/sym(
+                            Nat/ord/of_eq(
+                                255 - kn,
+                                255 - hn,
+                                Eq/cong((v: Nat) => 255 - v, Eq/sym(same)))),
+                        ih(r, parted))
+                end
+            end
+    end(b, parted);
+
+-- Of two runs that lead with a byte in the upper half, the complement of one is below the other.
+let halves(
+    a: Bytes,
+    b: Bytes,
+    upper_a: Holds(below(x[0x7F], a)),
+    upper_b: Holds(below(x[0x7F], b)),
+) -> Holds(below(flipped(a), b)) =
+    match a
+    | x[] => match upper_a end
+    | x[h, ..t] =>
+        match b
+        | x[] => match upper_b end
+        | x[k, ..r] =>
+            let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
+            match Nat/ord(127, hn)
+            | lt() =>
+                let over_h: Holds(127 < hn) = Nat/ord/lt(127, hn, Eq/refl());
+                match Nat/ord(127, kn)
+                | lt() =>
+                    let over_k: Holds(127 < kn) = Nat/ord/lt(127, kn, Eq/refl());
+                    below/of_heads(Byte/not(h), k, flipped(t), r, True/proved())
+                | eq() => match upper_b end
+                | gt() => match upper_b end
+                end
+            | eq() => match upper_a end
+            | gt() => match upper_a end
+            end
+        end
+    end;
+
+--- An integer's encoding, in the order of the numbers: a smaller integer's is before a larger one's as `Bytes/ord` reads them, and no integer's begins another's.
+---
+--- At or above zero it is its natural's, [`nat/code`]; below zero it is the complement, byte by byte, of the code of `-1 - i`. No byte is spent on the sign: a natural's code leads with a byte in the upper half and a complement's with one in the lower, so every integer below zero is before every other, and the more negative of two comes first.
+pub let code(i: Int) -> Bytes =
+    match i >= +0 | true => nat/code(Int/abs(i)) | false => flipped(nat/code(Int/abs(i) - 1)) end;
+
+--- `a < b` gives `a`'s code below `b`'s at a byte: by the naturals' law where both are at or above zero, by that law reversed where both are below, and by the half each leads in where zero is between them.
+pub let of_lt(a: Int, b: Int, under: Holds(a < b)) -> Holds(below(code(a), code(b))) =
+    match a >= +0
+    | true =>
+        match b >= +0
+        | true => nat/of_lt(Int/abs(a), Int/abs(b), True/proved())
+        | false => match False/refuted() end
+        end
+    | false =>
+        match b >= +0
+        | true =>
+            halves(
+                nat/code(Int/abs(a) - 1),
+                nat/code(Int/abs(b)),
+                nat/leads(Int/abs(a) - 1),
+                nat/leads(Int/abs(b)))
+        | false =>
+            reversed(
+                nat/code(Int/abs(b) - 1),
+                nat/code(Int/abs(a) - 1),
+                nat/of_lt(Int/abs(b) - 1, Int/abs(a) - 1, True/proved()))
+        end
+    end;
+
+--- The order of two integers is the order of their codes.
+pub let monotone(a: Int, b: Int) -> Eq()(Int/ord(a, b), Bytes/ord(code(a), code(b))) =
+    match a < b
+    | true => Eq/sym(below/lt(code(a), code(b), of_lt(a, b, True/qed())))
+    | false =>
+        match b < a
+        | true =>
+            Eq/trans(
+                Int/ord/of_gt(a, b, True/qed()),
+                Eq/sym(
+                    Eq/trans(
+                        Bytes/ord/flips(code(b), code(a)),
+                        Eq/cong(
+                            Ordering/flip,
+                            below/lt(code(b), code(a), of_lt(b, a, True/qed()))))))
+        | false =>
+            Eq/subst(
+                (y: Int) => Eq()(Int/ord(a, y), Bytes/ord(code(a), code(y))),
+                Int/le/antisym(a, b, True/proved(), True/proved()),
+                Eq/sym(Bytes/ord/refl(code(a))))
+        end
+    end;
+
+--- Distinct integers have distinct codes: two with one code are `eq` in their order, which is equality.
+pub let injective(a: Int, b: Int, same: Eq()(code(a), code(b))) -> Eq()(a, b) =
+    Int/ord/eq(
+        a,
+        b,
+        Eq/trans(
+            monotone(a, b),
+            Eq/subst(
+                (z: Bytes) => Eq()(Bytes/ord(code(a), z), Ordering/eq()),
+                same,
+                Bytes/ord/refl(code(a)))));
