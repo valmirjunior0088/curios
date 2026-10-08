@@ -5,7 +5,7 @@ use {
         MatrixArm, NatLiteral, NatPattern, Pattern, PatternField, Term,
     },
     curios_num::{Grain, Natural},
-    curios_utilities::Plicity,
+    curios_utilities::{Plicity, Span},
     std::{collections::BTreeMap, mem},
 };
 
@@ -21,6 +21,8 @@ struct MatrixRow<'t> {
     patterns: Vec<&'t MatchPattern>,
     binds: Vec<(Binder, curios_core::Term)>,
     body: &'t Term,
+    /// Where the arm's pattern is written, which is where a row no value reaches is reported.
+    span: Option<&'t Span>,
 }
 
 /// One row grouped under a constructor tag in [`MatchCompiler::compile_ctor`]: its still-borrowed, plicity-marked argument patterns and the row itself.
@@ -250,6 +252,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 patterns: vec![&arm.pattern],
                 binds: Vec::new(),
                 body: &arm.body,
+                span: arm.span.as_ref(),
             })
             .collect();
 
@@ -267,7 +270,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         if columns.is_empty() {
             return match rows.len() {
                 1 => self.finish_row(rows.into_iter().next().unwrap(), leaf),
-                _ => Err(Error::MatrixDuplicateRow),
+                // The rows keep the order of their arms, so the first is the arm a value reaches and the one after it the first that none does.
+                _ => Err(match rows.get(1).and_then(|row| row.span) {
+                    Some(span) => Error::MatrixDuplicateRow.at(span.clone()),
+                    None => Error::MatrixDuplicateRow,
+                }),
             };
         }
 

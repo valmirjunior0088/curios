@@ -66,6 +66,18 @@ fn match_rejects_duplicate_flat_tag() {
     );
 }
 
+// Of two arms that take the same value, the later is the one no value reaches, and the report stands under its pattern rather than under the whole match.
+#[test]
+fn a_duplicate_arm_is_reported_at_the_later_arm() {
+    let source = "use /std/{Option, Nat};\n\nlet f(o: Option(Nat)) -> Nat =\n    match o\n    | some(x) => x\n    | none() => 0\n    | none() => 1\n    end;\n\n/std/print(Nat/to_str(f(Option/some(3))))\n";
+
+    let error = error(source);
+    assert!(
+        error.contains("    7 |     | none() => 1\n      |       ^^^^^^"),
+        "unexpected error: {error}"
+    );
+}
+
 // A plain binder row (a named catch-all, which the full-enumeration matrix refuses) mixed with a concrete constructor row in the same column.
 #[test]
 fn match_rejects_mixed_binder_and_ctor_column() {
