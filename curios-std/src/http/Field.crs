@@ -46,19 +46,28 @@ pub let find(fields: List(Field), name: Str) -> Option(Value) =
 
 -- The pieces of a list between its commas, a comma inside a quoted string being its member's (RFC 9110 §5.6.4).
 let pieces(b: Bytes) -> List(Bytes) =
-    let (found, from, to, _, _): {List(Bytes), Nat, Nat, Bool, Bool} =
-        Bytes/fold(
-            b,
-            ([], 0, 0, false, false),
-            (byte, (found, from, at, quoted, escaped)) =>
-                let n = Byte/to_nat(byte);
-                choose
-                | escaped => (found, from, at + 1, quoted, false)
-                | quoted => (found, from, at + 1, n != '"', n == '\\')
-                | n == ',' => ([octets/between(b, from, at), ..found], at + 1, at + 1, false, false)
-                | _ => (found, from, at + 1, n == '"', false)
-                end);
-    List/reverse([octets/between(b, from, to), ..found]);
+    let go(
+        from: Nat,
+        at: Nat,
+        quoted: Bool,
+        escaped: Bool,
+        found: List(Bytes),
+        @ordered: Holds(from <= at),
+        @reached: Holds(at <= Bytes/len(b)),
+    ) -> List(Bytes) =
+        match Nat/lt/try(at, Bytes/len(b))
+        | none() => List/reverse([Bytes/slice(b, from, at - from), ..found])
+        | some(inside) =>
+            let n = Byte/to_nat(Bytes/get(b, at, @inside));
+            choose
+            | escaped => go(from, at + 1, quoted, false, found)
+            | quoted => go(from, at + 1, n != '"', n == '\\', found)
+            | n == ',' =>
+                go(at + 1, at + 1, false, false, [Bytes/slice(b, from, at - from), ..found])
+            | _ => go(from, at + 1, n == '"', false, found)
+            end
+        end;
+    go(0, 0, false, false, []);
 
 --- The members of the lists the `fields` named `name` hold, every line's in order, as RFC 9110 §5.2 joins the lines of one name: each without the whitespace around it, the empty ones left out as §5.6.1 has a recipient do, and a comma inside a quoted string left to its member.
 pub let members(fields: List(Field), name: Str) -> List(Bytes) =

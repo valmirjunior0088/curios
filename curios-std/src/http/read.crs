@@ -1,6 +1,7 @@
 use /std/{Bytes, Byte, Nat, Bool, Option, Result, Spell};
+use /std/Bool/{True, Holds};
 use /std/ops/{Eql};
-use /std/http/{Limits, Refusal, Framing, octets};
+use /std/http/{Limits, Refusal, Framing};
 use /std/http/Field/{Value};
 
 --- What a reader made of the bytes it holds: the piece it was asked for and the bytes after it, a refusal, or that the piece has not all arrived — with where to resume and the bytes still held, so the next look reads none of them twice. A reader holds no stream: whoever owns one asks again once more bytes have arrived, and decides what a stream that ended means.
@@ -23,25 +24,47 @@ satisfy (@S: Type, @A: Type, use Spell(S), use Spell(A)) => Spell(Step(S, A)) {
 let is(b: Bytes, i: Nat, byte: Nat) -> Bool =
     match Bytes/try_get(b, i) | some(x) => Byte/to_nat(x) == byte | none() => false end;
 
---- Where the first line end at or after `i` begins in `b`, or `none`.
-pub let line_end(b: Bytes, i: Nat) -> Option(Nat) =
-    match i + 1 < Bytes/len(b)
-    | false => Option/none()
-    | true =>
+--- Where a search of `b` from `from` on found what it sought: an index at or after `from`, with `room` bytes of `b` from it on, so a cut there needs no bound decided again.
+pub let Found(b: Bytes, from: Nat, room: Nat) -> Type =
+    {at: Nat, onward: Holds(from <= at), within: Holds(at + room <= Bytes/len(b))};
+
+-- The search behind `line_end`, the index it began at carried down so the answer states it and the walk is a loop.
+let line_end_from(
+    b: Bytes,
+    from: Nat,
+    i: Nat,
+    @onward: Holds(from <= i),
+) -> Option(Found(b, from, 2)) =
+    match Nat/lt/try(i + 1, Bytes/len(b))
+    | none() => Option/none()
+    | some(room) =>
         match is(b, i, '\r') && is(b, i + 1, '\n')
-        | true => Option/some(i)
-        | false => line_end(b, i + 1)
+        | true => Option/some((at = i, onward = onward, within = True/proved()))
+        | false => line_end_from(b, from, i + 1)
         end
     end;
 
--- Where the first empty line at or after `i` begins in `b`: a line end with a line end right after it.
-let blank_line(b: Bytes, i: Nat) -> Option(Nat) =
-    match line_end(b, i)
+--- Where the first line end at or after `i` begins in `b`, both its bytes within `b`, or `none`.
+pub let line_end(b: Bytes, i: Nat) -> Option(Found(b, i, 2)) =
+    line_end_from(b, i, i);
+
+-- Where the first empty line at or after `i` begins in `b`: a line end with a line end right after it, all four bytes within `b`. The answer is stated from `from` on, which the search began no earlier than.
+let blank_line(
+    b: Bytes,
+    from: Nat,
+    i: Nat,
+    @onward: Holds(from <= i),
+) -> Option(Found(b, from, 4)) =
+    match line_end_from(b, from, i)
     | none() => Option/none()
-    | some(at) =>
-        match is(b, at + 2, '\r') && is(b, at + 3, '\n')
-        | true => Option/some(at)
-        | false => blank_line(b, at + 2)
+    | some(ended) =>
+        match Nat/le/try(ended.at + 4, Bytes/len(b))
+        | none() => Option/none()
+        | some(room) =>
+            match is(b, ended.at + 2, '\r') && is(b, ended.at + 3, '\n')
+            | true => Option/some((at = ended.at, onward = ended.onward, within = room))
+            | false => blank_line(b, from, ended.at + 2)
+            end
         end
     end;
 
@@ -49,23 +72,32 @@ let blank_line(b: Bytes, i: Nat) -> Option(Nat) =
 let leading_lines(b: Bytes, i: Nat) -> Nat =
     match is(b, i, '\r') && is(b, i + 1, '\n') | true => leading_lines(b, i + 2) | false => i end;
 
---- A message's head: the bytes of its start line and its fields, their line ends between them, without the empty line that ends them. `lenient` skips the empty lines a request may be preceded by (RFC 9112 §2.2). The state is how far the bytes held have been searched. A start line past `limits.line` and a head past `limits.head` are refused.
-pub let head(limits: Limits, lenient: Bool, searched: Nat, held: Bytes) -> Step(Nat, Bytes) =
-    let start = match lenient | true => leading_lines(held, 0) | false => 0 end;
+-- Where the head that begins at `start` ends in `b`: its empty line, searched for from three bytes before `searched`, which the line's four bytes may straddle, and no earlier than `start`.
+let head_end(b: Bytes, start: Nat, searched: Nat) -> Option(Found(b, start, 4)) =
+    let back = searched - Nat/min(searched, 3);
+    match Nat/le/try(start, back)
+    | some(ahead) => blank_line(b, start, back, @ahead)
+    | none() => blank_line(b, start, start)
+    end;
+
+-- `head` of the bytes held from `start` on, where its start line begins. The index is a parameter, so the cuts made at it are stated of a value and of no walk.
+let head_from(limits: Limits, start: Nat, searched: Nat, held: Bytes) -> Step(Nat, Bytes) =
     let arrived = Bytes/len(held) - start;
-    let first = line_end(held, start);
     let line_fits =
-        match first | some(at) => at - start <= limits.line | none() => arrived <= limits.line end;
+        match line_end(held, start)
+        | some(first) => first.at - start <= limits.line
+        | none() => arrived <= limits.line
+        end;
     match line_fits
     | false => Step/refused(Refusal/line_too_long())
     | true =>
-        match blank_line(held, Nat/max(start, searched - Nat/min(searched, 3)))
-        | some(at) =>
-            match at - start <= limits.head
+        match head_end(held, start, searched)
+        | some(blank) =>
+            match blank.at - start <= limits.head
             | true =>
                 Step/took(
-                    octets/front(octets/past(held, start), at - start),
-                    octets/past(held, at + 4))
+                    Bytes/slice(held, start, blank.at - start),
+                    Bytes/drop(held, blank.at + 4))
             | false => Step/refused(Refusal/head_too_large())
             end
         | none() =>
@@ -76,13 +108,21 @@ pub let head(limits: Limits, lenient: Bool, searched: Nat, held: Bytes) -> Step(
         end
     end;
 
+--- A message's head: the bytes of its start line and its fields, their line ends between them, without the empty line that ends them. `lenient` skips the empty lines a request may be preceded by (RFC 9112 §2.2). The state is how far the bytes held have been searched. A start line past `limits.line` and a head past `limits.head` are refused.
+pub let head(limits: Limits, lenient: Bool, searched: Nat, held: Bytes) -> Step(Nat, Bytes) =
+    head_from(
+        limits,
+        match lenient | true => leading_lines(held, 0) | false => 0 end,
+        searched,
+        held);
+
 --- A body of `n` bytes: the bytes held once there are that many. One longer than `limits.content` is refused before any of it is read.
 pub let length(limits: Limits, n: Nat, held: Bytes) -> Step({}, Bytes) =
     match n <= limits.content
     | false => Step/refused(Refusal/content_too_large())
     | true =>
         match n <= Bytes/len(held)
-        | true => Step/took(octets/front(held, n), octets/past(held, n))
+        | true => Step/took(Bytes/slice(held, 0, n), Bytes/drop(held, n))
         | false => Step/more((), held)
         end
     end;
@@ -99,14 +139,15 @@ let hex(byte: Byte) -> Option(Nat) =
 -- A chunk's size, read from its size line: hexadecimal digits, one or more, then nothing or an extension, which begins with `;` and holds no control octet. Anything else is no size line.
 let chunk_size(line: Bytes) -> Option(Nat) =
     let go(i: Nat, value: Nat, digits: Nat) -> Option(Nat) =
-        match Bytes/try_get(line, i)
+        match Nat/lt/try(i, Bytes/len(line))
         | none() => match digits | 0 => Option/none() | _ => Option/some(value) end
-        | some(byte) =>
+        | some(inside) =>
+            let byte = Bytes/get(line, i, @inside);
             match hex(byte)
             | some(d) => go(i + 1, value * 16 + d, digits + 1)
             | none() =>
                 match Byte/to_nat(byte) == ';' && digits != 0
-                    && Bytes/all(octets/past(line, i), Value/admits)
+                    && Bytes/all(Bytes/drop(line, i), Value/admits)
                 | true => Option/some(value)
                 | false => Option/none()
                 end
@@ -114,11 +155,15 @@ let chunk_size(line: Bytes) -> Option(Nat) =
         end;
     go(0, 0, 0);
 
--- Where the bytes after a trailer section's empty line begin, the section starting at `i`: the first line end that begins a line.
-let trailers_end(b: Bytes, i: Nat) -> Option(Nat) =
+-- Where the bytes after a trailer section's empty line begin, the section starting at `i`: past the first line end that begins a line, an index within `b`.
+let trailers_end(b: Bytes, i: Nat) -> Option({at: Nat, within: Holds(at <= Bytes/len(b))}) =
     match line_end(b, i)
     | none() => Option/none()
-    | some(at) => match at == i | true => Option/some(at + 2) | false => trailers_end(b, at + 2) end
+    | some(ended) =>
+        match ended.at == i
+        | true => Option/some((at = ended.at + 2, within = ended.within))
+        | false => trailers_end(b, ended.at + 2)
+        end
     end;
 
 --- A chunked body (RFC 9112 §7.1): the content its chunks hold, the trailer section read past and dropped. The state is the content decoded so far, and the bytes held always begin at a chunk's size line, so each look reads whole chunks and nothing twice. A size line that is none, a chunk not followed by a line end, a size line past `limits.chunk_line`, a trailer section past `limits.head` and content past `limits.content` are refused.
@@ -129,8 +174,9 @@ pub let chunked(limits: Limits, content: Bytes, held: Bytes) -> Step(Bytes, Byte
         | true => Step/more(content, held)
         | false => Step/refused(Refusal/malformed("a chunk's size line is too long"))
         end
-    | some(at) =>
-        match (at <= limits.chunk_line, chunk_size(octets/front(held, at)))
+    | some(ended) =>
+        let at = ended.at;
+        match (at <= limits.chunk_line, chunk_size(Bytes/slice(held, 0, at)))
         | (false, _) => Step/refused(Refusal/malformed("a chunk's size line is too long"))
         | (true, none()) =>
             Step/refused(Refusal/malformed("a chunk states its size in hexadecimal digits"))
@@ -138,7 +184,7 @@ pub let chunked(limits: Limits, content: Bytes, held: Bytes) -> Step(Bytes, Byte
             match size
             | 0 =>
                 match trailers_end(held, at + 2)
-                | some(past) => Step/took(content, octets/past(held, past))
+                | some(past) => Step/took(content, Bytes/drop(held, past.at))
                 | none() =>
                     match Bytes/len(held) - at <= limits.head
                     | true => Step/more(content, held)
@@ -158,8 +204,8 @@ pub let chunked(limits: Limits, content: Bytes, held: Bytes) -> Step(Bytes, Byte
                         | true =>
                             chunked(
                                 limits,
-                                x[..content, ..octets/front(octets/past(held, at + 2), size)],
-                                octets/past(held, at + 4 + size))
+                                x[..content, ..Bytes/slice(held, at + 2, size)],
+                                Bytes/drop(held, at + 4 + size))
                         end
                     end
                 end

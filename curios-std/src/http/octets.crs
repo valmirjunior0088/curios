@@ -1,4 +1,5 @@
 use /std/{Bytes, Byte, Nat, Bool, List, Option};
+use /std/Bool/{Holds};
 
 --- Whether `b` is optional whitespace, a space or a tab (RFC 9110 §5.6.3): the whitespace a field line's value and a list's members are trimmed of, and no other.
 pub let is_ows(b: Byte) -> Bool =
@@ -13,58 +14,69 @@ pub let is_digit(b: Byte) -> Bool =
 pub let at(b: Bytes, i: Nat, byte: Byte) -> Bool =
     match Bytes/try_get(b, i) | some(found) => found == byte | none() => false end;
 
---- The first `n` bytes of `b`, or all of it where it holds fewer.
-pub let front(b: Bytes, n: Nat) -> Bytes =
-    match Nat/le/try(n, Bytes/len(b))
-    | some(within) => Bytes/slice(b, 0, n, @within)
-    | none() => b
+--- Where the first `byte` of `b` stands, with the proof that it lies within `b`, or `none`.
+pub let index_of(b: Bytes, byte: Byte) -> Option({at: Nat, within: Holds(at < Bytes/len(b))}) =
+    let go(i: Nat) -> Option({at: Nat, within: Holds(at < Bytes/len(b))}) =
+        match Nat/lt/try(i, Bytes/len(b))
+        | none() => Option/none()
+        | some(within) =>
+            match Bytes/get(b, i, @within) == byte
+            | true => Option/some((at = i, within = within))
+            | false => go(i + 1)
+            end
+        end;
+    go(0);
+
+-- `b` from `start` up to `stop`, without the optional whitespace that ends it.
+let trim_end(
+    b: Bytes,
+    start: Nat,
+    stop: Nat,
+    @ordered: Holds(start <= stop),
+    @reached: Holds(stop <= Bytes/len(b)),
+) -> Bytes =
+    match Nat/lt/try(start, stop)
+    | none() => Bytes/slice(b, start, stop - start)
+    | some(room) =>
+        match is_ows(Bytes/get(b, stop - 1))
+        | true => trim_end(b, start, stop - 1)
+        | false => Bytes/slice(b, start, stop - start)
+        end
     end;
 
---- `b` past its first `n` bytes, or nothing where it holds no more.
-pub let past(b: Bytes, n: Nat) -> Bytes =
-    match Nat/le/try(n, Bytes/len(b))
-    | some(within) => Bytes/drop(b, n, @within)
+-- `b` from `start` on, without the optional whitespace at either end: the walk that finds where it begins hands the index to the one that finds where it ends, so each cut is made under the bounds its walk kept.
+let trim_from(b: Bytes, start: Nat, @reached: Holds(start <= Bytes/len(b))) -> Bytes =
+    match Nat/lt/try(start, Bytes/len(b))
     | none() => x[]
+    | some(inside) =>
+        match is_ows(Bytes/get(b, start, @inside))
+        | true => trim_from(b, start + 1)
+        | false => trim_end(b, start, Bytes/len(b))
+        end
     end;
-
---- How many bytes `b` holds once the optional whitespace at its end is left out.
-let trimmed_len(b: Bytes) -> Nat =
-    let (_, kept): {Nat, Nat} =
-        Bytes/fold(
-            b,
-            (0, 0),
-            (byte, (seen, kept)) =>
-                match is_ows(byte) | true => (seen + 1, kept) | false => (seen + 1, seen + 1) end);
-    kept;
-
---- How many bytes of optional whitespace `b` begins with.
-let leading(b: Bytes) -> Nat =
-    Option/unwrap_or(Bytes/find_index(b, (byte) => Bool/not(is_ows(byte))), Bytes/len(b));
 
 --- `b` without the optional whitespace at either end.
 pub let trim(b: Bytes) -> Bytes =
-    let ended = front(b, trimmed_len(b));
-    past(ended, leading(ended));
-
---- The bytes of `b` from the index `from` up to `to`, or nothing where those are no part of it.
-pub let between(b: Bytes, from: Nat, to: Nat) -> Bytes =
-    match Nat/le/try(from + (to - from), Bytes/len(b))
-    | some(within) => Bytes/slice(b, from, to - from, @within)
-    | none() => x[]
-    end;
+    trim_from(b, 0);
 
 --- The pieces of `b` between each `sep`, in order: one more than the separators it holds.
 pub let split(b: Bytes, sep: Byte) -> List(Bytes) =
-    let (found, from, to): {List(Bytes), Nat, Nat} =
-        Bytes/fold(
-            b,
-            ([], 0, 0),
-            (byte, (found, from, at)) =>
-                match byte == sep
-                | true => ([between(b, from, at), ..found], at + 1, at + 1)
-                | false => (found, from, at + 1)
-                end);
-    List/reverse([between(b, from, to), ..found]);
+    let go(
+        from: Nat,
+        at: Nat,
+        found: List(Bytes),
+        @ordered: Holds(from <= at),
+        @reached: Holds(at <= Bytes/len(b)),
+    ) -> List(Bytes) =
+        match Nat/lt/try(at, Bytes/len(b))
+        | none() => List/reverse([Bytes/slice(b, from, at - from), ..found])
+        | some(inside) =>
+            match Bytes/get(b, at, @inside) == sep
+            | true => go(at + 1, at + 1, [Bytes/slice(b, from, at - from), ..found])
+            | false => go(from, at + 1, found)
+            end
+        end;
+    go(0, 0, []);
 
 --- The number `b` spells in decimal digits, one or more and nothing else, or `none`.
 pub let number(b: Bytes) -> Option(Nat) =

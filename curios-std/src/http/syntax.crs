@@ -1,13 +1,14 @@
 use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result};
+use /std/Bool/{Holds};
 use /std/http/{Field, Status, Version, Refusal, read, octets};
 use /std/http/Field/{Value};
 
 --- The lines of a head's bytes, in order, their line ends left out: the start line first.
 pub let lines(head: Bytes) -> List(Bytes) =
-    let go(from: Nat, found: List(Bytes)) -> List(Bytes) =
+    let go(from: Nat, found: List(Bytes), @reached: Holds(from <= Bytes/len(head))) -> List(Bytes) =
         match read/line_end(head, from)
-        | some(at) => go(at + 2, [octets/front(octets/past(head, from), at - from), ..found])
-        | none() => List/reverse([octets/past(head, from), ..found])
+        | some(ended) => go(ended.at + 2, [Bytes/slice(head, from, ended.at - from), ..found])
+        | none() => List/reverse([Bytes/drop(head, from), ..found])
         end;
     go(0, []);
 
@@ -82,20 +83,29 @@ pub let status_line(line: Bytes) -> Result(Refusal, {Version, Status}) =
         Result/failure(
             Refusal/malformed(
                 "a status line is a version, a three-digit code and a reason phrase"));
-    let stated = version(octets/front(line, 8))!;
-    let digits = octets/front(octets/past(line, 9), 3);
-    match octets/at(line, 8, ' ') && octets/at(line, 12, ' ') && Bytes/len(digits) == 3
-    | false => unspelled
-    | true =>
-        match octets/number(digits)
-        | none() => unspelled
-        | some(code) =>
-            match Value/of_bytes(octets/past(line, 13))
+    -- A line shorter than a version is read as one whole, which it is not.
+    let stated =
+        match Nat/le/try(8, Bytes/len(line))
+        | some(long) => version(Bytes/slice(line, 0, 8, @long))
+        | none() => version(line)
+        end!;
+    -- A version, a space, three digits and a space stand ahead of the reason: thirteen octets.
+    match Nat/le/try(13, Bytes/len(line))
+    | none() => unspelled
+    | some(long) =>
+        match octets/at(line, 8, ' ') && octets/at(line, 12, ' ')
+        | false => unspelled
+        | true =>
+            match octets/number(Bytes/slice(line, 9, 3))
             | none() => unspelled
-            | some(reason) =>
-                match 100 <= code && code <= 999
-                | true => Result/success((stated, Status { code = code, reason = reason }))
-                | false => unspelled
+            | some(code) =>
+                match Value/of_bytes(Bytes/drop(line, 13))
+                | none() => unspelled
+                | some(reason) =>
+                    match 100 <= code && code <= 999
+                    | true => Result/success((stated, Status { code = code, reason = reason }))
+                    | false => unspelled
+                    end
                 end
             end
         end
@@ -103,12 +113,12 @@ pub let status_line(line: Bytes) -> Result(Refusal, {Version, Status}) =
 
 -- One field line: a name, a colon, and a value trimmed of the optional whitespace around it. No whitespace stands before the colon, since the name it would end is no token.
 let field(line: Bytes) -> Result(Refusal, Field) =
-    match Bytes/index_of(line, ':')
+    match octets/index_of(line, ':')
     | none() => Result/failure(Refusal/malformed("a field line is a name, a colon and a value"))
-    | some(at) =>
+    | some(colon) =>
         match Option/bind(
-            Result/to_option(Str/of_bytes(octets/front(line, at))),
-            (name) => Field/read(name, octets/trim(octets/past(line, at + 1))))
+            Result/to_option(Str/of_bytes(Bytes/slice(line, 0, colon.at))),
+            (name) => Field/read(name, octets/trim(Bytes/drop(line, colon.at + 1))))
         | some(read) => Result/success(read)
         | none() =>
             Result/failure(
