@@ -116,29 +116,18 @@ let paste_end: Bytes =
 --- `input` as the events it encodes, up to the first sequence the chunk ends inside; that tail is `rest`, for the next chunk to complete.
 pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} =
     let key(k: Key) -> Option(Event(E)) = Option/some(Event/key(k));
-    let scalar(i: Nat, n: Nat) -> Step(E) =
-        let len =
-            choose
-            | n < 0x80 => 1
-            | Nat/in_range(n, 0xC2, 0xDF) => 2
-            | Nat/in_range(n, 0xE0, 0xEF) => 3
-            | Nat/in_range(n, 0xF0, 0xF4) => 4
-            | _ => 0
-            end;
-        match len
-        | 0 => Step/emit(Option/none(), i + 1)
-        | _ =>
-            match Nat/le/try(i + len, Bytes/len(input))
-            | none() => Step/cut()
-            | some(within) =>
-                match Str/of_bytes(Bytes/slice(input, i, len, @within))
-                | failure(_) => Step/emit(Option/none(), i + 1)
-                | success(s) =>
-                    match Str/At/try_next(s, Str/At/start(s))
-                    | none() => Step/emit(Option/none(), i + len)
-                    | some(first) => Step/emit(key(Key/plain(Code/char(first.char))), i + len)
-                    end
-                end
+    -- The character the byte at `i` begins and `more` bytes continue. The bytes are decided text as the bytes they are, so the text is known to hold them and has a first character.
+    let scalar(i: Nat, more: Nat) -> Step(E) =
+        match Nat/le/try(i + (more + 1), Bytes/len(input))
+        | none() => Step/cut()
+        | some(within) =>
+            let piece = Bytes/slice(input, i, more + 1, @within);
+            match Str/Valid/try(Str/Scan/lead(), piece)
+            | none() => Step/emit(Option/none(), i + 1)
+            | some(valid) =>
+                let s = Str { bytes = piece, @valid = valid };
+                let first = Str/At/next(s, Str/At/start(s));
+                Step/emit(key(Key/plain(Code/char(first.char))), i + (more + 1))
             end
         end;
     let paste(_: Nat, start: Nat) -> Step(E) =
@@ -221,12 +210,18 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
         match Nat/lt/try(i, Bytes/len(input))
         | none() => (events = List/reverse(acc), rest = x[])
         | some(inside) =>
-            let n = Byte/to_nat(Bytes/get(input, i, @inside));
+            let head = Bytes/get(input, i, @inside);
+            let n = Byte/to_nat(head);
             let step =
                 choose
                 | n == 0x1B => escape(i)
                 | n < 0x20 || n == 0x7F => Step/emit(key(control(n)), i + 1)
-                | _ => scalar(i, n)
+                | _ =>
+                    match Str/classify(head)
+                    | ascii() => scalar(i, 0)
+                    | lead(more, _, _, _) => scalar(i, more)
+                    | bad() => Step/emit(Option/none(), i + 1)
+                    end
                 end;
             match step
             | cut() => (events = List/reverse(acc), rest = Bytes/drop(input, i))

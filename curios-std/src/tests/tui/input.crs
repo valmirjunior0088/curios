@@ -92,6 +92,17 @@ test a_bracketed_paste_is_one_event =
 test a_multi_byte_scalar_is_one_character =
     Test/equal(keys(x[0xC3, 0xA9]), [k(Code/char('é'))]);
 
+test a_scalar_of_three_and_of_four_bytes_is_one_character =
+    Test/equal(
+        keys(x[0xE2, 0x82, 0xAC, 0xF0, 0x9F, 0x98, 0x80]),
+        [k(Code/char('€')), k(Code/char('😀'))]);
+
+-- A byte that begins no character is passed over alone, and so is a lead the bytes after it do not complete: what follows either is read on its own.
+test a_byte_that_begins_no_character_is_passed_over_alone =
+    Test/equal(
+        keys(x[0x80, 'a', 0xC3, 'b', 0xFF, 'c', 0xED, 0xA0, 0x80, 'd']),
+        [k(Code/char('a')), k(Code/char('b')), k(Code/char('c')), k(Code/char('d'))]);
+
 -- A chunk ending inside a scalar hands its first bytes back, and the next chunk completes the character.
 test a_scalar_split_across_chunks_waits_for_the_rest =
     let first = input/decode(@Nat, x['a', 0xC3]);
