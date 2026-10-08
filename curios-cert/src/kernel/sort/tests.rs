@@ -1,5 +1,5 @@
 use {
-    crate::{Error, Kernel, Sort},
+    crate::{Error, Kernel, Sort, erased_half},
     curios_analysis::{Erased, test_support::SYNTAX},
     curios_core::{
         Free, Global, InductDecl, Intrinsic, Level, Many, Nat, RecGroup, RecMemberScopes, Scope,
@@ -570,4 +570,106 @@ fn a_sort_is_remembered_by_the_reduction_that_read_it() {
     Sort::of(&mut kernel, &judged).expect("classifies");
     assert!(kernel.plainly(|kernel| kernel.sort_hit(&judged)).is_none());
     assert!(kernel.sort_hit(&judged).is_some());
+}
+
+// === A proposition known by its head ====================================
+//
+// `Sort::of` answers `Prop` for an application of a declaration that lands there before it reduces anything, and takes no other head's word. The fixtures below hold the answer, that nothing is run for it, and what it declines.
+
+/// `name: (Nat) -> sort`, defined as a function that decides something of its argument before it answers `body` either way: applied, it is no type former, and reducing the application evaluates the argument.
+fn define_family(kernel: &mut Kernel, path: &str, sort: Term, body: Term) -> Free {
+    let name = Free::from(&nominal(path));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let n = binder(81, "n");
+    let decided = Term::intrinsic(Intrinsic::nat_lt(
+        Term::free_var(&n),
+        Term::intrinsic(Intrinsic::Nat(Nat::new(10usize))),
+    ));
+
+    kernel
+        .define(
+            &name,
+            &Term::func_type([(binder(80, "n"), nat_type.clone())], sort.clone()),
+            &Term::func(
+                [(n, nat_type)],
+                Term::bool_match(decided, None, sort, body.clone(), body),
+            ),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
+
+    name
+}
+
+/// An argument no budget this file's kernels hold could reduce: a tower of powers, which the family's application would evaluate before it applied.
+fn unaffordable() -> Term {
+    let ten = || Term::intrinsic(Intrinsic::Nat(Nat::new(10usize)));
+
+    Term::intrinsic(Intrinsic::NatPow(
+        ten(),
+        Term::intrinsic(Intrinsic::NatPow(ten(), ten())),
+    ))
+}
+
+/// An application of a definition declared into `Prop` is a proposition, and nothing is run to learn it: its argument is one the budget cannot reduce, and the question is answered.
+#[test]
+fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
+    let mut kernel = kernel();
+    let proposition = declare(&mut kernel, "P", Term::prop());
+    let family = define_family(&mut kernel, "F", Term::prop(), proposition);
+    let applied = Term::apply(Term::free_var(&family), [unaffordable()]);
+
+    assert_eq!(Sort::of(&mut kernel, &applied), Ok(Sort::Prop));
+    assert_eq!(erased_half(&mut kernel, &applied), Ok(Some(Erased::Proof)));
+}
+
+/// A declaration into `Type` is reduced as before: its reduct says its level, and the argument is run to reach it.
+#[test]
+fn an_application_of_a_declaration_into_type_is_classified_by_its_reduct() {
+    let mut kernel = kernel();
+    let data = declare(&mut kernel, "D", Term::type_ground());
+    let family = define_family(&mut kernel, "F", Term::type_ground(), data);
+
+    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
+    assert_eq!(
+        Sort::of(&mut kernel, &Term::apply(Term::free_var(&family), [three])),
+        Ok(Sort::Type(Level::zero())),
+    );
+    assert!(
+        Sort::of(
+            &mut kernel,
+            &Term::apply(Term::free_var(&family), [unaffordable()])
+        )
+        .is_err(),
+        "the argument was not run",
+    );
+}
+
+/// A group's claim about its member is not taken for an application of that member either: the group below claims `(Nat) -> Prop` over a body that answers a `Type`-sorted family, and the application is classified by what it reduces to. [`a_groups_claim_about_its_member_does_not_decide_that_members_sort`] holds the bare projection.
+#[test]
+fn a_groups_claim_does_not_decide_the_sort_of_its_members_application() {
+    let mut kernel = kernel();
+    let data = declare(&mut kernel, "Data", Term::type_ground());
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let member = Free::local(900, Some("F"));
+
+    let group = RecGroup::new(vec![RecMemberScopes {
+        type_: Scope::close(
+            Many(1),
+            &[&member],
+            Term::func_type([(binder(80, "n"), nat_type.clone())], Term::prop()),
+        ),
+        body: Scope::close(
+            Many(1),
+            &[&member],
+            Term::func([(binder(81, "n"), nat_type)], data),
+        ),
+    }]);
+    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
+
+    assert_eq!(
+        Sort::of(&mut kernel, &Term::apply(Term::rec_proj(group, 0), [three])),
+        Ok(Sort::Type(Level::zero())),
+        "the group's `Prop` claim was trusted over the sort its member's application reduces to",
+    );
 }

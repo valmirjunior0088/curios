@@ -5,10 +5,10 @@ mod tests;
 
 use {
     super::probe_level_fallback,
-    crate::{Binders, Context, reduce, reduce_forced, synth_neutral},
+    crate::{Binders, Context, Opened, reduce, reduce_forced, synth_neutral},
     curios_core::{
-        Bound, Free, FuncType, InductType, Intrinsic, Level, MatchResult, ReduceError, StructType,
-        Subterm, Term, TupleType,
+        Bound, Free, FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, MatchResult,
+        ReduceError, StructType, Subterm, Term, TupleType,
     },
 };
 
@@ -68,6 +68,11 @@ impl Sort {
         opened: &mut Vec<(Free, Term)>,
         type_: &Term,
     ) -> Result<Sort, ReduceError> {
+        // Asked of the type as written, before anything is run to classify it.
+        if Sort::declared_into_prop(context, binders, opened, type_)? {
+            return Ok(Sort::Prop);
+        }
+
         let reduced = reduce_forced(context, type_.clone())?;
 
         Ok(match &*reduced {
@@ -336,6 +341,38 @@ impl Sort {
                 }
                 Sort::Type(Level::zero())
             }
+        })
+    }
+
+    /// Whether `type_`, as written, is an application of a declaration that lands in `Prop` — the kernel's rule, `curios-cert`'s `declared_into_prop`, which states why a proposition is known by its head and why only a declaration's word is taken. Here a declaration is a global name with an assumption, a member of the group being elaborated included: its signature was checked before any body was, and reduction reads it where the member is still a slot.
+    pub(crate) fn declared_into_prop(
+        context: &mut Context,
+        binders: &Binders,
+        opened: &Opened,
+        type_: &Term,
+    ) -> Result<bool, ReduceError> {
+        let mut head = type_;
+        while let Subterm::Apply(apply) = &**head {
+            head = &apply.head;
+        }
+        let name = match &**head {
+            Subterm::Var(var) => var.unwrap(),
+            Subterm::Instance(Instance {
+                head: InstanceHead::Var(var),
+                ..
+            }) => var.unwrap(),
+            _ => return Ok(false),
+        };
+        let declared = matches!(&**type_, Subterm::Apply(_))
+            && name.as_global().is_some()
+            && context.assumption(name).is_some();
+        if !declared {
+            return Ok(false);
+        }
+
+        Ok(match synth_neutral(context, binders, opened, type_)? {
+            Some(declared) => matches!(&*reduce(context, declared)?, Subterm::Prop),
+            None => false,
         })
     }
 

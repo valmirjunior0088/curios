@@ -13,7 +13,7 @@
 //! A compile judges only the unit's own items, so the classification of what is already in scope arrives rather than being recomputed — as the certifier's own record, filed with each unit by the walk that judged it ([`Certification`](curios_core::Certification)). Trusting it is trusting a verdict this crate already reached about those exact terms, the same structure as the rest of the archive-verdict pattern. A unit mounted without a record covering it is classified here from its items, exactly as a judged item is. Nothing reads the totality elaboration stamps on a carried [`Definition`](curios_core::Definition): the stamp on an item this walk judges is compared against the walk's own verdict, which is where the two checkers disagree when they do, and a carried one is consulted by nothing.
 
 use {
-    super::{Error, Globals, Kernel, Position, Sort},
+    super::{Error, Globals, Kernel, Position, Sort, declared_into_prop},
     curios_analysis::Erased,
     curios_core::{Enter, Free, Global, Item, RecGroup, Reducer, Subterm, Term, Totality},
     std::collections::{BTreeMap, BTreeSet, HashMap},
@@ -208,6 +208,11 @@ pub(crate) fn check_positions(
 ///
 /// Decided where the position is recorded, while the binders its type mentions are still assumed. A failure propagates rather than reading as "unconstrained": everywhere else in this crate an exhausted budget refuses the item, and this is not the place to make a resource limit read as a pass.
 pub(crate) fn erased_half(kernel: &mut Kernel, type_: &Term) -> Result<Option<Erased>, Error> {
+    // A proposition known by its head is recorded with nothing run ([`declared_into_prop`]); no proposition is a sort, so the test below has nothing to say about it.
+    if declared_into_prop(kernel, type_)? {
+        return Ok(Some(Erased::Proof));
+    }
+
     let reduced = kernel.reduce_forced(type_.clone())?;
     // A term at a sort is a type, and erasure deletes it wholesale. This is the one question the structural test answers — what the *runtime* observes — and it is not the question [`carries_information`](crate::Sort) asks, which is what *conversion* observes and where a type counts in full. Reading the two as one predicate would certify a closed inhabitant of `False`.
     if matches!(&*reduced, Subterm::Type(_) | Subterm::Prop) {

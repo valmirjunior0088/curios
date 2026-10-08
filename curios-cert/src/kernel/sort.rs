@@ -98,6 +98,11 @@ impl Sort {
 
     /// [`Sort::of`]'s rules, one per type former.
     fn classify(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Error> {
+        // Asked of the type as written, before anything is run to classify it.
+        if declared_into_prop(kernel, type_)? {
+            return Ok(Sort::Prop);
+        }
+
         let reduced = kernel.reduce_forced(type_.clone())?;
 
         match &*reduced {
@@ -161,6 +166,43 @@ impl Sort {
             _ => Err(Error::Unclassified(reduced.clone())),
         }
     }
+}
+
+/// Whether `type_`, as written, is an application of a declaration that lands in `Prop`: a family or a definition, declared at a type whose codomain at these arguments is `Prop`.
+///
+/// **A proposition is known by its head.** A declaration says where its applications land whatever their arguments reduce to — `/std/Eq`'s family and `/sys/Bool/Holds: (Bool) -> Prop` say `Prop` — and [`synth_neutral`] reads that without reducing an argument. Classified by its reduct instead, the type is run to be told what its declaration states: a closed `Holds(d)` is decided, and a text scanned to learn that `/std/Str/Valid(b)` is a proposition, by every question that only asks whether a proof stands here — the record of erased positions, and conversion's irrelevance gate, which exists so that no proof is reduced.
+///
+/// **Only a declaration's word is taken.** The head is a name this kernel defined, whose type it checked the body against before it stored either. A projection of a group the term itself carries states a claim nothing here has checked, and a member of the group being checked is a binder assumed at one: each is classified by what it reduces to, and [`Sort::classify`]'s neutral arm reads such a claim only where reduction leaves the spine standing.
+///
+/// **Only `Prop` is answered.** A proposition is admitted where a `Type` is declared — `let P(n: Nat) -> Type = Eq()(n, n)` — so a head declared into `Type` does not say its application is none, and such a type is reduced as before. Nothing is admitted the other way: a body at `Type` is refused under a declared `Prop`.
+pub(crate) fn declared_into_prop(kernel: &mut Kernel, type_: &Term) -> Result<bool, Error> {
+    if !matches!(&**type_, Subterm::Apply(_)) || !heads_a_declaration(kernel, type_) {
+        return Ok(false);
+    }
+    let Some(declared) = synth_neutral(kernel, type_)? else {
+        return Ok(false);
+    };
+
+    Ok(matches!(&*whnf(kernel, declared)?, Subterm::Prop))
+}
+
+/// Whether the spine `term` is headed by a name this kernel defined, which no binder in scope shadows.
+fn heads_a_declaration(kernel: &Kernel, term: &Term) -> bool {
+    let mut head = term;
+    while let Subterm::Apply(apply) = &**head {
+        head = &apply.head;
+    }
+
+    let name = match &**head {
+        Subterm::Var(var) => var.unwrap(),
+        Subterm::Instance(Instance {
+            head: InstanceHead::Var(var),
+            ..
+        }) => var.unwrap(),
+        _ => return false,
+    };
+
+    kernel.local_type(name).is_none() && kernel.scheme_of(name).is_some()
 }
 
 /// How a type former's parts are established before its universe is computed from them.

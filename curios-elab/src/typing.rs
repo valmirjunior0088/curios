@@ -3,11 +3,11 @@ mod tests;
 
 use {
     super::{
-        Context, Error, FrozenFrame, Mode, Outcome, ParkedProblem, ParkedWork, Problem, Sort,
-        callee, convert, convert_outcome, diagnose_embedding, diagnose_shape, elaborate,
-        elaborate_func_settle, embeds, is_monad, monad_shape, normalize, problem_outcome,
-        reduce_forced, refold_recs, refused_scrutinee, retry_discharge, retry_match,
-        retry_projection, retry_witness, shallow_scrutinee, subsume_outcome,
+        Binders, Context, Error, FrozenFrame, Mode, Opened, Outcome, ParkedProblem, ParkedWork,
+        Problem, Sort, callee, convert, convert_outcome, diagnose_embedding, diagnose_shape,
+        elaborate, elaborate_func_settle, embeds, is_monad, monad_shape, normalize,
+        problem_outcome, reduce_forced, refold_recs, refused_scrutinee, retry_discharge,
+        retry_match, retry_projection, retry_witness, shallow_scrutinee, subsume_outcome,
         zonk_solved_term_metas,
     },
     curios_analysis::{
@@ -89,6 +89,19 @@ pub(crate) fn is_prop_in(
                 Error::reduce_exhausted(type_.clone(), refusal)
             })
         })
+}
+
+/// Whether `type_`, as written, is an application of a declaration that lands in `Prop` ([`Sort::declared_into_prop`]), under the binders a surrounding walk has opened: what erasure's classifier asks before it reduces a type to read it.
+pub(crate) fn is_declared_prop_in(
+    context: &mut Context,
+    opened: &Opened,
+    type_: &Term,
+) -> Result<bool, Error> {
+    Sort::declared_into_prop(context, &Binders::default(), opened, type_).map_err(|error| {
+        Error::from_reduce(error, |refusal| {
+            Error::reduce_exhausted(type_.clone(), refusal)
+        })
+    })
 }
 
 /// Elaborate `term` as a type/proposition without inventing an arbitrary expected universe upper bound.

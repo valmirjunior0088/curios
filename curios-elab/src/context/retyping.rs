@@ -8,7 +8,10 @@
 
 use {
     super::{Context, InScope},
-    crate::{Binders, Error, is_prop_in, reduce_with, refine_head, sort_term, synth_neutral},
+    crate::{
+        Binders, Error, Opened, is_declared_prop_in, is_prop_in, reduce_with, refine_head,
+        sort_term, synth_neutral,
+    },
     curios_analysis::{Invert, solve_indices},
     curios_core::{
         Advance, Cost, DefinitionKind, Free, Global, InductDecl, Level, ReduceError, StructDecl,
@@ -174,6 +177,15 @@ impl<'s> Retyping<'s> {
         type_: &Term,
     ) -> Result<bool, Error> {
         is_prop_in(&mut self.context, opened, type_)
+    }
+
+    /// Whether `type_`, as written, is an application of a declaration that lands in `Prop`, under the binders `opened` ([`is_declared_prop_in`]).
+    pub(crate) fn is_declared_prop_in(
+        &mut self,
+        opened: &Opened,
+        type_: &Term,
+    ) -> Result<bool, Error> {
+        is_declared_prop_in(&mut self.context, opened, type_)
     }
 
     /// The type of the neutral `term`, read with no binder a conversion opened ([`synth_neutral`]): a walk over finished terms assumes the binders it stands under.

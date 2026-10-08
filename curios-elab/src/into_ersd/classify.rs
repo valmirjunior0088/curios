@@ -27,6 +27,11 @@ fn is_erasable_in(
     opened: &mut Vec<(Free, Term)>,
     type_: &Term,
 ) -> Result<bool, Error> {
+    // A proposition known by its head is erased with nothing run to read it.
+    if context.is_declared_prop_in(opened, type_)? {
+        return Ok(true);
+    }
+
     match Term::unwrap_or_clone(context.reduce_with(type_)?) {
         Subterm::Type(_) | Subterm::Prop => Ok(true),
         Subterm::Instance(instance) => is_erasable_in(context, opened, &instance.head.to_term()),

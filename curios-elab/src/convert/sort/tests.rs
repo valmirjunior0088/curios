@@ -3,7 +3,8 @@
 use {
     crate::{Context, Sort},
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Free, Intrinsic, Level, Term},
+    curios_core::{Free, Global, Intrinsic, Level, Nat, Term},
+    curios_utilities::Qualifier,
 };
 
 /// A record of two fields at one type, `depth` deep: a graph of `depth + 1` nodes whose tree has `2^depth` fields.
@@ -123,4 +124,58 @@ fn a_type_naming_a_binder_its_walk_opened_is_not_remembered() {
 
     assert_eq!(at_a_type, Sort::Type(Level::zero()));
     assert_eq!(at_a_proposition, Sort::Prop);
+}
+
+/// An application of a declaration that lands in `Prop` is a proposition by that declaration, and nothing is run to learn it: the argument below is one no budget reduces, and the application is classified. A declaration into `Type` says less than its reduct, so the same argument under one is run, and refused.
+///
+/// The kernel's rule, held there by `curios-cert`'s `an_application_of_a_declaration_into_prop_is_a_proposition_unreduced`.
+#[test]
+fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
+    let mut context = Context::with_default_budget(SYNTAX);
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let proposition = Free::local(0, Some("P"));
+    context.assume(&proposition, &Term::prop());
+
+    let mut declare = |path: &str, sort: Term| {
+        let name = Free::from(&Global::Authored(Qualifier::from([path])));
+        context.assume(
+            &name,
+            &Term::func_type([(Free::local(80, Some("n")), nat_type.clone())], sort),
+        );
+        context.define(
+            &name,
+            &Term::func(
+                [(Free::local(81, Some("n")), nat_type.clone())],
+                Term::free_var(&proposition),
+            ),
+            None,
+        );
+
+        name
+    };
+    let into_prop = declare("F", Term::prop());
+    let into_type = declare("G", Term::type_ground());
+
+    let ten = || Term::intrinsic(Intrinsic::Nat(Nat::new(10usize)));
+    let unaffordable = Term::intrinsic(Intrinsic::NatPow(
+        ten(),
+        Term::intrinsic(Intrinsic::NatPow(ten(), ten())),
+    ));
+
+    assert_eq!(
+        Sort::of(
+            &mut context,
+            &Term::apply(Term::free_var(&into_prop), [unaffordable.clone()])
+        )
+        .expect("classifies"),
+        Sort::Prop,
+    );
+    assert!(
+        Sort::of(
+            &mut context,
+            &Term::apply(Term::free_var(&into_type), [unaffordable])
+        )
+        .is_err(),
+        "the argument was not run",
+    );
 }
