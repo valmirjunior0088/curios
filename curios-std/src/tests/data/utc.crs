@@ -29,6 +29,8 @@ test a_leap_day_falls_where_the_calendar_puts_it =
     Test/all([
         Test/equal(spelled(1709164800), "Thu, 29 Feb 2024 00:00:00 GMT"),
         Test/equal(spelled(951782400), "Tue, 29 Feb 2000 00:00:00 GMT"),
+        Test/equal(spelled(951868800), "Wed, 01 Mar 2000 00:00:00 GMT"),
+        Test/equal(spelled(13574563200), "Tue, 29 Feb 2400 00:00:00 GMT"),
         Test/equal(spelled(4107542399), "Sun, 28 Feb 2100 23:59:59 GMT"),
         Test/equal(spelled(4107542400), "Mon, 01 Mar 2100 00:00:00 GMT")]);
 

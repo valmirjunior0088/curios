@@ -9,14 +9,22 @@ let leap(year: Nat) -> Bool =
     | _ => false
     end;
 
+-- How many days the month has: none for a number that is no month, so no day is one of it.
 let days_in(year: Nat, month: Nat) -> Nat =
     match month
+    | 1 => 31
     | 2 => match leap(year) | true => 29 | false => 28 end
+    | 3 => 31
     | 4 => 30
+    | 5 => 31
     | 6 => 30
+    | 7 => 31
+    | 8 => 31
     | 9 => 30
+    | 10 => 31
     | 11 => 30
-    | _ => 31
+    | 12 => 31
+    | _ => 0
     end;
 
 let sound(year: Nat, month: Nat, day: Nat) -> Bool =

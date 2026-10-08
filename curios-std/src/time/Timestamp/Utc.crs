@@ -1,4 +1,5 @@
-use /std/{Nat, Str, Spell};
+use /std/{Nat, Str, List, Spell};
+use /std/Bool/{True, Holds};
 use /std/ops/{Eql};
 use /std/time/{Timestamp};
 
@@ -66,22 +67,21 @@ satisfy Spell(Utc) {
     ..
 }
 
--- The month `n` months after March.
-let month_from_march(n: Nat) -> Month =
-    match n
-    | 0 => Month/march()
-    | 1 => Month/april()
-    | 2 => Month/may()
-    | 3 => Month/june()
-    | 4 => Month/july()
-    | 5 => Month/august()
-    | 6 => Month/september()
-    | 7 => Month/october()
-    | 8 => Month/november()
-    | 9 => Month/december()
-    | 10 => Month/january()
-    | _ => Month/february()
-    end;
+-- The months of a year that begins in March, in order.
+let months_from_march: List(Month) =
+    [
+        Month/march(),
+        Month/april(),
+        Month/may(),
+        Month/june(),
+        Month/july(),
+        Month/august(),
+        Month/september(),
+        Month/october(),
+        Month/november(),
+        Month/december(),
+        Month/january(),
+        Month/february()];
 
 -- The day of the week `n` days after a Sunday.
 let weekday_from_sunday(n: Nat) -> Weekday =
@@ -96,20 +96,27 @@ let weekday_from_sunday(n: Nat) -> Weekday =
     end;
 
 --- The date and the time of day `t` is, to the second. The days since the epoch are counted in eras of 400 years, each of 146 097 days, and in years that begin on the first of March, so that a leap day is its year's last and a month's first day falls where a line through the months puts it; the first of January 1970 was a Thursday.
+---
+--- An era is taken apart into its centuries, a century into its cycles of four years and a cycle into its years, each by a remainder, so the day of the year is at most the 365 a leap year's last day is and the month it falls in is one of twelve by its bound. An era's last day is the 36 525th of its fourth century and a cycle's last the 366th of its fourth year, which is why each count stops at three.
 pub let of_timestamp(t: Timestamp) -> Utc =
     let secs = Timestamp/to_unix(t).secs;
     let days = secs / 86400;
     let within = secs % 86400;
     let shifted = days + 719468;
     let day_of_era = shifted % 146097;
-    let year_of_era =
-        (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let century = Nat/min(day_of_era / 36524, 3);
+    let day_of_century = day_of_era - century * 36524;
+    let cycle = day_of_century / 1461;
+    let day_of_cycle = day_of_century % 1461;
+    let year_of_cycle = Nat/min(day_of_cycle / 365, 3);
+    let day_of_year = day_of_cycle - year_of_cycle * 365;
+    let year_of_era = century * 100 + cycle * 4 + year_of_cycle;
+    let within_year: Holds(day_of_year <= 365) = True/proved();
     let months = (5 * day_of_year + 2) / 153;
     Utc {
         year =
             year_of_era + shifted / 146097 * 400 + match months < 10 | true => 0 | false => 1 end,
-        month = month_from_march(months),
+        month = List/get(months_from_march, months),
         day = day_of_year - (153 * months + 2) / 5 + 1,
         weekday = weekday_from_sunday(days + 4),
         hour = within / 3600,

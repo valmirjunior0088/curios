@@ -180,26 +180,29 @@ let query_str(q: Option(Str)) -> Str =
 pub let to_str(u: Url) -> Str =
     Str/flatten([scheme_str(u.scheme), "://", u.host, port_str(u), u.path, query_str(u.query)]);
 
--- The hexadecimal digit of the nibble `n`, uppercase, as an octet a value may hold.
-let hex_octet(n: Nat) -> Octet =
-    match n
-    | 0 => Octet { byte = '0' }
-    | 1 => Octet { byte = '1' }
-    | 2 => Octet { byte = '2' }
-    | 3 => Octet { byte = '3' }
-    | 4 => Octet { byte = '4' }
-    | 5 => Octet { byte = '5' }
-    | 6 => Octet { byte = '6' }
-    | 7 => Octet { byte = '7' }
-    | 8 => Octet { byte = '8' }
-    | 9 => Octet { byte = '9' }
-    | 10 => Octet { byte = 'A' }
-    | 11 => Octet { byte = 'B' }
-    | 12 => Octet { byte = 'C' }
-    | 13 => Octet { byte = 'D' }
-    | 14 => Octet { byte = 'E' }
-    | _ => Octet { byte = 'F' }
-    end;
+-- The sixteen hexadecimal digits, uppercase, each an octet a value may hold.
+let hex_octets: List(Octet) =
+    [
+        Octet { byte = '0' },
+        Octet { byte = '1' },
+        Octet { byte = '2' },
+        Octet { byte = '3' },
+        Octet { byte = '4' },
+        Octet { byte = '5' },
+        Octet { byte = '6' },
+        Octet { byte = '7' },
+        Octet { byte = '8' },
+        Octet { byte = '9' },
+        Octet { byte = 'A' },
+        Octet { byte = 'B' },
+        Octet { byte = 'C' },
+        Octet { byte = 'D' },
+        Octet { byte = 'E' },
+        Octet { byte = 'F' }];
+
+-- The hexadecimal digit of the nibble `n`, read off the sixteen under the bound that makes it one.
+let hex_octet(n: Nat, @nibble: Holds(n < 16)) -> Octet =
+    List/get(hex_octets, n);
 
 -- `b` with every octet that is not visible ASCII written as its `%XX`.
 let escaped_bytes(b: Bytes) -> Value =
