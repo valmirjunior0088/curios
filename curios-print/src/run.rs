@@ -182,14 +182,33 @@ impl<'a, 'b, 'c> PrinterState<'a, 'b, 'c> {
     }
 
     /// The members of a block end here — see [`Printer::Ends`]. What was written past the last of them is due and takes its line now, at their indentation; the document offers this line start, so nothing hangs from it.
-    fn ends(&mut self) -> Result<(), fmt::Error> {
-        if let Some((original, mut cursor)) = self.following {
-            cursor.close(original);
-            self.following = Some((original, cursor));
+    fn ends(&mut self, rest: &mut [Step]) -> Result<(), fmt::Error> {
+        self.meet(rest);
+        self.pay(false)
+    }
+
+    /// A newline the document writes, taken with the work still ahead of it — see [`PrinterState::meet`].
+    fn line_ends(&mut self, rest: &mut [Step]) -> Result<(), fmt::Error> {
+        self.meet(rest);
+        self.newline()
+    }
+
+    /// Bring the cursor up to the character the document writes next, where the original holds it in reach. What the original holds ahead of that character has then arrived: a comment written behind something the document leaves out — a parenthesis the tree does not record, a list's last comma — is taken while the line it was written on is still open, and not with the first character of the next.
+    fn meet(&mut self, rest: &mut [Step]) {
+        let Some((original, cursor)) = self.following else {
+            return;
+        };
+        let Some(next) = ahead(rest) else {
+            return;
+        };
+
+        let mut met = cursor;
+        met.approach(next, original);
+        // A character the original does not hold next is no reason to wait yet, since it has not been written.
+        if !met.held || cursor.held {
+            self.following = Some((original, met));
             self.arrivals();
         }
-
-        self.pay(false)
     }
 
     /// Note that the document holds the original up to `at` — see [`Printer::Mark`].
@@ -409,17 +428,6 @@ impl Cursor {
         }
     }
 
-    /// Step over what the document may equally write or leave out — a list's last comma — where a block's members end. It carries no position: what is written past it stands before the closer as much as what is written ahead of it.
-    fn close(&mut self, original: &Original<'_>) {
-        while let Some(next) = self
-            .next(original)
-            .filter(|next| !self.held && (original.added)(*next) && (original.dropped)(*next))
-        {
-            self.offset += next.len_utf8();
-            self.settle(original);
-        }
-    }
-
     /// The document holds the original up to `at`: a hold ends, and a cursor behind it moves up.
     fn reach(&mut self, at: usize, original: &Original<'_>) {
         self.held = false;
@@ -473,12 +481,6 @@ impl Arriving<'_> {
         self.note(from);
     }
 
-    fn close(&mut self) {
-        let from = self.cursor.arrived;
-        self.cursor.close(self.original);
-        self.note(from);
-    }
-
     /// Whether `char` may be written flat: nothing follows a comment on its line, but for what closes the line a riding one is on.
     fn admits(&mut self, char: char) -> bool {
         let from = self.cursor.arrived;
@@ -496,6 +498,57 @@ impl Arriving<'_> {
         self.note(from);
 
         true
+    }
+}
+
+/// The next character of document text still to be written that is not blank, found through the renderer's remaining work without taking any of it. An [`Printer::IfBreak`] is read in the mode its step was queued under, which is the one a line that ends here leaves it in.
+///
+/// Forces every [`Printer::Deferred`] on the way in place, as [`fits`] does and for its reason; what it forces is what printing consumes next.
+fn ahead(rest: &mut [Step]) -> Option<char> {
+    let visible = |text: &str| text.chars().find(|char| !char.is_whitespace());
+    let mut rest = rest.iter_mut().rev();
+    let mut stack: Vec<(&mut Printer, bool)> = Vec::new();
+
+    loop {
+        let Some((node, flat)) = stack.pop() else {
+            match rest.next()? {
+                Step::Dedent => {}
+                Step::Fill(items) => stack.extend(items.iter_mut().rev().map(|item| (item, true))),
+                Step::Print(printer, mode) => stack.push((printer, *mode)),
+            }
+            continue;
+        };
+
+        if let Printer::Deferred(slot) = &mut *node {
+            let thunk = slot
+                .take()
+                .expect("a deferred thunk is present until forced");
+            *node = thunk();
+            stack.push((node, flat));
+            continue;
+        }
+
+        match &mut *node {
+            Printer::Text(text) | Printer::Named(text) => {
+                if let Some(found) = visible(text) {
+                    return Some(found);
+                }
+            }
+            Printer::IfBreak {
+                flat: on_flat,
+                broken,
+            } => {
+                if let Some(found) = visible(if flat { on_flat } else { broken }) {
+                    return Some(found);
+                }
+            }
+            Printer::Concat(parts) | Printer::Fill(parts) => {
+                stack.extend(parts.iter_mut().rev().map(|part| (part, flat)));
+            }
+            Printer::Indent(inner) | Printer::Group(inner) => stack.push((inner, flat)),
+            Printer::Line { .. } | Printer::Mark(_) | Printer::Ends => {}
+            Printer::Deferred(_) => unreachable!("forced above"),
+        }
     }
 }
 
@@ -645,12 +698,8 @@ fn fits(
                     arriving.reach(*at);
                 }
             }
-            // Zero width too: what was written past the last member arrives here, as it will when the note is printed.
-            Printer::Ends => {
-                if inside && let Some(arriving) = arriving.as_mut() {
-                    arriving.close();
-                }
-            }
+            // Zero width, and nothing to measure: what it brings in arrives with the closer the scan reads next.
+            Printer::Ends => {}
             // Reversed, because the stack pops last-in first.
             Printer::Concat(parts) => {
                 stack.extend(parts.iter_mut().rev().map(|part| Measured {
@@ -771,10 +820,10 @@ fn run<'b, 'c>(
                     }
                 }
                 // A hard line breaks even under a fitting group — the fits scan only guarantees the first line, and a mandatory break is mandatory.
-                Printer::Line { hard: true, .. } => state.newline()?,
+                Printer::Line { hard: true, .. } => state.line_ends(&mut stack)?,
                 Printer::Line { flat: spelling, .. } => match flat {
                     true => state.text(spelling)?,
-                    false => state.newline()?,
+                    false => state.line_ends(&mut stack)?,
                 },
                 Printer::Fill(items) => {
                     // The first item is printed directly, so `Step::Fill` always owns a *gap* and never has to ask whether one is due.
@@ -813,12 +862,13 @@ fn run<'b, 'c>(
                     state.text(&spelling)?;
                 }
                 Printer::Mark(at) => state.reach(*at),
-                Printer::Ends => state.ends()?,
+                Printer::Ends => state.ends(&mut stack)?,
             },
             // One item per turn: measure it against what is left of the line, emit the gap it earned, print it flat, and queue the remainder. Printing the item flat is what makes it atomic — a fill decides *between* items, never inside one.
             Step::Fill(mut items) => {
                 let mut item = items.remove(0);
-                if !state.should_indent {
+                // Whether the item shares the line, where a line is open for it to share.
+                let placed = (!state.should_indent).then(|| {
                     let room = match state.width {
                         None => usize::MAX,
                         Some(width) => width.saturating_sub(state.effective_column() + 1),
@@ -827,20 +877,22 @@ fn run<'b, 'c>(
                     let owes =
                         !state.suffix.is_empty() || !state.due.is_empty() || state.after_comment;
                     // The last item is measured against what follows the fill, for the reason a group is: whatever trails it — a closing bracket, a semicolon — has no break point before it and must share its line. A middle item is measured alone, since the items still to come will push that content onto a later line anyway.
-                    let placed = !owes
+                    !owes
                         && match items.is_empty() {
                             true => fits(&mut item, &mut stack, room, true, state.following),
                             false => fits(&mut item, &mut [], room, true, state.following),
-                        };
-                    match placed {
-                        true => state.text(" ")?,
-                        false => state.newline()?,
-                    }
-                }
+                        }
+                });
                 if !items.is_empty() {
                     stack.push(Step::Fill(items));
                 }
                 stack.push(Step::Print(item, true));
+                // Written with the item already queued, so a line that ends here sees what follows it.
+                match placed {
+                    Some(true) => state.text(" ")?,
+                    Some(false) => state.line_ends(&mut stack)?,
+                    None => {}
+                }
             }
             Step::Dedent => state.indent_by -= state.indent_step,
         }

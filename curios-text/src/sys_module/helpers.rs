@@ -187,10 +187,12 @@ pub(super) fn branch(condition: Term, yes: Term, no: Term) -> Term {
             MatrixArm {
                 pattern: MatchPattern::Bool(true),
                 body: yes,
+                span: None,
             },
             MatrixArm {
                 pattern: MatchPattern::Bool(false),
                 body: no,
+                span: None,
             },
         ],
     })

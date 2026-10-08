@@ -23,6 +23,7 @@ fn inductive_match_nullary_and_unary() {
                         args: vec![],
                     },
                     body: Subterm::ProofLiteral(ProofLiteral::Str(StrLit::line("null"))).into(),
+                    span: None,
                 },
                 MatrixArm {
                     pattern: MatchPattern::Variant {
@@ -30,6 +31,7 @@ fn inductive_match_nullary_and_unary() {
                         args: vec![(Plicity::Explicit, MatchPattern::Binder("b".into()))],
                     },
                     body: Subterm::Name(Name::from(["b".to_string()])).into(),
+                    span: None,
                 },
             ],
         })
@@ -55,6 +57,7 @@ fn inductive_match_multi_binder() {
                     ],
                 },
                 body: Subterm::Name(Name::from(["a".to_string()])).into(),
+                span: None,
             }],
         })
         .into()
@@ -75,6 +78,7 @@ fn match_omitted_motive() {
                     args: vec![(Plicity::Explicit, MatchPattern::Binder("y".into()))],
                 },
                 body: Subterm::Name(Name::from(["y".to_string()])).into(),
+                span: None,
             }],
         })
         .into()
@@ -450,9 +454,10 @@ fn a_dispatch_case_keeps_a_numeral_wider_than_the_erased_carrier() {
     };
     assert_eq!(
         first.pattern,
-        MatchPattern::Nat(NatPattern::Lit(
-            Natural::parse_bytes(b"4294967296", 10).expect("a decimal numeral")
-        ))
+        MatchPattern::Nat(NatPattern::Lit(NatLiteral(
+            Natural::parse_bytes(b"4294967296", 10).expect("a decimal numeral"),
+            Radix::Dec(10)
+        )))
     );
 }
 

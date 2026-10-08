@@ -1,5 +1,8 @@
 use {
-    super::{Intrinsic, Label, Literal, Name, Radix, parse_term, parse_whitespace, print_term},
+    super::{
+        Intrinsic, Label, Literal, Name, NatLiteral, Radix, parse_term, parse_whitespace,
+        print_term,
+    },
     curios_abi::ForeignFunction,
     curios_num::{Grain, Natural},
     curios_parse::{ParserError, run_parser, take_eof},
@@ -285,10 +288,18 @@ pub struct Match {
 }
 
 /// One arm of a [`Match`]: `| pattern => body`. Compiled by `into_core::match_compile` into the single-level core match/projection forms — exactly what a person would get from hand-nesting matches (see its doc comment). A flat, unnested arm (`tag(x, y) => body`, i.e. every argument a plain [`MatchPattern::Binder`]) lowers to one core arm binding the written names.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct MatrixArm {
     pub pattern: MatchPattern,
     pub body: Term,
+    /// Where the pattern is written, or `None` for an arm the compiler built. A location, as a [`Term`]'s span is, and no part of what the arm is.
+    pub span: Option<Span>,
+}
+
+impl PartialEq for MatrixArm {
+    fn eq(&self, other: &Self) -> bool {
+        self.pattern == other.pattern && self.body == other.body
+    }
 }
 
 /// A match-arm pattern: genuinely refutable, unlike [`Pattern`] (which is always irrefutable — see its own doc comment). Distinct from `Pattern` on purpose, even though `Tuple`/`Struct` mirror its field grammar exactly: a `let`/lambda/function-sugar binder site never dispatches on shape, but a match arm's whole point is dispatching on shape, so the two must never be conflated.
@@ -343,7 +354,9 @@ pub enum NatPattern {
     /// A literal-dispatch leaf `k` — matched by value, peeling no successor. Always `k >= 1`: the numeral `0` is [`NatPattern::Zero`], never `Lit(0)`, so a `Nat` has one canonical leaf per value. A column of `Lit` (and possibly `Zero`) leaves with no `Succ` is value dispatch, lowered to a `Cases::Switch` with a mandatory default rather than the `Nat` eliminator (see `into_core::match_compile`'s `compile_nat`).
     ///
     /// Carries the numeral, not the erased carrier's `u32`. Narrowing here would choose `curios-ersd`'s width in the parser, four stages above the erase boundary that owns it, and — because a digit run *is* an identifier — an oversized numeral would not even refuse: it would fall past every leaf to [`MatchPattern::Binder`], so `match n | 4294967296 => 7 end` would compile to `let 4294967296 = n; 7`, a match that dispatches on nothing and takes its one arm for every input. The width is `curios-elab`'s alone, and it refuses rather than wraps — see [Nat and Int are an i31 until they outgrow it](../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md).
-    Lit(Natural),
+    ///
+    /// The radix it was written in rides along, as a term's numeral keeps it, so `| 0x10 =>` prints back as written; dispatch reads the value alone.
+    Lit(NatLiteral),
 }
 
 /// The two shapes a nested `List` leaf can take — see [`MatchPattern::List`].

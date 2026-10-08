@@ -31,6 +31,13 @@ fn an_overflowing_record_breaks_one_field_per_line_with_its_closer_riding_after_
 }
 
 #[test]
+fn a_numeral_pattern_prints_in_the_radix_and_width_it_was_written_in() {
+    let ladder = "match c | 0x10 => 1 | 007 => 2 | _ => 0 end";
+
+    assert_eq!(render(ladder, 80), ladder);
+}
+
+#[test]
 fn a_fitting_application_stays_flat() {
     assert_eq!(render("f(alpha, bravo)", 80), "f(alpha, bravo)");
 }

@@ -1,14 +1,14 @@
 use {
     super::{
         members, parse_func_pattern_param, parse_keyword, parse_literal, parse_match_pattern,
-        parse_pattern,
+        parse_pattern, trimmed,
     },
     crate::{
         Choose, ChooseArm, ChooseTest, Func, Match, MatrixArm, Pattern, Subterm, Term, parse_term,
         parse_whitespace,
     },
     curios_parse::{
-        Parser, commit, fail, lazy, many0, not_ahead, pure, sep_by0_trailing, take_exact,
+        Parser, commit, fail, lazy, many0, not_ahead, pure, sep_by0_trailing, spanned, take_exact,
     },
 };
 
@@ -40,11 +40,15 @@ pub(super) fn parse_match_prefix<'a>() -> Parser<'a, (Term, Option<Term>)> {
 pub(super) fn parse_induct_match_branch<'a>() -> Parser<'a, MatrixArm> {
     parse_literal("|")
         .and_keep(commit(
-            parse_match_pattern()
+            spanned(parse_match_pattern())
                 .and_drop(parse_literal("=>"))
                 .and(lazy(parse_term)),
         ))
-        .map(|(pattern, body)| MatrixArm { pattern, body })
+        .map(|((span, pattern), body)| MatrixArm {
+            pattern,
+            body,
+            span: Some(trimmed(span)),
+        })
 }
 
 // The `; ih` induction-hypothesis tail on a `Nat` succ or `List`/`Bin` cons leaf pattern: `;` sets the hypothesis apart from the scrutinee's shape. The hypothesis binds the *fold result*, not scrutinee shape, so it takes the same irrefutable pattern grammar a `let` binder does — `; ih` a plain name, `; (cur, live)` a destructuring. A plain case-split needs no hypothesis, so the tail may be omitted — `None`, not a placeholder; lowering mints a fresh internal name for it directly.

@@ -239,7 +239,7 @@ pub(super) fn with_span<'a>(parser: Parser<'a, Term>) -> Parser<'a, Term> {
 }
 
 /// The span cut back to the term's own text, which every span a term is stamped with passes through — the wrapper's, a postfix chain's and a `let` block's alike. Every atom parser consumes the whitespace after it, so a span built from where the parse stopped would run on to the next operator or delimiter, and a caret underline the blanks after an operand; the same run, comment included, is what the `?` oracle, the language server and the test runner's body slice read. A comment is stepped over through the table `parse_whitespace` records it in, complete for everything the parser consumed by the time this runs. The formatter, which needs the far end — a comment past a separator is paid onto its line by the term that reaches it — recovers it from the source text in `print_term` rather than from the span.
-fn trimmed(mut span: Span) -> Span {
+pub(super) fn trimmed(mut span: Span) -> Span {
     loop {
         let text = &span.source.text[span.start..span.end];
         let end = span.start + text.trim_end().len();

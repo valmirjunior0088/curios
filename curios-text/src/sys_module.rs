@@ -132,10 +132,12 @@ fn holds() -> Decl {
                     MatrixArm {
                         pattern: MatchPattern::Bool(true),
                         body: name("True"),
+                        span: None,
                     },
                     MatrixArm {
                         pattern: MatchPattern::Bool(false),
                         body: name("False"),
+                        span: None,
                     },
                 ],
             })

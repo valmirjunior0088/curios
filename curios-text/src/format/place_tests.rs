@@ -456,3 +456,68 @@ fn a_comment_before_a_closer_stays_at_its_members_column() {
     );
     assert_eq!(formatted(source), source);
 }
+
+/// A comment beside what the printer leaves out or spells another way keeps its line: behind the parentheses the tree does not record, riding the arrow after a pattern whose numeral changes the case of its digits or whose character was written as an escape, and before a closer behind a parenthesis. A numeral pattern keeps the radix and the width it was written with.
+#[test]
+fn a_comment_beside_what_the_printer_respells_or_leaves_out_keeps_its_line() {
+    let written = concat!(
+        "let grouped: Nat =\n",
+        "    ((first + second)) -- after the redundant pair\n",
+        "        * third;\n",
+        "\n",
+        "let dispatched(c: Nat) -> Nat =\n",
+        "    match c\n",
+        "    | 0x3e => -- after a numeral\n",
+        "        1\n",
+        "    | '\\u{41}' => -- after a character\n",
+        "        2\n",
+        "    | 0x10 => 3\n",
+        "    | 0b0101 => 4\n",
+        "    | 007 => 5\n",
+        "    | _ => 0\n",
+        "    end;\n",
+        "\n",
+        "let tuple: Shape =\n",
+        "    ((first), -- after a parenthesized member\n",
+        "     (second));\n",
+        "\n",
+        "let listed: Shape =\n",
+        "    [\n",
+        "        first,\n",
+        "        (second)\n",
+        "        -- before the closer, behind a parenthesis\n",
+        "    ];\n",
+    );
+    let canonical = concat!(
+        "let grouped: Nat =\n",
+        "    (first + second) -- after the redundant pair\n",
+        "        * third;\n",
+        "\n",
+        "let dispatched(c: Nat) -> Nat =\n",
+        "    match c\n",
+        "    | 0x3E => -- after a numeral\n",
+        "        1\n",
+        "    | 'A' => -- after a character\n",
+        "        2\n",
+        "    | 0x10 => 3\n",
+        "    | 0b0101 => 4\n",
+        "    | 007 => 5\n",
+        "    | _ => 0\n",
+        "    end;\n",
+        "\n",
+        "let tuple: Shape =\n",
+        "    (\n",
+        "        first, -- after a parenthesized member\n",
+        "        second);\n",
+        "\n",
+        "let listed: Shape =\n",
+        "    [\n",
+        "        first,\n",
+        "        second\n",
+        "        -- before the closer, behind a parenthesis\n",
+        "    ];\n",
+    );
+
+    assert_eq!(formatted(written), canonical);
+    assert_eq!(formatted(canonical), canonical);
+}

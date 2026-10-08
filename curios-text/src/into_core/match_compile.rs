@@ -2,7 +2,7 @@ use {
     super::{Binder, Hoisted, Lowerer},
     crate::{
         BinPattern, Choose, ChooseArm, ChooseTest, Error, Label, ListPattern, Match, MatchPattern,
-        MatrixArm, NatPattern, Pattern, PatternField, Term,
+        MatrixArm, NatLiteral, NatPattern, Pattern, PatternField, Term,
     },
     curios_num::{Grain, Natural},
     curios_utilities::Plicity,
@@ -130,6 +130,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let arm = MatrixArm {
             pattern: pattern.clone(),
             body: body.clone(),
+            span: None,
         };
         self.lower_defaulted_matrix(
             value,
@@ -558,7 +559,9 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 MatchPattern::Nat(NatPattern::Succ { pred_label, ih }) => {
                     succ_rows.push((pred_label.clone(), ih.clone(), row))
                 }
-                MatchPattern::Nat(NatPattern::Lit(value)) => lit_rows.push((value.clone(), row)),
+                MatchPattern::Nat(NatPattern::Lit(NatLiteral(value, _))) => {
+                    lit_rows.push((value.clone(), row))
+                }
                 MatchPattern::Char(character) => {
                     lit_rows.push((Natural::from(*character as u32), row))
                 }

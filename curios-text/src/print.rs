@@ -6,10 +6,10 @@ use {
         Apply, Argument, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Doc,
         Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix,
         Intrinsic, Label, Let, LetSignature, ListEntry, ListPattern, Literal, Match, MatchPattern,
-        MatchPatternField, NatPattern, NumLit, Pattern, PatternField, Proj, ProofLiteral, Radix,
-        StructField, StructLit, StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign,
-        TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple,
-        TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField,
+        MatchPatternField, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj,
+        ProofLiteral, Radix, StructField, StructLit, StructLitEntry, Subterm, Term, TopCase,
+        TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse,
+        TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField,
     },
     crate::op_precedence,
     curios_abi::{ResultShape, WireResults, WireSignature, WireType, stdio},
@@ -478,7 +478,7 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
         MatchPattern::Nat(NatPattern::Succ { pred_label, ih }) => {
             flat([pure(pred_label), pure(" + 1"), print_cons_ih(ih)])
         }
-        MatchPattern::Nat(NatPattern::Lit(n)) => pure(n.to_string()),
+        MatchPattern::Nat(NatPattern::Lit(NatLiteral(n, radix))) => pure(format_radix(&n, radix)),
         MatchPattern::List(ListPattern::Nil) => pure("[]"),
         MatchPattern::List(ListPattern::Cons {
             head_label,
@@ -1339,10 +1339,16 @@ fn print_term_inner(term: Term) -> Printer {
                 flat(
                     arms.into_iter()
                         .map(|arm| {
+                            // Where the pattern ends, for the reason a term is marked — see `print_term`: a literal leaf may be spelled another way than it was written.
+                            let written = match arm.span {
+                                Some(span) => reached(span.end),
+                                None => flat([]),
+                            };
                             flat([
                                 separator(),
                                 pure("| "),
                                 print_match_pattern(arm.pattern),
+                                written,
                                 attached_body(" =>", arm.body),
                             ])
                         })

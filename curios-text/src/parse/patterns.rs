@@ -330,9 +330,9 @@ fn refuse_glued_successor<'a>() -> Parser<'a, MatchPattern> {
 //
 // The numeral is kept whole, never narrowed to the erased `u32` here; `NatPattern::Lit` says why.
 pub(super) fn parse_nat_lit_match_pattern<'a>() -> Parser<'a, MatchPattern> {
-    parse_nat_digits().flat_map(|NatLiteral(value, _)| match value.is_zero() {
+    parse_nat_digits().flat_map(|literal| match literal.0.is_zero() {
         true => fail("0 is the Nat zero pattern, not a literal-dispatch case"),
-        false => pure(MatchPattern::Nat(NatPattern::Lit(value))),
+        false => pure(MatchPattern::Nat(NatPattern::Lit(literal))),
     })
 }
 

@@ -186,6 +186,16 @@ fn a_character_the_document_leaves_out_is_stepped_over() {
 }
 
 #[test]
+fn a_comment_behind_what_the_document_leaves_out_arrives_before_its_line_ends() {
+    let document = flat([pure("(a)"), hard_line(), pure("+ b")]);
+
+    assert_eq!(
+        placed(document, "((a)) -- note\n+ b", 80),
+        "(a) -- note\n+ b"
+    );
+}
+
+#[test]
 fn a_comma_past_what_the_document_left_out_is_the_originals_own() {
     let document = flat([pure("a"), pure(","), hard_line(), pure("b")]);
 
