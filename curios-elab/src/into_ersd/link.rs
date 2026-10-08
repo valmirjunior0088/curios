@@ -172,7 +172,10 @@ pub(super) fn link(
     entry: &ErasedItem,
 ) -> Result<ErasedProgram, Error> {
     curios_profile::profile!("link_program");
-    let reached = reached(scope, own.items().iter().chain([entry]));
+    let reached = reached(
+        scope,
+        own.items().iter().map(|erased| &**erased).chain([entry]),
+    );
     curios_profile::sample!(
         "link::computing",
         scope

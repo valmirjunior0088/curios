@@ -59,13 +59,14 @@ fn define_pick(context: &mut Context, variance: Variance) {
         body: Term::func([(carrier, sort)], nat(3)),
     };
 
-    context.define_assuming_scheme(
-        &Free::from(&definition.name),
+    let name = Free::from(&definition.name);
+    context.define_assuming(
+        &name,
         &definition.type_,
         &definition.body,
         Some(&definition.kind),
-        definition.universe_context.clone(),
     );
+    context.set_assumption_universe_context(&name, definition.universe_context.clone());
     context.record_definition_variances(&definition);
 }
 

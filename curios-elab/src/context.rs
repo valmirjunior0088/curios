@@ -413,7 +413,7 @@ impl<'s> Context<'s> {
         self.underway.needs.nothing()
     }
 
-    /// Publish a finished item: bind each of its names to what it elaborated to and file the registry entries it declares, each zonked ([`zonk_published`](crate::zonk_published)), as a recompile's reused items are replayed (`replay_reused`). What another declaration reads of this one then holds no metavariable of the state it was elaborated in, which the next declaration replaces, and is what a recompile that reuses the item reads.
+    /// Publish a finished item: bind each of its names to what it elaborated to and file the registry entries it declares, each zonked ([`zonk_published`](crate::zonk_published)). What another declaration reads of this one then holds no metavariable of the state it was elaborated in, which the next declaration replaces, and is what a recompile that keeps the item reads of its baseline.
     pub(crate) fn publish(&mut self, published: &Published) {
         for (name, declaration) in &published.induct_decls {
             self.update_induct(name, declaration.clone());
@@ -541,10 +541,6 @@ impl<'s> Context<'s> {
 
     pub(crate) fn definition_totality(&self, name: &Global) -> Option<Totality> {
         self.typing.program.definition_totality(name)
-    }
-
-    pub(crate) fn seed_totality(&mut self, inherited: &BTreeMap<Global, Totality>) {
-        self.typing.program.seed_totality(inherited);
     }
 
     /// File the vector a finished definition carries, for conversion's level alignment: with the length of its type's outer telescope, which is the one spine that applies it in full.
@@ -1257,18 +1253,6 @@ impl<'s> Context<'s> {
     ) {
         self.assume(name, type_);
         self.define(name, term, kind);
-    }
-
-    pub(crate) fn define_assuming_scheme(
-        &mut self,
-        name: &Free,
-        type_: &Term,
-        term: &Term,
-        kind: Option<&DefinitionKind>,
-        universe_context: UniverseContext,
-    ) {
-        self.define_assuming(name, type_, term, kind);
-        self.set_assumption_universe_context(name, universe_context);
     }
 
     pub(crate) fn definition_kind(&self, name: &Free) -> Option<&DefinitionKind> {

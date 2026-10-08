@@ -32,6 +32,14 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 **Rejected.** An optional record, a special case every reader carries; a unit generic over its record, which two named types say without the machinery; the record outside the unit, which turns the predecessors into a slice of pairs.
 
+### A unit is handed over, never copied
+
+**Decision.** A unit holds its lowered state, its elaborated module, its erased forms and its certification each by pointer, and each item's erased form by pointer among them, so a clone of a unit is a clone of its handles. Where its elaborated module holds each name it defines (`curios_core::Places`) is made once, the first time the unit is read by name, and kept with it for as long as it is held.
+
+**Rationale.** A unit is handed on more often than it is made: a fold hands each to its successors, a session keeps the last one as the next question's baseline and takes it back out, a store offers the archived one, and a unit compiled over a baseline keeps every erased form it does not redo. Copied, each of those is a walk of the whole unit for a question that may redo one declaration, and a scope keyed again for each compile is the same walk made of every unit in scope.
+
+**Rejected.** One handle around the whole unit, which leaves a recompile copying the parts it keeps into the unit it builds. A table of a unit's names made by elaboration for each compile, a walk of every unit in scope before the first declaration is read.
+
 ### A unit carries no identity another compilation could mint
 
 **Decision.** Nothing a unit stores is a position in a counter another compilation also counts. A binder's label is its display hint; no term holds a free local or a metavariable; a witness is named by its module, its concept and the key its signature is spelled at; and every counter a lowering and an elaboration mint from starts at zero for each declaration of the unit, the lowering's count carried beside the module for the elaborator to start above (`curios_core::Minted`). An erased form's identities are places in its own item's fragment, counted from zero, and what it hands on binds the names its item declares, never a binder its erasure opened.

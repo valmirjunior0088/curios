@@ -45,20 +45,14 @@ fn stamped(item: &Item) -> Totality {
 fn a_partial_name_from_another_unit_still_taints_what_mentions_it() {
     // The replay path: `caller` is user code and `/std/Async/bind` is a prelude definition this unit does not contain. Without the recorded verdict the classification sees a name with none and calls `caller` total, which is the hole that would let a user proof mention a divergent prelude function.
     let mut context = Context::with_default_budget(SYNTAX);
-    context.seed_totality(&BTreeMap::from([(
-        name("prelude_partial"),
-        Totality::Partial,
-    )]));
+    context.record_definition_totality(&name("prelude_partial"), Totality::Partial);
     let mut caller = mentioning("caller", "prelude_partial");
     stamp_totality(&mut context, &mut caller).expect("classified");
     assert_eq!(stamped(&caller), Totality::Partial);
 
     // And the verdict is read, not assumed: the same item against a total prelude name is total.
     let mut context = Context::with_default_budget(SYNTAX);
-    context.seed_totality(&BTreeMap::from([(
-        name("prelude_partial"),
-        Totality::Total,
-    )]));
+    context.record_definition_totality(&name("prelude_partial"), Totality::Total);
     let mut caller = mentioning("caller", "prelude_partial");
     stamp_totality(&mut context, &mut caller).expect("classified");
     assert_eq!(stamped(&caller), Totality::Total);
@@ -68,7 +62,7 @@ fn a_partial_name_from_another_unit_still_taints_what_mentions_it() {
 fn partiality_crosses_a_chain_of_declarations_one_verdict_at_a_time() {
     // `first → second → outside`. Each declaration is classified as it is published, after what it reads, and a verdict is a closure: `second` records that it reaches something partial, and `first` reads that of `second` without walking into it.
     let mut context = Context::with_default_budget(SYNTAX);
-    context.seed_totality(&BTreeMap::from([(name("outside"), Totality::Partial)]));
+    context.record_definition_totality(&name("outside"), Totality::Partial);
     let mut second = mentioning("second", "outside");
     let mut first = mentioning("first", "second");
 

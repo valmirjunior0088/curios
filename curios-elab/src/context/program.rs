@@ -312,10 +312,4 @@ impl<'s> Program<'s> {
             .copied()
             .or_else(|| Some(self.scope?.definition(name)?.totality))
     }
-
-    /// Seed the recorded verdicts with a replayed prefix's, which its own archive settled.
-    pub(crate) fn seed_totality(&mut self, inherited: &BTreeMap<Global, Totality>) {
-        self.totality
-            .extend(inherited.iter().map(|(name, totality)| (*name, *totality)));
-    }
 }

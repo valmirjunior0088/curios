@@ -1,7 +1,7 @@
 //! What one run reports when an item is refused: every independent refusal in item order, nothing from an item that reaches a refused one, and a context with nothing of the refused item left in it — and what finalization reads off a declaration's value.
 
 use {
-    super::vocabulary_reach,
+    super::{Keeping, vocabulary_reach},
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
@@ -282,8 +282,14 @@ fn the_vocabulary_reaches_what_it_reads_through_a_baselines_items() {
         nominal("apart"),
     ]);
 
+    // A recompile that elaborates none of the baseline again keeps all of it.
+    let kept = Keeping {
+        baseline: &baseline,
+        redone: &BTreeSet::new(),
+    };
+
     assert_eq!(
-        vocabulary_reach(&context(), Some(&baseline), &order),
+        vocabulary_reach(&context(), Some(kept), &order),
         BTreeSet::from([lemma(), nominal("between"), nominal("read")]),
     );
 }
@@ -294,8 +300,13 @@ fn a_unit_declaring_none_of_the_vocabulary_asks_for_nothing_first() {
     let reused = baseline_reading_through();
     let order = written(&[nominal("read"), nominal("apart")]);
 
+    let kept = Keeping {
+        baseline: &reused,
+        redone: &BTreeSet::new(),
+    };
+
     assert_eq!(
-        vocabulary_reach(&context(), Some(&reused), &order),
+        vocabulary_reach(&context(), Some(kept), &order),
         BTreeSet::new(),
     );
 }

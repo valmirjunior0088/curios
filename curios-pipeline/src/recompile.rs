@@ -1,4 +1,4 @@
-//! One unit compiled over a baseline: the items its new text changed, closed over what the baseline's elaboration reached, elaborated, judged and erased alone, with everything outside the closure replayed from the baseline as a predecessor's items are and its erased form taken as the baseline holds it.
+//! One unit compiled over a baseline: the items its new text changed, closed over what the baseline's elaboration reached, elaborated, judged and erased alone, with everything outside the closure read where the baseline holds it, as a predecessor's items are, and its erased form the baseline's own.
 //!
 //! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. What a reused item rests on is the verdict recorded when the baseline was judged, exactly as a whole unit taken from a store does, and the argument is [Cached verdicts](../../documentation/design/soundness/cached-verdicts.md) applied per item: the key is the item's lowered form together with everything its reach closure covers. That is why the closure is transitive — conversion unfolds bodies, so a dependent's judgment reaches through what it names, and a closure that stopped one edge short would be a key omitting an input.
 //!
@@ -38,11 +38,15 @@ pub fn compile_unit_over(
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
     let closure = invalidated(baseline, lowered.core());
-    // A reused item is exactly as the baseline elaborated it; the seeds are the new lowering's, handed to elaboration with its counts.
-    let reused = baseline.core().restricted(|name| !closure.contains(name));
+    // The seeds are the new lowering's, handed to elaboration with its counts.
     let changed = lowered.core().restricted(|name| closure.contains(name));
 
-    let established = Established::over(&cores);
+    // A kept item is exactly as the baseline elaborated it, and is read where the baseline holds it: the scope's last layer, answering for every name outside the closure.
+    let established = Established::placed(&predecessors.placed()).keeping(
+        baseline.core(),
+        baseline.places(),
+        &closure,
+    );
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
@@ -52,7 +56,8 @@ pub fn compile_unit_over(
             &mut context,
             &established,
             Recompile {
-                reused: &reused,
+                baseline: baseline.core(),
+                redone: &closure,
                 closure: &changed,
                 lowered: lowered.core(),
             },
@@ -77,6 +82,8 @@ pub fn compile_unit_over(
     let core =
         Zonked::project(&core).map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
+    // What the kernel is told stands: the baseline's items outside the closure, mounted with the baseline's record.
+    let reused = baseline.core().restricted(|name| !closure.contains(name));
     let rechecked = recheck_over(&core, budget, predecessors, &reused, baseline, syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
         return Err(kernel_refusal(verdict, core.as_module(), &cores, syntax));

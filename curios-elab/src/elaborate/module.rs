@@ -18,9 +18,9 @@ use {
         check_type_totality, check_written_type_totality, compared_levels, decide_polarities,
         definition_variances, family_levels, goal_sites, hold_variances, is_prop,
         record_definition_totality, record_superclasses, record_variances, reduce_with,
-        register_witness, replay_reused, report_goals, seed_reused, sort_term, stamp_totality,
-        state_proof_binders, superclass_targets, test_program_tail, zonk, zonk_arity, zonk_entry,
-        zonk_module, zonk_published, zonk_solved_term_metas,
+        register_witness, report_goals, sort_term, stamp_totality, state_proof_binders,
+        superclass_targets, test_program_tail, zonk, zonk_arity, zonk_entry, zonk_module,
+        zonk_published, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_core::{
@@ -1434,12 +1434,48 @@ fn declared_witnesses(module: &Module, order: &BTreeMap<Global, usize>) -> Vec<(
         .collect()
 }
 
-/// The names of the unit the prover's vocabulary stands on before any item elaborates: the vocabulary's own, and what it reads through the items a recompile reuses, which arrive elaborated and which no walk asks for. The walk asks for the declarations among them first ([`Demand::all`]), so a declaration the vocabulary reads is given no lemma of the unit whether its unit is compiled whole or over a baseline.
+/// The declarations a recompile keeps: its baseline's, but for the ones elaborated again. They are read where the baseline holds them ([`Established::keeping`]), and nothing of them is brought in.
+#[derive(Clone, Copy)]
+struct Keeping<'a> {
+    baseline: &'a Module,
+    redone: &'a BTreeSet<Global>,
+}
+
+impl<'a> Keeping<'a> {
+    fn keeps(&self, name: &Global) -> bool {
+        !self.redone.contains(name)
+    }
+
+    /// The baseline's items that are kept: those none of whose names is elaborated again.
+    fn items(&self) -> impl Iterator<Item = &'a Item> + '_ {
+        self.baseline.items.iter().filter(|item| {
+            item.declared_names()
+                .into_iter()
+                .all(|name| self.keeps(name))
+        })
+    }
+
+    /// One of the unit's registries: the baseline's entry for each declaration kept, and `redone`'s for every other, a declaration the new text dropped leaving none.
+    fn entries<D: Clone>(
+        &self,
+        baseline: &BTreeMap<Global, D>,
+        redone: BTreeMap<Global, D>,
+    ) -> BTreeMap<Global, D> {
+        baseline
+            .iter()
+            .filter(|(name, _)| self.keeps(name))
+            .map(|(name, entry)| (*name, entry.clone()))
+            .chain(redone)
+            .collect()
+    }
+}
+
+/// The names of the unit the prover's vocabulary stands on before any item elaborates: the vocabulary's own, and what it reads through the items a recompile keeps, which arrive elaborated and which no walk asks for. The walk asks for the declarations among them first ([`Demand::all`]), so a declaration the vocabulary reads is given no lemma of the unit whether its unit is compiled whole or over a baseline.
 ///
 /// Empty for a unit that declares none of the vocabulary, which is every unit but the library's.
 fn vocabulary_reach(
     context: &Context,
-    reused: Option<&Module>,
+    kept: Option<Keeping<'_>>,
     order: &BTreeMap<Global, usize>,
 ) -> BTreeSet<Global> {
     let mut pending = context
@@ -1454,9 +1490,13 @@ fn vocabulary_reach(
     }
 
     // The unit's items that arrive elaborated, each with the module that says what it reaches.
-    let reused = reused
+    let reused = kept
         .into_iter()
-        .flat_map(|module| module.items.iter().map(move |item| (module, item)))
+        .flat_map(|kept| {
+            kept.items()
+                .map(|item| (kept.baseline, item))
+                .collect::<Vec<_>>()
+        })
         .flat_map(|(module, item)| {
             item.declared_names()
                 .into_iter()
@@ -1504,27 +1544,24 @@ struct ElaboratedSuffix {
 ///
 /// **One protocol serves both entry points**, and that is the point. `established` is [`Established::nothing`] for a from-scratch elaboration and the units in scope otherwise; every step below degenerates to the whole-module reading when it is empty, so there is no second implementation to keep in agreement by reading — the shape of a configuration-dependent defect, a rule correct in the configuration its author was looking at and wrong in the other one.
 ///
-/// A scope is read through where it stands and nothing of it is elaborated or brought in ([`Context::read_through`]). What is replayed is `reused`, the items a recompile takes from its baseline: they are the unit's own, and go into the base frame after [`check_concept_registry`] as the items elaborated beside them will.
+/// A scope is read through where it stands and nothing of it is elaborated or brought in ([`Context::read_through`]), and so are the declarations a recompile keeps of its baseline, `kept`: `established` holds the baseline as its last layer ([`Established::keeping`]), answering for every declaration but the ones `module` elaborates again.
 fn elaborate_module_suffix<'s>(
     context: &mut Context<'s>,
     established: Option<&'s Established<'_>>,
-    reused: Option<&Module>,
+    kept: Option<Keeping<'_>>,
     module: &Module,
     lowered: &Module,
     minted: &Minted,
     tail: Option<Tail<'_>>,
 ) -> Result<ElaboratedSuffix, Error> {
     curios_profile::profile!("elaborate_module_suffix");
-    // The scope is read through, and nothing of it goes in but each unit's mounts, which a privilege question is answered out of and which the unit's own items may ask while they elaborate. `register_*` rejects a key the scope holds, and the unit declares only its own, so the two cannot collide.
+    // The scope is read through, and nothing of it goes in but each unit's mounts, which a privilege question is answered out of and which the unit's own items may ask while they elaborate. `register_*` rejects a key the scope holds, and the unit declares only its own, so the two cannot collide: a baseline answers for none of the names being elaborated again.
     if let Some(established) = established {
         established.coherent()?;
         context.read_through(established);
         for unit in established.modules() {
             context.mount(&unit.mounts);
         }
-    }
-    if let Some(reused) = reused {
-        seed_reused(context, reused)?;
     }
     // The unit's own mounts, after its scope's. Mount sets are pairwise disjoint, so the order only fixes which entry a lookup finds first among equals, and there are none.
     context.mount(&module.mounts);
@@ -1548,10 +1585,6 @@ fn elaborate_module_suffix<'s>(
     }
     check_concept_registry(context)?;
 
-    if let Some(reused) = reused {
-        replay_reused(context, reused)?;
-    }
-
     // Elaboration goes on minting in the spaces the unit's lowering minted in, so each counter starts above the lowering's count: a lowered hole and an inserted implicit are distinct metavariables, and an unbound name — a free local the lowering minted — is never an elaborated binder, which would find it bound instead of reporting it. The scope's terms carry neither, so nothing a predecessor minted can meet these.
     context.seed(minted);
 
@@ -1569,7 +1602,7 @@ fn elaborate_module_suffix<'s>(
     for (name, declared) in declared_witnesses(module, &order) {
         context.declare_witness(name, declared);
     }
-    let vocabulary = vocabulary_reach(context, reused, &order);
+    let vocabulary = vocabulary_reach(context, kept, &order);
     context.begin_unit(
         order,
         module
@@ -2054,16 +2087,26 @@ fn elaborate_and_zonk<'s>(
     })
 }
 
-/// What an item-level recompile hands elaboration: the baseline's items it reuses, replayed into the base frame; the closure it re-elaborates, restricted out of the new lowering, whose seeds come beside it in the whole unit's [`Minted`]; and that lowering, which says which items the unit holds.
+/// What an item-level recompile hands elaboration: the baseline, as an earlier text of the unit elaborated; the names elaborated again, `redone`; the closure it re-elaborates, restricted out of the new lowering, whose seeds come beside it in the whole unit's [`Minted`]; and that lowering, which says which items the unit holds.
 ///
-/// The closure is closed under reverse reachability over the baseline's elaborated graph — the caller's obligation. A reused declaration's cells stand as the baseline published them — its vectors, its totality — and nothing here writes one again: nothing a reused declaration read is in the closure, so what decided them has not moved.
+/// The scope elaboration is handed holds the baseline as its last layer, answering for every declaration but those `redone` names ([`Established::keeping`]) — the caller's obligation, as it is that `redone` is closed under reverse reachability over the baseline's elaborated graph and holds every name `closure` declares. A kept declaration's cells stand as the baseline published them — its vectors, its totality — and nothing here writes one again: nothing a kept declaration read is redone, so what decided them has not moved.
 pub struct Recompile<'a> {
-    pub reused: &'a Module,
+    pub baseline: &'a Module,
+    pub redone: &'a BTreeSet<Global>,
     pub closure: &'a Module,
     pub lowered: &'a Module,
 }
 
-/// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the closure alone is elaborated, against the scope with the reused items replayed into the base frame, and the result is reassembled with them into one module, put in the order a whole compile stores it in (`Module::ordered`).
+impl<'a> Recompile<'a> {
+    fn kept(&self) -> Keeping<'a> {
+        Keeping {
+            baseline: self.baseline,
+            redone: self.redone,
+        }
+    }
+}
+
+/// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the closure alone is elaborated, against the scope and the baseline's kept declarations read where they stand, and the result is reassembled with them into one module, put in the order a whole compile stores it in (`Module::ordered`).
 ///
 /// Everything decided of a declaration narrows to the closure by construction: each of its declarations decides its own vectors, totality and erasure obligations as it is published, reading a reused declaration's as the baseline left them, and a reused item is zonked and stamped already. A cycle is met among the closure's items as they are asked for: one through a reused witness would need that witness to reach a closure item, which contradicts the closure being closed, and a cycle among reused witnesses was refused when the baseline compiled.
 ///
@@ -2087,7 +2130,7 @@ fn elaborate_and_zonk_unit_over_within<'s>(
     let elaborated = elaborate_module_suffix(
         context,
         Some(established),
-        Some(recompile.reused),
+        Some(recompile.kept()),
         recompile.closure,
         recompile.lowered,
         minted,
@@ -2132,10 +2175,9 @@ fn reassemble(recompile: &Recompile<'_>, closure: Module, dropped: &BTreeSet<Glo
             .cloned()
             .expect("an item declares a name")
     };
-    let reused = recompile
-        .reused
-        .items
-        .iter()
+    let kept = recompile.kept();
+    let reused = kept
+        .items()
         .map(|item| (first(item), item))
         .collect::<BTreeMap<_, _>>();
     let mut elaborated = closure
@@ -2170,12 +2212,9 @@ fn reassemble(recompile: &Recompile<'_>, closure: Module, dropped: &BTreeSet<Glo
         .cloned()
         .collect::<BTreeSet<_>>();
 
-    let mut induct_decls = recompile.reused.induct_decls.clone();
-    induct_decls.extend(closure.induct_decls);
-    let mut struct_decls = recompile.reused.struct_decls.clone();
-    struct_decls.extend(closure.struct_decls);
-    let mut concepts = recompile.reused.concepts.clone();
-    concepts.extend(closure.concepts);
+    let induct_decls = kept.entries(&recompile.baseline.induct_decls, closure.induct_decls);
+    let struct_decls = kept.entries(&recompile.baseline.struct_decls, closure.struct_decls);
+    let concepts = kept.entries(&recompile.baseline.concepts, closure.concepts);
 
     Module {
         items,

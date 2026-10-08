@@ -331,7 +331,6 @@ fn std_replay_census() {
         };
         let roots = [*sys];
         let predecessors = Predecessors::over(&roots);
-        let cores = predecessors.cores();
         let source = std_from_its_tree();
         let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
         let lowered =
@@ -405,9 +404,12 @@ fn std_replay_census() {
                         .take(padding),
                 );
 
-                let reused = whole.restricted(|name| !closure.contains(name));
                 let changed = lowered_core.restricted(|name| closure.contains(name));
-                let established = Established::over(&cores);
+                let established = Established::placed(&predecessors.placed()).keeping(
+                    whole,
+                    std.places(),
+                    &closure,
+                );
                 let mut context = Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
                 context.set_imports(lowered.imports().clone());
                 context.set_broken(lowered.broken_names());
@@ -415,7 +417,8 @@ fn std_replay_census() {
                     &mut context,
                     &established,
                     Recompile {
-                        reused: &reused,
+                        baseline: whole,
+                        redone: &closure,
                         closure: &changed,
                         lowered: lowered_core,
                     },

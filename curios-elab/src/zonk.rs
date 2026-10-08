@@ -396,14 +396,13 @@ pub(crate) fn validate_bound_universes<B: Bound>(
 
 fn validate_instance_arities<B: Bound>(
     value: &B,
-    definitions: &BTreeMap<Global, usize>,
-    inducts: &BTreeMap<Global, usize>,
-    structs: &BTreeMap<Global, usize>,
+    schemes: &Schemes,
     owner: &str,
 ) -> Result<(), Error> {
-    let definitions = definitions.clone();
-    let inducts = inducts.clone();
-    let structs = structs.clone();
+    // Shared with the hook, never copied: a table holds a count for every name of the module, and this runs once for each term a module holds.
+    let definitions = Rc::clone(&schemes.definitions);
+    let inducts = Rc::clone(&schemes.inducts);
+    let structs = Rc::clone(&schemes.structs);
     let owner = owner.to_string();
     let error = Rc::new(RefCell::new(None));
     let found = Rc::clone(&error);
@@ -491,67 +490,81 @@ fn validate_instance_arities<B: Bound>(
 
 /// The universe parameter counts a module's definitions and registry entries declare, which an occurrence's instance is held to.
 struct Schemes {
-    definitions: BTreeMap<Global, usize>,
-    inducts: BTreeMap<Global, usize>,
-    structs: BTreeMap<Global, usize>,
+    definitions: Rc<BTreeMap<Global, usize>>,
+    inducts: Rc<BTreeMap<Global, usize>>,
+    structs: Rc<BTreeMap<Global, usize>>,
 }
 
 impl Schemes {
     fn of(module: &Module) -> Self {
         Self {
-            definitions: module
-                .items
-                .iter()
-                .flat_map(Item::definitions)
-                .map(|definition| {
-                    let count = definition.universe_context.parameter_count;
-                    (definition.name, count)
-                })
-                .collect(),
-            inducts: module
-                .induct_decls
-                .iter()
-                .map(|(name, declaration)| (*name, declaration.universe_context.parameter_count))
-                .collect(),
-            structs: module
-                .struct_decls
-                .iter()
-                .map(|(name, declaration)| (*name, declaration.universe_context.parameter_count))
-                .collect(),
+            definitions: Rc::new(
+                definition_schemes(module)
+                    .map(|(name, _, context)| (name, context.parameter_count))
+                    .collect(),
+            ),
+            inducts: Rc::new(
+                module
+                    .induct_decls
+                    .iter()
+                    .map(|(name, declaration)| {
+                        (*name, declaration.universe_context.parameter_count)
+                    })
+                    .collect(),
+            ),
+            structs: Rc::new(
+                module
+                    .struct_decls
+                    .iter()
+                    .map(|(name, declaration)| {
+                        (*name, declaration.universe_context.parameter_count)
+                    })
+                    .collect(),
+            ),
         }
     }
 
     fn validate<B: Bound>(&self, value: &B, owner: &str) -> Result<(), Error> {
-        validate_instance_arities(
-            value,
-            &self.definitions,
-            &self.inducts,
-            &self.structs,
-            owner,
-        )
+        validate_instance_arities(value, self, owner)
     }
 }
 
-fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
-    let mut definition_schemes = BTreeMap::new();
-    for item in &module.items {
-        match item {
-            Item::Let(definition) => {
-                definition_schemes.insert(
+/// Each name `module` defines, with how it was introduced and the universe context it is generalized under: a definition's own, a group member's its group's. Read off what an item states of its members, so no group is opened to ask.
+fn definition_schemes(
+    module: &Module,
+) -> impl Iterator<Item = (Global, &DefinitionKind, &UniverseContext)> {
+    module.items.iter().flat_map(|item| match item {
+        Item::Let(definition) => vec![(
+            definition.name,
+            &definition.kind,
+            &definition.universe_context,
+        )],
+        Item::Rec(rec) => rec
+            .definitions
+            .iter()
+            .map(|definition| {
+                (
                     definition.name,
-                    (definition.kind.clone(), definition.universe_context.clone()),
-                );
-            }
-            Item::Rec(rec) => {
-                for definition in rec.definitions() {
-                    definition_schemes.insert(
-                        definition.name,
-                        (definition.kind, definition.universe_context),
-                    );
-                }
-            }
-        }
-    }
+                    &definition.kind,
+                    rec.group.universe_context(),
+                )
+            })
+            .collect(),
+    })
+}
+
+/// Whether `held` admits one of the names `item` declares.
+fn holds(item: &Item, held: &dyn Fn(&Global) -> bool) -> bool {
+    item.declared_names().into_iter().any(held)
+}
+
+fn validate_module_instance_arities(
+    module: &Module,
+    held: &dyn Fn(&Global) -> bool,
+) -> Result<(), Error> {
+    let definition_schemes = definition_schemes(module)
+        .map(|(name, kind, context)| (name, (kind, context)))
+        .collect::<BTreeMap<_, _>>();
     let schemes = Schemes::of(module);
     macro_rules! validate {
         ($value:expr, $owner:expr $(,)?) => {
@@ -559,7 +572,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
         };
     }
 
-    for item in &module.items {
+    for item in module.items.iter().filter(|item| holds(item, held)) {
         for definition in item.definitions() {
             validate!(
                 &definition.type_,
@@ -571,7 +584,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
             )?;
         }
     }
-    for (name, declaration) in &module.induct_decls {
+    for (name, declaration) in module.induct_decls.iter().filter(|(name, _)| held(name)) {
         validate!(&declaration.arity, &format!("inductive {name} arity"))?;
         validate!(
             &declaration.result_sort,
@@ -585,14 +598,14 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
         }
 
         if let Some((kind, actual)) = definition_schemes.get(name)
-            && (kind != &DefinitionKind::InductiveType || actual != &declaration.universe_context)
+            && (**kind != DefinitionKind::InductiveType || **actual != declaration.universe_context)
         {
             return Err(Error::UniverseInvariant(format!(
                 "inductive {name} and its type-former definition have different universe contexts"
             )));
         }
     }
-    for (name, declaration) in &module.struct_decls {
+    for (name, declaration) in module.struct_decls.iter().filter(|(name, _)| held(name)) {
         validate!(&declaration.arity, &format!("structure {name} arity"))?;
         validate!(
             &declaration.result_sort,
@@ -602,14 +615,14 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
             && (!matches!(
                 kind,
                 DefinitionKind::StructType | DefinitionKind::ConceptType
-            ) || actual != &declaration.universe_context)
+            ) || **actual != declaration.universe_context)
         {
             return Err(Error::UniverseInvariant(format!(
                 "structure {name} and its type-former definition have different universe contexts"
             )));
         }
     }
-    for (name, concept) in &module.concepts {
+    for (name, concept) in module.concepts.iter().filter(|(name, _)| held(name)) {
         validate!(&concept.params, &format!("concept {name} parameters"))?;
         let Some(struct_decl) = module.struct_decls.get(name) else {
             return Err(Error::UniverseInvariant(format!(
@@ -623,7 +636,7 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
         }
     }
     // Both directions of the generated-member correspondence, read off the definition's own recorded origin. A constructor names the inductive it belongs to *and* which case it is, so this checks the registry entry exists and actually declares that case — without joining an owner and a tag back into a name to look up.
-    for (name, (kind, _)) in &definition_schemes {
+    for (name, (kind, _)) in definition_schemes.iter().filter(|(name, _)| held(name)) {
         match kind {
             DefinitionKind::InductiveConstructor { owner, tag } => {
                 let owner = Global::Authored(*owner);
@@ -657,8 +670,26 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
     Ok(())
 }
 
+/// Hold every universe `module` states to the scheme it is stated under: each definition's and registry entry's context, the levels its terms mention, and each instance's arity against the scheme of the name it instantiates.
 pub fn validate_universes(module: &Module) -> Result<(), Error> {
-    for item in &module.items {
+    validate_universes_of(module, &|_| true)
+}
+
+/// [`validate_universes`] for the declarations of `module` that `held` names, each held to the schemes the whole module declares: what a unit compiled over a baseline validates, the declarations it keeps having been validated where the baseline was compiled.
+pub(crate) fn validate_universes_of(
+    module: &Module,
+    held: &dyn Fn(&Global) -> bool,
+) -> Result<(), Error> {
+    let mut entries = module
+        .induct_decls
+        .keys()
+        .chain(module.struct_decls.keys())
+        .chain(module.concepts.keys());
+    if !module.items.iter().any(|item| holds(item, held)) && !entries.any(held) {
+        return Ok(());
+    }
+
+    for item in module.items.iter().filter(|item| holds(item, held)) {
         for definition in item.definitions() {
             universe_context_validate(&definition.universe_context).map_err(|error| {
                 Error::UniverseInvariant(format!(
@@ -679,7 +710,7 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
             )?;
         }
     }
-    for (name, induct_decl) in &module.induct_decls {
+    for (name, induct_decl) in module.induct_decls.iter().filter(|(name, _)| held(name)) {
         universe_context_validate(&induct_decl.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
                 "inductive {name} has an invalid universe context: {error}"
@@ -704,7 +735,7 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
             )?;
         }
     }
-    for (name, struct_decl) in &module.struct_decls {
+    for (name, struct_decl) in module.struct_decls.iter().filter(|(name, _)| held(name)) {
         universe_context_validate(&struct_decl.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
                 "structure {name} has an invalid universe context: {error}"
@@ -729,7 +760,7 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
             )));
         }
     }
-    for (name, concept) in &module.concepts {
+    for (name, concept) in module.concepts.iter().filter(|(name, _)| held(name)) {
         universe_context_validate(&concept.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
                 "concept {name} has an invalid universe context: {error}"
@@ -741,7 +772,7 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
             &format!("concept {name} parameters"),
         )?;
     }
-    validate_module_instance_arities(module)?;
+    validate_module_instance_arities(module, held)?;
     Ok(())
 }
 

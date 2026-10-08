@@ -10,7 +10,7 @@ use {
     super::{Binding, Environment},
     curios_core::{Free, Global, Item, Module},
     curios_utilities::Span,
-    std::collections::BTreeMap,
+    std::{collections::BTreeMap, rc::Rc},
 };
 
 /// One item's erased form — see the module documentation.
@@ -135,11 +135,13 @@ impl ErasedItem {
 }
 
 /// A unit's items' erased forms, in the order the unit stores its items.
+///
+/// Each is held by pointer: a unit compiled over a baseline keeps the baseline's own erased form for every item it does not erase again, and copies none.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived(recursive)]
 pub struct ErasedUnit {
     #[archived_omit_bounds]
-    items: Vec<ErasedItem>,
+    items: Vec<Rc<ErasedItem>>,
     /// The item that declares each name.
     declared: BTreeMap<Global, u32>,
     /// The items whose evaluation at initialization computes ([`curios_ersd::Module::computes`]), ascending: what a program links whether or not it names them, since whether one is observable is the program's to say.
@@ -153,7 +155,7 @@ impl ErasedUnit {
     }
 
     /// Add `item`'s erased form after those of the items before it.
-    pub(super) fn push(&mut self, item: &Item, erased: ErasedItem) {
+    pub(super) fn push(&mut self, item: &Item, erased: Rc<ErasedItem>) {
         let place = u32::try_from(self.items.len()).expect("a unit's items are counted in a u32");
         for name in item.declared_names() {
             self.declared.insert(*name, place);
@@ -165,7 +167,7 @@ impl ErasedUnit {
     }
 
     /// The erased forms, in item order.
-    pub(super) fn items(&self) -> &[ErasedItem] {
+    pub(super) fn items(&self) -> &[Rc<ErasedItem>] {
         &self.items
     }
 
@@ -176,6 +178,11 @@ impl ErasedUnit {
 
     /// The erased form of the item declaring `name`.
     pub(super) fn find(&self, name: &Global) -> Option<&ErasedItem> {
+        self.held(name).map(|erased| &**erased)
+    }
+
+    /// The erased form of the item declaring `name`, as this unit holds it: what a unit compiled over this one keeps.
+    pub(super) fn held(&self, name: &Global) -> Option<&Rc<ErasedItem>> {
         self.place(name).map(|place| &self.items[place])
     }
 

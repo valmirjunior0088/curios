@@ -606,7 +606,7 @@ impl Module {
 
     /// This module with its items in the order a unit is stored in: every item after the items it [reaches](Self::reaches), and where that leaves a choice, the one whose first declared name is least.
     ///
-    /// The order is a function of what the items declare and name, and of nowhere they were written: a unit holds the same module wherever its declarations sit in its sources, and whether it was compiled whole or over a baseline. It is given once, where a module is made, and every walk after that takes the items as they come: the certifier, which refuses a name an item reaches before it is defined, and erasure. A witness is named by its place among its module's witnesses, so witnesses keep the order their module writes them in.
+    /// The order is a function of what the items declare and name, and of nowhere they were written: a unit holds the same module wherever its declarations sit in its sources, and whether it was compiled whole or over a baseline. It is given once, where a module is made, and every walk after that takes the items as they come: the certifier, which refuses a name an item reaches before it is defined, and erasure.
     ///
     /// Items that reach one another have no such order. The least-named of what is left then goes first, so the walk ends, and the certifier refuses the name it finds unbound.
     pub fn ordered(mut self) -> Self {

@@ -1,7 +1,10 @@
 //! What earlier units established, as the thing a later one is compiled against.
 
 use {
-    crate::Unit, curios_abi::ForeignStore, curios_core::Module, curios_elab::ErasedUnit,
+    crate::Unit,
+    curios_abi::ForeignStore,
+    curios_core::{Module, Places},
+    curios_elab::ErasedUnit,
     curios_text::PreparedText,
 };
 
@@ -35,9 +38,17 @@ impl<'a> Predecessors<'a> {
         self.units.iter().map(|unit| unit.text()).collect()
     }
 
-    /// The elaborated module of each predecessor, for `curios-elab`'s `Established` and for the kernel's environment.
+    /// The elaborated module of each predecessor, for the kernel's environment and for a report that spells a predecessor's name.
     pub fn cores(&self) -> Vec<&'a Module> {
         self.units.iter().map(|unit| unit.core()).collect()
+    }
+
+    /// The elaborated module of each predecessor beside the places its unit keeps for it, for `curios-elab`'s `Established`: a scope read by name, with nothing keyed for the compile.
+    pub fn placed(&self) -> Vec<(&'a Module, &'a Places)> {
+        self.units
+            .iter()
+            .map(|unit| (unit.core(), unit.places()))
+            .collect()
     }
 
     /// Every `foreign` row the predecessors declare, in dependency order — the union an embedder binds against.

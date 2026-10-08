@@ -2,76 +2,65 @@
 //!
 //! Elaboration of a compilation unit happens against everything already in scope, and that scope is not a *part* of the unit: it is a set of finished modules. [`Established`] is those modules as a declaration reads them — a name's type, its body, a registry entry, the witness at a key — each answered by reference into the unit that holds it (`InScope`).
 //!
-//! **Nothing of a scope is brought in.** A context is handed the scope and reads through to it where its own stores miss, so what a compile costs of its scope is what its declarations read: no definition is defined again, no registry entry cloned, no witness registered again by reducing a signature its own unit already keyed. A unit in scope answers for its names by an index made once for the compile, a place for each name and nothing copied.
+//! **Nothing of a scope is brought in.** A context is handed the scope and reads through to it where its own stores miss, so what a compile costs of its scope is what its declarations read: no definition is defined again, no registry entry cloned, no witness registered again by reducing a signature its own unit already keyed. A unit in scope answers for its names by the places its own unit keeps for it (`curios_core::Places`), made once for as long as the unit is held.
 //!
-//! **A witness in scope is found by its name**, which states its concept and its key (`curios_core::WitnessId`): a unit's witnesses are an ordered set of names, so the witness at a concept and a key is the first name from there on.
+//! **A baseline is one more layer.** A unit compiled over a baseline reads the declarations it keeps where the baseline holds them, above its scope and beneath its own stores, and the layer answers for none of the names being elaborated again ([`Established::keeping`]).
+//!
+//! **A witness in scope is found by its name**, which states its concept and its key (`curios_core::WitnessId`): a unit's witnesses are an ordered set of names, so the witnesses at a concept and a key are the names from there on.
 
 use {
-    super::{Context, Defined, Error, InScope, recorded_totality, register_witness},
+    super::{Defined, Error, InScope},
     curios_core::{
-        ConceptDecl, Free, Global, InductDecl, Item, Module, RecGroup, StructDecl, Term, WitnessId,
-        WitnessKey,
+        ConceptDecl, Global, InductDecl, Item, Module, Place, Places, RecGroup, RecItem,
+        StructDecl, WitnessId, WitnessKey,
     },
     curios_utilities::Qualifier,
-    std::{cell::OnceCell, collections::HashMap},
+    std::collections::{BTreeSet, HashMap},
 };
 
-/// Where a unit holds a name: an item that is a definition, or a member of an item that is a group.
-#[derive(Debug, Clone, Copy)]
-enum Place {
-    Let(u32),
-    Member { item: u32, member: u32, slot: u32 },
+/// The places of one unit's names: its unit's own, or made here for a module nothing keeps them with.
+#[derive(Debug)]
+enum Placed<'a> {
+    Kept(&'a Places),
+    Made(Places),
 }
 
 /// One unit in scope, answering for its names.
 #[derive(Debug)]
 struct Standing<'a> {
     module: &'a Module,
-    places: HashMap<Global, Place>,
-    /// A group's member is read by its type and by its projection out of the group, which are terms the group does not hold as such: each is made the first time its member is read, and kept for the compile.
-    members: Vec<OnceCell<(Term, Term)>>,
-    /// The item each of the unit's groups is, made the first time a report asks which names a group's members go by.
-    groups: OnceCell<HashMap<RecGroup, u32>>,
+    places: Placed<'a>,
+    /// The names this unit does not answer for: a baseline's declarations that are being elaborated again. `None` for a unit in scope, which answers for every name it holds.
+    redone: Option<&'a BTreeSet<Global>>,
 }
 
 impl<'a> Standing<'a> {
-    fn of(module: &'a Module) -> Self {
-        let mut places = HashMap::with_capacity(module.items.len());
-        let mut slots = 0;
-        for (item, declared) in module.items.iter().enumerate() {
-            let item = u32::try_from(item).expect("a unit's items are counted in a u32");
-            match declared {
-                Item::Let(definition) => {
-                    places.insert(definition.name, Place::Let(item));
-                }
-                Item::Rec(rec) => {
-                    for (member, definition) in rec.definitions.iter().enumerate() {
-                        let member =
-                            u32::try_from(member).expect("a group's members are counted in a u32");
-                        places.insert(
-                            definition.name,
-                            Place::Member {
-                                item,
-                                member,
-                                slot: slots,
-                            },
-                        );
-                        slots += 1;
-                    }
-                }
-            }
+    fn places(&self) -> &Places {
+        match &self.places {
+            Placed::Kept(places) => places,
+            Placed::Made(places) => places,
         }
+    }
 
-        Self {
-            module,
-            places,
-            members: (0..slots).map(|_| OnceCell::new()).collect(),
-            groups: OnceCell::new(),
+    /// Whether this unit answers for `name`, where it holds it.
+    fn answers(&self, name: &Global) -> bool {
+        !self.redone.is_some_and(|redone| redone.contains(name))
+    }
+
+    /// The group the item at `item` is.
+    fn group(&self, item: usize) -> &'a RecItem {
+        match &self.module.items[item] {
+            Item::Rec(rec) => rec,
+            Item::Let(_) => unreachable!("a member's place is a group's"),
         }
     }
 
     fn definition(&self, name: &Global) -> Option<Defined<'_>> {
-        match *self.places.get(name)? {
+        if !self.answers(name) {
+            return None;
+        }
+
+        match self.places().place(name)? {
             Place::Let(item) => {
                 let Item::Let(definition) = &self.module.items[item as usize] else {
                     unreachable!("a definition's place is a definition's");
@@ -88,17 +77,9 @@ impl<'a> Standing<'a> {
                 })
             }
             Place::Member { item, member, slot } => {
-                let Item::Rec(rec) = &self.module.items[item as usize] else {
-                    unreachable!("a member's place is a group's");
-                };
-                let index = member as usize;
-                let definition = &rec.definitions[index];
-                let (type_, body) = self.members[slot as usize].get_or_init(|| {
-                    (
-                        rec.group.member_type(index),
-                        Term::rec_proj(rec.group.clone(), index),
-                    )
-                });
+                let rec = self.group(item as usize);
+                let definition = &rec.definitions[member as usize];
+                let (type_, body) = self.places().member(rec, member, slot);
 
                 Some(Defined {
                     type_,
@@ -114,7 +95,36 @@ impl<'a> Standing<'a> {
         }
     }
 
-    /// The first witness this unit declares at `(concept, key)`: its names are ordered by concept and key, so it is the first from there on.
+    fn induct_decl(&self, name: &Global) -> Option<&'a InductDecl> {
+        self.module
+            .induct_decls
+            .get(name)
+            .filter(|_| self.answers(name))
+    }
+
+    fn struct_decl(&self, name: &Global) -> Option<&'a StructDecl> {
+        self.module
+            .struct_decls
+            .get(name)
+            .filter(|_| self.answers(name))
+    }
+
+    fn concept(&self, name: &Global) -> Option<&'a ConceptDecl> {
+        self.module
+            .concepts
+            .get(name)
+            .filter(|_| self.answers(name))
+    }
+
+    /// The witnesses this unit answers for, in the order of their names: by concept, then by key.
+    fn witnesses(&self) -> impl Iterator<Item = &'a Global> + '_ {
+        self.module
+            .witnesses
+            .iter()
+            .filter(|name| self.answers(name))
+    }
+
+    /// The first witness this unit answers for at `(concept, key)`: its names are ordered by concept and key, so the ones declared there are the names from there on.
     fn witness(&self, concept: &Qualifier, key: &WitnessKey) -> Option<Global> {
         let from = Global::Witness(WitnessId::Spelled {
             concept: *concept,
@@ -126,37 +136,39 @@ impl<'a> Standing<'a> {
         self.module
             .witnesses
             .range(from..)
-            .next()
-            .filter(|name| spelled_at(name) == Some((Global::Authored(*concept), *key)))
+            .take_while(|name| spelled_at(name) == Some((Global::Authored(*concept), *key)))
+            .find(|name| self.answers(name))
             .copied()
     }
 
-    fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {
-        let groups = self.groups.get_or_init(|| {
-            self.module
-                .items
-                .iter()
-                .enumerate()
-                .filter_map(|(item, declared)| match declared {
-                    Item::Rec(rec) => Some((
-                        rec.group.clone(),
-                        u32::try_from(item).expect("a unit's items are counted in a u32"),
-                    )),
-                    Item::Let(_) => None,
-                })
-                .collect()
-        });
-        let Item::Rec(rec) = &self.module.items[*groups.get(group)? as usize] else {
-            unreachable!("a group's place is a group's");
-        };
+    /// Each group this unit answers for, with its members' names in member order.
+    fn groups(&self) -> impl Iterator<Item = (RecGroup, Vec<Global>)> + '_ {
+        self.module.items.iter().filter_map(|item| match item {
+            Item::Rec(rec) => {
+                let names = member_names(rec);
 
-        Some(
-            rec.definitions
-                .iter()
-                .map(|definition| definition.name)
-                .collect(),
-        )
+                names
+                    .iter()
+                    .all(|name| self.answers(name))
+                    .then(|| (rec.group.clone(), names))
+            }
+            Item::Let(_) => None,
+        })
     }
+
+    fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {
+        let names = member_names(self.group(self.places().group(self.module, group)?));
+
+        names.iter().all(|name| self.answers(name)).then_some(names)
+    }
+}
+
+/// The names `rec`'s members are defined under, in member order.
+fn member_names(rec: &RecItem) -> Vec<Global> {
+    rec.definitions
+        .iter()
+        .map(|definition| definition.name)
+        .collect()
 }
 
 /// The concept and the key a witness's name states.
@@ -170,8 +182,9 @@ fn spelled_at(name: &Global) -> Option<(Global, WitnessKey)> {
 /// The modules already elaborated, as scope for elaborating another.
 #[derive(Debug, Default)]
 pub struct Established<'a> {
-    /// The units already elaborated, in dependency order. Empty for a from-scratch elaboration, where the unit defines every name it mentions.
+    /// The units already elaborated, in dependency order, and last, where a unit is compiled over one, the baseline whose declarations it keeps. Empty for a from-scratch elaboration, where the unit defines every name it mentions.
     units: Vec<Standing<'a>>,
+    /// The units in scope, in dependency order: never the baseline, which is the unit being compiled.
     modules: Vec<&'a Module>,
 }
 
@@ -181,12 +194,50 @@ impl<'a> Established<'a> {
         Self::default()
     }
 
-    /// Everything `modules` established, in dependency order, as scope.
+    /// Everything `modules` established, in dependency order, as scope: each read by places made here, for a module no unit holds.
     pub fn over(modules: &[&'a Module]) -> Self {
         Self {
-            units: modules.iter().map(|module| Standing::of(module)).collect(),
+            units: modules
+                .iter()
+                .map(|module| Standing {
+                    module,
+                    places: Placed::Made(Places::of(module)),
+                    redone: None,
+                })
+                .collect(),
             modules: modules.to_vec(),
         }
+    }
+
+    /// Everything `units` established, in dependency order, as scope: each module read by the places its unit keeps for it.
+    pub fn placed(units: &[(&'a Module, &'a Places)]) -> Self {
+        Self {
+            units: units
+                .iter()
+                .map(|(module, places)| Standing {
+                    module,
+                    places: Placed::Kept(places),
+                    redone: None,
+                })
+                .collect(),
+            modules: units.iter().map(|(module, _)| *module).collect(),
+        }
+    }
+
+    /// This scope with `baseline` above it: the unit being compiled, as an earlier text of it elaborated, answering for every declaration it holds but those `redone` names, which are elaborated again. Nothing of it is brought in: a kept declaration is read where the baseline holds it, as a scope's is.
+    pub fn keeping(
+        mut self,
+        baseline: &'a Module,
+        places: &'a Places,
+        redone: &'a BTreeSet<Global>,
+    ) -> Self {
+        self.units.push(Standing {
+            module: baseline,
+            places: Placed::Kept(places),
+            redone: Some(redone),
+        });
+
+        self
     }
 
     /// The modules in scope, in dependency order.
@@ -200,7 +251,7 @@ impl<'a> Established<'a> {
     pub(crate) fn coherent(&self) -> Result<(), Error> {
         let mut declared = HashMap::<(Global, WitnessKey), Qualifier>::new();
         for unit in &self.units {
-            for name in &unit.module.witnesses {
+            for name in unit.witnesses() {
                 let (Some((concept, key)), Global::Witness(id)) = (spelled_at(name), name) else {
                     continue;
                 };
@@ -216,108 +267,26 @@ impl<'a> Established<'a> {
     }
 
     /// The last unit answering `asked`: a later unit's answer over an earlier one's, which mount disjointness makes the only one.
-    fn find<T>(&self, asked: impl Fn(&Standing<'a>) -> Option<T>) -> Option<T> {
+    fn find<'s, T>(&'s self, asked: impl Fn(&'s Standing<'a>) -> Option<T>) -> Option<T> {
         self.units.iter().rev().find_map(asked)
     }
 }
 
-/// The registries, mounts and recorded totality of the items a recompile reuses, into `context`'s own stores before any item is checked.
-///
-/// Those items are the unit's own and arrive elaborated, in a module made for this compile, so no view of a scope answers for them: they stand in the context's stores as the items elaborated beside them will. An inductive's type-constructor and value-constructor definitions reference their own registry entry, and `elaborate_struct`/`elaborate_proj` consult the struct registry, so these go in ahead of the unit's own; the totality flags were settled when the baseline was compiled, which is what lets a written type be refused against them before it reduces.
-pub(crate) fn seed_reused(context: &mut Context, reused: &Module) -> Result<(), Error> {
-    context.mount(&reused.mounts);
-    context.seed_totality(&recorded_totality(reused));
-    for (name, induct_decl) in &reused.induct_decls {
-        context.register_induct(name, induct_decl.clone())?;
-    }
-    for (name, struct_decl) in &reused.struct_decls {
-        context.register_struct(name, struct_decl.clone())?;
-    }
-    for (name, concept) in &reused.concepts {
-        context.register_concept(name, concept.clone())?;
-    }
-
-    Ok(())
-}
-
-/// The definitions of the items a recompile reuses, into the persistent base frame.
-///
-/// `define_assuming_scheme` reproduces exactly the state `elaborate_module_let`/`_rec` leave behind — assume the type, define the body — with no re-checking, because these terms are already elaborated, and a definition's variance vector is filed as its publication files it. A witness additionally registers its already-elaborated signature, since the witness table is per-elaboration state and is not carried on a module.
-///
-/// Registering reduces the signature to its key, so each registration spends a budget restored for it: what a baseline costs to bring in is spent on no declaration's budget.
-pub(crate) fn replay_reused(context: &mut Context, reused: &Module) -> Result<(), Error> {
-    for item in &reused.items {
-        match item {
-            Item::Let(def) => {
-                context.define_assuming_scheme(
-                    &Free::from(&def.name),
-                    &def.type_,
-                    &def.body,
-                    Some(&def.kind),
-                    def.universe_context.clone(),
-                );
-                context.record_definition_variances(def);
-                if reused.witnesses.contains(&def.name) {
-                    context.restore_budget();
-                    register_witness(
-                        context,
-                        &def.name,
-                        &def.type_,
-                        def.universe_context.clone(),
-                        &def.island,
-                    )?;
-                }
-            }
-            Item::Rec(rec) => {
-                for (index, definition) in rec.definitions.iter().enumerate() {
-                    let name = Free::from(&definition.name);
-                    context.assume(&name, &rec.group.member_type(index));
-                    context.set_assumption_universe_context(
-                        &name,
-                        rec.group.universe_context().clone(),
-                    );
-                    context.define(
-                        &name,
-                        &Term::rec_proj(rec.group.clone(), index),
-                        Some(&definition.kind),
-                    );
-                    // A witness that resolves through its own entry is lowered as a group of one, so the table is rebuilt from this arm as well.
-                    if reused.witnesses.contains(&definition.name) {
-                        context.restore_budget();
-                        register_witness(
-                            context,
-                            &definition.name,
-                            &rec.group.member_type(index),
-                            rec.group.universe_context().clone(),
-                            &definition.island,
-                        )?;
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
 impl InScope for Established<'_> {
     fn definition(&self, name: &Global) -> Option<Defined<'_>> {
-        self.units
-            .iter()
-            .rev()
-            .find_map(|unit| unit.definition(name))
+        self.find(|unit| unit.definition(name))
     }
 
     fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
-        self.find(|unit| unit.module.induct_decls.get(name))
+        self.find(|unit| unit.induct_decl(name))
     }
 
     fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
-        self.find(|unit| unit.module.struct_decls.get(name))
+        self.find(|unit| unit.struct_decl(name))
     }
 
     fn concept(&self, name: &Global) -> Option<&ConceptDecl> {
-        self.find(|unit| unit.module.concepts.get(name))
+        self.find(|unit| unit.concept(name))
     }
 
     fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<Global> {
@@ -329,7 +298,7 @@ impl InScope for Established<'_> {
     fn witnesses(&self) -> Vec<(Global, WitnessKey, Global)> {
         self.units
             .iter()
-            .flat_map(|unit| &unit.module.witnesses)
+            .flat_map(Standing::witnesses)
             .filter_map(|name| {
                 let (concept, key) = spelled_at(name)?;
 
@@ -339,20 +308,7 @@ impl InScope for Established<'_> {
     }
 
     fn groups(&self) -> Vec<(RecGroup, Vec<Global>)> {
-        self.units
-            .iter()
-            .flat_map(|unit| &unit.module.items)
-            .filter_map(|item| match item {
-                Item::Rec(rec) => Some((
-                    rec.group.clone(),
-                    rec.definitions
-                        .iter()
-                        .map(|definition| definition.name)
-                        .collect(),
-                )),
-                Item::Let(_) => None,
-            })
-            .collect()
+        self.units.iter().flat_map(Standing::groups).collect()
     }
 
     fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {

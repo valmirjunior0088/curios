@@ -279,8 +279,7 @@ pub fn typecheck_entrypoint(
             }
         })?;
 
-    let cores = predecessors.cores();
-    let established = Established::over(&cores);
+    let established = Established::placed(&predecessors.placed());
     let mut context = Context::new(budget, *syntax);
     let ((program, _, _), obligations) = elaborate_entry(
         &mut context,
@@ -443,8 +442,7 @@ where
     curios_profile::profile!("elaborate_and_zonk");
 
     let mut findings = Findings::take(&mut lowered);
-    let cores = predecessors.cores();
-    let established = Established::over(&cores);
+    let established = Established::placed(&predecessors.placed());
     let mut context = Context::new(budget, *syntax);
     let verdict = elaborate_entry(
         &mut context,
@@ -869,7 +867,7 @@ pub fn compile_unit(
     let mut lowered = into_core_unit(source, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
-    let established = Established::over(&cores);
+    let established = Established::placed(&predecessors.placed());
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
@@ -956,14 +954,18 @@ where
 
     for (index, (source, offered)) in sources.iter().enumerate() {
         // Announced *after* the cache is consulted and *before* the work, so a reported operation is one that is actually about to happen and its timing starts where it does.
-        if let Some(unit) = cache.and_then(|cache| cache.get(source)) {
+        let hit =
+            curios_profile::profile!("cache::get" => cache.and_then(|cache| cache.get(source)));
+        if let Some(unit) = hit {
             progress(Progress::Reused(&source.prefix()));
             produced.push(unit);
             continue;
         }
 
         // A baseline is asked for only on a miss: a hit is the empty case of a recompile, where nothing changed and everything is reused.
-        let baseline = cache.and_then(|cache| cache.baseline(source, *offered));
+        let baseline = curios_profile::profile!(
+            "cache::baseline" => cache.and_then(|cache| cache.baseline(source, *offered))
+        );
         let prefix = source.prefix();
         progress(match &baseline {
             Some(_) => Progress::Recompiling(&prefix),
@@ -990,7 +992,9 @@ where
         progress(Progress::Compiled);
 
         if let Some(cache) = cache {
-            cache.put(source, &unit, index + 1 < sources.len());
+            curios_profile::profile!(
+                "cache::put" => cache.put(source, &unit, index + 1 < sources.len())
+            );
         }
 
         produced.push(unit);

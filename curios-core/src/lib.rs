@@ -17,6 +17,9 @@ pub use concept::*;
 mod module;
 pub use module::*;
 
+mod places;
+pub use places::*;
+
 mod atoms;
 use atoms::*;
 

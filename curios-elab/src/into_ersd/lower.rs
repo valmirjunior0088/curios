@@ -7,7 +7,7 @@ use {
         Binding, Bound, Environment, ErasedItem, ErasedUnit, Erasures, Error, Export, Intrinsic,
         Let, Projected, Retyping, Subterm, Telescope, Term, emitted, intrinsic, link,
     },
-    crate::{validate_entry_universes, validate_universes},
+    crate::{validate_entry_universes, validate_universes, validate_universes_of},
     curios_core::{
         Certification, Entrypoint, Free, Global, Item, Module, Operand, Program, Zonked,
         foreign_operands, project_erased_universes,
@@ -15,6 +15,7 @@ use {
     curios_utilities::{Span, SyntaxRegistry, grown},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
+        rc::Rc,
         sync::Arc,
     },
 };
@@ -451,9 +452,9 @@ pub fn erase_unit(
     })
 }
 
-/// [`erase_unit`] for a unit compiled over a baseline: an item none of whose names `redone` holds keeps the erased form `baseline` has for it, and every other is erased.
+/// [`erase_unit`] for a unit compiled over a baseline: an item none of whose names `redone` holds keeps the erased form `baseline` has for it, the baseline's own and no copy of it, and every other is erased.
 ///
-/// What is redone is closed under what an item's erasure reads — the types and registry entries of the names it reaches, and how each of them is bound — which is the caller's to guarantee, as it is for the items elaborated again.
+/// What is redone is closed under what an item's erasure reads — the types and registry entries of the names it reaches, and how each of them is bound — which is the caller's to guarantee, as it is for the items elaborated again. The universes held to their schemes are those of the items erased: a kept item's were held where the baseline was compiled.
 pub fn erase_unit_over(
     budget: u64,
     syntax: SyntaxRegistry,
@@ -465,15 +466,20 @@ pub fn erase_unit_over(
     curios_profile::profile!("erase_unit");
     grown(|| {
         let module = module.as_module();
-        let view = projected(scope, module)?;
-        let context = &mut Retyping::over(budget, syntax, &view);
-        erase_items(context, &view, scope, module, |item| {
+        let kept = |item: &Item| {
             let names = item.declared_names();
             match names.iter().any(|name| redone(name)) {
                 true => None,
-                false => baseline.find(names.first()?).cloned(),
+                false => baseline.held(names.first()?).cloned(),
             }
-        })
+        };
+        // An item the baseline holds no erased form for is erased whatever `redone` says of it, so it is validated as one.
+        validate_universes_of(module, &|name| {
+            redone(name) || baseline.held(name).is_none()
+        })?;
+        let view = Projected::over(scope.cores(), module);
+        let context = &mut Retyping::over(budget, syntax, &view);
+        erase_items(context, &view, scope, module, kept)
     })
 }
 
@@ -529,7 +535,7 @@ pub(super) fn erase_items<'s>(
     view: &'s Projected<'_>,
     scope: Erasures<'_>,
     module: &Module,
-    reused: impl Fn(&Item) -> Option<ErasedItem>,
+    reused: impl Fn(&Item) -> Option<Rc<ErasedItem>>,
 ) -> Result<ErasedUnit, Error> {
     let mut unit = ErasedUnit::default();
     for (place, item) in module.items.iter().enumerate() {
@@ -537,7 +543,7 @@ pub(super) fn erase_items<'s>(
             Some(erased) => erased,
             None => {
                 let externals = |name: &Global| unit.find(name).or_else(|| scope.find(name));
-                erase_item(context, &externals, view.own(place))?
+                Rc::new(erase_item(context, &externals, view.own(place))?)
             }
         };
         unit.push(item, erased);
