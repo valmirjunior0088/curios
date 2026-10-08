@@ -6,22 +6,23 @@ use {
         Cache, DEFAULT_STEP_BUDGET, Fold, compile_unit, compile_unit_over,
         tests::test_support::{assert_stored_alike, compile_with_units},
     },
-    curios_core::{DefinitionKind, Global, Item, Module},
+    curios_core::{Anchors, Certification, DefinitionKind, Global, Imports, Item, Module, Sharing},
     curios_elab::{
-        Context, Error, Established, Recompile, Recompiled, elaborate_and_zonk_unit_over,
+        Context, ErasedUnit, Error, Established, Recompile, Recompiled, Traces,
+        elaborate_and_zonk_unit_over,
     },
     curios_prelude::with_prelude,
     curios_std::std_directory,
     curios_text::{
         Overlay, PreparedText, RootSource, SYNTAX, UnitSource, into_core_unit, into_core_unit_over,
     },
-    curios_unit::{Predecessors, Unit},
-    curios_utilities::{Qualifier, RootKind, test_support::Temporary},
+    curios_unit::{Predecessors, Unit, halves},
+    curios_utilities::{Qualifier, RootKind, digest, test_support::Temporary},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
         fs,
-        time::Instant,
+        time::{Duration, Instant},
     },
 };
 
@@ -253,6 +254,179 @@ fn std_recompile_reproduction() {
                 whole.stored().expect("a unit serializes").len()
             );
         }
+    });
+}
+
+/// How the standard library's stored unit divides between its parts: the bytes of each archived alone, and how long each takes to restore out of them. What only a recompile of the unit reads is its baseline half, and the rest is what every compilation after the unit restores. A measurement, so it reports rather than asserts; mixed, its bytes counted and its times the median of five readings with their span, the profile it was built under.
+#[test]
+#[ignore = "measurement: archives each part of the standard library's unit alone and reports its bytes and how long it takes to restore"]
+fn std_image_division() {
+    with_prelude(|prelude| {
+        let [_, std] = prelude else {
+            panic!("the prelude has two roots")
+        };
+        let row = |part: &str, bytes: usize, times: Option<[Duration; 3]>| match times {
+            Some([least, median, most]) => println!(
+                "  {part:<42}{bytes:>12} bytes   {median:>9.1?}  ({least:.1?} to {most:.1?})"
+            ),
+            None => println!("  {part:<42}{bytes:>12} bytes"),
+        };
+        // The least, the median and the most of five restorations of `$bytes` as a `$type`.
+        macro_rules! restored {
+            ($type:ty, $bytes:expr) => {{
+                let mut readings = [Duration::ZERO; 5];
+                for reading in &mut readings {
+                    let start = Instant::now();
+                    let value =
+                        curios_archive::from_bytes::<$type>($bytes).expect("a part restores");
+                    *reading = start.elapsed();
+                    drop(value);
+                }
+                readings.sort();
+
+                [readings[0], readings[2], readings[4]]
+            }};
+        }
+        // What `$module`'s items are of it: archived as it holds them, and each alone, which stores a structure two of them share once for each.
+        macro_rules! items {
+            ($name:expr, $module:expr) => {{
+                let module: &Module = $module;
+                let whole =
+                    curios_archive::to_bytes(&module.items).expect("a module's items serialize");
+                let alone = module
+                    .items
+                    .iter()
+                    .map(|item| {
+                        curios_archive::to_bytes(item)
+                            .expect("an item serializes")
+                            .len()
+                    })
+                    .sum::<usize>();
+                row($name, whole.len(), None);
+                row(concat!($name, ", each archived alone"), alone, None);
+            }};
+        }
+        macro_rules! part {
+            ($name:expr, $type:ty, $value:expr) => {{
+                let bytes = curios_archive::to_bytes($value).expect("a part serializes");
+                let length = bytes.len();
+                row($name, length, Some(restored!($type, &bytes)));
+
+                length
+            }};
+        }
+
+        let stored = std.stored().expect("the library's unit serializes");
+        let (unit, baseline) = halves(&stored).expect("a unit's artifact");
+
+        println!("\n=== how /std's stored unit divides ===");
+        row("the artifact", stored.len(), None);
+        row(
+            "what a successor restores",
+            unit.len(),
+            Some(restored!(Unit, unit)),
+        );
+        let text = part!("  the lowering's state", PreparedText, std.text());
+        let lowered = part!("    its lowered module", Module, std.text().core());
+        items!("      its items", std.text().core());
+        let imports = part!("    its import scopes", Imports, std.text().imports());
+        let anchors = part!(
+            "    where its declarations lie",
+            Anchors,
+            std.text().anchors()
+        );
+        row(
+            "    its tables, lints and the rest",
+            text - lowered - imports - anchors,
+            None,
+        );
+        let consed = std.core().shared(&Sharing::new());
+        part!("  the elaborated module, consed", Module, &consed);
+        items!("    its items", &consed);
+        part!("  the erased forms", ErasedUnit, std.erased());
+        part!(
+            "  the certifier's record",
+            Certification,
+            std.certification()
+        );
+
+        row("what a recompile alone restores", baseline.len(), None);
+        row(
+            "  the lowering's records and scans",
+            std.text()
+                .baseline_bytes()
+                .expect("the lowering's half serializes")
+                .len(),
+            None,
+        );
+        part!("  what its declarations asked", Traces, std.traces());
+        row(
+            "  what its erasures asked",
+            std.erased()
+                .baseline_bytes()
+                .expect("erasure's half serializes")
+                .len(),
+            None,
+        );
+
+        let together = Sharing::new();
+        std.core().shared(&together);
+        let alone = std
+            .core()
+            .items
+            .iter()
+            .map(|item| {
+                let sharing = Sharing::new();
+                let module = Module {
+                    items: vec![item.clone()],
+                    ..Module::default()
+                };
+                module.shared(&sharing);
+
+                sharing.structures()
+            })
+            .sum::<usize>();
+        println!(
+            "  structures  {} with the module consed in one table, {} with each item in its own",
+            together.structures(),
+            alone
+        );
+
+        // The least, the median and the most of five runs of `$step`.
+        macro_rules! timed {
+            ($name:expr, $step:expr) => {{
+                let mut readings = [Duration::ZERO; 5];
+                for reading in &mut readings {
+                    let start = Instant::now();
+                    let value = $step;
+                    *reading = start.elapsed();
+                    drop(value);
+                }
+                readings.sort();
+                println!(
+                    "  {:<42}{:>9.1?}  ({:.1?} to {:.1?})",
+                    $name, readings[2], readings[0], readings[4]
+                );
+            }};
+        }
+        println!("  a filing's steps");
+        timed!(
+            "    consing the elaborated module",
+            std.core().shared(&Sharing::new())
+        );
+        timed!(
+            "    serializing the elaborated module alone",
+            curios_archive::to_bytes(&consed).expect("a module serializes")
+        );
+        timed!(
+            "    serializing the unit, consed",
+            std.stored().expect("a unit serializes")
+        );
+        timed!("    digesting the artifact", digest(&stored));
+        timed!(
+            "    restoring the artifact",
+            Unit::restored(&stored).expect("a unit restores")
+        );
     });
 }
 
