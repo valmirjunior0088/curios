@@ -71,3 +71,17 @@ test narrowings_answer_their_partiality_with_an_option =
         Test/equal(Flt/try_to_int(-1.5), Option/some(-1)),
         Test/equal(Flt/try_to_int(-inf.0), Option/none()),
         Test/equal(Flt/try_to_int(+nan.0), Option/none())]);
+
+-- A decision of every number below a bound holds where each number meets it, and of no bound one number fails.
+test a_decision_of_every_number_below_a_bound_is_decided_at_each =
+    Test/all([
+        Test/assert(Nat/all_below(10, (n) => n < 10)),
+        Test/assert(Bool/not(Nat/all_below(10, (n) => n < 9))),
+        Test/assert(Nat/all_below(0, (_) => false))]);
+
+-- A fact the logic reads of no operation is had of every byte by running it: the low bit of a number, which no law of `and` states, is at most one.
+let _a_fact_of_every_byte_is_decided_by_running_it(
+    n: Nat,
+    under: Bool/Holds(n < 256),
+) -> Bool/Holds(Nat/and(n, 1) <= 1) =
+    Nat/all_below/at(256, (m) => Nat/and(m, 1) <= 1, n, Bool/True/qed(), under);

@@ -170,6 +170,10 @@ pub use ord/{let ord};
 pub mod descend;
 pub use descend/{let descend};
 
+--- Whether a decision holds of every number below a bound, and that it then holds of each.
+pub mod all_below;
+pub use all_below/{let all_below};
+
 satisfy Show(Nat) {
     show = to_str,
 }

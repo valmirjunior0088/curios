@@ -1,0 +1,30 @@
+use /std/{Nat, Bool, Eq};
+use /std/Bool/{True, Holds};
+
+--- Whether `p` accepts every number below `k`.
+---
+--- A decision, so `Holds(all_below(k, p))` at a literal `k` is discharged by reduction running `p` at each number: a fact of every byte is had that way where the logic reads nothing of the operation it is about.
+pub let all_below(k: Nat, p: (Nat) -> Bool) -> Bool =
+    match k | 0 => true | j + 1; rest => p(j) && rest end;
+
+--- What the decision says of one number below the bound.
+pub let at(
+    k: Nat,
+    p: (Nat) -> Bool,
+    n: Nat,
+    all: Holds(all_below(k, p)),
+    under: Holds(n < k),
+) -> Holds(p(n)) =
+    match k: (m) => (all: Holds(all_below(m, p)), under: Holds(n < m)) -> Holds(p(n))
+    | 0 => (_, under) => match under end
+    | j + 1; ih =>
+        (all, under) =>
+            match n < j
+            | true => ih(Bool/second(p(j), all_below(j, p), all), True/qed())
+            | false =>
+                Eq/subst(
+                    (m: Nat) => Holds(p(m)),
+                    Nat/le/antisym(j, n, True/proved(), True/proved()),
+                    Bool/first(p(j), all_below(j, p), all))
+            end
+    end(all, under);
