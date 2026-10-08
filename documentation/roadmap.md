@@ -45,6 +45,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 - [ ] [Contification of a function with several return contexts](roadmap/compilation/07-multi-site-contification.md) — not refined yet; such a function stays a function, and nothing downstream contifies it
 - [ ] [A binary reader for `curios-wasm`](roadmap/compilation/08-wasm-binary-reader.md) — not refined yet; the binary side is checked only by the engine's acceptance
 - [ ] [A reader of finished terms holds no elaboration state](roadmap/compilation/09-a-reader-of-finished-terms-holds-no-elaboration-state.md) — the reader erasure reads through keeps an elaborator's context whose elaboration half is empty, and what erases is decided through the reducer and the conversion that elaborate
+- [ ] [A store that files a facet once](roadmap/compilation/10-a-store-that-files-a-facet-once.md) — not refined yet; a unit's slot is one file replaced whole for every edit, and it holds the last unit filed and nothing of the one before
 - [x] [A module is a compilation unit, and the prelude is an environment](design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md): units folded over a dependency order, every edge declared in a manifest, and a package named `std` compiled as the standard library
 - [x] The prelude built once per compiler build, archived and certified, and restored with no source fallback
 - [x] Packages: manifests and discovery, exactly pinned dependencies in a content-addressed store, and `curios pin` deriving a row's hash from the delivery

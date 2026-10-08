@@ -1,0 +1,15 @@
+# A store that files a facet once
+
+**Not refined yet.** This specification reserves a store that holds each facet of a unit as an object of its own: written when a compile makes it and never again, shared by every slot that names it, and found again by a compile of a text the store has held before. It is not an implementation plan.
+
+## What is missing
+
+A unit is filed as one file under its slot, replaced whole whenever the unit is filed (`replace`, `curios-verdicts/src/verdicts.rs`): `/std`'s is 38.05 MB, written again for an edit to one declaration. The slot holds the last unit filed under its address and nothing of the one before, so a compile of a text the store held two edits ago elaborates again what that compile elaborated. The storage stage of [A compile costs what it reads](03-a-compile-costs-what-it-reads.md) decides that file as an index of facets, each one that shares nothing with another declaration's a blob a recompile copies, and leaves the elaborated declarations in one archive consed in one table, since they share half of what they spell: `/std`'s items archived one by one are 12.49 MB against 6.67 MB (`std_image_division`, counted at `35bf5c23b`). So a compile that elaborated one declaration again serializes every elaborated declaration of its unit.
+
+## Refinement
+
+- **Whether a facet is an object of the store**, addressed by a digest of what it says, with a slot an index of digests: what a filing then writes, what two slots and two versions of one unit share, how an object no slot names is collected, and what the store's trust argument ([Cached verdicts](../../design/soundness/cached-verdicts.md)) vouches for once a slot's bytes are no longer one file's. Unison's codebase is the model, each definition stored under the hash of its structure "in a cache which is never invalidated" ([The big idea](https://www.unison-lang.org/docs/the-big-idea/)).
+- **Whether a facet is found by what it was made from**, the digest of its own input with the digests its trace read, as Go's action ID finds a package's output ([`buildid.go`](https://go.dev/src/cmd/go/internal/work/buildid.go)): a compile of a text the store has held then reads every facet that text made, in whatever order the texts came.
+- **How the elaborated declarations' shared structure is held** once a declaration is an object: a table of nodes with each declaration a set of roots, which Agda's interface files are ([`Agda.TypeChecking.Serialise.Base`](https://hackage-origin.haskell.org/package/Agda-2.5.1/docs/src/Agda-TypeChecking-Serialise-Base.html)); nodes as objects of their own; or a declaration's closure stored whole, at twice the bytes.
+- **What it is worth**, measured once the storage stage has landed: what a filing spends writing beside what it spends consing and serializing, and the bytes two slots hold twice.
+- **What becomes of a recompile storing the bytes a whole compile stores**: a file appended to gives it up, and a store addressed by content keeps it by construction.
