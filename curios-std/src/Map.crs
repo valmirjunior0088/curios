@@ -146,15 +146,15 @@ pub struct Map(K: Type, use Key(K), V: Type): Type {
     root: Option(Node(K, V)),
 }
 
-let bit(k: Bytes, j: Nat) -> Nat =
+let bit(k: Bytes, j: Nat) -> Bool =
     let g = j / 9;
     let o = j % 9;
     match g < Bytes/len(k)
-    | false => 0
+    | false => false
     | true =>
         match o == 0
-        | true => 1
-        | false => Nat/and(Nat/shr(Byte/to_nat(Bytes/get(k, g)), 8 - o), 1)
+        | true => true
+        | false => Nat/and(Nat/shr(Byte/to_nat(Bytes/get(k, g)), 8 - o), 1) != 0
         end
     end;
 
@@ -182,11 +182,21 @@ let crit(a: Bytes, b: Bytes) -> Nat =
 let lookup(@K: Type, @V: Type, t: Node(K, V), k: Bytes) -> {K, V} =
     match t
     | leaf(k0, v0) => (k0, v0)
-    | fork(c, z, o) => match bit(k, c) | 0 => lookup(z, k) | _ => lookup(o, k) end
+    | fork(c, z, o) => match bit(k, c) | false => lookup(z, k) | true => lookup(o, k) end
     end;
 
-let wedge(@K: Type, @V: Type, c: Nat, b: Nat, key: K, v: V, t: Node(K, V)) -> Node(K, V) =
-    match b | 0 => Node/fork(c, Node/leaf(key, v), t) | _ => Node/fork(c, t, Node/leaf(key, v)) end;
+let wedge(@K: Type, @V: Type, c: Nat, b: Bool, key: K, v: V, t: Node(K, V)) -> Node(K, V) =
+    match b
+    | false => Node/fork(c, Node/leaf(key, v), t)
+    | true => Node/fork(c, t, Node/leaf(key, v))
+    end;
+
+-- How an insertion under a node ended: the node with the key's leaf added, the node with the value of a leaf it held replaced, or the node as it was beside the bit the key first parts from its keys at, where its leaf is still to be wedged in above.
+induct Inserted(K: Type, V: Type): Type
+| added(Node(K, V))
+| replaced(Node(K, V))
+| parted(Node(K, V), Nat)
+end
 
 -- `key` is the key and `k` its encoding, computed once by the caller; a leaf's is derived here, where it is compared.
 let insert1(
@@ -197,50 +207,64 @@ let insert1(
     key: K,
     k: Bytes,
     v: V,
-) -> {Node(K, V), Nat, Nat} =
+) -> Inserted(K, V) =
     match t
-    | leaf(k0, v0) =>
+    | leaf(k0, _) =>
         let e0 = Hash/hash(k0);
         match e0 == k
-        | true => (Node/leaf(key, v), 0, 2)
-        | false => (Node/leaf(k0, v0), crit(k, e0), 1)
+        | true => Inserted/replaced(Node/leaf(key, v))
+        | false => Inserted/parted(t, crit(k, e0))
         end
     | fork(tc, z, o) =>
         match bit(k, tc)
-        | 0 =>
-            let (z2, c, st) = insert1(z, key, k, v);
-            match st
-            | 1 =>
+        | false =>
+            match insert1(z, key, k, v)
+            | added(z2) => Inserted/added(Node/fork(tc, z2, o))
+            | replaced(z2) => Inserted/replaced(Node/fork(tc, z2, o))
+            | parted(z2, c) =>
                 match tc < c
-                | true => (Node/fork(tc, wedge(c, bit(k, c), key, v, z2), o), 0, 0)
-                | false => (t, c, 1)
+                | true => Inserted/added(Node/fork(tc, wedge(c, bit(k, c), key, v, z2), o))
+                | false => Inserted/parted(t, c)
                 end
-            | _ => (Node/fork(tc, z2, o), 0, st)
             end
-        | _ =>
-            let (o2, c, st) = insert1(o, key, k, v);
-            match st
-            | 1 =>
+        | true =>
+            match insert1(o, key, k, v)
+            | added(o2) => Inserted/added(Node/fork(tc, z, o2))
+            | replaced(o2) => Inserted/replaced(Node/fork(tc, z, o2))
+            | parted(o2, c) =>
                 match tc < c
-                | true => (Node/fork(tc, z, wedge(c, bit(k, c), key, v, o2)), 0, 0)
-                | false => (t, c, 1)
+                | true => Inserted/added(Node/fork(tc, z, wedge(c, bit(k, c), key, v, o2)))
+                | false => Inserted/parted(t, c)
                 end
-            | _ => (Node/fork(tc, z, o2), 0, st)
             end
         end
     end;
 
-let remove1(@K: Type, use Key(K), @V: Type, t: Node(K, V), k: Bytes) -> {Node(K, V), Nat} =
+-- How a removal under a node ended: the key was not there, the node was its leaf and nothing is left of it, or what is left of the node.
+induct Removed(K: Type, V: Type): Type
+| absent()
+| gone()
+| kept(Node(K, V))
+end
+
+let remove1(@K: Type, use Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Removed(K, V) =
     match t
-    | leaf(k0, _) => match Hash/hash(k0) == k | true => (t, 2) | false => (t, 0) end
+    | leaf(k0, _) =>
+        match Hash/hash(k0) == k | true => Removed/gone() | false => Removed/absent() end
     | fork(c, z, o) =>
         match bit(k, c)
-        | 0 =>
-            let (z2, st) = remove1(z, k);
-            match st | 2 => (o, 1) | 1 => (Node/fork(c, z2, o), 1) | _ => (t, 0) end
-        | _ =>
-            let (o2, st) = remove1(o, k);
-            match st | 2 => (z, 1) | 1 => (Node/fork(c, z, o2), 1) | _ => (t, 0) end
+        | false =>
+            match remove1(z, k)
+            | absent() => Removed/absent()
+            | gone() => Removed/kept(o)
+            | kept(z2) => Removed/kept(Node/fork(c, z2, o))
+            end
+        | true =>
+            match remove1(o, k)
+            | absent() => Removed/absent()
+            | gone() => Removed/kept(z)
+            | kept(o2) => Removed/kept(Node/fork(c, z, o2))
+            end
         end
     end;
 
@@ -272,11 +296,11 @@ pub let insert(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K, v: V) -> Ma
     match m.root
     | none() => Map { size = 1, root = Option/some(Node/leaf(key, v)) }
     | some(n) =>
-        let (n2, c, st) = insert1(n, key, k, v);
-        match st
-        | 2 => Map { size = m.size, root = Option/some(n2) }
-        | 1 => Map { size = m.size + 1, root = Option/some(wedge(c, bit(k, c), key, v, n2)) }
-        | _ => Map { size = m.size + 1, root = Option/some(n2) }
+        match insert1(n, key, k, v)
+        | replaced(n2) => Map { size = m.size, root = Option/some(n2) }
+        | parted(n2, c) =>
+            Map { size = m.size + 1, root = Option/some(wedge(c, bit(k, c), key, v, n2)) }
+        | added(n2) => Map { size = m.size + 1, root = Option/some(n2) }
         end
     end;
 
@@ -286,11 +310,10 @@ pub let remove(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Map(K, V
     match m.root
     | none() => m
     | some(n) =>
-        let (n2, st) = remove1(n, k);
-        match st
-        | 2 => Map { size = m.size - 1, root = Option/none() }
-        | 1 => Map { size = m.size - 1, root = Option/some(n2) }
-        | _ => m
+        match remove1(n, k)
+        | gone() => Map { size = m.size - 1, root = Option/none() }
+        | kept(n2) => Map { size = m.size - 1, root = Option/some(n2) }
+        | absent() => m
         end
     end;
 
