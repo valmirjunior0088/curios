@@ -3,7 +3,9 @@
 //! Everything the library *computes* is a `test` declaration in `curios-std/src/tests/tui/`, where one compile serves the whole unit. What stays here is what needs the compiler's own answer rather than a program's — a spelling that must be refused, which a corpus unit could only express by failing to compile and taking its every other test with it — and what needs a terminal: the session bracket and the loop run against the scripted host, whose standard input arrives in chunks a fiber parks between, exactly as a terminal delivers keystrokes.
 
 use {
+    super::test_support::Lying,
     crate::tests::{run_text, typecheck},
+    curios_abi::{Failure, HostOp, TtySize},
     curios_runtime::MockHost,
 };
 
@@ -194,6 +196,99 @@ fn resize_events_update_the_drawing_session_before_rendering() {
     let output = String::from_utf8_lossy(&io.output()).into_owned();
     assert_eq!(output.matches("\x1b[2J").count(), 2, "{output:?}");
     assert!(output.ends_with("\x1b[?1049l2"), "{output:?}");
+    assert_eq!(io.raw_modes(), vec![true, false]);
+}
+
+// A program that never quits by itself, so what ends its run is its terminal: a failure is printed by its name, and a run that ended any other way prints that it did.
+const IDLE_PROGRAM: &str = r#"
+        use /std/{Nat, Option, Try, Async, Show, Tui, print};
+        use /std/Tui/{Frame, Directive};
+        let app: Tui(Nat, Nat) = Tui {
+            init = (0, Directive/none()),
+            update(model, event) = (model, Directive/none()),
+            view(model, w, h) = Frame/blank(w, h),
+            cursor(model, w, h) = Option/none(),
+        };
+        let fiber: Async({}) =
+            let result = Try/run(Tui/run(app))!;
+            print(match result | success(_) => "quit" | failure(e) => Show/show(e) end);
+        Async/run(fiber)
+    "#;
+
+// A read of the terminal that fails ends the run with the read's error, the bracket undone on the way out: a program whose terminal has failed does not run on without input and without a reason.
+#[test]
+fn a_failed_read_ends_the_run_with_its_error() {
+    let (host, io) = MockHost::builder().tty_size(4, 2).build();
+    let failing = Lying::new(
+        host,
+        HostOp::HandleRead,
+        Err::<Option<Vec<u8>>, Failure>(Failure::PermissionDenied),
+    );
+    run_text(IDLE_PROGRAM, failing).expect("the run ends");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    assert!(
+        output.ends_with("\x1b[?1049lpermission_denied"),
+        "{output:?}"
+    );
+    assert_eq!(io.raw_modes(), vec![true, false]);
+}
+
+// The size is asked once where the session opens and again at each tick, and the tick's query failing ends the run as a failed read does. Standard input has ended by then, which ends the reading alone.
+#[test]
+fn a_failed_size_query_ends_the_run_with_its_error() {
+    let (host, io) = MockHost::builder()
+        .tty_size(4, 2)
+        .mono((0..40).map(|second| (second, 0)))
+        .build();
+    let failing = Lying::after(
+        host,
+        HostOp::TtySize,
+        1,
+        Err::<TtySize, Failure>(Failure::PermissionDenied),
+    );
+    run_text(IDLE_PROGRAM, failing).expect("the run ends");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    assert!(
+        output.ends_with("\x1b[?1049lpermission_denied"),
+        "{output:?}"
+    );
+    assert_eq!(io.raw_modes(), vec![true, false]);
+}
+
+// The end of standard input is no failure: the reading stops and the program runs on, here until the answer of its own directive, which arrives after the input has ended, has it quit.
+#[test]
+fn a_program_outlives_the_end_of_its_input() {
+    let (host, io) = MockHost::builder()
+        .tty_size(4, 2)
+        .mono((0..40).map(|second| (second, 0)))
+        .build();
+    run_text(
+        r#"
+        use /std/{Nat, Option, Try, Async, Tui, print};
+        use /std/time/{Duration};
+        use /std/Tui/{Frame, Directive};
+        let later: Async(Nat) =
+            let _ = Async/sleep(Duration/of_millis(300))!;
+            Async/pure(7);
+        let app: Tui(Nat, Nat) = Tui {
+            init = (0, Directive/perform(later)),
+            update(model, event) = match event
+                | custom(n) => (n, Directive/quit())
+                | _ => (model, Directive/none())
+                end,
+            view(model, w, h) = Frame/blank(w, h),
+            cursor(model, w, h) = Option/none(),
+        };
+        let fiber: Async({}) =
+            let result = Try/run(Tui/run(app))!;
+            print(match result | success(n) => Nat/to_str(n) | failure(_) => "failed" end);
+        Async/run(fiber)
+    "#,
+        host,
+    )
+    .expect("the run ends");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    assert!(output.ends_with("\x1b[?1049l7"), "{output:?}");
     assert_eq!(io.raw_modes(), vec![true, false]);
 }
 

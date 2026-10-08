@@ -1,8 +1,7 @@
 //! A host held to its rows' contracts: a reply outside its row refuses the call, naming the import and what the host answered, rather than handing the guest a reply its row does not allow.
 
 use {
-    super::test_support::Lying,
-    crate::tests::run_text,
+    crate::tests::{run_text, test_support::Lying},
     curios_abi::{Failure, Handle, HostOp, Poll, Refusal, Timestamp},
     curios_runtime::MockHost,
 };

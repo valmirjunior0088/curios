@@ -1,3 +1,5 @@
+mod test_support;
+
 mod aggregates;
 mod algebra;
 mod alignment;

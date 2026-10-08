@@ -120,27 +120,40 @@ pub let drive(
         frame = app.view(state.model, w, h),
         pending = state.pending);
 
---- Run the program in a session until it quits, answering its last model. Keys, resizes and the answers of the program's own directives feed one queue, and the screen is drawn once per burst.
+-- What wakes the loop: an event for the program, or the failure of its terminal, which ends the run. A failure is no `Event`, a type every program matches.
+induct Wake(E: Type): Type
+| event(Event(E))
+| failed(Io/Error)
+end
+
+--- Run the program in a session until it quits, answering its last model. Keys, resizes and the answers of the program's own directives feed one queue, and the screen is drawn once per burst. A read of the terminal that fails ends the run with its error, and so does a query of its size. The end of standard input ends the reading alone, and the program runs on until it quits.
 pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
     Session/with((s) =>
-        let queue: {Channel/Sender(Event(E)), Channel/Receiver(Event(E))} = Channel/new(256)!;
+        let queue: {Channel/Sender(Wake(E)), Channel/Receiver(Wake(E))} = Channel/new(256)!;
         let push(e: Event(E)) -> Async({}) =
-            let _ = Channel/send(queue.0, e)!;
+            let _ = Channel/send(queue.0, Wake/event(e))!;
+            Async/pure(());
+        let fail(why: Io/Error) -> Async({}) =
+            let _ = Channel/send(queue.0, Wake/failed(why))!;
             Async/pure(());
         let reader(session: Session) -> Async({}) =
-            let got = Session/read(@E, session)!;
-            match got.1
-            | none() => Async/pure(())
-            | some(events) =>
-                let _ = List/each(events, push)!;
-                reader(got.0)
+            let got = Try/run(Session/read(@E, session))!;
+            match got
+            | failure(why) => fail(why)
+            | success((next, input)) =>
+                match input
+                | none() => Async/pure(())
+                | some(events) =>
+                    let _ = List/each(events, push)!;
+                    reader(next)
+                end
             end;
         let ticker(session: Session) -> Async({}) =
             let _ = Async/sleep(Duration/of_millis(100))!;
             let known = Session/last_size(session)!;
             let now = Try/run(Session/size(session))!;
             match now
-            | failure(_) => ticker(session)
+            | failure(why) => fail(why)
             | success((updated, sz)) =>
                 match sz == known
                 | true => ticker(updated)
@@ -175,23 +188,25 @@ pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
                 | false => drain(updated, next.0, more)
                 end
             end;
-        -- Everything queued behind the event that woke the loop, so a burst still draws once.
-        let burst(acc: List(Event(E))) -> Async(List(Event(E))) =
+        -- Everything queued behind the event that woke the loop, so a burst still draws once. A failure queued among them ends the run where it stands.
+        let burst(acc: List(Event(E))) -> Try(Async, Io/Error, List(Event(E))) =
             let more = Async/lift(Channel/try_recv(queue.1))!;
             match more
-            | item(e) => burst([..acc, e])
-            | empty() => Async/pure(acc)
-            | ended() => Async/pure(acc)
+            | item(event(e)) => burst([..acc, e])
+            | item(failed(why)) => Try/raise(why)
+            | empty() => Try/pure(acc)
+            | ended() => Try/pure(acc)
             end;
-        let loop(session: Session, m: M) -> Async(M) =
+        let loop(session: Session, m: M) -> Try(Async, Io/Error, M) =
             let woke = Channel/recv(queue.1)!;
             match woke
-            | none() => Async/pure(m)
-            | some(e) =>
+            | none() => Try/pure(m)
+            | some(failed(why)) => Try/raise(why)
+            | some(event(e)) =>
                 let events = burst([e])!;
                 let folded = drain(session, m, events)!;
                 match folded.2
-                | true => Async/pure(folded.1)
+                | true => Try/pure(folded.1)
                 | false =>
                     let drawn = draw(folded.0, folded.1)!;
                     loop(drawn, folded.1)
@@ -204,6 +219,5 @@ pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
         | true => Try/pure(app.init.0)
         | false =>
             let drawn = draw(s, app.init.0)!;
-            let m = loop(drawn, app.init.0)!;
-            Try/pure(m)
+            loop(drawn, app.init.0)
         end);

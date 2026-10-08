@@ -1,4 +1,4 @@
-//! A host that answers one row with a scripted reply and every other with a [`MockHost`]'s: how a host that breaks its contract is put in front of the adapter, since no honest host does.
+//! A host that answers one row with a scripted reply and every other with a [`MockHost`]'s: how a host that breaks its contract is put in front of the adapter, since no honest host does, and how one call of a row fails where the mock's script only succeeds.
 
 use {
     curios_abi::{
@@ -10,36 +10,62 @@ use {
     std::{any::Any, sync::Mutex},
 };
 
-/// A [`MockHost`] with one lie in it: the first call to the lying row answers the scripted reply, and every other call the mock's.
+/// A [`MockHost`] with one lie in it: one call to the lying row answers the scripted reply, and every other call the mock's.
 pub(super) struct Lying {
     inner: MockHost,
-    lie: Mutex<Option<(HostOp, Box<dyn Any + Send>)>>,
+    lie: Mutex<Option<Lie>>,
+}
+
+/// A lie not told yet: the row, how many of its calls the mock still answers first, and the reply.
+struct Lie {
+    op: HostOp,
+    honest: usize,
+    reply: Box<dyn Any + Send>,
 }
 
 impl Lying {
     /// `inner`, except that the first call to `op` answers `reply`, which must be `op`'s reply type.
     pub(super) fn new<R: Send + 'static>(inner: MockHost, op: HostOp, reply: R) -> Self {
+        Self::after(inner, op, 0, reply)
+    }
+
+    /// `inner`, except that the call to `op` after its first `honest` answers `reply`, which must be `op`'s reply type.
+    pub(super) fn after<R: Send + 'static>(
+        inner: MockHost,
+        op: HostOp,
+        honest: usize,
+        reply: R,
+    ) -> Self {
         Self {
             inner,
-            lie: Mutex::new(Some((op, Box::new(reply)))),
+            lie: Mutex::new(Some(Lie {
+                op,
+                honest,
+                reply: Box::new(reply),
+            })),
         }
     }
 
-    /// The lie, when `op` is the lying row and it has not been told yet.
+    /// The lie, when `op` is the lying row, its honest calls are spent and it has not been told yet.
     fn lie<R: 'static>(&self, op: HostOp) -> Option<R> {
         let mut lie = self.lie.lock().unwrap();
 
         match lie.take() {
-            Some((lying, reply)) if lying == op => Some(
-                *reply
+            Some(told) if told.op == op && told.honest == 0 => Some(
+                *told
+                    .reply
                     .downcast::<R>()
                     .unwrap_or_else(|_| panic!("the lie is not {op:?}'s reply")),
             ),
-            untold => {
-                *lie = untold;
+            Some(mut untold) => {
+                if untold.op == op {
+                    untold.honest -= 1;
+                }
+                *lie = Some(untold);
 
                 None
             }
+            None => None,
         }
     }
 }
