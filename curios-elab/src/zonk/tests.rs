@@ -2,7 +2,7 @@ use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, MetavarId, Minted,
+        Cost, Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, MetavarId, Minted,
         Module, Nat, Subterm, Term, Totality, Tuple, UniverseContext, UniverseMetaId,
         UniverseParam,
     },
@@ -303,4 +303,35 @@ fn a_hole_zonked_once_keeps_each_occurrence_s_span() {
     };
     assert_eq!(tuple.fields[0].span(), Some(span(0)));
     assert_eq!(tuple.fields[1].span(), Some(span(2)));
+}
+
+/// A budget that runs out while a term under a binder is zonked is refused in words. The level the walk cannot pay for is the body's, which it reads where it stands, its binder's occurrence a loose index; a report over that body is one the printer has no name for, so the report is over the nearest enclosing term that holds no loose index.
+///
+/// Mutation-checked: with the body reported as it stands, rendering the refusal panics on the loose index.
+#[test]
+fn a_budget_spent_under_a_binder_is_reported_over_a_term_that_prints() {
+    // The function's level and its body's are two frames, and this pays for one and a half.
+    let mut context = Context::new(Cost::FRAME.get() + Cost::FRAME.get() / 2, SYNTAX);
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
+    context.solve_metavar(MetavarId(0), nat());
+    let x = Free::local(0, Some("x"));
+    let function = Term::func(
+        [(x, nat())],
+        Term::tuple([Term::free_var(&x), Term::hole(0)]),
+    );
+
+    let refused = zonk(&context, &function).expect_err("the body's level is past the budget");
+
+    assert!(
+        refused
+            .format_with(&lowered_module(nat()), &[], &SYNTAX)
+            .contains("ran out"),
+    );
+    let Error::ReduceExhausted { term, .. } = &refused else {
+        panic!("a spent budget: {refused:?}");
+    };
+    assert_eq!(
+        **term, function,
+        "the report names the function, which holds no loose index"
+    );
 }

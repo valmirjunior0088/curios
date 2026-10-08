@@ -1072,7 +1072,14 @@ fn zonk_term(context: &Zonk, term: &Term) -> Result<Term, Error> {
             Error::reduce_exhausted(term.clone(), refusal)
         })
     })?;
-    let zonked = zonk_level(context, term);
+    // A level under a binder is read where it stands, its binder's occurrence a loose index, and a refusal there reports that term, which the printer has no name for. So each level on the way out names itself in the report instead, until one holds no loose index: the nearest term a reader can be shown.
+    let zonked = zonk_level(context, term).map_err(|error| match error {
+        Error::ReduceExhausted {
+            term: reported,
+            refusal,
+        } if !reported.closed() => Error::reduce_exhausted(term.clone(), refusal),
+        error => error,
+    });
     context.leave_level();
 
     if let Ok(zonked) = &zonked {
