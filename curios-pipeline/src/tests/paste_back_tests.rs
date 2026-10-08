@@ -221,6 +221,22 @@ fn an_operator_under_an_abstract_witness_reads_back() {
 }
 
 #[test]
+fn a_call_with_a_witness_between_two_implicits_reads_back() {
+    // `pick(@K, use _, @V, key, value)`: resolution would restore the witness, so it is not spelled, but an `@` written past a slot left out would be read at that slot, so the slot holds its place.
+    let source = r#"
+        use /std/{Nat, Bool, Show};
+        use /std/Bool/{Holds};
+        pub let pick(@K: Type, use Show(K), @V: Type, key: K, value: V) -> Bool = true;
+        pub let held(@K: Type, use Show(K), @V: Type, key: K, value: V) -> Holds(pick(key, value)) =
+            /std/Bool/True/qed();
+        pub let t: ? = held;
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
+
+#[test]
 fn a_standard_alias_taking_a_witness_reads_back() {
     // `/std/Parse`'s `Parse(I, use Input(I), A)`: the `use` argument is the function type's own binder.
     let source = r#"

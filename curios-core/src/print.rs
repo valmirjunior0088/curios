@@ -355,6 +355,38 @@ fn marked_argument(printer: Printer, plicity: Option<&Plicity>) -> Printer {
     }
 }
 
+/// A call's arguments as a reader writes them, each marked: a `use` argument resolution would restore is left out (axis (h)) where nothing hidden is written after it in its run, and holds its place as `use _` where something is, since hidden members are written in order from the first of their run and a later one written past a slot left out would be read at that slot.
+fn call_arguments(arguments: Vec<Argument>, frame: Frame) -> Vec<Printer> {
+    let restored = arguments
+        .iter()
+        .map(|argument| argument.plicity == Plicity::Witness && restorable(&argument.term, frame))
+        .collect::<Vec<_>>();
+
+    // Read from the back: whether a hidden argument is written later in the run a position stands in.
+    let mut written_after = vec![false; arguments.len()];
+    let mut later = false;
+    for (index, argument) in arguments.iter().enumerate().rev() {
+        written_after[index] = later;
+        later = argument.plicity != Plicity::Explicit && (later || !restored[index]);
+    }
+
+    arguments
+        .into_iter()
+        .zip(restored)
+        .zip(written_after)
+        .filter_map(
+            |((argument, restored), written_after)| match (restored, written_after) {
+                (true, false) => None,
+                (true, true) => Some(pure("use _")),
+                (false, _) => Some(marked_argument(
+                    sub(argument.term, frame),
+                    Some(&argument.plicity),
+                )),
+            },
+        )
+        .collect()
+}
+
 /// A nominal type's arguments from position `offset` of its declaration on, each marked as the declaration marks it, and a witness resolution would restore left out (axis (h)).
 fn nominal_arguments(
     group: Vec<Term>,
@@ -2012,21 +2044,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             };
             flat([
                 callee,
-                listed(
-                    "(".into(),
-                    false,
-                    arguments
-                        .into_iter()
-                        .filter(|argument| {
-                            argument.plicity != Plicity::Witness
-                                || !restorable(&argument.term, frame)
-                        })
-                        .map(|argument| {
-                            marked_argument(sub(argument.term, frame), Some(&argument.plicity))
-                        })
-                        .collect::<Vec<_>>(),
-                    ")",
-                ),
+                listed("(".into(), false, call_arguments(arguments, frame), ")"),
             ])
         }
         Subterm::TupleType(TupleType { telescope, .. }) => {
