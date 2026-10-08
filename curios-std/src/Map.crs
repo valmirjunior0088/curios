@@ -1,4 +1,5 @@
-use /std/{Nat, Bool, Str, List, Option, Hash, Show, Spell};
+use /std/{Nat, Bool, Bytes, Str, List, Option, Eq, Hash, Show, Spell};
+use /std/Bool/{True};
 use /std/ops/{Eql};
 
 --- How a key type encodes to the byte string that identifies it, in its own order: the concept, a witness for each key type the library has, and the laws every key has from it.
@@ -12,17 +13,54 @@ mod bits;
 mod Node;
 use Node/{let Node};
 
+-- That a root's trie is sound, in the form a map holds: a family over the root that applies no function to it.
+induct Rooted(K: Type, use Key(K), V: Type): (Option(Node(K, V))) -> Prop
+| none(): (Option/none())
+| some(@n: Node(K, V), @a: Bytes, @p: Option(Nat), shaped: Node/Shaped(K, V)(n, a, p)): (
+    Option/some(n))
+end
+
+-- A root is sound where its trie is.
+let Grounded(@K: Type, use Key(K), @V: Type, root: Option(Node(K, V))) -> Prop =
+    match root | none() => True | some(n) => Node/Sound(n) end;
+
+-- What a map holds of its root, read as the root's soundness.
+let grounded(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    @root: Option(Node(K, V)),
+    held: Rooted(K, V)(root),
+) -> Grounded(root) =
+    match held: (r, _) => Grounded(r)
+    | none() => True/qed()
+    | some(shaped) => Node/read(shaped).sound
+    end;
+
+-- A sound node as a root's proof.
+let rooted(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    n: Node(K, V),
+    sound: Node/Sound(n),
+) -> Rooted(K, V)(Option/some(n)) =
+    Rooted/some(Node/shaped(n, sound));
+
 --- A map from keys of type `K` to values, built and read under one `Key(K)` dictionary, which its type names.
+---
+--- A map holds, hidden, the proof that its trie is sound: at every fork, the fork's bit is the first at which the keys of its two sides differ, clear in those of the zero side and set in those of the one side. Every operation that builds a map builds the proof, and it erases.
 ---
 --- A leaf holds the key itself and its encoding is derived where a comparison needs it, so the keys come back as they went in. The shape of the trie is a function of the encoding, which is why the dictionary is a parameter: a map built under another is a value of another type, and every operation walks under the dictionary its map's type names.
 pub struct Map(K: Type, use Key(K), V: Type): Type {
     size: Nat,
     root: Option(Node(K, V)),
+    @sound: Rooted(K, V)(root),
 }
 
 --- The empty map.
 pub let empty(@K: Type, use Key(K), @V: Type) -> Map(K, V) =
-    Map { size = 0, root = Option/none() };
+    Map { size = 0, root = Option/none(), @sound = Rooted/none() };
 
 --- How many entries.
 pub let len(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Nat =
@@ -46,13 +84,37 @@ pub let has(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Bool =
 pub let insert(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K, v: V) -> Map(K, V) =
     let k = Hash/hash(key);
     match m.root
-    | none() => Map { size = 1, root = Option/some(Node/leaf(key, v)) }
+    | none() =>
+        Map {
+            size = 1,
+            root = Option/some(Node/leaf(key, v)),
+            @sound = rooted(Node/leaf(key, v), True/qed()) }
     | some(n) =>
-        match Node/insert(n, key, k, v)
-        | replaced(n2) => Map { size = m.size, root = Option/some(n2) }
-        | parted(n2, c) =>
-            Map { size = m.size + 1, root = Option/some(Node/wedge(c, bits/bit(k, c), key, v, n2)) }
-        | added(n2) => Map { size = m.size + 1, root = Option/some(n2) }
+        match Node/insert(n, key, k, v, @Eq/refl(), @grounded(m.sound))
+        | replaced(n2, @stands) =>
+            Map { size = m.size, root = Option/some(n2), @sound = rooted(n2, stands.sound) }
+        | parted(n2, c, @back, @apart, @past) =>
+            Map {
+                size = m.size + 1,
+                root = Option/some(Node/wedge(c, bits/bit(k, c), key, v, n2)),
+                @sound =
+                    rooted(
+                        Node/wedge(c, bits/bit(k, c), key, v, n2),
+                        Eq/subst(
+                            (t: Node(K, V)) => Node/Sound(Node/wedge(c, bits/bit(k, c), key, v, t)),
+                            Eq/sym(back),
+                            Node/wedged(
+                                c,
+                                key,
+                                k,
+                                v,
+                                n,
+                                Eq/refl(),
+                                grounded(m.sound),
+                                apart,
+                                past))) }
+        | added(n2, @stands) =>
+            Map { size = m.size + 1, root = Option/some(n2), @sound = rooted(n2, stands.sound) }
         end
     end;
 
@@ -62,9 +124,10 @@ pub let remove(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Map(K, V
     match m.root
     | none() => m
     | some(n) =>
-        match Node/remove(n, k)
-        | gone() => Map { size = m.size - 1, root = Option/none() }
-        | kept(n2) => Map { size = m.size - 1, root = Option/some(n2) }
+        match Node/remove(n, k, @grounded(m.sound))
+        | gone() => Map { size = m.size - 1, root = Option/none(), @sound = Rooted/none() }
+        | kept(n2, @stands) =>
+            Map { size = m.size - 1, root = Option/some(n2), @sound = rooted(n2, stands.sound) }
         | absent() => m
         end
     end;
@@ -120,7 +183,16 @@ pub let update(
 
 --- `f` on every value. The keys and their dictionary stay, so the trie keeps its shape.
 pub let map(@K: Type, use Key(K), @V: Type, @W: Type, m: Map(K, V), f: (V) -> W) -> Map(K, W) =
-    Map { size = m.size, root = Option/map(m.root, (n: Node(K, V)) => Node/map(n, f)) };
+    Map {
+        size = m.size,
+        root = Option/map(m.root, (n: Node(K, V)) => Node/map(n, f)),
+        @sound =
+            match m.root: (r) =>
+                (ground: Grounded(r)) -> Rooted(K, W)(
+                    Option/map(r, (n: Node(K, V)) => Node/map(n, f)))
+            | none() => (_) => Rooted/none()
+            | some(n) => (ground) => rooted(Node/map(n, f), Node/mapped(n, f, ground))
+            end(grounded(m.sound)) };
 
 --- The entries `pred` accepts.
 pub let filter(@K: Type, use Key(K), @V: Type, m: Map(K, V), pred: (K, V) -> Bool) -> Map(K, V) =
