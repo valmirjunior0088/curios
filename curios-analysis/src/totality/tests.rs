@@ -5,7 +5,8 @@
 use {
     super::*,
     curios_core::{
-        Atom, Free, Global, InductDecl, InstanceHead, Intrinsic, Rec, StructDecl, Subterm, Term,
+        Atom, Free, Global, InductDecl, InstanceHead, Intrinsic, Polarity, Rec, StructDecl,
+        Subterm, Term,
     },
     curios_num::{Binary, Grain},
 };
@@ -51,6 +52,10 @@ impl Env for Probe {
 
     fn struct_decl(&self, _: &Global) -> Option<&StructDecl> {
         None
+    }
+
+    fn polarity(&self, _: &Global, _: usize) -> Polarity {
+        Polarity::Mixed
     }
 }
 

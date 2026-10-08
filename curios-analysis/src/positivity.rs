@@ -462,7 +462,7 @@ type Occurrences = BTreeMap<Global, BTreeMap<Global, Polarity>>;
 
 /// Each analyzed declaration's parameter polarities as the fixpoint currently estimates them.
 ///
-/// A name absent from the map is outside the set under analysis, and answers from the entry its driver holds ([`Declarations`]): the vector that entry carries, and [`Polarity::Mixed`], never `Unused`, where the driver holds no entry or the entry no vector.
+/// A name absent from the map is outside the set under analysis, and answers as its driver holds it ([`Env::polarity`]): [`Polarity::Mixed`], never `Unused`, where the driver holds no vector for it.
 #[derive(Debug)]
 struct Vectors {
     computed: BTreeMap<Global, Vec<Polarity>>,
@@ -470,16 +470,10 @@ struct Vectors {
 
 impl Vectors {
     fn at<E: Env>(&self, env: &E, name: &Global, index: usize) -> Polarity {
-        if let Some(vector) = self.computed.get(name) {
-            return vector.get(index).copied().unwrap_or(Polarity::Mixed);
+        match self.computed.get(name) {
+            Some(vector) => vector.get(index).copied().unwrap_or(Polarity::Mixed),
+            None => env.polarity(name, index),
         }
-        env.induct_decl(name)
-            .map(|declaration| declaration.polarity(index))
-            .or_else(|| {
-                env.struct_decl(name)
-                    .map(|declaration| declaration.polarity(index))
-            })
-            .unwrap_or(Polarity::Mixed)
     }
 }
 

@@ -20,7 +20,9 @@
 //!
 //! Both traits report through an associated [`Env::Error`] rather than through [`ReduceError`](curios_core::ReduceError). The kernel's failures are `curios_cert::Error`s and the elaborator's are spanned diagnostics that name the offending term, and a shared analysis should not have to know which. This is the rule `ReduceError` already states from the other direction — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 
-use curios_core::{Bound, Exhaustion, Free, Global, InductDecl, StructDecl, Subterm, Term};
+use curios_core::{
+    Bound, Exhaustion, Free, Global, InductDecl, Polarity, StructDecl, Subterm, Term,
+};
 
 /// Whether it is both meaningful and *safe* to hand `term` to [`Env::force`] — the guard a shared analysis takes before spending a reduction on a term it only wants to read.
 ///
@@ -73,6 +75,11 @@ pub trait Env {
 
     /// The registry entry for a `struct` declaration, or `None` when the name is not one.
     fn struct_decl(&self, name: &Global) -> Option<&StructDecl>;
+
+    /// How the family `name` uses its parameter at `index`, as this checker holds it: [`Polarity::Mixed`], never `Unused`, where it holds no vector for the name or the vector ends before `index`.
+    ///
+    /// Asked of the checker rather than read off the entry it hands back, because which vector a family answers with is the checker's own record. The elaborator's is the one its entry carries; the kernel's is the one its own walk filed, which no entry holds, so reading the entry would have it keep a second copy of every registry entry in scope to put its vector there.
+    fn polarity(&self, name: &Global, index: usize) -> Polarity;
 }
 
 /// [`Env`], plus the one judgment a shared analysis is allowed to borrow.

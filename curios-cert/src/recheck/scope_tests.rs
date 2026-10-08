@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::{Error, Globals, Verdict},
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Certification, Free, Global, Level, Term, Totality},
+    curios_core::{Certification, Free, Global, Level, Places, Term, Totality},
 };
 
 /// Whether `verdicts` is the one refusal a module redeclaring `name` meets: standing is decided before anything is judged, so no other verdict stands beside it.
@@ -37,7 +37,7 @@ fn a_definition_differing_from_the_environments_is_refused() {
     let verdicts = fixture_verdicts(
         &module,
         1_000_000,
-        &already_judged(&judged_environment()),
+        &already_judged(&judged_environment()).globals(),
         SYNTAX,
     );
     assert!(
@@ -66,7 +66,7 @@ fn a_registry_entry_differing_from_the_environments_is_refused() {
     let verdicts = fixture_verdicts(
         &oversized,
         1_000_000,
-        &already_judged(&judged_environment()),
+        &already_judged(&judged_environment()).globals(),
         SYNTAX,
     );
     assert!(
@@ -84,7 +84,7 @@ fn a_registry_entry_differing_in_elaborations_stamps_alone_is_passed_over() {
         fixture_verdicts(
             &two_registry_entries(Varied::Stamps),
             1_000_000,
-            &already_judged(&two_registry_entries(Varied::Nothing)),
+            &already_judged(&two_registry_entries(Varied::Nothing)).globals(),
             SYNTAX,
         ),
         Vec::new(),
@@ -102,7 +102,7 @@ fn a_registry_entry_differing_in_what_the_certifier_reads_is_refused() {
     let verdicts = fixture_verdicts(
         &two_registry_entries(Varied::Variance),
         1_000_000,
-        &environment,
+        &environment.globals(),
         SYNTAX,
     );
     assert!(
@@ -113,7 +113,7 @@ fn a_registry_entry_differing_in_what_the_certifier_reads_is_refused() {
     let verdicts = fixture_verdicts(
         &two_registry_entries(Varied::Field),
         1_000_000,
-        &environment,
+        &environment.globals(),
         SYNTAX,
     );
     assert!(
@@ -143,13 +143,17 @@ fn a_mounted_familys_vector_is_the_certifiers_and_not_its_entrys() {
         let environments = [
             (
                 "the record its walk left",
-                Globals::of(&unit, &certified.certification),
+                AlreadyJudged::with(&unit, &certified.certification),
             ),
             ("no record", already_judged(&unit)),
         ];
         for (under, environment) in environments {
-            let verdicts =
-                fixture_verdicts(&stored_in_the_wrapper(), 1_000_000, &environment, SYNTAX);
+            let verdicts = fixture_verdicts(
+                &stored_in_the_wrapper(),
+                1_000_000,
+                &environment.globals(),
+                SYNTAX,
+            );
             let refused = verdicts.iter().any(|verdict| {
                 verdict.name == Some(stored_family())
                     && matches!(verdict.error, Error::NotPositive { .. })
@@ -183,7 +187,7 @@ fn a_declaration_equal_to_the_environments_is_passed_over() {
     let rechecked = fixture_certified(
         &module,
         1_000_000,
-        &already_judged(&judged_environment()),
+        &already_judged(&judged_environment()).globals(),
         SYNTAX,
     );
 
@@ -222,7 +226,7 @@ fn a_definition_under_a_name_the_environment_holds_as_a_registry_key_is_refused(
     let verdicts = fixture_verdicts(
         &module,
         1_000_000,
-        &already_judged(&judged_environment()),
+        &already_judged(&judged_environment()).globals(),
         SYNTAX,
     );
     assert!(
@@ -247,7 +251,7 @@ fn a_group_the_environment_holds_in_part_is_refused() {
     let verdicts = fixture_verdicts(
         &module,
         1_000_000,
-        &already_judged(&judged_environment()),
+        &already_judged(&judged_environment()).globals(),
         SYNTAX,
     );
     assert!(
@@ -338,16 +342,10 @@ fn a_name_in_both_registries_is_refused() {
 #[should_panic(expected = "a mounted unit redeclared a name already in scope")]
 fn a_registry_entry_mounted_twice_is_a_construction_bug() {
     let unit = shadowing_registry(Term::type_ground());
-    let mut globals = already_judged(&unit);
+    let judged = already_judged(&unit);
+    let places = Places::of(&unit);
+    let certification = Certification::default();
+    let mut globals = judged.globals();
 
-    globals.mount(&unit, &Certification::default());
-}
-
-/// An environment is built from a unit that declares each name once: one declaring a name twice is its builder's fault, and no environment is made of it.
-///
-/// Mutation-checked against the assertion: with the entries collected, the later one standing, an environment is built.
-#[test]
-#[should_panic(expected = "a unit put in scope declares one name twice")]
-fn an_environment_is_not_built_from_a_unit_declaring_a_name_twice() {
-    already_judged(&group_naming_a_member_twice());
+    globals.mount(&unit, &places, &certification);
 }

@@ -12,7 +12,7 @@ use {
     curios_utilities::Qualifier,
 };
 
-fn kernel() -> Kernel {
+fn kernel() -> Kernel<'static> {
     Kernel::new(100_000, SYNTAX)
 }
 

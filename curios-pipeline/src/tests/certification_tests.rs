@@ -102,7 +102,7 @@ fn a_compiled_unit_files_the_certifiers_record_of_every_definition() {
     assert_eq!(classified(&unit, "twice"), Some(Totality::Total));
 }
 
-/// An item-level recompile walks only the closure the edit reached, so its record joins the baseline's classifications for what it reused to its own walk's — covering the unit whole, with a reused item classified as the walk that filed the baseline classified it.
+/// An item-level recompile's walk is handed the baseline whole and adopts the verdicts that stand, so its record covers the unit — a declaration the edit did not reach classified, and read, as the walk that filed the baseline left it, and one that read the edit judged again.
 #[test]
 fn an_item_level_recompile_keeps_the_baselines_record_for_what_it_reuses() {
     let baseline = unit_of(SOURCE);

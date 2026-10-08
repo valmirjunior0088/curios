@@ -895,7 +895,7 @@ fn two_polls_of_one_cell_at_two_ground_levels_do_not_convert() {
 }
 
 /// `f : (Nat, Nat) -> Nat`, `n : Nat` and `m : Nat` assumed, for the comparisons below.
-fn over_a_function(mut kernel: Kernel, f: &Free, n: &Free, m: &Free) -> Kernel {
+fn over_a_function<'s>(mut kernel: Kernel<'s>, f: &Free, n: &Free, m: &Free) -> Kernel<'s> {
     kernel.assume(
         f,
         &Term::func_type(

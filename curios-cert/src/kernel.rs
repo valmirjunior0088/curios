@@ -50,7 +50,7 @@ mod whnf;
 pub(crate) use whnf::*;
 
 use {
-    crate::{build_shorten_layered, entails, erased_half},
+    crate::{Baseline, build_shorten_layered, entails, erased_half},
     curios_analysis::{Env, Erased, Judge},
     curios_core::{
         Advance, Atom, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level, LevelHead,
@@ -187,7 +187,7 @@ pub enum Error {
     UnsatisfiableUniverses,
     /// A universe instance whose stated levels do not satisfy the scheme's constraint set. The scheme declared `lower ≤ upper` over its parameters; at this instance's levels, under the hypotheses of the item being checked, the inequality does not hold — which is the route back to the paradox the hierarchy exists to exclude.
     UniverseInstance { lower: Level, upper: Level },
-    /// An occurrence of a universe-polymorphic definition that states no instance. Such an occurrence denotes no particular instance, which is why `Globals::value` withholds its body; reading its *type* regardless hands back the scheme's own parameters, which are then read as the ambient item's, and skips `check_instance` entirely — so the scheme's constraints are discharged by nothing and a use the stated-instance spelling refuses is admitted by dropping the instance.
+    /// An occurrence of a universe-polymorphic definition that states no instance. Such an occurrence denotes no particular instance, which is why a bare occurrence is handed no body to unfold; reading its *type* regardless hands back the scheme's own parameters, which are then read as the ambient item's, and skips `check_instance` entirely — so the scheme's constraints are discharged by nothing and a use the stated-instance spelling refuses is admitted by dropping the instance.
     MissingUniverseInstance { name: Free, expected: usize },
 }
 
@@ -425,7 +425,7 @@ impl fmt::Display for Displayed<'_> {
 /// The kernel's side of the shared-analysis seam.
 ///
 /// `assumption` reads the *locals* rather than `Kernel::type_of`, because a shared analysis asking what a binder was assumed at means the binder in scope, not a top-level name that happens to share its spelling. That matches what the elaborator's `Context::assumption` answers, which is the point of the seam.
-impl Env for Kernel {
+impl Env for Kernel<'_> {
     type Error = Error;
 
     /// Plain reduction, as the seam asks: a shared analysis borrows no opinion of the kernel's conversion through the term it reads.
@@ -456,9 +456,13 @@ impl Env for Kernel {
     fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         Kernel::struct_decl(self, name)
     }
+
+    fn polarity(&self, name: &Global, index: usize) -> Polarity {
+        Kernel::polarity(self, name, index)
+    }
 }
 
-impl Judge for Kernel {
+impl Judge for Kernel<'_> {
     fn convert_at(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, Self::Error> {
         convert::convert(self, type_, this, that)
     }
@@ -468,10 +472,10 @@ impl Judge for Kernel {
 ///
 /// Deliberately small, and deliberately *composed*. The elaborator's `Context` carries fifteen-odd stores — caches, parked goals, refinement layers, a metavariable heap — and each is a place where an answer can come from something other than the term in hand. Here each independent job is a component that states its own invariants, and what remains is the composition and the couplings that genuinely cross it.
 ///
-/// One coupling that would cross it does not arise. A definition rewritten under its name would make every remembered reduct stale, which is a fact about `Globals` *and* `Memos`; `Globals` refuses the write, so neither component has to know the other exists.
+/// One coupling that would cross it does not arise. A definition rewritten under its name would make every remembered reduct stale, which is a fact about the environment *and* `Memos`; the environment refuses the write, so neither component has to know the other exists.
 ///
 /// Growing this struct is how independence gets lost. A new *component* should have to argue for itself.
-pub struct Kernel {
+pub struct Kernel<'s> {
     /// What the walk in progress has opened.
     scope: Scope,
     /// What a judgment may consume, and what it has.
@@ -484,8 +488,8 @@ pub struct Kernel {
     calls: Calls,
     /// What the item being judged has read of other items — an output, not an input.
     reads: ReadRecorder,
-    /// Top-level definitions and the nominal registry.
-    globals: Globals,
+    /// Top-level definitions and the nominal registry: what this walk wrote, over the units it was seeded with, each read where it stands.
+    globals: Environment<'s>,
     /// The registered spellings this walk may need to *state* a type — today the propositions the guarded operations take as bounds, read through `Intrinsic::signature`.
     ///
     /// Handed in rather than defaulted, and deliberately not optional. An absent registry could only mean skipping the bound check, and a check that silently does not run is worse than one that is missing outright: the kernel would report a verdict it had not reached.
@@ -502,7 +506,7 @@ pub struct Kernel {
     asked: Option<(Term, Term)>,
 }
 
-impl Kernel {
+impl<'s> Kernel<'s> {
     /// A kernel that may spend `budget` reduction steps per judgment, stating types through `syntax`.
     pub fn new(budget: u64, syntax: SyntaxRegistry) -> Self {
         Self {
@@ -512,7 +516,7 @@ impl Kernel {
             positions: Positions::default(),
             calls: Calls::default(),
             reads: ReadRecorder::default(),
-            globals: Globals::default(),
+            globals: Environment::default(),
             syntax,
             assumed: Vec::new(),
             machine: true,
@@ -528,9 +532,19 @@ impl Kernel {
 
     /// Start this kernel's environment from `globals` — the scope an earlier walk established — rather than from nothing.
     ///
-    /// Set wholesale, where [`Kernel::define`] writes one name and refuses a held one: a kernel is seeded before it has judged anything, so what it starts from is what every judgment of its walk reads.
-    pub(crate) fn seed(&mut self, globals: &Globals) {
-        self.globals = globals.clone();
+    /// Set wholesale, where [`Kernel::define`] writes one name and refuses a held one: a kernel is seeded before it has judged anything, so what it starts from is what every judgment of its walk reads. Nothing is brought in: a name of the scope is read where its unit holds it.
+    pub(crate) fn seed(&mut self, globals: &'s Globals<'s>) {
+        self.globals.seed(globals);
+    }
+
+    /// Read the declarations this walk adopts where `baseline` holds them ([`Kernel::adopt`]).
+    pub(crate) fn over(&mut self, baseline: Baseline<'s>) {
+        self.globals.over(baseline);
+    }
+
+    /// Take the definition `name` as the baseline this walk is over holds it, unjudged, as [`Kernel::define`] records one. Refused as [`Error::Redeclared`] where a definition already stands under `name`, and where the baseline holds none.
+    pub(crate) fn adopt(&mut self, name: &Global) -> Result<(), Error> {
+        self.globals.adopt(name)
     }
 
     /// A kernel whose evaluation memos are off — every reduction re-derived from scratch. Exists for one purpose: asserting that memoization changes no *semantic* verdict. It may change a resource one, since a term-keyed hit is free and an uncached walk therefore spends at least as much; see the `spend` module's documentation for why that is the whole of what was given up.
@@ -795,9 +809,15 @@ impl Kernel {
         self.globals.unvectored()
     }
 
-    /// File the polarity vector the walk computed for the registry entry under `name` ([`Globals::file_polarities`]).
+    /// File the polarity vector the walk computed, or adopted, for the registry entry under `name`: what every later judgment that composes through the family reads.
     pub(crate) fn file_polarities(&mut self, name: &Global, vector: Vec<Polarity>) {
         self.globals.file_polarities(name, vector);
+    }
+
+    /// How the family `name` uses its parameter at `index`, by the vector this walk or the walk over its unit filed for it: a read of the family's signature, as a read of its registry entry is.
+    pub(crate) fn polarity(&self, name: &Global, index: usize) -> Polarity {
+        self.reads.signature(name);
+        self.globals.polarity(name, index)
     }
 
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
@@ -1107,7 +1127,7 @@ impl Kernel {
 
     /// The type `name` was bound or declared at. Locals shadow definitions.
     ///
-    /// A definition with universe parameters is refused here rather than answered, which is [`Globals::value`]'s rule applied to the other half of a definition. A bare occurrence denotes no particular instance, so there is no instantiation to report a type at: handing back the stored scheme type reads that scheme's parameters as the ambient item's and reaches [`Kernel::check_instance`] never, so the scheme's constraints go undischarged. A local is exempt because it is monomorphic: it was opened at one type, and there is no scheme to instantiate.
+    /// A definition with universe parameters is refused here rather than answered, which is [`Kernel::value`]'s rule applied to the other half of a definition. A bare occurrence denotes no particular instance, so there is no instantiation to report a type at: handing back the stored scheme type reads that scheme's parameters as the ambient item's and reaches [`Kernel::check_instance`] never, so the scheme's constraints go undischarged. A local is exempt because it is monomorphic: it was opened at one type, and there is no scheme to instantiate.
     pub(crate) fn type_of(&self, name: &Free) -> Result<Option<&Term>, Error> {
         if let Some(local) = self.scope.local_type(name) {
             return Ok(Some(local));

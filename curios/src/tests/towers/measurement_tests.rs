@@ -50,13 +50,16 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
     };
 
     let module = Zonked::project(&checked.program).expect("a checked program is zonked");
-    let (verdicts, kernel) = recheck_with_prelude_measured(&module, DEFAULT_STEP_BUDGET);
+    let (verdicts, heaviest) =
+        recheck_with_prelude_measured(&module, DEFAULT_STEP_BUDGET, |kernel| {
+            kernel.heaviest_declaration()
+        });
     let kernel = Cost {
         verdict: match verdicts.is_empty() {
             true => "accepted",
             false => "refused",
         },
-        units: Some(kernel.heaviest_declaration().units()),
+        units: Some(heaviest.units()),
         looks: take_looks(),
     };
 

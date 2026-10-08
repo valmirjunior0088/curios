@@ -34,7 +34,7 @@ fn family(
 }
 
 /// A kernel holding the vocabulary a bound is stated in, defined as `/sys` defines it — `True` with its one proof, a proposition with none, and `Holds(b)` reducing to one or the other — so a bound is discharged by its decision reducing, as a program's is, rather than assumed.
-fn kernel_with_bounds() -> Kernel {
+fn kernel_with_bounds() -> Kernel<'static> {
     let mut kernel = kernel();
     let nullary = |name| Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
 

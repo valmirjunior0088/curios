@@ -11,7 +11,7 @@ use {
     curios_utilities::Qualifier,
 };
 
-pub(super) fn kernel() -> Kernel {
+pub(super) fn kernel() -> Kernel<'static> {
     Kernel::new(100_000, SYNTAX)
 }
 

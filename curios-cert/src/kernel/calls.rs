@@ -118,7 +118,7 @@ impl Calls {
     }
 }
 
-impl Kernel {
+impl Kernel<'_> {
     /// Open `group` for recording, its members assumed under `members`.
     pub(super) fn open_group(&mut self, group: &RecGroup, members: &[Free]) {
         let arities = member_arities(self, group);

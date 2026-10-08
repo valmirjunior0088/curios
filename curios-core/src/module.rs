@@ -100,6 +100,11 @@ impl Certification {
         self.polarities.get(name).map(Vec::as_slice)
     }
 
+    /// What the certifier concluded about `name`, when this record covers it.
+    pub fn certified(&self, name: &Global) -> Option<&Certified> {
+        self.certified.get(name)
+    }
+
     /// The certifier's classification of `name`, when this record covers it.
     pub fn totality(&self, name: &Global) -> Option<Totality> {
         self.certified.get(name).map(|certified| certified.totality)
@@ -112,11 +117,15 @@ impl Certification {
 
     /// Whether this record classifies every definition `module` holds.
     pub fn covers(&self, module: &Module) -> bool {
-        module
-            .items
-            .iter()
-            .flat_map(Item::definitions)
-            .all(|definition| self.certified.contains_key(&definition.name))
+        let classified = |name: &Global| self.certified.contains_key(name);
+
+        module.items.iter().all(|item| match item {
+            Item::Let(definition) => classified(&definition.name),
+            Item::Rec(rec) => rec
+                .definitions
+                .iter()
+                .all(|definition| classified(&definition.name)),
+        })
     }
 
     /// Every classification this record holds.
@@ -124,25 +133,6 @@ impl Certification {
         self.certified
             .iter()
             .map(|(name, certified)| (name, certified.totality))
-    }
-
-    /// This record with `other`'s entry for each definition of `module` it lacks and `other`'s vector for each registry entry of `module` it lacks, its own winning where both hold a name — how an item-level recompile's record joins the baseline's for the declarations it reused to its own walk's, and for no declaration the new text dropped.
-    pub fn extended(mut self, other: &Certification, module: &Module) -> Self {
-        for definition in module.items.iter().flat_map(Item::definitions) {
-            if let Some(certified) = other.certified.get(&definition.name) {
-                self.certified
-                    .entry(definition.name)
-                    .or_insert_with(|| certified.clone());
-            }
-        }
-        for name in module.induct_decls.keys().chain(module.struct_decls.keys()) {
-            if let Some(vector) = other.polarities.get(name) {
-                self.polarities
-                    .entry(*name)
-                    .or_insert_with(|| vector.clone());
-            }
-        }
-        self
     }
 }
 

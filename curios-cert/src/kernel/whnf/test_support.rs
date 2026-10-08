@@ -9,7 +9,7 @@ use {
 };
 
 /// The kernel every test starts from.
-pub(super) fn kernel() -> Kernel {
+pub(super) fn kernel() -> Kernel<'static> {
     Kernel::new(1_000_000, SYNTAX)
 }
 
@@ -88,7 +88,7 @@ pub(super) fn across_an_arm(kernel: &mut Kernel) -> [Term; 4] {
 }
 
 /// The strategy arm of the differential fixture below: the ordinary test kernel with its closed machine off, so every closed term is walked by the recursive strategy. Beside its one consumer on purpose — nothing else may evaluate with the machine disabled.
-pub(super) fn strategy_kernel() -> Kernel {
+pub(super) fn strategy_kernel() -> Kernel<'static> {
     let mut kernel = kernel();
     kernel.machine = false;
     kernel

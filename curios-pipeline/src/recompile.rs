@@ -1,12 +1,12 @@
 //! One unit compiled over a baseline: the items its new text changed, closed over what the baseline's elaboration reached, elaborated, judged and erased alone, with everything outside the closure read where the baseline holds it, as a predecessor's items are, and its erased form the baseline's own.
 //!
-//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. What a reused item rests on is the verdict recorded when the baseline was judged, exactly as a whole unit taken from a store does, and the argument is [Cached verdicts](../../documentation/design/soundness/cached-verdicts.md) applied per item: the key is the item's lowered form together with everything its reach closure covers. That is why the closure is transitive — conversion unfolds bodies, so a dependent's judgment reaches through what it names, and a closure that stopped one edge short would be a key omitting an input.
+//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its items are elaborated and erased again is this module's closure, and which of its verdicts stand is not: the kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed, so a closure that stopped one edge short costs a judgment and admits nothing ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). The closure is transitive all the same — conversion unfolds bodies, so a dependent's elaboration reaches through what it names — since an item it leaves out is stored as the baseline elaborated it.
 //!
 //! **The diff is over lowered items, modulo what a lowering mints.** A lowering numbers every written `Type` and every elided annotation from zero for each declaration, so a declaration its text leaves alone carries the ids it carried whatever was written around it, and an edit inside one renumbers that one alone; [`Term::equal_modulo_metas`] pairs the ids by position, which is how an edited declaration whose edit only shifted them is still found unchanged. Everything else compares exactly, spans excepted, so a moved declaration is not a change — and a renamed parameter is one: a binder's name is in what is stored, the item's own and every dependent's that was handed its signature, so an item reused under the old name would be another unit than a whole compile's.
 
 use {
     crate::{CompileError, globals, kernel_refusal, with_broken},
-    curios_cert::{Rechecked, certify_module},
+    curios_cert::{Baseline, Rechecked, certify_module_over},
     curios_core::{
         Bound, ConceptDecl, Global, InductDecl, Item, MetaRenaming, Module, StructDecl, Telescope,
         Term, Zonked,
@@ -82,16 +82,12 @@ pub fn compile_unit_over(
     let core =
         Zonked::project(&core).map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
-    // What the kernel is told stands: the baseline's items outside the closure, mounted with the baseline's record.
-    let reused = baseline.core().restricted(|name| !closure.contains(name));
-    let rechecked = recheck_over(&core, budget, predecessors, &reused, baseline, syntax);
+    // The kernel is told nothing of the closure: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped.
+    let rechecked = recheck_over(&core, budget, predecessors, baseline, syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
         return Err(kernel_refusal(verdict, core.as_module(), &cores, syntax));
     }
-    // The walk classified the closure; the reused items keep the baseline's classifications, which nothing they mention has moved — a reused item is one the invalidation closure did not reach. Joined for what the new text declares, so a declaration it dropped leaves no entry behind.
-    let certification = rechecked
-        .certification
-        .extended(baseline.certification(), core.as_module());
+    let certification = rechecked.certification;
 
     // An item's erasure reads the types and registry entries of the names it reaches and how each is bound, every one of which the closure holds where it moved: the closure is the reverse of reaching, and transitive.
     let erased = predecessors.erased();
@@ -108,21 +104,27 @@ pub fn compile_unit_over(
     Ok(Uncertified::new(lowered, core.into_module(), ersd).certified(certification))
 }
 
-/// [`recheck`](crate::recheck) with `reused` in scope beside the units: `baseline`'s items an item-level recompile replayed, judged by the walk that filed the baseline, so this walk judges the closure alone. They are mounted with the baseline's record, whose classifications of them nothing in the closure has moved.
+/// [`recheck`](crate::recheck) for a unit compiled over `baseline`: the walk is handed the units in scope as its environment and the baseline's module and record whole, and adopts each of the baseline's verdicts that still stands, by the reads its own walk filed (`curios_cert::Baseline`).
 ///
-/// The reused items and registry entries are both mounted and kept in `module`, and the walk holds the two to each other: it passes a declaration over only where the mounted one is the same terms — an item's type, body and universe context, a registry entry's terms and its variance vector — and refuses the module for any other under a mounted name. Elaboration's stamps take no part, the polarity vectors among them, in whose place the kernel holds the ones it filed. So the module that is stored, and that a later walk mounts, is one the kernel saw whole.
+/// Nothing here says which declarations are kept. A declaration elaborated again that came out as the baseline holds it, reading nothing that moved, is adopted like one never touched, and one kept by a closure cut short is judged where what it read has changed: the verdicts that are filed rest on the certifier's record, and on one claim of the fold's, that `baseline` was compiled after these `predecessors`, which is what a cache offers one by ([`Cache::baseline`](crate::Cache::baseline)).
 pub(crate) fn recheck_over(
     module: &Zonked<Module>,
     budget: u64,
     predecessors: Predecessors<'_>,
-    reused: &Module,
     baseline: &Unit,
     syntax: &SyntaxRegistry,
 ) -> Rechecked {
-    let mut globals = globals(predecessors);
-    globals.mount(reused, baseline.certification());
-
-    certify_module(module, budget, &globals, *syntax)
+    certify_module_over(
+        module,
+        budget,
+        &globals(predecessors),
+        Baseline {
+            module: baseline.core(),
+            places: baseline.places(),
+            certification: baseline.certification(),
+        },
+        *syntax,
+    )
 }
 
 /// The names the new text invalidates: every declared name whose lowered item differs from the baseline's modulo the identities lowering mints, every registry key whose entry differs, every name only one side declares, and every name whose witness or test membership moved — closed backwards over the baseline's elaborated graph.

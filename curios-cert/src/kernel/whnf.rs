@@ -36,7 +36,7 @@ use {
 };
 
 /// The kernel's side of the closed-machine seam: the same delta `step_var` and `step_instance` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
-impl ClosedHost for Kernel {
+impl ClosedHost for Kernel<'_> {
     fn closed_body(&self, name: &Free) -> Option<&Term> {
         self.value(name)
     }
@@ -52,7 +52,7 @@ fn machine_admissible(kernel: &Kernel, term: &Term) -> bool {
 }
 
 /// The kernel's reduction strategy: everything unfolds, and what a term unfolds to is remembered — for the declaration if it is local-free, for as long as the equations in force stand if it is not — see the `memos` and `spend` modules for what that does and does not concede, and for why a hit is free.
-impl Reducer for Kernel {
+impl Reducer for Kernel<'_> {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         curios_profile::profile!("reduce");
         whnf(self, term)

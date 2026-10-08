@@ -3,6 +3,11 @@
 //! A finished module is read by name: a later unit's elaboration asks for a definition's type, the certifier for what a name unfolds to, erasure for how one is bound. [`Places`] says where a name is held — the item that declares it and, for a group's member, which member — and is made once for a module and kept with whatever holds the module, so no reader keys a module again.
 //!
 //! **Looked up, never walked.** The table is a hash's, and nothing reads its order.
+//!
+//! **One place for a name.** A finished module declares each name once: lowering refuses a second declaration and the certifier a module that carries one. A table made of a module that did would hold the later declaration and say nothing of the earlier, to every reader alike, so such a module is its builder's fault and has no places — asserted, where a walk reports.
+
+#[cfg(test)]
+mod tests;
 
 use {
     super::{Global, Item, Module, RecGroup, RecItem, Term},
@@ -43,19 +48,21 @@ pub struct Places {
 impl Places {
     /// The places of `module`'s names: one for each definition and each member of a group, and nothing copied.
     pub fn of(module: &Module) -> Self {
+        const TWICE: &str = "a module declares one name twice";
         let mut places = HashMap::with_capacity(module.items.len());
         let mut slots = 0;
         for (item, declared) in module.items.iter().enumerate() {
             let item = u32::try_from(item).expect("a unit's items are counted in a u32");
             match declared {
                 Item::Let(definition) => {
-                    places.insert(definition.name, Place::Let(item));
+                    let earlier = places.insert(definition.name, Place::Let(item));
+                    assert!(earlier.is_none(), "{TWICE}");
                 }
                 Item::Rec(rec) => {
                     for (member, definition) in rec.definitions.iter().enumerate() {
                         let member =
                             u32::try_from(member).expect("a group's members are counted in a u32");
-                        places.insert(
+                        let earlier = places.insert(
                             definition.name,
                             Place::Member {
                                 item,
@@ -63,6 +70,7 @@ impl Places {
                                 slot: slots,
                             },
                         );
+                        assert!(earlier.is_none(), "{TWICE}");
                         slots += 1;
                     }
                 }

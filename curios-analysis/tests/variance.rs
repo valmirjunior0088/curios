@@ -13,7 +13,7 @@ use {
     std::collections::BTreeMap,
 };
 
-fn kernel() -> Kernel {
+fn kernel() -> Kernel<'static> {
     Kernel::new(100_000, SYNTAX)
 }
 
@@ -437,7 +437,7 @@ fn held(kernel: &mut Kernel, parts: &[Term]) -> Vec<usize> {
 }
 
 /// A kernel declaring `Wrap`, irrelevant in its level, and `Box`, invariant in its.
-fn with_wrap_and_box() -> Kernel {
+fn with_wrap_and_box() -> Kernel<'static> {
     let mut kernel = kernel();
     kernel
         .declare_induct(

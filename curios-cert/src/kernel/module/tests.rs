@@ -8,7 +8,7 @@ use {
     curios_utilities::{Plicity, Qualifier},
 };
 
-fn kernel() -> Kernel {
+fn kernel() -> Kernel<'static> {
     Kernel::new(100_000, SYNTAX)
 }
 

@@ -25,10 +25,8 @@ fn certify() {
 
     // The *restored* images, not the values the producing script held before serializing them. Those differ — hash-consing and the round trip sit between them — and it is the restored ones every compilation actually uses, so they are the ones worth certifying.
     curios_prelude_archive::with_prelude(|prelude| {
-        // Built up as the fold goes rather than taken from `Globals::default()`: `/std` names `/sys`, so judging it against an empty environment would refuse every intrinsic carrier it wraps. The assembler `curios-pipeline` offers is unreachable from here — a build script that reached the compiler boundary would pull the whole pipeline into the prelude's own build — so the environment is mounted by hand, which is two lines and says exactly what the fold order means.
-        let mut globals = Globals::default();
         let mut items = 0;
-        let mut certifications = Vec::new();
+        let mut certifications: Vec<Certification> = Vec::new();
 
         for unit in prelude {
             let core = unit.core();
@@ -39,7 +37,15 @@ fn certify() {
             let Rechecked {
                 verdicts: refusals,
                 certification,
-            } = certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
+            } = {
+                // The roots before this one rather than `Globals::default()`: `/std` names `/sys`, so judging it against an empty environment would refuse every intrinsic carrier it wraps. Each with the record its walk just made, so `/std`'s walk reads the certifier's classification of `/sys` rather than classifying it again. The assembler `curios-pipeline` offers is unreachable from here — a build script that reached the compiler boundary would pull the whole pipeline into the prelude's own build — so the environment is mounted by hand, which is three lines and says exactly what the fold order means.
+                let mut globals = Globals::default();
+                for (earlier, certification) in prelude.iter().zip(&certifications) {
+                    globals.mount(earlier.core(), earlier.places(), certification);
+                }
+
+                certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX)
+            };
 
             if let Some(verdict) = refusals.first() {
                 // The name, not only the error: a `curios_cert::Error` renders terms and sorts and never the top-level item it came from, so without this the one diagnostic this crate exists to produce points nowhere in a prelude of a thousand items.
@@ -57,8 +63,6 @@ fn certify() {
                 );
             }
 
-            // With the record this walk just made, so `/std`'s walk reads the certifier's classification of `/sys` rather than classifying it again.
-            globals.mount(core, &certification);
             items += core.items.len();
             certifications.push(certification);
         }

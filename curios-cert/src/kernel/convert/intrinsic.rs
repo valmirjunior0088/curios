@@ -103,7 +103,7 @@ fn in_progress(kernel: &Kernel, history: &mut History, this: &Term, that: &Term)
 }
 
 /// The kernel is handed finished terms, so it prepares nothing, and it has no solving view: the elaborator's views only propose solutions, and once they are committed the two spellings agree by reduction.
-impl Driver for Kernel {
+impl Driver for Kernel<'_> {
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
         intrinsic
     }

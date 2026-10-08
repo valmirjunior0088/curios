@@ -6,7 +6,8 @@ use {
         Error, Globals, certify_module, recheck_module_measured, recheck_module_verdicts_uncached,
     },
     curios_core::{
-        Bound, Cases, Enter, Global, Item, Match, Subterm, Telescope, Term, Variance, Visit, Zonked,
+        Bound, Cases, Certification, Enter, Global, Item, Match, Subterm, Telescope, Term,
+        Variance, Visit, Zonked,
     },
     curios_elab::{DEFAULT_STEP_BUDGET, Erasures, erase_unit},
     curios_text::SYNTAX,
@@ -21,6 +22,16 @@ use {
         time::Instant,
     },
 };
+
+/// The kernel's environment for the roots a walk has certified so far: each of `prelude`'s roots that has a record in `certifications`, read where it stands with that record, as `curios-prelude`'s build mounts it. Made for each walk rather than kept across them, since it borrows the records and a record is filed as its walk ends.
+fn certified<'a>(prelude: &[&'a Uncertified], certifications: &'a [Certification]) -> Globals<'a> {
+    let mut globals = Globals::default();
+    for (root, certification) in prelude.iter().zip(certifications) {
+        globals.mount(root.core(), root.places(), certification);
+    }
+
+    globals
+}
 
 /// Every item the prelude declares, across its roots — what a claim about "the prelude" is a claim about.
 fn items<'a>(prelude: &'a [&'a Uncertified]) -> impl Iterator<Item = &'a Item> {
@@ -270,16 +281,20 @@ fn class(error: &Error) -> String {
 #[ignore = "inventory: measures where the kernel disagrees rather than asserting"]
 fn kernel_disagreements() {
     with_prelude(|prelude| {
-        let mut globals = Globals::default();
+        let mut certifications = Vec::new();
         let mut verdicts = Vec::new();
 
         // Each root against the roots before it, which is the environment it was elaborated in: walking `/std` from an empty one would tally a refusal per intrinsic carrier it wraps and say nothing about the kernel. Mounted with the record its own walk left, as `curios-prelude`'s build mounts it.
         for root in prelude {
-            let core = root.core();
-            let zonked = Zonked::project(core).expect("a restored prelude root is zonked");
-            let rechecked = certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
+            let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
+            let rechecked = certify_module(
+                &zonked,
+                DEFAULT_STEP_BUDGET,
+                &certified(prelude, &certifications),
+                SYNTAX,
+            );
             verdicts.extend(rechecked.verdicts);
-            globals.mount(core, &rechecked.certification);
+            certifications.push(rechecked.certification);
         }
 
         let mut tally: BTreeMap<String, usize> = BTreeMap::new();
@@ -314,17 +329,26 @@ fn kernel_disagreements() {
 #[ignore = "parity: runs the whole-prelude walk twice, the second time uncached"]
 fn kernel_memo_parity() {
     with_prelude(|prelude| {
-        let mut globals = Globals::default();
+        let mut certifications = Vec::new();
 
         for root in prelude {
-            let core = root.core();
-            let zonked = Zonked::project(core).expect("a restored prelude root is zonked");
-            let cached = certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
-            assert_eq!(
-                cached.verdicts,
-                recheck_module_verdicts_uncached(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX),
-            );
-            globals.mount(core, &cached.certification);
+            let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
+            let cached = {
+                let globals = certified(prelude, &certifications);
+                let cached = certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
+                assert_eq!(
+                    cached.verdicts,
+                    recheck_module_verdicts_uncached(
+                        &zonked,
+                        DEFAULT_STEP_BUDGET,
+                        &globals,
+                        SYNTAX
+                    ),
+                );
+
+                cached
+            };
+            certifications.push(cached.certification);
         }
     });
 }
@@ -378,7 +402,7 @@ fn stored_prelude_measurements() {
         );
 
         // Per root, against the roots before it: the figures are per *unit*, and the prelude is two of them, so summing them would report a cost no single operation has.
-        let mut globals = Globals::default();
+        let mut certifications = Vec::new();
         let mut cores = Vec::new();
         let mut units = Vec::new();
 
@@ -401,11 +425,14 @@ fn stored_prelude_measurements() {
             .expect("a stored prelude root re-erases");
             let erasure = start.elapsed();
 
-            let start = Instant::now();
-            let (rechecked, kernel) =
-                recheck_module_measured(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
-            let certification = start.elapsed();
-            let heaviest = kernel.heaviest_declaration();
+            let (rechecked, certification, heaviest) = {
+                let globals = certified(prelude, &certifications);
+                let start = Instant::now();
+                let (rechecked, kernel) =
+                    recheck_module_measured(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
+
+                (rechecked, start.elapsed(), kernel.heaviest_declaration())
+            };
 
             let definitions: usize = core
                 .items
@@ -445,7 +472,7 @@ fn stored_prelude_measurements() {
             );
             println!("  concepts                     {:>10}", core.concepts.len());
 
-            globals.mount(core, &rechecked.certification);
+            certifications.push(rechecked.certification);
             cores.push(core);
             units.push(root.erased());
         }

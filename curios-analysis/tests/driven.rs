@@ -31,7 +31,7 @@ fn planted() -> Free {
     Free::local(1, Some("f"))
 }
 
-fn kernel() -> Kernel {
+fn kernel() -> Kernel<'static> {
     Kernel::new(100_000, SYNTAX)
 }
 

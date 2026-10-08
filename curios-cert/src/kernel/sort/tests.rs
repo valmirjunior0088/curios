@@ -8,7 +8,7 @@ use {
     curios_utilities::Qualifier,
 };
 
-fn kernel() -> Kernel {
+fn kernel() -> Kernel<'static> {
     Kernel::new(100_000, SYNTAX)
 }
 
@@ -260,7 +260,7 @@ fn a_universe_instance_over_a_defined_scheme_classifies_at_the_instances_level()
     );
 }
 
-/// The one route that brings a scheme head to the arm — a polymorphic global declared without a body, a permanent neutral — classifies at the instance's level, as [`synth_neutral`](super::synth_neutral) reads the same head inside a spine: `A<u> : Type (u + 1)` is `Type 1` at `u := 0` and `Type 2` at `u := 1`. A classification that dropped the levels would answer the scheme's own sort with its parameter still in it, one answer for both instances. Nothing on the compile path declares a bodiless global — the module walk `define`s every item with its real body, and `Globals::of` records bodies for every `Let` and `Rec` — so only [`Kernel::declare`] builds this state.
+/// The one route that brings a scheme head to the arm — a polymorphic global declared without a body, a permanent neutral — classifies at the instance's level, as [`synth_neutral`](super::synth_neutral) reads the same head inside a spine: `A<u> : Type (u + 1)` is `Type 1` at `u := 0` and `Type 2` at `u := 1`. A classification that dropped the levels would answer the scheme's own sort with its parameter still in it, one answer for both instances. Nothing on the compile path declares a bodiless global — the module walk `define`s every item with its real body, and a unit in scope answers with the body of every `Let` and `Rec` — so only [`Kernel::declare`] builds this state.
 #[test]
 fn a_universe_instance_over_a_bodiless_scheme_classifies_at_the_instances_level() {
     let mut kernel = kernel();

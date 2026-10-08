@@ -22,6 +22,9 @@ pub use satisfy::*;
 mod obligation;
 pub(crate) use obligation::*;
 
+mod baseline;
+pub use baseline::*;
+
 mod recheck;
 pub use recheck::*;
 

@@ -288,12 +288,15 @@ pub fn examine_with_prelude(
     })
 }
 
-/// Put `program` to the independent kernel with the fixed prelude in scope, handing back the walk's own kernel for a measurement to read. See `curios_cert::recheck_program_measured`.
-pub fn recheck_with_prelude_measured(
+/// Put `program` to the independent kernel with the fixed prelude in scope, handing the walk's own kernel to `read` for a measurement to take what it wants of it. See [`recheck_measured`].
+pub fn recheck_with_prelude_measured<T>(
     program: &curios_core::Zonked<curios_core::Program>,
     budget: u64,
-) -> (Vec<curios_cert::Verdict>, curios_cert::Kernel) {
-    with_prelude(|prelude| recheck_measured(program, budget, Predecessors::over(prelude), &SYNTAX))
+    read: impl FnOnce(&curios_cert::Kernel<'_>) -> T,
+) -> (Vec<curios_cert::Verdict>, T) {
+    with_prelude(|prelude| {
+        recheck_measured(program, budget, Predecessors::over(prelude), &SYNTAX, read)
+    })
 }
 
 /// Put `program` to the independent kernel with the fixed prelude in scope. See [`recheck`].

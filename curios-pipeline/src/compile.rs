@@ -190,24 +190,27 @@ pub(crate) fn certify(
     certify_module(module, budget, &globals(predecessors), *syntax)
 }
 
-/// [`recheck`], handing back the walk's own kernel for a measurement to read rather than only its verdicts. See `curios_cert::recheck_program_measured`.
-pub fn recheck_measured(
+/// [`recheck`], handing the walk's own kernel to `read` for a measurement to take what it wants of it rather than only its verdicts. See `curios_cert::recheck_program_measured`.
+///
+/// A reader rather than the kernel handed back: the kernel reads its scope where the units hold it, so it lives no longer than the environment assembled here.
+pub fn recheck_measured<T>(
     program: &curios_core::Zonked<Program>,
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
-) -> (Vec<Verdict>, Kernel) {
-    let (rechecked, kernel) =
-        recheck_program_measured(program, budget, &globals(predecessors), *syntax);
+    read: impl FnOnce(&Kernel<'_>) -> T,
+) -> (Vec<Verdict>, T) {
+    let globals = globals(predecessors);
+    let (rechecked, kernel) = recheck_program_measured(program, budget, &globals, *syntax);
 
-    (rechecked.verdicts, kernel)
+    (rechecked.verdicts, read(&kernel))
 }
 
-/// The kernel's environment for `predecessors`: every unit mounted, with the record the certifier filed with it.
-pub(crate) fn globals(predecessors: Predecessors<'_>) -> Globals {
+/// The kernel's environment for `predecessors`: every unit in scope where it stands, read by the places it keeps for its names, with the record the certifier filed with it. Nothing of a unit is copied.
+pub(crate) fn globals(predecessors: Predecessors<'_>) -> Globals<'_> {
     let mut globals = Globals::default();
     for unit in predecessors.units() {
-        globals.mount(unit.core(), unit.certification());
+        globals.mount(unit.core(), unit.places(), unit.certification());
     }
 
     globals

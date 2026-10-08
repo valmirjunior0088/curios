@@ -60,21 +60,25 @@ fn holds_a_group(term: &Term) -> bool {
 
 /// The definitions not known to terminate, as a walk comes to know them: the environment's, then each judged item's as it is classified.
 ///
-/// What an environment already answers for is read rather than recomputed: its non-total set, which is the certifier's record of each unit it mounted, seeds this one, and of a module's items only the judged ones are classified — the walk's own answer to which are new, the rest being the environment's own. That is what keeps a compile from re-analyzing the standard library.
+/// What an environment already answers for is read rather than recomputed: a name of a unit in scope is classified as the certifier's record of that unit classifies it, asked where a judgment reaches the name, and of a module's items only the judged ones are classified — the walk's own answer to which are new, the rest being the environment's own. That is what keeps a compile from re-analyzing the standard library, and from copying its classification.
 ///
-/// **Seeding from the environment is load-bearing rather than an optimization.** A definition is partial where anything it *mentions* is, and the already-judged items are not carried inside the module, so nothing else in a walk knows `/std/Async/bind` is partial. A user proof reaching it would then be read against a set the name is absent from and pass as total, which is exactly the identification (T) and (V) exist to prevent.
-pub(crate) struct Totals {
+/// **Reading the environment is load-bearing rather than an optimization.** A definition is partial where anything it *mentions* is, and the already-judged items are not carried inside the module, so nothing else in a walk knows `/std/Async/bind` is partial. A user proof reaching it would then be read against a set the name is absent from and pass as total, which is exactly the identification (T) and (V) exist to prevent.
+pub(crate) struct Totals<'g> {
+    /// The units in scope, whose records answer for their own definitions.
+    scope: &'g Globals<'g>,
+    /// What this walk classified as not known to terminate: the items it judged, the verdicts it adopted, and the items of a unit in scope no record covers.
     partial: BTreeSet<Global>,
     /// Which terms call a diverging host row, carried across every item the walk classifies: definitions share subterms heavily, and a node settled for one is settled for all.
     memo: HashMap<Term, bool>,
 }
 
-impl Totals {
-    /// What `globals` holds classified, and what it holds unclassified: the items of a unit mounted without a covering record, classified here from their terms, exactly as a judged item is, every group in them one this walk never typed. Those are closed over one another to a fixpoint, since nothing says in which order they were stored.
-    pub(crate) fn seeded(kernel: &Kernel, globals: &Globals) -> Self {
+impl<'g> Totals<'g> {
+    /// What `globals` holds classified, read where it stands, and what it holds unclassified: the items of a unit mounted without a covering record, classified here from their terms, exactly as a judged item is, every group in them one this walk never typed. Those are closed over one another to a fixpoint, since nothing says in which order they were stored.
+    pub(crate) fn seeded(kernel: &Kernel, globals: &'g Globals<'g>) -> Self {
         curios_profile::profile!("totals::seeded");
         let mut totals = Self {
-            partial: globals.partial().clone(),
+            scope: globals,
+            partial: BTreeSet::new(),
             memo: HashMap::new(),
         };
         let mut mentions = BTreeMap::new();
@@ -86,9 +90,14 @@ impl Totals {
         totals
     }
 
-    /// The set so far.
-    pub(crate) fn partial(&self) -> &BTreeSet<Global> {
-        &self.partial
+    /// Whether `name` is not known to terminate, as far as the walk has come: by its own classification, or by the record of the unit in scope that defines it.
+    pub(crate) fn partial(&self, name: &Global) -> bool {
+        self.partial.contains(name) || self.scope.partial(name)
+    }
+
+    /// Put `name` into the set on the word of an earlier walk's record: a definition whose verdict this walk adopts, which that walk classified as not known to terminate.
+    pub(crate) fn adopt(&mut self, name: Global) {
+        self.partial.insert(name);
     }
 
     /// Classify a judged `item` into the set, and hand back each of its definitions whose stamp says `Total` where the walk says otherwise.
@@ -103,13 +112,11 @@ impl Totals {
 
         item.definitions()
             .into_iter()
-            .filter(|definition| {
-                definition.totality.is_total() && self.partial.contains(&definition.name)
-            })
+            .filter(|definition| definition.totality.is_total() && self.partial(&definition.name))
             .map(|definition| {
                 let reached = mentions
                     .get(&definition.name)
-                    .and_then(|reached| reached.iter().find(|other| self.partial.contains(*other)))
+                    .and_then(|reached| reached.iter().find(|other| self.partial(other)))
                     .cloned();
                 (
                     definition.name,
@@ -163,7 +170,7 @@ impl Totals {
                 if self.partial.contains(name) {
                     continue;
                 }
-                if reached.iter().any(|other| self.partial.contains(other)) {
+                if reached.iter().any(|other| self.partial(other)) {
                     self.partial.insert(*name);
                     changed = true;
                 }
@@ -178,7 +185,7 @@ impl Totals {
 /// Obligations (T) and (V) over the positions one item's check recorded: each must reach nothing partial, and must not be partial in itself — enclose no group that does not descend, as the walk noted where it typed one, and call no host row that diverges.
 pub(crate) fn check_positions(
     positions: &[Position],
-    partial: &BTreeSet<Global>,
+    totals: &Totals<'_>,
     memo: &mut HashMap<Term, bool>,
 ) -> Result<(), Error> {
     curios_profile::profile!("check_positions");
@@ -188,7 +195,7 @@ pub(crate) fn check_positions(
             .free_vars()
             .iter()
             .filter_map(|free| free.as_global())
-            .find(|name| partial.contains(name))
+            .find(|name| totals.partial(name))
         {
             return Err(Error::NotTotal {
                 erased: position.erased,

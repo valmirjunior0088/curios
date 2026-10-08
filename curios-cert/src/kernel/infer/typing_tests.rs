@@ -288,7 +288,7 @@ fn doubled_pair(base: Term, base_type: Term, depth: u32) -> (Term, Term) {
 #[test]
 fn a_shared_term_over_a_local_is_typed_once_per_node() {
     let n = binder(0, "n");
-    let over = |mut kernel: Kernel| {
+    let over = |mut kernel: Kernel<'static>| {
         kernel.assume(&n, &nat_type());
         kernel
     };

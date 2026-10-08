@@ -20,9 +20,9 @@ use {
     curios_core::{
         Advance, Apply, Argument, Bound, Carrier, Cases, Classes, ClosedHost, Cost, Demand, Field,
         Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead,
-        Intrinsic, Layer, Let, Level, Match, MatchResult, Metavar, Nat, Probe, Proj, Rec, RecGroup,
-        ReduceError, Reducer, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
-        TupleType, Var, Variant, Visit, accelerable, atoms_within, classable,
+        Intrinsic, Layer, Let, Level, Match, MatchResult, Metavar, Nat, Polarity, Probe, Proj, Rec,
+        RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType, Subterm, Telescope, Term,
+        Tuple, TupleType, Var, Variant, Visit, accelerable, atoms_within, classable,
         instantiate_universe_levels_scoped, probe_spellings, project_erased_universes,
         reduce_closed, reduce_intrinsic, refold,
     },
@@ -152,6 +152,16 @@ impl curios_analysis::Env for Context<'_> {
 
     fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         Context::struct_decl(self, name)
+    }
+
+    /// The vector the family's entry carries, which is this checker's own: each declaration decides its entries' vectors as it is published.
+    fn polarity(&self, name: &Global, index: usize) -> Polarity {
+        Context::induct_decl(self, name)
+            .map(|declaration| declaration.polarity(index))
+            .or_else(|| {
+                Context::struct_decl(self, name).map(|declaration| declaration.polarity(index))
+            })
+            .unwrap_or(Polarity::Mixed)
     }
 }
 

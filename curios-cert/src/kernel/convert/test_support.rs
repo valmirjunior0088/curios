@@ -12,7 +12,7 @@ use {
     curios_utilities::{Plicity, Qualifier},
 };
 
-pub(super) fn kernel() -> Kernel {
+pub(super) fn kernel() -> Kernel<'static> {
     Kernel::new(100_000, SYNTAX)
 }
 

@@ -6,7 +6,7 @@
 
 use {
     crate::Env,
-    curios_core::{Free, Global, InductDecl, StructDecl, Term},
+    curios_core::{Free, Global, InductDecl, Polarity, StructDecl, Term},
     curios_utilities::{
         ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
         EqlDerivation, HashDerivation, IntegerSyntax, LiftSyntax, MonadSyntax, NaturalSyntax,
@@ -207,5 +207,9 @@ impl Env for Scope {
 
     fn struct_decl(&self, _: &Global) -> Option<&StructDecl> {
         None
+    }
+
+    fn polarity(&self, _: &Global, _: usize) -> Polarity {
+        Polarity::Mixed
     }
 }

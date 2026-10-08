@@ -244,7 +244,7 @@ fn a_universe_instance_of_the_declared_width_is_accepted() {
 
 /// An occurrence of a universe-polymorphic definition that states no instance is refused rather than typed at the scheme's own type, which would discharge nothing.
 ///
-/// A bare `Var` denotes no particular instance, and the rest of the codebase says so twice. `Globals::value` withholds such an occurrence's *body*, because a polymorphic definition unfolds only through an `Instance` that names which instance; `curios-elab` never builds one at all, rebuilding every polymorphic occurrence as an `Instance` at freshly minted levels, and its `Frames::var_reduct` withholds the body for the reason it states — letting a raw variable unfold "would leak those bound parameters into the ambient solver". `Kernel::type_of` applies the same rule to the type: handing the definition's stored type back whole would hand back the scheme's parameters with it.
+/// A bare `Var` denotes no particular instance, and the rest of the codebase says so twice. `Kernel::value` withholds such an occurrence's *body*, because a polymorphic definition unfolds only through an `Instance` that names which instance; `curios-elab` never builds one at all, rebuilding every polymorphic occurrence as an `Instance` at freshly minted levels, and its `Frames::var_reduct` withholds the body for the reason it states — letting a raw variable unfold "would leak those bound parameters into the ambient solver". `Kernel::type_of` applies the same rule to the type: handing the definition's stored type back whole would hand back the scheme's parameters with it.
 ///
 /// Two things would follow from that, and the second is what this asserts. The scheme's parameters are *captured* — `A`'s `Type v` is read as the ambient item's `v`, so a level belonging to one scheme becomes a level the using item quantifies over, which is the collapse at the neighbouring position. And `check_instance` would never run, so the scheme's own constraints would be discharged by nothing. `A` here is well formed only where `u + 1 <= v`, and the second case below is that same occurrence with its instance stated, refused for exactly that reason — so the two cases differ in nothing but whether dropping the instance also drops the rule.
 ///
@@ -569,8 +569,9 @@ fn a_family_of_a_unit_in_scope_answers_from_the_vector_it_carries() {
             vec![Variance::Irrelevant],
         )
     };
-    let judged =
-        |module: &Module, scope: Globals| fixture_verdicts(module, 1_000_000, &scope, SYNTAX);
+    let judged = |module: &Module, scope: AlreadyJudged| {
+        fixture_verdicts(module, 1_000_000, &scope.globals(), SYNTAX)
+    };
 
     let (_, module) = over_wrap();
     assert_eq!(

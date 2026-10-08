@@ -382,11 +382,14 @@ fn declaration_cost(source: &str) -> (Consumption, Consumption) {
     let elaborator = checked.consumption;
     let module =
         curios_core::Zonked::project(&checked.program).expect("the checked module is zonked");
-    let (verdicts, kernel) = recheck_with_prelude_measured(&module, DEFAULT_STEP_BUDGET);
+    let (verdicts, heaviest) =
+        recheck_with_prelude_measured(&module, DEFAULT_STEP_BUDGET, |kernel| {
+            kernel.heaviest_declaration()
+        });
 
     assert!(verdicts.is_empty(), "the kernel accepts it: {verdicts:?}");
 
-    (elaborator, kernel.heaviest_declaration())
+    (elaborator, heaviest)
 }
 
 /// One row of the table below: what a program cost each checker, split into depth and everything else.
@@ -475,8 +478,9 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 
     let certified = |module: &curios_core::Program, budget: u64| {
         let module = curios_core::Zonked::project(module).expect("the checked module is zonked");
-        let (verdicts, kernel) = recheck_with_prelude_measured(&module, budget);
-        (verdicts.is_empty(), kernel.heaviest_declaration().units())
+        let (verdicts, heaviest) =
+            recheck_with_prelude_measured(&module, budget, |kernel| kernel.heaviest_declaration());
+        (verdicts.is_empty(), heaviest.units())
     };
     let (accepted, alone_units) = certified(&alone_module, DEFAULT_STEP_BUDGET);
     assert!(accepted, "the kernel accepts `_b` alone");

@@ -30,7 +30,7 @@ fn doubled_pair(base: Term) -> Term {
 }
 
 /// A kernel with `n: Nat` and `a: Type` assumed, and a fresh budget: each row spends its own, so one row's cost cannot exhaust the next.
-fn kernel(n: &Free, a: &Free) -> Kernel {
+fn kernel(n: &Free, a: &Free) -> Kernel<'static> {
     let mut kernel = Kernel::new(1_000_000, SYNTAX);
     kernel.assume(n, &Term::intrinsic(Intrinsic::NatType));
     kernel.assume(a, &Term::type_ground());

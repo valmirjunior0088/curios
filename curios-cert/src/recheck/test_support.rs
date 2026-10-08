@@ -9,10 +9,10 @@ use {
     curios_abi::{DeclaredForeign, ForeignFunction, HostOp, WireResults, WireSignature, WireType},
     curios_core::{
         Atom, Certification, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global,
-        InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, Polarity, Program,
-        RecGroup, RecItem, RecMemberScopes, Scope, StructDecl, StructType, Subterm, Telescope,
-        Term, Totality, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseParam, Variance,
+        InductDecl, InductParam, Intrinsic, Item, Level, Many, Module, Nat, Places, Polarity,
+        Program, RecGroup, RecItem, RecMemberScopes, Scope, StructDecl, StructType, Subterm,
+        Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseParam, Variance,
     },
     curios_utilities::{Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -2353,9 +2353,35 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
     }
 }
 
-/// The environment a walk is handed: everything `module` puts in scope, with an empty record — so a walk classifies its items' totality for itself.
-pub(super) fn already_judged(module: &Module) -> Globals {
-    Globals::of(module, &Certification::default())
+/// A unit a test puts in scope by hand: a module no unit holds, with the places an environment reads it by and the record filed beside it.
+pub(super) struct AlreadyJudged {
+    module: Module,
+    places: Places,
+    certification: Certification,
+}
+
+impl AlreadyJudged {
+    /// `module` in scope with `certification` as the record of a walk over it.
+    pub(super) fn with(module: &Module, certification: &Certification) -> Self {
+        Self {
+            module: module.clone(),
+            places: Places::of(module),
+            certification: certification.clone(),
+        }
+    }
+
+    /// The environment a walk is handed: everything this unit puts in scope, and nothing else.
+    pub(super) fn globals(&self) -> Globals<'_> {
+        let mut globals = Globals::default();
+        globals.mount(&self.module, &self.places, &self.certification);
+
+        globals
+    }
+}
+
+/// Everything `module` puts in scope, with an empty record — so a walk classifies its items' totality for itself.
+pub(super) fn already_judged(module: &Module) -> AlreadyJudged {
+    AlreadyJudged::with(module, &Certification::default())
 }
 
 /// A module carrying `items` and `induct_decls` and nothing else.
@@ -2904,7 +2930,7 @@ fn coercion(from: Term, to: Term) -> Item {
 }
 
 /// A scope holding one certified unit that declares `family` and nothing else.
-pub(super) fn scope_of(family: Global, declaration: InductDecl) -> Globals {
+pub(super) fn scope_of(family: Global, declaration: InductDecl) -> AlreadyJudged {
     already_judged(&module_of(
         Vec::new(),
         BTreeMap::from([(family, declaration)]),
