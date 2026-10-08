@@ -2138,8 +2138,7 @@ impl Term {
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
-        let key = Rc::as_ptr(&self.inner) as usize;
-        if let Some(canonical) = visit.memo_get_as_stored(key) {
+        if let Some(canonical) = visit.met(self) {
             return canonical;
         }
 
@@ -2151,7 +2150,7 @@ impl Term {
             false
         });
         let canonical = visit.adopt(fresh, children);
-        visit.memo_put(key, self, canonical.clone());
+        visit.meet(self, canonical.clone());
 
         canonical
     }

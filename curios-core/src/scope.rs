@@ -769,6 +769,10 @@ struct Spelling {
 #[derive(Debug, Clone, Default)]
 pub struct Sharing {
     table: Rc<RefCell<HashSet<(Spelling, Term)>>>,
+    /// The canonical node of every input node met through this table, by the node's identity, with the node itself.
+    ///
+    /// **A node two definitions hold is walked once, whichever call meets it.** A visit's own memo lives for one call, and a module is canonicalized a term at a time, so a node shared between definitions — every node of a module restored from a consed image is one — would be rebuilt for each definition that reaches it and found in the table each time. The node is held beside its answer because an identity is an address: one freed while the table lives could be handed to another node, whose lookup would answer with the first one's.
+    met: Rc<RefCell<HashMap<usize, (Term, Term)>>>,
 }
 
 impl Sharing {
@@ -913,7 +917,7 @@ enum Mode {
     },
     /// Replace every level with the ground representative, visiting only nodes that carry universe data.
     ErasingUniverses,
-    /// Hash-consing: every term comes back as the canonical node of its spelling. `crossed` holds, for each node being rebuilt, the labels of the scopes crossed so far beneath it and above its children. Pairs with [`Memo::ByNode`], which is what keeps the input's sharing as well as the output's.
+    /// Hash-consing: every term comes back as the canonical node of its spelling. `crossed` holds, for each node being rebuilt, the labels of the scopes crossed so far beneath it and above its children. The table remembers each input node it has met ([`Sharing`]), which is what keeps the input's sharing as well as the output's, so the visit keeps no memo of its own.
     Sharing {
         table: Sharing,
         crossed: Vec<Vec<Option<Vec<Label>>>>,
@@ -1099,7 +1103,7 @@ where
                 table,
                 crossed: Vec::new(),
             },
-            memo: Memo::ByNode(HashMap::new()),
+            memo: Memo::None,
         }
     }
 }
@@ -1317,11 +1321,26 @@ where
         }
     }
 
-    /// The remembered rebuild of the input node at `key` exactly as it was stored. What a consing visit hands every occurrence: its nodes sit under no span, so there is none to make an occurrence's own, and [`Visit::memo_get`] would hand a node first met with no span the span of whoever asks next.
-    pub(crate) fn memo_get_as_stored(&self, key: usize) -> Option<Term> {
-        match &self.memo {
-            Memo::ByNode(memo) => memo.get(&key).map(|remembered| remembered.rebuilt.clone()),
-            _ => None,
+    /// The canonical node of the input node `at`, where a consing visit's table has met it: handed to every occurrence as it is, since a canonical node sits under no extent and there is none to make an occurrence's own.
+    pub(crate) fn met(&self, at: &Term) -> Option<Term> {
+        let Mode::Sharing { table, .. } = &self.mode else {
+            return None;
+        };
+
+        table
+            .met
+            .borrow()
+            .get(&at.identity())
+            .map(|(_, canonical)| canonical.clone())
+    }
+
+    /// Remember `canonical` as the canonical node of the input node `at`, for every later call through the visit's table.
+    pub(crate) fn meet(&mut self, at: &Term, canonical: Term) {
+        if let Mode::Sharing { table, .. } = &self.mode {
+            table
+                .met
+                .borrow_mut()
+                .insert(at.identity(), (at.clone(), canonical));
         }
     }
 
