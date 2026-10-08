@@ -44,7 +44,7 @@ What is in the tree and what is open, each part by where it is written. What is 
 
 ## The gap
 
-What a question about `/std` costs, compiled over the archived unit, in allocations. Counted at `7033f8ac9`, as *Verification* states; a count moves in its fifth digit from one run to the next.
+What a question about `/std` costs, compiled over the archived unit, in allocations. Counted at `a49561bb9`, as *Verification* states; a count moves in its fifth digit from one run to the next.
 
 | What a compile does | What it follows today | Nothing edited | `/std/Bool/not`'s body respelled |
 | --- | --- | --- | --- |
