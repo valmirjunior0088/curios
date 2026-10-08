@@ -1,11 +1,10 @@
-use {super::Formatted, curios_utilities::Source};
-
-/// The canonical text, either way: production callers match the variants directly, since changed-ness decides the exit path, and only these round-trip tests want the text alone.
-fn formatted(source: &str) -> String {
-    match Formatted::from_source(&Source::inline(source)).expect("fixture formats") {
-        Formatted::Unchanged(text) | Formatted::Changed(text) => text,
-    }
-}
+use {
+    super::{
+        Formatted,
+        test_support::{collect_sources, formatted},
+    },
+    curios_utilities::Source,
+};
 
 #[test]
 fn a_program_normalizes_to_the_canonical_shape() {
@@ -79,7 +78,7 @@ fn a_trailing_comment_rides_its_line() {
     );
 }
 
-/// A comment riding a top-level definition's `=` line, or a test's, stays on it: the body's start is reported before the break below the `=`, so the comment is owed while that line is still open rather than carried onto the body's.
+/// A comment riding a top-level definition's `=` line, or a test's, stays on it rather than being carried onto the body's.
 #[test]
 fn a_comment_riding_a_definitions_equals_stays_on_its_line() {
     for source in [
@@ -92,12 +91,11 @@ fn a_comment_riding_a_definitions_equals_stays_on_its_line() {
 
 #[test]
 fn a_comment_above_a_later_let_binding_stays_above_it() {
-    // The let-chain tail must not claim comments leading later bindings, as a tail built ahead of the binding documents would, and a binding-leading comment claims at the binding head, so this shape is a fixed point.
     let source = "let compute(n: /std/Nat) -> /std/Nat =\n    let a = n + n;\n    -- the second binding\n    let b = a + a;\n    b;\n\ncompute(1)\n";
     assert_eq!(formatted(source), source);
 }
 
-/// A clause joined by `and` records no span of its own, so a comment leading one could fall to the first *descendant* that has one — printing between a parameter and its type, reparsing as a leading comment somewhere new, and moving again on the next run: the one shape in which this formatter can fail to converge. Each fixture below is already canonical, so equality pins the placement and the fixed point at once.
+/// A comment leading a clause joined by `and` stays above the `and`, where it could print between a parameter and its type. Each fixture below is already canonical, so equality pins the placement and the fixed point at once.
 #[test]
 fn a_comment_above_a_let_group_clause_stays_above_and() {
     let source = "let even(n: /std/Nat) -> /std/Bool =\n    odd(n)\n-- what the second clause is for\nand odd(n: /std/Nat) -> /std/Bool =\n    even(n);\n";
@@ -112,12 +110,11 @@ fn a_comment_above_a_local_let_group_clause_stays_above_and() {
 
 #[test]
 fn a_comment_above_an_induct_clause_stays_above_and() {
-    // This clause has neither parameters nor indices, and a sort parses spanless, so its head carries no offset at all and the claim falls back to the first case's payload.
     let source = "induct Even: Type\n| zero()\n| from_odd(Odd)\n-- what the second family is for\nand Odd: Type\n| from_even(Even)\nend\n";
     assert_eq!(formatted(source), source);
 }
 
-/// A member of a delimited list — a `match` or `choose` arm, a struct-literal, concept or witness field, an `induct` case — records no span of its own, exactly as an `and` clause does not. A comment leading one could therefore fall to the first spanned *descendant*, which is the member's body, and print *inside* it: `injective(a, b, same) =` on one line and the comment that was written above the field on the next. Each fixture below is already canonical, so asserting the placement and the fixed point pins both halves.
+/// A comment leading a member of a delimited list — a `match` or `choose` arm, a struct-literal, concept or witness field, an `induct` case — stays above the member, where it could print *inside* it: `injective(a, b, same) =` on one line and the comment that was written above the field on the next. Each fixture below is already canonical, so asserting the placement and the fixed point pins both halves.
 #[test]
 fn a_comment_above_a_match_arm_stays_above_the_bar() {
     let source = "let f(n: /std/Nat) -> /std/Nat =\n    match n\n    | 0 => 1\n    -- the successor case\n    | p + 1 => p\n    end;\n\nf(1)\n";
@@ -162,21 +159,9 @@ fn a_comment_above_a_concept_field_stays_above_it() {
     assert_eq!(formatted(&output), output);
 }
 
-/// The repair half: a comment already sitting between a member's `=>` and its body is claimed by the member and lifted back out. That is what makes the placement self-repairing: a comment already relocated there is returned to the arm it documents by the next run.
-#[test]
-fn a_comment_relocated_into_an_arm_body_is_lifted_back_out() {
-    let source = "let f(n: /std/Nat) -> /std/Nat =\n    match n\n    | 0 => 1\n    | p + 1 =>\n        -- what the successor case does\n        p\n    end;\n\nf(1)\n";
-    let output = formatted(source);
-    assert!(
-        output.contains("\n    -- what the successor case does\n    | p + 1"),
-        "unexpected output: {output}"
-    );
-    assert_eq!(formatted(&output), output);
-}
-
 /// A trailing comment written after a separator — a local `let`'s `;`, a list element's, a call argument's or a tuple field's `,` — rides the line the separator ends, on every run.
 ///
-/// **A comment does not surface one construct down per run.** Were a term to report its reach up to the separator and no further — the separator and the break after it being the enclosing printer's — the comment would be owed to no mark until the next element began, past the break, and each run would carry it one line further: `-- after a` documenting `b`, `-- one` closing the list, and the tail's comment paid inside the call that follows.
+/// **A comment does not surface one construct down per run**: `-- after a` documenting `b`, `-- one` closing the list, and the tail's comment written inside the call that follows.
 #[test]
 fn a_trailing_comment_after_a_separator_rides_the_line_it_was_written_on() {
     let source = "let f(n: /std/Nat) -> /std/Nat =\n    let a = 1; -- after a\n    let b = [\n        1, -- one\n        2, -- two\n    ];\n    g(\n        a, -- first\n        n); -- the call\n\nf(1)\n";
@@ -203,7 +188,7 @@ fn a_trailing_comment_after_a_separator_rides_the_line_it_was_written_on() {
 
 /// A trailing comment stays on the arm it was written on, however many arms carry one.
 ///
-/// **A trailing comment does not drift to the next break.** Claimed by the node that *follows* it, it would be prefixed to that node's document and reach the suffix channel after the newline closing its own line had gone out — so each comment would surface one arm down, and the last one, having no break left inside the construct, flush at the document's end past `end;`: `-- affirmative` would document the negative arm and `-- negative` the declaration.
+/// **A trailing comment does not drift to the next break**, each surfacing one arm down and the last, having no break left inside the construct, past `end;`: `-- affirmative` would document the negative arm and `-- negative` the declaration.
 #[test]
 fn a_trailing_comment_stays_on_the_arm_it_was_written_on() {
     let source = "let d(b: /std/Bool) -> /std/Str =\n    choose\n    | b == true => \"yes\" -- affirmative\n    | _ => \"no\" -- negative\n    end;\n\nd(true)\n";
@@ -260,7 +245,7 @@ fn an_interior_trailing_comment_does_not_escape_its_construct() {
 
 #[test]
 fn an_interior_comment_survives_and_forces_a_break() {
-    // The comment claims into the argument's document; its hard break keeps the call broken. `f` is unbound as far as formatting cares — formatting is syntax-only — so this must format, conserve the comment, and reparse.
+    // The comment keeps the call broken. `f` is unbound as far as formatting cares — formatting is syntax-only — so this must format, conserve the comment, and reparse.
     let source = "let one : /std/Nat = f( -- why\n    1);\none\n";
     let output = formatted(source);
     assert!(output.contains("-- why"), "comment lost: {output}");
@@ -292,98 +277,6 @@ fn blank_lines_normalize_to_exactly_one_between_items() {
     assert!(output.contains(";\n\nlet b"), "unexpected output: {output}");
     assert!(output.contains(";\n\nlet c"), "unexpected output: {output}");
     assert!(!output.contains("\n\n\n"), "unexpected output: {output}");
-}
-
-/// Every syntactic position a comment can be attached at, one fixture each: a `let` signature over a `choose`, a `match` with a local `let`, an `induct`, a `concept` body, and a `satisfy` body.
-///
-/// Unbound names are deliberate — formatting is syntax-only, so these need to parse and nothing more.
-const POSITIONS: [&str; 7] = [
-    "use /std/{Bool, Str, Option};\n\npub let of_str(s: Str) -> Option(Bool) =\n    choose\n    | s == \"true\" => Option/some(true)\n    | _ => Option/none()\n    end;\n",
-    // Documentation comments, one line each: a comment inserted between two `---` lines would split a block, which is a refusal by design rather than a formatting question.
-    "use /std/{Nat};\n\n--- Doubles.\npub let double(n: Nat) -> Nat =\n    n + n;\n\n--- Nothing.\nlet zero: Nat =\n    0\n--- One more.\nand one: Nat =\n    1;\n",
-    "--- Shapes.\npub induct Shape: pub Type\n--- Round.\n| circle(Nat)\n| square(Nat)\nend\n\n--- A point.\nstruct Point: pub Type {\n    --- Across.\n    x: Nat,\n    y: Nat,\n}\n",
-    "use /std/{Bool, Str};\n\npub let to_str(b: Bool) -> Str =\n    let x: Str = \"y\";\n    match b | true => x | false => \"false\" end;\n",
-    "pub induct Ordering: pub Type\n| lt()\n| eq()\n| gt()\nend\n",
-    "use /std/{Equal, Ordering};\n\npub concept Ordered(A: Type): pub Type {\n    use Equal(A),\n    cmp(A, A) -> Ordering,\n}\n",
-    "use /std/{Equal, Bool};\n\nsatisfy Equal(Bool) {\n    eql = eql,\n    neq = xor,\n}\n",
-];
-
-/// **Formatting converges: a second run over the first run's output changes nothing.**
-///
-/// The one property the formatter's own verification cannot check, and the reason it cannot is structural. [`verify`](super::verify) compares *programs* — comments are not part of one — and counts comments, so a comment that merely *moves* passes both halves. A comment that moves to a position the next parse reads differently moves again, and a single `curios format` then leaves a file that no later run agrees with.
-///
-/// Every line of every fixture is tried twice, once with a comment on its own line above it and once riding its end, which is the whole space of positions a writer has.
-///
-/// **A trailing comment is placed by the renderer**, the only thing that knows where an output line ends; decided by whichever node's geometry happened to reach it, the claimant would differ between the written form and the printed one.
-#[test]
-fn formatting_converges_from_every_comment_position() {
-    let mut wandering = Vec::new();
-
-    for (fixture, source) in POSITIONS.iter().enumerate() {
-        let lines = source
-            .trim_end_matches('\n')
-            .split('\n')
-            .collect::<Vec<_>>();
-
-        for (index, line) in lines.iter().enumerate() {
-            let mut placements = vec![("leading", with_line(&lines, index, "-- MARK"))];
-            if !line.trim().is_empty() {
-                placements.push((
-                    "trailing",
-                    replacing(&lines, index, &format!("{line} -- MARK")),
-                ));
-            }
-
-            for (placement, perturbed) in placements {
-                let once = match Formatted::from_source(&Source::inline(&perturbed)) {
-                    Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => text,
-                    Err(refusal) => {
-                        wandering.push(format!(
-                            "{fixture}:{} {placement}: refused: {refusal}",
-                            index + 1
-                        ));
-                        continue;
-                    }
-                };
-
-                match Formatted::from_source(&Source::inline(&once)) {
-                    Ok(Formatted::Unchanged(_)) => {}
-                    Ok(Formatted::Changed(twice)) => wandering.push(format!(
-                        "{fixture}:{} {placement}: moved again\n--- once ---\n{once}--- twice ---\n{twice}",
-                        index + 1
-                    )),
-                    Err(refusal) => wandering.push(format!(
-                        "{fixture}:{} {placement}: its own output was refused: {refusal}",
-                        index + 1
-                    )),
-                }
-            }
-        }
-    }
-
-    assert!(
-        wandering.is_empty(),
-        "{} positions do not converge:\n\n{}",
-        wandering.len(),
-        wandering.join("\n\n")
-    );
-}
-
-/// `lines` with `inserted` on a line of its own before `index`.
-fn with_line(lines: &[&str], index: usize, inserted: &str) -> String {
-    let mut out = lines[..index].to_vec();
-    out.push(inserted);
-    out.extend_from_slice(&lines[index..]);
-
-    format!("{}\n", out.join("\n"))
-}
-
-/// `lines` with the line at `index` replaced by `replacement`.
-fn replacing(lines: &[&str], index: usize, replacement: &str) -> String {
-    let mut out = lines.to_vec();
-    out[index] = replacement;
-
-    format!("{}\n", out.join("\n"))
 }
 
 /// A telescope that overflows breaks the way a `let`'s already did: one binder per line, a trailing comma, and the closer dedented to the declaration's own column.
@@ -535,28 +428,6 @@ fn every_source_in_the_tree_formats_without_refusal() {
         })
         .collect::<Vec<_>>();
     assert!(refused.is_empty(), "{}", refused.join("\n"));
-}
-
-/// Every `.crs` under `directory`, skipping the directories that hold generated or foreign trees.
-fn collect_sources(directory: &std::path::Path, sources: &mut Vec<std::path::PathBuf>) {
-    for entry in std::fs::read_dir(directory).expect("the tree is readable") {
-        let path = entry.expect("a readable entry").path();
-        let name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("");
-        if path.is_dir() {
-            // `editors/` holds highlighting fixtures for the editor grammars, which are not programs.
-            if !matches!(
-                name,
-                "target" | ".git" | ".curios" | ".claude" | "node_modules" | "editors"
-            ) {
-                collect_sources(&path, sources);
-            }
-        } else if path.extension().is_some_and(|extension| extension == "crs") {
-            sources.push(path);
-        }
-    }
 }
 
 /// A block string literal is laid out by the formatter: its lines and its closer one level in from the opener's line, wherever the author left them, and the value unchanged because the closer's column is what a reader strips.

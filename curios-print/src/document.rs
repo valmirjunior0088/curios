@@ -36,12 +36,10 @@ pub enum Printer {
     Group(Box<Printer>),
     /// Mode-dependent text that is *not* itself a break point: `flat` under a fitting group, `broken` under a broken one. The formatter's broken-only trailing comma is `IfBreak { flat: "", broken: "," }`. Measured at its flat spelling, so it never breaks a group by itself.
     IfBreak { flat: String, broken: String },
-    /// A zero-width note of where in the *source* the document has reached, for a renderer placing source-derived text the builder does not hold.
+    /// A zero-width note that the document holds its original up to this offset, for a renderer following that text — see [`Original`](crate::Original).
     ///
-    /// `begins` separates the two things a builder can say. A node's *start* begins something, so text written before it — a comment on a line of its own — belongs ahead of it. A node's *end* only reports how much source the output now holds, and a span runs to the next token, so text written after the node is inside it: that pays a comment riding the line, and must not pay one waiting for the next element to begin.
-    ///
-    /// **What a formatter needs and a pretty printer cannot express.** A comment riding the end of a source line belongs after the last thing written on that line — which is often punctuation the enclosing printer emits (a separator comma, an opening brace, `=`) and which therefore corresponds to no node of the tree. Attaching it to a node cannot reach those positions; knowing *where the output has got to in the source* can, because the renderer is the only thing that knows where a line ends. Emits nothing and measures as nothing, so layout is untouched and a document carrying no marks renders as it would without them.
-    Mark { at: usize, begins: bool },
+    /// The renderer finds its own way through the original, a character at a time, and needs no note to do it. This is for the one place it cannot: where the document spells something another way than it was written — a literal respelled from its value — the characters stop agreeing and the renderer waits, and the note at the far end of what was respelled is where it picks the text up again. Emits nothing and measures as nothing, so a document carrying none renders as it would without them.
+    Mark(usize),
 }
 
 impl Printer {
@@ -55,7 +53,7 @@ impl Printer {
     /// Whether this node's children are already gone, so dropping it cannot reach another node.
     fn is_dismantled(&self) -> bool {
         match self {
-            Printer::Text(_) | Printer::Named(_) | Printer::Mark { .. } => true,
+            Printer::Text(_) | Printer::Named(_) | Printer::Mark(_) => true,
             Printer::Concat(parts) | Printer::Fill(parts) => parts.is_empty(),
             Printer::Indent(inner) | Printer::Group(inner) => {
                 matches!(**inner, Printer::Text(_))
@@ -88,7 +86,7 @@ impl Drop for Printer {
                 Printer::Deferred(_) => {}
                 Printer::Line { .. } => {}
                 Printer::IfBreak { .. } => {}
-                Printer::Mark { .. } => {}
+                Printer::Mark(_) => {}
             }
             // `printer` is dismantled now, so its own drop returns at once.
         }

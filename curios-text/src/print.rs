@@ -15,10 +15,10 @@ use {
     curios_abi::{ResultShape, WireResults, WireSignature, WireType, stdio},
     curios_num::{Floating, Grain, Natural, Rounding},
     curios_print::{
-        Printer, begins, fill, flat, group, hard_line, if_break, indent, line, named, pure,
-        reaches, sep_flat, soft_line,
+        Printer, fill, flat, group, hard_line, if_break, indent, line, named, pure, reached,
+        sep_flat, soft_line,
     },
-    curios_utilities::{Plicity, Span},
+    curios_utilities::Plicity,
 };
 
 fn print_plicity(plicity: Plicity) -> Printer {
@@ -245,50 +245,26 @@ fn spell_block_line(line: &str) -> String {
 }
 
 /// The always-broken brace block a `struct`, `concept`, or `satisfy` body is: one field per line at the next indent with a trailing comma, the closing brace at the opening's column, regardless of how little would fit flat. An empty body prints the bare delimiters.
-fn listed_hard(
-    open: &'static str,
-    items: Vec<(Option<usize>, Printer)>,
-    close: &'static str,
-) -> Printer {
+fn listed_hard(open: &'static str, items: Vec<Printer>, close: &'static str) -> Printer {
     if items.is_empty() {
-        return pure(format!("{open}{close}"));
-    }
-    // Every break comes before the mark of the member it opens, so a comment riding the line the break ends is reported here and paid onto that line — see `reached_before`. Each member carries where it begins, which for a documented one is where its documentation does, so the comment never lands on a `---` line.
-    let opens_at = items.first().and_then(|(start, _)| *start);
-    let mut members = Vec::with_capacity(items.len() * 3);
-    for (index, (start, item)) in items.into_iter().enumerate() {
-        if index > 0 {
-            members.push(pure(","));
-            members.push(reached_before(start));
-            members.push(hard_line());
-        }
-        members.push(item);
+        return flat([pure(open), pure(close)]);
     }
     flat([
         pure(open),
-        reached_before(opens_at),
-        indent(flat([hard_line(), flat(members), pure(",")])),
+        indent(flat([
+            hard_line(),
+            sep_flat(items, || flat([pure(","), hard_line()])),
+            pure(","),
+        ])),
         hard_line(),
         pure(close),
     ])
 }
 
-/// Where a documentation comment begins, for the mark that pays a riding comment before the break above it.
-fn doc_start(doc: &Option<Doc>) -> Option<usize> {
-    doc.as_ref()?.span.as_ref().map(|span| span.start)
-}
-
 /// A body that rides its introducer — ` => body`, ` = body` — inline when it fits, on the next line one level deeper when it does not.
 fn attached_body(introducer: &'static str, body: Term) -> Printer {
-    // Taken as a term rather than a document so the body's own start is in reach: a comment written after the introducer, on the introducer's line, is owed as soon as the source is reported consumed up to the body. Reported *before* the break, because paying it after would carry it onto the body's line — and each run would carry it one construct deeper than the last, which is a formatter that never settles.
-    let reached = match body.span() {
-        Some(span) => reaches(span.start),
-        None => flat([]),
-    };
-
     group(flat([
         pure(introducer),
-        reached,
         indent(flat([line(), print_term(body)])),
     ]))
 }
@@ -374,19 +350,13 @@ fn print_func_param((plicity, name, annotation): (Plicity, Label, Option<Term>))
 
 /// A tuple-literal / struct-literal field: positional, `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
 fn print_tuple_field(field: TupleField) -> Printer {
-    // A labeled field's label carries no span, so this is what puts the mark at the field's own head rather than at its value — without it a comment written above the field would be placed inside it. An unlabeled field *is* its value, and `print_term` already marks the right place.
-    let start = member_start([&field.value]);
     match (field.label, field.func_params) {
-        (Some(label), Some(params)) => marked(start, || {
-            flat([
-                pure(label),
-                listed("(", params.into_iter().map(print_func_param).collect(), ")"),
-                attached_body(" =", field.value),
-            ])
-        }),
-        (Some(label), None) => marked(start, || {
-            flat([pure(label), attached_body(" =", field.value)])
-        }),
+        (Some(label), Some(params)) => flat([
+            pure(label),
+            listed("(", params.into_iter().map(print_func_param).collect(), ")"),
+            attached_body(" =", field.value),
+        ]),
+        (Some(label), None) => flat([pure(label), attached_body(" =", field.value)]),
         (None, _) => print_term(field.value),
     }
 }
@@ -1155,111 +1125,26 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
 }
 
 pub(crate) fn print_term(term: Term) -> Printer {
-    // The formatter's comment weave, and the whole of what the printer contributes to it: a term reports where its own text begins and how far into the source it reaches. Nothing here decides where a comment goes — that is a fact about the output line, which only the renderer knows.
-    //
-    // The *end* mark is what reaches a comment written past a separator the enclosing printer emits: it is placed past the whitespace and comments after the term — where the parse stopped, beyond the span's own end — so such a comment falls inside it, and the line comes to owe the comment before the break that would otherwise carry it away. Outside a format run there are no comments and both marks emit nothing.
-    let bounds = term.span().map(|span| (span.start, past_trailing(span)));
-
-    marked(bounds.map(|(start, _)| start), || match bounds {
-        Some((start, end)) => flat([begins(start), print_term_inner(term), reaches(end)]),
+    // The whole of what the printer tells a formatter's renderer: where the term's own text begins and ends in the source. The renderer follows the source by itself and needs neither to place a comment; they are where it picks the text up again past a literal this printer spells another way than it was written — see `Printer::Mark`. Outside a format run both emit nothing.
+    match term.span().map(|span| (span.start, span.end)) {
+        Some((start, end)) => flat([reached(start), print_term_inner(term), reached(end)]),
         None => print_term_inner(term),
-    })
-}
-
-/// The offset past the whitespace and line comments that follow `span` — the extent `parse_whitespace` consumed after the term, recovered from the text — and past one `,` or `;` among them.
-///
-/// **The separator is stepped over so a comment written after it is the term's to report.** The separator is emitted by the enclosing printer, and so is the break after it; a reach that stopped at the separator would leave a comment riding that line owed to no mark until the next element began, which is past the break — so every comment after a local `let`'s `;`, a list element's `,` or a call argument's `,` would surface one line down, and one line further on every run. Reported here, it is paid onto the line the separator ends, wherever the enclosing printer breaks. One separator and no more: two in a row never follow one term, and what follows the separator is the next term's own.
-fn past_trailing(span: &Span) -> usize {
-    let text = &span.source.text;
-    let mut end = span.end;
-    let mut separated = false;
-    loop {
-        let rest = &text[end..];
-        let trimmed = rest.trim_start();
-        end += rest.len() - trimmed.len();
-        // A `---` is syntax rather than a comment, so a term's reach stops before it exactly as the parser's whitespace does.
-        if trimmed.starts_with("--") && !trimmed.starts_with("---") {
-            end += trimmed.find('\n').unwrap_or(trimmed.len());
-        } else if !separated && (trimmed.starts_with(',') || trimmed.starts_with(';')) {
-            separated = true;
-            end += 1;
-        } else {
-            return end;
-        }
     }
 }
 
-/// Note that `build`'s document begins at `offset`, so the renderer can place there whatever the source held and the document does not — see [`Printer::Mark`]. `None` (a spanless node) notes nothing.
-///
-/// **Nothing is claimed and nothing is decided here.** A comment's place is a fact about the output — which line it rides, or which line it takes — and only the renderer knows that. What this marks is the one thing the builder does know: where in the source the document has reached.
-fn marked(offset: Option<usize>, build: impl FnOnce() -> Printer) -> Printer {
-    match offset {
-        Some(offset) => flat([begins(offset), build()]),
-        None => build(),
-    }
-}
-
-/// The documentation comment above what `doc` documents: every line printed as written, each on a line of its own, between the two marks the block's span records. The first pays a plain comment written above the block above it; the second, at the documented head, pays one written between the block and its declaration between them, so neither is carried across the block on a format run.
+/// The documentation comment above what `doc` documents: every line printed as written, each on a line of its own.
 fn print_doc(doc: Option<Doc>) -> Printer {
     let Some(doc) = doc else {
         return pure("");
     };
-    let (start, end) = match &doc.span {
-        Some(span) => (Some(span.start), Some(span.end)),
-        None => (None, None),
-    };
-    let lines = doc
-        .lines
-        .into_iter()
-        .map(|line| {
-            let spelled = match line.is_empty() {
-                true => "---".to_string(),
-                false => format!("--- {line}"),
-            };
-            flat([pure(spelled), hard_line()])
-        })
-        .collect::<Vec<_>>();
 
-    flat([marked(start, || flat(lines)), marked(end, || pure(""))])
-}
-
-/// Report the source consumed up to `offset` before a break, so a comment written on the line the break ends is paid onto that line rather than carried past it.
-///
-/// **The law every member list obeys.** Were a break separating one source construct from the next to come *before* the next construct's own mark, a comment written after the previous one — on the line the break is about to end — would not yet be owed when the line closes, and would be paid on the following line instead; each run would find it one construct deeper than the last, which is a formatter that never settles. Reporting the position first pays it where it was written; a comment on a line of its own is untouched, since only what *begins* something pays one of those.
-fn reached_before(offset: Option<usize>) -> Printer {
-    match offset {
-        Some(offset) => reaches(offset),
-        None => flat([]),
-    }
-}
-
-/// Where a member of a delimited list begins: a `match` or `choose` arm, a tuple or struct-literal field, a concept or witness field, an `induct` case.
-///
-/// None of these records a span of its own — an arm is a pattern and a body, a field a bare label and a value — so without a position derived at the member's own head, the mark would sit at the first spanned *descendant* and a comment written above the member would surface inside the member's body. [`signature_start`] is this same rule for `let` and `and` clauses, and its doc records the convergence failure both exist to prevent.
-///
-/// The earliest spanned component bounds it, for the reason it does there: a comment above the member precedes every component, so any one of them would place it, and taking the earliest keeps a comment written *inside* the member's head with the component it leads. A member whose components are all spanless reports nothing, exactly as a signature with no spanned component does.
-fn member_start<'a>(terms: impl IntoIterator<Item = &'a Term>) -> Option<usize> {
-    terms
-        .into_iter()
-        .filter_map(|term| term.span().map(|span| span.start))
-        .min()
-}
-
-/// Where a `let` binding or an `and` clause begins: the start of its earliest spanned component, since none of the introducer keyword, the binder pattern, and the clause label records a span. A comment above the binding precedes all of these, so any of them bounds it; taking the earliest keeps comments written inside the signature with the component they lead.
-///
-/// A clause with no position of its own does not thereby keep its comment: a mark falling to the first *descendant* with a span would let a comment above an `and` clause surface between a parameter and its type, reparse as a leading comment somewhere new, and move again on the next format run — the one way this formatter can fail to converge, which `formatting_converges_from_every_comment_position` checks.
-fn signature_start(signature: &LetSignature) -> Option<usize> {
-    let earliest = match signature {
-        LetSignature::Name {
-            type_: Some(type_), ..
-        } => type_,
-        LetSignature::Name { type_: None, body } => body,
-        LetSignature::Func { params, output, .. } => match params.first() {
-            Some(param) => &param.type_,
-            None => output,
-        },
-    };
-    earliest.span().map(|span| span.start)
+    flat(doc.lines.into_iter().map(|line| {
+        let spelled = match line.is_empty() {
+            true => "---".to_string(),
+            false => format!("--- {line}"),
+        };
+        flat([pure(spelled), hard_line()])
+    }))
 }
 
 /// The parentheses the grammar demands and the tree does not record. An infix operand parenthesizes when its own operator binds looser than its position requires — the exact mirror of `op_precedence`'s climb, with the right operand one level up for left-associativity — and any whole-term form (a binding, a lambda, an arrow) parenthesizes unconditionally, since the operand grammar cannot produce it bare. A `match` or `choose` does not: `end` closes it, so it is an atom and prints bare in every position.
@@ -1402,42 +1287,25 @@ fn print_term_inner(term: Term) -> Printer {
                 pure("choose"),
                 flat(
                     arms.into_iter()
-                        .map(|arm| {
-                            // A choose arm's test is spanned and precedes its body, so it is the earliest component; the head is built *inside* the mark so that printing the test cannot report a later position first.
-                            let start = member_start([
-                                match &arm.test {
-                                    ChooseTest::Cond(condition) => condition,
-                                    ChooseTest::Bind { value, .. } => value,
-                                },
-                                &arm.body,
-                            ]);
-                            let ChooseArm { test, body } = arm;
-                            flat([
-                                // Reported before the break, so a comment riding the previous line is paid there — see `reached_before`.
-                                reached_before(start),
-                                separator(),
-                                marked(start, || {
-                                    let head = match test {
-                                        ChooseTest::Cond(condition) => {
-                                            flat([pure("| "), print_term(condition)])
-                                        }
-                                        ChooseTest::Bind { pattern, value } => flat([
-                                            pure("| "),
-                                            print_match_pattern(pattern),
-                                            pure(" = "),
-                                            print_term(value),
-                                        ]),
-                                    };
-                                    flat([head, attached_body(" =>", body)])
-                                }),
-                            ])
+                        .map(|ChooseArm { test, body }| {
+                            let head = match test {
+                                ChooseTest::Cond(condition) => {
+                                    flat([pure("| "), print_term(condition)])
+                                }
+                                ChooseTest::Bind { pattern, value } => flat([
+                                    pure("| "),
+                                    print_match_pattern(pattern),
+                                    pure(" = "),
+                                    print_term(value),
+                                ]),
+                            };
+                            flat([separator(), head, attached_body(" =>", body)])
                         })
                         .collect::<Vec<_>>(),
                 ),
                 separator(),
-                marked(member_start([&default]), || {
-                    flat([pure("| _"), attached_body(" =>", default)])
-                }),
+                pure("| _"),
+                attached_body(" =>", default),
                 separator(),
                 pure("end"),
             ]))
@@ -1456,18 +1324,11 @@ fn print_term_inner(term: Term) -> Printer {
                 flat(
                     arms.into_iter()
                         .map(|arm| {
-                            // The mark sits *after* the separator: it is what breaks the line, so a comment written on its own line before it leads this arm rather than riding the previous one. The position is reported *before* the break, so a comment riding the previous line is paid there — see `reached_before`.
-                            let start = member_start([&arm.body]);
                             flat([
-                                reached_before(start),
                                 separator(),
-                                marked(start, || {
-                                    flat([
-                                        pure("| "),
-                                        print_match_pattern(arm.pattern),
-                                        attached_body(" =>", arm.body),
-                                    ])
-                                }),
+                                pure("| "),
+                                print_match_pattern(arm.pattern),
+                                attached_body(" =>", arm.body),
                             ])
                         })
                         .collect::<Vec<_>>(),
@@ -1477,14 +1338,11 @@ fn print_term_inner(term: Term) -> Printer {
             ]))
         }
         Subterm::Let(Let { groups, tail }) => {
-            // The statement documents materialize before the tail's, so the marks come out in source order; an eagerly evaluated tail would report its own position ahead of every binding's. Every clause marks its own head, so a comment above a `let` stays above it instead of sliding under the `=` — and a clause after the first carries its `and` inside the mark, since a separator carrying the keyword would print it before the comment the clause leads.
             let statements = groups
                 .into_iter()
                 .map(|group| {
-                    let count = group.members.len();
                     let mut parts = Vec::new();
                     for (index, member) in group.members.into_iter().enumerate() {
-                        let start = signature_start(&member.signature);
                         let keyword = match index {
                             0 => "let ",
                             _ => {
@@ -1492,22 +1350,13 @@ fn print_term_inner(term: Term) -> Printer {
                                 "and "
                             }
                         };
-                        parts.push(marked(start, || {
-                            let mut clause = vec![
-                                pure(keyword),
-                                print_pattern(member.binder),
-                                print_let_signature(member.signature, false),
-                            ];
-                            // A lone binding keeps its terminator inside the mark; a group's terminator closes the last clause from outside it, as the top-level item's does.
-                            if count == 1 {
-                                clause.extend([pure(";"), hard_line()]);
-                            }
-                            flat(clause)
-                        }));
+                        parts.extend([
+                            pure(keyword),
+                            print_pattern(member.binder),
+                            print_let_signature(member.signature, false),
+                        ]);
                     }
-                    if count > 1 {
-                        parts.extend([pure(";"), hard_line()]);
-                    }
+                    parts.extend([pure(";"), hard_line()]);
                     flat(parts)
                 })
                 .collect::<Vec<_>>();
@@ -1561,9 +1410,7 @@ fn braced_escape(character: char) -> String {
 fn print_let_signature(signature: LetSignature, top: bool) -> Printer {
     let bound = |body: Term| {
         if top {
-            // The body's start is reported before the break, as `attached_body` reports it: a comment riding the `=` line is owed on that line, and paid after the break it would ride the body's.
-            let reached = reached_before(body.span().map(|span| span.start));
-            flat([pure(" ="), reached, hard_line(), indent(print_term(body))])
+            flat([pure(" ="), hard_line(), indent(print_term(body))])
         } else {
             attached_body(" =", body)
         }
@@ -1628,7 +1475,6 @@ fn print_top_test(test: TopTest) -> Printer {
         pure("test "),
         pure(test.label),
         pure(" ="),
-        reached_before(test.body.span().map(|span| span.start)),
         hard_line(),
         indent(print_term(test.body)),
         pure(";"),
@@ -1649,21 +1495,14 @@ fn print_top_let(items: Vec<TopLet>) -> Printer {
         flat(
             rest.into_iter()
                 .map(|item| {
-                    let start = signature_start(&item.signature);
-                    // The separator stays outside the mark, so a comment leading this clause opens a line of its own above `and` rather than running on from the previous clause's last character; one riding the previous clause's last line is paid before the break.
                     flat([
-                        reached_before(doc_start(&item.doc).or(start)),
                         hard_line(),
                         print_doc(item.doc),
-                        marked(start, || {
-                            flat([
-                                // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a group would print as `and pub f` and not reparse, and the formatter's verify gate would refuse the file rather than write it.
-                                print_pub(item.vis_pub),
-                                pure("and "),
-                                pure(item.label),
-                                print_let_signature(item.signature, true),
-                            ])
-                        }),
+                        // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a group would print as `and pub f` and not reparse, and the formatter's verify gate would refuse the file rather than write it.
+                        print_pub(item.vis_pub),
+                        pure("and "),
+                        pure(item.label),
+                        print_let_signature(item.signature, true),
                     ])
                 })
                 .collect::<Vec<_>>(),
@@ -1773,13 +1612,6 @@ pub(crate) fn print_module_items(items: Vec<TopItem>) -> Printer {
 }
 
 fn print_top_induct_case(case: TopCase) -> Printer {
-    // Computed before anything below builds a document, since printing a payload type would otherwise report its own position first and place this case's leading comment inside the payload list.
-    let start = member_start(
-        case.payload
-            .iter()
-            .map(|param| &param.type_)
-            .chain(case.target.iter().flatten()),
-    );
     let payload = case
         .payload
         .into_iter()
@@ -1805,16 +1637,11 @@ fn print_top_induct_case(case: TopCase) -> Printer {
     };
 
     flat([
-        reached_before(doc_start(&case.doc).or(start)),
         hard_line(),
         print_doc(case.doc),
-        marked(start, || {
-            flat([
-                pure(format!("| {}", case.label)),
-                listed("(", payload, ")"),
-                target,
-            ])
-        }),
+        pure(format!("| {}", case.label)),
+        listed("(", payload, ")"),
+        target,
     ])
 }
 
@@ -1847,28 +1674,6 @@ fn print_top_induct_arity(
     ])
 }
 
-/// [`signature_start`] for an `induct` clause, over the components an inductive head has: its parameters, then its index telescope, then its result sort, then the first payload or target its cases carry.
-///
-/// The label is spanless like a `let`'s binder, so a clause with no position of its own would leave its leading comment to the first spanned descendant. The cases are the fallback because a *sort* is spanless too — `parse_type` and `parse_prop` build their term from a bare `Subterm` — so `and Odd : Type` has no located component in its head at all. Any offset within the clause bounds it equally well: only the clause's own text lies between its head and its first case, and a comment written in there is one this hoists above `and` rather than one it misplaces.
-fn induct_start(item: &TopInduct) -> Option<usize> {
-    let head = match (item.params.first(), item.indices.first()) {
-        (Some(param), _) => Some(&param.type_),
-        (None, Some((_, index))) => Some(index),
-        (None, None) => None,
-    };
-    let case_component = || {
-        let case = item.cases.first()?;
-        match case.payload.first() {
-            Some(param) => Some(&param.type_),
-            None => case.target.as_ref()?.first(),
-        }
-    };
-    head.or(Some(&item.result_sort))
-        .into_iter()
-        .chain(case_component())
-        .find_map(|term| term.span().map(|span| span.start))
-}
-
 fn print_top_induct(group: Vec<TopInduct>) -> Printer {
     let mut iter = group.into_iter();
     let first = iter.next().unwrap();
@@ -1891,26 +1696,20 @@ fn print_top_induct(group: Vec<TopInduct>) -> Printer {
         flat(
             rest.into_iter()
                 .map(|u| {
-                    let start = induct_start(&u);
                     flat([
-                        reached_before(doc_start(&u.doc).or(start)),
                         hard_line(),
                         print_doc(u.doc),
-                        marked(start, || {
-                            flat([
-                                print_pub(u.vis_pub),
-                                pure("and "),
-                                pure(u.label),
-                                print_top_induct_params(u.params),
-                                print_top_induct_arity(u.indices, u.rep_pub, u.result_sort),
-                                flat(
-                                    u.cases
-                                        .into_iter()
-                                        .map(print_top_induct_case)
-                                        .collect::<Vec<_>>(),
-                                ),
-                            ])
-                        }),
+                        print_pub(u.vis_pub),
+                        pure("and "),
+                        pure(u.label),
+                        print_top_induct_params(u.params),
+                        print_top_induct_arity(u.indices, u.rep_pub, u.result_sort),
+                        flat(
+                            u.cases
+                                .into_iter()
+                                .map(print_top_induct_case)
+                                .collect::<Vec<_>>(),
+                        ),
                     ])
                 })
                 .collect::<Vec<_>>(),
@@ -1920,18 +1719,16 @@ fn print_top_induct(group: Vec<TopInduct>) -> Printer {
     ])
 }
 
-/// A `struct` item: one structure, or a group joined by `and`, each later member marked at its head as a `let` group's clauses are.
+/// A `struct` item: one structure, or a group joined by `and`.
 fn print_top_struct(items: Vec<TopStruct>) -> Printer {
     let mut iter = items.into_iter();
     let mut first = iter.next().expect("a `struct` item has a member");
     let rest = iter
         .map(|mut item| {
-            let start = struct_member_start(&item);
             flat([
-                reached_before(doc_start(&item.doc).or(start)),
                 hard_line(),
                 print_doc(item.doc.take()),
-                marked(start, || print_struct_member(item, "and ")),
+                print_struct_member(item, "and "),
             ])
         })
         .collect::<Vec<_>>();
@@ -1940,22 +1737,6 @@ fn print_top_struct(items: Vec<TopStruct>) -> Printer {
         print_struct_member(first, "struct "),
         flat(rest),
     ])
-}
-
-/// Where a struct member begins: its earliest spanned component — a parameter type, the result sort, or the first field type.
-fn struct_member_start(item: &TopStruct) -> Option<usize> {
-    [
-        item.params
-            .first()
-            .and_then(|param| param.type_.span().map(|span| span.start)),
-        item.result_sort.span().map(|span| span.start),
-        item.fields
-            .first()
-            .and_then(|field| field.param.type_.span().map(|span| span.start)),
-    ]
-    .into_iter()
-    .flatten()
-    .min()
 }
 
 fn print_struct_member(item: TopStruct, keyword: &'static str) -> Printer {
@@ -1976,53 +1757,36 @@ fn print_struct_member(item: TopStruct, keyword: &'static str) -> Printer {
     ])
 }
 
-/// A struct field: its documentation comment, then the Σ-type field it is written as — with where it begins, for the list's breaks.
-fn print_struct_field(field: StructField) -> (Option<usize>, Printer) {
-    let start = doc_start(&field.doc).or_else(|| field.param.type_.span().map(|span| span.start));
-    (
-        start,
-        flat([
-            print_doc(field.doc),
-            print_plicity(field.plicity),
-            print_field(field.param),
-        ]),
-    )
+/// A struct field: its documentation comment, then the Σ-type field it is written as.
+fn print_struct_field(field: StructField) -> Printer {
+    flat([
+        print_doc(field.doc),
+        print_plicity(field.plicity),
+        print_field(field.param),
+    ])
 }
 
-fn print_concept_field(field: ConceptField) -> (Option<usize>, Printer) {
-    // Marked before the branch, because every branch prints a field and a comment above one leads the field however it is spelled. A superclass field returning before marking would let its comment fall through to the type term and surface *inside* the field, between `use` and the type it leads.
-    let start = member_start([&field.type_]);
-    let begins_at = doc_start(&field.doc).or(start);
+fn print_concept_field(field: ConceptField) -> Printer {
     let doc = print_doc(field.doc);
 
     // A superclass edge is a `use` member: the mark and its type, no label.
     let Some(label) = field.label else {
-        return (
-            begins_at,
-            flat([
-                doc,
-                marked(start, || flat([pure("use "), print_term(field.type_)])),
-            ]),
-        );
+        return flat([doc, pure("use "), print_term(field.type_)]);
     };
     let spelled = match field.func_params {
-        Some(params) => marked(start, || {
-            flat([
-                pure(label),
-                listed(
-                    "(",
-                    params.into_iter().map(print_func_type_param).collect(),
-                    ")",
-                ),
-                pure(" -> "),
-                print_term(field.type_),
-            ])
-        }),
-        None => marked(start, || {
-            flat([pure(label), pure(": "), print_term(field.type_)])
-        }),
+        Some(params) => flat([
+            pure(label),
+            listed(
+                "(",
+                params.into_iter().map(print_func_type_param).collect(),
+                ")",
+            ),
+            pure(" -> "),
+            print_term(field.type_),
+        ]),
+        None => flat([pure(label), pure(": "), print_term(field.type_)]),
     };
-    (begins_at, flat([doc, spelled]))
+    flat([doc, spelled])
 }
 
 /// A `concept` item: one concept, or a group joined by `and`, printed as a `struct` group is.
@@ -2031,12 +1795,10 @@ fn print_top_concept(items: Vec<TopConcept>) -> Printer {
     let mut first = iter.next().expect("a `concept` item has a member");
     let rest = iter
         .map(|mut item| {
-            let start = concept_member_start(&item);
             flat([
-                reached_before(doc_start(&item.doc).or(start)),
                 hard_line(),
                 print_doc(item.doc.take()),
-                marked(start, || print_concept_member(item, "and ")),
+                print_concept_member(item, "and "),
             ])
         })
         .collect::<Vec<_>>();
@@ -2045,21 +1807,6 @@ fn print_top_concept(items: Vec<TopConcept>) -> Printer {
         print_concept_member(first, "concept "),
         flat(rest),
     ])
-}
-
-fn concept_member_start(item: &TopConcept) -> Option<usize> {
-    [
-        item.params
-            .first()
-            .and_then(|param| param.type_.span().map(|span| span.start)),
-        item.result_sort.span().map(|span| span.start),
-        item.fields
-            .first()
-            .and_then(|field| field.type_.span().map(|span| span.start)),
-    ]
-    .into_iter()
-    .flatten()
-    .min()
 }
 
 fn print_concept_member(item: TopConcept, keyword: &'static str) -> Printer {
@@ -2085,13 +1832,10 @@ fn print_top_witness(items: Vec<TopWitness>) -> Printer {
     let mut first = iter.next().expect("a `satisfy` item has a member");
     let rest = iter
         .map(|mut item| {
-            let start = witness_member_start(&item);
-            // As for a `let` group: the separator stays outside the mark, so a comment leading this member opens a line of its own above `and`.
             flat([
-                reached_before(doc_start(&item.doc).or(start)),
                 hard_line(),
                 print_doc(item.doc.take()),
-                marked(start, || print_witness_member(item, "and")),
+                print_witness_member(item, "and"),
             ])
         })
         .collect::<Vec<_>>();
@@ -2132,10 +1876,7 @@ fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
             pure(" "),
             listed_hard(
                 "{",
-                entries
-                    .into_iter()
-                    .map(|entry| (witness_entry_start(&entry), print_witness_entry(entry)))
-                    .collect(),
+                entries.into_iter().map(print_witness_entry).collect(),
                 "}",
             ),
         ]),
@@ -2155,46 +1896,15 @@ fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
     ])
 }
 
-/// Where an `and` witness clause begins: its earliest spanned component — a telescope parameter's type, a concept argument, or the first entry — since the keyword, the concept name and the braces record no span. [`signature_start`]'s rule for a `let` clause.
-fn witness_member_start(item: &TopWitness) -> Option<usize> {
-    [
-        item.params
-            .first()
-            .and_then(|param| param.type_.span().map(|span| span.start)),
-        item.args
-            .iter()
-            .flatten()
-            .next()
-            .and_then(|arg| arg.term.span().map(|span| span.start)),
-        item.body
-            .as_ref()
-            .and_then(|entries| entries.first())
-            .and_then(witness_entry_start),
-    ]
-    .into_iter()
-    .flatten()
-    .min()
-}
-
-/// Where a witness-body entry begins, for the mark that pays a comment riding the opening brace's line.
-fn witness_entry_start(field: &WitnessField) -> Option<usize> {
-    field.value.span().map(|span| span.start)
-}
-
 /// A witness-body entry, which is an implementation field — `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
 fn print_witness_entry(field: WitnessField) -> Printer {
-    let start = member_start([&field.value]);
     match field.func_params {
-        Some(params) => marked(start, || {
-            flat([
-                pure(field.label),
-                listed("(", params.into_iter().map(print_func_param).collect(), ")"),
-                attached_body(" =", field.value),
-            ])
-        }),
-        None => marked(start, || {
-            flat([pure(field.label), attached_body(" =", field.value)])
-        }),
+        Some(params) => flat([
+            pure(field.label),
+            listed("(", params.into_iter().map(print_func_param).collect(), ")"),
+            attached_body(" =", field.value),
+        ]),
+        None => flat([pure(field.label), attached_body(" =", field.value)]),
     }
 }
 

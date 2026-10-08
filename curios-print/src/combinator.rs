@@ -105,18 +105,7 @@ pub fn named(text: impl Into<String>) -> Printer {
     Printer::Named(text.into())
 }
 
-/// Note that something written at source offset `offset` begins here — see [`Printer::Mark`]. Zero width and no output.
-pub fn begins(offset: usize) -> Printer {
-    Printer::Mark {
-        at: offset,
-        begins: true,
-    }
-}
-
-/// Note that the document now holds source up to `offset` — see [`Printer::Mark`]. Zero width and no output.
-pub fn reaches(offset: usize) -> Printer {
-    Printer::Mark {
-        at: offset,
-        begins: false,
-    }
+/// Note that the document holds its original up to `offset` — see [`Printer::Mark`]. Zero width and no output.
+pub fn reached(offset: usize) -> Printer {
+    Printer::Mark(offset)
 }

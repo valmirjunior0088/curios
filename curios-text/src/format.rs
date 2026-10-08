@@ -1,10 +1,8 @@
 //! The canonical formatter behind `curios format`: parse with comments, render the file as one document, verify, emit.
 //!
-//! The laws: formatting never changes a program — the output is reparsed and compared structurally, and a mismatch refuses to emit; every captured comment appears in the output exactly once — the verifier recounts them; nothing is ever reordered; and **the result is idempotent**, which `formatting_converges_from_every_comment_position` checks from every position a comment can be written in rather than leaving it to be believed.
+//! The laws: formatting never changes a program — the output is reparsed and compared structurally, and a mismatch refuses to emit; every captured comment appears in the output exactly once — the verifier recounts them; nothing is ever reordered; **a comment stays where it was written** — one on a line of its own between the two tokens it stood between, one after code on the line that code lands on; and **the result is idempotent**. `format/place_tests.rs` checks the last two from every position a comment can be written in, in its fixtures and across the sources of the tree, rather than leaving them to be believed.
 //!
-//! **A comment's place is decided by the renderer, not by the tree.** Where a comment goes is a fact about the *output*: one riding a line's end follows whatever was written last there — frequently punctuation the enclosing printer emits, which no node of the tree owns — and one on its own line must be placed where a line can begin. So the printer only reports *positions*, through [`Printer::Mark`], and the whole comment list is handed to the renderer as [`Owed`].
-//!
-//! A weave in which each node claims the comments written before it would need the claim written by hand at every syntactic position, could not reach the ones no node owns, and would depend on build order — a comment claimed by the wrong node reparses somewhere new and moves again on the next run, which is the one way a formatter fails to converge.
+//! **A comment's place is decided by the renderer, from the source text.** Where a comment goes is a fact about the *output*: one riding a line's end follows whatever was written last there — frequently punctuation the enclosing printer emits, which no node of the tree owns — and one on its own line stands between two tokens, either of which may be such punctuation. So the printer says nothing about comments at all: the renderer is handed the text the file was read from as an [`Original`] and follows it as it writes, and a comment is due exactly when everything written before it has gone out. `README.md` states the decision and what it rejected.
 //!
 //! Comments are classified once, from the source text: one with source content earlier on its own line *rides* that line, and every other takes a line of its own. Nothing is classified twice and nothing is decided twice.
 //!
@@ -12,7 +10,7 @@
 
 use {
     super::{FormatInput, TopItem, between_items, parse_for_format, print_term, print_top_item},
-    curios_print::{Owed, Printer, begins, flat, hard_line, reaches, run_printer_placing},
+    curios_print::{Original, Owed, Printer, flat, hard_line, reached, run_printer_placing},
     curios_utilities::{Source, Span},
     std::{cell::RefCell, fmt, path::Path, sync::Arc},
 };
@@ -28,21 +26,20 @@ impl Formatted {
     /// Format `source` canonically. `Err` is a human-readable refusal: a parse failure, or a verification failure — the output failing to reparse to the same program with the same comments — in which case nothing should be written.
     pub fn from_source(source: &Arc<Source>) -> Result<Self, String> {
         let input = parse_for_format(source).map_err(|error| error.format())?;
-        let comments = classify(&source.text, input.comments.clone());
+        let comments = classify(&source.text, &input.comments);
         let expected_comments = comments.len();
 
-        // Every comment goes to the renderer, which is the only thing that knows where an output line begins and ends — see `Owed`. Nothing here decides a comment's place; the printer only marks how far into the source its document has reached.
-        OWED.with(|owed| {
-            *owed.borrow_mut() = comments
-                .into_iter()
-                .map(|comment| Owed {
-                    at: comment.start,
-                    own_line: !comment.trailing,
-                    text: format!(" {}", comment.text),
-                })
-                .collect();
-        });
-        let output = emit(&input);
+        // Every comment goes to the renderer with the text it was written in, which is all that decides its place — see `Original`.
+        let output = emit(
+            &input,
+            &Original {
+                text: &source.text,
+                comments,
+                added,
+                dropped,
+                closes,
+            },
+        );
 
         verify(&input, expected_comments, &output)?;
         Ok(match output == source.text {
@@ -65,67 +62,69 @@ const WIDTH: usize = 100;
 /// The canonical indent — the corpus's four spaces.
 const INDENT: usize = 4;
 
-/// One captured comment, classified: its start offset, verbatim text, and whether source content precedes it on its own line (trailing) or not (leading).
-struct Comment {
-    start: usize,
-    text: String,
-    trailing: bool,
+/// The one character the printer writes where the source may hold none: the comma closing a broken list.
+fn added(char: char) -> bool {
+    char == ','
 }
 
-thread_local! {
-    /// The comments this run owes the renderer, by the offset each was written at — ascending, since `classify` walks the parse's own ascending spans.
-    ///
-    /// Present only while [`Formatted::from_source`] renders, so `Display` printing never carries any and renders as a pretty printer would.
-    static OWED: RefCell<Vec<Owed>> = const { RefCell::new(Vec::new()) };
+/// What the source may hold and the printer leaves out: a list's last comma, and the parentheses the tree does not record.
+fn dropped(char: char) -> bool {
+    matches!(char, ',' | '(' | ')')
 }
 
-fn classify(source: &str, spans: Vec<Span>) -> Vec<Comment> {
+/// What may still follow a token on the line its comment rides: the punctuation that closes what the token ends.
+fn closes(char: char) -> bool {
+    matches!(char, ')' | ']' | '}' | ',' | ';')
+}
+
+/// The captured comments, classified, in the ascending order the parse recorded them in: one with source content earlier on its own line rides that line, and every other has a line of its own.
+fn classify(source: &str, spans: &[Span]) -> Vec<Owed> {
     spans
-        .into_iter()
+        .iter()
         .map(|span| {
             let line_start = source[..span.start]
                 .rfind('\n')
                 .map(|index| index + 1)
                 .unwrap_or(0);
-            Comment {
-                start: span.start,
-                text: source[span.start..span.end].to_string(),
-                trailing: source[line_start..span.start]
+            Owed {
+                at: span.start,
+                end: span.end,
+                own_line: source[line_start..span.start]
                     .chars()
-                    .any(|char| !char.is_whitespace()),
+                    .all(char::is_whitespace),
+                text: source[span.start..span.end].trim_end().to_string(),
             }
         })
         .collect()
 }
 
-/// Render one document at the canonical width and indent.
-fn render(printer: Printer) -> String {
-    struct Within(RefCell<Option<Printer>>);
-    impl fmt::Display for Within {
+/// Render one document at the canonical width and indent, following `original`.
+fn render(printer: Printer, original: &Original<'_>) -> String {
+    struct Within<'a, 'b>(RefCell<Option<Printer>>, &'a Original<'b>);
+    impl fmt::Display for Within<'_, '_> {
         fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
             let printer = self.0.borrow_mut().take().expect("rendered once");
-            let owed = OWED.with(|owed| std::mem::take(&mut *owed.borrow_mut()));
 
-            run_printer_placing(printer, formatter, INDENT, WIDTH, owed)
+            run_printer_placing(printer, formatter, INDENT, WIDTH, self.1)
         }
     }
-    Within(RefCell::new(Some(printer))).to_string()
+    Within(RefCell::new(Some(printer)), original).to_string()
 }
 
 /// The parsed file as one document: items separated by exactly one blank line — except consecutive `use` declarations and a `use` directly following a `mod`, which stack with none, as the corpus writes its import heads and its `mod X; use X/{…}` pairs — and the tail last.
 ///
-/// **One document for the whole file, rendered once.** Every comment is placed by that single run, which is what lets a comment between two items be placed at all: rendering each item separately would give each its own renderer, and a comment belonging to neither would have to be spliced in as text by this function. Nothing here handles comments; it marks where each item begins and lets the renderer do the rest.
-pub(crate) fn emit(input: &FormatInput) -> String {
+/// **One document for the whole file, rendered once.** Every comment is placed by that single run, which is what lets a comment between two items be placed at all: rendering each item separately would give each its own renderer, and a comment belonging to neither would have to be spliced in as text by this function. Nothing here handles comments.
+pub(crate) fn emit(input: &FormatInput, original: &Original<'_>) -> String {
     let mut parts: Vec<Printer> = Vec::new();
     let mut previous: Option<&TopItem> = None;
 
     for (item, span) in input.module.items.iter().zip(&input.item_spans) {
         parts.push(between_items(previous, item));
 
-        // Marked at both ends, as a term is: the start is where a comment leading the item stops leading whatever came before, and the end is what makes a comment written after the item's own `;` owed before the break that would carry it to the next item.
-        parts.push(begins(span.start));
+        // Marked at both ends, as a term is — see `print_term`.
+        parts.push(reached(span.start));
         parts.push(print_top_item(item.clone()));
-        parts.push(reaches(span.end));
+        parts.push(reached(span.end));
         previous = Some(item);
     }
 
@@ -136,7 +135,7 @@ pub(crate) fn emit(input: &FormatInput) -> String {
         parts.push(print_term(tail.clone()));
     }
 
-    format!("{}\n", render(flat(parts)))
+    format!("{}\n", render(flat(parts), original))
 }
 
 /// The refuse-to-write gate: the output must reparse to the same program (structural equality — spans are excluded from it by design) carrying the same number of comments.
@@ -162,5 +161,9 @@ fn verify(input: &FormatInput, expected_comments: usize, output: &str) -> Result
     Ok(())
 }
 
+#[cfg(test)]
+mod place_tests;
+#[cfg(test)]
+mod test_support;
 #[cfg(test)]
 mod tests;

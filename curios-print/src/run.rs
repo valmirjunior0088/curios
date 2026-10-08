@@ -1,17 +1,20 @@
 //! The interpreter and the fits scan it consults.
 //!
 //! These are one engine rather than two files' worth: `fits` measures against `rest` — the interpreter's own remaining work stack — so the lookahead and the walk share [`Step`] and cannot be separated without inventing a seam the algorithm does not have.
+//!
+//! A formatter's run additionally *follows* the text its document was read from, which is how what that text held and the document does not — a comment — goes back between the characters it was written between: see [`Original`].
 
 use {
     super::Printer,
     std::{
         cell::RefCell,
+        collections::VecDeque,
         fmt::{self, Write},
         mem,
     },
 };
 
-struct PrinterState<'a, 'b> {
+struct PrinterState<'a, 'b, 'c> {
     formatter: &'a mut fmt::Formatter<'b>,
     /// Bytes emitted so far, which is what an [`Annotation`] measures its range in.
     written: usize,
@@ -24,21 +27,28 @@ struct PrinterState<'a, 'b> {
     column: usize,
     /// The line width [`Printer::Group`]s try to fit; `None` is unbounded, so every group renders flat.
     width: Option<usize>,
-    /// Text pending for the current line, flushed just before the next newline (or at the document's end) — how a comment rides the end of whatever line it was paid onto. Filled by [`PrinterState::reached`] and by nothing else.
+    /// The text the document was read from and how far into it the output has got. `None` for every ordinary `Display`, which is what keeps a run with nothing to follow rendering as a pretty printer's.
+    following: Option<(&'c Original<'c>, Cursor)>,
+    /// How many of the original's comments have been taken off the cursor's arrivals, into `suffix` or `due`.
+    taken: usize,
+    /// Arrived comments still to be written, each on a line of its own, by index and in written order.
+    due: VecDeque<usize>,
+    /// The comment riding the current line, flushed just before the line ends. One at most: two line comments sharing an output line are *one* comment when it is read back.
     suffix: String,
-    /// Source-derived text still owed a place, ascending by the offset it was written at — a formatter's comments, each flagged `own_line` when it must take a line of its own rather than ride one. Empty for every ordinary `Display`, which is what keeps a document with no marks rendering as a pretty printer's.
-    ///
-    /// **The reason this lives in the renderer.** Where a comment goes is a fact about the *output*: one riding a line's end follows whatever was written last there, which is frequently punctuation the enclosing printer emits and no node of the tree owns, and one on its own line must be placed where a line can begin. The renderer is the only thing that knows both how far into the source the output has got — [`Printer::Mark`] tells it — and where its lines start and end.
-    owed: Vec<Owed>,
-    /// The highest offset any [`Printer::Mark`] has reported, which is how much of the source the current output already holds.
-    reached: usize,
+    /// Spaces written and not yet followed by anything on their line, dropped where the line ends first. Only a following run holds any, so nothing else is ever buffered.
+    spaces: usize,
+    /// The line ends in a comment, which runs to the end of its line: whatever comes next starts another.
+    after_comment: bool,
+    /// The renderer broke a line where the document offered no break, so what continues it hangs one step in until the document's next newline.
+    hanging: bool,
 }
 
-impl<'a, 'b> PrinterState<'a, 'b> {
+impl<'a, 'b, 'c> PrinterState<'a, 'b, 'c> {
     fn new(
         formatter: &'a mut fmt::Formatter<'b>,
         indent_step: usize,
         width: Option<usize>,
+        original: Option<&'c Original<'c>>,
     ) -> Self {
         Self {
             formatter,
@@ -49,85 +59,197 @@ impl<'a, 'b> PrinterState<'a, 'b> {
             should_indent: true,
             column: 0,
             width,
+            following: original.map(|original| (original, Cursor::start(original))),
+            taken: 0,
+            due: VecDeque::new(),
             suffix: String::new(),
-            owed: Vec::new(),
-            reached: 0,
+            spaces: 0,
+            after_comment: false,
+            hanging: false,
         }
     }
 
-    /// Note that the output now holds source up to `offset`, and hand the current line every comment written at or before it.
-    ///
-    /// Ascending order is what makes this a drain from the front: a comment the line does not owe yet is written later in the source than anything emitted so far, so the first one that fails the test ends the run.
-    fn reached(&mut self, offset: usize, begins: bool) -> Result<(), fmt::Error> {
-        self.reached = self.reached.max(offset);
-
-        while self
-            .owed
-            .first()
-            .is_some_and(|owed| owed.at <= self.reached)
-        {
-            match self.owed[0].own_line {
-                // A comment written on a line of its own goes out before whatever this mark introduces, on a line of its own here too — and only where something *begins*, since a node's end reaches past its own text into the trivia that follows, which is where the next element's leading comment sits.
-                true if !begins => break,
-                true => {
-                    let owed = self.owed.remove(0);
-                    if !self.should_indent {
-                        self.write("\n")?;
-                    }
-                    self.write(owed.text.trim_start())?;
-                    self.write("\n")?;
-                }
-                // **One per line, and the rest wait.** Two line comments sharing an output line are *one* comment when it is read back — a line comment runs to the end of its line — so a line already owing one takes no more, and the next keeps its place until a later line pays it. Enforced here because here is the only place that knows what a line already holds; the alternative is every builder knowing it.
-                false => match self.suffix.is_empty() {
-                    true => {
-                        let owed = self.owed.remove(0);
-                        self.suffix.push_str(&owed.text);
-                    }
-                    false => break,
-                },
-            }
+    /// The indentation the next line begun here is owed.
+    fn indentation(&self) -> usize {
+        match self.hanging {
+            true => self.indent_by + self.indent_step,
+            false => self.indent_by,
         }
+    }
+
+    /// One character on the current line. A fresh line pays its indentation here, lazily, so a blank line stays blank; a following run holds a space back until something follows it.
+    fn put(&mut self, char: char) -> Result<(), fmt::Error> {
+        if char == ' ' && self.following.is_some() {
+            self.spaces += 1;
+            return Ok(());
+        }
+
+        let leading = mem::take(&mut self.spaces)
+            + match self.should_indent {
+                true => self.indentation(),
+                false => 0,
+            };
+        for _ in 0..leading {
+            self.formatter.write_char(' ')?;
+        }
+        self.written += leading;
+        self.column += leading;
+        self.should_indent = false;
+
+        self.formatter.write_char(char)?;
+        self.written += char.len_utf8();
+        self.column += 1;
 
         Ok(())
     }
 
-    fn write(&mut self, string: &str) -> Result<(), fmt::Error> {
+    /// End the current line, the comment riding it first.
+    fn end_line(&mut self) -> Result<(), fmt::Error> {
+        self.spaces = 0;
+        if !self.suffix.is_empty() {
+            let suffix = mem::take(&mut self.suffix);
+            self.formatter.write_str(&suffix)?;
+            self.written += suffix.len();
+        }
+
+        self.formatter.write_char('\n')?;
+        self.written += 1;
+        self.should_indent = true;
+        self.column = 0;
+        self.after_comment = false;
+
+        Ok(())
+    }
+
+    /// A newline the document writes, which is where a hanging continuation ends.
+    fn newline(&mut self) -> Result<(), fmt::Error> {
+        self.hanging = false;
+        self.end_line()
+    }
+
+    /// A newline the document did not offer, forced by a comment written where no line can begin.
+    fn force_break(&mut self) -> Result<(), fmt::Error> {
+        self.hanging = true;
+        self.end_line()
+    }
+
+    /// Document text. A following run steps through the original with every character that is not blank, so each comment arrives between the two characters it was written between.
+    fn text(&mut self, string: &str) -> Result<(), fmt::Error> {
         for char in string.chars() {
-            // A pending suffix rides at the end of the line it landed on: flush it before the newline. The suffix contains no newline itself, so the recursion is one level deep.
-            if char == '\n' && !self.suffix.is_empty() {
-                let suffix = mem::take(&mut self.suffix);
-                self.write(&suffix)?;
-            }
-            // A blank line is blank: the pending indent is owed by the next line that has content, so writing it before a newline would leave trailing spaces on an empty line. `should_indent` stays set, and the line after still pays.
-            if self.should_indent && char != '\n' {
-                for _ in 0..self.indent_by {
-                    self.formatter.write_str(" ")?;
-                    self.written += 1;
-                    self.column += 1;
-                }
-
-                self.should_indent = false;
-            }
-
-            self.formatter.write_char(char)?;
-            self.written += char.len_utf8();
-
             if char == '\n' {
-                self.should_indent = true;
-                self.column = 0;
+                self.newline()?;
+            } else if char.is_whitespace() || self.following.is_none() {
+                self.put(char)?;
             } else {
-                self.column += 1;
+                self.before(char)?;
+                self.put(char)?;
+                self.after(char);
             }
         }
 
         Ok(())
     }
 
-    /// The column the next character will actually land at: a fresh line still owes its indentation, which [`PrinterState::write`] emits lazily, so the pending spaces must be counted before a [`Printer::Group`] measures the room left on the line.
+    /// What `char` owes before it is written: the comments the original holds ahead of it, and the line a comment has already ended.
+    fn before(&mut self, char: char) -> Result<(), fmt::Error> {
+        let Some((original, mut cursor)) = self.following else {
+            return Ok(());
+        };
+        cursor.approach(char, original);
+        self.following = Some((original, cursor));
+        self.arrivals();
+
+        // A character the document adds is no part of the original, so nothing written there is before or after it: a trailing comma stays with the member it closes.
+        if !(original.added)(char) {
+            self.pay(true)?;
+        }
+        if self.after_comment {
+            self.end_line()?;
+        } else if !self.suffix.is_empty() && !(original.closes)(char) {
+            self.force_break()?;
+        }
+
+        Ok(())
+    }
+
+    /// Step the cursor past `char`, and take the comments written straight after it.
+    fn after(&mut self, char: char) {
+        if let Some((original, mut cursor)) = self.following {
+            cursor.pass(char, original);
+            self.following = Some((original, cursor));
+            self.arrivals();
+        }
+    }
+
+    /// Note that the document holds the original up to `at` — see [`Printer::Mark`].
+    fn reach(&mut self, at: usize) {
+        if let Some((original, mut cursor)) = self.following {
+            cursor.reach(at, original);
+            self.following = Some((original, cursor));
+            self.arrivals();
+        }
+    }
+
+    /// Take the comments the cursor has passed since the last look. One written after code rides the line that code is on, if that line is free; every other waits in `due` for a line of its own.
+    fn arrivals(&mut self) {
+        let Some((original, cursor)) = self.following else {
+            return;
+        };
+
+        while self.taken < cursor.arrived {
+            let comment = &original.comments[self.taken];
+            let rides = !comment.own_line
+                && self.suffix.is_empty()
+                && self.due.is_empty()
+                && !self.should_indent
+                && !self.after_comment;
+            match rides {
+                true => {
+                    self.suffix.push(' ');
+                    self.suffix.push_str(&comment.text);
+                }
+                false => self.due.push_back(self.taken),
+            }
+            self.taken += 1;
+        }
+    }
+
+    /// Write every comment that is due, each on a line of its own. `forced` says the document offers no line start here, so a line that holds text is broken by the renderer and its continuation hangs.
+    fn pay(&mut self, forced: bool) -> Result<(), fmt::Error> {
+        let Some((original, _)) = self.following else {
+            return Ok(());
+        };
+
+        while let Some(index) = self.due.pop_front() {
+            if self.after_comment {
+                self.end_line()?;
+            } else if !self.should_indent {
+                match forced {
+                    true => self.force_break()?,
+                    false => self.newline()?,
+                }
+            }
+            for char in original.comments[index].text.chars() {
+                self.put(char)?;
+            }
+            self.after_comment = true;
+        }
+
+        Ok(())
+    }
+
+    /// The column the next character will actually land at: a fresh line still owes its indentation, which [`PrinterState::put`] emits lazily, so the pending spaces must be counted before a [`Printer::Group`] measures the room left on the line — and a line that owes a comment a line of its own, or that a comment has ended, is over.
     fn effective_column(&self) -> usize {
-        match self.should_indent {
-            true => self.column + self.indent_by,
-            false => self.column,
+        let fresh = self.should_indent || self.after_comment;
+        if !self.due.is_empty() {
+            match self.hanging || !fresh {
+                true => self.indent_by + self.indent_step,
+                false => self.indent_by,
+            }
+        } else if fresh {
+            self.indentation()
+        } else {
+            self.column + self.spaces
         }
     }
 }
@@ -142,16 +264,146 @@ enum Step {
     Dedent,
 }
 
-/// One piece of source-derived text a formatter owes the output, and where it was written.
-///
-/// **What a formatter hands a renderer that a pretty printer never needs.** The document says what the program *is*; this says what the source also held and where, so the renderer can put it back on a line of the output. A comment is the only instance.
+/// One comment the original held: where it was written and how it reads.
 pub struct Owed {
-    /// The source offset it was written at. The queue is ascending, so the renderer pays in written order.
+    /// The offset its first character was written at.
     pub at: usize,
-    /// Whether it must take a line of its own, rather than ride the end of the line that reaches it.
+    /// The offset one past its last character.
+    pub end: usize,
+    /// Whether it had its line to itself, rather than following code on one.
     pub own_line: bool,
-    /// The text, spelled as it should appear — including any leading space that separates it from what it rides.
+    /// The text, as it should appear.
     pub text: String,
+}
+
+/// The text a document was read from, for a renderer that puts back what that text held and the document does not.
+///
+/// **What a formatter hands a renderer that a pretty printer never needs.** The document says what the program *is*; a comment is no part of it, and where one goes is a fact about the output: which line it rides, or which two characters it stands between. So the renderer reads the original as it writes: a cursor steps through this text with every character that goes out, and a comment has *arrived* when everything written before it has been written. Nothing in the document says where a comment belongs, so no printer can forget to.
+///
+/// The three predicates are what the document may spell differently from the text it was read from, and they are the caller's to state: this crate knows no language.
+pub struct Original<'a> {
+    pub text: &'a str,
+    /// Ascending by where each was written.
+    pub comments: Vec<Owed>,
+    /// A character the document may write where the original has none.
+    pub added: fn(char) -> bool,
+    /// A character of the original the document may leave out.
+    pub dropped: fn(char) -> bool,
+    /// A character that may still follow on a line a comment already rides, where anything else starts the next.
+    pub closes: fn(char) -> bool,
+}
+
+/// How far into an [`Original`] the output has got.
+///
+/// It rests on the next character the document has to write, past blanks and past every comment on the way — which is what makes a comment's arrival exact: the cursor cannot step over one without `arrived` counting it.
+#[derive(Clone, Copy)]
+struct Cursor {
+    offset: usize,
+    /// How many comments it has passed.
+    arrived: usize,
+    /// The document wrote a character the original does not hold next — a literal spelled another way — so the cursor waits where it is for the next [`Printer::Mark`].
+    held: bool,
+}
+
+impl Cursor {
+    fn start(original: &Original<'_>) -> Self {
+        let mut cursor = Self {
+            offset: 0,
+            arrived: 0,
+            held: false,
+        };
+        cursor.settle(original);
+
+        cursor
+    }
+
+    /// Rest on the next character the document has to write.
+    fn settle(&mut self, original: &Original<'_>) {
+        loop {
+            // A comment a mark carried the cursor over has arrived without moving it.
+            while original
+                .comments
+                .get(self.arrived)
+                .is_some_and(|comment| comment.at < self.offset)
+            {
+                self.arrived += 1;
+            }
+
+            let rest = &original.text[self.offset..];
+            self.offset += rest.len() - rest.trim_start().len();
+
+            match original.comments.get(self.arrived) {
+                Some(comment) if comment.at == self.offset => {
+                    self.offset = comment.end;
+                    self.arrived += 1;
+                }
+                _ => return,
+            }
+        }
+    }
+
+    fn next(&self, original: &Original<'_>) -> Option<char> {
+        original.text[self.offset..].chars().next()
+    }
+
+    /// Bring the cursor to where `written` stands in the original, over what the document left out on the way.
+    fn approach(&mut self, written: char, original: &Original<'_>) {
+        while !self.held {
+            match self.next(original) {
+                Some(next) if next == written => return,
+                // The document's own, unless the original holds it just past what the document left out: `(a), b` written `a, b`.
+                _ if (original.added)(written) => {
+                    if let Some(offset) = self.past_dropped(written, original) {
+                        self.offset = offset;
+                    }
+                    return;
+                }
+                Some(next) if (original.dropped)(next) => {
+                    self.offset += next.len_utf8();
+                    self.settle(original);
+                }
+                _ => self.held = true,
+            }
+        }
+    }
+
+    /// Where `written` stands, if nothing but blanks and what the document may leave out lies between the cursor and it. No comment is stepped over on the way, so taking the answer arrives nothing.
+    fn past_dropped(&self, written: char, original: &Original<'_>) -> Option<usize> {
+        let mut offset = self.offset;
+
+        loop {
+            let rest = &original.text[offset..];
+            offset += rest.len() - rest.trim_start().len();
+            if original
+                .comments
+                .get(self.arrived)
+                .is_some_and(|comment| comment.at == offset)
+            {
+                return None;
+            }
+
+            match original.text[offset..].chars().next() {
+                Some(next) if next == written => return Some(offset),
+                Some(next) if (original.dropped)(next) => offset += next.len_utf8(),
+                _ => return None,
+            }
+        }
+    }
+
+    /// Step past `written` where the original holds it next.
+    fn pass(&mut self, written: char, original: &Original<'_>) {
+        if !self.held && self.next(original) == Some(written) {
+            self.offset += written.len_utf8();
+            self.settle(original);
+        }
+    }
+
+    /// The document holds the original up to `at`: a hold ends, and a cursor behind it moves up.
+    fn reach(&mut self, at: usize, original: &Original<'_>) {
+        self.held = false;
+        self.offset = self.offset.max(at);
+        self.settle(original);
+    }
 }
 
 /// One [`Printer::Named`] as rendered: the byte range of the output it occupies, and the name it carries.
@@ -173,9 +425,55 @@ struct Measured<'a> {
     filling: bool,
 }
 
-/// Whether `printer`'s flat rendering fits in `available` characters — the [`Printer::Group`] decision. Within the group a hard [`Printer::Line`] fails the scan outright, and so does a [`Printer::Mark`] that a comment is due at once any text follows it inside the group: a group containing a mandatory break never renders flat. A due mark that nothing inside the group follows leaves the group flat — the comment rides the end of the line either way, and only text after it within the group would be carried past the comment by a flat rendering, which is what the break exists to prevent.
+/// What a scan has learned of the comments its group would write past, were it flat.
+struct Arriving<'a> {
+    original: &'a Original<'a>,
+    cursor: Cursor,
+    /// One that needs a line of its own has arrived inside the group.
+    own_line: bool,
+    /// One that rides its line has.
+    riding: bool,
+}
+
+impl Arriving<'_> {
+    fn note(&mut self, from: usize) {
+        for comment in &self.original.comments[from..self.cursor.arrived] {
+            match comment.own_line {
+                true => self.own_line = true,
+                false => self.riding = true,
+            }
+        }
+    }
+
+    fn reach(&mut self, at: usize) {
+        let from = self.cursor.arrived;
+        self.cursor.reach(at, self.original);
+        self.note(from);
+    }
+
+    /// Whether `char` may be written flat: nothing follows a comment on its line, but for what closes the line a riding one is on.
+    fn admits(&mut self, char: char) -> bool {
+        let from = self.cursor.arrived;
+        self.cursor.approach(char, self.original);
+        self.note(from);
+
+        if (self.own_line && !(self.original.added)(char))
+            || (self.riding && !(self.original.closes)(char))
+        {
+            return false;
+        }
+
+        let from = self.cursor.arrived;
+        self.cursor.pass(char, self.original);
+        self.note(from);
+
+        true
+    }
+}
+
+/// Whether `printer`'s flat rendering fits in `available` characters — the [`Printer::Group`] decision. Within the group a hard [`Printer::Line`] fails the scan outright, and so does text following a comment that arrives inside the group: a group containing a mandatory break never renders flat, and a comment is one. A comment that arrives with nothing after it in the group leaves the group flat — it rides the end of the line or takes the next either way.
 ///
-/// The scan does not stop at the group's edge: a group that fits exactly while unbreakable content trails it would otherwise overrun the line, so measurement continues into `rest` — the renderer's remaining work, in its recorded modes — until the line provably ends. Beyond the group the polarity of a mandatory break flips: a hard line, a text newline, or a soft [`Printer::Line`] in broken surroundings simply ends the line, deciding the scan in favor, and a pending suffix is skipped rather than counted — a trailing comment never reflows the code it rides.
+/// The scan does not stop at the group's edge: a group that fits exactly while unbreakable content trails it would otherwise overrun the line, so measurement continues into `rest` — the renderer's remaining work, in its recorded modes — until the line provably ends. Beyond the group the polarity of a mandatory break flips: a hard line, a text newline, or a soft [`Printer::Line`] in broken surroundings simply ends the line, deciding the scan in favor, and a comment is not looked for — a trailing comment never reflows the code it rides.
 ///
 /// A [`Printer::Fill`] is measured with the gap spaces its own layout will emit, and running out of room *inside* one also decides the scan in favor: the fill wraps at that gap, so the line ends within budget. A fill therefore never forces an enclosing group to break — which is the only answer consistent with printing, where a fill re-decides every gap regardless of the mode it was reached in.
 ///
@@ -185,11 +483,16 @@ fn fits(
     rest: &mut [Step],
     available: usize,
     inside: bool,
-    owed: Option<(usize, bool)>,
+    following: Option<(&Original<'_>, Cursor)>,
 ) -> bool {
     let mut used = 0usize;
-    // A comment is due on this line from here on: the next text inside the group would render past it, so it decides the scan against flatness — and text beyond the group, the enclosing printer's own punctuation, does not.
-    let mut due = false;
+    // A copy of the cursor, walked through the group as printing would walk the real one.
+    let mut arriving = following.map(|(original, cursor)| Arriving {
+        original,
+        cursor,
+        own_line: false,
+        riding: false,
+    });
     let mut stack = Vec::from([Measured {
         node: root,
         flat: true,
@@ -254,19 +557,33 @@ fn fits(
             continue;
         }
 
+        // Text of either kind, measured a character at a time: within the group each one that is not blank steps the cursor's copy, and the first to follow a comment refuses flatness.
+        let mut measure = |spelling: &str, used: &mut usize| -> Option<bool> {
+            for char in spelling.chars() {
+                if char == '\n' {
+                    return Some(true);
+                }
+                if inside
+                    && !char.is_whitespace()
+                    && arriving
+                        .as_mut()
+                        .is_some_and(|arriving| !arriving.admits(char))
+                {
+                    return Some(false);
+                }
+                *used += 1;
+                if *used > available {
+                    return Some(filling);
+                }
+            }
+
+            None
+        };
+
         match &mut *node {
             Printer::Text(text) | Printer::Named(text) => {
-                if inside && due && !text.is_empty() {
-                    return false;
-                }
-                for char in text.chars() {
-                    if char == '\n' {
-                        return true;
-                    }
-                    used += 1;
-                    if used > available {
-                        return filling;
-                    }
+                if let Some(verdict) = measure(text, &mut used) {
+                    return verdict;
                 }
             }
             Printer::Line {
@@ -280,12 +597,8 @@ fn fits(
                     // Broken surroundings render this as a newline, ending the line within budget. Unreachable inside the group, whose subtree is measured flat throughout.
                     return true;
                 }
-                if inside && due && !spelling.is_empty() {
-                    return false;
-                }
-                used += spelling.chars().count();
-                if used > available {
-                    return filling;
+                if let Some(verdict) = measure(spelling, &mut used) {
+                    return verdict;
                 }
             }
             // Not a break point: measured at the spelling its mode selects.
@@ -294,21 +607,14 @@ fn fits(
                 broken,
             } => {
                 let spelling = if flat { &*on_flat } else { &*broken };
-                if inside && due && !spelling.is_empty() {
-                    return false;
-                }
-                used += spelling.chars().count();
-                if used > available {
-                    return filling;
+                if let Some(verdict) = measure(spelling, &mut used) {
+                    return verdict;
                 }
             }
-            // Zero width, but not always silent: a mark reached at or past the earliest comment still owed means one is about to be placed on this line, so the line must end before anything inside the group follows it. That is the comment-is-a-hard-break law, stated here alone because a comment is never a node of the document.
-            Printer::Mark { at, begins } => {
-                // Only a comment this mark would actually place ends the line, by the same rule `PrinterState::reached` pays by: a mark that merely reports how far the source has been consumed pays nothing waiting for the next element to begin, so it must not break a line on its behalf either.
-                if inside
-                    && owed.is_some_and(|(owed, own_line)| owed <= *at && (*begins || !own_line))
-                {
-                    due = true;
+            // Zero width, and it moves the copy as it will move the cursor: what it carries the cursor over has arrived here.
+            Printer::Mark(at) => {
+                if inside && let Some(arriving) = arriving.as_mut() {
+                    arriving.reach(*at);
                 }
             }
             // Reversed, because the stack pops last-in first.
@@ -361,7 +667,7 @@ pub fn run_printer<'b, 'c>(
     formatter: &'b mut fmt::Formatter<'c>,
     indent_step: usize,
 ) -> Result<(), fmt::Error> {
-    run(printer, formatter, indent_step, None, Vec::new()).map(|_| ())
+    run(printer, formatter, indent_step, None, None).map(|_| ())
 }
 
 /// [`run_printer`] against a line width: each [`group`](crate::group) renders flat only when its flat form fits what remains of the line. The width is a target, not a guarantee — content with no break point still overruns.
@@ -371,20 +677,20 @@ pub fn run_printer_within<'b, 'c>(
     indent_step: usize,
     width: usize,
 ) -> Result<(), fmt::Error> {
-    run(printer, formatter, indent_step, Some(width), Vec::new()).map(|_| ())
+    run(printer, formatter, indent_step, Some(width), None).map(|_| ())
 }
 
-/// [`run_printer_within`], additionally placing `owed` — source-derived text the document does not carry, each paired with the offset it was written at, ascending.
+/// [`run_printer_within`], additionally following `original` — the text the document was read from — and placing the comments it held.
 ///
-/// **What a formatter has that a pretty printer does not.** Each entry is handed to the output line that holds the source it follows: the document says where it has got to with [`Printer::Mark`], and a line about to end pays what it owes. Nothing else about rendering changes, and a caller passing nothing gets [`run_printer_within`] exactly.
+/// **What a formatter has that a pretty printer does not.** A comment written after code rides the end of the line that code lands on; one written on a line of its own takes a line of its own between the two characters it stood between, broken open by the renderer where the document offers no break. Nothing else about rendering changes.
 pub fn run_printer_placing<'b, 'c>(
     printer: Printer,
     formatter: &'b mut fmt::Formatter<'c>,
     indent_step: usize,
     width: usize,
-    owed: Vec<Owed>,
+    original: &Original<'_>,
 ) -> Result<(), fmt::Error> {
-    run(printer, formatter, indent_step, Some(width), owed).map(|_| ())
+    run(printer, formatter, indent_step, Some(width), Some(original)).map(|_| ())
 }
 
 fn run<'b, 'c>(
@@ -392,20 +698,19 @@ fn run<'b, 'c>(
     formatter: &'b mut fmt::Formatter<'c>,
     indent_step: usize,
     width: Option<usize>,
-    owed: Vec<Owed>,
+    original: Option<&Original<'_>>,
 ) -> Result<Vec<Annotation>, fmt::Error> {
-    let mut state = PrinterState::new(formatter, indent_step, width);
-    state.owed = owed;
+    let mut state = PrinterState::new(formatter, indent_step, width, original);
     let mut stack = Vec::from([Step::Print(printer, false)]);
 
     while let Some(step) = stack.pop() {
         // Children are taken out rather than moved out: `Printer` has a `Drop` impl, so its fields cannot be moved away. What is left behind is childless and costs nothing to drop at the end of the arm.
         match step {
             Step::Print(mut printer, flat) => match &mut printer {
-                Printer::Text(text) => state.write(text)?,
+                Printer::Text(text) => state.text(text)?,
                 Printer::Named(text) => {
                     let start = state.written;
-                    state.write(text)?;
+                    state.text(text)?;
                     state.annotations.push(Annotation {
                         start,
                         end: state.written,
@@ -432,10 +737,10 @@ fn run<'b, 'c>(
                     }
                 }
                 // A hard line breaks even under a fitting group — the fits scan only guarantees the first line, and a mandatory break is mandatory.
-                Printer::Line { hard: true, .. } => state.write("\n")?,
+                Printer::Line { hard: true, .. } => state.newline()?,
                 Printer::Line { flat: spelling, .. } => match flat {
-                    true => state.write(spelling)?,
-                    false => state.write("\n")?,
+                    true => state.text(spelling)?,
+                    false => state.newline()?,
                 },
                 Printer::Fill(items) => {
                     // The first item is printed directly, so `Step::Fill` always owns a *gap* and never has to ask whether one is due.
@@ -454,14 +759,14 @@ fn run<'b, 'c>(
                         || match state.width {
                             // Unbounded: everything fits.
                             None => true,
-                            // A comment already taken onto this line ends it, so nothing measured now can render flat over the break it forces. Asked here rather than in the scan because it is a fact about the line already written, not about the document ahead — and because a group that measured *before* the comment was taken and one that measured after would otherwise lay the same code out two ways, which is the shape a formatter fails to converge in.
+                            // A comment already taken onto this line ends it, so nothing measured now can render flat over the break it forces. Asked here rather than in the scan because it is a fact about the line already written, not about the document ahead.
                             Some(_) if !state.suffix.is_empty() => false,
                             Some(width) => fits(
                                 &mut inner,
                                 &mut stack,
                                 width.saturating_sub(state.effective_column()),
                                 true,
-                                state.owed.first().map(|owed| (owed.at, owed.own_line)),
+                                state.following,
                             ),
                         };
                     stack.push(Step::Print(inner, inner_fits));
@@ -471,10 +776,9 @@ fn run<'b, 'c>(
                     broken,
                 } => {
                     let spelling = mem::take(if flat { on_flat } else { broken });
-                    state.write(&spelling)?;
+                    state.text(&spelling)?;
                 }
-                // Reaching a mark is what tells the renderer which source text the line now holds, and so which trailing comments it owes — see `Printer::Mark`.
-                Printer::Mark { at, begins } => state.reached(*at, *begins)?,
+                Printer::Mark(at) => state.reach(*at),
             },
             // One item per turn: measure it against what is left of the line, emit the gap it earned, print it flat, and queue the remainder. Printing the item flat is what makes it atomic — a fill decides *between* items, never inside one.
             Step::Fill(mut items) => {
@@ -484,15 +788,18 @@ fn run<'b, 'c>(
                         None => usize::MAX,
                         Some(width) => width.saturating_sub(state.effective_column() + 1),
                     };
-                    let owed_next = state.owed.first().map(|owed| (owed.at, owed.own_line));
+                    // A line that owes a comment is over, whatever room it has left.
+                    let owes =
+                        !state.suffix.is_empty() || !state.due.is_empty() || state.after_comment;
                     // The last item is measured against what follows the fill, for the reason a group is: whatever trails it — a closing bracket, a semicolon — has no break point before it and must share its line. A middle item is measured alone, since the items still to come will push that content onto a later line anyway.
-                    let placed = match items.is_empty() {
-                        true => fits(&mut item, &mut stack, room, true, owed_next),
-                        false => fits(&mut item, &mut [], room, true, owed_next),
-                    };
+                    let placed = !owes
+                        && match items.is_empty() {
+                            true => fits(&mut item, &mut stack, room, true, state.following),
+                            false => fits(&mut item, &mut [], room, true, state.following),
+                        };
                     match placed {
-                        true => state.write(" ")?,
-                        false => state.write("\n")?,
+                        true => state.text(" ")?,
+                        false => state.newline()?,
                     }
                 }
                 if !items.is_empty() {
@@ -504,21 +811,19 @@ fn run<'b, 'c>(
         }
     }
 
-    // Whatever the document never reached is owed at the end: a comment written past the final token has no mark beyond it to bring it out. The first may ride the last line if that line is free; each after it takes a line of its own, by the one-per-line rule `PrinterState::reached` states.
-    for (index, owed) in mem::take(&mut state.owed).into_iter().enumerate() {
-        match index == 0 && !owed.own_line && state.suffix.is_empty() {
-            true => state.suffix.push_str(&owed.text),
-            false => {
-                state.write("\n")?;
-                state.write(owed.text.trim_start())?;
-            }
-        }
+    // Whatever the document never reached is owed at its end: a comment written past the final character has nothing after it to bring it out. The first may ride the last line if that line is free; each after it takes a line of its own.
+    if let Some((original, mut cursor)) = state.following {
+        cursor.arrived = original.comments.len();
+        state.following = Some((original, cursor));
+        state.arrivals();
+        state.pay(false)?;
     }
 
-    // A document that ends without a newline still owes its pending suffix.
+    // A document that ends without a newline still owes the comment riding its last line.
     if !state.suffix.is_empty() {
         let suffix = mem::take(&mut state.suffix);
-        state.write(&suffix)?;
+        state.formatter.write_str(&suffix)?;
+        state.written += suffix.len();
     }
 
     Ok(state.annotations)
@@ -539,13 +844,7 @@ pub fn render_annotated(
     impl fmt::Display for Rendering {
         fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
             let printer = self.printer.borrow_mut().take().expect("rendered once");
-            let annotations = run(
-                printer,
-                formatter,
-                self.indent_step,
-                Some(self.width),
-                Vec::new(),
-            )?;
+            let annotations = run(printer, formatter, self.indent_step, Some(self.width), None)?;
             *self.annotations.borrow_mut() = annotations;
             Ok(())
         }
@@ -560,3 +859,6 @@ pub fn render_annotated(
     let text = rendering.to_string();
     (text, rendering.annotations.into_inner())
 }
+
+#[cfg(test)]
+mod tests;
