@@ -95,16 +95,16 @@ fn map_wall_spines_slope() {
     );
 }
 
-/// The per-iteration loop of `spines` with the map removed: the same LCG, the same key derivation, folding a checksum instead of inserting. The pair differs only in whether `Bytes/of_nat` runs, so the slope delta is the key construction's own price per insert.
-const KEY_OFNAT: &str = r#"
-use /std/{Str, Nat, Bytes, Option, Io};
+/// The per-iteration loop of `spines` with the map removed: the same LCG, the same key derivation, folding a checksum instead of inserting. The pair differs only in whether the two encodings an insert builds are built — its key's, and that of the leaf it is compared with, here the key the step before derived — so the slope delta is the key construction's own price per insert.
+const KEY_ENCODED: &str = r#"
+use /std/{Str, Nat, Bytes, Hash, Option, Io};
 
 let walk(n: Nat, x: Nat, s: Nat) -> Nat =
     match n: (_) => Nat
     | 0 => s
     | k + 1; ih =>
         let y = 75 * x % 65537;
-        walk(k, y, (s + y + Bytes/len(Bytes/of_nat(y))) % 1000003)
+        walk(k, y, (s + y + Bytes/len(Hash/hash(y)) + Bytes/len(Hash/hash(x))) % 1000003)
     end;
 
 let input = /std/read()!;
@@ -130,7 +130,7 @@ let walk(n: Nat, x: Nat, s: Nat) -> Nat =
     | 0 => s
     | k + 1; ih =>
         let y = 75 * x % 65537;
-        walk(k, y, (s + y + 2) % 1000003)
+        walk(k, y, (s + y + 4) % 1000003)
     end;
 
 let input = /std/read()!;
@@ -148,7 +148,7 @@ match input: (_) => Io({})
 end
 "#;
 
-/// The key's share of the insert: what `Bytes/of_nat` costs per call at `spines`' key magnitudes, isolated from the map. Sound as a pair of scalar loops because the collector's share of this workload measured nil (`spines_collection_decomposition`) — the live-set confound that would invalidate a whole-process ablation has no collections left to misattribute.
+/// The key's share of the insert: what the two encodings an insert builds cost at `spines`' key magnitudes, isolated from the map. Sound as a pair of scalar loops because the collector's share of this workload measured nil (`spines_collection_decomposition`) — the live-set confound that would invalidate a whole-process ablation has no collections left to misattribute.
 ///
 /// # How to run it
 ///
@@ -156,40 +156,31 @@ end
 /// cargo test --release --package curios --lib -- --ignored --nocapture map_wall_key_share
 /// ```
 ///
-/// The control folds a constant where the probe folds `Bytes/len(Bytes/of_nat(y))`, so the delta is `of_nat` plus one immediate `len` — read it as a slight upper bound on the key class. One call per insert makes the share arithmetic direct against `map_wall_spines_slope`'s figure.
+/// The control folds a constant where the probe folds the lengths of `Hash/hash` of this step's key and of the last's, so the delta is two encodings and two immediate `len`s — read it as a slight upper bound on the key class. An insert into a `Map(Nat, V)` builds those two, the map holding its keys and deriving their encodings where it compares them, so the share arithmetic is direct against `map_wall_spines_slope`'s figure read in the same sitting.
 ///
-/// # What it last printed
-///
-/// Taken at `447fbb0a1`, release, x86-64 Linux, seven readings in one sitting:
-///
-/// ```text
-/// outputs at N=1000: ofnat "923684", control "923689"
-///   key construction 151 153 154 155 155 156 159 ns/insert, median 155
-/// ```
-///
-/// **The key class is 14% of the insert `map_wall_spines_slope` reads — 155 ns against 1076** — so the workload confound `programs/README.md` flags is real but immaterial at these key magnitudes. Beside it, the collector's share measured nil (`spines_collection_decomposition`), and the optimized `spines` module's nine surviving `br_table`s all sit in string/UTF-8 decoding and `main`, none in `insert1`, `bit`, `crit`, `lookup`, `wedge`, or the fold, so the descent has no table left to replace. What remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
+/// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`), and the optimized `spines` module's surviving `br_table`s all sit in string/UTF-8 decoding and `main`, none in `insert1`, `bit`, `crit`, `lookup`, `wedge`, or the fold, so the descent has no table left to replace. What remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
 #[test]
 #[ignore = "measurement, timed: reports timings rather than asserting"]
 fn map_wall_key_share() {
-    let ofnat = cwasm_of(KEY_OFNAT);
+    let encoded = cwasm_of(KEY_ENCODED);
     let control = cwasm_of(KEY_CONTROL);
 
-    // Self-pinned outputs: the two arms legitimately differ (len versus the constant), so each pins its own.
-    let (_, ofnat_out) = run(&ofnat, 1000);
+    // Self-pinned outputs: the two arms legitimately differ (the lengths versus the constant), so each pins its own.
+    let (_, encoded_out) = run(&encoded, 1000);
     let (_, control_out) = run(&control, 1000);
     println!(
-        "outputs at N=1000: ofnat {:?}, control {:?}",
-        String::from_utf8_lossy(&ofnat_out).trim(),
+        "outputs at N=1000: encoded {:?}, control {:?}",
+        String::from_utf8_lossy(&encoded_out).trim(),
         String::from_utf8_lossy(&control_out).trim(),
     );
 
     let (n1, n2) = (25_000u64, 75_000u64);
     let slope =
         |cwasm: &[u8]| (timed(cwasm, n2) - timed(cwasm, n1)) * 1_000_000.0 / (n2 - n1) as f64;
-    let ofnat_ns = slope(&ofnat);
+    let encoded_ns = slope(&encoded);
     let control_ns = slope(&control);
     println!(
-        "  ofnat {ofnat_ns:.0} ns/iter, control {control_ns:.0} ns/iter, key construction {:.0} ns/insert",
-        ofnat_ns - control_ns,
+        "  encoded {encoded_ns:.0} ns/iter, control {control_ns:.0} ns/iter, key construction {:.0} ns/insert",
+        encoded_ns - control_ns,
     );
 }

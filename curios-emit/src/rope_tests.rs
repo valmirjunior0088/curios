@@ -43,6 +43,33 @@ fn bin_concat_builds_o1_nodes_inline_without_a_helper() {
     assert_absent(&wat, "call $bytes/slice");
 }
 
+/// Two immediates that fit their grain's envelope join without leaving it: the arm that tests both operands and their lengths stands ahead of the node, and ends in the immediate it builds. One arm a pair, so a join of three holds two.
+#[test]
+fn bin_concat_joins_two_immediates_by_arithmetic_ahead_of_the_node() {
+    for grain in [Grain::X, Grain::B] {
+        let operand = |bytes: Vec<u8>| {
+            curios_cont::Atom::Literal(curios_cont::Literal::Bin(
+                grain,
+                curios_num::Binary::from_bytes(bytes),
+            ))
+        };
+
+        let pair = wat(&intrinsic_main(
+            curios_cont::Intrinsic::BinConcat(grain, 2),
+            vec![operand(vec![1]), operand(vec![2])],
+        ));
+        assert_eq!(count(&pair, "block $bin_concat_rope"), 1, "{grain:?}");
+        assert_eq!(count(&pair, "br $bin_concat"), 1, "{grain:?}");
+        assert_contains(&pair, "struct.new $rope/bin/node");
+
+        let triple = wat(&intrinsic_main(
+            curios_cont::Intrinsic::BinConcat(grain, 3),
+            vec![operand(vec![1]), operand(vec![2]), operand(vec![3])],
+        ));
+        assert_eq!(count(&triple, "block $bin_concat_rope"), 2, "{grain:?}");
+    }
+}
+
 #[test]
 fn list_read_calls_the_list_read_helper() {
     assert_contains(&wat(&list_read()), "call $list/read");

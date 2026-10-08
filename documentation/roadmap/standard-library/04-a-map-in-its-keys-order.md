@@ -2,7 +2,7 @@
 
 Working specification for the order `/std/Map` enumerates its keys in: the law that holds every key type's encoding to its order, the encodings of `Nat` and `Int` rewritten to meet it, the proof that the trie walks its encodings in order, and the two walks that read an order off it.
 
-It is independent of every other spec. Stage 0 is the compiler's, and removes what a key costs to build; stages 3 and 4 change the bytes `/std/Hash` gives a `Nat` and an `Int`, which every map of either is shaped by.
+It is independent of every other spec. Stages 3 and 4 change the bytes `/std/Hash` gives a `Nat` and an `Int`, which every map of either is shaped by.
 
 ## What this builds on
 
@@ -15,7 +15,7 @@ Each observed at `196ee2723`.
 - **`Map/insert` may not stand in a type.** `crit`'s two walks count upward, so the totality obligation refuses a proposition that names a map built by `insert`: `'/std/Map/insert', which is not known to terminate`. `has`, `get`, `remove` and `keys` stand in one. With `crit` a walk on its two runs' structure and a ladder over a byte's eight places, the same trie's `insert` stands in a type and answers what it did.
 - **A fact of every byte is decided by running it.** `Nat/shr` and `Nat/and` are atoms to the elaborator, so the trie's bit test `Nat/and(Nat/shr(x, 8 - o), 1)` is read by no proof ([what the carriers' algebra leaves undecided](../arithmetic/09-left-undecided-by-the-carriers-algebra.md)); a decision over every number below a bound, `True/qed()` at 256, with the lemma that it then holds of each, states the test at each of the eight places as the parity of a quotient, of every byte.
 - **A map can hold what is true of its trie.** A structure under `use Key(K)` with a hidden proof over its nodes is built by `Map/empty` with nothing written, and a closed trie's reduces.
-- **A `Bytes` of at most three bytes is an immediate, and appending to one is arithmetic** ([A field is declared at the carrier its shape names](../../design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md); `emit_bin_append`, `curios-emit/src/code_emitter.rs`).
+- **A `Bytes` of at most three bytes is an immediate, and one built from two that fit it is arithmetic**, whichever end it is built from ([A field is declared at the carrier its shape names](../../design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md); `emit_bin_append` and `emit_bin_concat`, `curios-emit/src/code_emitter.rs`). An insert into a `Map(Nat, V)` builds two keys, its own and that of the leaf it is compared with.
 
 ## The gap
 
@@ -26,8 +26,6 @@ Each observed at `196ee2723`.
 **That the trie walks its encodings in order is nowhere a theorem, and cannot be stated.** `Map` carries no invariant, no proposition may name an `insert`, and the bit test is opaque to a proof, so the order a program meets in a fold is a fact about one function's code.
 
 **A map has no operation that reads an order**: no least key and no greatest.
-
-**A key costs an insert more than its length does.** A packed value built from the front takes the rope's path, `Bytes/of_nat` builds from the front, an insert builds two keys, and the measurement that reads the share reads one ([compilation findings](../compilation/00-findings.md)).
 
 ## Prior art
 
@@ -54,7 +52,6 @@ Taken before stage 1, each with its reason, so a stage meets none of them as a f
 
 ## Stages
 
-0. **A concatenation of two immediates is an immediate.** `BinConcat` takes the immediate's path where both operands are immediates and their lengths fit the envelope, at both grains; `map_wall_key_share` folds the encoding `/std/Map` calls, twice an insert. It deletes the compilation finding it fixes.
 1. **The order of bytes, as laws.** `Bytes/ord` answers `eq` at one run, carries across a middle run, and answers through a shared prefix as it does past it; `Bytes/ord/below` with its facts.
 2. **The decision of every number below a bound**, with the lemma that it holds of each: the piece stage 7 reads the bit test through.
 3. **`Nat` in its order.** `rank`, `top`, the first byte and the bytes appended to it; `Hash(Nat)` is the four; the law, by the first bytes where the ranks or the tops differ and by the bytes where they agree; `Key(Nat)`'s injectivity from it.
@@ -68,14 +65,13 @@ Taken before stage 1, each with its reason, so a stage meets none of them as a f
 
 ## Verification
 
-- Stage 0: `curios-emit`'s `rope_tests.rs` and `capacity_tests.rs` over a concatenation at each side of the envelope at both grains; `curios-std`'s corpus.
 - Stage 3: `Map(Nat, V)` over `256, 1, 2, 65536, 255, 257, 0, 513` enumerates in number order, and so does one over `15`, `16`, `4095`, `4096`, `2^20 - 1`, `2^20`, `16 * 256^6 - 1`, `16 * 256^6`, `16 * 256^13` and `16 * 256^14`, across the first byte's own boundaries; `curios/src/tests/derive.rs`'s three encodings are retaken.
 - Stage 4: `Map(Int, V)` over each of those and its `-1 - n` enumerates in number order.
 - Stage 5: `curios/src/tests/map.rs` refuses a witness whose encoding is out of its order as it refuses one that collides; a function under `use Key(K)` alone sorts its keys and states the sort's order.
 - Stage 6: a claim in `curios-std/src/tests/data/map.crs` states what an `insert` answers, by `Eq/refl()`.
 - Stage 8: `wonder stage wasm-optm` of `programs/spines/spines.crs` is the module it was before the stage, the proofs having erased.
 - Stage 10: `least` and `greatest` of a map of each key type are the first and last of `List/sort` of its keys, and `none` of the empty map.
-- Stages 0, 3, 4, 6 and 8, what an insert costs: `programs/spines/spines.crs` and `map_wall_key_share`'s loop compiled with `curios compile` by the compiler built before the stage and by the one after, each run at 25 000 and at 75 000 inserts, the slope between them a median of at least eleven readings, each the least of three runs, the two compilers' programs interleaved in one sitting. A stage whose span stands clear above the span before it stops. The figures `map_wall` records are read on a quiet machine.
+- Stages 3, 4, 6 and 8, what an insert costs: `programs/spines/spines.crs` and `map_wall_key_share`'s loop compiled with `curios compile` by the compiler built before the stage and by the one after, each run at 25 000 and at 75 000 inserts, the slope between them a median of at least eleven readings, each the least of three runs, the two compilers' programs interleaved in one sitting. A stage whose span stands clear above the span before it stops. The figures `map_wall` records are read on a quiet machine.
 - Every stage of `/std`: the prelude's build is measured before and after, naming the stage, and the table of stage 7 by its own count.
 
 **Readings behind the decisions.** Timed at `196ee2723` on a machine under load, so each is a ratio. The codes: `programs/spines/spines.crs` with its map a `Map(Bytes, Nat)` keyed by the code under test, of the orbit's `y` and of `y * 15`, which is below `2^20`; each compiled with `curios compile` and run at 4 000 and at 12 000 inserts, the slope between them a median of eleven interleaved readings, each the least of three runs. Of `y`: `Bytes/of_nat` 2 424 ns an insert (1 253 to 6 258), a whole byte of length 1 599 (978 to 3 023), decision 2's code 1 319 (129 to 3 220). Of `y * 15`: 2 833 (1 850 to 5 041), 3 545 (613 to 7 756) and 1 945 (1 121 to 2 995). `crit`: the library's trie copied into a program over `Bytes` keys, with its two counts and with the walk and the ladder, the slope between 25 000 and 75 000 inserts over fifteen readings: 2 594 (845 to 3 376) and 2 404 (1 847 to 3 269).
@@ -101,7 +97,7 @@ Taken before stage 1, each with its reason, so a stage meets none of them as a f
 - A key type is declared with the proof that its encoding is in its order, and `Nat` and `Int` are.
 - The keys of a map are in their order, by a theorem under `use Key(K)` alone.
 - The least and the greatest key of a map are read off it, each with its theorem.
-- An insert costs no more than it did at stage 0.
+- An insert costs no more than it did before stage 3.
 
 ## Retirement
 

@@ -1,7 +1,8 @@
 use {
     super::{
         BigHelper, Bitwise, Context, EmissionCode, EmissionValueName, FltHelper, ImmediateLayout,
-        LoadAs, RopeData, Table, box_instr, call, either, get, rounding_code, set, tee, when,
+        LoadAs, RopeData, Table, block, box_instr, br, br_if, call, either, get, rounding_code,
+        set, tee, when,
     },
     curios_num::{Grain, Rounding},
 };
@@ -1411,6 +1412,148 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_instr(curios_wasm::Instr::Call { func_name: norm });
     }
 
+    /// Lower a packed concatenation with the immediate split, pair by pair from the left. Two immediates whose lengths together fit their grain's envelope join by arithmetic — the right payload shifted past the left's elements, the two lengths summed — with no box, no node and no normalisation; every other pair is the rope's: a node over its boxed operands, a side that is empty answering the other, normalised since that answer may be a boxed immediate. Fewer than two operands join nothing and take the rope's lowering whole.
+    ///
+    /// **The split is here for what a cons costs.** `x[h, ..t]` is a chunk of one concatenated with `t`, so a short run built from the front is this lowering once an element; without the arithmetic arm each step boxes both operands, allocates their node and gathers it back into the immediate it was always going to be.
+    fn emit_bin_concat(
+        &mut self,
+        grain: Grain,
+        result_local: &curios_wasm::LocalName,
+        operands: &'a [EmissionValueName],
+    ) {
+        let rope = self.context.table().bin_rope();
+        let (norm, boxf) = match grain {
+            Grain::X => (
+                self.context.table().bytes_norm_func(),
+                self.context.table().bytes_box_func(),
+            ),
+            Grain::B => (
+                self.context.table().bits_norm_func(),
+                self.context.table().bits_box_func(),
+            ),
+        };
+        let (first, rest) = match operands {
+            [first, rest @ ..] if !rest.is_empty() => (first, rest),
+            _ => {
+                self.emit_rope_concat(
+                    result_local,
+                    operands,
+                    LoadAs::Bin(grain),
+                    &rope,
+                    Some(norm),
+                );
+                return;
+            }
+        };
+
+        let layout = ImmediateLayout::of(grain);
+        let (len_shift, payload_mask, envelope) =
+            (layout.len_shift, layout.payload_mask(), layout.envelope);
+        let word = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
+        let left = self.context.push_local("bin_left", word.clone());
+        let right = self.context.push_local("bin_right", word);
+        let length = |local: &curios_wasm::LocalName| {
+            [
+                get(local),
+                curios_wasm::Instr::I32Const { value: len_shift },
+                curios_wasm::Instr::I32ShrU,
+            ]
+        };
+        let is_rope = [
+            curios_wasm::Instr::RefTest {
+                ref_type: Table::int_type(false),
+            },
+            curios_wasm::Instr::I32Eqz,
+            br_if("bin_concat_rope"),
+        ];
+
+        // The accumulator: the first operand as it is written, and the result local once a pair has settled into it.
+        let mut lhs = self.context.load_value_instrs(first, LoadAs::NonNull);
+        let mut lhs_rope = self.context.load_value_instrs(first, LoadAs::Bin(grain));
+        for operand in rest {
+            let rhs = self.context.load_value_instrs(operand, LoadAs::NonNull);
+            let rhs_rope = self.context.load_value_instrs(operand, LoadAs::Bin(grain));
+
+            // Immediate, fitting: left payload | right payload << left's elements | (left length + right length) << len_shift, the position one byte or one bit an element per the grain.
+            let mut joined = lhs.clone();
+            joined.extend(is_rope.clone());
+            joined.extend(rhs.clone());
+            joined.extend(is_rope.clone());
+            joined.extend(lhs);
+            joined.extend([
+                Self::imm_cast(),
+                curios_wasm::Instr::I31GetU,
+                tee(&left),
+                curios_wasm::Instr::I32Const { value: len_shift },
+                curios_wasm::Instr::I32ShrU,
+            ]);
+            joined.extend(rhs);
+            joined.extend([
+                Self::imm_cast(),
+                curios_wasm::Instr::I31GetU,
+                tee(&right),
+                curios_wasm::Instr::I32Const { value: len_shift },
+                curios_wasm::Instr::I32ShrU,
+                curios_wasm::Instr::I32Add,
+                curios_wasm::Instr::I32Const { value: envelope },
+                curios_wasm::Instr::I32GtU,
+                br_if("bin_concat_rope"),
+                get(&left),
+                curios_wasm::Instr::I32Const {
+                    value: payload_mask,
+                },
+                curios_wasm::Instr::I32And,
+                get(&right),
+                curios_wasm::Instr::I32Const {
+                    value: payload_mask,
+                },
+                curios_wasm::Instr::I32And,
+            ]);
+            joined.extend(length(&left));
+            if matches!(grain, Grain::X) {
+                joined.extend([
+                    curios_wasm::Instr::I32Const { value: 3 },
+                    curios_wasm::Instr::I32Shl,
+                ]);
+            }
+            joined.extend([curios_wasm::Instr::I32Shl, curios_wasm::Instr::I32Or]);
+            joined.extend(length(&left));
+            joined.extend(length(&right));
+            joined.extend([
+                curios_wasm::Instr::I32Add,
+                curios_wasm::Instr::I32Const { value: len_shift },
+                curios_wasm::Instr::I32Shl,
+                curios_wasm::Instr::I32Or,
+                curios_wasm::Instr::RefI31,
+                br("bin_concat"),
+            ]);
+
+            // Rope: the node over the boxed pair, read back and normalised.
+            let mut pair = vec![block("bin_concat_rope", joined)];
+            pair.extend(self.concat_pair_instrs(lhs_rope, rhs_rope, result_local, &rope));
+            pair.extend([
+                get(result_local),
+                curios_wasm::Instr::RefCast {
+                    ref_type: curios_wasm::RefType {
+                        is_nullable: false,
+                        heap_type: curios_wasm::HeapType::Concrete(rope.base.clone()),
+                    },
+                },
+                call(&norm),
+            ]);
+
+            self.emit_instr(curios_wasm::Instr::Block {
+                label_name: curios_wasm::LabelName::from("bin_concat"),
+                block_type: curios_wasm::BlockType::Inline(Table::top_type(false)),
+                instructions: pair,
+            });
+            self.emit_instr(set(result_local));
+
+            lhs = vec![get(result_local), curios_wasm::Instr::RefAsNonNull];
+            lhs_rope = vec![get(result_local), call(&boxf)];
+        }
+    }
+
     /// Lower a packed append with the immediate split. A base inside its grain's envelope appends by arithmetic — mask the element, OR it at the next slot, bump the length — with no allocation at all; a full immediate boxes into a leaf under a fresh node, entering the rope world one element past the envelope; a rope base (past the envelope, by canonicity) builds the ordinary node, whose result can never be small, so no arm normalises.
     fn emit_bin_append(
         &mut self,
@@ -2224,12 +2367,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
             }
             curios_cont::Intrinsic::BinConcat(grain, _) => {
-                let norm = match grain {
-                    Grain::B => Some(self.context.table().bits_norm_func()),
-                    Grain::X => Some(self.context.table().bytes_norm_func()),
-                };
-                let rope = self.context.table().bin_rope();
-                self.emit_rope_concat(&result_local, args, LoadAs::Bin(grain), &rope, norm);
+                self.emit_bin_concat(grain, &result_local, args);
             }
             curios_cont::Intrinsic::BinReinterp(grain) => {
                 // The norm is the *result*'s, not the operand's: a run that crosses grains lands at a different length, and whether it fits an immediate is a question about where it lands.
