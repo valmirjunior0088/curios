@@ -1,5 +1,6 @@
 -- `Map`, the crit-bit trie over `Key`-encoded bytes, and `Set` over it: lookups, the canonical shape, and the rewriting functions.
-use /std/{Str, Nat, Int, Bool, Bytes, List, Option, Eq, Hash, Ord, Ordering, Map, Set, Test};
+use /std/{Str, Nat, Int, Bool, Byte, Bytes, Bits, List, Option, Eq, Hash, Ord, Ordering, Map, Set,
+    Test};
 
 test get_on_empty_is_none =
     let m: Map(Str, Str) = Map/empty();
@@ -139,6 +140,47 @@ let _a_sets_elements_are_in_their_order(
     s: Set(K),
 ) -> List/Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(Set/to_list(s)) =
     Set/to_list/pairwise(s);
+
+-- The keys of the least and of the greatest entry of the map of `keys`.
+let ends(@K: Type, use Map/Key(K), keys: List(K)) -> List(Option(K)) =
+    let m: Map(K, Nat) = Map/of(List/map(keys, (k: K) => (k, 0)));
+    [Option/map(Map/least(m), ((k, _)) => k), Option/map(Map/greatest(m), ((k, _)) => k)];
+
+-- The first and the last of `keys` sorted.
+let sorted_ends(@K: Type, use Ord(K), keys: List(K)) -> List(Option(K)) =
+    let sorted = List/sort(keys);
+    [List/try_get(sorted, 0), List/last(sorted)];
+
+-- The least and the greatest key of a map are the first and the last of its keys sorted, at every key type, and the empty map has neither.
+test the_least_and_the_greatest_key_are_the_ends_of_the_sorted_keys =
+    let naturals: List(Nat) = [256, 1, 65536, 0, 255, 4096];
+    let integers: List(Int) = [+2, -3, +0, -1, -65536, +4096];
+    let texts: List(Str) = ["b", "", "ab", "a"];
+    let runs: List(Bytes) = [x[0x01, 0x00], x[], x[0xFF], x[0x01]];
+    let bytes: List(Byte) = [0x7F, 0x00, 0xFF, 0x80];
+    let truths: List(Bool) = [true, false];
+    let bits: List(Bits) = [b[true, false], b[], b[false], b[true]];
+    let none: List(Nat) = [];
+    Test/all([
+        Test/equal(ends(naturals), sorted_ends(naturals)),
+        Test/equal(ends(integers), sorted_ends(integers)),
+        Test/equal(ends(texts), sorted_ends(texts)),
+        Test/equal(ends(runs), sorted_ends(runs)),
+        Test/equal(ends(bytes), sorted_ends(bytes)),
+        Test/equal(ends(truths), sorted_ends(truths)),
+        Test/equal(ends(bits), sorted_ends(bits)),
+        Test/equal(ends(none), [Option/none(), Option/none()])]);
+
+-- No key of a map is below its least or above its greatest, and each of the two is a key of the map: the theorems beside the two walks, read under the map's key alone.
+let _no_key_is_past_a_maps_ends(
+    @K: Type,
+    use Map/Key(K),
+    @V: Type,
+    m: Map(K, V),
+    x: K,
+    i: List/Member()(x, Map/keys(m)),
+) -> {Map/least/Below(Map/least(m), x), Map/greatest/Above(Map/greatest(m), x)} =
+    (Map/least/below(m, x, i), Map/greatest/above(m, x, i));
 
 -- Setting an existing key goes down the `replace` path: same size, new value, no duplicate leaf.
 test insert_replaces_without_growing =

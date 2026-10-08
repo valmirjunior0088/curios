@@ -810,3 +810,101 @@ pub let ascending(
                     Eq/sym(Eq/trans(Key/monotone(x, y), across(c, z, o, sound, x, y, i, j))),
                     True/qed()))
     end;
+
+--- The entry a walk down the zero sides ends at, which is the one of the least key.
+pub let least(@K: Type, @V: Type, t: Node(K, V)) -> {K, V} =
+    match t | leaf(k, v) => (k, v) | fork(_, z, _) => least(z) end;
+
+--- The entry a walk down the one sides ends at, which is the one of the greatest key.
+pub let greatest(@K: Type, @V: Type, t: Node(K, V)) -> {K, V} =
+    match t | leaf(k, v) => (k, v) | fork(_, _, o) => greatest(o) end;
+
+--- The least entry's key is a key under the node.
+pub let least_among(@K: Type, @V: Type, t: Node(K, V)) -> Member()(least(t).0, keys(t)) =
+    match t
+    | leaf(_, _) => Member/here()
+    | fork(_, z, o) => Member/left(keys(o), least_among(z))
+    end;
+
+--- The greatest entry's key is a key under the node.
+pub let greatest_among(@K: Type, @V: Type, t: Node(K, V)) -> Member()(greatest(t).0, keys(t)) =
+    match t
+    | leaf(_, _) => Member/here()
+    | fork(_, z, o) => Member/right(keys(z), greatest_among(o))
+    end;
+
+--- No key under a sound node is below its least entry's.
+pub let least_below(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    t: Node(K, V),
+    sound: Sound(t),
+    x: K,
+    i: Member()(x, keys(t)),
+) -> Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(least(t).0, x)) =
+    match t
+    | leaf(k, _) =>
+        Member/uncons(
+            i,
+            (e) =>
+                Eq/subst(
+                    (y: K) => Holds(Ordering/is_le(Ord/ord(k, y))),
+                    Eq/sym(e),
+                    Eq/subst(
+                        (r: Ordering) => Holds(Ordering/is_le(r)),
+                        Eq/sym(Key/refl(k)),
+                        True/qed())),
+            (rest) => match Member/absent(rest) end)
+    | fork(c, z, o) =>
+        Member/split(
+            keys(z),
+            i,
+            (in_zero) => least_below(z, sound.zero, x, in_zero),
+            (in_one) =>
+                Eq/subst(
+                    (r: Ordering) => Holds(Ordering/is_le(r)),
+                    Eq/sym(
+                        Eq/trans(
+                            Key/monotone(least(z).0, x),
+                            across(c, z, o, sound, least(z).0, x, least_among(z), in_one))),
+                    True/qed()))
+    end;
+
+--- No key under a sound node is above its greatest entry's.
+pub let greatest_above(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    t: Node(K, V),
+    sound: Sound(t),
+    x: K,
+    i: Member()(x, keys(t)),
+) -> Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(x, greatest(t).0)) =
+    match t
+    | leaf(k, _) =>
+        Member/uncons(
+            i,
+            (e) =>
+                Eq/subst(
+                    (y: K) => Holds(Ordering/is_le(Ord/ord(y, k))),
+                    Eq/sym(e),
+                    Eq/subst(
+                        (r: Ordering) => Holds(Ordering/is_le(r)),
+                        Eq/sym(Key/refl(k)),
+                        True/qed())),
+            (rest) => match Member/absent(rest) end)
+    | fork(c, z, o) =>
+        Member/split(
+            keys(z),
+            i,
+            (in_zero) =>
+                Eq/subst(
+                    (r: Ordering) => Holds(Ordering/is_le(r)),
+                    Eq/sym(
+                        Eq/trans(
+                            Key/monotone(x, greatest(o).0),
+                            across(c, z, o, sound, x, greatest(o).0, in_zero, greatest_among(o)))),
+                    True/qed()),
+            (in_one) => greatest_above(o, sound.one, x, in_one))
+    end;

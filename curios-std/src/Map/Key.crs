@@ -133,6 +133,10 @@ satisfy Key(Int) {
     monotone = Hash/int/monotone,
 }
 
+--- A key is `eq` to itself in its order, as its encoding is in the order of bytes.
+pub let refl(@K: Type, use Key(K), a: K) -> Eq()(Ord/ord(a, a), Ordering/eq()) =
+    Eq/trans(Key/monotone(a, a), Bytes/ord/refl(Hash/hash(a)));
+
 --- A key's order answers the flipped answer with its operands swapped, as the order of bytes does.
 ---
 --- Proved once for every key from [`monotone`], so no witness states it and a sort under `use Key(K)` has its law from the dictionary.

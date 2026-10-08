@@ -1,0 +1,79 @@
+use /std/{List, Option, Eq, Ord};
+use /std/Bool/{True, False, Holds};
+use /std/List/{Member};
+use /std/Map/{Map, Key, Node, keys, Grounded, grounded};
+use /std/Map/Node/{let Node};
+
+--- The entry of the least key, or `none` of the empty map: the one a walk down the trie's zero sides ends at.
+pub let least(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Option({K, V}) =
+    match m.root | none() => Option/none() | some(n) => Option/some(Node/least(n)) end;
+
+--- That `found` is an entry whose key is one of `l`, or no entry at all.
+pub let Among(@K: Type, @V: Type, found: Option({K, V}), l: List(K)) -> Prop =
+    match found | none() => True | some(entry) => Member()(entry.0, l) end;
+
+--- That `found` is an entry whose key is at or below `x` in the keys' order.
+pub let Below(@K: Type, use Key(K), @V: Type, found: Option({K, V}), x: K) -> Prop =
+    match found
+    | none() => False
+    | some(entry) => Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(entry.0, x))
+    end;
+
+-- The keys under a root hold the key of the root's least entry.
+let among_root(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    root: Option(Node(K, V)),
+) -> Among(
+    match root | none() => Option/none() | some(n) => Option/some(Node/least(n)) end,
+    match root | none() => [] | some(n) => Node/collect(n, []) end) =
+    match root
+    | none() => True/qed()
+    | some(n) =>
+        Eq/subst(
+            (l: List(K)) => Member()(Node/least(n).0, l),
+            Eq/sym(Node/collected(n, [])),
+            Node/least_among(n))
+    end;
+
+-- A key under a sound root is at or above the key of the root's least entry.
+let below_root(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    root: Option(Node(K, V)),
+    ground: Grounded(root),
+    x: K,
+    i: Member()(x, match root | none() => [] | some(n) => Node/collect(n, []) end),
+) -> Below(match root | none() => Option/none() | some(n) => Option/some(Node/least(n)) end, x) =
+    match root: (r) =>
+        (
+            ground: Grounded(r),
+            i: Member()(x, match r | none() => [] | some(n) => Node/collect(n, []) end)) -> Below(
+            match r | none() => Option/none() | some(n) => Option/some(Node/least(n)) end,
+            x)
+    | none() => (_, i) => Member/absent(i)
+    | some(n) =>
+        (ground, i) =>
+            Node/least_below(
+                n,
+                ground,
+                x,
+                Eq/subst((l: List(K)) => Member()(x, l), Node/collected(n, []), i))
+    end(ground, i);
+
+--- A map's least key is one of its keys.
+pub let among(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Among(least(m), keys(m)) =
+    among_root(m.root);
+
+--- No key of a map is below its least: a map that has a key has a least entry, whose key is at or below it.
+pub let below(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    m: Map(K, V),
+    x: K,
+    i: Member()(x, keys(m)),
+) -> Below(least(m), x) =
+    below_root(m.root, grounded(m.sound), x, i);

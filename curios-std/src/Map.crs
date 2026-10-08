@@ -158,6 +158,14 @@ pub let entries(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List({K, V}) =
 pub mod keys;
 pub use keys/{let keys};
 
+--- A map's least entry, with the theorems that its key is the map's and that no key of the map is below it.
+pub mod least;
+pub use least/{let least};
+
+--- A map's greatest entry, with the theorems that its key is the map's and that no key of the map is above it.
+pub mod greatest;
+pub use greatest/{let greatest};
+
 --- The values, in the order of their keys.
 pub let values(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List(V) =
     fold(m, [], (_, v, acc) => [..acc, v]);
