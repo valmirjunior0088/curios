@@ -456,7 +456,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 let (head, rest) = body
                     .split_first()
                     .expect("a loop layout body is never empty");
-                debug_assert!(
+                assert!(
                     matches!(head, LayoutItem::Block(first) if first == header),
                     "a loop layout leads with its header block",
                 );

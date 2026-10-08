@@ -834,7 +834,7 @@ impl<'s> Context<'s> {
         }
 
         // Locally-nameless discipline: every scope is opened before descent, so a term in elaboration position carries no loose bound indices — which is what makes it keyable without any binder context.
-        debug_assert!(term.closed(), "elaboration-cache key has loose indices");
+        assert!(term.closed(), "elaboration-cache key has loose indices");
 
         match self.typing.caches.elaboration_get(
             term,

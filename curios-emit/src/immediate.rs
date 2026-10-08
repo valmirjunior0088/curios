@@ -27,11 +27,11 @@ impl ImmediateLayout {
             envelope,
             len_shift,
         };
-        debug_assert!(
+        assert!(
             layout.payload_bits() <= len_shift,
             "the payload must fit below the length field"
         );
-        debug_assert!(
+        assert!(
             envelope < (1 << (31 - len_shift)),
             "the length field must count the whole envelope"
         );
@@ -71,7 +71,7 @@ impl ImmediateLayout {
     ///
     /// The compile-time twin of `rope_emitter`'s `norm` helper, and the reason the two compile-time packers do not each spell the fold: they are one instruction sequence apart — a global initializer against an inline literal — and identical in what they compute.
     pub(crate) fn pack(&self, length: usize, bytes: &[u8]) -> i32 {
-        debug_assert!(length <= self.envelope as usize, "the value must fit");
+        assert!(length <= self.envelope as usize, "the value must fit");
         bytes.iter().enumerate().fold(
             (length as i32) << self.len_shift,
             |packed, (index, &byte)| packed | (byte as i32) << (8 * index),

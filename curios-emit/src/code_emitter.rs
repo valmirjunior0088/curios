@@ -525,7 +525,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     ) {
         match self.context.table().raw_carrier(dest.value_name) {
             Some(curios_cont::Repr::Nat) => {
-                debug_assert!(
+                assert!(
                     matches!(finish, Fast::Small),
                     "a word-held result is one its operands bound, which no fast path can outgrow",
                 );
@@ -1645,7 +1645,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         match op {
             EmissionCode::Intrinsic(op, args) => self.emit_intrinsic(&dest, *op, args),
             EmissionCode::ListMap(src, f) => {
-                debug_assert!(
+                assert!(
                     self.context.table().raw_carrier(value_name).is_none(),
                     "`{value_name}` maps a list into a register, where the result is a rope",
                 );
@@ -1742,7 +1742,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             _ => op.result_repr(),
         };
         // A result its literal operands bound is the one exception: the analysis may hold it in a word although the operation produces a reference in general, and the lowering then delivers the word.
-        debug_assert!(
+        assert!(
             self.context
                 .table()
                 .raw_carrier(value_name)

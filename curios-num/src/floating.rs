@@ -123,7 +123,7 @@ fn round(
         let headroom = u32::try_from(exponent - MIN_EXPONENT).expect("an exponent above the grid");
         let left = room.min(headroom);
 
-        debug_assert!(!sticky, "a residue below a magnitude that loses no bits");
+        assert!(!sticky, "a residue below a magnitude that loses no bits");
 
         return Floating::pack(
             negative,
@@ -262,7 +262,7 @@ impl Floating {
         }
 
         if magnitude < HIDDEN_BIT {
-            debug_assert_eq!(exponent, MIN_EXPONENT, "a subnormal off the grid");
+            assert_eq!(exponent, MIN_EXPONENT, "a subnormal off the grid");
 
             return Self {
                 bits: Self::sign_bit(negative) | magnitude,

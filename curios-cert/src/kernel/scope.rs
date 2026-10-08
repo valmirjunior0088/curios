@@ -268,7 +268,7 @@ impl Scope {
     ///
     /// A restated equation goes through [`Scope::refine`] like any other, so one the solution leaves with no local is not recorded, for the reason no local-free equation is. It is pushed inside the arm's bracket, and [`Scope::retract`] both drops it and lets the recorded one answer again.
     pub(super) fn restate(&mut self, solutions: &[(Free, Term)]) -> bool {
-        debug_assert!(
+        assert!(
             self.hidden.is_none(),
             "an arm's solution restated while an equation's reduced spelling was being settled"
         );
@@ -476,7 +476,7 @@ impl Scope {
     ///
     /// Where equations are withheld — for a settlement, or for a question asked under the view one was made in ([`Scope::hide_refinements_from`]) — only a scope opened inside the withholding closes here. That is structural rather than checked by discipline: `Kernel::scoped` is this method's only caller and a withholding is a bracket as well, so the two nest. A settlement runs reduction, which opens no binder scope; a question runs conversion, which opens them and assumes no equation in them.
     pub(super) fn retract(&mut self, mark: Mark) -> bool {
-        debug_assert!(
+        assert!(
             self.hidden.is_none_or(|limit| limit <= mark.refinements),
             "a scope closed past the equations a settlement or a question was withholding"
         );

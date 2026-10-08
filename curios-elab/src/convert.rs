@@ -2590,7 +2590,7 @@ impl Convert {
                 && !literal(&that)
             {
                 let expanded = self.eta_expand_neutral(context, this, that, type_)?;
-                debug_assert!(
+                assert!(
                     expanded,
                     "eta by a function or a record type enqueues its goals"
                 );

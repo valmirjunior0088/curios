@@ -82,3 +82,23 @@ fn the_widest_reach_reads_back_beside_every_flag() {
     assert!(read.has_local_free && read.has_metavar && read.has_transient);
     assert!(read.has_universe_meta && read.has_universe_data);
 }
+
+/// A reach at the packed width is refused, in every build: packed unmasked it would read back truncated, an understated reach, which a pruning traversal trusts to pass over a subterm.
+#[test]
+#[should_panic(expected = "reach exceeds its packed width")]
+fn a_reach_at_the_packed_width_is_refused() {
+    let Ok(reach) = usize::try_from(1u64 << REACH_BITS) else {
+        panic!("reach exceeds its packed width: no reach this host can spell is as wide");
+    };
+
+    ScalarCache::default().fill(Scalars {
+        reach,
+        has_local_free: false,
+        has_metavar: false,
+        has_transient: false,
+        has_universe_meta: false,
+        has_universe_data: false,
+        has_group: false,
+        hash: 0,
+    });
+}

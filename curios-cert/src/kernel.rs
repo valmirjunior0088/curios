@@ -1194,7 +1194,7 @@ impl<'s> Kernel<'s> {
     /// Called from both `check` and `infer`, because a term's type is its type however the judgment reached it. The orchestration lives here rather than on [`Positions`] because the middle of it — `erased_half` — needs the whole kernel; see `Positions::begin` on why that bracket cannot be a closure.
     pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) -> Option<usize> {
         // Typing is a judgment's: nothing is typed under plain reduction (`Kernel::plainly`), which is why the positions classified here and the types remembered beside them are filed once.
-        debug_assert!(
+        assert!(
             !self.scope.plain(),
             "a term was typed under plain reduction"
         );

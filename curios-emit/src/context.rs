@@ -460,7 +460,7 @@ impl<'a, 'b> Context<'a, 'b> {
     fn resume_instrs(&self, resume: &EmissionBlockName, arity: usize) -> Vec<curios_wasm::Instr> {
         let block_data = self.find_block(resume);
 
-        debug_assert!(
+        assert!(
             block_data.params().iter().all(|(name, _)| matches!(
                 self.table().raw_carrier(name),
                 None | Some(curios_cont::Repr::Flt)
@@ -910,7 +910,7 @@ impl<'a, 'b> Context<'a, 'b> {
     ) -> (Vec<curios_wasm::Instr>, Vec<Option<Waiting>>) {
         let signature = function.signature();
 
-        debug_assert_eq!(
+        assert_eq!(
             operands.len(),
             signature.params.len(),
             "{} operand count does not match its signature",

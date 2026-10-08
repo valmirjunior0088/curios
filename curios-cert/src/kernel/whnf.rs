@@ -354,7 +354,7 @@ pub(crate) fn canonical_operands(kernel: &mut Kernel, term: &Term) -> Result<Ter
 ///
 /// The body is reduced by a nested `whnf`, which remembers it under the body's term for the rest of the declaration, so the next occurrence of the name in this declaration continues from the reduct instead of re-deriving it — and nothing is remembered past the declaration. The nested `whnf` recurses one native frame per link of a definition-reference chain, which is authored depth, not data depth.
 fn step_var(kernel: &mut Kernel, var: Var) -> Result<Step, ReduceError> {
-    debug_assert!(
+    assert!(
         !kernel.binds(var.unwrap()),
         "a `let`-bound local reached reduction by name"
     );

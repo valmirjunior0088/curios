@@ -42,7 +42,7 @@ impl FreeCache {
             FreeVars::Owned(owned) => Rc::new(owned),
         };
         let filled = self.frees.set(frees);
-        debug_assert!(filled.is_ok(), "a free-variable cache fills at most once");
+        assert!(filled.is_ok(), "a free-variable cache fills at most once");
     }
 
     /// Whether `name` is in the filled set. A membership lookup, not a set handout — and only meaningful after the owning term's walk has filled this node, which every caller guarantees by warming first.

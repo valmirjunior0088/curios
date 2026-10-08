@@ -84,8 +84,8 @@ impl ScalarCache {
 
     /// Memoize the node's scalars — the whole value, once. `reach` must fit its packed width, which any representable term satisfies: it is bounded by the term's binder depth, and understating it would let a pruning traversal skip a subtree it still has to rewrite.
     pub(crate) fn fill(&self, scalars: Scalars) {
-        debug_assert!(!self.is_filled(), "a scalar cache fills at most once");
-        debug_assert!(
+        assert!(!self.is_filled(), "a scalar cache fills at most once");
+        assert!(
             (scalars.reach as u64) < 1 << REACH_BITS,
             "reach exceeds its packed width"
         );
