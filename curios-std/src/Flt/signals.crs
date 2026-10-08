@@ -29,7 +29,7 @@ pub let add(r: Rounding, a: Flt, b: Flt) -> Exceptions =
     | Flt/is_signaling(a) || Flt/is_signaling(b) => invalid
     | Flt/is_nan(a) || Flt/is_nan(b) => Exceptions/none
     | (some(x), some(y)) = (Dyadic/try_of(a), Dyadic/try_of(b)) =>
-        from_exact(r, Dyadic/add(x, y), false, rounded/add(r, a, b))
+        from_exact(r, x + y, false, rounded/add(r, a, b))
     -- An infinity, exact unless it meets the other one.
     | _ => match Flt/is_nan(rounded/add(r, a, b)) | true => invalid | false => Exceptions/none end
     end;
@@ -46,7 +46,7 @@ pub let mul(r: Rounding, a: Flt, b: Flt) -> Exceptions =
     | Flt/is_infinite(a) && Flt/is_zero(b) || Flt/is_zero(a) && Flt/is_infinite(b) => invalid
     | Flt/is_zero(a) || Flt/is_zero(b) => Exceptions/none
     | (some(x), some(y)) = (Dyadic/try_of(a), Dyadic/try_of(b)) =>
-        from_exact(r, Dyadic/mul(x, y), false, rounded/mul(r, a, b))
+        from_exact(r, x * y, false, rounded/mul(r, a, b))
     -- An infinity times a nonzero value, which is exact.
     | _ => Exceptions/none
     end;
@@ -86,7 +86,7 @@ pub let fma(r: Rounding, a: Flt, b: Flt, c: Flt) -> Exceptions =
     | (some(x), some(y), some(z)) = (Dyadic/try_of(a), Dyadic/try_of(b), Dyadic/try_of(c)) =>
         match Flt/is_zero(a) || Flt/is_zero(b)
         | true => Exceptions/none
-        | false => from_exact(r, Dyadic/add(Dyadic/mul(x, y), z), false, rounded/fma(r, a, b, c))
+        | false => from_exact(r, x * y + z, false, rounded/fma(r, a, b, c))
         end
     -- An infinity, exact unless the product's meets the other one.
     | _ =>

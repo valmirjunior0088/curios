@@ -6,7 +6,7 @@ use /std/ops/{Eql, Cmp, And, Or};
 
 --- Whether the two are equal.
 pub let eql(a: Byte, b: Byte) -> Bool =
-    Nat/eql(to_nat(a), to_nat(b));
+    to_nat(a) == to_nat(b);
 
 --- A decided equality is an equation: `a == b` gives `Eq()(a, b)`. The codes are equal by `Nat`'s, and a byte is the byte of its own code, since `to_byte(to_nat(b))` converts with `b`.
 pub let eq_of_eql(a: Byte, b: Byte, h: Holds(a == b)) -> Eq()(a, b) =
@@ -14,19 +14,19 @@ pub let eq_of_eql(a: Byte, b: Byte, h: Holds(a == b)) -> Eq()(a, b) =
 
 --- Whether `a` is below `b`.
 pub let lt(a: Byte, b: Byte) -> Bool =
-    Nat/lt(to_nat(a), to_nat(b));
+    to_nat(a) < to_nat(b);
 
 --- Whether `a` is below `b` or equal to it.
 pub let le(a: Byte, b: Byte) -> Bool =
-    Nat/le(to_nat(a), to_nat(b));
+    to_nat(a) <= to_nat(b);
 
 --- Whether `a` is above `b`.
 pub let gt(a: Byte, b: Byte) -> Bool =
-    Nat/gt(to_nat(a), to_nat(b));
+    to_nat(a) > to_nat(b);
 
 --- Whether `a` is above `b` or equal to it.
 pub let ge(a: Byte, b: Byte) -> Bool =
-    Nat/ge(to_nat(a), to_nat(b));
+    to_nat(a) >= to_nat(b);
 
 --- The bitwise conjunction.
 pub let and(a: Byte, b: Byte) -> Byte =
@@ -75,7 +75,7 @@ pub let rotr(a: Byte, count: Nat) -> Byte =
 
 --- The order of the two values.
 pub let ord(a: Byte, b: Byte) -> Ordering =
-    choose | lt(a, b) => Ordering/lt() | eql(a, b) => Ordering/eq() | _ => Ordering/gt() end;
+    choose | a < b => Ordering/lt() | a == b => Ordering/eq() | _ => Ordering/gt() end;
 
 satisfy Eql(Byte) {
     eql = eql,

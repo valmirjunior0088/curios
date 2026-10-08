@@ -34,7 +34,7 @@ satisfy Key(Byte) {
 
 -- Which of the two one-byte encodings a run is, as a total function of any `Bytes`.
 let bool_of(z: Bytes) -> Bool =
-    Bytes/eql(z, x[0x1]);
+    z == x[0x1];
 
 -- The encoding round-trips through it at both values, which is the whole of the injectivity below: two values encoding alike decode alike, and decoding is the identity.
 let bool_round(b: Bool) -> Eq()(bool_of(Hash/hash(b)), b) =
@@ -52,7 +52,7 @@ let byte_of_bit(h: Bool) -> Byte =
 
 -- The bit a one-byte encoding stands for, read back. Total, so congruence can take an encoding apart.
 let bit_of(k: Byte) -> Bool =
-    Byte/eql(k, 0x1);
+    k == 0x1;
 
 -- One bit's byte round-trips through it, which is the head half of the induction below.
 let bit_round(h: Bool) -> Eq()(bit_of(byte_of_bit(h)), h) =
@@ -60,7 +60,7 @@ let bit_round(h: Bool) -> Eq()(bit_of(byte_of_bit(h)), h) =
 
 -- An encoding of no bits is no encoding of a cons: the lengths differ, and zero against a successor is refuted by the comparison deciding it.
 let no_empty(k: Byte, r: Bytes, e: Eq()(x[], x[k, ..r])) -> False =
-    Eq/subst((m) => Holds(Nat/eql(0, m)), Eq/cong(Bytes/len, e), True/qed());
+    Eq/subst((m) => Holds(0 == m), Eq/cong(Bytes/len, e), True/qed());
 
 -- Distinct bit runs encode distinctly.
 --
@@ -93,7 +93,7 @@ satisfy Key(Bits) {
 
 -- The two sign bytes are no one byte: the comparison deciding them refutes it.
 let signs_differ(e: Eq(@Byte)(0x0, 0x1)) -> False =
-    Eq/subst((m: Byte) => Holds(Byte/eql(0x0, m)), e, True/qed());
+    Eq/subst((m: Byte) => Holds(0x0 == m), e, True/qed());
 
 -- Distinct integers encode distinctly.
 --
@@ -201,7 +201,7 @@ let insert1(
     match t
     | leaf(k0, v0) =>
         let e0 = Hash/hash(k0);
-        match Bytes/eql(e0, k)
+        match e0 == k
         | true => (Node/leaf(key, v), 0, 2)
         | false => (Node/leaf(k0, v0), crit(k, e0), 1)
         end
@@ -232,7 +232,7 @@ let insert1(
 
 let remove1(@K: Type, use Key(K), @V: Type, t: Node(K, V), k: Bytes) -> {Node(K, V), Nat} =
     match t
-    | leaf(k0, _) => match Bytes/eql(Hash/hash(k0), k) | true => (t, 2) | false => (t, 0) end
+    | leaf(k0, _) => match Hash/hash(k0) == k | true => (t, 2) | false => (t, 0) end
     | fork(c, z, o) =>
         match bit(k, c)
         | 0 =>
@@ -259,7 +259,7 @@ pub let get(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Option(V) =
     | none() => Option/none()
     | some(n) =>
         let (k0, v0) = lookup(n, k);
-        match Bytes/eql(Hash/hash(k0), k) | true => Option/some(v0) | false => Option/none() end
+        match Hash/hash(k0) == k | true => Option/some(v0) | false => Option/none() end
     end;
 
 --- Whether `key` has an entry.
@@ -382,8 +382,7 @@ let same_entries(
     | [x, ..xt] =>
         match ys
         | [] => false
-        | [y, ..yt] =>
-            Bytes/eql(Hash/hash(x.0), Hash/hash(y.0)) && x.1 == y.1 && same_entries(xt, yt)
+        | [y, ..yt] => Hash/hash(x.0) == Hash/hash(y.0) && x.1 == y.1 && same_entries(xt, yt)
         end
     end;
 

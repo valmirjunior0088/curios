@@ -131,7 +131,7 @@ let rest_is_a_suffix(b: Bytes) -> Test =
     match Nat/le/try(cut, Bytes/len(b))
     | none() => Test/assert(false)
     | some(ok) =>
-        Test/assert(Bytes/len(d.rest) <= Bytes/len(b) && Bytes/eql(Bytes/drop(b, cut, @ok), d.rest))
+        Test/assert(Bytes/len(d.rest) <= Bytes/len(b) && Bytes/drop(b, cut, @ok) == d.rest)
     end;
 
 -- Every shape the decoder cuts differently: nothing to read, a complete key, a lone Escape and a truncated sequence it must hold back, a complete and an incomplete paste, a scalar cut short, and an end marker cut in half.

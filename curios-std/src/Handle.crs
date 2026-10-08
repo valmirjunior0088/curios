@@ -12,12 +12,12 @@ pub mod Readiness;
 pub use Readiness/{let Readiness};
 
 let to_mask(i: Interest) -> Byte =
-    Byte/or(
-        match i.readable | true => /sys/event/read | false => 0 end,
-        match i.writable | true => /sys/event/write | false => 0 end);
+    let readable: Byte = match i.readable | true => /sys/event/read | false => 0 end;
+    let writable: Byte = match i.writable | true => /sys/event/write | false => 0 end;
+    readable || writable;
 
 let flagged(mask: Byte, flag: Byte) -> Bool =
-    Byte/to_nat(Byte/and(mask, flag)) > 0;
+    Byte/to_nat(mask && flag) > 0;
 
 let of_mask(mask: Byte) -> Readiness =
     Readiness {

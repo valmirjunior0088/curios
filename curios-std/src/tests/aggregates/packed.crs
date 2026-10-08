@@ -11,7 +11,7 @@ test atom_splice_builds_the_written_sequence =
 let _bytes_cons_has_the_length_of_its_tail_plus_one(
     h: Byte,
     t: Bytes,
-) -> Eq()(Bytes/len(x[h, ..t]), Nat/add(1, Bytes/len(t))) =
+) -> Eq()(Bytes/len(x[h, ..t]), 1 + Bytes/len(t)) =
     Eq/refl();
 
 let _bytes_cons_decodes_its_head_first(
@@ -23,16 +23,14 @@ let _bytes_cons_decodes_its_head_first(
 let _bits_cons_has_the_length_of_its_tail_plus_one(
     h: Bool,
     t: Bits,
-) -> Eq()(Bits/len(b[h, ..t]), Nat/add(1, Bits/len(t))) =
+) -> Eq()(Bits/len(b[h, ..t]), 1 + Bits/len(t)) =
     Eq/refl();
 
 test list_fold_sums_elements =
-    Test/equal(List/fold([10, 20, 30], 0, (e, acc) => Nat/add(acc, e)), 60);
+    Test/equal(List/fold([10, 20, 30], 0, (e, acc) => acc + e), 60);
 
 test bytes_fold_sums_bytes =
-    Test/equal(
-        Bytes/fold(x[0x0A, 0x14, 0x1E], 0, (byte, acc) => Nat/add(acc, Byte/to_nat(byte))),
-        60);
+    Test/equal(Bytes/fold(x[0x0A, 0x14, 0x1E], 0, (byte, acc) => acc + Byte/to_nat(byte)), 60);
 
 -- Bytes show as two hexadecimal digits each, a leading zero kept, built from characters rather than decoded from bytes.
 test bytes_show_as_hexadecimal =

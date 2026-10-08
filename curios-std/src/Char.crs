@@ -1,5 +1,5 @@
 use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, Str, Show, Spell, Ord};
-use /std/Bool/{True, Holds};
+use /std/Bool/{True};
 use /std/ops/{Eql, Cmp};
 
 --- That a code point is a Unicode scalar value, which is what `Char` carries, and deciding it where no guard has.
@@ -57,14 +57,6 @@ pub let gt(a: Char, b: Char) -> Bool =
 --- Whether `a` is at least `b` in code-point order.
 pub let ge(a: Char, b: Char) -> Bool =
     a.code >= b.code;
-
---- That `a` is below `b` in code-point order, decided.
-pub let Lt(a: Char, b: Char) -> Prop =
-    Holds(lt(a, b));
-
---- That `a` is at most `b` in code-point order, decided.
-pub let Le(a: Char, b: Char) -> Prop =
-    Holds(le(a, b));
 
 --- Space, tab, newline, vertical tab, form feed or carriage return.
 pub let is_whitespace(c: Char) -> Bool =

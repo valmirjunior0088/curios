@@ -19,10 +19,10 @@ pub struct Gcd(a: Nat, b: Nat): pub Type {
 --- One step of Euclid's algorithm: a greatest common divisor of `b` and `a % b` is one of `a` and `b`.
 ---
 --- It divides `a` as the divisor's multiple and the remainder, which is `a` by Euclid's identity, and a common divisor of `a` and `b` divides the remainder by [`Divides/rem`].
-pub let step(a: Nat, b: Nat, @ok: Holds(0 < b), below: Gcd(b, Nat/rem(a, b, @ok))) -> Gcd(a, b) =
+pub let step(a: Nat, b: Nat, @ok: Holds(0 < b), below: Gcd(b, a % b)) -> Gcd(a, b) =
     Gcd {
         value = below.value,
-        left = Divides/add(Divides/mul(below.left, Nat/div(a, b, @ok)), below.right),
+        left = Divides/add(Divides/mul(below.left, a / b), below.right),
         right = below.left,
         greatest(d, p, q) = below.greatest(d, q, Divides/rem(a, b, p, q)),
     };
@@ -68,12 +68,8 @@ pub let symmetric(a: Nat, b: Nat) -> Eq()(Nat/gcd(a, b), Nat/gcd(b, a)) =
         });
 
 --- `gcd(a, b)` is `gcd(b, a % b)`: the equation Euclid's algorithm computes by, at a divisor reduction does not open.
-pub let euclid(
-    a: Nat,
-    b: Nat,
-    @ok: Holds(0 < b),
-) -> Eq()(Nat/gcd(a, b), Nat/gcd(b, Nat/rem(a, b, @ok))) =
-    Eq/sym(unique(step(a, b, of(b, Nat/rem(a, b, @ok)))));
+pub let euclid(a: Nat, b: Nat, @ok: Holds(0 < b)) -> Eq()(Nat/gcd(a, b), Nat/gcd(b, a % b)) =
+    Eq/sym(unique(step(a, b, of(b, a % b))));
 
 -- A sum scaled is its summands scaled, stated over variables: at a quotient and its remainder the left side is the dividend scaled, by Euclid's identity, which conversion would recombine before the product distributed.
 let spread(q: Nat, y: Nat, r: Nat, c: Nat) -> Eq()((q * y + r) * c, y * c * q + r * c) =

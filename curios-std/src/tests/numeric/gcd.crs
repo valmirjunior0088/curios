@@ -37,7 +37,7 @@ let _a_step_of_euclid_s_algorithm_keeps_it(
     a: Nat,
     b: Nat,
     @ok: Holds(0 < b),
-) -> Eq()(Nat/gcd(a, b), Nat/gcd(b, Nat/rem(a, b, @ok))) =
+) -> Eq()(Nat/gcd(a, b), Nat/gcd(b, a % b)) =
     Gcd/euclid(a, b);
 
 let _a_common_factor_stays_a_factor(

@@ -93,29 +93,16 @@ pub let antisym(@a: Nat, @b: Nat, p: Divides(a, b), q: Divides(b, a)) -> Eq()(a,
     end;
 
 --- A zero remainder is a divisor: `n % d == 0` gives `Divides(d, n)`, the quotient as the witness.
-pub let of_rem(
-    n: Nat,
-    d: Nat,
-    @ok: Holds(0 < d),
-    h: Holds(Nat/rem(n, d, @ok) == 0),
-) -> Divides(d, n) =
-    let joined: Eq()(n, Nat/div(n, d, @ok) * d + Nat/rem(n, d, @ok)) = Eq/refl();
+pub let of_rem(n: Nat, d: Nat, @ok: Holds(0 < d), h: Holds(n % d == 0)) -> Divides(d, n) =
+    let joined: Eq()(n, n / d * d + n % d) = Eq/refl();
     Divides/intro(
-        Nat/div(n, d, @ok),
-        Eq/subst(
-            (r: Nat) => Eq()(n, Nat/div(n, d, @ok) * d + r),
-            Nat/eq_of_eql(Nat/rem(n, d, @ok), 0, h),
-            joined));
+        n / d,
+        Eq/subst((r: Nat) => Eq()(n, n / d * d + r), Nat/eq_of_eql(n % d, 0, h), joined));
 
 --- A divisor leaves no remainder: `Divides(d, n)` gives `n % d == 0`, the converse of [`of_rem`].
 ---
 --- A multiple's remainder by a symbolic divisor is zero by neither reduction nor the facts in scope; it is [`Nat/DivMod/unique`] at the multiplier and a remainder of zero.
-pub let to_rem(
-    n: Nat,
-    d: Nat,
-    @ok: Holds(0 < d),
-    p: Divides(d, n),
-) -> Holds(Nat/rem(n, d, @ok) == 0) =
+pub let to_rem(n: Nat, d: Nat, @ok: Holds(0 < d), p: Divides(d, n)) -> Holds(n % d == 0) =
     match p
     | intro(k, e) =>
         Eq/subst(
@@ -127,12 +114,7 @@ pub let to_rem(
 --- A quotient by a divisor is exact: under `Divides(d, n)`, `n` is `n / d` copies of `d`.
 ---
 --- What the evidence buys of `/`, which is the quotient either way: the multiple with nothing left over.
-pub let exact(
-    n: Nat,
-    d: Nat,
-    @ok: Holds(0 < d),
-    p: Divides(d, n),
-) -> Eq()(n, Nat/div(n, d, @ok) * d) =
+pub let exact(n: Nat, d: Nat, @ok: Holds(0 < d), p: Divides(d, n)) -> Eq()(n, n / d * d) =
     match p
     | intro(k, e) =>
         Eq/subst(
@@ -151,5 +133,5 @@ pub let rem(
     @ok: Holds(0 < b),
     p: Divides(d, a),
     q: Divides(d, b),
-) -> Divides(d, Nat/rem(a, b, @ok)) =
-    sub(@d, @b * Nat/div(a, b, @ok), @Nat/rem(a, b, @ok), p, mul(q, Nat/div(a, b, @ok)));
+) -> Divides(d, a % b) =
+    sub(@d, @b * (a / b), @a % b, p, mul(q, a / b));

@@ -17,12 +17,7 @@ pub struct DivMod(n: Nat, d: Nat): pub Type {
 ---
 --- Both proofs are the reducer's own: Euclid's identity recombines the quotient and remainder into `n`, and a remainder sits below its divisor by definition.
 pub let of(n: Nat, d: Nat, @ok: Holds(0 < d)) -> DivMod(n, d) =
-    DivMod {
-        quotient = Nat/div(n, d, @ok),
-        remainder = Nat/rem(n, d, @ok),
-        joined = Eq/refl(),
-        bounded = True/qed(),
-    };
+    DivMod { quotient = n / d, remainder = n % d, joined = Eq/refl(), bounded = True/qed() };
 
 --- `m * d <= n` gives `m <= n / d`: the quotient is the largest multiplier that fits.
 ---
@@ -33,7 +28,7 @@ pub let le_div_of_mul_le(
     d: Nat,
     @ok: Holds(0 < d),
     p: Holds(m * d <= n),
-) -> Holds(m <= Nat/div(n, d, @ok)) =
+) -> Holds(m <= n / d) =
     True/proved();
 
 --- `n < m * d` gives `n / d < m`: a quotient of at least `m` would scale past `n`, since the quotient's multiple of `d` is at most `n` — a product the elaborator proves from the facts in scope.
@@ -43,7 +38,7 @@ pub let div_lt_of_lt_mul(
     d: Nat,
     @ok: Holds(0 < d),
     p: Holds(n < m * d),
-) -> Holds(Nat/div(n, d, @ok) < m) =
+) -> Holds(n / d < m) =
     True/proved();
 
 --- A quotient and a remainder are the ones `/` and `%` compute: a `q` and an `r` with `n = q * d + r` and `r < d` are `n / d` and `n % d`.
@@ -57,12 +52,11 @@ pub let unique(
     @ok: Holds(0 < d),
     joined: Eq()(n, q * d + r),
     bounded: Holds(r < d),
-) -> {quotient: Eq()(q, Nat/div(n, d, @ok)), remainder: Eq()(r, Nat/rem(n, d, @ok))} =
-    let quotient: Eq()(q, Nat/div(n, d, @ok)) =
-        Nat/le/antisym(q, Nat/div(n, d, @ok), True/proved(), True/proved());
-    let euclid: Eq()(n, Nat/div(n, d, @ok) * d + Nat/rem(n, d, @ok)) = Eq/refl();
-    let rejoined: Eq()(n, q * d + Nat/rem(n, d, @ok)) =
-        Eq/subst((x: Nat) => Eq()(n, x * d + Nat/rem(n, d, @ok)), Eq/sym(quotient), euclid);
+) -> {quotient: Eq()(q, n / d), remainder: Eq()(r, n % d)} =
+    let quotient: Eq()(q, n / d) = Nat/le/antisym(q, n / d, True/proved(), True/proved());
+    let euclid: Eq()(n, n / d * d + n % d) = Eq/refl();
+    let rejoined: Eq()(n, q * d + n % d) =
+        Eq/subst((x: Nat) => Eq()(n, x * d + n % d), Eq/sym(quotient), euclid);
     (
         quotient = quotient,
         remainder = Eq/cong((x: Nat) => x - q * d, Eq/trans(Eq/sym(joined), rejoined)));

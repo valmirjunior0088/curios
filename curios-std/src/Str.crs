@@ -332,7 +332,7 @@ pub let flatten(parts: List(Str)) -> Str =
 
 --- Whether the two are equal.
 pub let eql(a: Str, b: Str) -> Bool =
-    Bytes/eql(to_bytes(a), to_bytes(b));
+    to_bytes(a) == to_bytes(b);
 
 let lower_ascii_byte(byte: Byte) -> Byte =
     let n = Byte/to_nat(byte);
@@ -343,7 +343,7 @@ let lower_ascii_bytes(b: Bytes) -> Bytes =
 
 --- Equality with ASCII letters compared regardless of case; every other character exactly.
 pub let eql_ascii_ci(a: Str, b: Str) -> Bool =
-    Bytes/eql(lower_ascii_bytes(to_bytes(a)), lower_ascii_bytes(to_bytes(b)));
+    lower_ascii_bytes(to_bytes(a)) == lower_ascii_bytes(to_bytes(b));
 
 --- `s` written `n` times.
 pub let repeat(s: Str, n: Nat) -> Str =

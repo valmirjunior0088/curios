@@ -35,7 +35,7 @@ let _a_multiple_by_any_divisor_has_its_multiplier_as_quotient(
     k: Nat,
     d: Nat,
     @ok: Holds(0 < d),
-) -> Eq()(k, Nat/div(k * d, d, @ok)) =
+) -> Eq()(k, k * d / d) =
     DivMod/unique(k * d, d, k, 0, Eq/refl(), ok).quotient;
 
 let _a_divisor_leaves_no_remainder: Holds(12 % 4 == 0) =
@@ -45,16 +45,13 @@ let _a_multiple_by_any_divisor_leaves_no_remainder(
     k: Nat,
     d: Nat,
     @ok: Holds(0 < d),
-) -> Holds(Nat/rem(k * d, d, @ok) == 0) =
+) -> Holds(k * d % d == 0) =
     Divides/to_rem(k * d, d, Divides/intro(k, Eq/refl()));
 
 let _a_quotient_by_a_divisor_is_exact: Eq()(12, 12 / 4 * 4) =
     Divides/exact(12, 4, Divides/intro(3, Eq/refl()));
 
-let _zero_is_every_divisor_s_exact_multiple(
-    d: Nat,
-    @ok: Holds(0 < d),
-) -> Eq()(0, Nat/div(0, d, @ok) * d) =
+let _zero_is_every_divisor_s_exact_multiple(d: Nat, @ok: Holds(0 < d)) -> Eq()(0, 0 / d * d) =
     Divides/exact(0, d, Divides/zero(d));
 
 let _a_divisor_of_a_sum_and_a_summand_divides_the_other: Divides(3, 9) =

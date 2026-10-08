@@ -105,7 +105,7 @@ test a_number_is_built_from_a_finite_float_alone =
             of_flt(+inf.0),
             of_flt(-inf.0),
             of_flt(+nan.0),
-            of_flt(Flt/mul(huge, huge))]),
+            of_flt(huge * huge)]),
         "1.5|[1,-0]|-1.5|no number|no number|no number|no number");
 
 -- RFC 8259 §6's number rule at its edges: an integer part is `0` or opens with another digit, a point owes a digit and so does an exponent, and no sign but a minus opens a number.

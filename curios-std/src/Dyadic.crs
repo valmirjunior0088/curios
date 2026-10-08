@@ -46,7 +46,7 @@ pub let add(a: Dyadic, b: Dyadic) -> Dyadic =
 
 --- The exact difference.
 pub let sub(a: Dyadic, b: Dyadic) -> Dyadic =
-    add(a, neg(b));
+    a + neg(b);
 
 --- The exact product.
 pub let mul(a: Dyadic, b: Dyadic) -> Dyadic =
@@ -59,10 +59,10 @@ pub let quotient(a: Dyadic, b: Dyadic, @ok: Int/NonZero(b.mantissa)) -> {Dyadic,
     let scaled = Int/shl(a.mantissa, k);
     (
         Dyadic {
-            mantissa = Int/div(scaled, b.mantissa, @ok),
+            mantissa = scaled / b.mantissa,
             exponent = a.exponent - b.exponent - Nat/to_int(k),
         },
-        Int/rem(scaled, b.mantissa, @ok) != +0);
+        scaled % b.mantissa != +0);
 
 --- The representation with an odd mantissa, or `0 · 2^0` for zero: the one each number has.
 pub let normalized(a: Dyadic) -> Dyadic =

@@ -162,15 +162,14 @@ end
 pub let Lookup(spec: List(Arg), name: Str) -> Type =
     match spec
     | [] => {}
-    | [a, ..rest] =>
-        match Str/eql(a.long, name) | true => Carrier(a) | false => Lookup(rest, name) end
+    | [a, ..rest] => match a.long == name | true => Carrier(a) | false => Lookup(rest, name) end
     end;
 
 --- That `name` is one of `spec`'s long names, decided by reduction: a name the declaration lacks is refused where it is written.
 pub let Has(spec: List(Arg), name: Str) -> Prop =
     match spec
     | [] => False
-    | [a, ..rest] => match Str/eql(a.long, name) | true => True | false => Has(rest, name) end
+    | [a, ..rest] => match a.long == name | true => True | false => Has(rest, name) end
     end;
 
 --- The field named `name`, at the type its argument decides.
@@ -184,7 +183,7 @@ pub let get(
     | nil() => match ok end
     | cons(@a, @rest, head, tail) =>
         let pick =
-            match Str/eql(a.long, name): (b) =>
+            match a.long == name: (b) =>
                 (here: match b | true => True | false => Has(rest, name) end) -> match b
                 | true => Carrier(a)
                 | false => Lookup(rest, name)
@@ -293,10 +292,10 @@ let takes_value(k: Kind) -> Bool =
     end;
 
 let long_named(name: Str) -> (Arg, List(Str)) -> Bool =
-    (a, _) => Str/eql(a.long, name);
+    (a, _) => a.long == name;
 
 let short_named(c: Char) -> (Arg, List(Str)) -> Bool =
-    (a, _) => match a.short | some(d) => Char/eql(c, d) | none() => false end;
+    (a, _) => match a.short | some(d) => c == d | none() => false end;
 
 --- A positional the line has not filled yet: positionals fill in declaration order, one token each.
 let unfilled_positional(a: Arg, found: List(Str)) -> Bool =
@@ -307,12 +306,12 @@ let collects_the_rest(a: Arg, _: List(Str)) -> Bool =
 
 let wants_help(argv: List(Str)) -> Bool =
     List/any(argv, (t) =>
-        Str/eql(t, "--help")
+        t == "--help"
             || Str/starts_with(t, "-") && Bool/not(Str/starts_with(t, "--"))
                 && Str/has_substr(t, "h"));
 
 let wants_version(argv: List(Str)) -> Bool =
-    List/any(argv, (t) => Str/eql(t, "--version"));
+    List/any(argv, (t) => t == "--version");
 
 struct Walk(spec: List(Arg)): Type {
     slots: Slots(spec),
@@ -364,7 +363,7 @@ let step(@spec: List(Arg), w: Walk(spec), tokens: List(Str)) -> Result(Failure, 
             let w2 = place(w, t)!;
             step(w2, more)
         | false =>
-            match Str/eql(t, "--")
+            match t == "--"
             | true => step(Walk { ..w, literal = true }, more)
             | false =>
                 choose
@@ -613,7 +612,7 @@ let named(subs: List(Cli), wanted: Str) -> Option(Cli) =
     match subs
     | [] => Option/none()
     | [c, ..more] =>
-        match Str/eql(name(c), wanted) | true => Option/some(c) | false => named(more, wanted) end
+        match name(c) == wanted | true => Option/some(c) | false => named(more, wanted) end
     end;
 
 --- The subcommand the first token names, and the rest of the line as its own.

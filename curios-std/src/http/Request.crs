@@ -209,7 +209,7 @@ satisfy Spell(Address) {
 --- What the request `head` is addressed to, over a connection of `scheme` (RFC 9112 §3.2, §3.3). A target in origin-form, a path and its query, is joined to the authority its one `Host` field states; one in absolute-form, a whole URL, is the address, with `Host` ignored though HTTP/1.1 still owes one; and `*` is the server itself, which only `OPTIONS` is asked of, an HTTP/1.1 request still owing its `Host`. A request for a resource with no authority, one with two `Host` fields or one that is no authority, and one with a target of none of those forms, is malformed.
 pub let address_of(scheme: Scheme, head: Head) -> Result(Refusal, Address) =
     let host = host_of(head.headers)!;
-    match Str/eql(head.target, "*")
+    match head.target == "*"
     | false => Result/map_success(resource_of(scheme, head, host), (url) => Address/resource(url))
     | true =>
         choose

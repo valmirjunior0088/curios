@@ -50,11 +50,11 @@ pub use ord/{let ord};
 
 --- That `a` is not zero, decided — what `/` and `%` on `Int` ask of a divisor.
 pub let NonZero(a: Int) -> Prop =
-    Holds(neq(a, 0));
+    Holds(a != +0);
 
 --- That `a` is zero or above, decided.
 pub let NonNeg(a: Int) -> Prop =
-    Holds(ge(a, 0));
+    Holds(a >= +0);
 
 --- An integer is a natural widened, or one below the negation of one: the two canonical forms, as the family's indices.
 ---

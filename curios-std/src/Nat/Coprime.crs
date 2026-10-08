@@ -45,10 +45,10 @@ pub let quotients(
     a: Nat,
     b: Nat,
     @ok: Holds(0 < Nat/gcd(a, b)),
-) -> Coprime(Nat/div(a, Nat/gcd(a, b), @ok), Nat/div(b, Nat/gcd(a, b), @ok)) =
+) -> Coprime(a / Nat/gcd(a, b), b / Nat/gcd(a, b)) =
     let g = Nat/gcd(a, b);
-    let x = Nat/div(a, g, @ok);
-    let y = Nat/div(b, g, @ok);
+    let x = a / g;
+    let y = b / g;
     let left: Eq()(a, x * g) = Divides/exact(a, g, Gcd/of(a, b).left);
     let right: Eq()(b, y * g) = Divides/exact(b, g, Gcd/of(a, b).right);
     let whole: Eq()(Nat/gcd(x * g, y * g), Nat/gcd(x, y) * g) = Gcd/scaled(x, y, g);

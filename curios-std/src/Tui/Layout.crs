@@ -86,7 +86,7 @@ pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =
         match c
         | length(n) => n
         | min(n) => n
-        | percent(p) => Nat/div(avail * p, 100)
+        | percent(p) => avail * p / 100
         | fill(_) => 0
         end;
     let weight(c: Constraint) -> Nat = match c | fill(k) => k | _ => 0 end;
@@ -96,7 +96,7 @@ pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =
     let shares =
         match Nat/lt/try(0, weights)
         | none() => List/map(cs, fixed)
-        | some(ok) => List/map(cs, (c) => fixed(c) + Nat/div(spare * weight(c), weights, @ok))
+        | some(ok) => List/map(cs, (c) => fixed(c) + spare * weight(c) / weights)
         end;
     let used = List/fold(shares, 0, (n, total) => n + total);
     let short = avail - used;

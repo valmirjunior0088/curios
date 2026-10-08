@@ -154,7 +154,7 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
             match Nat/le/try(j + 6, Bytes/len(input))
             | none() => Option/none()
             | some(room) =>
-                match Bytes/eql(Bytes/slice(input, j, 6, @room), paste_end)
+                match Bytes/slice(input, j, 6, @room) == paste_end
                 | true => Option/some((at = j, onward = onward, room = room))
                 | false => find(j + 1)
                 end

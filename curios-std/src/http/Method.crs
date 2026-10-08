@@ -42,12 +42,12 @@ satisfy Show(Method) {
 --- The method `s` spells, or `none`.
 pub let of_str(s: Str) -> Option(Method) =
     choose
-    | Str/eql(s, "GET") => Option/some(Method/get())
-    | Str/eql(s, "HEAD") => Option/some(Method/head())
-    | Str/eql(s, "POST") => Option/some(Method/post())
-    | Str/eql(s, "PUT") => Option/some(Method/put())
-    | Str/eql(s, "DELETE") => Option/some(Method/delete())
-    | Str/eql(s, "PATCH") => Option/some(Method/patch())
-    | Str/eql(s, "OPTIONS") => Option/some(Method/options())
+    | s == "GET" => Option/some(Method/get())
+    | s == "HEAD" => Option/some(Method/head())
+    | s == "POST" => Option/some(Method/post())
+    | s == "PUT" => Option/some(Method/put())
+    | s == "DELETE" => Option/some(Method/delete())
+    | s == "PATCH" => Option/some(Method/patch())
+    | s == "OPTIONS" => Option/some(Method/options())
     | _ => Option/none()
     end;

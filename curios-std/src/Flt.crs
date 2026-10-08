@@ -37,7 +37,7 @@ mod reduction;
 
 --- That `b` is eight bytes long, decided.
 pub let EightBytes(b: Bytes) -> Prop =
-    Holds(Nat/eql(Bytes/len(b), 8));
+    Holds(Bytes/len(b) == 8);
 
 --- Whether `f` is a number: neither infinity nor a NaN.
 pub let is_finite(f: Flt) -> Bool =
@@ -325,7 +325,7 @@ pub let signaling_nan(p: Flt) -> Flt =
 
 --- The float whose little-endian bytes these are, or `none` unless there are exactly eight.
 pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
-    match Nat/eql(Bytes/len(b), 8): (_) => Option(Flt)
+    match Bytes/len(b) == 8: (_) => Option(Flt)
     | true => Option/some(of_le_bytes(b, @True/qed()))
     | false => Option/none()
     end;

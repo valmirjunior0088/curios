@@ -40,7 +40,7 @@ let _product_rounds_its_exact_value_ties_to_even: Eq()(
     Eq/refl();
 
 let _third_times_three_rounds_its_exact_value_ties_to_even: Eq()(
-    rounded/mul(Rounding/ties_to_even(), Flt/div(+1.0, +3.0), +3.0),
+    rounded/mul(Rounding/ties_to_even(), +1.0 / +3.0, +3.0),
     rounded/of_dyadic(
         Rounding/ties_to_even(),
         Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
@@ -66,7 +66,7 @@ let _product_rounds_its_exact_value_ties_to_away: Eq()(
     Eq/refl();
 
 let _third_times_three_rounds_its_exact_value_ties_to_away: Eq()(
-    rounded/mul(Rounding/ties_to_away(), Flt/div(+1.0, +3.0), +3.0),
+    rounded/mul(Rounding/ties_to_away(), +1.0 / +3.0, +3.0),
     rounded/of_dyadic(
         Rounding/ties_to_away(),
         Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
@@ -92,7 +92,7 @@ let _product_rounds_its_exact_value_toward_zero: Eq()(
     Eq/refl();
 
 let _third_times_three_rounds_its_exact_value_toward_zero: Eq()(
-    rounded/mul(Rounding/toward_zero(), Flt/div(+1.0, +3.0), +3.0),
+    rounded/mul(Rounding/toward_zero(), +1.0 / +3.0, +3.0),
     rounded/of_dyadic(
         Rounding/toward_zero(),
         Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
@@ -118,7 +118,7 @@ let _product_rounds_its_exact_value_toward_positive: Eq()(
     Eq/refl();
 
 let _third_times_three_rounds_its_exact_value_toward_positive: Eq()(
-    rounded/mul(Rounding/toward_positive(), Flt/div(+1.0, +3.0), +3.0),
+    rounded/mul(Rounding/toward_positive(), +1.0 / +3.0, +3.0),
     rounded/of_dyadic(
         Rounding/toward_positive(),
         Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
@@ -144,7 +144,7 @@ let _product_rounds_its_exact_value_toward_negative: Eq()(
     Eq/refl();
 
 let _third_times_three_rounds_its_exact_value_toward_negative: Eq()(
-    rounded/mul(Rounding/toward_negative(), Flt/div(+1.0, +3.0), +3.0),
+    rounded/mul(Rounding/toward_negative(), +1.0 / +3.0, +3.0),
     rounded/of_dyadic(
         Rounding/toward_negative(),
         Dyadic { mantissa = +18014398509481983, exponent = -54 })) =
@@ -157,9 +157,8 @@ let _fma_rounds_its_exact_value_toward_negative: Eq()(
 
 -- The directions part where the exact value falls between two floats, and meet where it doesn't.
 let _a_third_below_and_above: Eq()(
-    Flt/lt(
-        rounded/div(Rounding/toward_negative(), +1.0, +3.0),
-        rounded/div(Rounding/toward_positive(), +1.0, +3.0)),
+    rounded/div(Rounding/toward_negative(), +1.0, +3.0)
+        < rounded/div(Rounding/toward_positive(), +1.0, +3.0),
     true) =
     Eq/refl();
 
@@ -541,7 +540,7 @@ test text_reads_in_a_direction =
 
 -- A fixed number of significant digits, rounded in a direction, carrying into the next power of ten when it rounds up past it.
 test significant_digits_round_in_a_direction =
-    let third = Flt/div(+1.0, +3.0);
+    let third = +1.0 / +3.0;
     Test/equal(
         [
             Flt/to_str_significant(third, 5, @True/qed()),

@@ -28,12 +28,12 @@ let until_char(stop: Char) -> Parse(Str, Str) =
 
 let named_reference(body: Str) -> Option(Str) =
     choose
-    | Str/eql(body, "amp") => Option/some("&")
-    | Str/eql(body, "lt") => Option/some("<")
-    | Str/eql(body, "gt") => Option/some(">")
-    | Str/eql(body, "quot") => Option/some("\"")
-    | Str/eql(body, "apos") => Option/some("'")
-    | Str/eql(body, "nbsp") => Option/map(Char/of_nat(160), Str/of_char)
+    | body == "amp" => Option/some("&")
+    | body == "lt" => Option/some("<")
+    | body == "gt" => Option/some(">")
+    | body == "quot" => Option/some("\"")
+    | body == "apos" => Option/some("'")
+    | body == "nbsp" => Option/map(Char/of_nat(160), Str/of_char)
     | _ => Option/none()
     end;
 
