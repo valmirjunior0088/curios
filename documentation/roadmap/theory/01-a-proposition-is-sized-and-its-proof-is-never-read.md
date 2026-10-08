@@ -1,6 +1,6 @@
 # A proposition is sized as a type is, and its proof is never read
 
-Working specification for the smaller `Prop`: a proposition takes a universe level and is sized exactly as a type is, it reaches data only where it is empty or where its indices pin every payload of its one constructor, and a match that takes it there fires without reading the proof. It closes the open ticket in [the board's totality part](../../../xboard/src/board/totality.rs), and it replaces the reservation this directory held for K-like reduction.
+Working specification for the smaller `Prop`: a proposition takes a universe level and is sized exactly as a type is, it reaches data only where it is empty or where its indices pin every payload of its one constructor, and a match that takes it there fires without reading the proof. The level and the sizing are in the tree, and they fix the ticket in [the board's totality part](../../../xboard/src/board/totality.rs); what follows them is open. It replaces the reservation this directory held for K-like reduction.
 
 It amends [`Prop` is strict, proof-irrelevant, and definitionally K](../../design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md), whose strictness, irrelevance and K all stand. What an arm learns of its scrutinee is untouched: [case equations](../../design/soundness/case-equations-and-their-key.md) stay as they are.
 
@@ -8,11 +8,11 @@ It amends [`Prop` is strict, proof-irrelevant, and definitionally K](../../desig
 
 | Part | State | Where it is written |
 | --- | --- | --- |
-| `Prop` is one sort with no level, and a function type into it is a proposition whatever it quantifies over | To change | `Subterm::Prop` (`curios-core/src/term/subterm.rs`), `func_sort` (`curios-cert/src/kernel/sort.rs`) |
-| A `Prop`-sorted family, and a `Prop`-sorted payload of any family, carry no size condition | To change | `check_signature` (`curios-cert/src/kernel/module.rs`), the telescope's bound in `curios-elab/src/elaborate/module.rs` |
+| `Prop u : Type (u + 1)`, below `Prop v` and `Type v` where `u ≤ v`, and a function type into it sits at the join of its domains' levels and its own | In the tree | [`Prop` is strict, proof-irrelevant, and definitionally K](../../design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md) |
+| A declaration at `Prop u` bounds every payload and field at `u`, and a proof counts at its proposition's level in any family | In the tree | the same decision; `check_signature` (`curios-cert/src/kernel/module.rs`) |
 | A proposition eliminates into data where it is empty or has one constructor whose every payload is a proof or pinned by the indices | To change | `guard_large_elimination` (`curios-cert/src/kernel/infer/eliminate.rs`), `singleton_eliminable` (`curios-elab/src/elaborate/match_.rs`) |
 | That elimination reduces by forcing the proof to its constructor | To change | the `Match` arm of `whnf` (`curios-cert/src/kernel/whnf.rs`), `reduce_match` (`curios-elab/src/reduce.rs`), the machine's `Cases::Induct` step (`curios-core/src/machine.rs`) |
-| An application of a constructor's payload is graded a child of the constructor | Stands, on an argument to restate | `curios-analysis/src/totality.rs` |
+| An application of a constructor's payload is graded a child of the constructor | Stands, on sizing | `curios-analysis/src/totality.rs` |
 | `/std` recurses on an accessibility proof where a measure descends | To change | `curios-std/src/WellFounded.crs` and its callers |
 
 What `/std` uses of all this, counted over `/sys` and `/std` by the protocol under *Verification*:
@@ -23,9 +23,7 @@ What `/std` uses of all this, counted over `/sys` and `/std` by the protocol und
 
 ## The gap
 
-**A closed proof of `False`.** `induct Bad: Prop | c(f: (A: Prop) -> (A) -> A) end` holds a payload that quantifies over the sort `Bad` is in, since nothing sizes a proposition, and the payload's type names `Bad` nowhere, so strict positivity has nothing to refuse. The size order reads `f(Bad)(b)` as a child of `c(f)`, on the premise that a payload of a foreign type cannot hand back a value of the family; at the identity it hands back `b`, and `let bad(b: Bad) -> False = match b | c(f) => bad(f(Bad)(b)) end` is judged to descend. The same declaration in `Type` is refused by its levels.
-
-**A checker reduces proofs.** Eliminating `Accessible` or `Eq` into data forces the proof, so a proof body is never opaque ([A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md)), the evaluator a type runs still demands a proof where an elimination reads one ([The closed machine binds a proof unreduced](../../design/compilation/the-closed-machine-binds-a-proof-unreduced.md)), and with an impredicative `Prop` a cast between two propositions can unfold without end, which the budget refuses.
+**A checker reduces proofs.** Eliminating `Accessible` or `Eq` into data forces the proof, so a proof body is never opaque ([A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md)), and the evaluator a type runs still demands a proof where an elimination reads one ([The closed machine binds a proof unreduced](../../design/compilation/the-closed-machine-binds-a-proof-unreduced.md)).
 
 **The algebra and a cast disagree.** `Eq/subst(P, p, v)` along a hypothesis `p: Eq()(a + b, b + a)` is stuck, where conversion already holds `P(a + b)` and `P(b + a)` one type: the cast is the identity to every judgment but reduction.
 
@@ -50,23 +48,20 @@ What `/std` uses of all this, counted over `/sys` and `/std` by the protocol und
 
 ## Open questions
 
-- **What the elaborator refuses the ticket's programs by.** The kernel's refusal is `Error::Oversized`; the elaborator's is read off `cargo xboard` once the bound is recorded.
-- **What keeps the subject of `a_proof_is_not_reduced_to_compare_it_with_another`.** Its fixture is Abel and Coquand's term, which no longer types. A predicative program on which a checker that reduces proofs first runs out of steps keeps the test; if none is found the test goes with the hazard.
 - **A scrutinee no lookup types.** A β-redex or a `let` is stepped until one does; whether any other shape is met is counted over `/std` and the corpus before the old path is removed.
 - **Hand-built fixtures whose arm names a pinned payload.** The kernel refuses one once stage 4 lands, so each such fixture is respelled or becomes the refusal's test.
 
 ## Stages
 
-Each is one commit on its own check, and none waits for a later one.
+Each is one commit on its own check, and none waits for a later one. The first, a level on `Prop` and the sizing it brings, is in the tree.
 
-1. **`Prop` takes a level.** The `Prop` node carries a `Level` through every walk that reads one; a written `Prop` mints a level as a written `Type` does; both checkers' sorts, their function-type rule, subsumption and the sizing of a declaration take the level; the stored unit's schema tag moves. The ticket turns fixed in this commit, each witness naming its refusal. Check: `cargo xboard`; the suites of `curios-core`, `curios-analysis`, `curios-cert` and `curios-elab`; `curios`'s `tests::laws`.
 2. **`/std` recurses on a bound.** `Nat/descend` lands and every caller of `WellFounded/recurse` moves to it; `Str/At`'s `forward` and `backward` are stated over a measure, their accessibility proofs deleted; `WellFounded.crs` is deleted. Check: `cargo xtask clippy`, `cargo xtask test curios-std`, and `descend`'s reported type read back.
 3. **A proposition reaches data only where empty or wholly pinned.** One classifier in `curios-analysis` beside `pinned_by_targets`, called by both guards; the clause admitting a proof payload goes, and erasure's branch for an unpinned payload with it. Check: the elimination, erasure and board suites.
 4. **The match fires without reading its proof.** The elaborator writes the arm free of its binders and the kernel's guard refuses one that is not; the rule enters both reducers through one function of `curios-analysis` and the closed machine by its own; nothing forces a proposition's proof any longer. Check: rows for a cast between algebra-equal ends, a cast along a hypothesis whose ends differ and a closed cast along a lemma, put to each checker alone; `kernel_memo_parity`; the respelling grid.
 
 ## Verification
 
-- **The board.** `cargo xboard` shows the ticket `HOLDS` and none regressed. The two neighbouring routes — a large payload pinned by an index, and a proof payload of a data family reached through a squash — are tests of `curios-cert`, each refused.
+- **The board.** `cargo xboard report` shows the ticket `HOLDS` and none regressed. The two neighbouring routes — a large payload pinned by an index, and a proof payload of a data family reached through a squash — are tests of `curios`'s board suite, each refused, and the kernel's sizing tests hold a proof payload to its proposition's level.
 - **The census**, `counted`, taken at `dae89d7ca` and retaken after stage 4. In a scratch copy of the tree, three places of `curios-cert` append a line to a file named by an environment variable, each with the item the walk is judging (`item.describe()`, set where `recheck` enters an item): `func_sort`, where it answers `Prop` and a domain's level is not zero, with the levels; `guard_large_elimination`, where it admits an empty or a singleton family, with the family's name; and `curios-prelude`'s build, with each root's item count in place of its panic. Building `curios-prelude` then certifies `/sys` and `/std` once. After stage 4 the second kind of line names only families whose every payload is pinned, and the first kind is gone, a function type into `Prop` being sized by its domains. The motives of `Eq/subst` are read off the sources: the first argument of each call under `curios-std/src` outside `tests/`, by what its body returns.
 - **Figures the change may move**, named and not retaken here: the budget `/std` consumes in elaboration and in certification, `curios-prelude-archive`'s `universe_parameter_census`, and the least budgets `curios/src/tests/reduction.rs` holds.
 - **The full gate**, once, after stage 4.

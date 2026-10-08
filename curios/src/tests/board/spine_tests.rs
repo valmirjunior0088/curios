@@ -116,7 +116,7 @@ fn two_accessibility_proofs_at_one_recursive_call_convert() {
     );
 }
 
-// **Irrelevance decides a goal before either side is reduced, in the elaborator as in the kernel, wherever nothing is flexible.** Inside the arm of `match h(Top, Top)` the case equation makes that proof `refl`, the cast along it reduces, and Abel and Coquand's `Omega(h)` unfolds forever — no recursion anywhere, so the totality obligations have nothing to refuse. Outside the arm the same comparison is accepted either way. Mutation-checked: without the check ahead of reduction the elaborator runs out of steps on exactly that goal.
+// **Irrelevance decides a goal before either side is reduced, in the elaborator as in the kernel, wherever nothing is flexible.** `spin` walks its argument, so the proof `spin(100000000000)` is a hundred billion steps from its constructor, and the same walk at a data type runs out of steps: a checker that reduced a proof to learn it equals another would never answer. Compared at the proposition, the two are one before either is read. Mutation-checked: without the check ahead of reduction the elaborator runs out of steps on exactly that goal.
 #[test]
 fn a_proof_is_not_reduced_to_compare_it_with_another() {
     assert_eq!(run(A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER), b"1");

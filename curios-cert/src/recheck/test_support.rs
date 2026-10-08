@@ -61,7 +61,7 @@ pub(super) fn proposition(constructors: Vec<(Atom, InductParam)>) -> InductDecl 
     }
 }
 
-/// `induct Eq(@A : Type 1) : (x : A, y : A) -> Prop | refl(z : A) : (z, z) end` — the equality the forgeries transport along.
+/// `induct Eq(@A : Type 1) : (x : A, y : A) -> Prop 1 | refl(z : A) : (z, z) end` — the equality the forgeries transport along, a proposition at its carrier's level, where a value of the carrier fits.
 pub(super) fn equality_declaration() -> InductDecl {
     let type_1 = Term::type_at(Level::zero().succ().expect("level zero has a successor"));
     let carrier = Free::local(20, Some("A"));
@@ -79,6 +79,8 @@ pub(super) fn equality_declaration() -> InductDecl {
             vec![Plicity::Implicit, Plicity::Explicit],
         ),
     )]);
+    declaration.result_sort =
+        Term::prop_at(Level::zero().succ().expect("level zero has a successor"));
     declaration.arity = Telescope::build(
         [(carrier, type_1.clone())],
         Telescope::build(
@@ -111,15 +113,16 @@ pub(super) fn forgery() -> Program {
     let reflexivity =
         |carrier: Term, value: Term| Term::variant(equality_name, [carrier], "refl", [value]);
 
-    // induct Box : Prop | mk(a : Type 0) end
+    // induct Box : Prop 1 | mk(a : Type 0) end — at the level its payload fits under, so the declaration stands and the guard is what refuses `unbox`.
     let payload = Free::local(10, Some("a"));
-    let box_decl = proposition(vec![(
+    let mut box_decl = proposition(vec![(
         Atom::from("mk"),
         InductParam::new(
             Telescope::build([(payload, type_0.clone())], Vec::new()),
             vec![Plicity::Explicit],
         ),
     )]);
+    box_decl.result_sort = Term::prop_at(Level::zero().succ().expect("level zero has a successor"));
 
     let equality_decl = equality_declaration();
 

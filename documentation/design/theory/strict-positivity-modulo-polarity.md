@@ -6,7 +6,7 @@
 
 - **An `induct` claims its functor has an initial algebra**, and its eliminator is the statement that the algebra is initial. Strict positivity is the syntactic condition for that functor being polynomial, hence for the algebra existing, and it is the construction that yields the eliminator. Without it `induct Bad | c(f : (Bad) -> False) end` inhabits `False` with no recursion at all.
 - **Polarity is what admits the standard library.** Most parameterized declarations are not covariant — `Show(A)` carries `(A) -> Str` — while `/std/Toml` recurses through `Map(Toml)` and `Option(Node(V))` and `/std/Json` through `List` and a tuple. A check that recognizes recursion only in immediate payloads rejects `Toml`, `Json` and `Map`. Every functor polarity admits was polynomial already; the checker only recognizes it through abstraction.
-- **Merely positive occurrences stay out**, because Cantor with an impredicative `Prop` gives the Coquand–Paulin construction (`tests::positivity::refusal_tests::a_positive_but_not_strictly_positive_occurrence_is_rejected`).
+- **Merely positive occurrences stay out**, because Cantor's argument gives the Coquand–Paulin construction in an impredicative universe, and a family that is its own double function space has no model as a set in a predicative one (`tests::positivity::refusal_tests::a_positive_but_not_strictly_positive_occurrence_is_rejected`).
 - **A declaration cannot reach itself through its own index binder type**: `induct Foo : (x : Foo) -> Type` fails kinding before positivity runs, so walking those types would cost precision for nothing — `Eq` would come out `Mixed` and refuse the sound `induct Wit | base() | tied(a : Wit, b : Wit, p : Eq()(a, b)) end`.
 
 **Rejected.**

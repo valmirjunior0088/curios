@@ -119,3 +119,36 @@ fn a_proposition_still_eliminates_into_a_formed_proposition() {
         b"1"
     );
 }
+
+// A proposition is sized as a type is. Unsized, `Bad` held a payload quantifying over the sort it sat in, the payload applied at `Bad` handed back the value it was given, and the application read as a descent: the ticket in `xboard`'s totality part.
+#[test]
+fn a_payload_quantifying_over_its_own_propositions_sort_is_refused() {
+    rejected_by(
+        A_PAYLOAD_QUANTIFYING_OVER_ITS_OWN_PROPOSITIONS_SORT,
+        "this Prop would need to be strictly below itself",
+    );
+}
+
+// The neighbouring route in `Type`, which no exemption opens: a payload an index pins counts at its level like any other.
+#[test]
+fn a_large_payload_pinned_by_an_index_is_refused() {
+    rejected_by(A_LARGE_PAYLOAD_PINNED_BY_AN_INDEX, "strictly below itself");
+}
+
+// The neighbouring route through a data family: its payload is a proof of a proposition one level up, which counts at that level, so the family cannot be squashed into the propositions the payload ranges over.
+#[test]
+fn a_proof_payload_of_a_data_family_counts_at_its_level() {
+    rejected_by(
+        A_PROOF_PAYLOAD_REACHED_THROUGH_A_SQUASH,
+        "strictly below itself",
+    );
+}
+
+// The control: the family is admitted at the level its payload fits under, and the payload is applied at a proposition below it.
+#[test]
+fn a_proposition_holding_a_polymorphic_proof_is_admitted_at_its_level() {
+    assert_eq!(
+        run(A_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED),
+        b"1"
+    );
+}

@@ -249,7 +249,7 @@ pub(crate) fn hold_proof(kernel: &mut Kernel, stated: bool, type_: &Term) -> Res
 /// Decided where the position is recorded, while the binders its type mentions are still assumed. A failure propagates rather than reading as "unconstrained": everywhere else in this crate an exhausted budget refuses the item, and this is not the place to make a resource limit read as a pass.
 pub(crate) fn erased_half(kernel: &mut Kernel, type_: &Term) -> Result<Option<Erased>, Error> {
     // A proposition known by its head is recorded with nothing run ([`declared_into_prop`]); no proposition is a sort, so the test below has nothing to say about it.
-    if declared_into_prop(kernel, type_)? {
+    if declared_into_prop(kernel, type_)?.is_some() {
         return Ok(Some(Erased::Proof));
     }
 

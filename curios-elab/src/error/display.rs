@@ -355,14 +355,21 @@ impl fmt::Display for Displayed<'_> {
                     "an action of one monad where another is expected\n  action: {action}\n  expected: {expected}\n  an action is embedded through the declared Lift witness when its monad can be read from its head's declaration\n  write lift(action) to embed this one explicitly; that resolves the witness, or reports the edge to declare"
                 )
             }
-            Error::UniverseInconsistency { lower, upper, .. } => {
+            Error::UniverseInconsistency { lower, upper, path } => {
                 let names = level_meta_names([lower, upper]);
                 write!(
                     f,
-                    "this Type would need to be strictly below itself\n  required constraint: {} ≤ {}",
+                    "this {} would need to be strictly below itself\n  required constraint: {} ≤ {}",
+                    curios_core::inconsistent_sort(path),
                     renamed_level(lower, &names),
                     renamed_level(upper, &names),
                 )?;
+                if curios_core::names_a_proposition(path) {
+                    write!(
+                        f,
+                        "\n  a proposition sits at the level of what it quantifies over and of what it holds, so it is none of the propositions it ranges over"
+                    )?;
+                }
 
                 write!(
                     f,

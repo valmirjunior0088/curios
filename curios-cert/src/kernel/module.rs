@@ -390,9 +390,9 @@ fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Resul
     )
 }
 
-/// Walk one declaration telescope, typing each domain and requiring each `Type`-sorted one to sit at or below the declared result level — one rung higher for the leading `uniform` binders, which are the declaration's parameters.
+/// Walk one declaration telescope, typing each domain and requiring each to sit at or below the declared result level — one rung higher for the leading `uniform` binders, which are the declaration's parameters.
 ///
-/// A `Prop`-sorted result imposes no *size* condition: `Prop` is impredicative, and what keeps that sound is the large-elimination guard, not sizing. A `Prop`-sorted domain imposes none either — `Prop` sits below every level.
+/// A `Prop`-sorted result bounds its telescope as a `Type`-sorted one does, and a `Prop`-sorted domain counts at its own level, whichever sort the result is. The size order reads an application of a payload as a child of its constructor, which holds only of a payload that cannot be applied at the family holding it: a payload quantifying over the sort its family sits in can, and hands back the value it was given.
 ///
 /// **Typing the domain is a separate clause from sizing it.** Run inside the size test, `infer_type` would type no domain of a declaration whose `result_sort` is `Prop` — and nothing else covers them: `check_arity` reaches an `induct`'s parameters and indices but not its constructor telescopes, a `struct` has no `check_arity`, and `check_non_informative` only *classifies* each field with `Sort::of`, so a field type that lies about its own sort would stand unexamined; see `recheck::proposition_tests::a_proposition_may_not_carry_a_computed_relevant_field`.
 fn check_signature<B: Bound + Clone>(
@@ -404,9 +404,11 @@ fn check_signature<B: Bound + Clone>(
 ) -> Result<(), Error> {
     kernel.scoped(|kernel| {
         let result = kernel.reduce_forced(result_sort.clone())?;
-        // A `Prop`-sorted result imposes no size condition, but the walk still runs: the terminal clause below is owed whatever the result sort is.
+        // A result that is no sort imposes no size condition, but the walk still runs: the terminal clause below is owed whatever the result is.
         let sized = match &*result {
-            Subterm::Type(bound) => Some((bound.clone(), bound.checked_add(1)?)),
+            Subterm::Type(bound) | Subterm::Prop(bound) => {
+                Some((bound.clone(), bound.checked_add(1)?))
+            }
             _ => None,
         };
 
@@ -417,9 +419,8 @@ fn check_signature<B: Bound + Clone>(
             let sort = infer_type(kernel, &domain)?;
             hold_proof(kernel, cursor.binds_proof(), &domain)?;
 
-            if let Some((bound, raised)) = &sized
-                && let Sort::Type(level) = sort
-            {
+            if let Some((bound, raised)) = &sized {
+                let (Sort::Type(level) | Sort::Prop(level)) = sort;
                 let upper = if entries.len() < uniform {
                     raised
                 } else {

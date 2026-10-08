@@ -27,13 +27,15 @@ pub(super) fn elaborate_tuple_type(
 
     // One walk, each field type opened once at the binders before it, rather than a recursion reopening the rest per field.
     let mut fields = Vec::new();
-    // The level of each field that is no proposition, as typing read it.
+    // The level of each field that is no proposition, as typing read it, and of each that is one.
     let mut levels = Vec::new();
+    let mut proofs = Vec::new();
     context.with_frame(|context| {
         tt.telescope.walk_producing(|_, hint, ty| {
             let (field, field_sort) = check_is_sort(context, &ty)?;
-            if let Sort::Type(level) = field_sort {
-                levels.push(level);
+            match field_sort {
+                Sort::Type(level) => levels.push(level),
+                Sort::Prop(level) => proofs.push(level),
             }
             let name = context.fresh(hint);
             let x = Term::free_var(&name);
@@ -46,8 +48,11 @@ pub(super) fn elaborate_tuple_type(
 
     // A tuple type's sort: `Prop` when it has a field and every one is a proposition, so a record of proofs checks against `Prop`, and `Type` otherwise, the unit `{}` at zero. Sized from its fields' sorts as typing read each, as a function type is and for its reason.
     let sort = match levels.is_empty() && !fields.is_empty() {
-        true => Sort::Prop,
-        false => Sort::Type(Level::max(levels)),
+        true => Sort::Prop(Level::max(proofs)),
+        false => {
+            levels.extend(proofs);
+            Sort::Type(Level::max(levels))
+        }
     };
     let telescope = Telescope::build(fields, ()).relabel(&source_labels);
 

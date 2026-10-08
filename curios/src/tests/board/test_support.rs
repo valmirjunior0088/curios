@@ -1343,23 +1343,15 @@ pub(super) const AN_INFERRED_VALUE_UNDER_A_REFINED_PROOF_KEEPS_ITS_UNIVERSE_INST
 pub(super) const A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER: &str = r#"
         use /std/{Eq, Nat};
 
-        let Bot : Prop = (A : Prop) -> A;
-        let Top : Prop = (Bot) -> Bot;
-        let cast(A : Prop, B : Prop, e : Eq()(A, B), x : A) -> B = match e | refl(@_) => x end;
-        let delta : Top = (z) => z(Top)(z);
-        let omega(h : (A : Prop, B : Prop) -> Eq()(A, B)) -> Bot = (A) => cast(Top, A, h(Top, A), delta);
-        let Omega(h : (A : Prop, B : Prop) -> Eq()(A, B)) -> Bot = delta(omega(h));
-
         induct T: pub Prop
         | t()
         end
 
-        let within(h : (A : Prop, B : Prop) -> Eq()(A, B), y : T, w : Eq(@T)(y, y)) -> Nat =
-            match h(Top, Top)
-            | refl(@_) =>
-                let _v : Eq(@T)(Omega(h)(T), y) = w;
-                0
-            end;
+        let spin(n : Nat) -> T = match n : (_) => T | 0 => T/t() | k + 1; ih => ih end;
+
+        let within(y : T, w : Eq(@T)(y, y)) -> Nat =
+            let _v : Eq(@T)(spin(100000000000), y) = w;
+            0;
 
         /std/print(Nat/to_str(1))
         "#;
@@ -1894,4 +1886,59 @@ pub(super) const A_HYPOTHESIS_ABOUT_A_FOLDS_SCRUTINEE_RIDES_IN_ITS_MOTIVE: &str 
             end(h);
 
         /std/print(Nat/to_str(counted(3, 5, True/qed())))
+        "#;
+
+pub(super) const A_PAYLOAD_QUANTIFYING_OVER_ITS_OWN_PROPOSITIONS_SORT: &str = r#"
+        use /std/Bool/{False};
+
+        induct Bad: Prop
+        | c(f: (A: Prop) -> (A) -> A)
+        end
+
+        let bad(b: Bad) -> False = match b | c(f) => bad(f(Bad)(b)) end;
+
+        /std/print("unreachable")
+        "#;
+
+pub(super) const A_LARGE_PAYLOAD_PINNED_BY_AN_INDEX: &str = r#"
+        use /std/Bool/{False};
+
+        induct I: (f: (A: Type) -> (A) -> A) -> Type
+        | c(@f: (A: Type) -> (A) -> A): (f)
+        end
+
+        let bad(f: (A: Type) -> (A) -> A, b: I(f)) -> False =
+            match b | c(@g) => bad(g, g(I(g))(b)) end;
+
+        /std/print("unreachable")
+        "#;
+
+pub(super) const A_PROOF_PAYLOAD_REACHED_THROUGH_A_SQUASH: &str = r#"
+        use /std/Bool/{False};
+
+        induct T: Type
+        | c(f: (A: Prop) -> (A) -> A)
+        end
+
+        induct Sq(A: Type): Prop
+        | sq(a: A)
+        end
+
+        let bad(t: T) -> False =
+            match t | c(f) => match f(Sq(T))(Sq/sq(t)) | sq(u) => bad(u) end end;
+
+        /std/print("unreachable")
+        "#;
+
+pub(super) const A_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+
+        induct Fine: Prop
+        | c(f: (A: Prop) -> (A) -> A)
+        end
+
+        let through(b: Fine, p: True) -> True = match b | c(f) => f(True)(p) end;
+
+        /std/print(Nat/to_str(1))
         "#;

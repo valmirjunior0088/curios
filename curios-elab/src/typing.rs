@@ -82,7 +82,7 @@ pub(crate) fn is_prop_in(
     type_: &Term,
 ) -> Result<bool, Error> {
     Sort::of_in(context, opened, type_)
-        .map(|sort| matches!(sort, Sort::Prop))
+        .map(|sort| matches!(sort, Sort::Prop(_)))
         .map_err(|error| {
             Error::from_reduce(error, |refusal| {
                 Error::reduce_exhausted(type_.clone(), refusal)
@@ -96,11 +96,13 @@ pub(crate) fn is_declared_prop_in(
     opened: &Opened,
     type_: &Term,
 ) -> Result<bool, Error> {
-    Sort::declared_into_prop(context, &Binders::default(), opened, type_).map_err(|error| {
-        Error::from_reduce(error, |refusal| {
-            Error::reduce_exhausted(type_.clone(), refusal)
+    Sort::declared_into_prop(context, &Binders::default(), opened, type_)
+        .map(|level| level.is_some())
+        .map_err(|error| {
+            Error::from_reduce(error, |refusal| {
+                Error::reduce_exhausted(type_.clone(), refusal)
+            })
         })
-    })
 }
 
 /// Whether a value of `type_` carries nothing at run time, under the binders a surrounding walk has opened, each with its declared type: `type_` is a sort, so the value is a type; a proposition, so the value is a proof; or a function that ultimately answers one of those. The empty tuple is none of them, being what an effect answers, so `{}` and `X -> {}` are kept.
@@ -178,7 +180,7 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
     };
 
     match &*reduce_with(context, &inferred)? {
-        Subterm::Prop(_) => Ok((rebuilt, Sort::Prop)),
+        Subterm::Prop(level) => Ok((rebuilt, Sort::Prop(level.clone()))),
         Subterm::Type(level) => Ok((rebuilt, Sort::Type(level.clone()))),
         other => Err(Error::type_mismatch(other.clone(), Term::type_ground())),
     }

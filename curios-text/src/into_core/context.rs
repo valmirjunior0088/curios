@@ -560,7 +560,11 @@ impl<'a> Context<'a> {
         self.metavars.fresh()
     }
 
-    pub(super) fn fresh_universe(&self, span: Option<&Span>) -> curios_core::Level {
+    pub(super) fn fresh_universe(
+        &self,
+        span: Option<&Span>,
+        written: curios_core::UniverseConstraintKind,
+    ) -> curios_core::Level {
         if let Some(span) = span
             && let Some(id) = self.universe_allocations.borrow().get(span)
         {
@@ -579,7 +583,7 @@ impl<'a> Context<'a> {
             role: self.universe_role(),
             origin: span.map(|span| curios_core::UniverseConstraintOrigin {
                 extent: self.extent(span),
-                kind: curios_core::UniverseConstraintKind::WrittenType,
+                kind: written,
                 declaration: (!self.prefix.is_root()).then(|| self.prefix.join()),
                 binder: None,
             }),

@@ -125,7 +125,7 @@ fn a_polymorphic_definition_instantiates_at_prop_and_type() {
     assert_eq!(
         levels,
         vec![
-            vec![curios_core::Level::constant(1)],
+            vec![curios_core::Level::constant(2)],
             vec![curios_core::Level::constant(2)],
         ]
     );

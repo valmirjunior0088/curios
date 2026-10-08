@@ -49,7 +49,7 @@ fn an_intrinsic_type_sits_at_level_zero() {
     );
 }
 
-/// `Type u : Type (u + 1)`, and `Prop : Type 0`. Both are the sort of a universe, not the universe itself.
+/// `Type u : Type (u + 1)`, and `Prop u : Type (u + 1)` beside it. Both are the sort of a universe, not the universe itself.
 #[test]
 fn a_universe_is_one_level_above_itself() {
     let mut kernel = kernel();
@@ -62,7 +62,9 @@ fn a_universe_is_one_level_above_itself() {
     );
     assert_eq!(
         Sort::of(&mut kernel, &Term::prop()),
-        Ok(Sort::Type(Level::zero())),
+        Ok(Sort::Type(
+            Level::zero().succ().expect("level zero succeeds")
+        )),
     );
 }
 
@@ -72,7 +74,10 @@ fn a_nominal_types_sort_is_the_one_its_declaration_states() {
     let proposition = declare(&mut kernel, "P", Term::prop());
     let data = declare(&mut kernel, "D", Term::type_ground());
 
-    assert_eq!(Sort::of(&mut kernel, &proposition), Ok(Sort::Prop));
+    assert_eq!(
+        Sort::of(&mut kernel, &proposition),
+        Ok(Sort::Prop(Level::zero()))
+    );
     assert_eq!(Sort::of(&mut kernel, &data), Ok(Sort::Type(Level::zero())),);
 }
 
@@ -85,7 +90,7 @@ fn a_function_into_a_proposition_is_a_proposition() {
 
     let pi = Term::func_type([(binder, Term::intrinsic(Intrinsic::NatType))], proposition);
 
-    assert_eq!(Sort::of(&mut kernel, &pi), Ok(Sort::Prop));
+    assert_eq!(Sort::of(&mut kernel, &pi), Ok(Sort::Prop(Level::zero())));
 }
 
 #[test]
@@ -111,7 +116,10 @@ fn a_record_of_propositions_is_a_proposition_but_the_empty_one_is_unit() {
         (binder(0, "a"), proposition.clone()),
         (binder(1, "b"), proposition),
     ]);
-    assert_eq!(Sort::of(&mut kernel, &all_props), Ok(Sort::Prop));
+    assert_eq!(
+        Sort::of(&mut kernel, &all_props),
+        Ok(Sort::Prop(Level::zero()))
+    );
 
     let unit = Term::tuple_type(Vec::<(Free, Term)>::new());
     assert_eq!(Sort::of(&mut kernel, &unit), Ok(Sort::Type(Level::zero())));
@@ -177,7 +185,7 @@ fn a_hypothesis_takes_the_sort_of_the_type_it_was_opened_at() {
     kernel.assume(&hypothesis, &Term::prop());
     let sort = Sort::of(&mut kernel, &Term::free_var(&hypothesis));
 
-    assert_eq!(sort, Ok(Sort::Prop));
+    assert_eq!(sort, Ok(Sort::Prop(Level::zero())));
 }
 
 /// Refusing beats guessing: an unregistered nominal type has no sort the kernel can determine, and inventing one is the unsound direction.
@@ -223,7 +231,7 @@ fn a_universe_instance_over_a_local_head_takes_the_locals_sort() {
     for levels in [vec![Level::zero()], vec![one.clone(), Level::zero()]] {
         assert_eq!(
             Sort::of(&mut kernel, &Term::instance_of(&hypothesis, levels.clone()),),
-            Ok(Sort::Prop),
+            Ok(Sort::Prop(Level::zero())),
         );
         assert_eq!(
             Sort::of(&mut kernel, &Term::instance_of(&data, levels),),
@@ -363,7 +371,7 @@ fn a_remembered_sort_does_not_outlive_the_equations_it_was_taken_under() {
 
     let cached = sequence(&mut kernel());
 
-    assert_eq!(cached[0], Ok(Sort::Prop));
+    assert_eq!(cached[0], Ok(Sort::Prop(Level::zero())));
     assert_eq!(cached[1], Ok(Sort::Type(Level::zero())));
     assert!(matches!(cached[2], Err(Error::NotASort(_))));
     assert_eq!(cached, sequence(&mut Kernel::uncached(100_000, SYNTAX)));
@@ -423,7 +431,7 @@ fn a_remembered_sort_does_not_outlive_the_type_its_local_stands_at() {
         Sort::of(kernel, &type_)
     });
 
-    assert_eq!(shadowed, Ok(Sort::Prop));
+    assert_eq!(shadowed, Ok(Sort::Prop(Level::zero())));
     assert_eq!(Sort::of(&mut kernel, &type_), Ok(Sort::Type(Level::zero())));
 }
 
@@ -446,7 +454,7 @@ fn a_remembered_sort_does_not_outlive_its_binder() {
     });
 
     assert_eq!(first, Ok(Sort::Type(Level::zero())));
-    assert_eq!(second, Ok(Sort::Prop));
+    assert_eq!(second, Ok(Sort::Prop(Level::zero())));
 }
 
 /// A local-free type an arm's equation makes a proposition, beside that equation's scrutinee. `g: (P) -> Nat` has no body, the type is `(x: P) -> match g(x) < 10 | true => Q | false => Nat`, which names no local, and the scrutinee is `g(p) < 10` over a proof `p` in scope. Under its equation `g(x) < 10` is that scrutinee to the kernel's conversion, the two calls differing in a proof, so the type is a proposition inside the arm and data outside it.
@@ -619,7 +627,10 @@ fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
     let family = define_family(&mut kernel, "F", Term::prop(), proposition);
     let applied = Term::apply(Term::free_var(&family), [unaffordable()]);
 
-    assert_eq!(Sort::of(&mut kernel, &applied), Ok(Sort::Prop));
+    assert_eq!(
+        Sort::of(&mut kernel, &applied),
+        Ok(Sort::Prop(Level::zero()))
+    );
     assert_eq!(erased_half(&mut kernel, &applied), Ok(Some(Erased::Proof)));
 }
 

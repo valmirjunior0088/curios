@@ -16,7 +16,7 @@ use {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Sort {
     Type(Level),
-    Prop,
+    Prop(Level),
 }
 
 impl Sort {
@@ -69,8 +69,8 @@ impl Sort {
         type_: &Term,
     ) -> Result<Sort, ReduceError> {
         // Asked of the type as written, before anything is run to classify it.
-        if Sort::declared_into_prop(context, binders, opened, type_)? {
-            return Ok(Sort::Prop);
+        if let Some(level) = Sort::declared_into_prop(context, binders, opened, type_)? {
+            return Ok(Sort::Prop(level));
         }
 
         let reduced = reduce_forced(context, type_.clone())?;
@@ -108,10 +108,12 @@ impl Sort {
             Subterm::TupleType(TupleType { telescope, .. }) if !telescope.is_empty() => {
                 // A later field may mention an earlier one, so each opened binder joins `opened` before the walk descends. See the `FuncType` arm below for why leaving it out is not merely imprecise but silently wrong. Each field is opened once, at every binder before it: opening binder by binder would rewrite every later field, whose metavariable spines name every earlier one.
                 let mut levels = Vec::new();
+                let mut proofs = Vec::new();
                 let mark = opened.len();
                 telescope.walk_producing(|_, hint, ty| {
-                    if let Sort::Type(level) = Sort::of_under(context, binders, opened, &ty)? {
-                        levels.push(level);
+                    match Sort::of_under(context, binders, opened, &ty)? {
+                        Sort::Type(level) => levels.push(level),
+                        Sort::Prop(level) => proofs.push(level),
                     }
                     let binder = context.fresh(hint);
                     let variable = Term::free_var(&binder);
@@ -121,8 +123,11 @@ impl Sort {
                 opened.truncate(mark);
 
                 match levels.is_empty() {
-                    true => Sort::Prop,
-                    false => Sort::Type(Level::max(levels)),
+                    true => Sort::Prop(Level::max(proofs)),
+                    false => {
+                        levels.extend(proofs);
+                        Sort::Type(Level::max(levels))
+                    }
                 }
             }
             // The empty tuple `{}` is unit — it quantifies over nothing, so level 0 is the answer rather than a default, and like `Prop` below it is not worth reporting as a fallback.
@@ -146,7 +151,7 @@ impl Sort {
                     match Sort::of_under(context, binders, opened, &element)? {
                         Sort::Type(level) => Sort::Type(level),
                         // A list, cell, or description of proofs is not itself a proposition — it has length, identity, or an effect, so its inhabitants are distinguishable and proof irrelevance does not apply. It lands at `Type` instead, and `Prop : Type 0`. For `Io` that is what keeps sort-driven erasure from dropping a description of a proof and its host effect with it.
-                        Sort::Prop => Sort::Type(Level::zero()),
+                        Sort::Prop(level) => Sort::Type(level),
                     }
                 }
                 // An intrinsic *value* in type position is not a shape this can classify, and unlike the formers above it is not expected.
@@ -274,16 +279,19 @@ impl Sort {
                 let mut domains = Vec::new();
                 let mark = opened.len();
                 let (_, output) = telescope.walk_producing(|_, hint, domain| {
-                    if let Sort::Type(level) = Sort::of_under(context, binders, opened, &domain)? {
-                        domains.push(level);
-                    }
+                    let (Sort::Type(level) | Sort::Prop(level)) =
+                        Sort::of_under(context, binders, opened, &domain)?;
+                    domains.push(level);
                     let binder = context.fresh(hint);
                     let variable = Term::free_var(&binder);
                     opened.push((binder, domain));
                     Ok(variable)
                 })?;
                 let sort = match Sort::of_under(context, binders, opened, &output)? {
-                    Sort::Prop => Sort::Prop,
+                    Sort::Prop(output) => {
+                        domains.push(output);
+                        Sort::Prop(Level::max(domains))
+                    }
                     Sort::Type(output) => {
                         domains.push(output);
                         Sort::Type(Level::max(domains))
@@ -313,7 +321,9 @@ impl Sort {
                     }
                 }
             }
-            Subterm::Type(level) => Sort::Type(level.succ().map_err(ReduceError::Universe)?),
+            Subterm::Type(level) | Subterm::Prop(level) => {
+                Sort::Type(level.succ().map_err(ReduceError::Universe)?)
+            }
             Subterm::Instance(instance) => {
                 Sort::of_under(context, binders, opened, &instance.head.to_term())?
             }
@@ -323,22 +333,22 @@ impl Sort {
                     .metavar_entry(metavar.id)
                     .map(|entry| entry.result.clone());
                 let proposition = match result {
-                    Some(result) => matches!(&*reduce(context, result)?, Subterm::Prop(_)),
-                    None => false,
+                    Some(result) => match &*reduce(context, result)? {
+                        Subterm::Prop(level) => Some(level.clone()),
+                        _ => None,
+                    },
+                    None => None,
                 };
                 match proposition {
-                    true => Sort::Prop,
-                    false => {
+                    Some(level) => Sort::Prop(level),
+                    None => {
                         probe_level_fallback("unsolved metavariable", &reduced);
                         Sort::Type(Level::zero())
                     }
                 }
             }
-            // `Prop` reaches here too, and `Prop : Type 0` is exactly right, so it is not a fallback and is not worth reporting.
             _ => {
-                if !matches!(&*reduced, Subterm::Prop(_)) {
-                    probe_level_fallback("unclassified shape", &reduced);
-                }
+                probe_level_fallback("unclassified shape", &reduced);
                 Sort::Type(Level::zero())
             }
         })
@@ -350,7 +360,7 @@ impl Sort {
         binders: &Binders,
         opened: &Opened,
         type_: &Term,
-    ) -> Result<bool, ReduceError> {
+    ) -> Result<Option<Level>, ReduceError> {
         let mut head = type_;
         while let Subterm::Apply(apply) = &**head {
             head = &apply.head;
@@ -361,18 +371,21 @@ impl Sort {
                 head: InstanceHead::Var(var),
                 ..
             }) => var.unwrap(),
-            _ => return Ok(false),
+            _ => return Ok(None),
         };
         let declared = matches!(&**type_, Subterm::Apply(_))
             && name.as_global().is_some()
             && context.assumption(name).is_some();
         if !declared {
-            return Ok(false);
+            return Ok(None);
         }
 
         Ok(match synth_neutral(context, binders, opened, type_)? {
-            Some(declared) => matches!(&*reduce(context, declared)?, Subterm::Prop(_)),
-            None => false,
+            Some(declared) => match &*reduce(context, declared)? {
+                Subterm::Prop(level) => Some(level.clone()),
+                _ => None,
+            },
+            None => None,
         })
     }
 
@@ -380,7 +393,7 @@ impl Sort {
     pub(crate) fn term(self) -> Term {
         match self {
             Sort::Type(level) => Term::type_at(level),
-            Sort::Prop => Term::prop(),
+            Sort::Prop(level) => Term::prop_at(level),
         }
     }
 
@@ -388,7 +401,7 @@ impl Sort {
     fn from_universe(context: &mut Context, universe: &Term) -> Result<Sort, ReduceError> {
         let reduced = reduce(context, universe.clone())?;
         Ok(match &*reduced {
-            Subterm::Prop(_) => Sort::Prop,
+            Subterm::Prop(level) => Sort::Prop(level.clone()),
             Subterm::Type(level) => Sort::Type(level.clone()),
             _ => {
                 probe_level_fallback("universe term is not a sort", &reduced);

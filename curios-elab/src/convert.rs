@@ -602,11 +602,14 @@ impl Convert {
         let upper = reduce_forced(context, that.clone())?;
 
         match (&*lower, &*upper) {
-            (Subterm::Prop(_) | Subterm::Type(_), Subterm::Type(upper)) => {
-                let lower = match &*lower {
-                    Subterm::Type(lower) => lower.clone(),
-                    _ => Level::zero(),
+            (below @ (Subterm::Prop(lower) | Subterm::Type(lower)), Subterm::Type(upper))
+            | (below @ Subterm::Prop(lower), Subterm::Prop(upper)) => {
+                // What is put below is named for the report: a proposition's level and a type's are told apart by nothing else on the path.
+                let kind = match below {
+                    Subterm::Prop(_) => UniverseConstraintKind::PropositionCumulativity,
+                    _ => UniverseConstraintKind::Cumulativity,
                 };
+                let lower = lower.clone();
                 context
                     .universes_mut()
                     .add_leq(
@@ -614,7 +617,7 @@ impl Convert {
                         upper.clone(),
                         UniverseConstraintOrigin {
                             extent: self.extent,
-                            kind: UniverseConstraintKind::Cumulativity,
+                            kind,
                             declaration: None,
                             binder: None,
                         },
@@ -2441,7 +2444,7 @@ impl Convert {
                 && !that.has_metavar()
                 && matches!(
                     Sort::of_under(context, &posed, &mut Vec::new(), &type_)?,
-                    Sort::Prop
+                    Sort::Prop(_)
                 )
             {
                 continue;
@@ -2543,7 +2546,7 @@ impl Convert {
             }
 
             // Definitional proof irrelevance: any two inhabitants of a strict proposition are convertible. Placed after the metavar dispatch so a flexible side is still solved against the other (a metavar is not left dangling merely because its type is a proposition); a pair with neither side flexible was decided before either was reduced, above.
-            if let Sort::Prop = Sort::of_under(context, &posed, &mut Vec::new(), &type_)? {
+            if let Sort::Prop(_) = Sort::of_under(context, &posed, &mut Vec::new(), &type_)? {
                 continue;
             }
 
@@ -2645,7 +2648,8 @@ impl Convert {
                 (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => {
                     convert_intrinsic(self, context, this, that)?
                 }
-                (Subterm::Type(this), Subterm::Type(that)) => {
+                (Subterm::Type(this), Subterm::Type(that))
+                | (Subterm::Prop(this), Subterm::Prop(that)) => {
                     context
                         .universes_mut()
                         .add_eq(

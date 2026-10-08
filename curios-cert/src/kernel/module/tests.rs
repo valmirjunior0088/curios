@@ -66,13 +66,55 @@ fn a_payload_below_the_familys_level_is_admitted() {
     assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
 }
 
-/// A `Prop`-sorted family carries no size condition: `Prop` is impredicative, and the large-elimination guard is what keeps that sound.
+/// A `Prop`-sorted family is sized as a `Type`-sorted one is: `induct Box : Prop | mk(x : Type 0)` holds a payload a level above it. Left unsized, a payload quantifying over the sort its family sits in is applied at the family, and the application reads as a descent.
 #[test]
-fn a_proposition_family_has_no_size_condition() {
+fn a_proposition_family_is_sized_as_a_type_family_is() {
     let mut kernel = kernel();
     let declaration = family(&mut kernel, Term::prop(), Term::type_ground());
 
+    assert!(matches!(
+        check_induct_decl(&mut kernel, &declaration),
+        Err(Error::Oversized { .. }),
+    ));
+}
+
+/// `Box : Prop 1 | mk(x : Type 0)`: the payload fits under a proposition at its own level.
+#[test]
+fn a_payload_below_a_propositions_level_is_admitted() {
+    let mut kernel = kernel();
+    let one = Level::zero().succ().expect("level zero has a successor");
+    let declaration = family(&mut kernel, Term::prop_at(one), Term::type_ground());
+
     assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
+}
+
+/// A proof counts at its proposition's level, in a data family as in a proposition: `induct Box : Type 0 | mk(x : (A : Prop) -> A)` holds a proof of a proposition one level up. Exempt, a data family squashes a large proposition into the sort it ranges over.
+#[test]
+fn a_proof_payload_counts_at_its_propositions_level() {
+    let mut kernel = kernel();
+    let declaration = family(&mut kernel, Term::type_ground(), large_proposition());
+
+    assert!(matches!(
+        check_induct_decl(&mut kernel, &declaration),
+        Err(Error::Oversized { .. }),
+    ));
+}
+
+/// The control: the same proof fits under a family one level up.
+#[test]
+fn a_proof_payload_below_the_familys_level_is_admitted() {
+    let mut kernel = kernel();
+    let one = Level::zero().succ().expect("level zero has a successor");
+    let declaration = family(&mut kernel, Term::type_at(one), large_proposition());
+
+    assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
+}
+
+/// `(A : Prop) -> A`: a proposition at level one, since it quantifies over the ground propositions.
+fn large_proposition() -> Term {
+    let a = Free::local(1, Some("A"));
+
+    Term::func_type([(a, Term::prop())], Term::free_var(&a))
 }
 
 /// A uniform parameter gets one rung of slack: a family at `Type 0` may take a `T : Type` parameter — the parameter's domain sorts at `1 ≤ 0 + 1` — while the same domain as a *payload* is refused above.

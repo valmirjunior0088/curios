@@ -15,7 +15,7 @@ fn a_universe_is_one_level_above_itself() {
         infer(&mut kernel, &Term::type_ground()),
         Ok(Term::type_at(one())),
     );
-    assert_eq!(infer(&mut kernel, &Term::prop()), Ok(Term::type_ground()));
+    assert_eq!(infer(&mut kernel, &Term::prop()), Ok(Term::type_at(one())));
 }
 
 #[test]

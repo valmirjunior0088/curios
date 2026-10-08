@@ -41,7 +41,7 @@ fn inhabited_once(
         let proposition = |context: &mut Context, opened: &mut Vec<(Free, Term)>| {
             Ok(matches!(
                 Sort::of_under(context, binders, opened, &at)?,
-                Sort::Prop
+                Sort::Prop(_)
             ))
         };
 

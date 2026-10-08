@@ -342,8 +342,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         span: Option<&Span>,
     ) -> Result<curios_core::Term, Error> {
         Ok(match term {
-            Subterm::Type => curios_core::Term::type_at(self.context.fresh_universe(span)),
-            Subterm::Prop => curios_core::Term::prop(),
+            Subterm::Type => curios_core::Term::type_at(
+                self.context
+                    .fresh_universe(span, curios_core::UniverseConstraintKind::WrittenType),
+            ),
+            Subterm::Prop => curios_core::Term::prop_at(
+                self.context
+                    .fresh_universe(span, curios_core::UniverseConstraintKind::WrittenProp),
+            ),
             Subterm::Hole => curios_core::Term::hole(self.context.fresh_metavar()),
             // A written goal `?`: same fresh metavariable, but marked so zonk reports what elaboration determined for it instead of splicing.
             Subterm::Goal => {

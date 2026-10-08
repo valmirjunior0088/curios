@@ -30,7 +30,7 @@ use {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Sort {
     Type(Level),
-    Prop,
+    Prop(Level),
 }
 
 impl Sort {
@@ -38,13 +38,13 @@ impl Sort {
     pub fn term(self) -> Term {
         match self {
             Sort::Type(level) => Term::type_at(level),
-            Sort::Prop => Term::prop(),
+            Sort::Prop(level) => Term::prop_at(level),
         }
     }
 
     /// Whether this is a strict proposition — the question proof irrelevance turns on.
     pub fn is_prop(&self) -> bool {
-        matches!(self, Sort::Prop)
+        matches!(self, Sort::Prop(_))
     }
 }
 
@@ -69,7 +69,7 @@ pub(crate) fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, Erro
     let reduced = whnf(kernel, universe.clone())?;
 
     match &*reduced {
-        Subterm::Prop(_) => Ok(Sort::Prop),
+        Subterm::Prop(level) => Ok(Sort::Prop(level.clone())),
         Subterm::Type(level) => Ok(Sort::Type(level.clone())),
         _ => Err(Error::NotASort(reduced.clone())),
     }
@@ -99,8 +99,8 @@ impl Sort {
     /// [`Sort::of`]'s rules, one per type former.
     fn classify(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Error> {
         // Asked of the type as written, before anything is run to classify it.
-        if declared_into_prop(kernel, type_)? {
-            return Ok(Sort::Prop);
+        if let Some(level) = declared_into_prop(kernel, type_)? {
+            return Ok(Sort::Prop(level));
         }
 
         let reduced = kernel.reduce_forced(type_.clone())?;
@@ -161,7 +161,7 @@ impl Sort {
 
             // `Type u : Type (u + 1)`, and `Prop : Type 0`.
             Subterm::Type(level) => Ok(Sort::Type(level.succ()?)),
-            Subterm::Prop(_) => Ok(Sort::Type(Level::zero())),
+            Subterm::Prop(level) => Ok(Sort::Type(level.succ()?)),
 
             _ => Err(Error::Unclassified(reduced.clone())),
         }
@@ -175,15 +175,21 @@ impl Sort {
 /// **Only a declaration's word is taken.** The head is a name this kernel defined, whose type it checked the body against before it stored either. A projection of a group the term itself carries states a claim nothing here has checked, and a member of the group being checked is a binder assumed at one: each is classified by what it reduces to, and [`Sort::classify`]'s neutral arm reads such a claim only where reduction leaves the spine standing.
 ///
 /// **Only `Prop` is answered.** A proposition is admitted where a `Type` is declared — `let P(n: Nat) -> Type = Eq()(n, n)` — so a head declared into `Type` does not say its application is none, and such a type is reduced as before. Nothing is admitted the other way: a body at `Type` is refused under a declared `Prop`.
-pub(crate) fn declared_into_prop(kernel: &mut Kernel, type_: &Term) -> Result<bool, Error> {
+pub(crate) fn declared_into_prop(
+    kernel: &mut Kernel,
+    type_: &Term,
+) -> Result<Option<Level>, Error> {
     if !matches!(&**type_, Subterm::Apply(_)) || !heads_a_declaration(kernel, type_) {
-        return Ok(false);
+        return Ok(None);
     }
     let Some(declared) = synth_neutral(kernel, type_)? else {
-        return Ok(false);
+        return Ok(None);
     };
 
-    Ok(matches!(&*whnf(kernel, declared)?, Subterm::Prop(_)))
+    Ok(match &*whnf(kernel, declared)? {
+        Subterm::Prop(level) => Some(level.clone()),
+        _ => None,
+    })
 }
 
 /// Whether the spine `term` is headed by a name this kernel defined, which no binder in scope shadows.
@@ -219,16 +225,19 @@ fn tuple_sort(
     establish: Establish,
 ) -> Result<Sort, Error> {
     kernel.scoped(|kernel| {
-        sort_of_binders(kernel, telescope, establish, |_, levels, ()| {
+        sort_of_binders(kernel, telescope, establish, |_, mut levels, proofs, ()| {
             Ok(match levels.is_empty() {
-                true => Sort::Prop,
-                false => Sort::Type(Level::max(levels)),
+                true => Sort::Prop(Level::max(proofs)),
+                false => {
+                    levels.extend(proofs);
+                    Sort::Type(Level::max(levels))
+                }
             })
         })
     })
 }
 
-/// Π into a proposition is a proposition, regardless of what it quantifies over — that is what makes `(n : Nat) -> P(n)` erasable. Otherwise the level is the join of the domains and the codomain.
+/// Π into a proposition is a proposition — that is what makes `(n : Nat) -> P(n)` erasable — and into a type a type, at the join of the domains' levels and the codomain's either way. A `Prop`-sorted domain counts at its own level: a proposition that quantifies over the sort it sits in could be instantiated at itself.
 fn func_sort(
     kernel: &mut Kernel,
     telescope: Telescope<Term>,
@@ -239,9 +248,13 @@ fn func_sort(
             kernel,
             telescope,
             establish,
-            |kernel, mut levels, codomain| {
+            |kernel, mut levels, proofs, codomain| {
+                levels.extend(proofs);
                 Ok(match establish(kernel, &codomain)? {
-                    Sort::Prop => Sort::Prop,
+                    Sort::Prop(output) => {
+                        levels.push(output);
+                        Sort::Prop(Level::max(levels))
+                    }
                     Sort::Type(output) => {
                         levels.push(output);
                         Sort::Type(Level::max(levels))
@@ -288,20 +301,22 @@ fn sort_of_binders<B: Bound>(
     kernel: &mut Kernel,
     telescope: Telescope<B>,
     establish: Establish,
-    terminal: impl FnOnce(&mut Kernel, Vec<Level>, B) -> Result<Sort, Error>,
+    terminal: impl FnOnce(&mut Kernel, Vec<Level>, Vec<Level>, B) -> Result<Sort, Error>,
 ) -> Result<Sort, Error> {
     let mut levels = Vec::new();
+    let mut proofs = Vec::new();
     let mut cursor = telescope.cursor();
 
     while let Some((_, domain)) = cursor.entry() {
-        if let Sort::Type(level) = establish(kernel, &domain)? {
-            levels.push(level);
+        match establish(kernel, &domain)? {
+            Sort::Type(level) => levels.push(level),
+            Sort::Prop(level) => proofs.push(level),
         }
         kernel.advance_assumed(&mut cursor, &domain);
     }
 
     let body = cursor.body().expect("a cursor past every entry");
-    terminal(kernel, levels, body)
+    terminal(kernel, levels, proofs, body)
 }
 
 /// The sort of an intrinsic type former.
@@ -330,7 +345,7 @@ pub(crate) fn sort_of_intrinsic(kernel: &mut Kernel, intrinsic: &Intrinsic) -> R
 
             Ok(match Sort::of(kernel, &element)? {
                 Sort::Type(level) => Sort::Type(level),
-                Sort::Prop => Sort::Type(Level::zero()),
+                Sort::Prop(level) => Sort::Type(level),
             })
         }
 

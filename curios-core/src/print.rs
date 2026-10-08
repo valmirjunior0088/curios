@@ -1948,7 +1948,14 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 pure(format!("Type.{{{level}}}"))
             }
         }
-        Subterm::Prop(_) => pure("Prop"),
+        Subterm::Prop(level) => {
+            if level.is_zero() || (frame.spelling.erase_universes && level.metas().next().is_some())
+            {
+                pure("Prop")
+            } else {
+                pure(format!("Prop.{{{level}}}"))
+            }
+        }
         Subterm::Instance(instance) => flat([
             sub(instance.head.to_term(), frame),
             pure(universe_suffix(&instance.levels, frame.spelling)),

@@ -91,7 +91,9 @@ fn add_arity_sizing(
     result_sort: &Term,
     kind: UniverseConstraintKind,
 ) -> Result<(), Error> {
-    let Subterm::Type(result_level) = &*reduce_with(context, result_sort)? else {
+    let (Subterm::Type(result_level) | Subterm::Prop(result_level)) =
+        &*reduce_with(context, result_sort)?
+    else {
         return Ok(());
     };
     let result_level = result_level.clone();
@@ -165,7 +167,7 @@ fn telescope_sizing<B: Bound>(
 
         let domain_sort = sort_term(context, &domain)?;
         let domain_sort = reduce_with(context, &domain_sort)?;
-        if let Subterm::Type(domain_level) = &*domain_sort {
+        if let Subterm::Type(domain_level) | Subterm::Prop(domain_level) = &*domain_sort {
             let upper = if position < uniform_count {
                 result_level.checked_add(1).map_err(Error::from)?
             } else {
@@ -200,7 +202,9 @@ fn add_declaration_sizing<B: Bound>(
     result_sort: &Term,
     kind: UniverseConstraintKind,
 ) -> Result<(), Error> {
-    let Subterm::Type(result_level) = &*reduce_with(context, result_sort)? else {
+    let (Subterm::Type(result_level) | Subterm::Prop(result_level)) =
+        &*reduce_with(context, result_sort)?
+    else {
         return Ok(());
     };
     let result_level = result_level.clone();
@@ -483,7 +487,7 @@ fn result_sort_only_metas(context: &Context, type_: &Term) -> BTreeSet<UniverseM
 
     let mut domains = Vec::new();
     let terminal = peel(type_, &mut domains);
-    if !matches!(&**terminal, Subterm::Type(_)) {
+    if !matches!(&**terminal, Subterm::Type(_) | Subterm::Prop(_)) {
         return BTreeSet::new();
     }
     let mut result = context.universe_metas_in(terminal);

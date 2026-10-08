@@ -19,16 +19,15 @@ pub(super) fn elaborate_func_type(
 ) -> Result<(Term, Term), Error> {
     // One walk, each domain opened once at the binders before it, rather than a recursion reopening the rest per binder.
     let mut domains: Vec<(Plicity, Free, Term)> = Vec::new();
-    // The level of each domain that is no proposition, as typing read it.
+    // The level of each domain, a proposition's among them, as typing read it.
     let mut levels = Vec::new();
     let (output, output_sort) = context.with_frame(|context| {
         let mut cursor = ft.telescope.cursor();
         while let Some((_, ty)) = cursor.entry() {
             let mark = cursor.mark().expect("a mark stands at an entry");
             let (domain, domain_sort) = check_is_sort(context, &ty)?;
-            if let Sort::Type(level) = domain_sort {
-                levels.push(level);
-            }
+            let (Sort::Type(level) | Sort::Prop(level)) = domain_sort;
+            levels.push(level);
             // A definition sugar's parameter is one written binder in its type and in its lambda, so a proof written under it here credits it as one written in the body does.
             let written = cursor.written();
             let name = cursor.advance_fresh(|hint| context.fresh_for(hint, written));
@@ -70,7 +69,10 @@ pub(super) fn elaborate_func_type(
 
     // Sized from its parts' sorts as typing read each, a Π into a proposition being one: where the kernel types it, which reads a part as it is written. Sized from the parts' reducts, a part whose written type sits above its reduct's, a call typed by its codomain or an occurrence at a level its value drops, leaves the former below the sort the kernel finds.
     let sort = match output_sort {
-        Sort::Prop => Sort::Prop,
+        Sort::Prop(level) => {
+            levels.push(level);
+            Sort::Prop(Level::max(levels))
+        }
         Sort::Type(level) => {
             levels.push(level);
             Sort::Type(Level::max(levels))

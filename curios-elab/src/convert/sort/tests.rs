@@ -56,7 +56,7 @@ fn a_remembered_sort_does_not_outlive_the_type_its_local_stands_at() {
     let after = Sort::of(&mut context, &type_).expect("classifies");
 
     assert_eq!(before, Sort::Type(Level::zero()));
-    assert_eq!(shadowed, Sort::Prop);
+    assert_eq!(shadowed, Sort::Prop(Level::zero()));
     assert_eq!(after, Sort::Type(Level::zero()));
 }
 
@@ -76,7 +76,7 @@ fn a_remembered_sort_does_not_outlive_a_definition_landing() {
     let unfolded = Sort::of(&mut context, &type_).expect("classifies");
 
     assert_eq!(stuck, Sort::Type(Level::zero()));
-    assert_eq!(unfolded, Sort::Prop);
+    assert_eq!(unfolded, Sort::Prop(Level::zero()));
 }
 
 /// A remembered sort lives as long as the budget does, as a reduct does: across a restore a type pays for its classification again, so a sort one declaration filed never spares the next the reduction it rests on.
@@ -123,7 +123,7 @@ fn a_type_naming_a_binder_its_walk_opened_is_not_remembered() {
         Sort::of_in(&mut context, &mut vec![(binder, Term::prop())], &type_).expect("classifies");
 
     assert_eq!(at_a_type, Sort::Type(Level::zero()));
-    assert_eq!(at_a_proposition, Sort::Prop);
+    assert_eq!(at_a_proposition, Sort::Prop(Level::zero()));
 }
 
 /// An application of a declaration that lands in `Prop` is a proposition by that declaration, and nothing is run to learn it: the argument below is one no budget reduces, and the application is classified. A declaration into `Type` says less than its reduct, so the same argument under one is run, and refused.
@@ -168,7 +168,7 @@ fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
             &Term::apply(Term::free_var(&into_prop), [unaffordable.clone()])
         )
         .expect("classifies"),
-        Sort::Prop,
+        Sort::Prop(Level::zero()),
     );
     assert!(
         Sort::of(

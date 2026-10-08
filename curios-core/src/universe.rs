@@ -1,6 +1,6 @@
 //! Algebraic universe levels and declaration-local schemes: the data a universe judgment is stated over. Solving it is `curios-elab`'s `universe_solver`, and deciding whether a constraint set is satisfiable is each checker's own.
 //!
-//! Surface Curios has no level syntax. `curios-text` assigns a fresh [`UniverseMetaId`] and diagnostic [`UniverseSeed`] to every written `Type`; Core normalizes levels to finite maxima of a constant and checked-offset parameter/meta atoms. `Prop` remains a separate impredicative sort, while `Type u : Type (u + 1)` and checking `Type u` against `Type v` records `u ≤ v`.
+//! Surface Curios has no level syntax. `curios-text` assigns a fresh [`UniverseMetaId`] and diagnostic [`UniverseSeed`] to every written `Type` and every written `Prop`; Core normalizes levels to finite maxima of a constant and checked-offset parameter/meta atoms. `Type u : Type (u + 1)` and `Prop u : Type (u + 1)`, and checking `Type u` or `Prop u` against `Type v`, or `Prop u` against `Prop v`, records `u ≤ v`.
 //!
 //! Reusable declarations bind surviving input levels in a [`UniverseContext`]. Flexible classifier levels take their principal least solution when one exists; genuinely non-principal choices remain residual constrained parameters. Every external occurrence instantiates the stored context freshly. Local schemes may temporarily refer to ambient metas and are capture-safely rewritten beneath the enclosing declaration's parameters; recursive members instead share one context and one internal instance.
 //!
@@ -313,7 +313,9 @@ pub struct UniverseSeed {
 #[curios_archive::archived]
 pub enum UniverseConstraintKind {
     WrittenType,
+    WrittenProp,
     Cumulativity,
+    PropositionCumulativity,
     TypeSuccessor,
     FunctionFormation,
     TupleFormation,
@@ -322,6 +324,31 @@ pub enum UniverseConstraintKind {
     Conversion,
     SchemeInstantiation,
     Other(String),
+}
+
+/// Whether an inconsistency's path runs through a proposition: one written, or one put below a sort.
+pub fn names_a_proposition(path: &[UniverseConstraintOrigin]) -> bool {
+    path.iter().any(|origin| {
+        matches!(
+            origin.kind,
+            UniverseConstraintKind::WrittenProp | UniverseConstraintKind::PropositionCumulativity
+        )
+    })
+}
+
+/// The sort an inconsistency is reported about, as its reader wrote it: `Prop` where its path runs through a proposition and through no type, `Type` otherwise.
+pub fn inconsistent_sort(path: &[UniverseConstraintOrigin]) -> &'static str {
+    let through_a_type = path.iter().any(|origin| {
+        matches!(
+            origin.kind,
+            UniverseConstraintKind::WrittenType | UniverseConstraintKind::Cumulativity
+        )
+    });
+
+    match names_a_proposition(path) && !through_a_type {
+        true => "Prop",
+        false => "Type",
+    }
 }
 
 /// User-facing provenance for one universe constraint.
@@ -514,7 +541,8 @@ impl fmt::Display for UniverseError {
             UniverseError::Inconsistency { lower, upper, path } => {
                 write!(
                     formatter,
-                    "this Type would need to be strictly below itself ({lower} ≤ {upper})"
+                    "this {} would need to be strictly below itself ({lower} ≤ {upper})",
+                    inconsistent_sort(path),
                 )?;
                 for origin in path {
                     write!(formatter, "\n  required by {:?}", origin.kind)?;

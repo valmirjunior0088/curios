@@ -500,7 +500,7 @@ fn structural(
     match (&**this, &**that) {
         // Levels compare under the item's assumed constraints: two levels the hypotheses force equal are equal in every instance that satisfies them, which is what checking generically means.
         (Subterm::Type(left), Subterm::Type(right)) => Ok(kernel.level_eq(left, right)),
-        (Subterm::Prop(_), Subterm::Prop(_)) => Ok(true),
+        (Subterm::Prop(left), Subterm::Prop(right)) => Ok(kernel.level_eq(left, right)),
 
         (Subterm::Intrinsic(left), Subterm::Intrinsic(right)) => {
             convert_intrinsic(kernel, history, left, right)

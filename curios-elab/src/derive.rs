@@ -300,7 +300,7 @@ fn classify(
             Error::reduce_exhausted(type_.clone(), refusal)
         })
     })?;
-    if matches!(sort, Sort::Prop) {
+    if matches!(sort, Sort::Prop(_)) {
         return Ok(Classified {
             position,
             payload,

@@ -24,29 +24,29 @@ pub(super) const TOTALITY: Part = Part {
         Ticket {
             title: "A payload that quantifies over `Prop` is applied at its own family, and the application is graded below its constructor",
             found_on: Date::new(2026, 10, 8),
-            status: Status::Open,
+            status: Status::Fixed,
             witnesses: &[
                 Witness {
                     what: "a proof by recursion on what a payload returns of the scrutinee, the payload the polymorphic identity",
                     proof: Proof::Program(A_PAYLOAD_RETURNS_THE_SCRUTINEE_IT_IS_APPLIED_TO),
-                    expect: refused![elaborator],
+                    expect: refused![elaborator: curios_elab::Error::UniverseInconsistency { .. }],
                 },
                 Witness {
                     what: "the same recursion on what the payload returns of its constructor built again",
                     proof: Proof::Program(A_PAYLOAD_RETURNS_ITS_CONSTRUCTOR_BUILT_AGAIN),
-                    expect: refused![elaborator],
+                    expect: refused![elaborator: curios_elab::Error::UniverseInconsistency { .. }],
                 },
                 Witness {
                     what: "the recursion on what the payload returns of the scrutinee, as a term",
                     proof: Proof::Module(a_payload_applied_at_its_own_family),
-                    expect: refused![kernel],
+                    expect: refused![kernel: curios_cert::Error::Oversized { .. }],
                 },
             ],
         },
     ],
 };
 
-/// `f` quantifies over every proposition, `Bad` among them, so `f(Bad)(b)` is a `Bad`, and an application of a payload is graded a child of its constructor. With `f` the identity it is `b` itself, and the recursion that was judged to descend takes the same value for ever.
+/// `f` quantified over every proposition, `Bad` among them, so `f(Bad)(b)` was a `Bad`, and an application of a payload is graded a child of its constructor. With `f` the identity it is `b` itself, and the recursion that was judged to descend took the same value for ever. `Bad` is now sized: holding `f`, it sits above the propositions `f` ranges over, and is none of them.
 const A_PAYLOAD_RETURNS_THE_SCRUTINEE_IT_IS_APPLIED_TO: &str = r#"
     use /std/Bool/{False};
     induct Bad: Prop
@@ -86,7 +86,7 @@ fn a_member_reached_through_an_instance() -> (Module, Term) {
 
 /// `induct Bad : Prop | c(f : (A : Prop) -> (x : A) -> A) end` and `rec bad : (b : Bad) -> False = (b) => match b | c(f) => bad(f(Bad)(b)) end`, closed with `bad(Bad/c((A) => (x) => x))`.
 ///
-/// A `Prop`-sorted family carries no size condition, so `Bad` holds a payload that quantifies over the sort `Bad` is in, and the payload's declared type names `Bad` nowhere, so strict positivity has nothing to refuse. The size order reads an application of a payload as a child of its constructor, on the premise that a payload of a foreign type cannot hand back a value of the family; applied at `Bad` this one does, and at the identity it hands back the scrutinee.
+/// A `Prop`-sorted family carried no size condition, so `Bad` held a payload that quantified over the sort `Bad` was in, and the payload's declared type names `Bad` nowhere, so strict positivity had nothing to refuse. The size order reads an application of a payload as a child of its constructor, on the premise that a payload of a foreign type cannot hand back a value of the family; applied at `Bad` this one did, and at the identity it handed back the scrutinee. The declaration is refused where it is sized: its payload does not fit under `Prop` at level zero.
 fn a_payload_applied_at_its_own_family() -> (Module, Term) {
     let family = Global::Authored(Qualifier::from(["Bad"]));
     let family_type = Term::induct_type(family, Vec::<Term>::new(), Vec::<Term>::new());
