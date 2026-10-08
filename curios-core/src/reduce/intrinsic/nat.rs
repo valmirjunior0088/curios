@@ -208,7 +208,7 @@ pub(super) fn reduce_nat_division(
     non_zero: &Term,
     euclid: Euclid,
 ) -> Result<Subterm, ReduceError> {
-    let span = right.span().or_else(|| left.span());
+    let extent = right.extent().or_else(|| left.extent());
     let left = reducer.reduce_forced(left.clone())?;
     let right = reducer.reduce_forced(right.clone())?;
 
@@ -216,7 +216,7 @@ pub(super) fn reduce_nat_division(
     if divisor.as_ref().is_some_and(Natural::is_zero) {
         return Err(ReduceError::DivisionByZero {
             kind: euclid.kind(),
-            span,
+            extent,
         });
     }
 

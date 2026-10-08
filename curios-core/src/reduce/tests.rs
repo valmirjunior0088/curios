@@ -10,7 +10,7 @@ fn refused() -> ReduceError {
     ReduceError::ListGetOutOfBounds {
         len: 2,
         index: 5,
-        span: None,
+        extent: None,
     }
 }
 

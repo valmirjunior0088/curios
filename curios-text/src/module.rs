@@ -324,29 +324,87 @@ fn parse_items<'a>(strict: bool) -> Parser<'a, Vec<Recovered<TopItem>>> {
 fn first_broken(recovered: &[Recovered<TopItem>]) -> Option<ParserError> {
     recovered.iter().find_map(|item| match item {
         Recovered::Broken { error, .. } => Some(error.clone()),
-        Recovered::Item(_) => None,
+        Recovered::Item { .. } => None,
     })
 }
 
-/// The recovered list as items, a broken one carried as [`TopItem::Broken`].
-fn into_items(recovered: Vec<Recovered<TopItem>>) -> Vec<TopItem> {
-    recovered
+/// The recovered list as a module, a broken item carried as [`TopItem::Broken`], each item with the text its parse consumed.
+fn into_module(recovered: Vec<Recovered<TopItem>>) -> Module {
+    let (items, spans) = recovered
         .into_iter()
         .map(|item| match item {
-            Recovered::Item(item) => item,
-            Recovered::Broken { error, span } => TopItem::Broken(TopBroken {
-                report: error.report(),
-                declares: error.tagged().map(Label::from),
+            Recovered::Item { item, span } => (item, span),
+            Recovered::Broken { error, span } => (
+                TopItem::Broken(TopBroken {
+                    report: error.report(),
+                    declares: error.tagged().map(Label::from),
+                    span: span.clone(),
+                }),
                 span,
-            }),
+            ),
         })
-        .collect()
+        .unzip();
+
+    Module { items, spans }
 }
 
 /// A parsed module body: its top-level items in source order — an order that matters, since `use` scoping is point-of-use and the flat items leave the lowering in it. Parsed via `FromStr`, loaded from disk through a [`RootSource`], or built synthetically (the embedded `sys` prelude).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Module {
     pub items: Vec<TopItem>,
+    /// Where each item's own text lies, parallel to `items`: from its first word, a documentation block's `---` included, to the end of its last, the whitespace and plain comments after it left out — so nothing written between two items is either's. Empty for a module built rather than parsed. Like `Term`'s span, excluded from equality.
+    pub spans: Vec<Span>,
+}
+
+impl PartialEq for Module {
+    fn eq(&self, other: &Self) -> bool {
+        self.items == other.items
+    }
+}
+
+impl Module {
+    /// A module of `items` built rather than parsed, which lie nowhere.
+    pub(crate) fn built(items: Vec<TopItem>) -> Self {
+        Self {
+            items,
+            spans: Vec::new(),
+        }
+    }
+
+    /// This module with each item's span cut back to its own text, in it and in every module written inline within it: an item's parse runs on past its last word, over the whitespace and the plain `comments` up to where the next item begins.
+    fn trimmed(mut self, comments: &[Span]) -> Self {
+        for span in &mut self.spans {
+            *span = own_text(span, comments);
+        }
+        for item in &mut self.items {
+            if let TopItem::Mod(TopMod {
+                module: Some(module),
+                ..
+            }) = item
+            {
+                *module = std::mem::replace(module, Module::built(Vec::new())).trimmed(comments);
+            }
+        }
+
+        self
+    }
+}
+
+/// `span` without the whitespace and the plain comments that end it. `comments` are the parse's, ascending.
+fn own_text(span: &Span, comments: &[Span]) -> Span {
+    let text = &span.source.text;
+    let mut end = span.end;
+    loop {
+        end = span.start + text[span.start..end].trim_end().len();
+        // The last comment that begins before `end`: the one ending there, where the text ends in a comment.
+        let before = comments.partition_point(|comment| comment.start < end);
+        match before.checked_sub(1).map(|index| &comments[index]) {
+            Some(comment) if comment.end == end && span.start <= comment.start => {
+                end = comment.start;
+            }
+            _ => return Span::new(span.source.clone(), span.start, end),
+        }
+    }
 }
 
 /// End of a module's item sequence: the input is exhausted, or the item parser explains why it is not.
@@ -376,12 +434,11 @@ impl Module {
             parse_whitespace()
                 .and_keep(parse_items(strict))
                 .and_drop(parse_items_end())
-                .map(|items| Module {
-                    items: into_items(items),
-                }),
+                .map(into_module),
             source,
         )?;
-        Ok((module, take_comments()))
+        let comments = take_comments();
+        Ok((module.trimmed(&comments), comments))
     }
 
     /// Read and parse a standalone module while retaining its source path for diagnostics. `curios-package` reads a library's header with it to learn what the library declares; ordinary compilation reaches file-backed modules through [`RootSource`], which parses each text once.
@@ -424,11 +481,8 @@ pub struct Entrypoint {
 }
 
 impl Entrypoint {
-    pub(crate) fn new(items: Vec<TopItem>, tail: Term) -> Self {
-        Self {
-            module: Module { items },
-            tail,
-        }
+    pub(crate) fn new(module: Module, tail: Term) -> Self {
+        Self { module, tail }
     }
 }
 
@@ -458,12 +512,19 @@ impl Entrypoint {
                     };
                     lazy(parse_term)
                         .and_drop(parse_program_end())
-                        .map(move |tail| Entrypoint::new(into_items(items), tail))
+                        .map(move |tail| Entrypoint::new(into_module(items), tail))
                         .or(swallowed)
                 }),
             source,
         )?;
-        Ok((entrypoint, take_comments()))
+        let comments = take_comments();
+        Ok((
+            Entrypoint {
+                module: entrypoint.module.trimmed(&comments),
+                tail: entrypoint.tail,
+            },
+            comments,
+        ))
     }
 }
 
@@ -488,7 +549,7 @@ pub(crate) fn parse_for_format(source: &Arc<Source>) -> Result<FormatInput, Pars
             .and_drop(parse_program_end())
             .map(|(items, tail)| {
                 let (spans, items): (Vec<_>, Vec<_>) = items.into_iter().unzip();
-                (Module { items }, spans, tail)
+                (Module::built(items), spans, tail)
             }),
         source,
     )?;
@@ -554,7 +615,7 @@ impl Entrypoint {
     /// This is a program. It needs no text, so there is nothing to parse and nothing to fail; and it is the `IoPure` intrinsic rather than a path, so there is no name to resolve and no dependence on `/std` being reachable from a placeholder.
     pub fn trivial() -> Self {
         Self {
-            module: Module { items: Vec::new() },
+            module: Module::built(Vec::new()),
             tail: Term::from(Subterm::Intrinsic(Intrinsic::IoPure {
                 result: Term::from(Subterm::TupleType(TupleType { fields: Vec::new() })),
                 value: Term::from(Subterm::Tuple(Tuple { fields: Vec::new() })),

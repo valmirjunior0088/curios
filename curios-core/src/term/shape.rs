@@ -842,7 +842,7 @@ pub enum InstanceHead {
 }
 
 impl InstanceHead {
-    /// This head spelled as the term it abbreviates: the variable itself, or the ordinary `Rec` node whose tail selects the member (see [`Term::rec_proj`]). The spelling is span-less; an occurrence's span lives on the wrapping instance term.
+    /// This head spelled as the term it abbreviates: the variable itself, or the ordinary `Rec` node whose tail selects the member (see [`Term::rec_proj`]). The spelling is without a position; an occurrence's extent lives on the wrapping instance term.
     pub fn to_term(&self) -> Term {
         match self {
             InstanceHead::Var(var) => Term::var(var.clone()),

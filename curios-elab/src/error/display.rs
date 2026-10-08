@@ -8,12 +8,13 @@ mod tests;
 use {
     super::{
         BinderSite, Callee, CycleMember, Declined, Erased, Error, GoalReport, ShapeDiagnosis,
-        Underivable,
+        Underivable, Watched,
     },
     crate::{Conclusion, Origin, Refusal, ordinal},
     curios_algebra::BOOL_ATOM_CAP,
     curios_core::{
-        CalleeId, Free, Level, ReaderPosition, Spelling, Subterm, Term, UniverseMetaId, WitnessKey,
+        Anchors, CalleeId, Free, Level, ReaderPosition, Spelling, Subterm, Term, UniverseMetaId,
+        WitnessKey,
     },
     curios_num::Grain,
     curios_utilities::{Plicity, Qualifier},
@@ -252,11 +253,18 @@ impl Callee {
 }
 
 /// An error paired with the [`Spelling`] its terms render under — the parameter `Display::fmt` cannot take, and the reason every arm below rebinds its term fields before interpolating them. A field left unrebound would silently render core's own spelling, which is why the rebinding is per-arm and mechanical rather than left to each `write!`.
-pub(super) struct Displayed<'a>(pub(super) &'a Error, pub(super) Rc<Spelling>);
+///
+/// The third is where the declarations a position lies in were written, for the two messages that state one in their own text: a goal batch rendered whole, and a written goal a postponed conversion watched. Empty where nobody knows, and the position is then left out.
+pub(super) struct Displayed<'a>(
+    pub(super) &'a Error,
+    pub(super) Rc<Spelling>,
+    pub(super) &'a [&'a Anchors],
+);
 
 impl fmt::Display for Displayed<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let spelling = &self.1;
+        let anchors = self.2;
         match self.0 {
             Error::ReduceExhausted { term, .. } => {
                 let term = term.spelled(spelling);
@@ -822,6 +830,21 @@ impl fmt::Display for Displayed<'_> {
                     )?,
                 }
                 if !watching.is_empty() {
+                    let watching = watching
+                        .iter()
+                        .map(|watched| match watched {
+                            Watched::Described(description) => description.clone(),
+                            Watched::Goal(extent) => {
+                                match extent.and_then(|extent| extent.resolved(anchors)) {
+                                    Some(span) => {
+                                        let (line, column) = span.line_column();
+                                        format!("the written goal `?` at {line}:{column}")
+                                    }
+                                    None => "a written goal `?`".to_string(),
+                                }
+                            }
+                        })
+                        .collect::<Vec<_>>();
                     write!(f, "\n  never solved: {}", watching.join(", "))?;
                 }
                 if *under_refinements {
@@ -1075,11 +1098,11 @@ impl fmt::Display for Displayed<'_> {
                 goal,
                 solution,
             } => {
-                // Rendered as a one-element batch so the safety-net spelling and the compile path's [`Error::Goals`] can never drift; this form carries no occurrence span or candidates of its own.
+                // Rendered as a one-element batch so the safety-net spelling and the compile path's [`Error::Goals`] can never drift; this form carries no occurrence extent or candidates of its own.
                 // Its reader position is the enclosing `InDeclaration`'s and `InScope`'s, which the spelling handed here already stands at.
                 let reader = spelling.reader();
                 let report = GoalReport {
-                    span: None,
+                    extent: None,
                     owner: reader.owner,
                     witnesses: Rc::clone(&reader.witnesses),
                     scope: scope.clone(),
@@ -1089,7 +1112,7 @@ impl fmt::Display for Displayed<'_> {
                     candidates: Vec::new(),
                     refusal: None,
                 };
-                Displayed(&Error::Goals(vec![report]), Rc::clone(spelling)).fmt(f)
+                Displayed(&Error::Goals(vec![report]), Rc::clone(spelling), anchors).fmt(f)
             }
             Error::Goals(reports) => {
                 // Each entry is the single-goal turnstile idiom followed by its own snippet — message first, then location, matching how `reports` orders a `Located` diagnostic. Entries are separated by a blank line.
@@ -1102,7 +1125,7 @@ impl fmt::Display for Displayed<'_> {
                         witnesses: Rc::clone(&report.witnesses),
                     }));
                     f.write_str(&goal_text(report, &spelling))?;
-                    if let Some(span) = &report.span {
+                    if let Some(span) = report.extent.and_then(|extent| extent.resolved(anchors)) {
                         write!(f, "\n\n{}", span.render_snippet())?;
                     }
                 }
@@ -1368,10 +1391,10 @@ impl fmt::Display for Displayed<'_> {
             // `render_body` intercepts both wrappers before a real spelling ever reaches this match, but these arms must not rely on that: interpolating `{error}` would route through `Display for Error`, silently resetting a nested term's spelling to core's default. Recurse with the spelling in hand instead.
             Error::InDeclaration { name, error, .. } => {
                 writeln!(f, "while elaborating {name}:")?;
-                Displayed(error, Rc::clone(spelling)).fmt(f)
+                Displayed(error, Rc::clone(spelling), anchors).fmt(f)
             }
             Error::Located { error, .. } | Error::InScope { error, .. } => {
-                Displayed(error, Rc::clone(spelling)).fmt(f)
+                Displayed(error, Rc::clone(spelling), anchors).fmt(f)
             }
             Error::InUnreachableArm {
                 guard,
@@ -1379,7 +1402,7 @@ impl fmt::Display for Displayed<'_> {
                 enclosing,
                 error,
             } => {
-                Displayed(error, Rc::clone(spelling)).fmt(f)?;
+                Displayed(error, Rc::clone(spelling), anchors).fmt(f)?;
                 write!(
                     f,
                     "\n{}",
@@ -1392,7 +1415,7 @@ impl fmt::Display for Displayed<'_> {
                     if index > 0 {
                         write!(f, "\n\n")?;
                     }
-                    Displayed(error, Rc::clone(spelling)).fmt(f)?;
+                    Displayed(error, Rc::clone(spelling), anchors).fmt(f)?;
                 }
                 Ok(())
             }

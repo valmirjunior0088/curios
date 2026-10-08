@@ -5,8 +5,8 @@
 use {
     super::Solutions,
     crate::UniverseSolver,
-    curios_core::{Free, MetavarId, MetavarOrigin, Mints, Term},
-    curios_utilities::{Entropy, Span},
+    curios_core::{Extent, Free, MetavarId, MetavarOrigin, Mints, Term},
+    curios_utilities::Entropy,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -26,8 +26,8 @@ pub(crate) struct Attempt {
     pub(super) universe_solver: UniverseSolver,
     // Conversions the item drain gave up on because written goals alone held them up — what each such `?` must make true, carried to the goal batch rather than reported as an error. See [`Attempt::note_goal_obligation`].
     goal_obligations: Vec<GoalObligation>,
-    // Where each written goal `?` was written, recorded as it is born: a report that names a goal names it by this span, since an occurrence of the goal inside a type may carry the span of the binder it was substituted for — a declaration's, not the `?`'s.
-    goal_spans: BTreeMap<MetavarId, Span>,
+    // Where each written goal `?` was written, recorded as it is born: a report that names a goal names it by this extent, since an occurrence of the goal inside a type may carry the extent of the binder it was substituted for — a declaration's, not the `?`'s.
+    goal_spans: BTreeMap<MetavarId, Extent>,
     /// The member name each recursive slot stands for.
     ///
     /// A slot is the placeholder a `rec` group's member is known by while its body is being checked, and `elaborate_rec` defines the member's *name* to it — so reduction turns a recursive reference into the slot, and a committed solution can carry one. `RecItem::try_new` captures member **names** into the group's binder, so a slot reaching that point is not something the capture can bind: zonk expands it to the member's body instead, the body mentions that solution again, and the walk never ends. Knowing the name lets both substitution walks spell the member as the capturable thing it is.
@@ -35,7 +35,7 @@ pub(crate) struct Attempt {
     /// Why a solve could not commit: the unsolved metavariables `Convert::solve`'s embedded-metavariable guard found riding inside a candidate, with what each one fills and where it was written. The last attempt wins, so a metavariable that never solves leaves the reason it never did.
     ///
     /// This edge is what lets the item drain report the *cause* of an undecided conversion rather than the goal that merely waited on it. An undischarged bound riding inside a helper's unfolded body blocks every metavariable downstream of it, and without the edge the report names the last of them — an implicit the author never wrote, at a line that is not where the fault is — while the bound nothing discharged goes unmentioned entirely.
-    solve_blockers: BTreeMap<MetavarId, Vec<(MetavarId, MetavarOrigin, Option<Span>)>>,
+    solve_blockers: BTreeMap<MetavarId, Vec<(MetavarId, MetavarOrigin, Option<Extent>)>>,
 }
 
 impl Default for Attempt {
@@ -67,7 +67,7 @@ impl Attempt {
     pub(crate) fn note_solve_blockers(
         &mut self,
         id: MetavarId,
-        blockers: Vec<(MetavarId, MetavarOrigin, Option<Span>)>,
+        blockers: Vec<(MetavarId, MetavarOrigin, Option<Extent>)>,
     ) {
         self.solve_blockers.insert(id, blockers);
     }
@@ -76,17 +76,17 @@ impl Attempt {
     pub(crate) fn solve_blockers(
         &self,
         id: MetavarId,
-    ) -> &[(MetavarId, MetavarOrigin, Option<Span>)] {
+    ) -> &[(MetavarId, MetavarOrigin, Option<Extent>)] {
         self.solve_blockers.get(&id).map_or(&[], Vec::as_slice)
     }
 
     /// Record where the written goal `id` was written, at its birth.
-    pub(crate) fn note_goal_span(&mut self, id: MetavarId, span: Span) {
-        self.goal_spans.entry(id).or_insert(span);
+    pub(crate) fn note_goal_extent(&mut self, id: MetavarId, extent: Extent) {
+        self.goal_spans.entry(id).or_insert(extent);
     }
 
     /// Where the written goal `id` was written, if elaboration reached it.
-    pub(crate) fn goal_span(&self, id: MetavarId) -> Option<&Span> {
+    pub(crate) fn goal_extent(&self, id: MetavarId) -> Option<&Extent> {
         self.goal_spans.get(&id)
     }
 

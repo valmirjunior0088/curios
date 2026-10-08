@@ -7,7 +7,7 @@ use {
         Globals, Kernel, Rechecked, Verdict, certify_module, certify_program,
         recheck_program_measured,
     },
-    curios_core::{Certification, Consumption, Free, Global, Intrinsic, Program, Term},
+    curios_core::{Anchors, Certification, Consumption, Free, Global, Intrinsic, Program, Term},
     curios_elab::{
         Context, Erasures, Established, FinalizedProgram, Tail, elaborate_and_zonk_program,
         elaborate_and_zonk_program_reporting, elaborate_and_zonk_unit, erase_program, erase_unit,
@@ -206,6 +206,16 @@ pub fn recheck_measured<T>(
     (rechecked.verdicts, read(&kernel))
 }
 
+/// Where a report about the unit lowered as `text` is placed: the unit's own declarations first, then those of the units in its scope.
+pub(crate) fn anchors_of<'a>(
+    text: &'a PreparedText,
+    predecessors: Predecessors<'a>,
+) -> Vec<&'a Anchors> {
+    std::iter::once(text.anchors())
+        .chain(predecessors.anchors())
+        .collect()
+}
+
 /// The kernel's environment for `predecessors`: every unit in scope where it stands, read by the places it keeps for its names, with the record the certifier filed with it. Nothing of a unit is copied.
 pub(crate) fn globals(predecessors: Predecessors<'_>) -> Globals<'_> {
     let mut globals = Globals::default();
@@ -284,10 +294,10 @@ pub fn typecheck_entrypoint(
 
     let established = Established::placed(&predecessors.placed());
     let mut context = Context::new(budget, *syntax);
-    let ((program, _, _), obligations) = elaborate_entry(
+    let ((program, _, _, _), obligations) = elaborate_entry(
         &mut context,
         &established,
-        syntax,
+        &predecessors.anchors(),
         lowered,
         EntryTail::Authored,
         Obligations::Reported,
@@ -317,7 +327,7 @@ pub enum EntryTail {
     LastUnitTests,
 }
 
-/// One registered test, as the runner reports it: the path that names it, and its body as written — sliced from the span the authored body carries, empty when no span survives (a unit restored from a store may carry none).
+/// One registered test, as the runner reports it: the path that names it, and its body as written — sliced from where the anchors in hand place the extent its authored body carries, empty where it carries none (a unit restored from a store may carry none) or none of them holds its declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestRecord {
     pub path: String,
@@ -340,7 +350,7 @@ fn test_definition<'a>(
     })
 }
 
-/// Each registered test as the tail schedules it, read off the lowered definition that carries it: the plicity vector of the lambda its declaration lowered to, and the span of the authored body — the lambda's interior, since the wrapper node is synthesized and spans nothing. One lookup serves the tail and the runner's records, so the two cannot disagree about what the tests are.
+/// Each registered test as the tail schedules it, read off the lowered definition that carries it: the plicity vector of the lambda its declaration lowered to, and the extent of the authored body — the lambda's interior, since the wrapper node is synthesized and was written nowhere. One lookup serves the tail and the runner's records, so the two cannot disagree about what the tests are.
 fn scheduled_tests(
     tests: &[curios_core::Global],
     items: &[curios_core::Item],
@@ -348,7 +358,7 @@ fn scheduled_tests(
     tests
         .iter()
         .map(|test| {
-            // The declaration lowers to a `() -> Test` thunk, so the authored body is the lambda's terminal — the span a failing test's record is sliced from.
+            // The declaration lowers to a `() -> Test` thunk, so the authored body is the lambda's terminal — the extent a failing test's record is sliced from.
             let lambda = test_definition(items, test).and_then(|def| match &*def.body {
                 curios_core::Subterm::Func(func) => Some(func),
                 _ => None,
@@ -356,21 +366,21 @@ fn scheduled_tests(
 
             curios_elab::ScheduledTest {
                 name: *test,
-                span: lambda.and_then(|func| func.telescope.terminal().span()),
+                extent: lambda.and_then(|func| func.telescope.terminal().extent()),
             }
         })
         .collect()
 }
 
-/// The report metadata of each scheduled test: the path that names it, and its body as written, sliced from the span the authored body carries.
-fn test_records(scheduled: &[curios_elab::ScheduledTest]) -> Vec<TestRecord> {
+/// The report metadata of each scheduled test: the path that names it, and its body as written, sliced from where `anchors` place the extent the authored body carries.
+fn test_records(scheduled: &[curios_elab::ScheduledTest], anchors: &[&Anchors]) -> Vec<TestRecord> {
     scheduled
         .iter()
         .map(|test| TestRecord {
             path: test.name.path(),
             body: test
-                .span
-                .as_ref()
+                .extent
+                .and_then(|extent| extent.resolved(anchors))
                 .map(|span| span.source.text[span.start..span.end].to_string())
                 .unwrap_or_default(),
         })
@@ -426,8 +436,8 @@ where
         .map_err(|error| CompileError::Failure(vec![error.report()]))
 }
 
-/// An entry elaborated: its program, the `foreign` rows it declares, and one record per test it schedules.
-type Elaborated = (Program, ForeignStore, Vec<TestRecord>);
+/// An entry elaborated: its program, the `foreign` rows it declares, one record per test it schedules, and where its declarations lie, for what a later stage reports of it.
+type Elaborated = (Program, ForeignStore, Vec<TestRecord>, Anchors);
 
 /// The elaborating half of the prologue, over an entry already lowered: the lowering's findings, credited with what elaboration's proofs read whatever its verdict, beside that verdict.
 fn elaborate_lowered<O>(
@@ -450,7 +460,7 @@ where
     let verdict = elaborate_entry(
         &mut context,
         &established,
-        syntax,
+        &predecessors.anchors(),
         lowered,
         tail,
         obligations,
@@ -468,10 +478,12 @@ enum Obligations {
 }
 
 /// The one elaboration of an entry, in `context`, which the caller reads its credits and its consumption from however this ends: the compile path's and the type-checking path's alike, so the entry's contract is stated once. Beside the program come the obligations it reported, none where they are raised.
+///
+/// `scope` is where the declarations of the units in scope lie, which a report placed in one of them is resolved against, after the entry's own.
 fn elaborate_entry<'s, O>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
-    syntax: &SyntaxRegistry,
+    scope: &[&Anchors],
     lowered: LoweredEntry,
     tail: EntryTail,
     obligations: Obligations,
@@ -481,6 +493,8 @@ where
     O: FnMut(Stage<'_>),
 {
     let cores = established.modules();
+    // The registry the context was made with, which is the one its elaboration synthesizes names from.
+    let syntax = &context.syntax();
     let LoweredEntry {
         program: mut lowered,
         minted,
@@ -490,7 +504,11 @@ where
         lints: _,
         reached: _,
         broken,
+        anchors: own,
     } = lowered;
+    let anchors = std::iter::once(&own)
+        .chain(scope.iter().copied())
+        .collect::<Vec<_>>();
 
     // A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules; the elaborator states the synthesized entry's `Io({})` type, as this stage states an authored entry's below. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
     let scheduled = match tail {
@@ -501,7 +519,7 @@ where
             None => Vec::new(),
         },
     };
-    let records = test_records(&scheduled);
+    let records = test_records(&scheduled, &anchors);
 
     observe(Stage::Core(&lowered));
 
@@ -551,7 +569,14 @@ where
         Ok(built) => (None, Ok(built)),
         Err(error) => {
             let reported = CompileError::of(&error, |member| {
-                member.reports_with_hints(&lowered.module, cores, syntax, &unbound, &spellings)
+                member.reports_with_hints(
+                    &lowered.module,
+                    cores,
+                    syntax,
+                    &unbound,
+                    &spellings,
+                    &anchors,
+                )
             });
 
             (Some(Box::new(error)), Err(reported))
@@ -563,7 +588,14 @@ where
     let obligations = obligations
         .into_iter()
         .map(|error| Obligation {
-            reported: error.format_with_hints(&lowered.module, cores, syntax, &unbound, &spellings),
+            reported: error.format_with_hints(
+                &lowered.module,
+                cores,
+                syntax,
+                &unbound,
+                &spellings,
+                &anchors,
+            ),
             error,
         })
         .collect();
@@ -574,7 +606,7 @@ where
 
     observe(Stage::CoreElab(&program));
 
-    Ok(((program, user_foreigns, records), obligations))
+    Ok(((program, user_foreigns, records, own), obligations))
 }
 
 /// Everything [`compile_entrypoint`] decides *about* a program before it builds anything from it: lowered, elaborated, zonked, judged by the kernel, and **erased**, with a refusal from any of them reported as the compile path reports it. What a question about a program's correctness is answered by.
@@ -610,6 +642,8 @@ struct Judged {
     records: Vec<TestRecord>,
     /// The certifier's record of the entry's own definitions, which marks the sealed program's functions beside every unit's.
     certification: Certification,
+    /// Where the entry's declarations lie, for a refusal erasure places in one.
+    anchors: Anchors,
 }
 
 /// The erase step both the check and the compile path take, so neither can hold a verdict the other does not.
@@ -633,10 +667,15 @@ fn erase_checked(
         &judged.program,
     )
     .map_err(|error| {
+        let anchors = std::iter::once(&judged.anchors)
+            .chain(predecessors.anchors())
+            .collect::<Vec<_>>();
+
         CompileError::Failure(error.reports_with(
             &judged.program.as_program().module,
             &cores,
             syntax,
+            &anchors,
         ))
     })?;
     for unit in predecessors.units() {
@@ -703,6 +742,8 @@ struct Put {
     /// Every refusal the kernel reached.
     verdicts: Vec<Verdict>,
     certification: Certification,
+    /// Where the entry's declarations lie.
+    anchors: Anchors,
 }
 
 impl Put {
@@ -729,6 +770,7 @@ impl Put {
             foreigns: self.foreigns,
             records: self.records,
             certification: self.certification,
+            anchors: self.anchors,
         })
     }
 }
@@ -757,7 +799,7 @@ where
     );
     (
         findings,
-        elaborated.and_then(|((program, foreigns, records), obligations)| {
+        elaborated.and_then(|((program, foreigns, records, anchors), obligations)| {
             // The zonk evidence the kernel and erasure consume, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.
             let program = curios_core::Zonked::project(&program).map_err(|refusal| Refused {
                 error: None,
@@ -777,6 +819,7 @@ where
                 obligations,
                 verdicts: rechecked.verdicts,
                 certification: rechecked.certification,
+                anchors,
             })
         }),
     )
@@ -885,6 +928,7 @@ pub fn compile_unit(
                         syntax,
                         lowered.unbound(),
                         lowered.spellings(),
+                        &anchors_of(&lowered, predecessors),
                     )
                 })
             }),
@@ -902,7 +946,12 @@ pub fn compile_unit(
     let erased = predecessors.erased();
     let ersd =
         erase_unit(budget, *syntax, Erasures::of(&cores, &erased), &core).map_err(|error| {
-            CompileError::Failure(error.reports_with(core.as_module(), &cores, syntax))
+            CompileError::Failure(error.reports_with(
+                core.as_module(),
+                &cores,
+                syntax,
+                &anchors_of(&lowered, predecessors),
+            ))
         })?;
 
     let core = core.into_module();

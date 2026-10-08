@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_utilities::{Source, Span},
+    curios_core::{Anchor, Anchored, Extent},
     std::collections::BTreeSet,
 };
 
@@ -35,7 +35,12 @@ fn origin(label: &str) -> UniverseConstraintOrigin {
 #[test]
 fn a_constraint_instantiated_from_a_scheme_carries_no_position() {
     let raised = UniverseConstraintOrigin {
-        span: Some(Span::new(Source::inline("Type"), 0, 4)),
+        extent: Some(Extent {
+            anchor: Anchor::of(Anchored::Entry),
+            start: 0,
+            end: 4,
+            stamp: 0,
+        }),
         kind: UniverseConstraintKind::Cumulativity,
         declaration: Some("/lib/wrap".into()),
         binder: Some("A".into()),
@@ -55,7 +60,7 @@ fn a_constraint_instantiated_from_a_scheme_carries_no_position() {
     let [instantiated] = solver.constraints() else {
         panic!("one constraint, got {:?}", solver.constraints());
     };
-    assert_eq!(instantiated.origin.span, None);
+    assert_eq!(instantiated.origin.extent, None);
     assert_eq!(
         instantiated.origin.kind,
         UniverseConstraintKind::SchemeInstantiation

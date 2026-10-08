@@ -7,7 +7,8 @@ use {
         assert_modules_agree, assert_stored_alike, carried_variances, compile_modules,
         recompile_modules, recompile_over, reuses_body, unit_of, unused_binders, written,
     },
-    curios_core::Variance,
+    curios_core::{Enter, Item, Variance},
+    curios_unit::Unit,
 };
 
 /// Three items: `twice` reaches `double`, and `unrelated` reaches neither.
@@ -407,4 +408,98 @@ fn credited_binders_are_stored_alike_whichever_pass_credited_them() {
             == curios_archive::to_bytes(whole.text()).unwrap()[..],
         "the text stage's part is stored differently over a baseline"
     );
+}
+
+/// Where the terms of the definition `unit` calls `name` were written, as `unit`'s own text places them: each position's line with the text it covers, in order and once each.
+fn placed(unit: &Unit, name: &str) -> Vec<(usize, String)> {
+    let definition = unit
+        .core()
+        .items
+        .iter()
+        .find_map(|item| match item {
+            Item::Let(definition) if definition.name.symbol().ends_with(&format!("/{name}")) => {
+                Some(definition)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("{name} is a let item of the unit"));
+    let mut extents = Vec::new();
+    for term in [&definition.type_, &definition.body] {
+        term.walk(
+            &mut extents,
+            |extents, term| {
+                extents.extend(term.extent());
+                Enter::Descend
+            },
+            |_, _, _| (),
+        );
+    }
+
+    let mut placed = extents
+        .iter()
+        .map(|extent| {
+            let span = unit
+                .text()
+                .anchors()
+                .resolve(extent)
+                .expect("a declaration of the unit is sited");
+
+            (
+                span.line_column().0,
+                span.source.text[span.start..span.end].to_string(),
+            )
+        })
+        .collect::<Vec<_>>();
+    placed.sort();
+    placed.dedup();
+
+    placed
+}
+
+/// A declaration an edit above it moves is kept, and says nothing of where it was written: the terms the baseline elaborated are placed on the lines the new text holds them at, covering the text they covered.
+///
+/// Mutation-checked against the anchor: measured from the start of the file, the positions land on other words, above the lines they were written on.
+#[test]
+fn a_kept_declaration_is_placed_where_an_edit_above_moved_it() {
+    let baseline = unit_of(BASE);
+    let edited = BASE.replace(
+        "pub let double",
+        "pub let first: Nat = 1;\n\npub let double",
+    );
+
+    let incremental = recompile_over(&edited, &baseline).unwrap();
+
+    assert!(reuses_body(&baseline, &incremental, "double"));
+    let before = placed(&baseline, "double");
+    assert!(
+        before
+            .iter()
+            .any(|(line, text)| (*line, text.as_str()) == (3, "n + n")),
+        "the body is placed on its line: {before:?}"
+    );
+    assert_eq!(
+        placed(&incremental, "double"),
+        before
+            .into_iter()
+            .map(|(line, text)| (line + 2, text))
+            .collect::<Vec<_>>(),
+    );
+}
+
+/// A kept declaration whose own text changed without changing what it lowers to is placed at the declaration: the offsets its terms hold lay on the earlier text, and are not read against another.
+///
+/// Mutation-checked against the stamp: read by their offsets alone, the positions land on other words of the respaced text.
+#[test]
+fn a_kept_declaration_whose_text_changed_is_placed_at_the_declaration() {
+    let baseline = unit_of(BASE);
+    let edited = BASE.replace("= n + n;", "=\n    n + n;");
+
+    let incremental = recompile_over(&edited, &baseline).unwrap();
+
+    assert!(reuses_body(&baseline, &incremental, "double"));
+    assert_eq!(
+        placed(&incremental, "double"),
+        vec![(3, "pub let double(n: Nat) -> Nat =\n    n + n;".to_string())],
+    );
+    assert_modules_agree(unit_of(&edited).core(), incremental.core());
 }

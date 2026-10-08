@@ -1336,7 +1336,7 @@ impl UniverseSolver {
                     upper,
                     // Where the scheme's declaration raised it is that declaration's, in a text this compilation may never have read. The error this constraint closes is located by the term being elaborated, as every error is on its way out, and names what it instantiated.
                     origin: UniverseConstraintOrigin {
-                        span: None,
+                        extent: None,
                         kind: UniverseConstraintKind::SchemeInstantiation,
                         ..constraint.origin.clone()
                     },

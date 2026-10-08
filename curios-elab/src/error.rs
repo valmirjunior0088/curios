@@ -7,13 +7,13 @@ mod tests;
 use {
     super::{Erased, Refusal},
     curios_core::{
-        Atom, CalleeId, DefinitionKind, DisplayNames, Exhaustion, Free, Global, Item, Level,
-        Module, Polarity, ReaderNames, ReaderPosition, ReduceError, Rename, Spelling, Spellings,
-        Subterm, Term, UniverseConstraintOrigin, UniverseError, WitnessKey, build_rename,
-        build_shorten_layered,
+        Anchors, Atom, CalleeId, DefinitionKind, DisplayNames, Exhaustion, Extent, Free, Global,
+        Item, Level, Module, Polarity, ReaderNames, ReaderPosition, ReduceError, Rename, Spelling,
+        Spellings, Subterm, Term, UniverseConstraintOrigin, UniverseError, WitnessKey,
+        build_rename, build_shorten_layered,
     },
     curios_num::{Grain, Integer, Natural},
-    curios_utilities::{InfixOp, Plicity, Qualifier, Report, Span, SyntaxRegistry},
+    curios_utilities::{InfixOp, Plicity, Qualifier, Report, SyntaxRegistry},
     std::{collections::BTreeMap, fmt, rc::Rc},
 };
 
@@ -24,10 +24,10 @@ pub enum CycleMember {
     Witness(Box<Term>),
 }
 
-/// One written goal's entry in an [`Error::Goals`] batch: its occurrence span, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`], an unnameable binder's line spelling `_` the way source does; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
+/// One written goal's entry in an [`Error::Goals`] batch: its occurrence extent, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`], an unnameable binder's line spelling `_` the way source does; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
 #[derive(Debug)]
 pub struct GoalReport {
-    pub span: Option<Span>,
+    pub extent: Option<Extent>,
     /// The definition the goal was written in (the entrypoint's final term when `None`) and the witness binders in scope there, outermost first: the reader position its report is spelled for.
     pub owner: Option<Global>,
     pub witnesses: Rc<[(Free, Term)]>,
@@ -88,7 +88,16 @@ pub struct ShapeDiagnosis {
     pub bare: WitnessKey,
 }
 
-/// Why a derivation declined a key. Each is a hard refusal at the `satisfy` span, decided from the declaration's shape before any body is written; a payload whose witness is merely missing is not among them — that reports through [`Error::NoWitness`] under the derivation's own provenance, since a later item may still register it.
+/// One still-unsolved metavariable a postponed conversion watched, by what it is: what a reader can act on.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Watched {
+    /// An implicit or witness argument of a named callee, the type of a parameter, an inferred hole: described where it was found, since nothing about it needs a position.
+    Described(String),
+    /// A written goal `?`, which a reader knows by where it was written: its extent, rendered as a line and a column where the report is made.
+    Goal(Option<Extent>),
+}
+
+/// Why a derivation declined a key. Each is a hard refusal at the `satisfy` extent, decided from the declaration's shape before any body is written; a payload whose witness is merely missing is not among them — that reports through [`Error::NoWitness`] under the derivation's own provenance, since a later item may still register it.
 #[derive(Debug)]
 pub enum Underivable {
     /// Not a registered `induct` or `struct`: an intrinsic carrier, a tuple or function shape, a variable, or a stuck head.
@@ -147,7 +156,7 @@ pub enum Declined {
     PastCap,
 }
 
-/// Source-location anchoring is the [`Error::Located`] wrapper's job — the elaborate/erase/zonk drivers attach the offending term's span as the error propagates. Variants therefore carry only what their message displays; a variant carries a `Term` only when the message prints it.
+/// Source-location anchoring is the [`Error::Located`] wrapper's job — the elaborate/erase/zonk drivers attach the offending term's extent as the error propagates. Variants therefore carry only what their message displays; a variant carries a `Term` only when the message prints it.
 #[derive(Debug)]
 pub enum Error {
     ReduceExhausted {
@@ -433,16 +442,16 @@ pub enum Error {
         term: Box<Term>,
     },
     CannotInfer,
-    /// A parked checking problem that survived every retry: the expression's expected type never gained the structure the check was waiting on. Reported at the expression's own span by the item drain.
+    /// A parked checking problem that survived every retry: the expression's expected type never gained the structure the check was waiting on. Reported at the expression's own extent by the item drain.
     PostponedCheck {
         expected: Box<Term>,
     },
-    /// A parked conversion goal that survived every retry, distinguished from `TypeMismatch`: a rigid mismatch means the program is wrong, a postponed conversion means the program may be right and inference never gained the structure to decide. Reported at the goal's origin span by the item drain, naming the still-unsolved blockers it watched.
+    /// A parked conversion goal that survived every retry, distinguished from `TypeMismatch`: a rigid mismatch means the program is wrong, a postponed conversion means the program may be right and inference never gained the structure to decide. Reported at the goal's origin extent by the item drain, naming the still-unsolved blockers it watched.
     PostponedConversion {
         this: Box<Term>,
         that: Box<Term>,
-        /// The still-unsolved watched metavariables, pre-rendered with insertion provenance where an occurrence carries it.
-        watching: Vec<String>,
+        /// The still-unsolved watched metavariables, each by what it is.
+        watching: Vec<Watched>,
         /// Whether the goal's frozen frame carried live match-arm refinements — a solution holding only under them is deliberately never committed, one way a goal stays undecided.
         under_refinements: bool,
     },
@@ -509,7 +518,7 @@ pub enum Error {
         goal: Box<Term>,
         solution: Option<Box<Term>>,
     },
-    /// Every written goal `?` one elaboration reached, batched: collection replaces zonk's first-goal error on the compile path, so a program holding several goals reports them all in one run. Entries are deterministically ordered (items in declaration order, then the entrypoint tail) and each carries its own occurrence span rather than a shared `Located` wrapper — a goal's identity is its source location.
+    /// Every written goal `?` one elaboration reached, batched: collection replaces zonk's first-goal error on the compile path, so a program holding several goals reports them all in one run. Entries are deterministically ordered (items in declaration order, then the entrypoint tail) and each carries its own occurrence extent rather than a shared `Located` wrapper — a goal's identity is its source location.
     Goals(Vec<GoalReport>),
     /// Two witnesses registered under the same `(concept, key)` — global coherence admits exactly one witness per key, program-wide.
     DuplicateWitness {
@@ -603,7 +612,7 @@ pub enum Error {
     /// A read of a declaration that has not elaborated. Never reported: the attempt that met it is void and is made again once the declaration has, and this exists only to cut the attempt short — what voids it is the need the read recorded (`Context::need`), whatever becomes of this.
     Unfinished,
     Located {
-        span: Span,
+        extent: Extent,
         error: Box<Error>,
     },
     /// The declaration whose elaboration raised `error`.
@@ -640,35 +649,35 @@ impl Error {
     ) -> Error {
         match error {
             refusal @ ReduceError::Exhausted { .. } => exhausted(refusal),
-            ReduceError::BinGetOutOfBounds { len, index, span } => {
-                Error::BinGetOutOfBounds { len, index }.at_opt(span)
+            ReduceError::BinGetOutOfBounds { len, index, extent } => {
+                Error::BinGetOutOfBounds { len, index }.at_opt(extent)
             }
             ReduceError::BinSliceOutOfRange {
                 len,
                 start,
                 length,
-                span,
-            } => Error::BinSliceOutOfRange { len, start, length }.at_opt(span),
-            ReduceError::ListGetOutOfBounds { len, index, span } => {
-                Error::ListGetOutOfBounds { len, index }.at_opt(span)
+                extent,
+            } => Error::BinSliceOutOfRange { len, start, length }.at_opt(extent),
+            ReduceError::ListGetOutOfBounds { len, index, extent } => {
+                Error::ListGetOutOfBounds { len, index }.at_opt(extent)
             }
             ReduceError::ListSliceOutOfRange {
                 len,
                 start,
                 length,
-                span,
-            } => Error::ListSliceOutOfRange { len, start, length }.at_opt(span),
-            ReduceError::DivisionByZero { kind, span } => {
-                Error::DivisionByZero { kind }.at_opt(span)
+                extent,
+            } => Error::ListSliceOutOfRange { len, start, length }.at_opt(extent),
+            ReduceError::DivisionByZero { kind, extent } => {
+                Error::DivisionByZero { kind }.at_opt(extent)
             }
-            ReduceError::IntToNatNegative { value, span } => Error::IntToNatNegative {
+            ReduceError::IntToNatNegative { value, extent } => Error::IntToNatNegative {
                 value: Box::new(value),
             }
-            .at_opt(span),
-            ReduceError::NatToByteAbove { value, span } => Error::NatToByteAbove {
+            .at_opt(extent),
+            ReduceError::NatToByteAbove { value, extent } => Error::NatToByteAbove {
                 value: Box::new(value),
             }
-            .at_opt(span),
+            .at_opt(extent),
             ReduceError::Universe(error) => Error::from(error),
         }
     }
@@ -737,7 +746,7 @@ impl Error {
     pub(crate) fn postponed_conversion<T: Into<Term>, U: Into<Term>>(
         this: T,
         that: U,
-        watching: Vec<String>,
+        watching: Vec<Watched>,
         under_refinements: bool,
     ) -> Self {
         Self::PostponedConversion {
@@ -772,7 +781,7 @@ impl Error {
         }
     }
 
-    /// Name the argument position `self` arose at. Only a lambda against a non-function type takes it — that is the refusal an argument in the wrong position produces — and only once, through a span wrapper if one is already on.
+    /// Name the argument position `self` arose at. Only a lambda against a non-function type takes it — that is the refusal an argument in the wrong position produces — and only once, through an extent wrapper if one is already on.
     pub(crate) fn at_argument(self, site: ArgumentSite) -> Self {
         match self {
             Self::NotAFunctionType {
@@ -782,8 +791,8 @@ impl Error {
                 expected,
                 argument: Some(Box::new(site)),
             },
-            Self::Located { span, error } => Self::Located {
-                span,
+            Self::Located { extent, error } => Self::Located {
+                extent,
                 error: Box::new(error.at_argument(site)),
             },
             Self::InScope { witnesses, error } => Self::InScope {
@@ -1302,16 +1311,16 @@ impl Error {
         }
     }
 
-    /// The refusal a program earns from the erased verifier, framed at the refused member's initializer when `spans` records one — a cycle at its first member. Only the verifier's recursion rules come back as an error: a malformed module is a compiler fault, which the verifier panics on rather than returning.
+    /// The refusal a program earns from the erased verifier, framed at the refused member's initializer when `extents` records one — a cycle at its first member. Only the verifier's recursion rules come back as an error: a malformed module is a compiler fault, which the verifier panics on rather than returning.
     pub(crate) fn refused_by_verifier(
         error: curios_ersd::VerifyError,
-        spans: &BTreeMap<curios_ersd::ValueId, Span>,
+        extents: &BTreeMap<curios_ersd::ValueId, Extent>,
     ) -> Self {
         match error {
             curios_ersd::VerifyError::EvaluationCycle { steps } => {
-                let span = steps
+                let extent = steps
                     .first()
-                    .and_then(|step| spans.get(&step.value))
+                    .and_then(|step| extents.get(&step.value))
                     .cloned();
                 Self::EvaluationCycle {
                     steps: steps
@@ -1319,14 +1328,14 @@ impl Error {
                         .map(|step| (step.member, step.through))
                         .collect(),
                 }
-                .at_opt(span)
+                .at_opt(extent)
             }
             curios_ersd::VerifyError::InitializerPerformsEffect {
                 member,
                 value,
                 through,
             } => Self::InitializerPerformsEffect { member, through }
-                .at_opt(spans.get(&value).cloned()),
+                .at_opt(extents.get(&value).cloned()),
         }
     }
 
@@ -1389,19 +1398,19 @@ impl Error {
         }
     }
 
-    pub(crate) fn at(self, span: Span) -> Self {
+    pub(crate) fn at(self, extent: Extent) -> Self {
         match self {
             Self::Located { .. } | Self::Batch(_) => self,
             error => Self::Located {
-                span,
+                extent,
                 error: Box::new(error),
             },
         }
     }
 
-    pub(crate) fn at_opt(self, span: Option<Span>) -> Self {
-        match span {
-            Some(span) => self.at(span),
+    pub(crate) fn at_opt(self, extent: Option<Extent>) -> Self {
+        match extent {
+            Some(extent) => self.at(extent),
             None => self,
         }
     }
@@ -1413,8 +1422,8 @@ impl Error {
         }
         match self {
             Self::InScope { .. } | Self::Batch(_) => self,
-            Self::Located { span, error } => Self::Located {
-                span,
+            Self::Located { extent, error } => Self::Located {
+                extent,
                 error: Box::new(error.in_scope(witnesses)),
             },
             error => Self::InScope {
@@ -1456,13 +1465,16 @@ impl Error {
     }
 
     /// Render this error with source-style names, shortening global names against `module`'s symbols together with `predecessors`' (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here or [`Error::format_with_hints`], so every axis is set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
+    ///
+    /// `anchors` are where the declarations an error's positions lie in were written, the unit's own first and then its scope's: an error holds extents of declarations ([`curios_core::Extent`]), and this is where one becomes a line of a file.
     pub fn format_with(
         &self,
         module: &Module,
         predecessors: &[&Module],
         syntax: &SyntaxRegistry,
+        anchors: &[&Anchors],
     ) -> String {
-        Report::render_all(&self.reports_with(module, predecessors, syntax))
+        Report::render_all(&self.reports_with(module, predecessors, syntax, anchors))
     }
 
     /// [`Error::format_with`] as data: one [`Report`] per thing said, located. See [`Error::reports_with_hints`].
@@ -1471,10 +1483,12 @@ impl Error {
         module: &Module,
         predecessors: &[&Module],
         syntax: &SyntaxRegistry,
+        anchors: &[&Anchors],
     ) -> Vec<Report> {
         self.reports(
             &Rc::new(report_spelling(module, predecessors, syntax)),
             &BTreeMap::new(),
+            anchors,
         )
     }
 
@@ -1486,6 +1500,7 @@ impl Error {
         syntax: &SyntaxRegistry,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
         spellings: &Spellings,
+        anchors: &[&Anchors],
     ) -> String {
         Report::render_all(&self.reports_with_hints(
             module,
@@ -1493,10 +1508,11 @@ impl Error {
             syntax,
             unbound,
             spellings,
+            anchors,
         ))
     }
 
-    /// [`Error::format_with_hints`] as data, and the primitive it renders: every error is one report at its innermost span, except a goal batch, which is one report *per goal* at that goal's own occurrence — a goal's identity is its source location, and a consumer placing each where it was written needs them apart. Rendering the list is exactly the text the compile path prints, so the located form and the printed form cannot drift.
+    /// [`Error::format_with_hints`] as data, and the primitive it renders: every error is one report at its innermost extent, except a goal batch, which is one report *per goal* at that goal's own occurrence — a goal's identity is its source location, and a consumer placing each where it was written needs them apart. Rendering the list is exactly the text the compile path prints, so the located form and the printed form cannot drift.
     pub fn reports_with_hints(
         &self,
         module: &Module,
@@ -1504,6 +1520,7 @@ impl Error {
         syntax: &SyntaxRegistry,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
         spellings: &Spellings,
+        anchors: &[&Anchors],
     ) -> Vec<Report> {
         // A report's reader stands in one of this unit's definitions, and resolution reads that definition's module.
         let islands = module
@@ -1515,7 +1532,7 @@ impl Error {
         let names = ReaderNames::new(spellings.clone(), islands);
         let spelling =
             report_spelling(module, predecessors, syntax).with_reader_names(Rc::new(names));
-        self.reports(&Rc::new(spelling), unbound)
+        self.reports(&Rc::new(spelling), unbound, anchors)
     }
 
     /// The lines an `unbound variable` report adds from the text stage's table, or `None` for any other error or an unknown binder — one [`Qualifier::reach_hint`] per candidate, the line the text stage's `unresolved qualifier` report spells its own candidates with.
@@ -1547,19 +1564,20 @@ impl Error {
         (!lines.is_empty()).then(|| lines.join("\n"))
     }
 
-    /// One report per rendered error, at the innermost span attached to it — or one per goal for a goal batch, each at its own occurrence, under whatever declaration prefix the wrappers add — and for a batch of refusals, every member's reports in order.
+    /// One report per rendered error, at the innermost extent attached to it — or one per goal for a goal batch, each at its own occurrence, under whatever declaration prefix the wrappers add — and for a batch of refusals, every member's reports in order.
     ///
-    /// [`Error::at`] is first-wins *per wrapper*, so the innermost span is the first one stamped — but `in_declaration` may wrap a located error, after which a further `at` sees a non-`Located` head and stamps again, leaving the coarser span outermost. Locating therefore searches for the innermost rather than reading the outermost, and the message body is assembled separately so a nested `Located` cannot swallow it: `Display` for the wrappers deliberately prints no snippet, and a body rendered through `to_string` would drop the inner span silently.
+    /// [`Error::at`] is first-wins *per wrapper*, so the innermost extent is the first one stamped — but `in_declaration` may wrap a located error, after which a further `at` sees a non-`Located` head and stamps again, leaving the coarser extent outermost. Locating therefore searches for the innermost rather than reading the outermost, and the message body is assembled separately so a nested `Located` cannot swallow it: `Display` for the wrappers deliberately prints no snippet, and a body rendered through `to_string` would drop the inner extent silently.
     fn reports(
         &self,
         spelling: &Rc<Spelling>,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
+        anchors: &[&Anchors],
     ) -> Vec<Report> {
         // Each member under its own rename map, as each entry of a goal batch is: a binder is suffixed only against a collision the reader can see in the one report that shows it, not against a binder of the same name in another member's terms.
         if let Self::Batch(errors) = self {
             return errors
                 .iter()
-                .flat_map(|error| error.reports(spelling, unbound))
+                .flat_map(|error| error.reports(spelling, unbound, anchors))
                 .collect();
         }
 
@@ -1580,7 +1598,7 @@ impl Error {
                 .map(|goal| {
                     let spelling = for_reader(goal.owner, Rc::clone(&goal.witnesses));
                     Report {
-                        span: goal.span.clone(),
+                        span: goal.extent.and_then(|extent| extent.resolved(anchors)),
                         message: format!("{prefix}{}", goal_text(goal, &spelling)),
                     }
                 })
@@ -1594,13 +1612,15 @@ impl Error {
                 .clone()
                 .with_pretty_names(self.rename_map(&spelling)),
         );
-        let mut body = self.render_body(spelling);
+        let mut body = self.render_body(spelling, anchors);
         if let Some(suggestion) = self.unbound_suggestion(unbound, spelling) {
             body.push('\n');
             body.push_str(&suggestion);
         }
         vec![Report {
-            span: self.innermost_span().cloned(),
+            span: self
+                .innermost_extent()
+                .and_then(|extent| extent.resolved(anchors)),
             message: body,
         }]
     }
@@ -1630,13 +1650,16 @@ impl Error {
     }
 
     /// The message without any snippet — wrappers are transparent, every other variant renders through its own `Display`.
-    fn render_body(&self, spelling: &Rc<Spelling>) -> String {
+    fn render_body(&self, spelling: &Rc<Spelling>, anchors: &[&Anchors]) -> String {
         match self {
             Self::Located { error, .. } | Self::InScope { error, .. } => {
-                error.render_body(spelling)
+                error.render_body(spelling, anchors)
             }
             Self::InDeclaration { name, error, .. } => {
-                format!("while elaborating {name}:\n{}", error.render_body(spelling))
+                format!(
+                    "while elaborating {name}:\n{}",
+                    error.render_body(spelling, anchors)
+                )
             }
             Self::InUnreachableArm {
                 guard,
@@ -1645,24 +1668,24 @@ impl Error {
                 error,
             } => format!(
                 "{}\n{}",
-                error.render_body(spelling),
+                error.render_body(spelling, anchors),
                 unreachable_arm_note(guard, case, *enclosing, spelling)
             ),
-            error => Displayed(error, Rc::clone(spelling)).to_string(),
+            error => Displayed(error, Rc::clone(spelling), anchors).to_string(),
         }
     }
 
-    /// The innermost span stamped on this error, looking through both wrappers.
+    /// The innermost extent stamped on this error, looking through both wrappers.
     ///
     /// A universe inconsistency carries its own, from the first constraint on the path that knows where it came from: nothing stamps one on the way out, because the solve that finds the cycle runs after the terms that forced it have been checked and left behind.
-    fn innermost_span(&self) -> Option<&Span> {
+    fn innermost_extent(&self) -> Option<&Extent> {
         match self {
-            Self::Located { span, error } => error.innermost_span().or(Some(span)),
+            Self::Located { extent, error } => error.innermost_extent().or(Some(extent)),
             Self::InDeclaration { error, .. }
             | Self::InUnreachableArm { error, .. }
-            | Self::InScope { error, .. } => error.innermost_span(),
+            | Self::InScope { error, .. } => error.innermost_extent(),
             Self::UniverseInconsistency { path, .. } => {
-                path.iter().find_map(|origin| origin.span.as_ref())
+                path.iter().find_map(|origin| origin.extent.as_ref())
             }
             _ => None,
         }
@@ -1868,6 +1891,6 @@ fn report_spelling(module: &Module, predecessors: &[&Module], syntax: &SyntaxReg
 /// The faithful rendering: core's own names, every universe shown. Diagnostics go through [`Error::format_with`], which supplies a [`Spelling`].
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Displayed(self, Rc::new(Spelling::default())).fmt(f)
+        Displayed(self, Rc::new(Spelling::default()), &[]).fmt(f)
     }
 }

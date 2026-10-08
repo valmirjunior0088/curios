@@ -4,8 +4,7 @@
 
 use {
     super::{Attempt, CheckedTerms, Credits, DeclaredWitnesses, EmbeddingSite, Needs, Posture},
-    curios_core::{Global, Imports, Minted},
-    curios_utilities::Span,
+    curios_core::{Extent, Global, Imports, Minted},
     std::{
         collections::{BTreeMap, BTreeSet},
         rc::Rc,
@@ -39,8 +38,8 @@ pub(crate) struct Underway {
     pub(super) declaration: Option<Global>,
     /// Whether the declaration being elaborated can still settle a universe level: from `Context::enter_item` until its levels are finalized. A witness resolved while this holds leaves the levels its scheme minted to that finalization; one resolved after has none left, and closes them where it resolves.
     pub(super) scheme_open: bool,
-    /// What each auto-lift site named as written, under the span its `lift` wrapper took — see [`EmbeddingSite`]. One entry per such site the unit elaborates, read only where a missing embedding is reported, so a scan serves.
-    pub(super) embedding_sites: Vec<(Span, EmbeddingSite)>,
+    /// What each auto-lift site named as written, under the extent its `lift` wrapper took — see [`EmbeddingSite`]. One entry per such site the unit elaborates, read only where a missing embedding is reported, so a scan serves.
+    pub(super) embedding_sites: Vec<(Extent, EmbeddingSite)>,
     // What the unit's `use` declarations brought into scope, where, and under which spelling — the text stage's table, installed by the driver before elaboration. Read by goal suggestions alone, as the pool a candidate may come from beyond the names the program already mentions. Empty means nothing was imported, which is also what every embedding that never installs one gets: the pools then stop at the referenced globals.
     pub(super) imports: Imports,
 }

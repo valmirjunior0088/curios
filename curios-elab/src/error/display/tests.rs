@@ -27,7 +27,7 @@ fn rendered(inferred: Term, expected: Term) -> String {
             .with_erased_universes()
             .with_anonymous_metavars(),
     );
-    Displayed(&error, spelling).to_string()
+    Displayed(&error, spelling, &[]).to_string()
 }
 
 /// One family at two instances. Erasing the instances erases the whole of the disagreement, so the report has to put them back — the shape a struct's parameter telescope produces when its registry entry goes unelaborated.
@@ -93,7 +93,7 @@ fn a_mismatch_says_what_was_not_compared() {
                 .with_erased_universes()
                 .with_anonymous_metavars(),
         );
-        Displayed(&error, spelling).to_string()
+        Displayed(&error, spelling, &[]).to_string()
     };
 
     assert!(!shown(None).contains("not compared"));

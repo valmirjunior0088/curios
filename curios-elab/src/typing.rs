@@ -4,8 +4,8 @@ mod tests;
 use {
     super::{
         Binders, Context, Error, FrozenFrame, Mode, Opened, Outcome, ParkedProblem, ParkedWork,
-        Problem, Sort, callee, convert, convert_outcome, diagnose_embedding, diagnose_shape,
-        elaborate, elaborate_func_settle, embeds, is_monad, monad_shape, normalize,
+        Problem, Sort, Watched, callee, convert, convert_outcome, diagnose_embedding,
+        diagnose_shape, elaborate, elaborate_func_settle, embeds, is_monad, monad_shape, normalize,
         problem_outcome, reduce_forced, refold_recs, refused_scrutinee, retry_discharge,
         retry_match, retry_projection, retry_witness, shallow_scrutinee, subsume_outcome,
         zonk_solved_term_metas,
@@ -14,12 +14,11 @@ use {
         RESOLVED_SPELLING_LAYERS, Unfolding, records_case_equation, scrutinee_solution,
     },
     curios_core::{
-        Advance, Apply, Bound, Field, Free, Func, FuncType, Global, ImplicitOrigin, Intrinsic,
-        IntrinsicHead, Level, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError, Scope,
-        Spelling, Subterm, Telescope, Term, Transient, UniverseConstraintKind,
+        Advance, Apply, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin,
+        Intrinsic, IntrinsicHead, Level, Many, Metavar, MetavarId, MetavarOrigin, Proj,
+        ReduceError, Scope, Spelling, Subterm, Telescope, Term, Transient, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseRole, Visit,
     },
-    curios_utilities::Span,
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
@@ -285,7 +284,7 @@ pub(crate) fn expect(
     expected: &Term,
 ) -> Result<(), Error> {
     curios_profile::profile!("typing::expect");
-    let outcome = subsume_outcome(context, inferred, expected, term.span()).map_err(|error| {
+    let outcome = subsume_outcome(context, inferred, expected, term.extent()).map_err(|error| {
         Error::from_reduce(error, |refusal| {
             Error::convert_exhausted(inferred.clone(), expected.clone(), refusal)
         })
@@ -602,7 +601,7 @@ impl Context<'_> {
                                     let embedding = diagnose_embedding(
                                         self,
                                         &witness_goal,
-                                        parked_origin.span().as_ref(),
+                                        parked_origin.extent().as_ref(),
                                     );
                                     let shape = diagnose_shape(self, &witness_goal);
                                     Error::no_witness(
@@ -612,11 +611,11 @@ impl Context<'_> {
                                         embedding,
                                         shape,
                                     )
-                                    .at_opt(parked_origin.span())
+                                    .at_opt(parked_origin.extent())
                                 }
                                 // A watched blocker that is itself blocked names a goal that merely waited. Follow the chain to what nothing was ever going to solve and report *that* instead.
                                 None if let Some(error) =
-                                    root_blocker_error(self, &watching, parked_origin.span()) =>
+                                    root_blocker_error(self, &watching, parked_origin.extent()) =>
                                 {
                                     error
                                 }
@@ -630,23 +629,23 @@ impl Context<'_> {
                                         blockers,
                                         frame.carries_refinements(),
                                     )
-                                    .at_opt(parked_origin.span())
+                                    .at_opt(parked_origin.extent())
                                 }
                             }
                         }
                         ParkedWork::Checking { term, expected, .. } => match &*term {
                             // A parked bang is a region that never named its monad; report it as that, not as a generic stalled check.
                             Subterm::Transient(Transient::Bang(_)) => {
-                                Error::bang_region_undetermined().at_opt(parked_origin.span())
+                                Error::bang_region_undetermined().at_opt(parked_origin.extent())
                             }
                             _ => Error::postponed_check(resolved_for_display(self, &expected))
-                                .at_opt(parked_origin.span()),
+                                .at_opt(parked_origin.extent()),
                         },
                         ParkedWork::Witness {
                             goal, provenance, ..
                         } => {
                             let embedding =
-                                diagnose_embedding(self, &goal, parked_origin.span().as_ref());
+                                diagnose_embedding(self, &goal, parked_origin.extent().as_ref());
                             let shape = diagnose_shape(self, &goal);
                             Error::no_witness(
                                 resolved_for_display(self, &goal),
@@ -655,19 +654,19 @@ impl Context<'_> {
                                 embedding,
                                 shape,
                             )
-                            .at_opt(parked_origin.span())
+                            .at_opt(parked_origin.extent())
                         }
                         // A head whose type never reached a tuple or a struct is what the projection refused before it could wait.
                         ParkedWork::Projection(projection) => {
                             Error::not_a_tuple(resolved_for_display(self, &projection.head_type))
-                                .at_opt(parked_origin.span())
+                                .at_opt(parked_origin.extent())
                         }
                         // A scrutinee whose type never reached a carrier is what the match refused before it could wait.
                         ParkedWork::Match(parked) => refused_scrutinee(
                             &parked.term,
                             resolved_for_display(self, &parked.scrutinee_type),
                         )
-                        .at_opt(parked_origin.span()),
+                        .at_opt(parked_origin.extent()),
                         // A bound that never came to truth is its hole's to report: zonk names the binder and the bound, which is the report such a hole gets whether or not it was ever parked.
                         ParkedWork::Discharge { .. } => continue,
                     });
@@ -705,7 +704,7 @@ fn watched_blockers(
     watching: &BTreeSet<MetavarId>,
     this: &Term,
     that: &Term,
-) -> Vec<String> {
+) -> Vec<Watched> {
     let origins = metavar_origins(&[this, that]);
     // Rendered before the report's own spelling exists, so a witness callee reads at its full names.
     let spelling = Spelling::default();
@@ -713,32 +712,28 @@ fn watched_blockers(
         .iter()
         .filter(|id| context.metavar_solution(**id).is_none())
         .map(|id| match origins.get(id) {
-            Some((MetavarOrigin::Implicit(origin), _)) => {
-                callee(context, &origin.func).slot("implicit argument", &origin.binder, &spelling)
-            }
-            Some((MetavarOrigin::Witness(origin), _)) => {
-                callee(context, &origin.func).slot("witness argument", &origin.binder, &spelling)
-            }
-            // Named by the span the goal was born with, never by an occurrence's: substituted into a declaration's type, the goal rides the span of the binder it replaced, which would name the declaration rather than the `?`.
-            Some((MetavarOrigin::Goal, _)) => match context.goal_span(*id) {
-                Some(span) => {
-                    let (line, column) = span.line_column();
-                    format!("the written goal `?` at {line}:{column}")
-                }
-                None => "a written goal `?`".to_string(),
-            },
+            Some((MetavarOrigin::Implicit(origin), _)) => Watched::Described(
+                callee(context, &origin.func).slot("implicit argument", &origin.binder, &spelling),
+            ),
+            Some((MetavarOrigin::Witness(origin), _)) => Watched::Described(
+                callee(context, &origin.func).slot("witness argument", &origin.binder, &spelling),
+            ),
+            // Named by the extent the goal was born with, never by an occurrence's: substituted into a declaration's type, the goal rides the extent of the binder it replaced, which would name the declaration rather than the `?`. Where that is in a file is the report's to say.
+            Some((MetavarOrigin::Goal, _)) => Watched::Goal(context.goal_extent(*id).copied()),
             Some((MetavarOrigin::Domain(binder), _)) => {
-                format!("the type of parameter '{binder}'")
+                Watched::Described(format!("the type of parameter '{binder}'"))
             }
-            Some((MetavarOrigin::Hole, _)) | None => "an inferred hole".to_string(),
+            Some((MetavarOrigin::Hole, _)) | None => {
+                Watched::Described("an inferred hole".to_string())
+            }
         })
         .collect()
 }
 
-/// A metavariable's insertion provenance and the span of the occurrence it was read off — what a report names a blocker by.
-pub(crate) type Provenance = (MetavarOrigin, Option<Span>);
+/// A metavariable's insertion provenance and the extent of the occurrence it was read off — what a report names a blocker by.
+pub(crate) type Provenance = (MetavarOrigin, Option<Extent>);
 
-/// Every metavariable occurrence across `terms` that carries an origin, by id, with the span of its first occurrence.
+/// Every metavariable occurrence across `terms` that carries an origin, by id, with the extent of its first occurrence.
 ///
 /// Memoized on node identity: the hook only records an id's first occurrence, which a memoized walk still reaches first, and `convert`'s solver asks this of a candidate — a reduct, whose tree can be exponential in its depth — whenever it postpones one.
 pub(crate) fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetavarId, Provenance> {
@@ -752,7 +747,7 @@ pub(crate) fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetavarId, Provenance
                 if let Subterm::Metavar(Metavar { id, origin, .. }) = &**term {
                     sink.borrow_mut()
                         .entry(*id)
-                        .or_insert_with(|| (origin.clone(), term.span()));
+                        .or_insert_with(|| (origin.clone(), term.extent()));
                 }
                 None
             }),
@@ -828,7 +823,7 @@ fn retry_one(context: &mut Context, parked: ParkedProblem) -> Result<(), Error> 
 
     let outcome = context.with_retry_frame(&frame, |context| {
         Ok(
-            match problem_outcome(context, goal.clone(), origin.span())? {
+            match problem_outcome(context, goal.clone(), origin.extent())? {
                 Outcome::Converts => Retry::Converts,
                 // Built here, inside the restored frame, rather than at the report below: `display_mismatch` reads the sides through whatever solutions have landed, so they name the actual disagreement rather than the metavariables it arrived wrapped in (see `resolved_for_display`). A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
                 Outcome::Mismatch(declined) => Retry::Mismatch(
@@ -848,7 +843,7 @@ fn retry_one(context: &mut Context, parked: ParkedProblem) -> Result<(), Error> 
     match outcome {
         Retry::Converts => Ok(()),
         // Locate the mismatch at the construct that parked it, as every sibling arm of the drain does. A parked goal outlives the frame it came from, so without this the only surviving clue is the module.
-        Retry::Mismatch(error) => Err(error.at_opt(origin.span())),
+        Retry::Mismatch(error) => Err(error.at_opt(origin.extent())),
         Retry::Blocked(goals) => {
             for goal in goals {
                 context.repark(ParkedWork::Conversion(goal), origin.clone(), frame.clone());
@@ -879,7 +874,7 @@ pub(crate) fn fill_placeholder(
         Outcome::Converts => Ok(()),
         Outcome::Mismatch(declined) => Err(display_mismatch(context, origin, &rebuilt, &existing)
             .declined(declined)
-            .at_opt(origin.span())),
+            .at_opt(origin.extent())),
         Outcome::Blocked(goals) => {
             for goal in goals {
                 context.park(ParkedWork::Conversion(goal), origin.clone());
@@ -889,7 +884,7 @@ pub(crate) fn fill_placeholder(
     }
 }
 
-/// Retry a parked *checking problem*: under the frozen frame, the expected type either still reduces to a bare metavariable (re-park) or has gained structure — run the check for real and solve the placeholder with the rebuilt term. Errors propagate carrying the term's own spans.
+/// Retry a parked *checking problem*: under the frozen frame, the expected type either still reduces to a bare metavariable (re-park) or has gained structure — run the check for real and solve the placeholder with the rebuilt term. Errors propagate carrying the term's own extents.
 fn retry_checking(
     context: &mut Context,
     term: Term,
@@ -1336,18 +1331,18 @@ pub(crate) fn check_intrinsic_head(
 fn root_blocker_error(
     context: &mut Context,
     watching: &BTreeSet<MetavarId>,
-    fallback: Option<Span>,
+    fallback: Option<Extent>,
 ) -> Option<Error> {
     let mut seen: BTreeSet<MetavarId> = BTreeSet::new();
     let mut frontier: Vec<MetavarId> = watching.iter().copied().collect();
-    let mut root: Option<(MetavarId, ImplicitOrigin, Option<Span>)> = None;
+    let mut root: Option<(MetavarId, ImplicitOrigin, Option<Extent>)> = None;
 
     while let Some(id) = frontier.pop() {
         if !seen.insert(id) {
             continue;
         }
 
-        for (blocker, origin, span) in context.solve_blockers(id) {
+        for (blocker, origin, extent) in context.solve_blockers(id) {
             if context.metavar_solution(*blocker).is_some() {
                 continue;
             }
@@ -1358,14 +1353,14 @@ fn root_blocker_error(
                 .all(|(next, _, _)| context.metavar_solution(*next).is_some());
 
             if terminal && let MetavarOrigin::Implicit(implicit) = origin {
-                root = Some((*blocker, implicit.clone(), span.clone()));
+                root = Some((*blocker, implicit.clone(), *extent));
             }
 
             frontier.push(*blocker);
         }
     }
 
-    let (id, origin, span) = root?;
+    let (id, origin, extent) = root?;
     let (bound, proposition, reduct, refusal) = context.metavar_entry(id).map(|entry| {
         (
             entry.result.clone(),
@@ -1389,7 +1384,7 @@ fn root_blocker_error(
             reduct,
             refusal,
         )
-        // The blocker's own occurrence rides inside a candidate the reducer built, which need not have kept a span; the waiting goal's origin is then the nearest honest place to point.
-        .at_opt(span.or(fallback)),
+        // The blocker's own occurrence rides inside a candidate the reducer built, which need not have kept an extent; the waiting goal's origin is then the nearest honest place to point.
+        .at_opt(extent.or(fallback)),
     )
 }

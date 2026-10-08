@@ -177,7 +177,7 @@ fn telescope_sizing<B: Bound>(
                     domain_level.clone(),
                     upper,
                     UniverseConstraintOrigin {
-                        span: domain.span(),
+                        extent: domain.extent(),
                         kind: kind.clone(),
                         declaration: Some(declaration.to_string()),
                         binder: hint.map(str::to_string),
@@ -802,7 +802,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
             def.universe_context.clone(),
             &def.island,
         )
-        .map_err(|error| error.at_opt(def.type_.span()))?;
+        .map_err(|error| error.at_opt(def.type_.extent()))?;
     }
 
     // Before the body: a struct former's body checks its parameters against the registry arity, which is lowered raw. Share the elaborated telescope the type above just produced, so the two sides are one term.
@@ -920,7 +920,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 def.universe_context.clone(),
                 &def.island,
             )
-            .map_err(|error| error.at_opt(def.type_.span()))?;
+            .map_err(|error| error.at_opt(def.type_.extent()))?;
         }
     }
 

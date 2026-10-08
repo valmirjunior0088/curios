@@ -65,6 +65,9 @@ pub use machine::*;
 mod names;
 pub use names::*;
 
+mod extent;
+pub use extent::*;
+
 mod witness;
 pub use witness::*;
 

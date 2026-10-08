@@ -26,6 +26,21 @@ pub(super) enum UseSiteKind {
     Glob(String),
 }
 
+/// Where a unit's source declarations lie, as its lowering finds them, and the text of the one being lowered: what turns a written span into the extent a Core term holds (`curios_core::Extent`). The unit's, shared across nested contexts like its counters.
+#[derive(Default)]
+pub(super) struct Anchoring {
+    anchors: RefCell<curios_core::Anchors>,
+    /// `None` between declarations, and within one that was built rather than written: a term lowered then holds no position.
+    within: RefCell<Option<curios_core::Within>>,
+}
+
+impl Anchoring {
+    /// Where each declaration this lowering reached lies.
+    pub(super) fn into_anchors(self) -> curios_core::Anchors {
+        self.anchors.into_inner()
+    }
+}
+
 #[derive(Clone)]
 pub(super) struct FlatLet {
     pub name: curios_core::Global,
@@ -284,6 +299,8 @@ pub(super) struct Context<'a> {
     reached: &'a RefCell<BTreeSet<Qualifier>>,
     // Every lint a `Lowerer` of this unit decided — see `Lowerer::flush`.
     lints: &'a RefCell<Vec<Lint>>,
+    // Where the unit's declarations lie, and the one being lowered — see `Anchoring`.
+    anchoring: &'a Anchoring,
     syntax: &'a SyntaxRegistry,
 }
 
@@ -306,6 +323,7 @@ impl<'a> Context<'a> {
         sites: &'a RefCell<Vec<UseSite>>,
         reached: &'a RefCell<BTreeSet<Qualifier>>,
         lints: &'a RefCell<Vec<Lint>>,
+        anchoring: &'a Anchoring,
         syntax: &'a SyntaxRegistry,
     ) -> Context<'a> {
         Context {
@@ -332,6 +350,7 @@ impl<'a> Context<'a> {
             qualifier_sites: HashMap::new(),
             reached,
             lints,
+            anchoring,
             syntax,
         }
     }
@@ -361,6 +380,7 @@ impl<'a> Context<'a> {
             qualifier_sites: HashMap::new(),
             reached: self.reached,
             lints: self.lints,
+            anchoring: self.anchoring,
             syntax: self.syntax,
         }
     }
@@ -409,6 +429,30 @@ impl<'a> Context<'a> {
         self.binders.reset();
         self.universe_seeds.borrow_mut().clear();
         self.universe_allocations.borrow_mut().clear();
+        *self.anchoring.within.borrow_mut() = None;
+    }
+
+    /// Lower what follows as the text of the source declaration `anchored` names, which `span` covers: every span written within it becomes an extent of it, so nothing the declaration lowers to says where in its file it stands.
+    pub(super) fn anchor(&self, anchored: curios_core::Anchored, span: &Span) {
+        let within = self
+            .anchoring
+            .anchors
+            .borrow_mut()
+            .site(curios_core::Anchor::of(anchored), span);
+        *self.anchoring.within.borrow_mut() = Some(within);
+    }
+
+    /// The extent of `span` in the declaration being lowered: `None` outside one, and for a span that does not lie in its text.
+    pub(super) fn extent(&self, span: &Span) -> Option<curios_core::Extent> {
+        self.anchoring.within.borrow().as_ref()?.extent(span)
+    }
+
+    /// `term` at `span` — innermost wins if it already carries a position, per `curios_core::Term::with_extent`.
+    pub(super) fn placed(&self, span: &Span, term: curios_core::Term) -> curios_core::Term {
+        match self.extent(span) {
+            Some(extent) => term.with_extent(extent),
+            None => term,
+        }
     }
 
     /// What has been minted since [`Context::begin_declaration`].
@@ -453,14 +497,12 @@ impl<'a> Context<'a> {
         assert_eq!(id, seeds.len(), "universe seeds parallel their dense ids");
         seeds.push(curios_core::UniverseSeed {
             role: self.universe_role(),
-            origin: span
-                .cloned()
-                .map(|span| curios_core::UniverseConstraintOrigin {
-                    span: Some(span),
-                    kind: curios_core::UniverseConstraintKind::WrittenType,
-                    declaration: (!self.prefix.is_root()).then(|| self.prefix.join()),
-                    binder: None,
-                }),
+            origin: span.map(|span| curios_core::UniverseConstraintOrigin {
+                extent: self.extent(span),
+                kind: curios_core::UniverseConstraintKind::WrittenType,
+                declaration: (!self.prefix.is_root()).then(|| self.prefix.join()),
+                binder: None,
+            }),
         });
         let id = curios_core::UniverseMetaId(id);
         if let Some(span) = span {

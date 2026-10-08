@@ -2,10 +2,9 @@ mod intrinsic;
 pub use intrinsic::*;
 
 use {
-    super::{Category, Cost, Free, Subterm, Term, UniverseError},
+    super::{Category, Cost, Extent, Free, Subterm, Term, UniverseError},
     curios_abi::ForeignFunction,
     curios_num::{Integer, Natural},
-    curios_utilities::Span,
     std::sync::Arc,
 };
 
@@ -26,7 +25,7 @@ pub fn reduce_foreign(
     Ok(Subterm::Foreign(Arc::clone(function), reduced))
 }
 
-/// The failure mode of type-level evaluation: either the declaration's step budget ran out (`Exhausted`) or a partial intrinsic was folded outside its domain, carrying the offending redex's span. It is deliberately free of any elaboration vocabulary — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
+/// The failure mode of type-level evaluation: either the declaration's step budget ran out (`Exhausted`) or a partial intrinsic was folded outside its domain, carrying the offending redex's extent. It is deliberately free of any elaboration vocabulary — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReduceError {
     /// The declaration's work budget ran out. Deterministic: the same program spends the same units on every machine, so this is a fact about the program rather than about the host that compiled it.
@@ -43,39 +42,39 @@ pub enum ReduceError {
     BinGetOutOfBounds {
         len: usize,
         index: usize,
-        span: Option<Span>,
+        extent: Option<Extent>,
     },
     BinSliceOutOfRange {
         len: usize,
         start: usize,
         length: usize,
-        span: Option<Span>,
+        extent: Option<Extent>,
     },
     ListGetOutOfBounds {
         len: usize,
         index: usize,
-        span: Option<Span>,
+        extent: Option<Extent>,
     },
     ListSliceOutOfRange {
         len: usize,
         start: usize,
         length: usize,
-        span: Option<Span>,
+        extent: Option<Extent>,
     },
     /// A `Nat`/`Int` division whose divisor reduced to literal zero — mathematically undefined, so reported like [`ReduceError::BinGetOutOfBounds`] rather than panicking the fold. (Runtime *range* limits, by contrast, never error at the type level: `Nat`/`Int` folds are unbounded there.)
     DivisionByZero {
         kind: &'static str,
-        span: Option<Span>,
+        extent: Option<Extent>,
     },
     /// An `Int/to_nat` whose operand reduced to a negative literal — a value no natural holds, so it is reported like [`ReduceError::DivisionByZero`] rather than folded by bit reinterpretation.
     IntToNatNegative {
         value: Integer,
-        span: Option<Span>,
+        extent: Option<Extent>,
     },
     /// A `Nat/to_byte` whose operand reduced past the carrier — reported rather than masked, for the reason [`ReduceError::IntToNatNegative`] is reported rather than reinterpreted. The operation's `below` field states this cannot happen, so reaching here means a proof was admitted that should not have been.
     NatToByteAbove {
         value: Natural,
-        span: Option<Span>,
+        extent: Option<Extent>,
     },
     Universe(UniverseError),
 }

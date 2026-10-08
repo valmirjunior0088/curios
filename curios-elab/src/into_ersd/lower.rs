@@ -9,10 +9,10 @@ use {
     },
     crate::{validate_entry_universes, validate_universes, validate_universes_of},
     curios_core::{
-        Certification, Entrypoint, Free, Global, Item, Module, Operand, Program, Zonked,
+        Certification, Entrypoint, Extent, Free, Global, Item, Module, Operand, Program, Zonked,
         foreign_operands, project_erased_universes,
     },
-    curios_utilities::{Span, SyntaxRegistry, grown},
+    curios_utilities::{SyntaxRegistry, grown},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
@@ -48,8 +48,8 @@ pub(super) struct Lowering<'s> {
     pub(super) in_flight: BTreeSet<Global>,
     /// The type each term was read at ([`Lowering::type_of`]), for the item being erased. Dropped at every top-level item and before the entry, which is what bounds it.
     pub(super) types: HashMap<Term, Term>,
-    /// The span of each computed recursive member's initializer, by the identity it was minted as. The erased verifier refuses a member by that identity after the module holding it is gone, so the frame for the refusal is kept here rather than in the representation, whose nodes are the stored-unit format and carry no spans.
-    pub(super) spans: BTreeMap<curios_ersd::ValueId, Span>,
+    /// The extent of each computed recursive member's initializer, by the identity it was minted as. The erased verifier refuses a member by that identity after the module holding it is gone, so the frame for the refusal is kept here rather than in the representation, whose nodes are the stored-unit format and carry no extents.
+    pub(super) extents: BTreeMap<curios_ersd::ValueId, Extent>,
 }
 
 /// Erase the entrypoint body into the entry block of a fragment of its own — [`erase_program`]'s tail. The program's own body owns what it mints, the same way an item owns what its body mints: the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from. The verifier is the rejection point for the recursion classes the language does not admit — an evaluation cycle, an initializer that performs an effect — and hands those back as the refusal; a malformed fragment is an erasure fault, which the verifier panics on rather than returning here.
@@ -114,7 +114,7 @@ impl<'s> Lowering<'s> {
             pending_families: BTreeMap::new(),
             in_flight: BTreeSet::new(),
             types: HashMap::new(),
-            spans: BTreeMap::new(),
+            extents: BTreeMap::new(),
         }
     }
 
@@ -125,19 +125,19 @@ impl<'s> Lowering<'s> {
             environment,
             values,
             functions,
-            spans,
+            extents,
             ..
         } = self;
         let module = builder
             .into_module()
-            .map_err(|error| Error::refused_by_verifier(error, &spans))?;
+            .map_err(|error| Error::refused_by_verifier(error, &extents))?;
 
         Ok(ErasedItem::new(
             module,
             environment.exporting(declared),
             values,
             functions,
-            &spans,
+            &extents,
         ))
     }
 
@@ -157,8 +157,8 @@ impl<'s> Lowering<'s> {
             return Ok(None);
         };
         let binding = match export {
-            Export::Unforced { member, span } => {
-                return Err(Error::evaluates_itself(member.to_string()).at_opt(span.cloned()));
+            Export::Unforced { member, extent } => {
+                return Err(Error::evaluates_itself(member.to_string()).at_opt(extent.cloned()));
             }
             Export::Dropped => Binding::Dropped,
             Export::Constant(constant) => Binding::Atom(curios_ersd::Atom::Constant(
@@ -268,10 +268,10 @@ impl<'s> Lowering<'s> {
         expected: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        // Attach this term's span to any error from erasing it.
+        // Attach this term's extent to any error from erasing it.
         let result = self.walk_subterm(context, term, expected, hint);
-        match term.span() {
-            Some(span) => result.map_err(|error| error.at(span)),
+        match term.extent() {
+            Some(extent) => result.map_err(|error| error.at(extent)),
             None => result,
         }
     }

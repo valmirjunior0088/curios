@@ -4,9 +4,10 @@
 
 use {
     super::{
-        Free, Global, Level, LevelHead, Subterm, Term, UniverseError, UniverseMetaId, UniverseParam,
+        Extent, Free, Global, Level, LevelHead, Subterm, Term, UniverseError, UniverseMetaId,
+        UniverseParam,
     },
-    curios_utilities::{Span, Symbol},
+    curios_utilities::Symbol,
     std::{
         cell::RefCell,
         collections::{BTreeSet, HashMap, HashSet},
@@ -528,7 +529,7 @@ impl Label {
     }
 }
 
-/// A body abstracted over `A::arity()` binders, locally nameless: the body stores de Bruijn indices, while `labels` remembers a `Label` per binder it was closed over, for printing and for the hints later rebuilds re-mint from (`None` for a `constant` scope that never had binders written). Like a [`Term`]'s span, `labels` is irrelevant to identity: `Eq`/`Hash` compare arity and body only, so scopes differing solely in binder labels are equal — term equality is α-equivalence. The one place binder *hints* are semantic rather than decoration — tuple-type fields, the target of `.label` resolution — reasserts them in its own node identity (see `TupleType` in `term.rs`). Built by `close` (which captures free occurrences of those identities) and eliminated by `open` (which substitutes terms for the indices); entering a `Scope` is the only place a [`Visit`]'s depth changes, so this type is the unit of binding for the whole crate.
+/// A body abstracted over `A::arity()` binders, locally nameless: the body stores de Bruijn indices, while `labels` remembers a `Label` per binder it was closed over, for printing and for the hints later rebuilds re-mint from (`None` for a `constant` scope that never had binders written). Like a [`Term`]'s extent, `labels` is irrelevant to identity: `Eq`/`Hash` compare arity and body only, so scopes differing solely in binder labels are equal — term equality is α-equivalence. The one place binder *hints* are semantic rather than decoration — tuple-type fields, the target of `.label` resolution — reasserts them in its own node identity (see `TupleType` in `term.rs`). Built by `close` (which captures free occurrences of those identities) and eliminated by `open` (which substitutes terms for the indices); entering a `Scope` is the only place a [`Visit`]'s depth changes, so this type is the unit of binding for the whole crate.
 #[curios_archive::archived]
 pub struct Scope<A: Arity, B: Bound = Term> {
     arity: A,
@@ -764,7 +765,7 @@ struct Spelling {
 
 /// A hash-consing table, shared rather than owned so one canonicalization spans a whole module: two definitions that build the same type collapse onto one node only if they consult the same table.
 ///
-/// **One node for each structure as it is spelled, and no position on any.** A node is adopted unless the table holds one of its structure, under the same binder names, over the very same children; children are canonical before their parent is asked for, so the test is one node deep. Up to α it would hand `pow(base: Nat, exp: Nat)` the node of `min(a: Nat, b: Nat)`, and every report of `pow`'s type would name `a` and `b`. A canonical node sits under no span and holds its children under none: a position is an occurrence's, a canonical node is every occurrence's, and what is consed says what it means and not where it was written.
+/// **One node for each structure as it is spelled, and no position on any.** A node is adopted unless the table holds one of its structure, under the same binder names, over the very same children; children are canonical before their parent is asked for, so the test is one node deep. Up to α it would hand `pow(base: Nat, exp: Nat)` the node of `min(a: Nat, b: Nat)`, and every report of `pow`'s type would name `a` and `b`. A canonical node sits under no extent and holds its children under none: a position is an occurrence's, a canonical node is every occurrence's, and what is consed says what it means and not where it was written.
 #[derive(Debug, Clone, Default)]
 pub struct Sharing {
     table: Rc<RefCell<HashSet<(Spelling, Term)>>>,
@@ -775,7 +776,7 @@ impl Sharing {
         Self::default()
     }
 
-    /// `value` with every term in it replaced by the canonical node of its spelling, under no span.
+    /// `value` with every term in it replaced by the canonical node of its spelling, under no extent.
     ///
     /// One `Sharing` must span every term canonicalized together: the duplication worth collapsing is overwhelmingly *between* definitions, so a table per term would collapse almost none of it.
     pub fn share<B: Bound>(&self, value: &B) -> B {
@@ -832,7 +833,7 @@ pub(crate) struct MaskedLevels {
 ///
 /// Every constructor takes one explicitly. There is no default, deliberately: neither defaulting direction is safe — a wrong `None` costs an exponent and a wrong memo costs a wrong answer.
 ///
-/// **A span is an occurrence's, not a node's.** It sits on the `Term` wrapper, and one node is shared under wrappers spanning different text — the elaborator's cache hands every occurrence of a subterm one node and stamps each with its own span. An unmemoized rebuild keeps each occurrence's span; a hit that handed back the stored rebuild as it was would give every later occurrence the first one's, so a diagnostic at the second occurrence of a shared subterm would point at the first. So an entry keeps the span of the occurrence that filled it ([`Remembered`]), and a hit whose rebuild carries that span — a rebuild, or a hook's answer spanned by the occurrence it replaced — takes the asking occurrence's instead. A hook's own replacement, spanned by something else, is handed back as it was, which is what rebuilding the occurrence would have produced.
+/// **An extent is an occurrence's, not a node's.** It sits on the `Term` wrapper, and one node is shared under wrappers spanning different text — the elaborator's cache hands every occurrence of a subterm one node and stamps each with its own extent. An unmemoized rebuild keeps each occurrence's extent; a hit that handed back the stored rebuild as it was would give every later occurrence the first one's, so a diagnostic at the second occurrence of a shared subterm would point at the first. So an entry keeps the extent of the occurrence that filled it ([`Remembered`]), and a hit whose rebuild carries that extent — a rebuild, or a hook's answer placed by the occurrence it replaced — takes the asking occurrence's instead. A hook's own replacement, placed by something else, is handed back as it was, which is what rebuilding the occurrence would have produced.
 enum Memo {
     /// Rebuild every occurrence. Correct for a hook whose answer depends on how many times it has run.
     None,
@@ -844,23 +845,23 @@ enum Memo {
     ByNodeAndDepth(HashMap<(usize, usize, usize), Remembered>),
 }
 
-/// One memo entry: a node's rebuild, and the span of the occurrence whose visit filled it — see [`Memo`] for why a hit needs the second.
+/// One memo entry: a node's rebuild, and the extent of the occurrence whose visit filled it — see [`Memo`] for why a hit needs the second.
 struct Remembered {
-    filled_at: Option<Span>,
+    filled_at: Option<Extent>,
     rebuilt: Term,
 }
 
 impl Remembered {
-    /// The rebuild as `at`'s own: respanned when it carries the span of the occurrence that filled it, as it was otherwise.
+    /// The rebuild as `at`'s own: placed anew when it carries the extent of the occurrence that filled it, as it was otherwise.
     fn for_occurrence(&self, at: &Term) -> Term {
-        match self.rebuilt.span() == self.filled_at {
-            true => self.rebuilt.clone().respanned(at.span()),
+        match self.rebuilt.extent() == self.filled_at {
+            true => self.rebuilt.clone().occurring_at(at.extent()),
             false => self.rebuilt.clone(),
         }
     }
 }
 
-/// A memo keyed by node identity for a walk written by hand rather than driven by a [`Visit`] — the elaborator's strict zonk is one — under the visit memo's law and its span rule: a hit whose rebuild carries the span of the occurrence that filled it takes the asking occurrence's.
+/// A memo keyed by node identity for a walk written by hand rather than driven by a [`Visit`] — the elaborator's strict zonk is one — under the visit memo's law and its extent rule: a hit whose rebuild carries the extent of the occurrence that filled it takes the asking occurrence's.
 ///
 /// **It holds every key it was filled from**, where a visit's memo holds none. A visit keys only the nodes of the value it walks, which that value keeps alive; a hand-written walk may key a term it built itself, and a key freed while the memo lives is an address the allocator can hand to another node, whose lookup would then answer with the first one's rebuild.
 #[derive(Default)]
@@ -879,7 +880,7 @@ impl NodeMemo {
     /// Remember `rebuilt` as the rebuild of `at`'s node, filled by the occurrence `at`.
     pub fn put(&mut self, at: &Term, rebuilt: Term) {
         let remembered = Remembered {
-            filled_at: at.span(),
+            filled_at: at.extent(),
             rebuilt,
         };
         self.entries.insert(at.identity(), (at.clone(), remembered));
@@ -1242,7 +1243,7 @@ where
         }
     }
 
-    /// The memoized rebuild of the input node at `key`, at the depths this visit currently stands at for the modes whose memo is depth-keyed, as the occurrence `at` would have it rebuilt — see [`Memo`] for its span.
+    /// The memoized rebuild of the input node at `key`, at the depths this visit currently stands at for the modes whose memo is depth-keyed, as the occurrence `at` would have it rebuilt — see [`Memo`] for its extent.
     pub(crate) fn memo_get(&self, key: usize, at: &Term) -> Option<Term> {
         let remembered = match &self.memo {
             Memo::None => None,
@@ -1258,7 +1259,7 @@ where
     /// Remember `rebuilt` as the rebuild of the input node at `key`, filled by the occurrence `at`.
     pub(crate) fn memo_put(&mut self, key: usize, at: &Term, rebuilt: Term) {
         let remembered = Remembered {
-            filled_at: at.span(),
+            filled_at: at.extent(),
             rebuilt,
         };
         match &mut self.memo {

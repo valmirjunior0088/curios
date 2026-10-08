@@ -19,11 +19,11 @@ use {
     },
     crate::{SlotPositions, is_prop, premise_label},
     curios_core::{
-        Advance, CalleeId, ConceptDecl, Enter, Field, Free, Global, HeadKey, ImplicitOrigin,
-        Instance, InstanceHead, Level, Metavar, MetavarId, StructType, Subterm, Term,
-        UniverseContext, WitnessKey, WitnessOrigin,
+        Advance, CalleeId, ConceptDecl, Enter, Extent, Field, Free, Global, HeadKey,
+        ImplicitOrigin, Instance, InstanceHead, Level, Metavar, MetavarId, StructType, Subterm,
+        Term, UniverseContext, WitnessKey, WitnessOrigin,
     },
-    curios_utilities::{Mount, Plicity, Qualifier, Span},
+    curios_utilities::{Mount, Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
 };
 
@@ -80,7 +80,7 @@ fn no_witness_error(
     context: &mut Context,
     goal: &Term,
     provenance: &WitnessOrigin,
-    site: Option<&Span>,
+    site: Option<&Extent>,
 ) -> Error {
     let embedding = diagnose_embedding(context, goal, site);
     let shape = diagnose_shape(context, goal);
@@ -132,7 +132,7 @@ pub(crate) fn diagnose_shape(context: &mut Context, goal: &Term) -> Option<Box<S
 pub(crate) fn diagnose_embedding(
     context: &mut Context,
     goal: &Term,
-    site: Option<&Span>,
+    site: Option<&Extent>,
 ) -> Option<EmbeddingDiagnosis> {
     let goal = reduce_with(context, goal).ok()?;
     let (concept_name, _, params) = as_concept_app(context, &goal)?;
@@ -162,7 +162,9 @@ pub(crate) fn diagnose_embedding(
         _ => Vec::new(),
     };
 
-    let written = site.and_then(|span| context.embedding_site(span)).cloned();
+    let written = site
+        .and_then(|extent| context.embedding_site(extent))
+        .cloned();
     let written_source = written
         .as_ref()
         .and_then(|site| declared_result(context, &site.action))
@@ -376,7 +378,7 @@ fn commit_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<
     Ok(probe)
 }
 
-/// Run the resolution algorithm for `goal`. `origin` anchors spans and parked premise goals. Solutions committed by a successful match stay in force.
+/// Run the resolution algorithm for `goal`. `origin` anchors extents and parked premise goals. Solutions committed by a successful match stay in force.
 fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<Resolution, Error> {
     let goal_whnf = reduce_with(context, goal)?;
 
@@ -616,7 +618,7 @@ fn instantiate(
     } else {
         Term::instance_of(&name, universes)
     };
-    let span = origin.span();
+    let extent = origin.extent();
 
     let (args, premises, bounds, terminal) = match &*signature {
         Subterm::FuncType(ft) => {
@@ -639,7 +641,7 @@ fn instantiate(
                         };
                         let (slot, hole) = context.fresh_metavar(
                             ty.clone(),
-                            span.clone(),
+                            extent,
                             provenance.clone(),
                             proposition,
                             None,
@@ -654,11 +656,8 @@ fn instantiate(
                             func: CalleeId::Witness(witness.name),
                             binder: premise_label(position),
                         };
-                        let (id, metavar) = context.fresh_witness_metavar(
-                            ty.clone(),
-                            span.clone(),
-                            provenance.clone(),
-                        );
+                        let (id, metavar) =
+                            context.fresh_witness_metavar(ty.clone(), extent, provenance.clone());
                         premises.push((id, ty.clone(), provenance));
                         metavar
                     }
@@ -733,7 +732,7 @@ fn instantiate(
     Ok(Resolution::Solved(term))
 }
 
-/// Attempt a freshly minted witness goal: solve it now, or park it on a flex key. A definite failure is an error at `origin`'s span, and a key a witness that has not elaborated is spelled at is [`Error::Unfinished`], which voids the attempt. A slot unification has already solved is left as it stands.
+/// Attempt a freshly minted witness goal: solve it now, or park it on a flex key. A definite failure is an error at `origin`'s extent, and a key a witness that has not elaborated is spelled at is [`Error::Unfinished`], which voids the attempt. A slot unification has already solved is left as it stands.
 pub(crate) fn attempt_witness_goal(
     context: &mut Context,
     slot: MetavarId,
@@ -764,8 +763,8 @@ pub(crate) fn attempt_witness_goal(
         Resolution::Poisoned => Err(Error::Poisoned),
         Resolution::NoMatch => {
             Err(
-                no_witness_error(context, goal, &provenance, origin.span().as_ref())
-                    .at_opt(origin.span()),
+                no_witness_error(context, goal, &provenance, origin.extent().as_ref())
+                    .at_opt(origin.extent()),
             )
         }
     }
@@ -807,8 +806,8 @@ pub(crate) fn retry_witness(
         Resolution::Poisoned => Err(Error::Poisoned),
         Resolution::NoMatch => {
             Err(
-                no_witness_error(context, &goal, &provenance, origin.span().as_ref())
-                    .at_opt(origin.span()),
+                no_witness_error(context, &goal, &provenance, origin.extent().as_ref())
+                    .at_opt(origin.extent()),
             )
         }
     }
@@ -1051,7 +1050,8 @@ pub(crate) fn superclass_targets(
                     Ok(reached.name)
                 }
                 _ => {
-                    Err(Error::unknown_superclass(name.symbol(), edge.clone()).at_opt(edge.span()))
+                    Err(Error::unknown_superclass(name.symbol(), edge.clone())
+                        .at_opt(edge.extent()))
                 }
             }
         })

@@ -3,7 +3,7 @@
 use {
     crate::Unit,
     curios_abi::ForeignStore,
-    curios_core::{Module, Places},
+    curios_core::{Anchors, Module, Places},
     curios_elab::ErasedUnit,
     curios_text::PreparedText,
 };
@@ -48,6 +48,14 @@ impl<'a> Predecessors<'a> {
         self.units
             .iter()
             .map(|unit| (unit.core(), unit.places()))
+            .collect()
+    }
+
+    /// Where the source declarations of each predecessor lie, in dependency order: what a report placed in one of them is resolved against, after the anchors of the unit it is about.
+    pub fn anchors(&self) -> Vec<&'a Anchors> {
+        self.units
+            .iter()
+            .map(|unit| unit.text().anchors())
             .collect()
     }
 

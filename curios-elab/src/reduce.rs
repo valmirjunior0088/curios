@@ -119,7 +119,7 @@ impl Reducer for Context<'_> {
 
 /// The elaborator's side of the shared-analysis seam.
 ///
-/// Both methods are `typing`'s wrappers: they exist so a failure reaches the user as a spanned diagnostic naming the offending term rather than as a bare `ReduceError`, which is precisely the split [`Env::Error`](curios_analysis::Env::Error) formalizes.
+/// Both methods are `typing`'s wrappers: they exist so a failure reaches the user as a placed diagnostic naming the offending term rather than as a bare `ReduceError`, which is precisely the split [`Env::Error`](curios_analysis::Env::Error) formalizes.
 impl curios_analysis::Env for Context<'_> {
     type Error = Error;
 
@@ -431,7 +431,7 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceErr
 
 fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError> {
     let Proj { head, field } = proj;
-    // Label projections are normally resolved (and rebuilt positionally) by elaborate. One path reaches here with a label still attached: `elaborate_apply` substitutes a *postponed* argument's raw surface term into the remaining telescope and the result type (that raw spelling is load-bearing — beta-reducing it through the result is what lets `expect` pin the metavariables the postponed slot is waiting on). If such an argument is a lambda whose body projects by label, beta-reduction here manufactures a label projection on a not-yet-solved head, which no earlier pass could have resolved. Leave it stuck rather than panicking: the conversion it sits under then fails as an ordinary mismatch at its origin span, or succeeds once the slot is settled and re-opened.
+    // Label projections are normally resolved (and rebuilt positionally) by elaborate. One path reaches here with a label still attached: `elaborate_apply` substitutes a *postponed* argument's raw surface term into the remaining telescope and the result type (that raw spelling is load-bearing — beta-reducing it through the result is what lets `expect` pin the metavariables the postponed slot is waiting on). If such an argument is a lambda whose body projects by label, beta-reduction here manufactures a label projection on a not-yet-solved head, which no earlier pass could have resolved. Leave it stuck rather than panicking: the conversion it sits under then fails as an ordinary mismatch at its origin extent, or succeeds once the slot is settled and re-opened.
     let Field::Index(index) = field else {
         return Ok(Reduce::Break(Term::from(Subterm::Proj(Proj {
             head,
@@ -1308,7 +1308,7 @@ fn normalize_level(
     if stalled_unfolding(&term, &reduced) {
         return normalize_arguments(context, known, term);
     }
-    let span = reduced.span();
+    let extent = reduced.extent();
 
     let inner = match Term::unwrap_or_clone(reduced) {
         Subterm::Apply(Apply { head, arguments }) => Subterm::Apply(Apply {
@@ -1387,8 +1387,8 @@ fn normalize_level(
         other => other,
     };
 
-    Ok(match span {
-        Some(span) => Term::spanned(span, inner),
+    Ok(match extent {
+        Some(extent) => Term::placed(extent, inner),
         None => Term::from(inner),
     })
 }
@@ -1456,7 +1456,7 @@ fn normalize_arguments(
     known: &mut HashMap<Term, Term>,
     term: Term,
 ) -> Result<Term, ReduceError> {
-    let span = term.span();
+    let extent = term.extent();
 
     let inner = match Term::unwrap_or_clone(term) {
         Subterm::Apply(Apply { head, arguments }) => Subterm::Apply(Apply {
@@ -1466,8 +1466,8 @@ fn normalize_arguments(
         other => other,
     };
 
-    Ok(match span {
-        Some(span) => Term::spanned(span, inner),
+    Ok(match extent {
+        Some(extent) => Term::placed(extent, inner),
         None => Term::from(inner),
     })
 }

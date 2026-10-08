@@ -547,10 +547,10 @@ fn park_match(
         Mode::Check(expected) => expected.clone(),
         Mode::Infer => {
             let classifier = context.fresh_classifier_type("parked match type");
-            context.fresh_hole_metavar(classifier, term.span())
+            context.fresh_hole_metavar(classifier, term.extent())
         }
     };
-    let (placeholder, stand_in) = context.fresh_placeholder(result.clone(), term.span());
+    let (placeholder, stand_in) = context.fresh_placeholder(result.clone(), term.extent());
     let Scrutinee {
         term: scrutinee,
         type_: scrutinee_type,
@@ -589,7 +589,7 @@ pub(crate) fn retry_match(
             type_,
         };
         let (rebuilt, type_) = eliminate(context, m, &parked.term, parked.mode.clone(), scrutinee)
-            .map_err(|error| error.at_opt(origin.span()))?;
+            .map_err(|error| error.at_opt(origin.extent()))?;
         if matches!(parked.mode, Mode::Infer) {
             expect(context, &parked.term, &type_, &parked.result)?;
         }

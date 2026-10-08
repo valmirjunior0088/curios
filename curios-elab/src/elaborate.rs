@@ -68,18 +68,21 @@ pub(crate) fn elaborate(
 ) -> Result<(Term, Term), Error> {
     // Guarded by [`recurse`]: a child position is elaborated by descending into it, so the cycle `elaborate → elaborate_apply → check → elaborate` costs native frames per link of a right-nested argument spine. Nothing in the corpus produces a deep one — a string literal's proof is constant-size — but depth is a function of the input rather than of anything anyone wrote, and this is what makes that affordable rather than fatal.
     recurse(|| {
-        // Route through the elaboration cache: ground, local-free subterms — which the lowerer emits as `Rc`-shared DAGs — elaborate once per distinct node instead of once per occurrence. Span stamping stays outside it, since spans are excluded from `Term` equality: occurrences differing only in span share one un-stamped entry and restamp per occurrence.
+        // Route through the elaboration cache: ground, local-free subterms — which the lowerer emits as `Rc`-shared DAGs — elaborate once per distinct node instead of once per occurrence. Placing stays outside it, since extents are excluded from `Term` equality: occurrences differing only in extent share one un-stamped entry and restamp per occurrence.
         let expected = mode.expected();
         let result = context.get_or_init_elaborated(term, expected.as_ref(), |context| {
             elaborate_subterm(context, term, mode)
         });
 
         // `Error::at` is first-wins, so stamping as the recursion unwinds reports the deepest node that failed.
-        let (rebuilt, type_) =
-            result.map_err(|error| error.at_opt(term.span()).in_scope(context.witness_scope()))?;
+        let (rebuilt, type_) = result.map_err(|error| {
+            error
+                .at_opt(term.extent())
+                .in_scope(context.witness_scope())
+        })?;
 
-        let rebuilt = match term.span() {
-            Some(span) => rebuilt.with_span(span),
+        let rebuilt = match term.extent() {
+            Some(extent) => rebuilt.with_extent(extent),
             None => rebuilt,
         };
 
@@ -106,17 +109,22 @@ fn elaborate_ascribed(
     Ok((checked, type_))
 }
 
-/// Synthesize a lambda for the settle tiers ([`settle_against`](super::settle_against)): the infer walk with each unannotated domain admitted as a metavariable named after its binder, pinned by the body or by whatever the settled type later unifies with, rather than refused. Only a settle tier may call this — while the expectation could still gain structure, committing the lambda's written shape would guess. Deliberately outside the elaboration cache: admitting the holes is a side effect, and a cached settle result under an `Infer` key would let a plain inference of the same lambda succeed where it must refuse. The span restamp and checked-record mirror [`elaborate`]'s tail, so the settled node reaches the module exactly as an ordinarily elaborated one does.
+/// Synthesize a lambda for the settle tiers ([`settle_against`](super::settle_against)): the infer walk with each unannotated domain admitted as a metavariable named after its binder, pinned by the body or by whatever the settled type later unifies with, rather than refused. Only a settle tier may call this — while the expectation could still gain structure, committing the lambda's written shape would guess. Deliberately outside the elaboration cache: admitting the holes is a side effect, and a cached settle result under an `Infer` key would let a plain inference of the same lambda succeed where it must refuse. The extent restamp and checked-record mirror [`elaborate`]'s tail, so the settled node reaches the module exactly as an ordinarily elaborated one does.
 pub(crate) fn elaborate_func_settle(
     context: &mut Context,
     func: &Func,
     term: &Term,
 ) -> Result<(Term, Term), Error> {
     let (rebuilt, type_) =
-        elaborate_func_infer(context, &func.telescope, &func.plicities(), Some(term))
-            .map_err(|error| error.at_opt(term.span()).in_scope(context.witness_scope()))?;
-    let rebuilt = match term.span() {
-        Some(span) => rebuilt.with_span(span),
+        elaborate_func_infer(context, &func.telescope, &func.plicities(), Some(term)).map_err(
+            |error| {
+                error
+                    .at_opt(term.extent())
+                    .in_scope(context.witness_scope())
+            },
+        )?;
+    let rebuilt = match term.extent() {
+        Some(extent) => rebuilt.with_extent(extent),
         None => rebuilt,
     };
     context.record_checked(&rebuilt, &type_);
@@ -195,10 +203,10 @@ fn elaborate_subterm(
                 let rebuilt = if levels.is_empty() {
                     term.clone()
                 } else {
-                    // The occurrence's span moves onto the wrapping instance: the typed head carries none.
+                    // The occurrence's extent moves onto the wrapping instance: the typed head carries none.
                     let instance = Term::instance(InstanceHead::Var(var.clone()), levels);
-                    match term.span() {
-                        Some(span) => instance.with_span(span),
+                    match term.extent() {
+                        Some(extent) => instance.with_extent(extent),
                         None => instance,
                     }
                 };

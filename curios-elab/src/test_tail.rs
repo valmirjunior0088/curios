@@ -2,15 +2,14 @@
 
 use {
     crate::Context,
-    curios_core::{Free, Global, Intrinsic, Term, Var, str_literal, syn_call},
-    curios_utilities::Span,
+    curios_core::{Extent, Free, Global, Intrinsic, Term, Var, str_literal, syn_call},
 };
 
-/// One registered test as the synthesized tail schedules it: its name, and the span of its authored body. Read off the lowered definition by `curios-pipeline`, since `Module::tests` records names alone.
+/// One registered test as the synthesized tail schedules it: its name, and the extent of its authored body. Read off the lowered definition by `curios-pipeline`, since `Module::tests` records names alone.
 #[derive(Debug, Clone)]
 pub struct ScheduledTest {
     pub name: Global,
-    pub span: Option<Span>,
+    pub extent: Option<Extent>,
 }
 
 /// The synthesized tail of a unit compiled as its own test program: `Test/main([("path", thunk), …])` over `tests` in declaration order, each pair the test's path as its `Global` renders it and the declaration itself, which is already the `() -> Test` thunk its lowering built. The list's element type is one fresh hole minted here, solved bidirectionally from `Test/main`'s parameter exactly as a written literal's would be.

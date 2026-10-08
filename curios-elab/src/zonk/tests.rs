@@ -2,12 +2,11 @@ use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Cost, Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, MetavarId, Minted,
-        Module, Nat, Subterm, Term, Totality, Tuple, UniverseContext, UniverseMetaId,
-        UniverseParam,
+        Anchor, Anchored, Cost, Definition, DefinitionKind, Extent, Free, Global, Intrinsic, Item,
+        Level, MetavarId, Minted, Module, Nat, Subterm, Term, Totality, Tuple, UniverseContext,
+        UniverseMetaId, UniverseParam,
     },
-    curios_utilities::{Qualifier, Source, Span},
-    std::sync::Arc,
+    curios_utilities::Qualifier,
 };
 
 fn context() -> Context<'static> {
@@ -285,24 +284,31 @@ fn a_shared_graph_is_zonked_once_per_node() {
     assert!(std::ptr::eq::<Subterm>(&**left, &**right));
 }
 
-/// A hole zonked once still lands at each of its occurrences under that occurrence's span, so a refusal downstream of the zonk points at the occurrence it is about.
+/// A hole zonked once still lands at each of its occurrences under that occurrence's extent, so a refusal downstream of the zonk points at the occurrence it is about.
 #[test]
-fn a_hole_zonked_once_keeps_each_occurrence_s_span() {
+fn a_hole_zonked_once_keeps_each_occurrence_s_extent() {
     let mut context = context();
     context.birth_metavar(MetavarId(0), Vec::new(), nat());
     context.solve_metavar(MetavarId(0), nat_lit(1));
-    let source = Source::inline("a b");
-    let span = |start| Span::new(Arc::clone(&source), start, start + 1);
+    let extent = |start| Extent {
+        anchor: Anchor::of(Anchored::Entry),
+        start,
+        end: start + 1,
+        stamp: 0,
+    };
     let hole = Term::hole(0);
-    let term = Term::tuple([hole.clone().with_span(span(0)), hole.with_span(span(2))]);
+    let term = Term::tuple([
+        hole.clone().with_extent(extent(0)),
+        hole.with_extent(extent(2)),
+    ]);
 
     let zonked = zonk(&context, &term).expect("the hole is solved");
 
     let Subterm::Tuple(tuple) = &*zonked else {
         panic!("zonking changed the shape: {zonked}");
     };
-    assert_eq!(tuple.fields[0].span(), Some(span(0)));
-    assert_eq!(tuple.fields[1].span(), Some(span(2)));
+    assert_eq!(tuple.fields[0].extent(), Some(extent(0)));
+    assert_eq!(tuple.fields[1].extent(), Some(extent(2)));
 }
 
 /// A budget that runs out while a term under a binder is zonked is refused in words. The level the walk cannot pay for is the body's, which it reads where it stands, its binder's occurrence a loose index; a report over that body is one the printer has no name for, so the report is over the nearest enclosing term that holds no loose index.
@@ -324,7 +330,7 @@ fn a_budget_spent_under_a_binder_is_reported_over_a_term_that_prints() {
 
     assert!(
         refused
-            .format_with(&lowered_module(nat()), &[], &SYNTAX)
+            .format_with(&lowered_module(nat()), &[], &SYNTAX, &[])
             .contains("ran out"),
     );
     let Error::ReduceExhausted { term, .. } = &refused else {

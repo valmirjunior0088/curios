@@ -118,12 +118,12 @@ pub(super) fn reduce_int_division(
         Half::Quotient => ("Int/div", |dividend, divisor| dividend.div(divisor).ok()),
         Half::Remainder => ("Int/rem", |dividend, divisor| dividend.rem(divisor).ok()),
     };
-    let span = right.span().or_else(|| left.span());
+    let extent = right.extent().or_else(|| left.extent());
     let left = reducer.reduce_forced(left.clone())?;
     let right = reducer.reduce_forced(right.clone())?;
 
     if right.as_int().is_some_and(|divisor| divisor.is_zero()) {
-        return Err(ReduceError::DivisionByZero { kind, span });
+        return Err(ReduceError::DivisionByZero { kind, extent });
     }
 
     if let (Some(l), Some(r)) = (left.as_int(), right.as_int())

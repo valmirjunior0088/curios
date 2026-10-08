@@ -114,7 +114,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         });
         match declared {
             Some(span) => lowered
-                .map(|type_| curios_core::Term::spanned(span.clone(), type_))
+                .map(|type_| self.context.placed(span, type_))
                 .map_err(|error| error.at(span.clone())),
             None => lowered,
         }
@@ -238,7 +238,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             None => self.subterm(term.as_subterm(), None)?,
         };
         Ok(match span {
-            Some(s) => curios_core::Term::spanned(s, elaborated),
+            Some(s) => self.context.placed(&s, elaborated),
             None => elaborated,
         })
     }
@@ -546,7 +546,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .map_err(|error| Self::located(error, term))?;
 
         Ok(match term.span() {
-            Some(span) => lowered.with_span(span.clone()),
+            Some(span) => self.context.placed(span, lowered),
             None => lowered,
         })
     }
@@ -713,7 +713,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .collect_spine(term, binds)
             .map_err(|error| Self::located(error, term))?;
         Ok(match term.span() {
-            Some(span) => lowered.with_span(span.clone()),
+            Some(span) => self.context.placed(span, lowered),
             None => lowered,
         })
     }
@@ -941,7 +941,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         written.then(|| {
             let hole = curios_core::Term::hole(self.context.fresh_metavar());
             match term.span() {
-                Some(span) => curios_core::Term::spanned(span.clone(), hole),
+                Some(span) => self.context.placed(span, hole),
                 None => hole,
             }
         })
@@ -1047,7 +1047,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 None => curios_core::Term::proj_position(scrutinee, index),
             };
             let proj = match pattern_span(&field.value) {
-                Some(span) => proj.with_span(span),
+                Some(span) => self.context.placed(&span, proj),
                 None => proj,
             };
             let hole = curios_core::Term::hole(self.context.fresh_metavar());
@@ -1082,7 +1082,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             let cont = curios_core::Term::func([(binder, domain)], acc);
             let bang = curios_core::Term::bang(action, cont);
             Ok(match span {
-                Some(span) => curios_core::Term::spanned(span, bang),
+                Some(span) => self.context.placed(&span, bang),
                 None => bang,
             })
         })

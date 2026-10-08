@@ -102,14 +102,14 @@ fn archive(
         );
         let elaboration = match &elaborated {
             Ok(_) => String::new(),
-            Err(error) => error.format_with(&lowered, predecessors, &SYNTAX),
+            Err(error) => error.format_with(&lowered, predecessors, &SYNTAX, &[prepared.anchors()]),
         };
         panic!("/{root} failed to parse: {parsed}{elaboration}");
     }
     let core = elaborated.unwrap_or_else(|error| {
         panic!(
             "/{root} failed to elaborate: {}",
-            error.format_with(&lowered, predecessors, &SYNTAX)
+            error.format_with(&lowered, predecessors, &SYNTAX, &[prepared.anchors()])
         )
     });
     // The pipeline's crediting, for the one caller that elaborates a unit itself: a binder a proof the elaborator wrote reads is used, and the image's lints say so.
@@ -138,7 +138,7 @@ fn archive(
     .unwrap_or_else(|error| {
         panic!(
             "/{root} failed to erase: {}",
-            error.format_with(&core, predecessors, &SYNTAX)
+            error.format_with(&core, predecessors, &SYNTAX, &[prepared.anchors()])
         )
     });
 

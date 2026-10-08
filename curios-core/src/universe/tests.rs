@@ -1,10 +1,9 @@
 use {
     super::*,
-    curios_utilities::{Source, Span},
+    crate::{Anchor, Anchored},
     std::{
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
-        sync::Arc,
     },
 };
 
@@ -126,13 +125,11 @@ fn constraint_identity_ignores_diagnostic_provenance() {
     let left = semantic();
     let mut right = semantic();
     right.origin = origin("second");
-    right.origin.span = Some(Span {
-        source: Arc::new(Source {
-            path: None,
-            text: "Type".into(),
-        }),
+    right.origin.extent = Some(Extent {
+        anchor: Anchor::of(Anchored::Entry),
         start: 0,
         end: 4,
+        stamp: 0,
     });
 
     assert_eq!(left, right);

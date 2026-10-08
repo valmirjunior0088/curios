@@ -210,7 +210,7 @@ pub(super) fn link(
     linking.add(entry);
 
     let Linking { module, bound, .. } = linking;
-    // Every fragment was held to the recursion rules where it was erased: its own groups by its verification, what it applies of another through that function's interface, and a read of a value whose initializer reads itself where the read was erased. So nothing here is expected to be refused, and a refusal would name nothing a span was kept for.
+    // Every fragment was held to the recursion rules where it was erased: its own groups by its verification, what it applies of another through that function's interface, and a read of a value whose initializer reads itself where the read was erased. So nothing here is expected to be refused, and a refusal would name nothing an extent was kept for.
     module
         .verify()
         .map_err(|error| Error::refused_by_verifier(error, &BTreeMap::new()))?;

@@ -107,7 +107,7 @@ pub(super) fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
         span: None,
         vis_pub: true,
         label: label.into(),
-        module: Some(Module { items }),
+        module: Some(Module::built(items)),
     })
 }
 

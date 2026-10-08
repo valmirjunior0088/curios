@@ -4,7 +4,7 @@
 //!
 //! **The blessed set is one value.** Which concepts derive, and their specific method and renderer names, are one row of `curios_utilities::DerivationSyntax` — read here to pick the writer, and read by `curios-text`'s `order_flat_items` to supply the hard edges the transient hides. `Spell` also uses the registry's shared string vocabulary; both its writer and the scheduler receive that same entry.
 //!
-//! **Eligibility.** A derivation writes from a declaration, and only from one: the key must reduce to a registered `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — that is representation-transparent at the declaring island and not `Prop`-sorted, its parameters and indices given by the key. Sealing is refused before any of that, with the rule a written literal meets, so that derivation is never a door through representation privacy; a concept with no derivation refuses by name, since derivability is registered per concept and never inferred from its shape. Every refusal is a hard error at the `satisfy` span.
+//! **Eligibility.** A derivation writes from a declaration, and only from one: the key must reduce to a registered `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — that is representation-transparent at the declaring island and not `Prop`-sorted, its parameters and indices given by the key. Sealing is refused before any of that, with the rule a written literal meets, so that derivation is never a door through representation privacy; a concept with no derivation refuses by name, since derivability is registered per concept and never inferred from its shape. Every refusal is a hard error at the `satisfy` extent.
 //!
 //! **Payloads.** Every derivation reads a declaration the same way: the constructor telescopes (or the field telescope) opened at the key's parameters, one binder minted per payload, each explicit payload classified by its type under the binders before it. A payload that is itself a type is refused; a proof payload takes no part beyond what the derivation states for it; every other payload takes part through the concept's own method — `Spell/spell`, `Eql/eql`, `Ord/ord` — applied with a `use` argument the body supplies as a witness goal of its own — resolved by ordinary resolution in the witness's scope (a telescope premise, the witness's own entry, an `and` sibling), and reported unresolved under a provenance naming the constructor and the payload, with the telescope premise to add when the payload's type is a telescope variable. An implicit payload is bound and never named. A field or payload the lowerer named `_{position}` had no written label, which is the one mark Core keeps of it.
 //!
@@ -17,14 +17,14 @@
 use {
     super::{Context, Error, Mode, Sort, Underivable, elaborate, reduce_with},
     curios_core::{
-        CalleeId, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Many,
+        CalleeId, Extent, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Many,
         MetavarOrigin, Scope, StructDecl, StructEntry, StructType, Subterm, Term, WitnessOrigin,
         str_literal, syn_call,
     },
     curios_num::Natural,
     curios_utilities::{
         ConceptField, Derivation, EqlDerivation, HashDerivation, InfixOp, OrdDerivation, Plicity,
-        Qualifier, Sign, Span, SpellDerivation, StringSyntax, SyntaxRegistry,
+        Qualifier, Sign, SpellDerivation, StringSyntax, SyntaxRegistry,
     },
 };
 
@@ -44,16 +44,16 @@ pub(crate) fn elaborate_derive(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     let Mode::Check(expected) = &mode else {
-        return Err(Error::derive_outside_witness().at_opt(term.span()));
+        return Err(Error::derive_outside_witness().at_opt(term.extent()));
     };
 
     // The witness's declared type elaborated before its body, so the expectation reduces to the concept's record type — a `StructType` whose name is registered as a concept.
     let reduced = reduce_with(context, expected)?;
     let Subterm::StructType(StructType { name, params, .. }) = &*reduced else {
-        return Err(Error::derive_outside_witness().at_opt(term.span()));
+        return Err(Error::derive_outside_witness().at_opt(term.extent()));
     };
     if context.concept(name).is_none() {
-        return Err(Error::derive_outside_witness().at_opt(term.span()));
+        return Err(Error::derive_outside_witness().at_opt(term.extent()));
     }
 
     // Sealing first: the rule `elaborate_struct` applies to a written literal, decided here before any body is written.
@@ -66,12 +66,12 @@ pub(crate) fn elaborate_derive(
             .island()
             .is_some_and(|island| !island.is_within(&record.module))
     {
-        return Err(Error::private_representation(name.symbol()).at_opt(term.span()));
+        return Err(Error::private_representation(name.symbol()).at_opt(term.extent()));
     }
 
     let syntax = context.syntax();
     let Some(derivation) = derivation_for(&syntax, name) else {
-        return Err(Error::no_derivation(*name).at_opt(term.span()));
+        return Err(Error::no_derivation(*name).at_opt(term.extent()));
     };
     let key = params
         .first()
@@ -82,7 +82,7 @@ pub(crate) fn elaborate_derive(
     let site = Site {
         concept: name,
         key: &key,
-        span: term.span(),
+        extent: term.extent(),
     };
     let subject = subject(context, &site)?;
     let body = match derivation {
@@ -94,24 +94,24 @@ pub(crate) fn elaborate_derive(
     elaborate(context, &body, mode)
 }
 
-/// The declaration a derivation is writing for: the concept, the key it is derived at, and the span every refusal and goal reports at.
+/// The declaration a derivation is writing for: the concept, the key it is derived at, and the extent every refusal and goal reports at.
 struct Site<'a> {
     concept: &'a Global,
     /// Reduced when the site was built, which is what makes it printable: an unreduced nullary inductive key is its recursion block, not its name. Every consumer wants that same form — [`subject`] classifies it, a body types its value at it, and a refusal prints it.
     key: &'a Term,
-    span: Option<Span>,
+    extent: Option<Extent>,
 }
 
 impl Site<'_> {
     fn at(&self, term: Term) -> Term {
-        match &self.span {
-            Some(span) => term.with_span(span.clone()),
+        match &self.extent {
+            Some(extent) => term.with_extent(*extent),
             None => term,
         }
     }
 
     fn refuse(&self, reason: Underivable) -> Error {
-        Error::underivable(*self.concept, self.key.clone(), reason).at_opt(self.span.clone())
+        Error::underivable(*self.concept, self.key.clone(), reason).at_opt(self.extent)
     }
 }
 
@@ -194,7 +194,7 @@ fn transparent(
             .island()
             .is_some_and(|island| !island.is_within(module))
     {
-        return Err(Error::private_representation(name.symbol()).at_opt(site.span.clone()));
+        return Err(Error::private_representation(name.symbol()).at_opt(site.extent));
     }
     Ok(())
 }
@@ -465,7 +465,7 @@ fn witness_call(
         func: classified.payload.callee.clone(),
         binder,
     };
-    // Spanned like the application around it: a goal deferred to the module's drain reports at the term it was born from, and that term is the declaration.
+    // Placed like the application around it: a goal deferred to the module's drain reports at the term it was born from, and that term is the declaration.
     let goal = site.at(Term::metavar_birthed(
         context.mint_metavar(),
         MetavarOrigin::Witness(provenance),

@@ -14,8 +14,8 @@ use {
         withhold,
     },
     crate::{Context, Error, GoalSite},
-    curios_core::{DefinitionKind, Enter, Global, Item, Module, Term},
-    curios_utilities::{Span, recurse},
+    curios_core::{DefinitionKind, Enter, Extent, Global, Item, Module, Term},
+    curios_utilities::recurse,
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         ops::ControlFlow,
@@ -62,11 +62,11 @@ pub(super) struct Demand<'a> {
 /// The first position written anywhere in `term`, outermost first, each node of its graph visited once.
 ///
 /// Where a report about a declaration is placed: the position of a declaration's label does not reach Core, and a signature the lowering synthesized around what was written, a function sugar's, has none of its own.
-fn first_written(term: &Term) -> Option<Span> {
+fn first_written(term: &Term) -> Option<Extent> {
     let found = term.try_walk(
         &mut HashSet::new(),
-        |seen: &mut HashSet<Term>, term| match term.span() {
-            Some(span) => ControlFlow::Break(span),
+        |seen: &mut HashSet<Term>, term| match term.extent() {
+            Some(extent) => ControlFlow::Break(extent),
             None if seen.insert(term.clone()) => ControlFlow::Continue(Enter::Descend),
             None => ControlFlow::Continue(Enter::Skip(())),
         },
@@ -74,7 +74,7 @@ fn first_written(term: &Term) -> Option<Span> {
     );
 
     match found {
-        ControlFlow::Break(span) => Some(span),
+        ControlFlow::Break(extent) => Some(extent),
         ControlFlow::Continue(()) => None,
     }
 }

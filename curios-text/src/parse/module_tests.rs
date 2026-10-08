@@ -50,17 +50,15 @@ fn parse_nested_module() {
             span: None,
             vis_pub: false,
             label: "Inner".into(),
-            module: Some(Module {
-                items: vec![TopItem::Let(vec![TopLet {
-                    doc: None,
-                    vis_pub: true,
-                    label: "x".into(),
-                    signature: LetSignature::Name {
-                        type_: Some(Subterm::Type.into()),
-                        body: Subterm::Type.into(),
-                    },
-                }])],
-            }),
+            module: Some(Module::built(vec![TopItem::Let(vec![TopLet {
+                doc: None,
+                vis_pub: true,
+                label: "x".into(),
+                signature: LetSignature::Name {
+                    type_: Some(Subterm::Type.into()),
+                    body: Subterm::Type.into(),
+                },
+            }])])),
         })]
     );
 }

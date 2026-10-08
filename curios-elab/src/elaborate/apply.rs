@@ -59,7 +59,7 @@ pub(super) fn elaborate_func_type(
             if matches!(&*reduced, Subterm::StructType(struct_type) if context.concept(&struct_type.name).is_some())
             {
                 return Err(Error::implicit_concept_member_unfillable(domain.clone())
-                    .at_opt(domain.span()));
+                    .at_opt(domain.extent()));
             }
         }
 
@@ -94,7 +94,7 @@ pub(super) fn check_witness_domain(context: &mut Context, domain: &Term) -> Resu
 
     // Only a hint: a sort that cannot be computed must not hide the refusal it decorates.
     let proposition = is_prop(context, domain).unwrap_or(false);
-    Err(Error::use_parameter_not_a_concept(domain.clone(), proposition).at_opt(domain.span()))
+    Err(Error::use_parameter_not_a_concept(domain.clone(), proposition).at_opt(domain.extent()))
 }
 
 /// A one-based position as an English ordinal, for naming which slot of a call a goal belongs to.
@@ -139,7 +139,7 @@ impl SlotPositions {
     }
 }
 
-/// Fill an omitted non-explicit slot: an implicit binder gets a fresh metavariable; a witness binder gets a fresh metavariable *plus* a resolution goal, attempted eagerly (solved now, parked on a flex key, or deferred on a missing table entry). `origin` is the application node — the span anchor for the goal. `position` is the slot's place among the head's slots of its kind, which names a witness goal's premise.
+/// Fill an omitted non-explicit slot: an implicit binder gets a fresh metavariable; a witness binder gets a fresh metavariable *plus* a resolution goal, attempted eagerly (solved now, parked on a flex key, or deferred on a missing table entry). `origin` is the application node — the extent anchor for the goal. `position` is the slot's place among the head's slots of its kind, which names a witness goal's premise.
 pub(super) fn insert_auto_argument(
     context: &mut Context,
     plicity: Plicity,
@@ -180,7 +180,7 @@ pub(super) fn insert_auto_argument(
                 (proposition && matches!(&*reduced, Subterm::InductType(_))).then_some(reduced);
             let (slot, hole) = context.fresh_metavar(
                 type_.clone(),
-                origin.span(),
+                origin.extent(),
                 provenance.clone(),
                 proposition,
                 reduct,
@@ -206,7 +206,7 @@ pub(super) fn insert_auto_argument(
                 binder: premise_label(position),
             };
             let (id, metavar) =
-                context.fresh_witness_metavar(type_.clone(), origin.span(), provenance.clone());
+                context.fresh_witness_metavar(type_.clone(), origin.extent(), provenance.clone());
             attempt_witness_goal(context, id, type_, provenance, origin)?;
             Ok(metavar)
         }
@@ -273,7 +273,7 @@ pub(crate) fn retry_discharge(
         .with_retry_frame(&frame, |context| {
             attempt_discharge(context, slot, &bound, &provenance)
         })
-        .map_err(|error| error.at_opt(origin.span()))?;
+        .map_err(|error| error.at_opt(origin.extent()))?;
     if waiting {
         context.repark(
             ParkedWork::Discharge {
@@ -416,10 +416,9 @@ fn elaborate_apply_awaiting(
             marks[slot],
             ft.telescope.labels()[slot],
         )
-        .at_opt(arguments[member].term.span()),
-        Misaligned::Surplus { member } => {
-            Error::hidden_member_without_slot(written[member]).at_opt(arguments[member].term.span())
-        }
+        .at_opt(arguments[member].term.extent()),
+        Misaligned::Surplus { member } => Error::hidden_member_without_slot(written[member])
+            .at_opt(arguments[member].term.extent()),
     })?;
 
     // Whether the expected type is fully ground. The codomain postponement is only a win when `expect(output, expected)` actually *grounds* the result metavar; if `expected` itself carries an unsolved metavar, that turnaround is flex-flex and the metavar must instead be grounded by the continuation's body — so postponing it would strand the metavar (flex-flex-under-constructor) rather than refine it. When expected is not ground the argument checks eagerly.
@@ -465,7 +464,7 @@ fn elaborate_apply_awaiting(
                     };
                 if blocked {
                     let (placeholder, stand_in) =
-                        context.fresh_placeholder(ty.clone(), written.span());
+                        context.fresh_placeholder(ty.clone(), written.extent());
                     context.park(
                         ParkedWork::Checking {
                             term: written.clone(),

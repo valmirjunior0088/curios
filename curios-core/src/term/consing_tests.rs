@@ -1,11 +1,6 @@
 //! A hash-consed term: one node for each structure as it is spelled, built over canonical children, under no position.
 
-use {
-    super::test_support::*,
-    crate::*,
-    curios_utilities::{Source, Span},
-    std::{rc::Rc, sync::Arc},
-};
+use {super::test_support::*, crate::*, std::rc::Rc};
 
 /// `f(x)` over two locals, built anew at every call: equal as a term to every other, and no node of any.
 fn applied() -> Term {
@@ -89,42 +84,37 @@ fn a_structure_keeps_the_binder_names_it_was_written_with() {
 /// A consed term sits under no position and holds none beneath it, so two occurrences that differ only in where they were written are one node.
 #[test]
 fn a_consed_term_sits_under_no_position() {
-    let source = Source::inline("f x f x");
-    let span = |start| Some(Span::new(Arc::clone(&source), start, start + 1));
-    let written_at = |start: usize| {
+    let extent = |start| Some(written_at(start));
+    let applied_at = |start: u32| {
         Term::apply(
-            Term::free_var(&Free::local(0, Some("f"))).respanned(span(start)),
-            [Term::free_var(&Free::local(1, Some("x"))).respanned(span(start + 2))],
+            Term::free_var(&Free::local(0, Some("f"))).occurring_at(extent(start)),
+            [Term::free_var(&Free::local(1, Some("x"))).occurring_at(extent(start + 2))],
         )
-        .respanned(span(start))
+        .occurring_at(extent(start))
     };
     let sharing = Sharing::new();
 
-    let first = sharing.share(&written_at(0));
-    let second = sharing.share(&written_at(4));
+    let first = sharing.share(&applied_at(0));
+    let second = sharing.share(&applied_at(4));
 
-    assert_eq!(first.span(), None);
-    assert_eq!(argument(&first).span(), None);
+    assert_eq!(first.extent(), None);
+    assert_eq!(argument(&first).extent(), None);
     assert!(Rc::ptr_eq(&first.inner, &second.inner));
 }
 
-/// A node met first with no span and then under one comes back without one both times: a remembered rebuild is handed to an occurrence as it was stored, not as that occurrence's own.
+/// A node met first with no extent and then under one comes back without one both times: a remembered rebuild is handed to an occurrence as it was stored, not as that occurrence's own.
 #[test]
 fn a_node_met_first_without_a_span_comes_back_without_one() {
-    let source = Source::inline("f x");
     let shared = applied();
-    let term = Term::tuple([
-        shared.clone(),
-        shared.respanned(Some(Span::new(source, 0, 1))),
-    ]);
+    let term = Term::tuple([shared.clone(), shared.occurring_at(Some(written_at(0)))]);
 
     let consed = Sharing::new().share(&term);
 
     let Subterm::Tuple(tuple) = consed.as_ref() else {
         panic!("consing changed the term's shape: {consed}");
     };
-    assert_eq!(tuple.fields[0].span(), None);
-    assert_eq!(tuple.fields[1].span(), None);
+    assert_eq!(tuple.fields[0].extent(), None);
+    assert_eq!(tuple.fields[1].extent(), None);
     assert!(Rc::ptr_eq(&tuple.fields[0].inner, &tuple.fields[1].inner));
 }
 
@@ -152,7 +142,7 @@ fn a_shared_chain_is_consed_as_a_chain() {
 #[test]
 fn a_universe_context_is_consed_without_its_positions() {
     let raised = UniverseConstraintOrigin {
-        span: Some(Span::new(Source::inline("Type"), 0, 4)),
+        extent: Some(written_at(0)),
         kind: UniverseConstraintKind::WrittenType,
         declaration: Some("/lib/wrap".into()),
         binder: Some("A".into()),
@@ -172,7 +162,7 @@ fn a_universe_context_is_consed_without_its_positions() {
     let [constraint] = consed.constraints.as_slice() else {
         panic!("one constraint, got {:?}", consed.constraints);
     };
-    assert_eq!(constraint.origin.span, None);
+    assert_eq!(constraint.origin.extent, None);
     assert_eq!(constraint.origin.kind, raised.kind);
     assert_eq!(constraint.origin.declaration, raised.declaration);
     assert_eq!(constraint.origin.binder, raised.binder);

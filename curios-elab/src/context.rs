@@ -60,14 +60,14 @@ use {
     },
     curios_analysis::{Unfolding, records_case_equation},
     curios_core::{
-        Advance, Bound, ConceptDecl, Consumption, Cost, Definition, DefinitionKind, Free, FuncType,
-        Global, HeadKey, HeadTag, ImplicitOrigin, Imports, InductDecl, Item, Level, Metavar,
-        MetavarId, MetavarOrigin, Minted, Mints, Probe, RecGroup, ReduceError, StructDecl, Subterm,
-        Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        Advance, Bound, ConceptDecl, Consumption, Cost, Definition, DefinitionKind, Extent, Free,
+        FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports, InductDecl, Item, Level,
+        Metavar, MetavarId, MetavarOrigin, Minted, Mints, Probe, RecGroup, ReduceError, StructDecl,
+        Subterm, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseError, UniverseMetaId, UniverseRole, Variance, WitnessKey, WitnessOrigin,
         instantiate_universe_levels_scoped,
     },
-    curios_utilities::{Entropy, Mount, Plicity, Qualifier, Span, SyntaxRegistry},
+    curios_utilities::{Entropy, Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         mem,
@@ -199,7 +199,7 @@ impl<'s> Context<'s> {
     pub(crate) fn note_solve_blockers(
         &mut self,
         id: MetavarId,
-        blockers: Vec<(MetavarId, MetavarOrigin, Option<Span>)>,
+        blockers: Vec<(MetavarId, MetavarOrigin, Option<Extent>)>,
     ) {
         self.underway.attempt.note_solve_blockers(id, blockers);
     }
@@ -208,32 +208,32 @@ impl<'s> Context<'s> {
     pub(crate) fn solve_blockers(
         &self,
         id: MetavarId,
-    ) -> &[(MetavarId, MetavarOrigin, Option<Span>)] {
+    ) -> &[(MetavarId, MetavarOrigin, Option<Extent>)] {
         self.underway.attempt.solve_blockers(id)
     }
 
-    /// [`Attempt::note_goal_span`].
-    pub(crate) fn note_goal_span(&mut self, id: MetavarId, span: Span) {
-        self.underway.attempt.note_goal_span(id, span);
+    /// [`Attempt::note_goal_extent`].
+    pub(crate) fn note_goal_extent(&mut self, id: MetavarId, extent: Extent) {
+        self.underway.attempt.note_goal_extent(id, extent);
     }
 
-    /// [`Attempt::goal_span`].
-    pub(crate) fn goal_span(&self, id: MetavarId) -> Option<&Span> {
-        self.underway.attempt.goal_span(id)
+    /// [`Attempt::goal_extent`].
+    pub(crate) fn goal_extent(&self, id: MetavarId) -> Option<&Extent> {
+        self.underway.attempt.goal_extent(id)
     }
 
-    /// Record what the auto-lift at `span` named as written.
-    pub(crate) fn note_embedding_site(&mut self, span: Span, site: EmbeddingSite) {
-        self.underway.embedding_sites.push((span, site));
+    /// Record what the auto-lift at `extent` named as written.
+    pub(crate) fn note_embedding_site(&mut self, extent: Extent, site: EmbeddingSite) {
+        self.underway.embedding_sites.push((extent, site));
     }
 
-    /// What the auto-lift at `span` named as written, where it recorded it — the latest record, since re-validation may elaborate a site again.
-    pub(crate) fn embedding_site(&self, span: &Span) -> Option<&EmbeddingSite> {
+    /// What the auto-lift at `extent` named as written, where it recorded it — the latest record, since re-validation may elaborate a site again.
+    pub(crate) fn embedding_site(&self, extent: &Extent) -> Option<&EmbeddingSite> {
         self.underway
             .embedding_sites
             .iter()
             .rev()
-            .find(|(at, _)| at == span)
+            .find(|(at, _)| at == extent)
             .map(|(_, site)| site)
     }
 
@@ -255,7 +255,7 @@ impl<'s> Context<'s> {
     }
 
     /// The names this elaboration may synthesize.
-    pub(crate) fn syntax(&self) -> SyntaxRegistry {
+    pub fn syntax(&self) -> SyntaxRegistry {
         self.typing.syntax
     }
 
@@ -847,7 +847,7 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// Write half of the elaboration cache, paired with a [`probe_elaborated`](Self::probe_elaborated) `Miss`. Keys the same way the probe did (spans excluded from `Term` equality, so the un-restamped result the caller passes keys identically) and defers to [`insert_elaborated`](Self::insert_elaborated)'s purity/groundness condition against the snapshotted `stamp`.
+    /// Write half of the elaboration cache, paired with a [`probe_elaborated`](Self::probe_elaborated) `Miss`. Keys the same way the probe did (extents excluded from `Term` equality, so the un-restamped result the caller passes keys identically) and defers to [`insert_elaborated`](Self::insert_elaborated)'s purity/groundness condition against the snapshotted `stamp`.
     pub(crate) fn record_elaborated(
         &mut self,
         term: &Term,
@@ -1945,16 +1945,17 @@ impl<'s> Context<'s> {
         self.typing.frames.identity_snapshot()
     }
 
-    /// Mint a metavariable for an omitted implicit argument and birth it immediately — frozen local Γ, the binder's instantiated type as `result` — so the id always has a birth record. Returns its id beside the metavariable term carrying the *call site's* span and the insertion provenance (which rides on the node; see [`Metavar::origin`]). `proposition` is whether `result` is one, decided by the caller, which has the sort in hand; it is kept on the birth record for the unsolved report, which cannot ask.
+    /// Mint a metavariable for an omitted implicit argument and birth it immediately — frozen local Γ, the binder's instantiated type as `result` — so the id always has a birth record. Returns its id beside the metavariable term carrying the *call site's* extent and the insertion provenance (which rides on the node; see [`Metavar::origin`]). `proposition` is whether `result` is one, decided by the caller, which has the sort in hand; it is kept on the birth record for the unsolved report, which cannot ask.
     pub(crate) fn fresh_metavar(
         &mut self,
         result: Term,
-        span: Option<Span>,
+        extent: Option<Extent>,
         origin: ImplicitOrigin,
         proposition: bool,
         reduct: Option<Term>,
     ) -> (MetavarId, Term) {
-        let (id, metavar) = self.fresh_metavar_with(result, span, MetavarOrigin::Implicit(origin));
+        let (id, metavar) =
+            self.fresh_metavar_with(result, extent, MetavarOrigin::Implicit(origin));
         if proposition {
             self.underway.attempt.solutions.mark_proposition(id);
         }
@@ -1978,15 +1979,16 @@ impl<'s> Context<'s> {
     pub(crate) fn fresh_witness_metavar(
         &mut self,
         result: Term,
-        span: Option<Span>,
+        extent: Option<Extent>,
         origin: WitnessOrigin,
     ) -> (MetavarId, Term) {
-        self.fresh_metavar_with(result, span, MetavarOrigin::Witness(origin))
+        self.fresh_metavar_with(result, extent, MetavarOrigin::Witness(origin))
     }
 
     /// Mint a silent hole — the stand-in type a written goal in synthesis position gets, so the goal survives to zonk's report instead of dying with `CannotInfer` (`elaborate_metavar`).
-    pub(crate) fn fresh_hole_metavar(&mut self, result: Term, span: Option<Span>) -> Term {
-        self.fresh_metavar_with(result, span, MetavarOrigin::Hole).1
+    pub(crate) fn fresh_hole_metavar(&mut self, result: Term, extent: Option<Extent>) -> Term {
+        self.fresh_metavar_with(result, extent, MetavarOrigin::Hole)
+            .1
     }
 
     /// Mint a metavariable identity with no birth record, for a term built ahead of its elaboration exactly as `into_core` builds one: an omitted motive, a list literal's element type, a witness goal with a provenance of its own. Birth happens where elaboration first meets the term, in checking position, as it does for every lowered hole.
@@ -2005,14 +2007,14 @@ impl<'s> Context<'s> {
         &mut self,
         scope: &DomainScope,
         result: Term,
-        span: Option<Span>,
+        extent: Option<Extent>,
         binder: String,
     ) -> Term {
         let id = self.underway.attempt.solutions.mint();
         self.birth_metavar(id, scope.telescope.clone(), result);
         let metavar = Term::metavar_birthed(id, MetavarOrigin::Domain(binder), scope.spine.clone());
-        match span {
-            Some(span) => metavar.with_span(span),
+        match extent {
+            Some(extent) => metavar.with_extent(extent),
             None => metavar,
         }
     }
@@ -2174,12 +2176,12 @@ impl<'s> Context<'s> {
         })
     }
 
-    /// Solve the unsolved `inner` to a fresh stand-in as `restriction` plans it ([`Context::metavar_restriction`]), born under the refinements `inner` shares with `outer`'s birth: whatever reaches `outer` through `inner` must hold where `outer` is, so `inner`'s later solution can no longer rest on a guard `outer` would carry out of its arm. The stand-in keeps `inner`'s origin and `span`, so an unsolved one reports as `inner` would have. Birth records stay frozen; the restriction is a solution, rolled back and reported like any other.
+    /// Solve the unsolved `inner` to a fresh stand-in as `restriction` plans it ([`Context::metavar_restriction`]), born under the refinements `inner` shares with `outer`'s birth: whatever reaches `outer` through `inner` must hold where `outer` is, so `inner`'s later solution can no longer rest on a guard `outer` would carry out of its arm. The stand-in keeps `inner`'s origin and `extent`, so an unsolved one reports as `inner` would have. Birth records stay frozen; the restriction is a solution, rolled back and reported like any other.
     pub(crate) fn restrict_metavar(
         &mut self,
         inner: MetavarId,
         outer: MetavarId,
-        (origin, span): Provenance,
+        (origin, extent): Provenance,
         restriction: Restriction,
     ) {
         let (Some(inner_entry), Some(outer_entry)) =
@@ -2206,8 +2208,8 @@ impl<'s> Context<'s> {
             .solutions
             .birth(narrowed, telescope, refinements, witnesses, result);
         let stand_in = Term::metavar_birthed(narrowed, origin, arguments);
-        let stand_in = match span {
-            Some(span) => stand_in.with_span(span),
+        let stand_in = match extent {
+            Some(extent) => stand_in.with_extent(extent),
             None => stand_in,
         };
         curios_profile::note!(
@@ -2223,7 +2225,7 @@ impl<'s> Context<'s> {
     fn fresh_metavar_with(
         &mut self,
         result: Term,
-        span: Option<Span>,
+        extent: Option<Extent>,
         origin: MetavarOrigin,
     ) -> (MetavarId, Term) {
         let id = self.underway.attempt.solutions.mint();
@@ -2231,8 +2233,8 @@ impl<'s> Context<'s> {
         self.birth_metavar(id, telescope, result);
         let metavar = Term::metavar_birthed(id, origin, spine);
 
-        let metavar = match span {
-            Some(span) => metavar.with_span(span),
+        let metavar = match extent {
+            Some(extent) => metavar.with_extent(extent),
             None => metavar,
         };
 
@@ -2545,15 +2547,15 @@ impl<'s> Context<'s> {
     pub(crate) fn fresh_placeholder(
         &mut self,
         result: Term,
-        span: Option<Span>,
+        extent: Option<Extent>,
     ) -> (MetavarId, Term) {
         let id = self.underway.attempt.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar_as(id, telescope, result, MetaKind::Placeholder);
         let term = Term::metavar_birthed(id, MetavarOrigin::Hole, spine);
 
-        let term = match span {
-            Some(span) => term.with_span(span),
+        let term = match extent {
+            Some(extent) => term.with_extent(extent),
             None => term,
         };
 

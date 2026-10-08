@@ -93,9 +93,9 @@ impl Lowering<'_> {
                     Subterm::Func(_) => Member::Function(self.builder.reserve_function()),
                     _ => {
                         let value = self.builder.value(hint.clone());
-                        // Where the verifier's refusal of this member is framed, should it refuse it: the initializer, since no span of the binder reaches this far.
-                        if let Some(span) = body.span() {
-                            self.spans.insert(value, span);
+                        // Where the verifier's refusal of this member is framed, should it refuse it: the initializer, since no extent of the binder reaches this far.
+                        if let Some(extent) = body.extent() {
+                            self.extents.insert(value, extent);
                         }
                         Member::Computed(value)
                     }

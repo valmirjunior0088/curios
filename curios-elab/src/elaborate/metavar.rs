@@ -35,8 +35,8 @@ pub(super) fn elaborate_metavar(
                     return Ok((term.clone(), expected));
                 };
                 let rebuilt = Term::metavar_birthed(id, metavar.origin.clone(), spine);
-                let rebuilt = match term.span() {
-                    Some(span) => rebuilt.with_span(span),
+                let rebuilt = match term.extent() {
+                    Some(extent) => rebuilt.with_extent(extent),
                     None => rebuilt,
                 };
                 Ok((rebuilt, expected))
@@ -45,9 +45,9 @@ pub(super) fn elaborate_metavar(
                 let (telescope, spine) = context.identity_snapshot();
                 context.birth_metavar(id, telescope, expected.clone());
                 if matches!(metavar.origin, MetavarOrigin::Goal)
-                    && let Some(span) = term.span()
+                    && let Some(extent) = term.extent()
                 {
-                    context.note_goal_span(id, span.clone());
+                    context.note_goal_extent(id, extent);
                 }
 
                 // A metavariable born with witness provenance is a witness goal, attempted the moment it is born — how a term built ahead of elaboration (a derived witness body) supplies a `use` argument under a provenance of its own, where `elaborate_apply` would otherwise name the goal after the applied function.
@@ -56,8 +56,8 @@ pub(super) fn elaborate_metavar(
                 }
 
                 let rebuilt = Term::metavar_birthed(id, metavar.origin.clone(), spine);
-                let rebuilt = match term.span() {
-                    Some(span) => rebuilt.with_span(span),
+                let rebuilt = match term.extent() {
+                    Some(extent) => rebuilt.with_extent(extent),
                     None => rebuilt,
                 };
                 Ok((rebuilt, expected))
@@ -69,16 +69,16 @@ pub(super) fn elaborate_metavar(
             // A written goal, though, must survive to zonk's report rather than die here: a fresh silent hole stands in as its type (a hole so only the goal itself reports; the report then shows the stand-in — `?N` — if nothing ever pins it). Birth mirrors the checking arm, with the stand-in as `result`.
             None if matches!(metavar.origin, MetavarOrigin::Goal) => {
                 let classifier = context.fresh_classifier_type("inferred goal classifier");
-                let result = context.fresh_hole_metavar(classifier, term.span());
+                let result = context.fresh_hole_metavar(classifier, term.extent());
                 let (telescope, spine) = context.identity_snapshot();
                 context.birth_metavar(id, telescope, result.clone());
-                if let Some(span) = term.span() {
-                    context.note_goal_span(id, span.clone());
+                if let Some(extent) = term.extent() {
+                    context.note_goal_extent(id, extent);
                 }
 
                 let rebuilt = Term::metavar_birthed(id, metavar.origin.clone(), spine);
-                let rebuilt = match term.span() {
-                    Some(span) => rebuilt.with_span(span),
+                let rebuilt = match term.extent() {
+                    Some(extent) => rebuilt.with_extent(extent),
                     None => rebuilt,
                 };
                 Ok((rebuilt, result))

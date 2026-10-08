@@ -3,10 +3,10 @@ use {
     curios_utilities::Span,
 };
 
-/// One item of a [`recover`]ed repetition: what parsed, or what broke and the text the loop skipped to resume.
+/// One item of a [`recover`]ed repetition: what parsed, with the text its parse consumed, or what broke and the text the loop skipped to resume.
 #[derive(Debug)]
 pub enum Recovered<T> {
-    Item(T),
+    Item { item: T, span: Span },
     Broken { error: ParserError, span: Span },
 }
 
@@ -28,7 +28,10 @@ where
                         panic!("Infinite repetition");
                     }
 
-                    items.push(Recovered::Item(item));
+                    items.push(Recovered::Item {
+                        item,
+                        span: Span::new(next_state.source.clone(), start, next_state.offset),
+                    });
                     state = next_state;
                 }
                 Err(error) if error.is_committed() => {

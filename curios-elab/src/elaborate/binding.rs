@@ -6,15 +6,15 @@ use {
         elaborate, expect, reduce_with, written_monad, zonk_solved_term_metas,
     },
     curios_core::{
-        Advance, Bang, Bound, CalleeId, Free, Func, Global, HeadKey, Infix, Intrinsic, Let,
+        Advance, Bang, Bound, CalleeId, Extent, Free, Func, Global, HeadKey, Infix, Intrinsic, Let,
         Metavar, MetavarId, Nat, NumLit, Probe, Rec, Subterm, Telescope, Term, Transient,
         WitnessKey, WitnessOrigin,
     },
     curios_num::{Floating, Integer, Rounding},
-    curios_utilities::{InfixOp, Plicity, Span},
+    curios_utilities::{InfixOp, Plicity},
 };
 
-/// Elaborate a local `let` block. The bindings are a flat `Vec` in one node, so this loops over them — elaborating each binding's type/body, minting its binder, and defining it in a single frame — rather than recursing once per binding, which a long straight-line sequence of `let`s would overflow the stack with. The tail continues with one ordinary (recursive) `elaborate`, its depth bounded by how often `let` and `rec` alternate, not by chain length. Rebuilding is one `Term::let_block`, which closes the bindings back into a single flat `Let` in one pass. The whole block is one source term with one span, stamped by `elaborate`'s wrapper — no per-binding span bookkeeping.
+/// Elaborate a local `let` block. The bindings are a flat `Vec` in one node, so this loops over them — elaborating each binding's type/body, minting its binder, and defining it in a single frame — rather than recursing once per binding, which a long straight-line sequence of `let`s would overflow the stack with. The tail continues with one ordinary (recursive) `elaborate`, its depth bounded by how often `let` and `rec` alternate, not by chain length. Rebuilding is one `Term::let_block`, which closes the bindings back into a single flat `Let` in one pass. The whole block is one source term with one extent, stamped by `elaborate`'s wrapper — no per-binding extent bookkeeping.
 pub(super) fn elaborate_let(
     context: &mut Context,
     let_: &Let,
@@ -194,7 +194,7 @@ pub(super) fn park_checking(
     term: &Term,
     expected: &Term,
 ) -> Result<(Term, Term), Error> {
-    let (placeholder, stand_in) = context.fresh_placeholder(expected.clone(), term.span());
+    let (placeholder, stand_in) = context.fresh_placeholder(expected.clone(), term.extent());
     context.park(
         ParkedWork::Checking {
             term: term.clone(),
@@ -470,7 +470,7 @@ fn infix_method(
         binder: format!("its '{field_name}' implementation"),
     };
     let (slot, witness) =
-        context.fresh_witness_metavar(goal.clone(), term.span(), provenance.clone());
+        context.fresh_witness_metavar(goal.clone(), term.extent(), provenance.clone());
 
     // The method's type at `?T`, read out of the concept's lowered structure through the one operation that answers this — opened at the goal's own universes and parameter, so this and `elaborate_proj` agree by construction rather than by two derivations staying in step.
     let arity = context.instantiate_universe_bound_at(
@@ -495,7 +495,7 @@ fn infix_method(
     }))
 }
 
-/// Desugar a postfix `!` sequencing site ([`Bang`]) into its `/std/Monad/bind` application and elaborate the result. The region's monad is read from the expected type and never inferred from the action — the discipline Lean's do-elaborator enforces with `tryPostponeIfNoneOrMVar` and `extractBind`: a bang whose region type is still an unsolved metavariable parks as a whole checking problem and re-runs when it lands, and one in an inference position is refused, because sequencing has no monad until the region names one. The discipline is structural, not a matter of unification order: the wrapper is handed the region's monad as its `@M` (see [`region_monad`]), so every action is checked against `M(A)` with `M` the region's, and an action of another monad is reported at its own `!`. The rebuilt application takes the node's own span, so diagnostics keep anchoring at the written `!`.
+/// Desugar a postfix `!` sequencing site ([`Bang`]) into its `/std/Monad/bind` application and elaborate the result. The region's monad is read from the expected type and never inferred from the action — the discipline Lean's do-elaborator enforces with `tryPostponeIfNoneOrMVar` and `extractBind`: a bang whose region type is still an unsolved metavariable parks as a whole checking problem and re-runs when it lands, and one in an inference position is refused, because sequencing has no monad until the region names one. The discipline is structural, not a matter of unification order: the wrapper is handed the region's monad as its `@M` (see [`region_monad`]), so every action is checked against `M(A)` with `M` the region's, and an action of another monad is reported at its own `!`. The rebuilt application takes the node's own extent, so diagnostics keep anchoring at the written `!`.
 pub(super) fn elaborate_bang(
     context: &mut Context,
     bang: &Bang,
@@ -503,7 +503,7 @@ pub(super) fn elaborate_bang(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     let Mode::Check(expected) = &mode else {
-        return Err(Error::bang_region_undetermined().at_opt(term.span()));
+        return Err(Error::bang_region_undetermined().at_opt(term.extent()));
     };
 
     // Strict postponement: a region whose monad is not yet rigid parks the whole bang and re-checks when the expected type's metavariables solve; the drain reports the region as undetermined if they never do.
@@ -517,7 +517,7 @@ pub(super) fn elaborate_bang(
     let action_shape = action_result_shape(context, &bang.action)?;
     let action = match (region_shape, action_shape) {
         (Some(region_shape), Some(action_shape)) if embeds(&region_shape, &action_shape) => {
-            let wrapped = lift_wrapped(context, &bang.action, term.span());
+            let wrapped = lift_wrapped(context, &bang.action, term.extent());
             note_embedding_site(context, &wrapped, &bang.action, expected);
             wrapped
         }
@@ -527,8 +527,8 @@ pub(super) fn elaborate_bang(
     // The bind's monad is the region's, supplied before any action is checked. Left to the wrapper's own inference, `M` is pinned by whichever side unifies first — the action's type, since arguments elaborate before the result meets the expected type — so an action of another monad the oracle could not read would fix the region to *its* monad, and the mismatch would surface at the outermost `!` of the region, against an action that was never wrong.
     //
     // **A rigid region the imitation cannot read is refused here, not left to the wrapper.** The region is already reduced and not flex, so its head is a former, a variable or an atom; a variable-headed region — `M(Nat)` under a `use Monad(M)` premise — is exactly what the imitation solves. `None` therefore means the head applies to nothing, `?M(?B)` can never meet it, and the wrapper's inference would have only one outcome: `no witness of Monad(?) found`, against a premise of a call the author never wrote, showing a hole where the region's own type was already known. Refusing here changes no acceptance, only what the reader is told.
-    let Some(monad) = region_monad(context, &region, term.span())? else {
-        return Err(Error::bang_region_not_a_monad(region).at_opt(term.span()));
+    let Some(monad) = region_monad(context, &region, term.extent())? else {
+        return Err(Error::bang_region_not_a_monad(region).at_opt(term.extent()));
     };
     let head = Term::free_var(&Free::global(context.syntax().monad.bind.qualifier()));
     let arguments = [
@@ -537,8 +537,8 @@ pub(super) fn elaborate_bang(
         (Plicity::Explicit, bang.continuation.clone()),
     ];
     let app = Term::apply_marked(head, arguments);
-    let app = match term.span() {
-        Some(span) => Term::spanned(span, app),
+    let app = match term.extent() {
+        Some(extent) => Term::placed(extent, app),
         None => app,
     };
     elaborate(context, &app, mode)
@@ -548,13 +548,13 @@ pub(super) fn elaborate_bang(
 fn region_monad(
     context: &mut Context,
     region: &Term,
-    span: Option<Span>,
+    extent: Option<Extent>,
 ) -> Result<Option<Term>, Error> {
     let sort = context.fresh_classifier_type("region monad");
     let binder = context.fresh(None);
     let former = Term::func_type([(binder, sort.clone())], sort.clone());
-    let (_, monad) = context.fresh_placeholder(former, span.clone());
-    let (_, value) = context.fresh_placeholder(sort.clone(), span);
+    let (_, monad) = context.fresh_placeholder(former, extent);
+    let (_, value) = context.fresh_placeholder(sort.clone(), extent);
     let applied = Term::apply(monad.clone(), [value]);
     // The imitation is a probe: a conversion that fails for any reason but the budget falls back to the abstraction.
     let imitated = convert(context, &sort, &applied, region)
@@ -615,24 +615,24 @@ fn abstracted_monad(
     )))
 }
 
-/// `action` wrapped in `/std/Monad/Lift`'s `lift`, whose `use` slot resolves the declared embedding into the region or reports the missing edge; the wrapper takes the action's own span, or `fallback`, so the report anchors where the action was written.
-fn lift_wrapped(context: &Context, action: &Term, fallback: Option<Span>) -> Term {
+/// `action` wrapped in `/std/Monad/Lift`'s `lift`, whose `use` slot resolves the declared embedding into the region or reports the missing edge; the wrapper takes the action's own extent, or `fallback`, so the report anchors where the action was written.
+fn lift_wrapped(context: &Context, action: &Term, fallback: Option<Extent>) -> Term {
     let field = context.syntax().lift.lift;
     let wrapper = Term::free_var(&Free::global(field.concept.qualifier().with(field.field)));
     let wrapped = Term::apply(wrapper, vec![action.clone()]);
-    match action.span().or(fallback) {
-        Some(span) => Term::spanned(span, wrapped),
+    match action.extent().or(fallback) {
+        Some(extent) => Term::placed(extent, wrapped),
         None => wrapped,
     }
 }
 
 /// Record what an auto-lift names as written, for the report on a missing embedding — see [`EmbeddingSite`]. A region that applies no name records nothing: a nominal region, `Job(A)`, is spelled by its reduced form already.
 fn note_embedding_site(context: &mut Context, wrapped: &Term, action: &Term, region: &Term) {
-    let (Some(span), Some(region)) = (wrapped.span(), written_monad(region)) else {
+    let (Some(extent), Some(region)) = (wrapped.extent(), written_monad(region)) else {
         return;
     };
     context.note_embedding_site(
-        span,
+        extent,
         EmbeddingSite {
             action: action.clone(),
             region,
@@ -902,7 +902,7 @@ pub(super) fn elaborate_infix(
 ) -> Result<(Term, Term), Error> {
     // `?T`: the operand type shared by both sides.
     let classifier = context.fresh_classifier_type("infix operand classifier");
-    let (operand_id, operand_type) = context.fresh_placeholder(classifier, term.span());
+    let (operand_id, operand_type) = context.fresh_placeholder(classifier, term.extent());
 
     let target = context.syntax().operator.concept_field(infix.op);
     let field_name = target.field;
@@ -1015,7 +1015,7 @@ pub(super) fn elaborate_func_check(
     }
 
     // Where the binder at `member` was written, when the lowering located it: its annotation's place, read off the unopened telescope.
-    fn written_at(telescope: &Telescope<Term>, member: usize) -> Option<Span> {
+    fn written_at(telescope: &Telescope<Term>, member: usize) -> Option<Extent> {
         let mut link = telescope;
         for _ in 0..member {
             match link {
@@ -1024,7 +1024,7 @@ pub(super) fn elaborate_func_check(
             }
         }
         match link {
-            Telescope::Cons(_, domain, _) => domain.span(),
+            Telescope::Cons(_, domain, _) => domain.extent(),
             Telescope::Done(_) => None,
         }
     }
@@ -1140,7 +1140,7 @@ pub(super) fn elaborate_func_infer(
                             .unwrap_or_else(Term::type_ground);
                         let binder = hint.unwrap_or("_").to_string();
                         let named =
-                            context.fresh_domain_metavar(scope, result, lambda.span(), binder);
+                            context.fresh_domain_metavar(scope, result, lambda.extent(), binder);
                         context.solve_metavar(metavar.id, named.clone());
                         named
                     }

@@ -272,6 +272,8 @@ pub struct PreparedText {
     reached: BTreeSet<Qualifier>,
     /// Every item the parser could not read, in reading order — see [`BrokenItem`]. Empty for any unit that compiles.
     broken: Vec<BrokenItem>,
+    /// Where each source declaration this unit was lowered from lies: what a position in one of its terms is resolved against where a report is made — see `curios_core::Anchors`.
+    anchors: curios_core::Anchors,
     /// This unit's interface for its consumers, when its resolver marked a mount as documented — built here, as the last thing the lowering does, so it travels with the unit. See `document`.
     documentation: Option<Documentation>,
 }
@@ -287,6 +289,11 @@ pub struct BrokenItem {
 impl PreparedText {
     pub fn lints(&self) -> &[Lint] {
         &self.lints
+    }
+
+    /// Where each source declaration of this unit lies. See the field.
+    pub fn anchors(&self) -> &curios_core::Anchors {
+        &self.anchors
     }
 
     /// Drop the `unused-binder` lint of every binder in `credited`: read by a proof the elaborator wrote, which no written name reaches, so used. Called once the unit has elaborated, since only elaboration writes such a proof.
@@ -543,9 +550,25 @@ fn constructor_plicity(declared: Plicity) -> Plicity {
     }
 }
 
+/// What `top_item`'s text is anchored as: the declaration of the first name it declares, or one of its module's unnamed declarations where it declares none. `None` for an item no term is lowered from.
+fn anchored(top_item: &TopItem, context: &Context) -> Option<curios_core::Anchored> {
+    let named = |label: &Label| curios_core::Anchored::Declaration(context.prefixed(label));
+
+    match top_item {
+        TopItem::Let(group) => group.first().map(|let_| named(&let_.label)),
+        TopItem::Induct(group) => group.first().map(|induct| named(&induct.label)),
+        TopItem::Struct(group) => group.first().map(|struct_| named(&struct_.label)),
+        TopItem::Concept(group) => group.first().map(|concept| named(&concept.label)),
+        TopItem::Witness(_) => Some(curios_core::Anchored::Unnamed(context.island())),
+        TopItem::Foreign(foreign) => Some(named(&foreign.label)),
+        TopItem::Test(test) => Some(named(&test.label)),
+        TopItem::Mod(_) | TopItem::Use(_) | TopItem::Broken(_) => None,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn process_items(
-    top_items: &[TopItem],
+    module: &Module,
     context: &mut Context,
     flat_items: &mut Vec<FlatItem>,
     induct_decls: &mut BTreeMap<curios_core::Global, curios_core::InductDecl>,
@@ -557,7 +580,7 @@ fn process_items(
     broken: &mut Vec<BrokenItem>,
     modules: &HashMap<Qualifier, Rc<Module>>,
 ) -> Result<(), Error> {
-    for top_item in top_items {
+    for top_item in &module.items {
         match top_item {
             TopItem::Mod(m) => {
                 context.insert_scope(m.label.to_string(), context.prefixed(&m.label))?
@@ -603,12 +626,18 @@ fn process_items(
         }
     }
 
-    for top_item in top_items {
+    for (index, top_item) in module.items.iter().enumerate() {
         // A source declaration mints in a space of its own, shared by every item it lowers to; a nested module's declarations each take theirs.
         let declares = !matches!(top_item, TopItem::Mod(_));
         let lowered_from = flat_items.len();
         if declares {
             context.begin_declaration();
+            // And is written in a text of its own: what it lowers to holds positions in that text, wherever the file holds it. A module built rather than parsed has no text, and its terms no position.
+            if let (Some(anchored), Some(span)) =
+                (anchored(top_item, context), module.spans.get(index))
+            {
+                context.anchor(anchored, span);
+            }
         }
         match top_item {
             // Nothing lowers: the item is carried as its report, under the name it declared, for the compile boundary to refuse the unit by and the elaborator to withhold dependents of.
@@ -622,7 +651,7 @@ fn process_items(
             TopItem::Mod(mod_item) => match &mod_item.module {
                 Some(module) => {
                     process_items(
-                        &module.items,
+                        module,
                         &mut context.nested(&mod_item.label),
                         flat_items,
                         induct_decls,
@@ -641,7 +670,7 @@ fn process_items(
                     let module = modules.get(&path).expect("module loaded during discovery");
 
                     process_items(
-                        &module.items,
+                        module,
                         &mut context.nested(&mod_item.label),
                         flat_items,
                         induct_decls,
@@ -1705,6 +1734,7 @@ fn into_core_unit_within(
     let sites = RefCell::new(Vec::new());
     let reached = RefCell::new(BTreeSet::new());
     let lints = RefCell::new(Vec::new());
+    let anchoring = Anchoring::default();
 
     let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
     // The seed table of the declaration being lowered, from index zero, in step with `universes`.
@@ -1728,6 +1758,7 @@ fn into_core_unit_within(
         &sites,
         &reached,
         &lints,
+        &anchoring,
         syntax,
     );
     // Every named prefix in the compilation binds its own one-segment name. No two can repeat it: the disjointness check above refuses a unit claiming what a predecessor already holds, and the predecessors' own mounts were pairwise disjoint when each was compiled. The entry's prefix is the empty one, which has no name to bind.
@@ -1748,19 +1779,21 @@ fn into_core_unit_within(
     let mut broken = Vec::new();
 
     // The compilation root's own items — the entry's, and none for a unit with no entrypoint — then one pass per prefix this unit claims. Exactly one of the two does any work, because owning the empty prefix is what makes a unit the entry.
-    curios_profile::profile!("process_items" => process_items(
-        source.root_items(),
-        &mut context,
-        &mut flat_items,
-        &mut induct_decls,
-        &mut struct_decls,
-        &mut concepts,
-        &mut witnesses,
-        &mut tests,
-        &mut foreigns,
-        &mut broken,
-        &modules,
-    ))?;
+    if let Some(entrypoint) = source.entrypoint() {
+        curios_profile::profile!("process_items" => process_items(
+            &entrypoint.module,
+            &mut context,
+            &mut flat_items,
+            &mut induct_decls,
+            &mut struct_decls,
+            &mut concepts,
+            &mut witnesses,
+            &mut tests,
+            &mut foreigns,
+            &mut broken,
+            &modules,
+        ))?;
+    }
 
     for mount in own.iter().filter(|mount| !mount.prefix.is_root()) {
         let content = modules
@@ -1770,7 +1803,7 @@ fn into_core_unit_within(
         let mut nested = context.nested(mount.prefix.head());
 
         curios_profile::profile!("process_items" => process_items(
-            &content.items,
+            content,
             &mut nested,
             &mut flat_items,
             &mut induct_decls,
@@ -1806,8 +1839,14 @@ fn into_core_unit_within(
         let members = module_members(&imports.entries, &public);
         imports.members = members;
     }
-    // The entry mints in a space of its own, as a declaration does.
+    // The entry mints in a space of its own, as a declaration does, and is written in a text of its own.
     context.begin_declaration();
+    if let Some(span) = source
+        .entrypoint()
+        .and_then(|entrypoint| entrypoint.tail.span())
+    {
+        context.anchor(curios_core::Anchored::Entry, span);
+    }
     let entry = {
         // Scoped so the lowerer drops, and reports its lints, before the tables the context borrows are moved into the result below.
         let lower = Lowerer::new(&context, None);
@@ -1901,6 +1940,7 @@ fn into_core_unit_within(
         ),
         credited: BTreeSet::new(),
         reached: reached.into_inner(),
+        anchors: anchoring.into_anchors(),
         documentation,
     };
 
@@ -1951,6 +1991,8 @@ pub struct LoweredEntry {
     pub broken: Vec<BrokenItem>,
     /// See [`PreparedText::reached`].
     pub reached: BTreeSet<Qualifier>,
+    /// See [`PreparedText::anchors`].
+    pub anchors: curios_core::Anchors,
 }
 
 /// The `unused-import` lints: every site no reference resolved through, a re-export excepted.
@@ -1986,5 +2028,6 @@ pub fn into_core_with_prelude(
         lints: unit.lints,
         reached: unit.reached,
         broken: unit.broken,
+        anchors: unit.anchors,
     })
 }

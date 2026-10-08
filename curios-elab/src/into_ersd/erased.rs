@@ -8,8 +8,7 @@
 
 use {
     super::{Binding, Environment},
-    curios_core::{Free, Global, Item, Module},
-    curios_utilities::Span,
+    curios_core::{Extent, Free, Global, Item, Module},
     std::{collections::BTreeMap, rc::Rc},
 };
 
@@ -28,7 +27,7 @@ pub struct ErasedItem {
     /// What applying each function a declared name is bound to does ([`curios_ersd::Module::interface`]), read once here, where the fragment is final, since every item that imports the name asks.
     interfaces: BTreeMap<curios_ersd::FunctionId, curios_ersd::Interface>,
     /// The values whose initializers read themselves while nothing else of the fragment reads them ([`curios_ersd::Module::unforced`]), each with the name a refusal calls it by and where its initializer is written. Nothing here forces one; an item that reads one would, and is refused.
-    unforced: BTreeMap<curios_ersd::ValueId, (String, Option<Span>)>,
+    unforced: BTreeMap<curios_ersd::ValueId, (String, Option<Extent>)>,
 }
 
 /// How a name is bound, as an item that uses it reads it.
@@ -39,10 +38,10 @@ pub(super) enum Export<'a> {
     Constant(&'a curios_ersd::Constant),
     /// To a value its item computes.
     Value,
-    /// To a value whose own initializer reads it and nothing else of its item does: reading it is the cycle forcing meets first, under the name `member`, written at `span`.
+    /// To a value whose own initializer reads it and nothing else of its item does: reading it is the cycle forcing meets first, under the name `member`, written at `extent`.
     Unforced {
         member: &'a str,
-        span: Option<&'a Span>,
+        extent: Option<&'a Extent>,
     },
     /// To a function of `arity` parameters.
     Function {
@@ -52,13 +51,13 @@ pub(super) enum Export<'a> {
 }
 
 impl ErasedItem {
-    /// `spans` holds where each computed member's initializer is written, by the identity it was minted as.
+    /// `extents` holds where each computed member's initializer is written, by the identity it was minted as.
     pub(super) fn new(
         module: curios_ersd::Module,
         environment: Environment,
         values: Vec<Global>,
         functions: Vec<Global>,
-        spans: &BTreeMap<curios_ersd::ValueId, Span>,
+        extents: &BTreeMap<curios_ersd::ValueId, Extent>,
     ) -> Self {
         let interfaces = environment
             .bindings()
@@ -72,7 +71,7 @@ impl ErasedItem {
         let unforced = module
             .unforced()
             .into_iter()
-            .map(|step| (step.value, (step.member, spans.get(&step.value).cloned())))
+            .map(|step| (step.value, (step.member, extents.get(&step.value).cloned())))
             .collect();
 
         Self {
@@ -115,9 +114,9 @@ impl ErasedItem {
                     .expect("an exported constant is the fragment's"),
             ),
             Binding::Atom(curios_ersd::Atom::Value(value)) => match self.unforced.get(&value) {
-                Some((member, span)) => Export::Unforced {
+                Some((member, extent)) => Export::Unforced {
                     member,
-                    span: span.as_ref(),
+                    extent: extent.as_ref(),
                 },
                 None => Export::Value,
             },

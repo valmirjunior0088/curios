@@ -12,6 +12,16 @@ use {
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
+/// An extent of the entry's text from `start`, one byte long: a position for a fixture that needs one and no text behind it.
+pub(super) fn written_at(start: u32) -> Extent {
+    Extent {
+        anchor: Anchor::of(Anchored::Entry),
+        start,
+        end: start + 1,
+        stamp: 0,
+    }
+}
+
 pub(super) fn nominal(path: &str) -> Global {
     Global::Authored(Qualifier::from([path]))
 }

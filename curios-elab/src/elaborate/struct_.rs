@@ -80,7 +80,7 @@ pub(super) fn elaborate_struct_type(
             let proposition = is_prop(context, &ty).probed()?.unwrap_or(false);
             let (_, arg) = context.fresh_metavar(
                 ty,
-                term.span(),
+                term.extent(),
                 ImplicitOrigin {
                     func: CalleeId::Function(Free::Global(*name)),
                     binder,
@@ -161,7 +161,7 @@ pub(super) fn check_dependent_fields(
                 binder: format!("its '{edge}' superclass"),
             };
             let (id, metavar) =
-                context.fresh_witness_metavar(ty.clone(), origin.span(), provenance.clone());
+                context.fresh_witness_metavar(ty.clone(), origin.extent(), provenance.clone());
             attempt_witness_goal(context, id, &ty, provenance, origin)?;
             Ok(metavar)
         }
@@ -383,11 +383,11 @@ fn elaborate_struct_literal(
     let marks = written.iter().map(|(mark, ..)| *mark).collect::<Vec<_>>();
     let fills = align(&slots, &marks).map_err(|misaligned| match misaligned {
         Misaligned::Surplus { member } => {
-            Error::hidden_member_without_slot(marks[member]).at_opt(written[member].2.span())
+            Error::hidden_member_without_slot(marks[member]).at_opt(written[member].2.extent())
         }
         Misaligned::Mark { member, slot } => {
             Error::hidden_member_out_of_order(marks[member], slots[slot], labels[slot])
-                .at_opt(written[member].2.span())
+                .at_opt(written[member].2.extent())
         }
         Misaligned::Missing | Misaligned::Extra { .. } => {
             unreachable!("a literal's plain fields are counted before its entries are aligned")
@@ -405,7 +405,7 @@ fn elaborate_struct_literal(
                 format!("@{label}"),
                 written_fields(&labels, &slots),
             )
-            .at_opt(field.span()));
+            .at_opt(field.extent()));
         }
     }
     let sources = fills
@@ -483,7 +483,7 @@ pub(super) fn resolve_struct_params(
                     binder: premise_label(premises),
                 };
                 let (id, metavar) =
-                    context.fresh_witness_metavar(ty.clone(), term.span(), provenance.clone());
+                    context.fresh_witness_metavar(ty.clone(), term.extent(), provenance.clone());
                 attempt_witness_goal(context, id, &ty, provenance, term)?;
                 metavar
             }
@@ -493,7 +493,7 @@ pub(super) fn resolve_struct_params(
                 context
                     .fresh_metavar(
                         ty.clone(),
-                        term.span(),
+                        term.extent(),
                         ImplicitOrigin {
                             func: CalleeId::Function(Free::Global(*name)),
                             binder,
@@ -650,14 +650,14 @@ pub(super) fn elaborate_struct_spread(
             .collect::<Vec<_>>();
         let fills = align(&claimable_marks, &marks).map_err(|misaligned| match misaligned {
             Misaligned::Surplus { member } => {
-                Error::hidden_member_without_slot(marks[member]).at_opt(fields[1 + member].span())
+                Error::hidden_member_without_slot(marks[member]).at_opt(fields[1 + member].extent())
             }
             Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
                 marks[member],
                 claimable_marks[slot],
                 labels[claimable[slot]],
             )
-            .at_opt(fields[1 + member].span()),
+            .at_opt(fields[1 + member].extent()),
             Misaligned::Missing | Misaligned::Extra { .. } => {
                 unreachable!("the plain slots are the overrides written")
             }
@@ -676,7 +676,7 @@ pub(super) fn elaborate_struct_spread(
                     format!("@{written}"),
                     written_fields(&labels, &slots),
                 )
-                .at_opt(field.span()));
+                .at_opt(field.extent()));
             }
             // A hidden field written `@_` or `use _` is claimed and left as the spread leaves it.
             if slots[*position] == Plicity::Explicit || !is_placeholder(context, field) {

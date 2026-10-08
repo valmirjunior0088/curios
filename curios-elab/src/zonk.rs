@@ -8,15 +8,15 @@ use {
     },
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind,
-        Entrypoint, Free, Func, FuncType, Global, InductDecl, InductParam, InductType, Instance,
-        InstanceHead, Intrinsic, Item, Let, LetBinding, Level, LevelHead, Match, Metavar,
+        Entrypoint, Extent, Free, Func, FuncType, Global, InductDecl, InductParam, InductType,
+        Instance, InstanceHead, Intrinsic, Item, Let, LetBinding, Level, LevelHead, Match, Metavar,
         MetavarId, MetavarOrigin, Minted, Module, NodeMemo, Proj, Rec, RecGroup, RecItem,
         RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
         TupleType, UniverseContext, UniverseError, UniverseMetaId, Var, Variant, Visit,
         project_erased_universes, rewrite_universe_levels_scoped_shared, shift_universe_params,
         universe_metas,
     },
-    curios_utilities::{Span, recurse},
+    curios_utilities::recurse,
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
@@ -25,7 +25,7 @@ use {
     },
 };
 
-/// Substitute every solved metavariable in `term` by its (recursively zonked) solution, yielding a meta-free term. An unsolved metavariable is a residual hole the elaborator never pinned down — reported as `Error::CannotInfer` at its occurrence span. The result flows downstream to `erase`, which is then guaranteed never to meet a `Subterm::Metavar`.
+/// Substitute every solved metavariable in `term` by its (recursively zonked) solution, yielding a meta-free term. An unsolved metavariable is a residual hole the elaborator never pinned down — reported as `Error::CannotInfer` at its occurrence extent. The result flows downstream to `erase`, which is then guaranteed never to meet a `Subterm::Metavar`.
 ///
 /// Substitution replaces a metavariable node by its solution. A solution is spelled with the birth telescope's names and is *not* in general a closed term; the occurrence's spine (its delayed substitution) records what each birth binder corresponds to at the splice site, so `zonk_term` resolves by rewriting the solution through it. Every solved occurrence carries its spine — `elaborate_apply` opens telescopes with rebuilt arguments, so no bare copy of a birthed hole survives to be spliced.
 pub(crate) fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {
@@ -34,7 +34,7 @@ pub(crate) fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {
 
 /// One strict zonk: the context it reads, and every node it has zonked.
 ///
-/// **A node is zonked once per pass.** What a node zonks to is a function of the node and of the context's solutions and universe solver, which the pass holds immutably, so a second occurrence of a node may take the first one's answer. A solution is spliced at every occurrence of its metavariable, and a solution stored as a reduct is a graph whose tree can be exponential in its depth: remembered by node, each is zonked in its own size and once per module rather than once per occurrence. The memo is a [`NodeMemo`], whose span rule hands each occurrence its own span; a refusal is not remembered, and propagates.
+/// **A node is zonked once per pass.** What a node zonks to is a function of the node and of the context's solutions and universe solver, which the pass holds immutably, so a second occurrence of a node may take the first one's answer. A solution is spliced at every occurrence of its metavariable, and a solution stored as a reduct is a graph whose tree can be exponential in its depth: remembered by node, each is zonked in its own size and once per module rather than once per occurrence. The memo is a [`NodeMemo`], whose extent rule hands each occurrence its own extent; a refusal is not remembered, and propagates.
 ///
 /// It derefs to the [`Context`], so the walk below reads the context through it, and hands it to anything that takes one.
 struct Zonk<'a> {
@@ -118,8 +118,8 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
                 let labels = labels.iter().collect::<Vec<_>>();
                 let spine = spine.iter().collect::<Vec<_>>();
                 let zonked = resolved.capture(&labels).release(&spine);
-                Some(match term.span() {
-                    Some(span) => zonked.with_span(span),
+                Some(match term.extent() {
+                    Some(extent) => zonked.with_extent(extent),
                     None => zonked,
                 })
             }),
@@ -864,12 +864,12 @@ fn zonk_definition(context: &Zonk, def: &Definition) -> Result<Definition, Error
     })
 }
 
-/// Where a written goal was met: its id, its first occurrence's span, and its owning definition when it sits inside one (the suggestion pools exclude the owner).
-pub(crate) type GoalSite = (MetavarId, Option<Span>, Option<Global>);
+/// Where a written goal was met: its id, its first occurrence's extent, and its owning definition when it sits inside one (the suggestion pools exclude the owner).
+pub(crate) type GoalSite = (MetavarId, Option<Extent>, Option<Global>);
 
 /// Find every written goal one successful elaboration reached — the same set strict zonking would meet — in discovery order.
 ///
-/// The walk mirrors [`zonk_module`]'s coverage in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once with its first occurrence's span. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
+/// The walk mirrors [`zonk_module`]'s coverage in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once with its first occurrence's extent. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
 pub(crate) fn goal_sites(
     context: &Context,
     module: &Module,
@@ -902,7 +902,7 @@ pub(crate) fn goal_sites(
                     match origin {
                         MetavarOrigin::Goal => {
                             if seen_goals.borrow_mut().insert(*id) {
-                                goals.borrow_mut().push((*id, term.span(), owner));
+                                goals.borrow_mut().push((*id, term.extent(), owner));
                             }
                         }
                         _ => referenced.borrow_mut().push(*id),
@@ -1037,13 +1037,13 @@ pub(crate) fn report_goals(
     sites
         .iter()
         .zip(all_candidates)
-        .map(|((id, span, owner), suggestions)| {
+        .map(|((id, extent, owner), suggestions)| {
             // Every goal occurrence in the elaborated module was rebuilt by `elaborate_metavar`, which births on first sight in either mode — so the entry exists.
             let entry = context
                 .metavar_entry(*id)
                 .expect("a collected goal has a birth entry");
             GoalReport {
-                span: span.clone(),
+                extent: *extent,
                 owner: *owner,
                 witnesses: entry.witnesses.clone().unwrap_or_default(),
                 scope: entry
@@ -1126,14 +1126,14 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
         if let Subterm::Metavar(Metavar { id, spine, origin }) = &**term {
             // A written goal `?` never splices — the whole point of writing it was the report. Solved or not, error with what elaboration determined: the frozen scope, the goal's type, and the solution when one landed.
             if matches!(origin, MetavarOrigin::Goal) {
-                return Err(goal_report(context, *id).at_opt(term.span()));
+                return Err(goal_report(context, *id).at_opt(term.extent()));
             }
 
             // A filled recursive slot is spelled by its member's name, for the reason the tolerant walk above gives: the body reaches this very occurrence again, and the name is what the group's binder captures.
             if let Some(name) = context.rec_slot_name(*id) {
                 let member = Term::free_var(name);
-                return Ok(match term.span() {
-                    Some(span) => member.with_span(span),
+                return Ok(match term.extent() {
+                    Some(extent) => member.with_extent(extent),
                     None => member,
                 });
             }
@@ -1184,8 +1184,8 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                     // Handled by the unconditional report above.
                     MetavarOrigin::Goal => unreachable!("a goal never reaches the splice path"),
                 };
-                match term.span() {
-                    Some(span) => error.at(span),
+                match term.extent() {
+                    Some(extent) => error.at(extent),
                     None => error,
                 }
             })?;
@@ -1211,9 +1211,9 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
             let refs = spine.iter().collect::<Vec<_>>();
             let zonked = resolved.capture(&binders).release(&refs);
 
-            // Carry the hole's span only if the solution carries none of its own.
-            return Ok(match term.span() {
-                Some(span) => zonked.with_span(span),
+            // Carry the hole's extent only if the solution carries none of its own.
+            return Ok(match term.extent() {
+                Some(extent) => zonked.with_extent(extent),
                 None => zonked,
             });
         }
@@ -1227,8 +1227,8 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
 
         let inner = zonk_subterm(context, term)?;
 
-        Ok(match term.span() {
-            Some(span) => Term::spanned(span, inner),
+        Ok(match term.extent() {
+            Some(extent) => Term::placed(extent, inner),
             None => Term::from(inner),
         })
     })

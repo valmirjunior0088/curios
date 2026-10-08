@@ -1201,5 +1201,5 @@ pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
         .chain([option_decl(), result_decl()])
         .collect();
 
-    Module { items }
+    Module::built(items)
 }

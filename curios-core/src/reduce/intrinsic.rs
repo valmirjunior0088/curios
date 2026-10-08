@@ -432,7 +432,7 @@ pub fn reduce_intrinsic(
                 return reducer.reduce(operand.clone()).map(Term::unwrap_or_clone);
             }
 
-            let span = nat.span();
+            let extent = nat.extent();
             match nat.as_nat().map(|value| value.to_natural()) {
                 Some(Some(value)) => {
                     match u32::try_from(&value)
@@ -440,7 +440,7 @@ pub fn reduce_intrinsic(
                         .and_then(|value| u8::try_from(value).ok())
                     {
                         Some(value) => Ok(Subterm::Intrinsic(Intrinsic::Byte(value))),
-                        None => Err(ReduceError::NatToByteAbove { value, span }),
+                        None => Err(ReduceError::NatToByteAbove { value, extent }),
                     }
                 }
                 _ => Ok(Subterm::Intrinsic(Intrinsic::NatToByte {
@@ -1041,7 +1041,7 @@ pub fn reduce_intrinsic(
         ),
         // `Int/to_nat` of a negative literal is a value no natural holds — reported like a zero divisor, never wrapped. The bound the operation states does not retire that report: a bound is discharged in the context the call was written in, and an open term reduces under hypotheses that context may not have. A symbolic operand rebuilds the neutral term, carrying the proof it was handed.
         Intrinsic::IntToNat { int, non_neg } => {
-            let span = int.span();
+            let extent = int.extent();
             let int = reducer.reduce_forced(int.clone())?;
 
             // The other half of the round trip: ℕ embeds in ℤ, so a natural widened to `Int` narrows back to itself whatever proof the narrowing was handed — `Intrinsic::undone` — and so does any non-negative combination of widened naturals, which is the image of its preimage. `int_preimage` reads it; a single widened atom is its one-summand case.
@@ -1057,7 +1057,7 @@ pub fn reduce_intrinsic(
             match int.as_int() {
                 Some(value) => match Natural::try_from(&value) {
                     Ok(number) => Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(number)))),
-                    Err(_) => Err(ReduceError::IntToNatNegative { value, span }),
+                    Err(_) => Err(ReduceError::IntToNatNegative { value, extent }),
                 },
                 None => Ok(Subterm::Intrinsic(Intrinsic::IntToNat {
                     int,
@@ -1204,7 +1204,7 @@ pub fn reduce_intrinsic(
             in_range,
         } => {
             let grain = *grain;
-            let span = index.span();
+            let extent = index.extent();
             let bin = reducer.reduce_forced(bin.clone())?;
             let index_reduced = reducer.reduce_forced(index.clone())?;
             let i = as_index(&index_reduced);
@@ -1215,7 +1215,7 @@ pub fn reduce_intrinsic(
                 return element_of_run(grain, run, i).ok_or(ReduceError::BinGetOutOfBounds {
                     len: run.len(grain),
                     index: i,
-                    span,
+                    extent,
                 });
             }
             // The cons head's generator: `get(append(x[], k), 0) = k` — the base case of the cons-peel below, and the partner of `BinSlice`'s rules. Without it the peel's symbolic head chunk is this same `append(x[], k)`, so the `0`-index step would rebuild the redex it came from until the budget exhausted.
@@ -1263,7 +1263,7 @@ pub fn reduce_intrinsic(
                     return Err(ReduceError::BinGetOutOfBounds {
                         len: total,
                         index: start,
-                        span,
+                        extent,
                     });
                 }
                 None => {}
@@ -1312,7 +1312,7 @@ pub fn reduce_intrinsic(
             within,
         } => {
             let grain = *grain;
-            let span = start.span().or_else(|| length.span());
+            let extent = start.extent().or_else(|| length.extent());
             let bin = reducer.reduce_forced(bin.clone())?;
             let start_reduced = reducer.reduce_forced(start.clone())?;
             let length_reduced = reducer.reduce_forced(length.clone())?;
@@ -1341,7 +1341,7 @@ pub fn reduce_intrinsic(
                         len: run.len(grain),
                         start: s,
                         length: n,
-                        span,
+                        extent,
                     }),
                 };
             }
@@ -1380,7 +1380,7 @@ pub fn reduce_intrinsic(
                         len: total,
                         start,
                         length: count,
-                        span,
+                        extent,
                     });
                 }
                 None => {}
@@ -1686,7 +1686,7 @@ pub fn reduce_intrinsic(
                     None => Err(ReduceError::ListGetOutOfBounds {
                         len,
                         index: i,
-                        span: index.span(),
+                        extent: index.extent(),
                     }),
                 };
             }
@@ -1739,7 +1739,7 @@ pub fn reduce_intrinsic(
                     return Err(ReduceError::ListGetOutOfBounds {
                         len: total,
                         index: start,
-                        span: index.span(),
+                        extent: index.extent(),
                     });
                 }
                 None => {}
@@ -1822,7 +1822,7 @@ pub fn reduce_intrinsic(
                         len: elems.len(),
                         start: s,
                         length: n,
-                        span: start.span().or_else(|| length.span()),
+                        extent: start.extent().or_else(|| length.extent()),
                     }),
                 };
             }
@@ -1861,7 +1861,7 @@ pub fn reduce_intrinsic(
                         len: total,
                         start: from,
                         length: count,
-                        span: start.span().or_else(|| length.span()),
+                        extent: start.extent().or_else(|| length.extent()),
                     });
                 }
                 None => {}

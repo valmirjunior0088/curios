@@ -4,10 +4,11 @@
 //!
 //! Reusable declarations bind surviving input levels in a [`UniverseContext`]. Flexible classifier levels take their principal least solution when one exists; genuinely non-principal choices remain residual constrained parameters. Every external occurrence instantiates the stored context freshly. Local schemes may temporarily refer to ambient metas and are capture-safely rewritten beneath the enclosing declaration's parameters; recursive members instead share one context and one internal instance.
 //!
-//! Constraint provenance is diagnostic-only: semantic equality and hashing compare normalized inequalities but ignore their spans and explanations. Zonked Core validates that contexts are closed and nominal instance arities agree, then erasure removes every level, context, and instance before Ersd.
+//! Constraint provenance is diagnostic-only: semantic equality and hashing compare normalized inequalities but ignore their extents and explanations. Zonked Core validates that contexts are closed and nominal instance arities agree, then erasure removes every level, context, and instance before Ersd.
 
 use {
-    curios_utilities::{Mint, Span},
+    super::Extent,
+    curios_utilities::Mint,
     std::{
         collections::BTreeMap,
         fmt,
@@ -327,7 +328,7 @@ pub enum UniverseConstraintKind {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct UniverseConstraintOrigin {
-    pub span: Option<Span>,
+    pub extent: Option<Extent>,
     pub kind: UniverseConstraintKind,
     pub declaration: Option<String>,
     pub binder: Option<String>,
@@ -336,7 +337,7 @@ pub struct UniverseConstraintOrigin {
 impl UniverseConstraintOrigin {
     pub fn new(kind: UniverseConstraintKind) -> Self {
         Self {
-            span: None,
+            extent: None,
             kind,
             declaration: None,
             binder: None,
@@ -353,7 +354,7 @@ pub struct UniverseConstraint {
     pub origin: UniverseConstraintOrigin,
 }
 
-// Provenance explains an inequality but is not part of its semantic identity. In particular, `Span` equality follows source-allocation identity, which must not make replayed or archive-restored schemes compare differently.
+// Provenance explains an inequality but is not part of its semantic identity: one inequality raised at two positions, or restored from an archive under none, is one constraint, so a replayed or archive-restored scheme compares as the one it was.
 impl PartialEq for UniverseConstraint {
     fn eq(&self, other: &Self) -> bool {
         self.lower == other.lower && self.upper == other.upper
@@ -419,7 +420,7 @@ impl UniverseContext {
                     lower: constraint.lower.clone(),
                     upper: constraint.upper.clone(),
                     origin: UniverseConstraintOrigin {
-                        span: None,
+                        extent: None,
                         ..constraint.origin.clone()
                     },
                 })
@@ -522,9 +523,6 @@ impl fmt::Display for UniverseError {
                     }
                     if let Some(binder) = &origin.binder {
                         write!(formatter, " at binder {binder}")?;
-                    }
-                    if let Some(span) = &origin.span {
-                        write!(formatter, "\n{}", span.render_snippet())?;
                     }
                 }
                 Ok(())

@@ -1,6 +1,6 @@
 //! The packed home of a node's eager scalar derivations.
 //!
-//! [`Scalars`] is the value — one node's span-independent facts, as named fields. [`ScalarCache`] is where a node memoizes them: two words, filled at most once, and always all together, which is the invariant the single `fill`-taking-the-whole-value entry point makes structural. The bit layout is this module's private business; nothing outside it sees a shift or a mask.
+//! [`Scalars`] is the value — one node's position-independent facts, as named fields. [`ScalarCache`] is where a node memoizes them: two words, filled at most once, and always all together, which is the invariant the single `fill`-taking-the-whole-value entry point makes structural. The bit layout is this module's private business; nothing outside it sees a shift or a mask.
 
 #[cfg(test)]
 mod tests;
@@ -14,7 +14,7 @@ use {
     },
 };
 
-/// One node's span-independent derivations: the structural hash, the loose-index `reach`, and the six containment flags. Computed from the node's subterm with every child's own cache already filled, so [`Scalars::of`] costs O(children).
+/// One node's position-independent derivations: the structural hash, the loose-index `reach`, and the six containment flags. Computed from the node's subterm with every child's own cache already filled, so [`Scalars::of`] costs O(children).
 #[derive(Clone, Copy)]
 pub(crate) struct Scalars {
     pub(crate) reach: usize,

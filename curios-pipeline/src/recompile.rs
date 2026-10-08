@@ -2,10 +2,10 @@
 //!
 //! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its items are elaborated and erased again is this module's closure, and which of its verdicts stand is not: the kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed, so a closure that stopped one edge short costs a judgment and admits nothing ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). The closure is transitive all the same — conversion unfolds bodies, so a dependent's elaboration reaches through what it names — since an item it leaves out is stored as the baseline elaborated it.
 //!
-//! **The diff is over lowered items, modulo what a lowering mints.** A lowering numbers every written `Type` and every elided annotation from zero for each declaration, so a declaration its text leaves alone carries the ids it carried whatever was written around it, and an edit inside one renumbers that one alone; [`Term::equal_modulo_metas`] pairs the ids by position, which is how an edited declaration whose edit only shifted them is still found unchanged. Everything else compares exactly, spans excepted, so a moved declaration is not a change — and a renamed parameter is one: a binder's name is in what is stored, the item's own and every dependent's that was handed its signature, so an item reused under the old name would be another unit than a whole compile's.
+//! **The diff is over lowered items, modulo what a lowering mints.** A lowering numbers every written `Type` and every elided annotation from zero for each declaration, so a declaration its text leaves alone carries the ids it carried whatever was written around it, and an edit inside one renumbers that one alone; [`Term::equal_modulo_metas`] pairs the ids by position, which is how an edited declaration whose edit only shifted them is still found unchanged. Everything else compares exactly, extents excepted, so a moved declaration is not a change — and a renamed parameter is one: a binder's name is in what is stored, the item's own and every dependent's that was handed its signature, so an item reused under the old name would be another unit than a whole compile's.
 
 use {
-    crate::{CompileError, globals, kernel_refusal, with_broken},
+    crate::{CompileError, anchors_of, globals, kernel_refusal, with_broken},
     curios_cert::{Baseline, Rechecked, certify_module_over},
     curios_core::{
         Bound, ConceptDecl, Global, InductDecl, Item, MetaRenaming, Module, StructDecl, Telescope,
@@ -71,6 +71,7 @@ pub fn compile_unit_over(
                     syntax,
                     lowered.unbound(),
                     lowered.spellings(),
+                    &anchors_of(&lowered, predecessors),
                 )
             })
         }),
@@ -99,7 +100,14 @@ pub fn compile_unit_over(
         baseline.erased(),
         &|name| closure.contains(name),
     )
-    .map_err(|error| CompileError::Failure(error.reports_with(core.as_module(), &cores, syntax)))?;
+    .map_err(|error| {
+        CompileError::Failure(error.reports_with(
+            core.as_module(),
+            &cores,
+            syntax,
+            &anchors_of(&lowered, predecessors),
+        ))
+    })?;
 
     Ok(Uncertified::new(lowered, core.into_module(), ersd).certified(certification))
 }

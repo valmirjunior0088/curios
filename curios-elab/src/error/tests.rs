@@ -1,6 +1,10 @@
 //! What a batch of refusals is: one error carrying every member, flat, classified and reported member by member.
 
-use {super::*, curios_utilities::Source, std::sync::Arc};
+use {
+    super::*,
+    curios_core::{Anchor, Anchored},
+    curios_utilities::{Source, Span},
+};
 
 fn refusal() -> Error {
     Error::CannotInfer
@@ -10,8 +14,21 @@ fn goals() -> Error {
     Error::goals(Vec::new())
 }
 
-fn span(source: &Arc<Source>, start: usize, end: usize) -> Span {
-    Span::new(Arc::clone(source), start, end)
+/// Where the entry's text `a b` lies, and the extent of each of its two letters and of the whole.
+fn written() -> (Anchors, [Extent; 3]) {
+    let source = Source::inline("a b");
+    let mut anchors = Anchors::default();
+    let within = anchors.site(
+        Anchor::of(Anchored::Entry),
+        &Span::new(source.clone(), 0, 3),
+    );
+    let extent = |start, end| {
+        within
+            .extent(&Span::new(source.clone(), start, end))
+            .expect("the span lies in the text")
+    };
+
+    (anchors, [extent(0, 1), extent(2, 3), extent(0, 3)])
 }
 
 #[test]
@@ -40,28 +57,23 @@ fn a_batch_is_incomplete_only_when_every_member_is() {
 /// The members carry their own attribution, so the wrappers a caller adds around the whole leave it as it is.
 #[test]
 fn a_batch_is_neither_located_nor_attributed() {
-    let source = Source::inline("a b");
-    let batch = Error::batch(vec![
-        refusal().at(span(&source, 0, 1)),
-        refusal().at(span(&source, 2, 3)),
-    ]);
+    let (_, [first, second, whole]) = written();
+    let batch = Error::batch(vec![refusal().at(first), refusal().at(second)]);
 
-    let wrapped = batch.at(span(&source, 0, 3)).in_declaration("outer", None);
+    let wrapped = batch.at(whole).in_declaration("outer", None);
 
     assert!(matches!(wrapped, Error::Batch(_)));
 }
 
 #[test]
 fn a_batch_renders_one_report_per_member() {
-    let source = Source::inline("a b");
+    let (anchors, [first, second, _]) = written();
     let batch = Error::batch(vec![
-        refusal()
-            .at(span(&source, 0, 1))
-            .in_declaration("first", None),
-        refusal().at(span(&source, 2, 3)),
+        refusal().at(first).in_declaration("first", None),
+        refusal().at(second),
     ]);
 
-    let reports = batch.reports(&Rc::new(Spelling::default()), &BTreeMap::new());
+    let reports = batch.reports(&Rc::new(Spelling::default()), &BTreeMap::new(), &[&anchors]);
 
     assert_eq!(reports.len(), 2);
     assert!(reports[0].message.starts_with("while elaborating first:"));

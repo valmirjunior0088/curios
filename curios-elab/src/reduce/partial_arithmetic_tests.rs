@@ -25,7 +25,7 @@ fn nat_div_by_zero_reports() {
         ),
         Err(ReduceError::DivisionByZero {
             kind: "Nat/div",
-            span: None,
+            extent: None,
         })
     );
 
@@ -41,7 +41,7 @@ fn nat_div_by_zero_reports() {
         ),
         Err(ReduceError::DivisionByZero {
             kind: "Nat/div",
-            span: None,
+            extent: None,
         })
     );
 
@@ -68,7 +68,7 @@ fn nat_rem_by_zero_reports() {
         ),
         Err(ReduceError::DivisionByZero {
             kind: "Nat/rem",
-            span: None,
+            extent: None,
         })
     );
 }
@@ -87,7 +87,7 @@ fn int_div_by_zero_reports() {
         ),
         Err(ReduceError::DivisionByZero {
             kind: "Int/div",
-            span: None,
+            extent: None,
         })
     );
 
@@ -102,7 +102,7 @@ fn int_div_by_zero_reports() {
         ),
         Err(ReduceError::DivisionByZero {
             kind: "Int/rem",
-            span: None,
+            extent: None,
         })
     );
 }

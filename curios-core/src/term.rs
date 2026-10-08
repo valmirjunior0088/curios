@@ -28,7 +28,7 @@ pub use subterm::*;
 
 use {
     super::{
-        Atom, Bound, Enter, Families, Free, Global, Intrinsic, Level, LevelHead, Many,
+        Atom, Bound, Enter, Extent, Families, Free, Global, Intrinsic, Level, LevelHead, Many,
         MaskedLevels, Scope, SelfReference, Spelled, Spelling, Telescope, Three, Two,
         UniverseMetaId, Var, Variance, Visit, print_term, project_erased_universes,
         stamp_declaration_instance, universe_metas,
@@ -36,7 +36,7 @@ use {
     curios_abi::ForeignFunction,
     curios_num::{Grain, Natural},
     curios_print::{run_printer, run_printer_within},
-    curios_utilities::{Plicity, Span, recurse},
+    curios_utilities::{Plicity, recurse},
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         fmt,
@@ -55,18 +55,18 @@ pub enum HeadTag<'a> {
     Intrinsic(&'static str),
 }
 
-/// A core-calculus term: an `Rc`-shared `Node` — a [`Subterm`] plus its lazily-cached, span-independent derivations (a structural hash, `reach`, the free-variable set, and the `has_local_free`/`has_metavar` bits) — with an optional per-occurrence source span. Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The span is identity-irrelevant: hash and equality look only at the node, so re-spanning a term never splits a cache.
+/// A core-calculus term: an `Rc`-shared `Node` — a [`Subterm`] plus its lazily-cached, position-independent derivations (a structural hash, `reach`, the free-variable set, and the `has_local_free`/`has_metavar` bits) — with an optional per-occurrence extent: where it was written, in the text of the declaration that wrote it ([`Extent`]). Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The extent is identity-irrelevant: hash and equality look only at the node, so placing a term anew never splits a cache.
 ///
 /// The caches are derivations, never identity: hash and equality answer the same before and after a fill, so a map keyed on `Term` is sound. The workspace `clippy.toml` states exactly that to `mutable_key_type`, which is why no `Term`-keyed map carries an `#[allow]` for it.
 #[derive(Debug, Clone)]
 #[curios_archive::archived(recursive)]
 pub struct Term {
-    span: Option<Span>,
+    extent: Option<Extent>,
     #[archived_omit_bounds]
     inner: Rc<Node>,
 }
 
-/// A [`Subterm`] together with its memoized, span-independent derivations. One per distinct node, behind the shared `Rc` every occurrence bumps, so each derivation fills at most once across the whole DAG. The caches are filled lazily by an iterative post-order walk over the node's descendants (`Term::warm_scalars`/`Term::get_or_init_free_vars`) rather than by native recursion, so a data-shaped spine of any depth memoizes on a bounded stack: filling one node reads its children's already-filled caches in O(children).
+/// A [`Subterm`] together with its memoized, position-independent derivations. One per distinct node, behind the shared `Rc` every occurrence bumps, so each derivation fills at most once across the whole DAG. The caches are filled lazily by an iterative post-order walk over the node's descendants (`Term::warm_scalars`/`Term::get_or_init_free_vars`) rather than by native recursion, so a data-shaped spine of any depth memoizes on a bounded stack: filling one node reads its children's already-filled caches in O(children).
 #[curios_archive::archived]
 struct Node {
     /// The eager derivations — hash, `reach`, and the containment flags — packed behind one filled bit; see [`ScalarCache`].
@@ -363,10 +363,10 @@ impl Term {
                         .and_then(Free::as_global)
                         .is_some_and(|name| names.contains(name)) =>
             {
-                // The occurrence's span moves onto the wrapping instance: the head is a bare `Var` with no span of its own.
+                // The occurrence's extent moves onto the wrapping instance: the head is a bare `Var` with no extent of its own.
                 let stamped = Term::instance(InstanceHead::Var(var.clone()), levels.to_vec());
-                return Some(match self.span() {
-                    Some(span) => stamped.with_span(span),
+                return Some(match self.extent() {
+                    Some(extent) => stamped.with_extent(extent),
                     None => stamped,
                 });
             }
@@ -374,8 +374,8 @@ impl Term {
         };
 
         let stamped = Term::from(subterm);
-        Some(match self.span() {
-            Some(span) => stamped.with_span(span),
+        Some(match self.extent() {
+            Some(extent) => stamped.with_extent(extent),
             None => stamped,
         })
     }
@@ -669,22 +669,22 @@ impl Term {
         }
     }
 
-    pub fn span(&self) -> Option<Span> {
-        self.span.clone()
+    pub fn extent(&self) -> Option<Extent> {
+        self.extent
     }
 
-    /// This term under `span` in place of its own, the node shared: the same subterm at another occurrence.
-    pub(crate) fn respanned(self, span: Option<Span>) -> Self {
+    /// This term under `extent` in place of its own, the node shared: the same subterm at another occurrence.
+    pub(crate) fn occurring_at(self, extent: Option<Extent>) -> Self {
         Term {
-            span,
+            extent,
             inner: self.inner,
         }
     }
 
-    /// Attaches a span to this term. If the term already carries a span (the innermost one), it is preserved — innermost wins, matching how `Error::at` keeps the first span it sees as errors propagate up.
-    pub fn with_span(mut self, span: Span) -> Self {
-        if self.span.is_none() {
-            self.span = Some(span);
+    /// Attaches an extent to this term. If the term already carries an extent (the innermost one), it is preserved — innermost wins, matching how `Error::at` keeps the first extent it sees as errors propagate up.
+    pub fn with_extent(mut self, extent: Extent) -> Self {
+        if self.extent.is_none() {
+            self.extent = Some(extent);
         }
         self
     }
@@ -728,7 +728,7 @@ impl Term {
         Self::instance(InstanceHead::Var(Var::free(*name)), levels)
     }
 
-    /// Instantiate a generalized binding at occurrence-specific levels. The result is span-less; a call site holding the occurrence lifts its span onto the wrapper, since the typed head carries none.
+    /// Instantiate a generalized binding at occurrence-specific levels. The result is without a position; a call site holding the occurrence lifts its extent onto the wrapper, since the typed head carries none.
     pub fn instance(head: InstanceHead, levels: Vec<Level>) -> Self {
         if levels.is_empty() {
             head.to_term()
@@ -760,9 +760,9 @@ impl Term {
         }))
     }
 
-    /// `inner` with `span` attached — innermost wins if `inner` already carries one, per `Term::with_span`.
-    pub fn spanned<T: Into<Term>>(span: Span, inner: T) -> Self {
-        inner.into().with_span(span)
+    /// `inner` with `extent` attached — innermost wins if `inner` already carries one, per `Term::with_extent`.
+    pub fn placed<T: Into<Term>>(extent: Extent, inner: T) -> Self {
+        inner.into().with_extent(extent)
     }
 
     pub fn func_type<I, T, O>(params: I, output: O) -> Self
@@ -1902,7 +1902,7 @@ impl MetaRenaming {
 impl Term {
     /// Structural equality with a metavariable, and a universe metavariable, identified by position rather than by id, under `renaming` — and with every binder under the name it was written with.
     ///
-    /// [`PartialEq`]'s masking walk with two cases decided ahead of the mask, and one read beside it. Two `Type`s are equal when their levels are under the renaming, and two metavariables when their origins agree, their ids bind, and their spines are pairwise equal. The read is each node's binder names, which `PartialEq` leaves out since a name moves no judgment: it moves what is stored, a term elaborated from this one carrying its binders' names and so does a dependent handed its signature. Every other payload compares exactly, spans excepted as in `PartialEq`. No pointer or hash shortcut: one allocation on both sides still carries ids the renaming has to see.
+    /// [`PartialEq`]'s masking walk with two cases decided ahead of the mask, and one read beside it. Two `Type`s are equal when their levels are under the renaming, and two metavariables when their origins agree, their ids bind, and their spines are pairwise equal. The read is each node's binder names, which `PartialEq` leaves out since a name moves no judgment: it moves what is stored, a term elaborated from this one carrying its binders' names and so does a dependent handed its signature. Every other payload compares exactly, extents excepted as in `PartialEq`. No pointer or hash shortcut: one allocation on both sides still carries ids the renaming has to see.
     pub fn equal_modulo_metas(&self, other: &Term, renaming: &mut MetaRenaming) -> bool {
         let mut visit = Visit::masking_labels(|_, _| None, Term::from(Subterm::Prop));
         let mut mask = |subterm: &Subterm| {
@@ -2042,7 +2042,7 @@ impl Deref for Term {
 impl From<Subterm> for Term {
     fn from(term: Subterm) -> Self {
         Self {
-            span: None,
+            extent: None,
             inner: Rc::new(Node::new(term)),
         }
     }
@@ -2125,7 +2125,7 @@ impl Bound for Term {
 }
 
 impl Term {
-    /// This term as the canonical node of its spelling in a consing visit's table, under no span.
+    /// This term as the canonical node of its spelling in a consing visit's table, under no extent.
     ///
     /// **Built over its canonical children, never handed back as it was.** [`Term::rebuilt`] answers a payload equal to the node's own with the node, which holds the children it had — and under a consing visit every payload is equal to the node's own, since consing changes no structure. Taken through it, the first node met of a structure is adopted with every duplicate beneath it kept, and what the pass shares is whole terms that repeat.
     fn consed<F>(&self, visit: &mut Visit<F>) -> Self
@@ -2182,15 +2182,15 @@ impl Term {
     ///
     /// The alternative is a fresh `Rc` whose caches start empty, discarding every `hash`, `frees` and `scalars` fill the original had earned. That is affordable when a rewrite rewrites something and pure waste when it does not — and *does not* is the common case: `project_erased_universes` hands back an equal term on nearly every call over a web of definitions each naming the one before it twice.
     ///
-    /// No caller can tell the difference, because two of them already receive the original node: [`Visit::universes_only`] and [`Visit::passes_over`] both short-circuit to `self.clone()`. A span lives on this wrapper rather than on the node, so sharing one node across occurrences is representable. A consing visit is the one that can tell, and does not come here ([`Term::consed`]): the node handed back holds the children it had, where consing is the replacing of them.
+    /// No caller can tell the difference, because two of them already receive the original node: [`Visit::universes_only`] and [`Visit::passes_over`] both short-circuit to `self.clone()`. An extent lives on this wrapper rather than on the node, so sharing one node across occurrences is representable. A consing visit is the one that can tell, and does not come here ([`Term::consed`]): the node handed back holds the children it had, where consing is the replacing of them.
     fn rebuilt(&self, subterm: Subterm) -> Self {
         if subterm == **self {
             return self.clone();
         }
 
-        // Preserve the span across traversal; a genuinely rebuilt node is a fresh structure, so its cache starts empty.
+        // Preserve the extent across traversal; a genuinely rebuilt node is a fresh structure, so its cache starts empty.
         Self {
-            span: self.span.clone(),
+            extent: self.extent,
             inner: Rc::new(Node::new(subterm)),
         }
     }
@@ -2198,7 +2198,7 @@ impl Term {
     /// This term carrying `subterm` on a node of its own, whatever `subterm` equals: for a rewrite of what equality does not read. [`Term::rebuilt`] hands back the node it was given where the payload is equal, and a payload apart in a binder's label alone is equal, so a walk that states something on a label would be handed back the term it started from.
     pub(crate) fn respelled(&self, subterm: Subterm) -> Self {
         Self {
-            span: self.span.clone(),
+            extent: self.extent,
             inner: Rc::new(Node::new(subterm)),
         }
     }

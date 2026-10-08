@@ -38,14 +38,14 @@ use {
     },
     crate::{Declined, metavar_origins, metavar_spines, named_members, zonk_solved_term_metas},
     curios_core::{
-        Advance, Apply, Bound, Carrier, Cases, Classes, Cost, Cursor, Exhaustion, Families, Free,
-        Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Level,
-        Lockstep, Many, Match, MatchResult, Metavar, Probe, Proj, Rec, ReduceError, Scope, Step,
-        Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType,
+        Advance, Apply, Bound, Carrier, Cases, Classes, Cost, Cursor, Exhaustion, Extent, Families,
+        Free, Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic,
+        Level, Lockstep, Many, Match, MatchResult, Metavar, Probe, Proj, Rec, ReduceError, Scope,
+        Step, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, Variance, Variant,
         past_bool_cap,
     },
-    curios_utilities::{Plicity, Span, recurse},
+    curios_utilities::{Plicity, recurse},
     std::{
         collections::{HashMap, HashSet, VecDeque},
         mem,
@@ -180,12 +180,12 @@ pub(crate) fn convert_under(
     problem_outcome(context, problem, None)
 }
 
-/// Whether a term of type `lower` may stand where `upper` is wanted: the two types posed at [`Relation::Below`], under no binder. `span` is the term's, which a level bound raised on the way reports.
+/// Whether a term of type `lower` may stand where `upper` is wanted: the two types posed at [`Relation::Below`], under no binder. `extent` is the term's, which a level bound raised on the way reports.
 pub(crate) fn subsume_outcome(
     context: &mut Context,
     lower: &Term,
     upper: &Term,
-    span: Option<Span>,
+    extent: Option<Extent>,
 ) -> Result<Outcome, ReduceError> {
     let problem = Problem {
         type_: Term::type_ground(),
@@ -195,17 +195,17 @@ pub(crate) fn subsume_outcome(
         relation: Relation::Below,
     };
 
-    problem_outcome(context, problem, span)
+    problem_outcome(context, problem, extent)
 }
 
 /// Decide `problem` at the relation it carries: a question asked afresh, and the retry of a goal an earlier run surrendered, which resumes as what it was asked.
 pub(crate) fn problem_outcome(
     context: &mut Context,
     problem: Problem,
-    span: Option<Span>,
+    extent: Option<Extent>,
 ) -> Result<Outcome, ReduceError> {
     curios_profile::profile!("convert::outcome");
-    Convert::new(problem, span).outcome(context)
+    Convert::new(problem, extent).outcome(context)
 }
 
 /// The verdict of a conversion run, distinguishing "provably unequal" from "not yet decidable".
@@ -276,8 +276,8 @@ pub(crate) struct Convert {
     binders: Binders,
     // The level pairs the levels-only shortcut left to a curried head's type, in the order it met them. Nothing compares the two levels of one where the run goes on to hold its sides one, so each is a weak equation then and nothing where it does not.
     apart: Vec<(Level, Level)>,
-    // The span of the term this run was asked for, where it was asked for one: what a level bound raised at below reports.
-    span: Option<Span>,
+    // The extent of the term this run was asked for, where it was asked for one: what a level bound raised at below reports.
+    extent: Option<Extent>,
 }
 
 impl Convert {
@@ -331,7 +331,7 @@ impl Convert {
         Ok(true)
     }
 
-    fn new(problem: Problem, span: Option<Span>) -> Self {
+    fn new(problem: Problem, extent: Option<Extent>) -> Self {
         Self {
             history: HashSet::new(),
             binders: problem.binders.clone(),
@@ -342,7 +342,7 @@ impl Convert {
             minted: HashMap::new(),
             placeholders: Vec::new(),
             apart: Vec::new(),
-            span,
+            extent,
         }
     }
 
@@ -613,7 +613,7 @@ impl Convert {
                         lower,
                         upper.clone(),
                         UniverseConstraintOrigin {
-                            span: self.span.clone(),
+                            extent: self.extent,
                             kind: UniverseConstraintKind::Cumulativity,
                             declaration: None,
                             binder: None,
@@ -1531,7 +1531,7 @@ impl Convert {
                     .filter_map(|other| {
                         occurrences
                             .get(other)
-                            .map(|(origin, span)| (*other, origin.clone(), span.clone()))
+                            .map(|(origin, extent)| (*other, origin.clone(), *extent))
                     })
                     .collect(),
             );
@@ -2175,7 +2175,7 @@ impl Convert {
         match &*forced {
             Subterm::Type(level) => {
                 let origin = UniverseConstraintOrigin {
-                    span: self.span.clone(),
+                    extent: self.extent,
                     kind: UniverseConstraintKind::Cumulativity,
                     declaration: None,
                     binder: None,

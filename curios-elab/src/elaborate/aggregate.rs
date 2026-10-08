@@ -161,8 +161,8 @@ fn park_projection(
     term: &Term,
 ) -> (Term, Term) {
     let classifier = context.fresh_classifier_type("parked projection type");
-    let result = context.fresh_hole_metavar(classifier, term.span());
-    let (placeholder, stand_in) = context.fresh_placeholder(result.clone(), term.span());
+    let result = context.fresh_hole_metavar(classifier, term.extent());
+    let (placeholder, stand_in) = context.fresh_placeholder(result.clone(), term.extent());
     context.park(
         ParkedWork::Projection(ParkedProjection {
             head,
@@ -190,7 +190,7 @@ pub(crate) fn retry_projection(
         }
         let (projection, field_type) =
             project(context, parked.head.clone(), &head_type, &parked.field)
-                .map_err(|error| error.at_opt(origin.span()))?;
+                .map_err(|error| error.at_opt(origin.extent()))?;
         expect(context, &origin, &field_type, &parked.result)?;
         Ok(Some(projection))
     })?;

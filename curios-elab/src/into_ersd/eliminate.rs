@@ -286,9 +286,9 @@ impl Lowering<'_> {
         for (value, body) in cases {
             // Where the case key stops being unbounded. Core dispatches on a `Natural`; `curios-ersd`'s `NatCase` is a `u32`, and a key past it is refused here rather than wrapped — the discipline of [Nat and Int are an i31 until they outgrow it](../../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md), where a narrowing refuses rather than change a value.
             //
-            // Located at the arm's body, which is the only span the arm has: `walk` would otherwise attach the enclosing `Match`'s, and a synthesized match has none at all.
-            let key = narrow_case_key(value).map_err(|error| match body.span() {
-                Some(span) => error.at(span),
+            // Located at the arm's body, which is the only position the arm has: `walk` would otherwise attach the enclosing `Match`'s, and a synthesized match has none at all.
+            let key = narrow_case_key(value).map_err(|error| match body.extent() {
+                Some(extent) => error.at(extent),
                 None => error,
             })?;
             let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value.clone())));

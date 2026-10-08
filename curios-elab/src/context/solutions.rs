@@ -98,7 +98,7 @@ pub(crate) struct ParkedMatch {
 #[derive(Debug)]
 pub(crate) struct ParkedProblem {
     pub work: ParkedWork,
-    /// The term being checked at park time; its span anchors the eventual error if the problem never resolves.
+    /// The term being checked at park time; its extent anchors the eventual error if the problem never resolves.
     pub origin: Term,
     pub frame: FrozenFrame,
     /// The unsolved metavariables whose solutions could unblock this — solving any of them is the wake signal.

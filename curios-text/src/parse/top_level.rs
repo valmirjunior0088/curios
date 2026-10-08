@@ -227,9 +227,13 @@ pub(super) fn parse_top_mod<'a>(
         // Named for nothing: a module declares a scope rather than a binding, and a broken item inside its body is the module's, not the binding the body's item named.
         tagging(
             None,
-            many0(parse_top_item)
+            many0(|| spanned(parse_top_item()))
                 .and_drop(parse_keyword("end"))
-                .map(|items| Some(Module { items })),
+                .map(|items| {
+                    let (spans, items) = items.into_iter().unzip();
+
+                    Some(Module { items, spans })
+                }),
         )
         .or(parse_literal(";").map(|()| None))
         // The span reaches back to the mark the dispatch took before `pub`, since the head it covers was consumed there.
