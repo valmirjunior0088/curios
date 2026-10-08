@@ -43,46 +43,39 @@ satisfy Spell(Url) {
 pub let default_port(s: Scheme) -> Nat =
     match s | http() => 80 | https() => 443 end;
 
-let until(stops: List(Byte)) -> (Byte) -> Bool =
-    (byte) => Bool/not(List/any(stops, (stop) => byte == stop));
-
-let text(b: Bytes) -> Parse(Bytes, Str) =
-    match Str/of_bytes(b)
-    | success(s) => Parse/pure(s)
-    | failure(_) => Parse/fail("a URL is text")
-    end;
+let until(stops: List(Char)) -> (Char) -> Bool =
+    (c) => Bool/not(List/any(stops, (stop) => c == stop));
 
 -- Whether the wire carries `b` as it is: visible ASCII.
 let visible(b: Byte) -> Bool =
     Nat/in_range(Byte/to_nat(b), 33, 126);
 
--- One part of a URL as text. A space, a control octet and an octet past ASCII have no place in one: each is written percent-encoded, and one left bare is refused.
-let part(b: Bytes) -> Parse(Bytes, Str) =
-    match Bytes/all(b, visible)
-    | true => text(b)
+-- One part of a URL. A space, a control octet and an octet past ASCII have no place in one: each is written percent-encoded, and one left bare is refused.
+let part(s: Str) -> Parse(Str, Str) =
+    match Bytes/all(Str/to_bytes(s), visible)
+    | true => Parse/pure(s)
     | false =>
         Parse/fail(
             "a URL holds no space, control octet or octet past ASCII, each of which is written percent-encoded")
     end;
 
-let scheme: Parse(Bytes, Scheme) =
-    let name = Parse/bytes/take_while(until([':']))!;
-    let _ = Parse/bytes/literal("://")!;
-    let s = text(name)!;
+let scheme: Parse(Str, Scheme) =
+    let name = Parse/text/take_while(until([':']))!;
+    let _ = Parse/text/literal("://")!;
     choose
-    | Str/eql_ascii_ci(s, "http") => Parse/pure(Scheme/http())
-    | Str/eql_ascii_ci(s, "https") => Parse/pure(Scheme/https())
-    | _ => Parse/fail(Str/flatten(["unknown scheme '", s, "'"]))
+    | Str/eql_ascii_ci(name, "http") => Parse/pure(Scheme/http())
+    | Str/eql_ascii_ci(name, "https") => Parse/pure(Scheme/https())
+    | _ => Parse/fail(Str/flatten(["unknown scheme '", name, "'"]))
     end;
 
-let is_digit(byte: Byte) -> Bool =
-    Nat/in_range(Byte/to_nat(byte), '0', '9');
+let is_digit(c: Char) -> Bool =
+    Nat/in_range(Char/to_nat(c), '0', '9');
 
 -- Whether the authority ends here: at the path, the query, the fragment, or the end of the text.
-let ends_authority(next: Option(Byte)) -> Bool =
+let ends_authority(next: Option(Char)) -> Bool =
     match next
-    | some(b) =>
-        match Byte/to_nat(b)
+    | some(c) =>
+        match Char/to_nat(c)
         | '/' => true
         | '?' => true
         | '#' => true
@@ -92,18 +85,17 @@ let ends_authority(next: Option(Byte)) -> Bool =
     end;
 
 -- The port after a `:`: its digits up to where the authority ends. None is the scheme's, as RFC 3986 §3.2.3 reads an empty port, and a number no port holds is refused here rather than at the connection.
-let port_number(s: Scheme) -> Parse(Bytes, Nat) =
-    let _ = Parse/bytes/expect(':')!;
-    let digits = Parse/bytes/take_while(is_digit)!;
-    let next = Parse/bytes/peek!;
+let port_number(s: Scheme) -> Parse(Str, Nat) =
+    let _ = Parse/text/expect(':')!;
+    let digits = Parse/text/take_while(is_digit)!;
+    let next = Parse/text/peek!;
     match ends_authority(next)
     | false => Parse/fail("a port is a number")
     | true =>
-        match Bytes/len(digits) == 0
+        match Str/is_empty(digits)
         | true => Parse/pure(default_port(s))
         | false =>
-            let spelled = text(digits)!;
-            match Nat/of_str(spelled)
+            match Nat/of_str(digits)
             | some(n) =>
                 match n <= 65535
                 | true => Parse/pure(n)
@@ -114,39 +106,39 @@ let port_number(s: Scheme) -> Parse(Bytes, Nat) =
         end
     end;
 
-let port_of(s: Scheme) -> Parse(Bytes, Nat) =
-    let next = Parse/bytes/peek!;
+let port_of(s: Scheme) -> Parse(Str, Nat) =
+    let next = Parse/text/peek!;
     match next
-    | some(b) => match Byte/to_nat(b) | ':' => port_number(s) | _ => Parse/pure(default_port(s)) end
+    | some(c) => match Char/to_nat(c) | ':' => port_number(s) | _ => Parse/pure(default_port(s)) end
     | none() => Parse/pure(default_port(s))
     end;
 
-let path: Parse(Bytes, Str) =
-    let b = Parse/bytes/take_while(until(['?', '#']))!;
-    let s = part(b)!;
+let path: Parse(Str, Str) =
+    let written = Parse/text/take_while(until(['?', '#']))!;
+    let s = part(written)!;
     match Str/is_empty(s) | true => Parse/pure("/") | false => Parse/pure(s) end;
 
-let query_text: Parse(Bytes, Option(Str)) =
-    let _ = Parse/bytes/expect('?')!;
-    let b = Parse/bytes/take_while(until(['#']))!;
-    let s = part(b)!;
+let query_text: Parse(Str, Option(Str)) =
+    let _ = Parse/text/expect('?')!;
+    let written = Parse/text/take_while(until(['#']))!;
+    let s = part(written)!;
     Parse/pure(Option/some(s));
 
-let query: Parse(Bytes, Option(Str)) =
-    let next = Parse/bytes/peek!;
+let query: Parse(Str, Option(Str)) =
+    let next = Parse/text/peek!;
     match next
-    | some(b) => match Byte/to_nat(b) | '?' => query_text | _ => Parse/pure(Option/none()) end
+    | some(c) => match Char/to_nat(c) | '?' => query_text | _ => Parse/pure(Option/none()) end
     | none() => Parse/pure(Option/none())
     end;
 
-let url: Parse(Bytes, Url) =
+let url: Parse(Str, Url) =
     let s = scheme!;
-    let h = Parse/bytes/take_while(until([':', '/', '?', '#']))!;
+    let h = Parse/text/take_while(until([':', '/', '?', '#']))!;
     let host = part(h)!;
     let p = port_of(s)!;
     let pa = path!;
     let q = query!;
-    let _ = Parse/bytes/rest!;
+    let _ = Parse/text/rest!;
     match Str/is_empty(host)
     | true => Parse/fail("a URL names a host")
     | false => Parse/pure(Url { scheme = s, host = host, port = p, path = pa, query = q })
@@ -154,7 +146,7 @@ let url: Parse(Bytes, Url) =
 
 --- `s` read as a URL, or why it is not: a scheme other than `http` and `https`, a missing host, or a port that is no number of at most 65535. A port left empty, as in `http://h:/`, is the scheme's.
 pub let of_str(s: Str) -> Result(Parse/Error, Url) =
-    Parse/run(url, Str/to_bytes(s));
+    Parse/run(url, s);
 
 --- That `r` is a URL that read.
 pub let Read(r: Result(Parse/Error, Url)) -> Prop =

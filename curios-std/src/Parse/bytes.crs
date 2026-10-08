@@ -1,5 +1,5 @@
 use /std/{Result, Nat, Byte, Bytes, Char, Str, Bool, Option, Parse};
-use /std/Bool/{True, False, Holds};
+use /std/Bool/{True, Holds};
 use /std/Parse/{Of, At, Pos, Input, Error};
 
 --- A bytes parser walks its input as it is, and its positions lie within it.
@@ -124,16 +124,10 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes, Bytes) =
         run(input, at) =
             let rest = Bytes/drop(input, at.offset, @at.holds);
             let taken = leading(rest, pred, 0);
-            -- The bound is decided before it is argued, so a closed input takes the arm that holds no lemma.
-            match at.offset + taken <= Bytes/len(input)
-            | true =>
-                Result/success((
-                    At { offset = at.offset + taken, holds = True/qed() },
-                    Bytes/slice(input, at.offset, taken)))
-            | false =>
-                let fits = leading_within(rest, pred, 0);
-                match False/refuted() end
-            end,
+            let fits = leading_within(rest, pred, 0);
+            Result/success((
+                At { offset = at.offset + taken, holds = True/proved() },
+                Bytes/slice(input, at.offset, taken))),
     };
 
 --- Everything from the current position to the end of the input.
