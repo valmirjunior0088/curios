@@ -4,11 +4,10 @@
 
 use {
     crate::{
-        BROWSER_TRIPLE, HOST_TRIPLE, NEXTEST_FLOOR, NEXTEST_INSTALL, NODE_FLOOR, artifact, ask,
-        ask_cargo, bindgen_web, built, cargo, file_with_inputs, inputs, root, run,
-        target_directory,
+        BROWSER_TRIPLE, HOST_TRIPLE, NEXTEST_INSTALL, NODE_FLOOR, artifact, ask, ask_cargo,
+        bindgen_web, built, cargo, file_with_inputs, inputs, root, run, target_directory,
     },
-    std::{fs, path::Path, process::Command, str::FromStr},
+    std::{fs, path::Path, process::Command},
 };
 
 #[cfg(test)]
@@ -48,54 +47,22 @@ fn scope(package: Option<&str>) -> Vec<&str> {
     }
 }
 
-/// One of `total` even slices of a test selection, counted from one: what `--shard M/N` names.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Shard {
-    index: u32,
-    total: u32,
-}
-
-impl FromStr for Shard {
-    type Err = String;
-
-    fn from_str(text: &str) -> Result<Self, Self::Err> {
-        let parts = text
-            .split_once('/')
-            .and_then(|(index, total)| Some((index.parse().ok()?, total.parse().ok()?)));
-
-        match parts {
-            Some((index, total)) if (1..=total).contains(&index) => Ok(Self { index, total }),
-            _ => Err("a shard is M/N, the Mth of N slices, with M from 1 to N".into()),
-        }
-    }
-}
-
-/// The workspace's tests, or one package's, under nextest: every target and feature, every failure reported rather than the first, narrowed to the tests whose path contains `filter` and then to one `shard` of what that leaves.
+/// The workspace's tests, or one package's, under nextest: every target and feature, every failure reported rather than the first, narrowed to the tests whose path contains `filter`.
 ///
-/// **Nextest rather than `cargo test`, for the shard.** A shard is cut from the lists the test binaries themselves answer with, so the check workflow runs the suite as parallel jobs with no list of tests kept anywhere: a test written today is in exactly one shard tomorrow. Nextest also runs each test as a process of its own, so a test that aborts — Binaryen answering a module it cannot parse with a C++ `assert` — fails by name instead of taking every other result with it. Doctests are not its to run, which is why `doctest` stays cargo's.
+/// **Nextest rather than `cargo test`, for a process to a test.** Binaryen's settings are the process's and its optimizer serializes behind a lock, so tests that share a process queue for it, and a test that aborts — Binaryen answering a module it cannot parse with a C++ `assert` — takes every other result of its binary with it. Under nextest each test is a process of its own: the suite runs on every core, and an abort fails by name. Doctests are not its to run, which is why `doctest` stays cargo's.
 ///
-/// **A nextest the suite cannot run under is refused before anything is built**, by [`nextest_ready`], with the command that fixes it.
-pub(crate) fn test(
-    package: Option<&str>,
-    filter: Option<&str>,
-    shard: Option<Shard>,
-) -> Result<(), String> {
+/// **A missing nextest is refused before anything is built**, by [`nextest_ready`], with the command that installs it.
+pub(crate) fn test(package: Option<&str>, filter: Option<&str>) -> Result<(), String> {
     nextest_ready()?;
 
-    let arguments = test_arguments(package, filter, shard);
-
-    cargo(&arguments.iter().map(String::as_str).collect::<Vec<_>>())
+    cargo(&test_arguments(package, filter))
 }
 
 /// The `cargo nextest run` command line for one selection, which is the whole workspace when nothing narrows it.
 ///
-/// The filter is last because nextest reads what follows its options as the names to match, and it is one narrowing rather than a tail: the recipe takes a single name and places it. A selection that matches nothing warns rather than fails, because a shard of a package with fewer tests than shards is rightly empty, and nextest's own default would fail the job that drew it.
-fn test_arguments(
-    package: Option<&str>,
-    filter: Option<&str>,
-    shard: Option<Shard>,
-) -> Vec<String> {
-    let mut arguments = ["nextest", "run"]
+/// The filter is last because nextest reads what follows its options as the names to match, and it is one narrowing rather than a tail: the recipe takes a single name and places it. A selection that matches nothing warns rather than fails, because a package with no test of its own is rightly empty, and nextest's own default would fail the run that named it.
+fn test_arguments<'a>(package: Option<&'a str>, filter: Option<&'a str>) -> Vec<&'a str> {
+    ["nextest", "run"]
         .into_iter()
         .chain(scope(package))
         .chain([
@@ -104,38 +71,18 @@ fn test_arguments(
             "--no-fail-fast",
             "--no-tests=warn",
         ])
-        .map(String::from)
-        .collect::<Vec<_>>();
-
-    if let Some(Shard { index, total }) = shard {
-        arguments.extend(["--partition".into(), format!("slice:{index}/{total}")]);
-    }
-
-    arguments.extend(filter.map(String::from));
-
-    arguments
+        .chain(filter)
+        .collect()
 }
 
-/// Refuse unless the cargo that runs the suite has a nextest at [`NEXTEST_FLOOR`] or later, saying what is missing and the command that fixes it.
+/// Refuse unless the cargo that runs the suite has nextest, saying so and giving the command that installs it.
 ///
 /// Presence is read off `cargo --list` rather than found by running the subcommand: cargo answers a subcommand it does not have with an error of its own, and the refusal here is the one that says what to do.
 fn nextest_ready() -> Result<(), String> {
-    if !lists_nextest(&ask_cargo(&["--list"])?) {
-        return Err(nextest_refusal("it is not installed", "Install"));
+    match lists_nextest(&ask_cargo(&["--list"])?) {
+        true => Ok(()),
+        false => Err(nextest_refusal()),
     }
-
-    let answer = ask_cargo(&["nextest", "--version"])?;
-
-    if !admits_nextest(&answer) {
-        let answered = answer.split_whitespace().nth(1).unwrap_or(answer.trim());
-
-        return Err(nextest_refusal(
-            &format!("`cargo nextest --version` answered {answered}"),
-            "Update",
-        ));
-    }
-
-    Ok(())
 }
 
 /// Whether `cargo --list` names nextest among the commands it can run. Each command is a line led by its name, so a command merely named after nextest is not it.
@@ -145,27 +92,10 @@ fn lists_nextest(listing: &str) -> bool {
         .any(|line| line.split_whitespace().next() == Some("nextest"))
 }
 
-/// Whether the nextest that answered `--version` is one the suite runs under. An answer this cannot read a version from is refused with the rest, since nothing says it has `slice:`.
-fn admits_nextest(answer: &str) -> bool {
-    nextest_version(answer).is_some_and(|version| version >= NEXTEST_FLOOR)
-}
-
-/// The three numbers of the version nextest answers `--version` with, which leads its first line as `cargo-nextest 0.9.146 (8af696ddc 2026-09-21)`. A pre-release counts as the release it precedes.
-fn nextest_version(answer: &str) -> Option<[u32; 3]> {
-    let version = answer.split_whitespace().nth(1)?;
-    let release = version.split(['-', '+']).next()?;
-    let mut numbers = release.split('.').map(|number| number.parse().ok());
-    let read = [numbers.next()??, numbers.next()??, numbers.next()??];
-
-    numbers.next().is_none().then_some(read)
-}
-
-/// Why the suite cannot run under the nextest that was `found`, and the command that fixes it — on a line of its own, indented, because it is there to be selected and pasted rather than read, as the installer's advice is.
-fn nextest_refusal(found: &str, remedy: &str) -> String {
-    let floor = NEXTEST_FLOOR.map(|number| number.to_string()).join(".");
-
+/// That the suite cannot run without nextest, and the command that installs it — on a line of its own, indented, because it is there to be selected and pasted rather than read, as the installer's advice is.
+fn nextest_refusal() -> String {
     format!(
-        "test needs cargo-nextest {floor} or later, and {found}. {remedy} it with:\n\n    {NEXTEST_INSTALL}"
+        "test needs cargo-nextest, and it is not installed. Install it with:\n\n    {NEXTEST_INSTALL}"
     )
 }
 

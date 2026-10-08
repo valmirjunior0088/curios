@@ -52,13 +52,9 @@ jobs:
         run: cargo xtask clippy
 
   tests:
-    name: Tests (${{ matrix.shard }}/${{ strategy.job-total }})
+    name: Tests
     runs-on: ubuntu-24.04
     timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -73,7 +69,9 @@ jobs:
       - name: Build runtime launcher
         run: cargo xtask runtime
       - name: Run tests
-        run: cargo xtask test --shard ${{ matrix.shard }}/${{ strategy.job-total }}
+        run: cargo xtask test
+      - name: Run doctests
+        run: cargo xtask doctest
 
   # The native host's macOS branches — the serial speed ioctl, the modem-line opcodes, the device listing — are compiled by no Linux job, and the release workflow would be the first to meet them. The runtime's tests need neither the launcher nor Binaryen.
   tests-curios-runtime-macos:
@@ -91,23 +89,6 @@ jobs:
           key: runtime-macos
       - name: Run the runtime's tests
         run: cargo xtask test curios-runtime
-
-  doctests:
-    name: Doctests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-directories: |
-            curios/.artifacts
-            curios-binaryen/.artifacts
-      - name: Build runtime launcher
-        run: cargo xtask runtime
-      - name: Run doctests
-        run: cargo xtask doctest
 
   docs:
     name: Documentation

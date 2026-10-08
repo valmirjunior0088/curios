@@ -8,6 +8,7 @@ use std::{
     ops::Deref,
     path::{Path, PathBuf},
     process,
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -17,20 +18,23 @@ use std::{
 pub struct Temporary(PathBuf);
 
 impl Temporary {
-    /// A fresh path under the system's temporary directory, named for the `family` of tests and the `name` of this one, unique per process and millisecond.
+    /// A fresh path under the system's temporary directory, named for the `family` of tests and the `name` of this one, and unique to the call: by the process, the millisecond and a count of the paths the process has made, since tests that share a process, as `cargo test`'s do, may ask under one name at once.
     ///
     /// **Canonical by construction.** The code under test canonicalizes the locations it compares — the governance walk, the dependency walk, the roots the server publishes — so a path built under the temporary directory as spelled would compare two spellings of one directory, equal only on a host whose temporary directory already happens to be canonical. Resolving it here, once, is what keeps every fixture from having to remember to.
     pub fn new(family: &str, name: &str) -> Self {
         let base = env::temp_dir();
         let base = base.canonicalize().unwrap_or(base);
 
+        static MADE: AtomicU64 = AtomicU64::new(0);
+
         Self(base.join(format!(
-            "curios-{family}-{name}-{}-{}",
+            "curios-{family}-{name}-{}-{}-{}",
             process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_millis()
+                .as_millis(),
+            MADE.fetch_add(1, Ordering::Relaxed)
         )))
     }
 }

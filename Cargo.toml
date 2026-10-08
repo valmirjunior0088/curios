@@ -93,3 +93,7 @@ opt-level = 3
 
 [profile.release.build-override]
 opt-level = 3
+
+[profile.test]
+opt-level = 3
+debug = "line-tables-only"
