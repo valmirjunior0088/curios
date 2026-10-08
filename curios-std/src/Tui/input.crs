@@ -15,7 +15,12 @@ let modified(code: Code, m: Nat) -> Key =
         ctrl = Nat/and(bits, 4) > 0,
     };
 
-let control(n: Nat) -> Key =
+-- The character of a code below the surrogates, which every code this decoder builds one from is.
+let low(code: Nat, @below: Holds(code < 0xD800)) -> Char =
+    Char { code = code, @valid = Char/Valid/below_surrogates(code, below) };
+
+-- The key a control byte is. It is a byte's, which is what puts the letter or the sign it stands beside below the surrogates.
+let control(n: Nat, @byte: Holds(n <= 255)) -> Key =
     choose
     | n == 0x0D => Key/plain(Code/enter())
     | n == 0x09 => Key/plain(Code/tab())
@@ -23,16 +28,8 @@ let control(n: Nat) -> Key =
     | n == 0x08 => Key/plain(Code/backspace())
     | n == 0x1B => Key/plain(Code/escape())
     | n == 0x00 => Key/with_ctrl(Code/char(' '))
-    | n <= 0x1A =>
-        match Char/of_nat(n + 0x60)
-        | some(c) => Key/with_ctrl(Code/char(c))
-        | none() => Key/plain(Code/escape())
-        end
-    | _ =>
-        match Char/of_nat(n + 0x40)
-        | some(c) => Key/with_ctrl(Code/char(c))
-        | none() => Key/plain(Code/escape())
-        end
+    | n <= 0x1A => Key/with_ctrl(Code/char(low(n + 0x60)))
+    | _ => Key/with_ctrl(Code/char(low(n + 0x40)))
     end;
 
 let tilde(n: Nat) -> Option(Code) =
@@ -205,18 +202,16 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
             end
         end;
     let escape(i: Nat) -> Step(E) =
-        match at(input, i + 1)
+        match Bytes/try_get(input, i + 1)
         | none() => Step/cut()
-        | some(second) =>
+        | some(byte) =>
+            let second = Byte/to_nat(byte);
             choose
             | second == '[' => csi(i, i + 2)
             | second == 'O' => ss3(i + 2)
             | second == 0x1B => Step/emit(key(Key/plain(Code/escape())), i + 1)
             | Nat/in_range(second, 0x20, 0x7E) =>
-                match Char/of_nat(second)
-                | some(c) => Step/emit(key(Key/with_alt(Code/char(c))), i + 2)
-                | none() => Step/emit(Option/none(), i + 2)
-                end
+                Step/emit(key(Key/with_alt(Code/char(low(second)))), i + 2)
             | second < 0x20 || second == 0x7F =>
                 Step/emit(key(Key { ..control(second), alt = true }), i + 2)
             | _ => Step/emit(key(Key/plain(Code/escape())), i + 1)
