@@ -2642,6 +2642,7 @@ dependencies = [
 name = "xboard"
 version = "0.15.9"
 dependencies = [
+ "clap",
  "curios-cert",
  "curios-core",
  "curios-elab",

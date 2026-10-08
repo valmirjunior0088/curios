@@ -118,7 +118,7 @@ impl Report {
 }
 
 /// Who refused a witness and by which error, as a report notes it beside the witness.
-fn refusers(answer: &Answer) -> String {
+pub(crate) fn refusers(answer: &Answer) -> String {
     match answer.admitted() {
         true => "admitted".to_string(),
         false => {

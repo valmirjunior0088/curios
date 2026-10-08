@@ -6,6 +6,7 @@
 //! - [`Expected`], written by [`refused!`], is the refusal a witness expects once its flaw is closed.
 //! - [`Proof::answer`] puts a witness to the checkers at `False`, and an [`Answer`] is what they said, each [`Refusal`] the checker's own error.
 //! - [`Report`] runs every ticket and says where each one stands, a [`Standing`].
+//! - [`Probe`] puts one program that is on no ticket, and says what the checkers made of it.
 
 mod date;
 pub use date::*;
@@ -21,3 +22,6 @@ pub use put::*;
 
 mod report;
 pub use report::*;
+
+mod probe;
+pub use probe::*;

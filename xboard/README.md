@@ -1,12 +1,12 @@
 # xboard
 
-The soundness board: every flaw found in the Curios checkers, kept as something that is run. `cargo xboard` puts the board to the checkers and prints the report. The checkers themselves are `curios-elab`'s and `curios-cert`'s; this crate judges through `curios-pipeline` and the kernel, and nothing depends on it.
+The soundness board: every flaw found in the Curios checkers, kept as something that is run. `cargo xboard report` puts the board to the checkers and prints the report, and `cargo xboard probe` puts one program to them that is on no ticket. The checkers themselves are `curios-elab`'s and `curios-cert`'s; this crate judges through `curios-pipeline` and the kernel, and nothing depends on it.
 
 ## Design
 
 ### A flaw is a ticket that is run
 
-**Decision.** The board is the binary's, `src/board/`, one module per part of the judgment, and the library is what it is written in and run by: a part owns the tickets for the flaws found in it. A ticket states the day it was found and whether it is open or fixed. It carries witnesses, and `cargo xboard` puts every one to the checkers: a fixed flaw whose witness is no longer refused as it expects has regressed, an open flaw whose witnesses are all refused was shut without the ticket saying so, and either fails the run. The report then says of each part what was found in it.
+**Decision.** The board is the binary's, `src/board/`, one module per part of the judgment, and the library is what it is written in and run by: a part owns the tickets for the flaws found in it. A ticket states the day it was found and whether it is open or fixed. It carries witnesses, and `cargo xboard report` puts every one to the checkers: a fixed flaw whose witness is no longer refused as it expects has regressed, an open flaw whose witnesses are all refused was shut without the ticket saying so, and either fails the run. The report then says of each part what was found in it.
 
 **Rationale.** A flaw in the kernel of a proof assistant is not fixed and forgotten: every later change is held against every flaw already found, and the list is one a person can read and a machine runs. The fields are Rust values, so a date that does not exist does not compile, and where a ticket sits says which part it was found in, so that relation is stated once.
 
@@ -51,3 +51,11 @@ The soundness board: every flaw found in the Curios checkers, kept as something 
 **Rationale.** The elaborator refuses most forged programs while the module is still being built, so the kernel never sees them, and a ticket holding only such programs says nothing of the trusted base. Whether the kernel judged a witness is something the run observes, so the report states it rather than taking a ticket's word for which checker was at fault. The kernel is what is trusted, so every known forgery belongs before it in the end, whichever checker let it through.
 
 **Rejected.** A field saying which checker certified the flaw, and a failure where it named the kernel and no witness reached it: the field restates what the witnesses show, and nothing held it to them. Failing every ticket that does not reach the kernel, while most of the board is still programs.
+
+### A probe asks the board's question of a program on no ticket
+
+**Decision.** `cargo xboard probe <PROGRAM>` puts one program — a file, or standard input for `-` — to the checkers as a proof of `False`, exactly as the board puts a program witness, and prints what they said: the verdict in the report's words, what each checker made of it, and every refusal as a compilation prints it. It exits as a search does: 0 where the program was admitted, 1 where it was refused, 2 where it could not be put. The program is one file over the standard library, judged at the board's step budget.
+
+**Rationale.** A hunt asks of every candidate what the board asks of every witness, and before there is a ticket to write there was nowhere to ask it: a ticket is Rust, and a compilation judges a program's final term at `Io({})`, not at `False`. Asked here, the candidate is put by the function a ticket filed from it will be put by, so what the probe shows admitted is what the report then shows `OPEN`, and what it names as the refusing checker and error is what a fixed ticket expects.
+
+**Rejected.** A flag on `curios run` or a `curios wonder` query: either judges the final term at a type no build judges it at, so it answers about a compilation that would never be built, and ships a question about this tree's checkers in the product. A module built by hand on the command line: it has no spelling there, and stays a witness written in Rust.

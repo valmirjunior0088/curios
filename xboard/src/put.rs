@@ -155,7 +155,7 @@ impl Answer {
 /// Put a source program to both checkers as a proof of `False`: the elaborator, then the kernel over the module it built. The pipeline states the type; nothing here or in the program chooses it.
 ///
 /// The elaborator's erasure obligations are reported rather than raised, so a program only it refuses still yields a module for the kernel to judge. A refusal while the module is being built leaves the kernel nothing to judge.
-fn put_program(source: &str) -> Answer {
+pub(crate) fn put_program(source: &str) -> Answer {
     let entrypoint = match source.parse::<curios_text::Entrypoint>() {
         Ok(entrypoint) => entrypoint,
         Err(error) => return Answer::Unbuilt(Refusal::Text(format!("{error:?}"))),

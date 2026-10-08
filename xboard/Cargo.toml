@@ -22,3 +22,5 @@ curios-elab = { workspace = true }
 curios-pipeline = { workspace = true }
 # The registry's name for `False`, which a module built by hand is put at.
 curios-text = { workspace = true }
+# The binary's subcommands, `report` and `probe`.
+clap = { version = "4.6.1", features = ["derive"] }
