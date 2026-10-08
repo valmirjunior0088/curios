@@ -3,7 +3,7 @@
 //! A judgment — the type of a term, its reduct, whether two terms convert — reads the declarations in scope and the binders it stands under, mints the binders it opens, and spends a budget. That is everything a judgment over finished terms needs, and it is what [`Typing`] holds: the binder supply, the budget, the lexical frames, the program's registries, the memo tables over what was derived from them, the protocol by which reduction asks conversion, and the names the type-directed features emit. Nothing here says that a unit is being elaborated; what does is `Underway`'s, and a context that only reads finished terms holds that half empty.
 
 use {
-    super::{Asking, Caches, Frames, Program, Spend},
+    super::{Asking, Caches, Frames, Program, Spend, Traced},
     curios_utilities::{Entropy, SyntaxRegistry},
 };
 
@@ -22,6 +22,8 @@ pub(crate) struct Typing<'s> {
     pub(super) program: Program<'s>,
     // The protocol by which a judgment's reduction asks conversion; see [`Asking`].
     pub(super) asking: Asking,
+    // What the judgment under way asked of the declarations around it; see [`Traced`].
+    pub(super) traced: Traced,
     // The names the type-directed features synthesize — infix dispatch and row subsumption. Supplied rather than spelled: the elaborator knows *which* declaration it needs, and `curios-prelude` knows what that declaration is called. See `Context::syntax`.
     pub(super) syntax: SyntaxRegistry,
 }
@@ -36,6 +38,7 @@ impl Typing<'_> {
             frames: Frames::new(),
             program: Program::new(),
             asking: Asking::default(),
+            traced: Traced::default(),
             syntax,
         }
     }

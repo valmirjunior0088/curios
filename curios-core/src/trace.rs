@@ -21,6 +21,21 @@ impl<Q, A> Trace<Q, A> {
         self.asked.push((question, answer));
     }
 
+    /// How many questions were asked.
+    pub fn len(&self) -> usize {
+        self.asked.len()
+    }
+
+    /// Whether nothing was asked.
+    pub fn is_empty(&self) -> bool {
+        self.asked.is_empty()
+    }
+
+    /// Each question with its answer, in the order they were asked.
+    pub fn asked(&self) -> &[(Q, A)] {
+        &self.asked
+    }
+
     /// Whether every question is `answered` as it was, asked again in the order it was made: the first that is not ends the asking, since what was asked after it was asked of an answer that no longer stands.
     pub fn stands(&self, mut answered: impl FnMut(&Q, &A) -> bool) -> bool {
         self.asked

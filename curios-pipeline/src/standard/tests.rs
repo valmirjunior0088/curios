@@ -7,7 +7,9 @@ use {
         tests::test_support::{assert_stored_alike, compile_with_units},
     },
     curios_core::{DefinitionKind, Global, Item, Module},
-    curios_elab::{Context, Established, Recompile, elaborate_and_zonk_unit_over},
+    curios_elab::{
+        Answered, Context, Established, Question, Recompile, Traces, elaborate_and_zonk_unit_over,
+    },
     curios_prelude::with_prelude,
     curios_std::std_directory,
     curios_text::{Overlay, RootSource, SYNTAX, UnitSource, into_core_unit, into_core_unit_over},
@@ -152,6 +154,9 @@ fn std_unit_reproduction() {
         if stored!(first.certification()) != stored!(second.certification()) {
             differing.push("the certifier's record".to_string());
         }
+        if stored!(first.traces()) != stored!(second.traces()) {
+            differing.push("what its declarations asked".to_string());
+        }
         for (one, other) in first.core().items.iter().zip(&second.core().items) {
             if stored!(one) != stored!(other) {
                 differing.push(one.describe());
@@ -162,7 +167,8 @@ fn std_unit_reproduction() {
         println!("  items       {}", first.core().items.len());
         println!("  differing   {differing:?}");
         assert!(
-            stored!(&first) == stored!(&second),
+            stored!(&first) == stored!(&second)
+                && stored!(first.traces()) == stored!(second.traces()),
             "two compilations of the standard library store two units, differing in {differing:?}"
         );
     });
@@ -418,6 +424,7 @@ fn std_replay_census() {
                     &established,
                     Recompile {
                         baseline: whole,
+                        traces: std.traces(),
                         redone: &closure,
                         closure: &changed,
                         lowered: lowered_core,
@@ -434,7 +441,7 @@ fn std_replay_census() {
                             refusal.chars().take(600).collect::<String>()
                         );
                     }
-                    Ok(replayed) => {
+                    Ok((replayed, _)) => {
                         let differences = differences(whole, &replayed, names);
                         differing += usize::from(!differences.is_empty());
                         for difference in differences {
@@ -448,6 +455,160 @@ fn std_replay_census() {
                 declarations.len()
             );
         }
+    });
+}
+
+/// Whether each declaration of the standard library reads what its trace names and nothing else: the declaration as its sources lower it, elaborated alone against the archived unit answering for the names the declaration's trace holds and for no other of the library's, compared with what the archive holds for it, and its trace with the one the archive holds. A read no door noted meets a name nothing answers for, so its declaration is refused or comes out different; one a door noted that the archive's trace lacks shows in the trace. A measurement, so it reports rather than asserts.
+#[test]
+#[ignore = "measurement: lowers the standard library and elaborates each of its declarations alone over the archive, which answers for the names the declaration's trace holds alone, reporting the ones that come out different"]
+fn std_trace_census() {
+    with_prelude(|prelude| {
+        let [sys, std] = prelude else {
+            panic!("the prelude has two roots")
+        };
+        let roots = [*sys];
+        let predecessors = Predecessors::over(&roots);
+        let source = std_from_its_tree();
+        let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
+        let lowered =
+            into_core_unit(&unit, &predecessors.text(), &SYNTAX).expect("the library lowers");
+        let (whole, lowered_core) = (std.core(), lowered.core());
+
+        let mut dependents: BTreeMap<Global, Vec<usize>> = BTreeMap::new();
+        for (index, item) in whole.items.iter().enumerate() {
+            for name in whole.reaches(item) {
+                dependents.entry(name).or_default().push(index);
+            }
+        }
+        let position = lowered_core
+            .items
+            .iter()
+            .enumerate()
+            .flat_map(|(index, item)| {
+                item.declared_names()
+                    .into_iter()
+                    .map(move |name| (*name, index))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let every = position.keys().copied().collect::<BTreeSet<_>>();
+
+        println!("\n=== replaying each declaration of /std alone over what its trace names ===");
+        let declarations = declarations(lowered_core);
+        let (mut refused, mut differing, mut retraced, mut asked) = (0, 0, 0, 0);
+        for names in &declarations {
+            let own = names
+                .iter()
+                .filter_map(|name| position.get(name))
+                .map(|place| &lowered_core.items[*place])
+                .find(|item| {
+                    !matches!(
+                        introduced(item),
+                        DefinitionKind::InductiveConstructor { .. }
+                            | DefinitionKind::ConceptMethod { .. }
+                    )
+                })
+                .expect("a declaration holds the item it is written as");
+            let written = *own.declared_names()[0];
+            let mut closure = names.clone();
+            if matches!(
+                introduced(own),
+                DefinitionKind::InductiveType
+                    | DefinitionKind::StructType
+                    | DefinitionKind::ConceptType
+            ) {
+                closure.extend(witnesses_reaching(whole, &dependents, names));
+            }
+
+            // The archive answers for the names the traces of the declarations elaborated here hold, and for no other of the library's.
+            let mut read = BTreeSet::new();
+            for trace in closure.iter().filter_map(|name| std.traces().of(name)) {
+                for (question, answered) in trace.asked() {
+                    read.extend(question.subject().copied());
+                    if let Answered::Witness(Some(found)) = answered {
+                        read.insert(*found);
+                    }
+                    // Whether a witness is declared at a key is answered by the witnesses declared there, which the question does not name.
+                    if let Question::WitnessDeclared(concept, key) = question {
+                        read.extend(whole.witnesses.iter().copied().filter(|name| {
+                            matches!(name, Global::Witness(id) if id.spelled() == Some((*concept, *key)))
+                        }));
+                    }
+                }
+            }
+            asked += std.traces().of(&written).map_or(0, |trace| trace.len());
+            let unanswered = every
+                .difference(&read)
+                .chain(&closure)
+                .copied()
+                .collect::<BTreeSet<_>>();
+
+            let changed = lowered_core.restricted(|name| closure.contains(name));
+            let established = Established::placed(&predecessors.placed()).keeping(
+                whole,
+                std.places(),
+                &unanswered,
+            );
+            let mut context = Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
+            context.set_imports(lowered.imports().clone());
+            context.set_broken(lowered.broken_names());
+            let replayed = elaborate_and_zonk_unit_over(
+                &mut context,
+                &established,
+                Recompile {
+                    baseline: whole,
+                    traces: std.traces(),
+                    redone: &closure,
+                    closure: &changed,
+                    lowered: lowered_core,
+                },
+                lowered.minted(),
+            );
+            match replayed {
+                Err(error) => {
+                    refused += 1;
+                    let refusal = error.to_string().replace('\n', " | ");
+                    println!(
+                        "  {} is refused: {}",
+                        own.describe(),
+                        refusal.chars().take(600).collect::<String>()
+                    );
+                }
+                Ok((replayed, traces)) => {
+                    let differences = differences(whole, &replayed, names);
+                    differing += usize::from(!differences.is_empty());
+                    for difference in differences {
+                        println!("  {difference}");
+                    }
+                    let asks = |traces: &Traces| {
+                        traces
+                            .of(&written)
+                            .map_or(&[][..], |trace| trace.asked())
+                            .to_vec()
+                    };
+                    let (now, then) = (asks(&traces), asks(std.traces()));
+                    if now != then {
+                        retraced += 1;
+                        let apart = now
+                            .iter()
+                            .zip(&then)
+                            .position(|(now, then)| now != then)
+                            .unwrap_or(now.len().min(then.len()));
+                        println!(
+                            "  {}: asks {} questions for the archive's {}, apart from the {apart}th: {:?} for {:?}",
+                            own.describe(),
+                            now.len(),
+                            then.len(),
+                            now.get(apart),
+                            then.get(apart),
+                        );
+                    }
+                }
+            }
+        }
+        println!(
+            "{differing} of {} declarations differ, {refused} are refused, {retraced} ask otherwise; the library's traces hold {asked} questions",
+            declarations.len()
+        );
     });
 }
 

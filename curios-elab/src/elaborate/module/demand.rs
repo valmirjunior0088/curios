@@ -13,7 +13,7 @@ use {
         Elaborated, Holding, ItemMark, ItemStamp, Poison, Survivors, elaborate_module_item,
         withhold,
     },
-    crate::{Context, Error, GoalSite},
+    crate::{Context, Error, GoalSite, Traces},
     curios_core::{DefinitionKind, Enter, Extent, Global, Item, Module, Term},
     curios_utilities::recurse,
     std::{
@@ -57,6 +57,8 @@ pub(super) struct Demand<'a> {
     demanded: Vec<usize>,
     pub(super) poison: Poison,
     pub(super) survivors: Survivors,
+    /// What each declaration's standing attempt asked of the declarations around it.
+    pub(super) traces: Traces,
 }
 
 /// The first position written anywhere in `term`, outermost first, each node of its graph visited once.
@@ -143,6 +145,7 @@ impl<'a> Demand<'a> {
             demanded: Vec::new(),
             poison,
             survivors,
+            traces: Traces::default(),
         }
     }
 
@@ -327,6 +330,10 @@ impl<'a> Demand<'a> {
 
             let needs = context.take_needs();
             if needs.is_empty() {
+                // What the attempt that stands asked of the declarations around it is its declaration's.
+                let trace = context.take_trace();
+                curios_profile::sample!("demand::asked", trace.len());
+                self.traces.file(*names[0], trace);
                 self.poison = poison;
                 let mut holding = Vec::new();
                 for (position, outcome) in items.iter().zip(outcomes) {

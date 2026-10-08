@@ -87,7 +87,8 @@ pub fn restore_archives() -> [Stored; 2] {
                 .unwrap_or_else(|error| {
                     panic!("validated archived /{root} failed to restore: {error}")
                 })
-                .with_baseline(Cow::Borrowed(baseline)),
+                .with_baseline(Cow::Borrowed(baseline))
+                .unwrap_or_else(|error| panic!("archived /{root} holds no baseline half: {error}")),
         }
     });
 

@@ -53,13 +53,14 @@ pub fn compile_unit_over(
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
-    let core = with_broken(
+    let (core, traces) = with_broken(
         lowered.broken(),
         elaborate_and_zonk_unit_over(
             &mut context,
             &established,
             Recompile {
                 baseline: baseline.core(),
+                traces: baseline.traces(),
                 redone: &closure,
                 closure: &changed,
                 lowered: lowered.core(),
@@ -113,7 +114,7 @@ pub fn compile_unit_over(
         ))
     })?;
 
-    Ok(Uncertified::new(lowered, core.into_module(), ersd).certified(certification))
+    Ok(Uncertified::new(lowered, core.into_module(), ersd, traces).certified(certification))
 }
 
 /// [`recheck`](crate::recheck) for a unit compiled over `baseline`: the walk is handed the units in scope as its environment and the baseline's module and record whole, and adopts each of the baseline's verdicts that still stands, by the reads its own walk filed (`curios_cert::Baseline`).

@@ -62,6 +62,9 @@ pub use entailment::*;
 mod established;
 pub use established::*;
 
+mod traces;
+pub use traces::*;
+
 mod elaborate;
 pub use elaborate::*;
 

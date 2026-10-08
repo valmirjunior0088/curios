@@ -13,11 +13,11 @@ mod tests;
 use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
-        Declared, Established, GoalReport, GoalSite, Published, ScheduledTest, Zonked, body_levels,
-        check_concept_registry, check_is_sort, check_proof_totality, check_rec_item_totality,
-        check_type_totality, check_written_type_totality, compared_levels, decide_polarities,
-        definition_variances, family_levels, goal_sites, hold_variances, is_prop,
-        record_definition_totality, record_superclasses, record_variances, reduce_with,
+        Declared, Established, GoalReport, GoalSite, Published, ScheduledTest, Traces, Zonked,
+        body_levels, check_concept_registry, check_is_sort, check_proof_totality,
+        check_rec_item_totality, check_type_totality, check_written_type_totality, compared_levels,
+        decide_polarities, definition_variances, family_levels, goal_sites, hold_variances,
+        is_prop, record_definition_totality, record_superclasses, record_variances, reduce_with,
         register_witness, report_goals, sort_term, stamp_totality, state_proof_binders,
         superclass_targets, test_program_tail, zonk, zonk_arity, zonk_entry, zonk_module,
         zonk_published, zonk_solved_term_metas,
@@ -1540,6 +1540,8 @@ struct ElaboratedSuffix {
     held: Vec<Holding>,
     /// Every name an item this run produced no item for: withheld before it elaborated, refused, or held for a goal. Empty is the run that kept everything it was handed; non-empty is *not* the same fact as a non-empty `refusals`, since a withheld item reports nothing — see `recovery`.
     dropped: BTreeSet<Global>,
+    /// What each declaration that was attempted asked of the declarations around it, in the attempt that stood.
+    traces: Traces,
 }
 
 /// Elaborate a [`Module`] against an already-elaborated scope, returning what it added. Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint's body and the type it states. Returns the rebuilt suffix, its entry stating the type its body was judged at, reduced through the accumulated definitions.
@@ -1630,6 +1632,7 @@ fn elaborate_module_suffix<'s>(
     let Demand {
         poison,
         mut survivors,
+        traces,
         ..
     } = demand;
 
@@ -1759,6 +1762,7 @@ fn elaborate_module_suffix<'s>(
         obligations,
         held,
         dropped,
+        traces,
     })
 }
 
@@ -1995,14 +1999,16 @@ pub enum Tail<'a> {
 /// Sound because a scope is unit-independent: its items never see this unit's code, and — since top-level definitions are excluded from a metavariable's Γ (`Context::identity_snapshot`) — an item elaborates against the identical local context it would with no scope at all, so the solutions (and the zonked output) are identical.
 ///
 /// **The returned module holds this unit's items and no one else's.** That is a contract rather than an artifact of how the elaboration happens to be written: [`crate::erase_unit`] erases a unit *onto* what its scope already erased, and re-deriving the standard library on every compilation is exactly what carrying it here would cost.
+///
+/// Beside it comes what each of its declarations asked of the declarations around it ([`Traces`]), which a later compile of the unit keeps a declaration by.
 pub fn elaborate_and_zonk_unit<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     module: &Module,
     minted: &Minted,
-) -> Result<Module, Error> {
-    let finalized = elaborate_and_zonk(context, established, module, minted, None)?;
-    raise(finalized).map(|(module, _)| module)
+) -> Result<(Module, Traces), Error> {
+    let (finalized, traces) = elaborate_and_zonk(context, established, module, minted, None)?;
+    raise(finalized).map(|(module, _)| (module, traces))
 }
 
 /// [`elaborate_and_zonk_unit`] for a program: `module` and the term `tail` closes it with, both elaborated, zonked and checked.
@@ -2015,13 +2021,8 @@ pub fn elaborate_and_zonk_program<'s>(
     minted: &Minted,
     tail: Tail<'_>,
 ) -> Result<(Module, Option<Entrypoint>), Error> {
-    raise(elaborate_and_zonk(
-        context,
-        established,
-        module,
-        minted,
-        Some(tail),
-    )?)
+    let (finalized, _) = elaborate_and_zonk(context, established, module, minted, Some(tail))?;
+    raise(finalized)
 }
 
 /// [`elaborate_and_zonk_program`] with the erasure obligations *reported* rather than raised.
@@ -2034,11 +2035,14 @@ pub fn elaborate_and_zonk_program_reporting<'s>(
     minted: &Minted,
     tail: Tail<'_>,
 ) -> Result<FinalizedProgram, Error> {
-    let Finalized {
-        module,
-        entry,
-        obligations,
-    } = elaborate_and_zonk(context, established, module, minted, Some(tail))?;
+    let (
+        Finalized {
+            module,
+            entry,
+            obligations,
+        },
+        _,
+    ) = elaborate_and_zonk(context, established, module, minted, Some(tail))?;
 
     Ok(FinalizedProgram {
         module,
@@ -2047,14 +2051,14 @@ pub fn elaborate_and_zonk_program_reporting<'s>(
     })
 }
 
-/// The walk every unit and program is elaborated by: the items, then the term `tail` closes a program with, finalized together.
+/// The walk every unit and program is elaborated by: the items, then the term `tail` closes a program with, finalized together, with what each declaration asked beside them.
 fn elaborate_and_zonk<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     module: &Module,
     minted: &Minted,
     tail: Option<Tail<'_>>,
-) -> Result<Finalized, Error> {
+) -> Result<(Finalized, Traces), Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
     grown(|| {
         let elaborated = elaborate_module_suffix(
@@ -2083,11 +2087,14 @@ fn elaborate_and_zonk<'s>(
             obligations,
         } = finalized?;
 
-        Ok(Finalized {
-            module,
-            entry,
-            obligations,
-        })
+        Ok((
+            Finalized {
+                module,
+                entry,
+                obligations,
+            },
+            elaborated.traces,
+        ))
     })
 }
 
@@ -2096,6 +2103,8 @@ fn elaborate_and_zonk<'s>(
 /// The scope elaboration is handed holds the baseline as its last layer, answering for every declaration but those `redone` names ([`Established::keeping`]) — the caller's obligation, as it is that `redone` is closed under reverse reachability over the baseline's elaborated graph and holds every name `closure` declares. A kept declaration's cells stand as the baseline published them — its vectors, its totality — and nothing here writes one again: nothing a kept declaration read is redone, so what decided them has not moved.
 pub struct Recompile<'a> {
     pub baseline: &'a Module,
+    /// What each of the baseline's declarations asked, which a kept declaration's trace is taken from.
+    pub traces: &'a Traces,
     pub redone: &'a BTreeSet<Global>,
     pub closure: &'a Module,
     pub lowered: &'a Module,
@@ -2120,7 +2129,7 @@ pub fn elaborate_and_zonk_unit_over<'s>(
     established: &'s Established<'_>,
     recompile: Recompile<'_>,
     minted: &Minted,
-) -> Result<Module, Error> {
+) -> Result<(Module, Traces), Error> {
     curios_profile::profile!("elaborate_and_zonk_unit_over");
     grown(|| elaborate_and_zonk_unit_over_within(context, established, recompile, minted))
 }
@@ -2130,7 +2139,7 @@ fn elaborate_and_zonk_unit_over_within<'s>(
     established: &'s Established<'_>,
     recompile: Recompile<'_>,
     minted: &Minted,
-) -> Result<Module, Error> {
+) -> Result<(Module, Traces), Error> {
     let elaborated = elaborate_module_suffix(
         context,
         Some(established),
@@ -2157,13 +2166,17 @@ fn elaborate_and_zonk_unit_over_within<'s>(
     } = finalized?;
 
     let module = reassemble(&recompile, closure, &elaborated.dropped).ordered();
+    // A kept declaration asked what it asked where the baseline elaborated it, and a declaration elaborated again what it asked now.
+    let traces = recompile
+        .traces
+        .kept(|name| !recompile.redone.contains(name), elaborated.traces);
 
     raise(Finalized {
         module,
         entry: None,
         obligations,
     })
-    .map(|(module, _)| module)
+    .map(|(module, _)| (module, traces))
 }
 
 /// The reused items and the re-elaborated closure as one module, over the union of their registries. The items come out in the lowering's order, and the caller puts them in the order a module is stored in.

@@ -331,10 +331,19 @@ pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
             .expect("a baseline half serializes")
             .into_owned()
     };
+    let traces = |unit: &Unit| {
+        curios_archive::to_bytes(unit.traces())
+            .expect("a unit's traces serialize")
+            .to_vec()
+    };
     let parts = [
         (
-            "the baseline half",
+            "the text's baseline half",
             baseline(whole) == baseline(incremental),
+        ),
+        (
+            "what its declarations asked",
+            traces(whole) == traces(incremental),
         ),
         (
             "the text stage's part",

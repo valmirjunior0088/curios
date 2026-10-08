@@ -919,7 +919,7 @@ pub fn compile_unit(
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
-    let core = with_broken(
+    let (core, traces) = with_broken(
         lowered.broken(),
         elaborate_and_zonk_unit(&mut context, &established, lowered.core(), lowered.minted())
             .map_err(|error| {
@@ -959,7 +959,7 @@ pub fn compile_unit(
 
     let core = core.into_module();
 
-    Ok(Uncertified::new(lowered, core, ersd).certified(rechecked.certification))
+    Ok(Uncertified::new(lowered, core, ersd, traces).certified(rechecked.certification))
 }
 
 /// Where a judged unit is kept between compilations.

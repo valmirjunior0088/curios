@@ -2,8 +2,9 @@
 
 use {
     curios_abi::ForeignStore,
+    curios_archive::Deferred,
     curios_core::{Certification, Module, Places},
-    curios_elab::ErasedUnit,
+    curios_elab::{ErasedUnit, Traces},
     curios_text::PreparedText,
     curios_utilities::Mount,
     std::{cell::OnceCell, rc::Rc},
@@ -34,16 +35,22 @@ pub struct Uncertified {
     places: Rc<OnceCell<Places>>,
     /// What each of the unit's items erased to, in identities of its own and naming what another item binds by its name: this unit's alone, saying nothing of the units before it. Why is the crate `README.md`'s "An erased form is its item's".
     erased: Rc<ErasedUnit>,
+    /// What each of the unit's declarations asked of the declarations around it as it elaborated: what a later compile of the same sources keeps a declaration's elaboration by.
+    ///
+    /// **Of the unit's baseline half, with the text's** ([`PreparedText::baseline_bytes`]): nothing compiled after the unit reads it, so it is stored beside what the unit is for its successors and read out of its bytes when a compile over the unit first asks.
+    #[archived_with(curios_archive::Skip)]
+    traces: Rc<Deferred<Traces>>,
 }
 
 impl Uncertified {
     /// Assemble a unit from what each stage produced for it.
-    pub fn new(text: PreparedText, core: Module, erased: ErasedUnit) -> Self {
+    pub fn new(text: PreparedText, core: Module, erased: ErasedUnit, traces: Traces) -> Self {
         Self {
             text: Rc::new(text),
             core: Rc::new(core),
             places: Rc::default(),
             erased: Rc::new(erased),
+            traces: Rc::new(Deferred::held(traces)),
         }
     }
 
@@ -85,21 +92,55 @@ impl Uncertified {
         self.text.foreigns()
     }
 
+    /// What each of this unit's declarations asked as it elaborated. See the field. Read out of the unit's baseline half now, where the unit was restored and no compile over it has asked before.
+    pub fn traces(&self) -> &Traces {
+        #[cfg(feature = "archive")]
+        let traces = self
+            .traces
+            .get()
+            .unwrap_or_else(|error| panic!("a unit's traces failed to restore: {error}"));
+        #[cfg(not(feature = "archive"))]
+        let traces = self
+            .traces
+            .peek()
+            .expect("a unit that was never stored holds its traces");
+
+        traces
+    }
+
+    /// The bytes of this unit's baseline half: the text's part, then the elaborator's ([`halved`]).
+    #[cfg(feature = "archive")]
+    pub fn baseline_bytes(&self) -> Result<Vec<u8>, String> {
+        Ok(halved(&self.text.baseline_bytes()?, &self.traces.bytes()?))
+    }
+
     /// The bytes this unit is imaged as: itself, then its baseline half ([`halved`]).
     #[cfg(feature = "archive")]
     pub fn stored(&self) -> Result<Vec<u8>, String> {
         let unit = curios_archive::to_bytes(self)?;
 
-        Ok(halved(&unit, &self.text.baseline_bytes()?))
+        Ok(halved(&unit, &self.baseline_bytes()?))
     }
 
-    /// This unit with `bytes` as its baseline half, read when a lowering over the unit first asks — see [`PreparedText::with_baseline`].
+    /// This unit with `bytes` as its baseline half ([`Uncertified::baseline_bytes`]), each part read when a compile over the unit first asks — see [`PreparedText::with_baseline`]. `Err` is bytes that hold no baseline half.
     #[cfg(feature = "archive")]
-    pub fn with_baseline(self, bytes: Cow<'static, [u8]>) -> Self {
-        Self {
-            text: Rc::new(Rc::unwrap_or_clone(self.text).with_baseline(bytes)),
+    pub fn with_baseline(self, bytes: Cow<'static, [u8]>) -> Result<Self, String> {
+        let (text, traces) = match bytes {
+            Cow::Borrowed(bytes) => {
+                let (text, traces) = halves(bytes).ok_or("not a unit's baseline half")?;
+                (Cow::Borrowed(text), Cow::Borrowed(traces))
+            }
+            Cow::Owned(bytes) => {
+                let (text, traces) = halves(&bytes).ok_or("not a unit's baseline half")?;
+                (Cow::Owned(text.to_vec()), Cow::Owned(traces.to_vec()))
+            }
+        };
+
+        Ok(Self {
+            text: Rc::new(Rc::unwrap_or_clone(self.text).with_baseline(text)),
+            traces: Rc::new(Deferred::stored(traces)),
             ..self
-        }
+        })
     }
 
     /// This unit with its elaborated module hash-consed in a table of its own — what [`Unit::stored`] serializes. The lowered module is left as it was built, since a lint and a report are located in it.
@@ -110,6 +151,7 @@ impl Uncertified {
             core: Rc::new(self.core.shared(&Sharing::new())),
             places: Rc::default(),
             erased: Rc::clone(&self.erased),
+            traces: Rc::clone(&self.traces),
         }
     }
 }
@@ -163,6 +205,17 @@ impl Unit {
         self.unit.foreigns()
     }
 
+    /// See [`Uncertified::traces`].
+    pub fn traces(&self) -> &Traces {
+        self.unit.traces()
+    }
+
+    /// See [`Uncertified::baseline_bytes`].
+    #[cfg(feature = "archive")]
+    pub fn baseline_bytes(&self) -> Result<Vec<u8>, String> {
+        self.unit.baseline_bytes()
+    }
+
     /// The bytes this unit is stored as: itself, its elaborated module hash-consed in a table of its own ([`Module::shared`]), then its baseline half ([`halved`]).
     ///
     /// **A stored unit says what its items mean, not where they were written or how they were come by.** A consed module is one node for each structure as it is spelled, under no position, so an item elaborated now and the same item reused from a baseline are the same nodes, and one moved by an edit above it is stored as it was. The fixed prelude's images are consed by the same pass, where they are built.
@@ -175,7 +228,7 @@ impl Unit {
             certification: Rc::clone(&self.certification),
         })?;
 
-        Ok(halved(&unit, &self.text().baseline_bytes()?))
+        Ok(halved(&unit, &self.baseline_bytes()?))
     }
 
     /// The unit stored as `artifact` ([`Unit::stored`]): decoded, its baseline half kept as the bytes it is, for the lowering that asks. `Err` is bytes that hold no unit.
@@ -185,7 +238,7 @@ impl Unit {
         let restored = curios_archive::from_bytes::<Unit>(unit)?;
 
         Ok(Self {
-            unit: restored.unit.with_baseline(Cow::Owned(baseline.to_vec())),
+            unit: restored.unit.with_baseline(Cow::Owned(baseline.to_vec()))?,
             certification: restored.certification,
         })
     }

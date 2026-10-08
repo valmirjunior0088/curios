@@ -123,7 +123,7 @@ fn archive(
         };
         panic!("/{root} failed to parse: {parsed}{elaboration}");
     }
-    let core = elaborated.unwrap_or_else(|error| {
+    let (core, traces) = elaborated.unwrap_or_else(|error| {
         panic!(
             "/{root} failed to elaborate: {}",
             error.format_with(&lowered, predecessors, &SYNTAX, &[prepared.anchors()])
@@ -175,7 +175,7 @@ fn archive(
     );
 
     // Uncertified: no certifier can walk it from here. `curios-prelude`'s build files its record, and that crate certifies the unit as it restores it.
-    Uncertified::new(prepared, core, ersd)
+    Uncertified::new(prepared, core, ersd, traces)
 }
 
 /// Serialize one uncertified unit to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and `predecessors`, ahead of it — serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the unit's digest, which is what the next root's record names it by.

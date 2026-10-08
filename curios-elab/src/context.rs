@@ -31,6 +31,9 @@ pub(crate) use posture::*;
 mod program;
 pub(crate) use program::*;
 
+mod traced;
+pub use traced::*;
+
 mod retyping;
 pub(crate) use retyping::*;
 
@@ -63,9 +66,9 @@ use {
         Advance, Bound, ConceptDecl, Consumption, Cost, Definition, DefinitionKind, Extent, Free,
         FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports, InductDecl, Item, Level,
         Metavar, MetavarId, MetavarOrigin, Minted, Mints, Probe, RecGroup, ReduceError, StructDecl,
-        Subterm, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseError, UniverseMetaId, UniverseRole, Variance, WitnessKey, WitnessOrigin,
-        instantiate_universe_levels_scoped,
+        Subterm, Term, Totality, Trace, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseError, UniverseMetaId, UniverseRole, Variance, WitnessKey,
+        WitnessOrigin, instantiate_universe_levels_scoped,
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -325,7 +328,20 @@ impl<'s> Context<'s> {
     /// Begin an attempt at the declaration declaring `names`, with nothing needed yet and in a state of its own ([`Context::begin_state`]).
     pub(crate) fn attempt(&mut self, names: &[&Global]) {
         self.underway.needs.attempt(names);
+        self.typing.traced.begin(names);
         self.begin_state();
+    }
+
+    /// What the attempt under way asked of the declarations around it, taken: its trace, which is its declaration's where the attempt stands.
+    pub(crate) fn take_trace(&mut self) -> Trace<Question, Answered> {
+        self.typing.traced.take()
+    }
+
+    /// Note that the judgment under way asked `question` of the declaration `name` names, where `name` is a declaration's and not a binder's: the part asked is the declaration's to hold.
+    fn asks(&self, name: &Free, question: fn(Global) -> Question) {
+        if let Free::Global(global) = name {
+            self.typing.traced.note(question(*global), Answered::Part);
+        }
     }
 
     /// Replace what one declaration's elaboration mints and solves with a state no other declaration wrote: its binder identities, its metavariables and their solutions, and its universe levels with the solver that settles them, each counting from what the declaration's own lowering minted ([`Minted`]). What a declaration elaborates to then follows nothing of the declarations elaborated before it — neither how many there were nor what they left solved — and the identities it mints are the ones it would mint elaborated alone. Every other declaration is read as it was published ([`Context::publish`]), which holds none of these.
@@ -515,13 +531,20 @@ impl<'s> Context<'s> {
 
     /// Whether a proof the elaborator writes for the declaration being elaborated may apply `name`. A name another unit declares is applied wherever it is in scope. A name this unit declares is one of the prover's vocabulary, which the unit's walk elaborates before anything else, with every declaration it reads, and offers only from then on: so the vocabulary and what it reads are proved without it, every other declaration finds all of it elaborated, and what a declaration's proof is built from follows what the vocabulary reads, never where either is written or which of them was asked for first. A lemma that is on offer and not in scope was refused, and is applied by nothing.
     pub(crate) fn proof_may_apply(&self, name: &Global) -> bool {
+        self.asks(&Free::Global(*name), Question::Signature);
         let assumed = self
             .typing
             .frames
             .assumption(&Free::Global(*name))
             .is_some();
+        let own = self.underway.order.contains_key(name);
+        if own {
+            self.typing
+                .traced
+                .note(Question::Lemmas, Answered::Whether(self.underway.offering));
+        }
 
-        assumed && (self.underway.offering || !self.underway.order.contains_key(name))
+        assumed && (self.underway.offering || !own)
     }
 
     /// Name the declarations a lowering could not read. Their dependents are withheld from elaboration before the first item is checked, so a parse failure in one declaration reports as that declaration's and nothing else's.
@@ -540,6 +563,7 @@ impl<'s> Context<'s> {
     }
 
     pub(crate) fn definition_totality(&self, name: &Global) -> Option<Totality> {
+        self.asks(&Free::Global(*name), Question::Totality);
         self.typing.program.definition_totality(name)
     }
 
@@ -557,6 +581,7 @@ impl<'s> Context<'s> {
     }
 
     pub(crate) fn definition_variances(&self, name: &Global) -> Option<(&[Variance], usize)> {
+        self.asks(&Free::Global(*name), Question::Variances);
         self.typing.program.definition_variances(name)
     }
 
@@ -971,6 +996,7 @@ impl<'s> Context<'s> {
 
     /// The type `name` is assumed at. A miss on a name whose declaration has not finished is recorded as what the attempt needs ([`Context::need`]).
     pub(crate) fn assumption(&self, name: &Free) -> Option<&Term> {
+        self.asks(name, Question::Signature);
         let assumed = self.typing.frames.assumption(name);
         if assumed.is_none() {
             self.missed(name);
@@ -984,9 +1010,14 @@ impl<'s> Context<'s> {
         self.typing.frames.rec_definitions()
     }
 
-    /// [`Frames::member_names`]: the globals `group`'s members are defined under, in member order.
+    /// [`Frames::member_names`]: the globals `group`'s members are defined under, in member order. A group is its members' bodies, so a judgment told which names one goes by has read the body of each.
     pub(crate) fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {
-        self.typing.frames.member_names(group)
+        let names = self.typing.frames.member_names(group);
+        for name in names.iter().flatten() {
+            self.asks(&Free::Global(*name), Question::Body);
+        }
+
+        names
     }
 
     /// Remember that `instance` is `group` opened at `levels`, for the declaration in progress: reduction's own record, read back by [`Context::instance_of`].
@@ -1256,6 +1287,7 @@ impl<'s> Context<'s> {
     }
 
     pub(crate) fn definition_kind(&self, name: &Free) -> Option<&DefinitionKind> {
+        self.asks(name, Question::Kind);
         self.typing.frames.definition_kind(name)
     }
 
@@ -1381,6 +1413,7 @@ impl<'s> Context<'s> {
 
     /// [`Frames::definition_body`], and a need where the body is missing because its declaration has not finished ([`Context::missed`]): a reduction that asks for one would otherwise go stuck on a name that only has no body yet, and the attempt would be judged on a term it could have reduced.
     pub(crate) fn definition_body(&self, name: &Free) -> Option<&Term> {
+        self.asks(name, Question::Body);
         let body = self.typing.frames.definition_body(name);
         if body.is_none() {
             self.missed(name);
@@ -1391,6 +1424,7 @@ impl<'s> Context<'s> {
 
     /// [`Frames::var_reduct`], and a need as [`Context::definition_body`] records one.
     pub(crate) fn var_reduct(&self, name: &Free) -> Option<&Term> {
+        self.asks(name, Question::Body);
         let reduct = self.typing.frames.var_reduct(name);
         if reduct.is_none() {
             self.missed(name);
@@ -1401,6 +1435,7 @@ impl<'s> Context<'s> {
 
     /// [`Frames::var_reduct_at`], and a need as [`Context::definition_body`] records one.
     pub(crate) fn var_reduct_at(&self, name: &Free) -> Option<&Term> {
+        self.asks(name, Question::Body);
         let reduct = self.typing.frames.var_reduct_at(name);
         if reduct.is_none() {
             self.missed(name);
@@ -1624,6 +1659,7 @@ impl<'s> Context<'s> {
     }
 
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
+        self.asks(&Free::Global(*name), Question::Induct);
         self.reads_entry(name);
         self.typing.program.induct_decl(name)
     }
@@ -1641,6 +1677,7 @@ impl<'s> Context<'s> {
     }
 
     pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
+        self.asks(&Free::Global(*name), Question::Struct);
         self.reads_entry(name);
         self.typing.program.struct_decl(name)
     }
@@ -1654,6 +1691,7 @@ impl<'s> Context<'s> {
     }
 
     pub(crate) fn concept(&self, name: &Global) -> Option<&ConceptDecl> {
+        self.asks(&Free::Global(*name), Question::Concept);
         self.reads_entry(name);
         self.typing.program.concept(name)
     }
@@ -1693,7 +1731,15 @@ impl<'s> Context<'s> {
     }
 
     pub(crate) fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<Witness> {
-        self.typing.program.witness(concept, key)
+        let found = self.typing.program.witness(concept, key);
+        let question = Question::Witness(*concept, *key);
+        // Asked after the answer is in hand, and so under a second lookup only the first time a key is asked.
+        if !self.typing.traced.noted(question) {
+            let name = found.as_ref().map(|witness| witness.name);
+            self.typing.traced.note(question, Answered::Witness(name));
+        }
+
+        found
     }
 
     /// [`DeclaredWitnesses::declare`].
@@ -1715,8 +1761,14 @@ impl<'s> Context<'s> {
 
     /// Whether a witness stands under `(concept, key)`: one registered, or one the unit declares there and has not elaborated. A question of membership, answered the same whichever witnesses have elaborated.
     pub(crate) fn witness_declared(&self, concept: &Global, key: &WitnessKey) -> bool {
-        self.typing.program.witness_registered(concept, key)
-            || self.underway.witnesses.at(concept, key).is_some()
+        let declared = self.typing.program.witness_registered(concept, key)
+            || self.underway.witnesses.at(concept, key).is_some();
+        self.typing.traced.note(
+            Question::WitnessDeclared(*concept, *key),
+            Answered::Whether(declared),
+        );
+
+        declared
     }
 
     /// Whether the table's miss at `(concept, key)` is a witness the unit declares there and has not elaborated: the attempt needs it, and is void. `false` is a miss no other declaration answers — the one being attempted registers on its signature, so a miss on its own key is its signature asking for itself.
@@ -1959,7 +2011,9 @@ impl<'s> Context<'s> {
         self.solve_metavar(id, term);
     }
 
+    /// [`Frames::is_top_level`]: whether `name` is a declaration's, bound wherever a solution may stand. That a declaration is there at all is its signature's to say, so the question is noted as one about it: a candidate a solver admits for naming a declaration is another candidate once the declaration is gone.
     pub(crate) fn is_top_level(&self, name: &Free) -> bool {
+        self.asks(name, Question::Signature);
         self.typing.frames.is_top_level(name)
     }
 
