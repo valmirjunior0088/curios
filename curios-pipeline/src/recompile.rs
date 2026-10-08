@@ -2,7 +2,7 @@
 //!
 //! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its items are elaborated and erased again is this module's closure, and which of its verdicts stand is not: the kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed, so a closure that stopped one edge short costs a judgment and admits nothing ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). The closure is transitive all the same — conversion unfolds bodies, so a dependent's elaboration reaches through what it names — since an item it leaves out is stored as the baseline elaborated it.
 //!
-//! **The diff is over lowered items, modulo what a lowering mints.** A lowering numbers every written `Type` and every elided annotation from zero for each declaration, so a declaration its text leaves alone carries the ids it carried whatever was written around it, and an edit inside one renumbers that one alone; [`Term::equal_modulo_metas`] pairs the ids by position, which is how an edited declaration whose edit only shifted them is still found unchanged. Everything else compares exactly, extents excepted, so a moved declaration is not a change — and a renamed parameter is one: a binder's name is in what is stored, the item's own and every dependent's that was handed its signature, so an item reused under the old name would be another unit than a whole compile's.
+//! **The diff is over the declarations lowered again, modulo what a lowering mints.** A declaration the lowering kept from the baseline is the baseline's, and is not compared (`PreparedText::kept_from`). A lowering numbers every written `Type` and every elided annotation from zero for each declaration, so a declaration its text leaves alone carries the ids it carried whatever was written around it, and an edit inside one renumbers that one alone; [`Term::equal_modulo_metas`] pairs the ids by position, which is how an edited declaration whose edit only shifted them is still found unchanged. Everything else compares exactly, extents excepted, so a moved declaration is not a change — and a renamed parameter is one: a binder's name is in what is stored, the item's own and every dependent's that was handed its signature, so an item reused under the old name would be another unit than a whole compile's.
 
 use {
     crate::{CompileError, anchors_of, globals, kernel_refusal, with_broken},
@@ -14,7 +14,7 @@ use {
     curios_elab::{
         Context, Erasures, Established, Recompile, elaborate_and_zonk_unit_over, erase_unit_over,
     },
-    curios_text::{UnitSource, into_core_unit_over},
+    curios_text::{PreparedText, UnitSource, into_core_unit_over},
     curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::{SyntaxRegistry, grown},
     std::{
@@ -40,7 +40,7 @@ pub fn compile_unit_over(
     let mut lowered = into_core_unit_over(source, &text, syntax, baseline.text())
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
-    let closure = invalidated(baseline, lowered.core());
+    let closure = invalidated(baseline, &lowered);
     // The seeds are the new lowering's, handed to elaboration with its counts.
     let changed = lowered.core().restricted(|name| closure.contains(name));
 
@@ -139,21 +139,22 @@ pub(crate) fn recheck_over(
     )
 }
 
-/// The names the new text invalidates: every declared name whose lowered item differs from the baseline's modulo the identities lowering mints, every registry key whose entry differs, every name only one side declares, and every name whose witness or test membership moved — closed backwards over the baseline's elaborated graph.
-pub(crate) fn invalidated(baseline: &Unit, lowered: &Module) -> BTreeSet<Global> {
+/// The names the new text invalidates: every declared name whose item was lowered again and differs from the baseline's modulo the identities lowering mints, every registry key whose entry differs, every name only one side declares, and every name whose witness or test membership moved — closed backwards over the baseline's elaborated graph.
+pub(crate) fn invalidated(baseline: &Unit, lowered: &PreparedText) -> BTreeSet<Global> {
     grown(|| invalidated_within(baseline, lowered))
 }
 
-fn invalidated_within(baseline: &Unit, lowered: &Module) -> BTreeSet<Global> {
-    let seeds = changed_names(baseline.text().core(), lowered);
+fn invalidated_within(baseline: &Unit, lowered: &PreparedText) -> BTreeSet<Global> {
+    let kept = lowered.kept_from(baseline.text());
+    let seeds = changed_names(baseline.text().core(), lowered.core(), &kept);
 
     reverse_closure(baseline.core(), seeds)
 }
 
-/// The names an edit changed, read off the two lowered modules; see [`invalidated`].
+/// The names an edit changed, read off the two lowered modules; see [`invalidated`]. `kept` are the names whose lowering is the baseline's own, which stand without being read.
 ///
-/// Items are paired by their first declared name, and a pair is unchanged when it declares the same names, agrees on every scalar field and has every term position equal modulo one renaming — so a metavariable shared between an item's type and body is shared on both sides. A mount that moved invalidates everything, since every name's spelling depends on it.
-fn changed_names(before: &Module, after: &Module) -> BTreeSet<Global> {
+/// Items are paired by their first declared name, and a pair is unchanged when it is kept, or declares the same names, agrees on every scalar field and has every term position equal modulo one renaming — so a metavariable shared between an item's type and body is shared on both sides. A mount that moved invalidates everything, since every name's spelling depends on it.
+fn changed_names(before: &Module, after: &Module, kept: &BTreeSet<Global>) -> BTreeSet<Global> {
     if before.mounts != after.mounts {
         return declared(before).union(&declared(after)).cloned().collect();
     }
@@ -163,7 +164,7 @@ fn changed_names(before: &Module, after: &Module) -> BTreeSet<Global> {
 
     for (name, item) in &those {
         match these.get(name) {
-            Some(previous) if item_unchanged(previous, item) => {}
+            Some(previous) if kept.contains(name) || item_unchanged(previous, item) => {}
             _ => changed.extend(item.declared_names().into_iter().cloned()),
         }
     }
@@ -176,16 +177,19 @@ fn changed_names(before: &Module, after: &Module) -> BTreeSet<Global> {
     changed.extend(entries_changed(
         &before.induct_decls,
         &after.induct_decls,
+        kept,
         induct_unchanged,
     ));
     changed.extend(entries_changed(
         &before.struct_decls,
         &after.struct_decls,
+        kept,
         struct_unchanged,
     ));
     changed.extend(entries_changed(
         &before.concepts,
         &after.concepts,
+        kept,
         concept_unchanged,
     ));
     changed.extend(
@@ -261,17 +265,18 @@ fn by_name(module: &Module) -> BTreeMap<Global, &Item> {
         .collect()
 }
 
-/// The keys on either side whose entries are not `unchanged`, or that only one side holds.
+/// The keys on either side whose entries are not `unchanged`, or that only one side holds. A key of `kept` is a kept declaration's, whose entry is the baseline's own.
 fn entries_changed<'a, D>(
     before: &'a BTreeMap<Global, D>,
     after: &'a BTreeMap<Global, D>,
+    kept: &'a BTreeSet<Global>,
     unchanged: impl Fn(&D, &D) -> bool + 'a,
 ) -> impl Iterator<Item = Global> + 'a {
     before
         .keys()
         .chain(after.keys())
         .filter(move |name| match (before.get(*name), after.get(*name)) {
-            (Some(this), Some(that)) => !unchanged(this, that),
+            (Some(this), Some(that)) => !kept.contains(*name) && !unchanged(this, that),
             _ => true,
         })
         .cloned()

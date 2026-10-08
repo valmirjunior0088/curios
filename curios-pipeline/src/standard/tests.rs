@@ -10,7 +10,7 @@ use {
     curios_elab::{Context, Established, Recompile, elaborate_and_zonk_unit_over},
     curios_prelude::with_prelude,
     curios_std::std_directory,
-    curios_text::{Overlay, RootSource, SYNTAX, UnitSource, into_core_unit},
+    curios_text::{Overlay, RootSource, SYNTAX, UnitSource, into_core_unit, into_core_unit_over},
     curios_unit::{Predecessors, Unit},
     curios_utilities::{Qualifier, RootKind, test_support::Temporary},
     std::{
@@ -90,11 +90,11 @@ fn std_recompile_closure_census() {
             let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
             let start = Instant::now();
-            let lowered = into_core_unit(&unit, &predecessors.text(), &SYNTAX)
+            let lowered = into_core_unit_over(&unit, &predecessors.text(), &SYNTAX, std.text())
                 .expect("the edited library lowers");
             let lowered_in = start.elapsed();
             let start = Instant::now();
-            let closure = invalidated(std, lowered.core());
+            let closure = invalidated(std, &lowered);
             let diffed_in = start.elapsed();
             let start = Instant::now();
             compile_unit_over(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit, std)

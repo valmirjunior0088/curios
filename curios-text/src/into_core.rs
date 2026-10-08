@@ -365,6 +365,36 @@ impl PreparedText {
         &self.unbound
     }
 
+    /// The names this unit declares by a lowering it took from `baseline` whole: each one's item is the baseline's own under the same name, with the registry entries the baseline holds for it. What a recompile has no need to compare.
+    ///
+    /// **By the record, never by the text.** A declaration is the baseline's where this unit holds the very record the baseline does, which only a kept lowering leaves behind; and under the same name, since a kept witness is named anew and may take the name another held.
+    pub fn kept_from(&self, baseline: &PreparedText) -> BTreeSet<curios_core::Global> {
+        let mut held = HashMap::with_capacity(baseline.declarations.len());
+        let mut first = 0;
+        for declaration in &baseline.declarations {
+            held.insert(Rc::as_ptr(declaration), first);
+            first += declaration.facts().len();
+        }
+
+        let mut kept = BTreeSet::new();
+        let mut first = 0;
+        for declaration in &self.declarations {
+            let count = declaration.facts().len();
+            if let Some(&from) = held.get(&Rc::as_ptr(declaration)) {
+                let ours = &self.core.items[first..first + count];
+                let theirs = &baseline.core.items[from..from + count];
+                for (ours, theirs) in ours.iter().zip(theirs) {
+                    if ours.declared_names() == theirs.declared_names() {
+                        kept.extend(ours.declared_names().into_iter().copied());
+                    }
+                }
+            }
+            first += count;
+        }
+
+        kept
+    }
+
     /// What each `use` brought into scope, where, and under which spelling — the table `curios-elab`'s goal suggestions draw imported candidates from and spell them by.
     pub fn imports(&self) -> &curios_core::Imports {
         &self.imports
