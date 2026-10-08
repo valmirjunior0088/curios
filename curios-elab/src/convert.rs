@@ -99,7 +99,7 @@ pub(crate) fn convert(
     ))
 }
 
-/// Whether `this` and `that` convert at `Type` with no solution and no universe constraint committed: the comparison runs in the bracket a witness probe uses and is rolled back whatever it found, so a pair that would need a metavariable solved is not one, and asking commits nothing. A weak equation the comparison recorded is no commitment: it requires nothing of its two levels, a nominal family being irrelevant in them, and it goes with the bracket. What a classing asks of two atoms (`intrinsic`'s `classes`), and what reduction asks of two stuck forms (`reduce`'s `asked_classes` and `asked_scrutinee`).
+/// Whether `this` and `that` convert at `Type` with no solution and no universe constraint committed: the comparison runs in the bracket a witness probe uses and is rolled back whatever it found, so a pair that would need a metavariable solved is not one, and asking commits nothing. Nor is a level equation tried: two levels the store does not already read as one are withheld ([`Context::withholds`]), so the step that would have joined them does not hold and the pair is read by its value, as the kernel reads two instances it finds apart, by unfolding. Two occurrences of one definition, each at an open level of its own that the value does not read, are one term here whatever the two levels close at. A weak equation the comparison recorded is no commitment: it requires nothing of its two levels, a nominal family being irrelevant in them, and it goes with the bracket. What a classing asks of two atoms (`intrinsic`'s `classes`), and what reduction asks of two stuck forms (`reduce`'s `asked_classes` and `asked_scrutinee`).
 pub(crate) fn same_uncommitted(
     context: &mut Context,
     this: &Term,
@@ -109,7 +109,9 @@ pub(crate) fn same_uncommitted(
     let mark = context.solution_mark();
     let solutions = context.solutions_committed();
     let universes = context.universes().state_token();
+    let outer = context.withhold(Some(false));
     let converts = convert(context, &Term::type_ground(), this, that);
+    let withheld = context.withhold(outer) == Some(true);
     let committed = context.solutions_committed() != solutions
         || !context
             .universes()
@@ -119,7 +121,8 @@ pub(crate) fn same_uncommitted(
     context.end_solutions(mark);
     // How many pairs were asked about, and how many of them a solution or a level constraint stood between: an answer of the second kind can change once the solver moves, so whatever reduction is in progress remembers nothing taken across it.
     curios_profile::sample!("convert::same_uncommitted", u64::from(committed));
-    if committed {
+    // An answer other than yes reached past a withheld level equation can change the same way; a yes reached past one holds at every level.
+    if committed || (withheld && !matches!(converts, Ok(true))) {
         context.note_declined();
     }
     Ok(converts? && !committed)
@@ -281,6 +284,27 @@ pub(crate) struct Convert {
 }
 
 impl Convert {
+    /// Commit `left` and `right` equal, as conversion holds two instances or two sorts one, answering whether they are held. A question asked with nothing committed joins no two levels ([`Context::withholds`]), so there a pair the store does not already read as one is not held, and the step that needed it does not hold: the reduced comparison after a spine and the structural path after the levels-only shortcut read the pair by its value.
+    fn join_levels(
+        context: &mut Context,
+        left: &Level,
+        right: &Level,
+    ) -> Result<bool, ReduceError> {
+        if context.withholds(left, right)? {
+            return Ok(false);
+        }
+        context
+            .universes_mut()
+            .add_eq(
+                left.clone(),
+                right.clone(),
+                UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+            )
+            .map_err(ReduceError::Universe)?;
+
+        Ok(true)
+    }
+
     fn compare_levels(
         context: &mut Context,
         left: &[Level],
@@ -290,14 +314,9 @@ impl Convert {
             return Ok(false);
         }
         for (left, right) in left.iter().zip(right) {
-            context
-                .universes_mut()
-                .add_eq(
-                    left.clone(),
-                    right.clone(),
-                    UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
-                )
-                .map_err(ReduceError::Universe)?;
+            if !Self::join_levels(context, left, right)? {
+                return Ok(false);
+            }
         }
         Ok(true)
     }
@@ -319,14 +338,9 @@ impl Convert {
                     .add_weak_eq(left.clone(), right.clone());
                 continue;
             }
-            context
-                .universes_mut()
-                .add_eq(
-                    left.clone(),
-                    right.clone(),
-                    UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
-                )
-                .map_err(ReduceError::Universe)?;
+            if !Self::join_levels(context, left, right)? {
+                return Ok(false);
+            }
         }
         Ok(true)
     }
@@ -2435,7 +2449,8 @@ impl Convert {
                     }
                     Identification::Distinct
                     | Identification::GroundUnequal
-                    | Identification::UnderBinder => {}
+                    | Identification::UnderBinder
+                    | Identification::Withheld => {}
                 }
             }
 
@@ -2577,7 +2592,7 @@ impl Convert {
                     LevelQuestion::Identified
                     | LevelQuestion::UnderBinder
                     | LevelQuestion::Distinct => continue,
-                    LevelQuestion::GroundUnequal => return Ok(false),
+                    LevelQuestion::GroundUnequal | LevelQuestion::Withheld => return Ok(false),
                     // Parked under the raw spelling, which is what names the metavariables a wake must watch; the reduced key leaves the history so the retry is compared rather than assumed.
                     LevelQuestion::Blocked => {
                         self.history.remove(&key);
@@ -2650,15 +2665,7 @@ impl Convert {
                 }
                 (Subterm::Type(this), Subterm::Type(that))
                 | (Subterm::Prop(this), Subterm::Prop(that)) => {
-                    context
-                        .universes_mut()
-                        .add_eq(
-                            this,
-                            that,
-                            UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
-                        )
-                        .map_err(ReduceError::Universe)?;
-                    true
+                    Self::join_levels(context, &this, &that)?
                 }
                 (Subterm::Instance(this), Subterm::Instance(that)) => {
                     if !Self::compare_levels(context, &this.levels, &that.levels)? {
@@ -2726,7 +2733,11 @@ impl Convert {
                         }
                         _ if matches!(
                             instances,
-                            Some(LevelQuestion::GroundUnequal | LevelQuestion::UnderBinder)
+                            Some(
+                                LevelQuestion::GroundUnequal
+                                    | LevelQuestion::UnderBinder
+                                    | LevelQuestion::Withheld
+                            )
                         ) =>
                         {
                             false
@@ -2817,7 +2828,9 @@ impl Convert {
                             let that_term: Term = Subterm::Rec(that.clone()).into();
                             match level_question(context, &this_term, &that_term)? {
                                 LevelQuestion::Identified => true,
-                                LevelQuestion::GroundUnequal | LevelQuestion::UnderBinder => false,
+                                LevelQuestion::GroundUnequal
+                                | LevelQuestion::UnderBinder
+                                | LevelQuestion::Withheld => false,
                                 LevelQuestion::Blocked => {
                                     self.history.remove(&key);
                                     self.blocked.push(raw_problem(&type_));
@@ -3086,17 +3099,18 @@ fn declared_at(
         .map_err(ReduceError::Universe)
 }
 
-/// What a pair of sides is as a level question, once the term metavariables already solved are materialized: [`Identification`]'s four verdicts, plus a pair that could still become a level question once its remaining metavariables are solved.
+/// What a pair of sides is as a level question, once the term metavariables already solved are materialized: [`Identification`]'s five verdicts, plus a pair that could still become a level question once its remaining metavariables are solved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LevelQuestion {
     Identified,
     GroundUnequal,
     UnderBinder,
+    Withheld,
     Blocked,
     Distinct,
 }
 
-/// Classify a pair whose levels no sibling problem will surface — two projections of one `rec` group at an applied head, or a problem the history already holds. The levels inside the two groups are decided here rather than by the walk: identified when the sides differ in nothing else, refused when two of them are unequal ground levels, parked when an unsolved metavariable is all that keeps the skeletons apart, and left to the caller only when the sides genuinely differ in structure — the cycle the coinductive rule is for, or two groups the delta step may still relate. No type directs the pair from here, so a curried head keeps every level ([`Curried::Compared`]).
+/// Classify a pair whose levels no sibling problem will surface — two projections of one `rec` group at an applied head, or a problem the history already holds. The levels inside the two groups are decided here rather than by the walk: identified when the sides differ in nothing else, refused when two of them are unequal ground levels or are withheld, a group's member reproducing its levels under every unfolding so that no value decides the pair past them, parked when an unsolved metavariable is all that keeps the skeletons apart, and left to the caller only when the sides genuinely differ in structure — the cycle the coinductive rule is for, or two groups the delta step may still relate. No type directs the pair from here, so a curried head keeps every level ([`Curried::Compared`]).
 fn level_question(
     context: &mut Context,
     this: &Term,
@@ -3109,6 +3123,7 @@ fn level_question(
         Identification::Identified => return Ok(LevelQuestion::Identified),
         Identification::GroundUnequal => return Ok(LevelQuestion::GroundUnequal),
         Identification::UnderBinder => return Ok(LevelQuestion::UnderBinder),
+        Identification::Withheld => return Ok(LevelQuestion::Withheld),
         // No curried pair is set apart under the reading asked for, so the second is never answered.
         Identification::Distinct | Identification::Curried(_) => {}
     }

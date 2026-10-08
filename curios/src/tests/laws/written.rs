@@ -192,6 +192,10 @@ const ATOMS_HELD: &[&str] = &[
     "Eq()(2 * (f(a + b) / 2) + f(a + b) % 2, f(b + a))",
     "Eq()(2 * (f(a + b) / 2) + f(b + a) % 2 <= f(a + b), true)",
     "Eq()(+2 * (h(i + j) / +2) + h(j + i) % +2, h(i + j))",
+    // Two atoms one by conversion alone, each holding a quotient or a remainder written apart from the other's. A written `/` takes a universe level of its own, the level of the precondition its concept states, which the quotient's value does not read; a checker asked whether the two atoms are one joins no two levels, and holds the two quotients one by what each reduces to.
+    "Eq()((match n | 0 => a + b | _ => c / 2 end) + (match m | 0 => c + d | _ => a % 2 end), (match m | 0 => d + c | _ => a % 2 end) + (match n | 0 => b + a | _ => c / 2 end))",
+    "Eq()((match n | 0 => a + b | _ => c / 2 end) == (match m | 0 => c + d | _ => a % 2 end), (match m | 0 => d + c | _ => a % 2 end) == (match n | 0 => b + a | _ => c / 2 end))",
+    "Eq()((match n | 0 => a + b | _ => c / 2 end) - (match n | 0 => b + a | _ => c / 2 end), 0)",
     // A float's sum, product, `min` and `max`, and a fused multiply-add's two factors with its addend in place, pair their operands by identity as every symmetric reader does; a difference is the sum it is spelled as.
     "Eq()(r(a + b) + s(c + d), s(d + c) + r(b + a))",
     "Eq()(r(a + b) * s(c + d), s(d + c) * r(b + a))",

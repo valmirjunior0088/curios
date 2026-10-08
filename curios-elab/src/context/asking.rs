@@ -1,6 +1,6 @@
 //! The questions a judgment's reduction puts to conversion.
 //!
-//! Reduction is plain or it asks. At a stuck fold or a missed equation it may put a question to the elaborator's conversion, whose answer rests on the solutions and the level constraints that stand; a question reduction puts to conversion is itself answered by plain reduction, which is what ends the regress, and a shared analysis reads a term plainly too, since totality may rest on no verdict of conversion's. [`Asking`] is the state of that protocol: whether reduction is plain now, the two atoms a classing is asking about, and the counts a remembered reduct is held against.
+//! Reduction is plain or it asks. At a stuck fold or a missed equation it may put a question to the elaborator's conversion, whose answer rests on the solutions and the level constraints that stand; a question reduction puts to conversion is itself answered by plain reduction, which is what ends the regress, and a shared analysis reads a term plainly too, since totality may rest on no verdict of conversion's. [`Asking`] is the state of that protocol: whether reduction is plain now, the two atoms a classing is asking about, whether conversion is answering a question with nothing committed, and the counts a remembered reduct is held against.
 
 use curios_core::Term;
 
@@ -15,6 +15,8 @@ pub(crate) struct Asking {
     questions: u64,
     /// How many of every question asked with nothing committed were declined for a commit — what a remembered reduct is held against.
     declined: u64,
+    /// Whether a level equation has been withheld inside the question conversion is answering with nothing committed; `None` where it is answering none.
+    withheld: Option<bool>,
 }
 
 impl Asking {
@@ -46,6 +48,23 @@ impl Asking {
     /// How many questions have been declined for a commit.
     pub(crate) fn declined(&self) -> u64 {
         self.declined
+    }
+
+    /// Enter or leave a question asked with nothing committed, answering what stood before: one is entered with `Some(false)`, and what leaving it reads back says whether a level equation was withheld inside it.
+    pub(crate) fn withhold(&mut self, withheld: Option<bool>) -> Option<bool> {
+        std::mem::replace(&mut self.withheld, withheld)
+    }
+
+    /// Whether conversion is answering a question asked with nothing committed, where it joins no two levels.
+    pub(crate) fn withholding(&self) -> bool {
+        self.withheld.is_some()
+    }
+
+    /// A level equation was withheld inside the question conversion is answering.
+    pub(crate) fn note_withheld(&mut self) {
+        if let Some(withheld) = &mut self.withheld {
+            *withheld = true;
+        }
     }
 
     /// The two atoms a classing is asking conversion about, which a classing made meanwhile is held inside (`curios_core::Classes::of`).

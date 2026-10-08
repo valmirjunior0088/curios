@@ -17,7 +17,7 @@ use {
 ///
 /// Comparing the two sides through `project_erased_universes` and accepting on projection equality would rest on the premise that a universe instance cannot affect computation, and that premise is false (see `documentation/design/soundness/case-equations-and-their-key.md`): `Type u` embeds a level *in a term*, so a definition carrying a level into a constructor payload reduces to genuinely different values at two instances, and the projection would accept such pairs with no residue for the declaration boundary to refuse. Identification leaves the residue.
 ///
-/// What it answers is one of [`Identification`]'s verdicts. Declines — answering anything but `Identified`, with **nothing inserted**, so the structural path below judges the problem instead — on a pair of unequal ground levels, where there is nothing to identify and the problem may still hold by value, and on a differing pair under a universe binder, whose bound parameters the ambient solver cannot constrain. Every pair is checked before any is committed, because a decline that had already inserted would not be a fall-through.
+/// What it answers is one of [`Identification`]'s verdicts. Declines — answering anything but `Identified`, with **nothing inserted**, so the structural path below judges the problem instead — on a pair of unequal ground levels, where there is nothing to identify and the problem may still hold by value, on a differing pair under a universe binder, whose bound parameters the ambient solver cannot constrain, and on a pair a question asked with nothing committed withholds ([`Context::withholds`]), which is read by its value as two ground levels are. Every pair is checked before any is committed, because a decline that had already inserted would not be a fall-through.
 ///
 /// A level a value does not hold is no difference to identify: the walk is handed the context's registries, a nominal family's vector and a definition's, and sets apart the pair at a position either calls irrelevant, so two instances apart in it alone are identified with nothing committed. Where the sides are identified, each pair set apart is recorded as a weak equation ([`UniverseSolver::add_weak_eq`](crate::UniverseSolver::add_weak_eq)), which the declaration's closing joins where it can.
 ///
@@ -46,6 +46,13 @@ pub(super) fn identify_universe_levels(
             return Ok(Identification::Curried(apart));
         }
     };
+
+    // Every pair is asked before any is committed, as the walk checks them: a question asked with nothing committed joins none, and the pair is left to its value.
+    for (this_level, that_level) in &compared {
+        if context.withholds(this_level, that_level)? {
+            return Ok(Identification::Withheld);
+        }
+    }
 
     // How many pairs an identification equates and how many it records weak, per call that identifies, and above how many it leaves to a curried head's type per call that declines for one: the magnitudes a change to what it commits moves.
     curios_profile::sample!("identify::equated", compared.len());
@@ -223,13 +230,14 @@ enum Alignment {
     },
 }
 
-/// What [`identify_universe_levels`] found: the sides are one term now that their levels are committed equal; they differ in more than levels; a differing pair is two unequal ground levels, which no commitment can join; a differing pair sits under a universe binder, whose bound parameters the ambient solver cannot constrain; or a differing pair sits at a curried head, which the pair's type decides, and these are the pairs left to it.
+/// What [`identify_universe_levels`] found: the sides are one term now that their levels are committed equal; they differ in more than levels; a differing pair is two unequal ground levels, which no commitment can join; a differing pair sits under a universe binder, whose bound parameters the ambient solver cannot constrain; a differing pair is withheld, the question in hand committing nothing; or a differing pair sits at a curried head, which the pair's type decides, and these are the pairs left to it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Identification {
     Identified,
     Distinct,
     GroundUnequal,
     UnderBinder,
+    Withheld,
     Curried(Vec<(Level, Level)>),
 }
 

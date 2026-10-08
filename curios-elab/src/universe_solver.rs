@@ -685,6 +685,14 @@ impl UniverseSolver {
         walk(self, level, &mut BTreeSet::new())
     }
 
+    /// Whether the store already reads `left` and `right` as one level, by the level algebra alone once both are zonked: an equation of the two ([`UniverseSolver::add_eq`]) would add no constraint and solve no metavariable.
+    pub(crate) fn reads_as_one(&self, left: &Level, right: &Level) -> Result<bool, UniverseError> {
+        let left = self.zonk(left)?;
+        let right = self.zonk(right)?;
+
+        Ok(left.structurally_leq(&right) && right.structurally_leq(&left))
+    }
+
     pub fn add_leq(
         &mut self,
         lower: Level,

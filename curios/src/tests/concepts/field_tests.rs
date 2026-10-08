@@ -1,4 +1,4 @@
-//! A concept field that carries a type: chosen by a witness or an explicit dictionary, and unfolded through its projection.
+//! A concept field that carries a type, chosen by a witness or an explicit dictionary and unfolded through its projection, and one that states a proposition, whose level no method's value reads.
 
 use crate::tests::run;
 
@@ -44,4 +44,37 @@ fn a_higher_kinded_type_field_projects_through_an_explicit_dictionary() {
         "#;
 
     assert_eq!(run(source), b"3");
+}
+
+// A field that states a proposition gives its concept that proposition's level, which every witness takes and every written call of a method mints anew. The method's value reads none of it, so two calls written apart are one term wherever a checker is asked: here two atoms under `==` that are one only once `low` is reduced under its guard, the hypothesis's call standing at the level `low`'s body closed at and the goal's at its own.
+#[test]
+fn two_calls_of_a_method_under_a_stated_precondition_are_one_atom() {
+    let source = r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
+        pub concept Guarded(A : Type) : pub Type {
+            Ok(A) -> Prop,
+            step(a : A) -> A,
+        }
+        satisfy Guarded(Nat) {
+            Ok(a) = Holds(true),
+            step(a) = a - 16,
+        }
+        let low(n : Nat) -> Nat =
+            match n < 16 | true => n | false => low(Guarded/step(n)) end;
+        let moved(m : Nat, b : Nat, lows : Holds(low(m) == low(b))) -> True =
+            match m < 16
+            | true => True/qed()
+            | false =>
+                match b < 16
+                | true => True/qed()
+                | false =>
+                    let stepped : Holds(low(Guarded/step(m)) == low(Guarded/step(b))) = lows;
+                    True/qed()
+                end
+            end;
+        /std/print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
 }

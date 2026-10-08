@@ -1926,6 +1926,26 @@ impl<'s> Context<'s> {
         self.typing.asking.declined()
     }
 
+    /// Enter or leave a question asked with nothing committed (`same_uncommitted`), answering what stood before: one is entered with `Some(false)`, and what leaving it reads back says whether a level equation was withheld inside it.
+    pub(crate) fn withhold(&mut self, withheld: Option<bool>) -> Option<bool> {
+        self.typing.asking.withhold(withheld)
+    }
+
+    /// Whether an equation of `left` and `right` is withheld: conversion is answering a question asked with nothing committed, which joins no two levels, and the store does not already read the two as one. One withheld is noted on the question, whose no the solver can then change.
+    pub(crate) fn withholds(&mut self, left: &Level, right: &Level) -> Result<bool, ReduceError> {
+        if !self.typing.asking.withholding()
+            || self
+                .universes()
+                .reads_as_one(left, right)
+                .map_err(ReduceError::Universe)?
+        {
+            return Ok(false);
+        }
+        self.typing.asking.note_withheld();
+
+        Ok(true)
+    }
+
     /// The two atoms a classing is asking conversion about, which a classing made meanwhile is held inside (`curios_core::Classes::of`).
     pub(crate) fn asked(&self) -> Option<&(Term, Term)> {
         self.typing.asking.asked()
