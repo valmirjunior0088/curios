@@ -20,7 +20,7 @@ use {
     },
     curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::{Qualifier, Report, SyntaxRegistry},
-    std::{collections::BTreeSet, fmt},
+    std::{cell::LazyCell, collections::BTreeSet, fmt},
 };
 
 /// What a unit's lowering decided beside its module: its lints, and the prefix of every mount some reference of it resolved into — see [`Lint`]. Taken off the lowering before elaboration consumes it and credited with the binders elaboration's proofs read however elaboration ended, so a question about a program has them whether or not elaboration accepted it.
@@ -297,7 +297,7 @@ pub fn typecheck_entrypoint(
     let ((program, _, _, _), obligations) = elaborate_entry(
         &mut context,
         &established,
-        &predecessors.anchors(),
+        &predecessors.text(),
         lowered,
         EntryTail::Authored,
         Obligations::Reported,
@@ -460,7 +460,7 @@ where
     let verdict = elaborate_entry(
         &mut context,
         &established,
-        &predecessors.anchors(),
+        &predecessors.text(),
         lowered,
         tail,
         obligations,
@@ -479,11 +479,11 @@ enum Obligations {
 
 /// The one elaboration of an entry, in `context`, which the caller reads its credits and its consumption from however this ends: the compile path's and the type-checking path's alike, so the entry's contract is stated once. Beside the program come the obligations it reported, none where they are raised.
 ///
-/// `scope` is where the declarations of the units in scope lie, which a report placed in one of them is resolved against, after the entry's own.
+/// `scope` is the text part of each unit in scope: where its declarations lie, which a report placed in one of them is resolved against, after the entry's own, and the tables the path table a report spells a name by is made from.
 fn elaborate_entry<'s, O>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
-    scope: &[&Anchors],
+    scope: &[&PreparedText],
     lowered: LoweredEntry,
     tail: EntryTail,
     obligations: Obligations,
@@ -500,15 +500,17 @@ where
         minted,
         foreigns: user_foreigns,
         unbound,
-        spellings,
+        names,
         lints: _,
         reached: _,
         broken,
         anchors: own,
     } = lowered;
     let anchors = std::iter::once(&own)
-        .chain(scope.iter().copied())
+        .chain(scope.iter().map(|text| text.anchors()))
         .collect::<Vec<_>>();
+    // Made by the first report that spells a name, and by no elaboration that reports nothing.
+    let spellings = LazyCell::new(|| names.spellings(scope));
 
     // A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules; the elaborator states the synthesized entry's `Io({})` type, as this stage states an authored entry's below. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
     let scheduled = match tail {
@@ -542,7 +544,7 @@ where
         EntryTail::Tests | EntryTail::LastUnitTests => Tail::Tests(&scheduled),
     };
 
-    context.set_imports(spellings.imports.clone());
+    context.set_imports(names.imports().clone());
     context.set_broken(broken.iter().filter_map(|item| item.declares).collect());
     let elaborated = match obligations {
         Obligations::Raised => {
@@ -921,13 +923,14 @@ pub fn compile_unit(
         lowered.broken(),
         elaborate_and_zonk_unit(&mut context, &established, lowered.core(), lowered.minted())
             .map_err(|error| {
+                let spellings = lowered.spellings(&text);
                 CompileError::of(&error, |member| {
                     member.reports_with_hints(
                         lowered.core(),
                         &cores,
                         syntax,
                         lowered.unbound(),
-                        lowered.spellings(),
+                        &spellings,
                         &anchors_of(&lowered, predecessors),
                     )
                 })

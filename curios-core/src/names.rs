@@ -429,9 +429,8 @@ impl Imports {
     }
 }
 
-/// How a unit's names can be written, and where: what each definition's `use` lines brought into scope, and every absolute path the unit may write for each global — its declaration path and each re-export, with the subtrees whose modules may name it. The text stage builds it, because only the text stage sees re-exports and visibility; a report reads it to spell a global the way resolution would find it from where the reader stands ([`Spellings::spell`]).
+/// How a unit's names can be written, and where: what each definition's `use` lines brought into scope, and every absolute path the unit may write for each global — its declaration path and each re-export, with the subtrees whose modules may name it. The text stage makes one where a report asks, because only the text stage sees re-exports and visibility, and no unit stores one; a report reads it to spell a global the way resolution would find it from where the reader stands ([`Spellings::spell`]).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-#[curios_archive::archived]
 pub struct Spellings {
     pub imports: Imports,
     /// Each canonical global's absolute paths, the prefixes the unit may not name already dropped.
@@ -440,7 +439,6 @@ pub struct Spellings {
 
 /// One absolute path reaching a global, and who may write it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[curios_archive::archived]
 pub struct WritablePath {
     pub path: Qualifier,
     /// The subtree roots whose modules may name the path — a non-`pub` declaration's own module, a `pub` one's module's audience.

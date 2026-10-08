@@ -140,7 +140,7 @@ impl<'a> Reach<'a> {
     }
 }
 
-/// Every absolute path this unit may write for each global — each declaration at its own path, each export at the path its module gives it — with who may write it and whether it lies in the unit's own mounts; a path into a prefix the unit may not name is dropped. What a report spells a name by, through [`curios_core::Spellings::spell`].
+/// Every absolute path this unit may write for each global — each declaration at its own path, each export at the path its module gives it — with who may write it and whether it lies in the unit's own mounts; a path into a prefix the unit may not name is dropped. What a report spells a name by, through [`curios_core::Spellings::spell`], and made where one asks ([`PreparedText::spellings`]): a function of tables the units already store, which no unit stores again.
 fn writable_paths(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
@@ -263,8 +263,10 @@ pub struct PreparedText {
     minted: curios_core::Minted,
     /// Every bare name that resolved to nothing, by the binder it lowered to, with what it could have meant — see `Context::unbound_binder`. Empty for any unit that compiles, the prelude included.
     unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
-    /// How this unit's names can be written: every binding a `use` brought into scope, with the spelling a reader wrote it under and, per definition, the ones in scope where it was written — see `Context::imports` — and every absolute path the unit may write for each global. What a goal report's candidate pool reaches beyond the names the program already mentions, and what every report spells a name by.
-    spellings: curios_core::Spellings,
+    /// Every binding a `use` brought into scope, with the spelling a reader wrote it under and, per definition, the ones in scope where it was written — see `Context::imports`. What a goal report's candidate pool reaches beyond the names the program already mentions, and half of what a report spells a name by ([`PreparedText::spellings`]).
+    imports: curios_core::Imports,
+    /// The mounts this unit may name: the ones it declared a dependency on, or every open one in scope where it declared none, and its own. What its references were guarded by, and what drops a path it may not write from the table a report spells by.
+    visible: Vec<Mount>,
     /// Every lint the lowering found, in reading order, less each `unused-binder` lint elaboration credited — see [`Lint`]. Carried with the unit because a lint depends on exactly what the unit's identity in the store depends on: its own sources and its predecessors' interfaces.
     lints: Vec<Lint>,
     /// Every written binder a proof the elaborator wrote read — see [`LintedBinder`]. What a unit compiled over this one as its baseline credits in a declaration it does not elaborate again. A set, since membership is all that is asked of it: its order is then the binders' own, by declaration and place, whichever pass credited which, and a unit compiled over a baseline stores the one a whole compile stores.
@@ -360,12 +362,21 @@ impl PreparedText {
 
     /// What each `use` brought into scope, where, and under which spelling — the table `curios-elab`'s goal suggestions draw imported candidates from and spell them by.
     pub fn imports(&self) -> &curios_core::Imports {
-        &self.spellings.imports
+        &self.imports
     }
 
-    /// How this unit's names can be written, where — what every report spells a name by.
-    pub fn spellings(&self) -> &curios_core::Spellings {
-        &self.spellings
+    /// How this unit's names can be written, where — what every report spells a name by: its imports, and every absolute path it may write for each global of its scope, `predecessors` being the units it was lowered against.
+    ///
+    /// **Made where a report asks, and stored by no unit.** The path table is a function of the direct interfaces and export views the units in scope already store, and a report is its one reader: a compilation that reports nothing makes none.
+    pub fn spellings(&self, predecessors: &[&PreparedText]) -> curios_core::Spellings {
+        spellings_over(
+            &self.imports,
+            &self.table,
+            &self.public,
+            &self.mounts,
+            &self.visible,
+            predecessors,
+        )
     }
 }
 
@@ -1879,7 +1890,6 @@ fn into_core_unit_within(
     // As they are written. No item is moved for another's sake: elaboration asks for each declaration when it is read, wherever it sits, refuses the ones that need one another by name, and stores the module in an order of its own (`curios_elab`'s `Demand`, `curios_core::Module::ordered`).
     let items = flat_items.into_iter().map(FlatItem::into_core).collect();
 
-    let paths = writable_paths(&public, &table, &reach, &own);
     curios_profile::sample!("into_core_unit::imports", imports.borrow().entries.len());
     let unit = PreparedText {
         mounts: own.clone(),
@@ -1900,10 +1910,8 @@ fn into_core_unit_within(
             ..minted.into_inner()
         },
         unbound: unbound.into_inner(),
-        spellings: curios_core::Spellings {
-            imports: imports.into_inner(),
-            paths,
-        },
+        imports: imports.into_inner(),
+        visible: visible_mounts,
         broken,
         lints: ordered(
             unused_imports(sites.into_inner())
@@ -1989,9 +1997,9 @@ pub fn document_unit(
         &modules,
         &Scoped::over(&tables),
         &Scoped::over(&exports),
-        &unit.spellings.imports,
+        &unit.imports,
         &prefix,
-        &source.visible_mounts(predecessors, &unit.mounts),
+        &unit.visible,
         records,
         description,
     )))
@@ -2015,8 +2023,8 @@ pub struct LoweredEntry {
     pub foreigns: ForeignStore,
     /// See [`PreparedText::unbound`].
     pub unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
-    /// See [`PreparedText::spellings`].
-    pub spellings: curios_core::Spellings,
+    /// How the entry's names can be written, where — see [`EntryNames`].
+    pub names: EntryNames,
     /// See [`PreparedText::lints`].
     pub lints: Vec<Lint>,
     /// See [`PreparedText::broken`].
@@ -2025,6 +2033,72 @@ pub struct LoweredEntry {
     pub reached: BTreeSet<Qualifier>,
     /// See [`PreparedText::anchors`].
     pub anchors: curios_core::Anchors,
+}
+
+/// How the entry's names can be written, where: what its `use` lines brought into scope, and what the path table a report spells a name by is made from — the entry's direct interface and export view, the prefixes it claims and the ones it may name. An entry's lowering hands back no unit, so these are what a unit would have kept of them.
+pub struct EntryNames {
+    imports: curios_core::Imports,
+    table: BTreeMap<Qualifier, ModuleInfo>,
+    public: BTreeMap<Qualifier, PublicInterface>,
+    mounts: Vec<Mount>,
+    visible: Vec<Mount>,
+}
+
+impl EntryNames {
+    /// See [`PreparedText::imports`].
+    pub fn imports(&self) -> &curios_core::Imports {
+        &self.imports
+    }
+
+    /// See [`PreparedText::spellings`].
+    pub fn spellings(&self, predecessors: &[&PreparedText]) -> curios_core::Spellings {
+        spellings_over(
+            &self.imports,
+            &self.table,
+            &self.public,
+            &self.mounts,
+            &self.visible,
+            predecessors,
+        )
+    }
+}
+
+/// `imports` as a lowering recorded them, beside the path table of the unit whose direct interface is `table` and whose export view is `public`, over the tables of `predecessors`: what [`PreparedText::spellings`] and [`EntryNames::spellings`] answer.
+fn spellings_over(
+    imports: &curios_core::Imports,
+    table: &BTreeMap<Qualifier, ModuleInfo>,
+    public: &BTreeMap<Qualifier, PublicInterface>,
+    own: &[Mount],
+    visible: &[Mount],
+    predecessors: &[&PreparedText],
+) -> curios_core::Spellings {
+    // The unit's own tables as the nearest base, where the lowering held them as the layer it wrote: every read answers alike, since mount sets are disjoint and the nearest root shadows the ones before it.
+    let tables = predecessors
+        .iter()
+        .map(|earlier| &earlier.table)
+        .chain([table])
+        .collect::<Vec<_>>();
+    let exports = predecessors
+        .iter()
+        .map(|earlier| &earlier.public)
+        .chain([public])
+        .collect::<Vec<_>>();
+    let mounts = predecessors
+        .iter()
+        .flat_map(|earlier| earlier.mounts.iter())
+        .chain(own)
+        .cloned()
+        .collect::<Vec<_>>();
+
+    curios_core::Spellings {
+        imports: imports.clone(),
+        paths: writable_paths(
+            &Scoped::over(&exports),
+            &Scoped::over(&tables),
+            &Reach::over(&mounts, visible),
+            own,
+        ),
+    }
 }
 
 /// The `unused-import` lints: every site no reference resolved through, a re-export excepted.
@@ -2056,7 +2130,13 @@ pub fn into_core_with_prelude(
         minted: unit.minted,
         foreigns: unit.foreigns,
         unbound: unit.unbound,
-        spellings: unit.spellings,
+        names: EntryNames {
+            imports: unit.imports,
+            table: unit.table,
+            public: unit.public,
+            mounts: unit.mounts,
+            visible: unit.visible,
+        },
         lints: unit.lints,
         reached: unit.reached,
         broken: unit.broken,

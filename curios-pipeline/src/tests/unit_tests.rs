@@ -1,6 +1,9 @@
 //! Mounts and prefixes across compilation units, the orphan rule that fires between them, and the bytes a unit stores whatever came before it and whichever compilation made it.
 
-use {super::test_support::*, curios_core::Module, curios_text::RootSource};
+use {
+    super::test_support::*, curios_core::Module, curios_prelude::with_prelude,
+    curios_text::RootSource,
+};
 
 /// Two ordinary units mounting one prefix is refused where the registry knows both, naming the prefix.
 #[test]
@@ -177,25 +180,26 @@ fn a_units_stored_bytes_do_not_depend_on_what_was_compiled_before_it() {
     );
 }
 
-/// A name exported along several paths is stored the same by every compilation.
+/// A name exported along several paths is listed the same by every compilation.
 ///
-/// `/lib/a/x` is written four ways, its own path and three re-exports, and the lowering reaches the modules exporting it through tables it walks in a hash's order. The paths a unit stores for a name are listed its own first and then by path, so sixteen compilations store one list; in the order they were reached, two would agree one time in six.
+/// `/lib/a/x` is written four ways, its own path and three re-exports, and the lowering reaches the modules exporting it through tables it walks in a hash's order. The paths a report is handed for a name are listed its own first and then by path, so sixteen compilations hand over one list; in the order they were reached, two would agree one time in six.
 #[test]
-fn a_name_exported_along_several_paths_is_stored_the_same_every_time() {
+fn a_name_exported_along_several_paths_is_listed_the_same_every_time() {
     let source = "pub mod a\n    pub let x: /std/Nat = 1;\nend\npub mod b\n    pub use /lib/a/{x};\nend\npub mod c\n    pub use /lib/a/{x};\nend\npub mod d\n    pub use /lib/a/{x};\nend";
 
     for _ in 0..16 {
         let unit = unit_of(source);
-        let written = unit
-            .text()
-            .spellings()
-            .paths
-            .values()
-            .find(|written| written.len() > 1)
-            .expect("a name written several ways")
-            .iter()
-            .map(|written| written.path.join())
-            .collect::<Vec<_>>();
+        let written = with_prelude(|prelude| {
+            let scope = prelude.iter().map(|root| root.text()).collect::<Vec<_>>();
+            unit.text().spellings(&scope)
+        })
+        .paths
+        .values()
+        .find(|written| written.len() > 1)
+        .expect("a name written several ways")
+        .iter()
+        .map(|written| written.path.join())
+        .collect::<Vec<_>>();
 
         assert_eq!(written, ["/lib/a/x", "/lib/b/x", "/lib/c/x", "/lib/d/x"]);
     }

@@ -64,13 +64,14 @@ pub fn compile_unit_over(
             lowered.minted(),
         )
         .map_err(|error| {
+            let spellings = lowered.spellings(&text);
             CompileError::of(&error, |member| {
                 member.reports_with_hints(
                     lowered.core(),
                     &cores,
                     syntax,
                     lowered.unbound(),
-                    lowered.spellings(),
+                    &spellings,
                     &anchors_of(&lowered, predecessors),
                 )
             })
