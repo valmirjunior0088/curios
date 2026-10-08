@@ -1,0 +1,158 @@
+use /std/{Bytes, Bits, Byte, Nat, Int, Bool, Str, Eq, Hash, Ord, Ordering};
+use /std/Bool/{True, False, Holds};
+
+-- **`Flt` is deliberately not a key, and the reason is not the proof.** Injectivity holds and is cheap — `Flt/of_le_bytes` inverts `Flt/to_le_bytes`, so the witness is one congruence through a guarded decoder. What stops it is that this concept promises injectivity on *propositional* equality while `/std/ops/Eql`'s `Flt` witness is IEEE `==`, and the two disagree at both ends: `+0.0` and `-0.0` are distinct values with distinct encodings that `==` calls equal, so a map would hold them as two entries; a `NaN` is found by lookup though `==` calls it equal to nothing. Nothing here forbids that, because a key's law says nothing about `Eql` — which is exactly why the witness is withheld until what a map means for such a carrier is decided rather than discovered.
+--- How a key type encodes to the byte string that identifies it, with the proofs that distinct keys encode distinctly and that the encodings stand in the keys' own order.
+---
+--- The encoding is `/std/Hash`'s and the order `/std/Ord`'s, each by the edge rather than by convention: there is no second field to disagree with either, so a type has one identity as bytes and one order by construction. What this concept adds is the two proofs neither carries. `injective` is why the trie cannot merge two keys into one entry; `monotone` is why a walk of the trie, which is in the order of the encodings, is in the order of the keys. A witness whose encoding collides, or is out of its order, is refused where it is declared.
+---
+--- A type with an encoding and no order of its own takes its encoding's, and its `monotone` is `Eq/refl()`.
+pub concept Key(K: Type): pub Type {
+    use Hash(K),
+    use Ord(K),
+    --- Distinct keys encode distinctly.
+    injective(a: K, b: K, same: Eq()(Hash/hash(a), Hash/hash(b))) -> Eq()(a, b),
+    --- The order of two keys is the order of their encodings, as `Bytes/ord` reads them.
+    monotone(a: K, b: K) -> Eq()(Ord/ord(a, b), Bytes/ord(Hash/hash(a), Hash/hash(b))),
+}
+
+pub use Key/*;
+
+--- The identity encoding, in the order of bytes.
+satisfy Key(Bytes) {
+    injective(_, _, same) = same,
+    monotone(_, _) = Eq/refl(),
+}
+
+--- The UTF-8 bytes, whose order is a text's.
+satisfy Key(Str) {
+    injective(a, b, same) = Str/eq_of_bytes(a, b, same),
+    monotone(_, _) = Eq/refl(),
+}
+
+--- The code in the order of the numbers, whose injectivity is that order's.
+satisfy Key(Nat) {
+    injective = Hash/nat/injective,
+    monotone = Hash/nat/monotone,
+}
+
+--- The one byte itself, a cons onto no bytes: injective in its head, and ordered as its head is.
+satisfy Key(Byte) {
+    injective(a, b, same) = Bytes/cons_inj_head(@a, @x[], @b, @x[], same),
+    monotone(a, b) =
+        match a < b
+        | true => Eq/refl()
+        | false => match a == b | true => Eq/refl() | false => Eq/refl() end
+        end,
+}
+
+-- Which of the two one-byte encodings a run is, as a total function of any `Bytes`.
+let bool_of(z: Bytes) -> Bool =
+    z == x[0x1];
+
+-- The encoding round-trips through it at both values, which is the whole of the injectivity below: two values encoding alike decode alike, and decoding is the identity.
+let bool_round(b: Bool) -> Eq()(bool_of(Hash/hash(b)), b) =
+    match b | true => Eq/refl() | false => Eq/refl() end;
+
+--- One byte per value, `false`'s below `true`'s.
+satisfy Key(Bool) {
+    injective(a, b, same) =
+        Eq/trans(Eq/sym(bool_round(a)), Eq/trans(Eq/cong(bool_of, same), bool_round(b))),
+    monotone(a, b) =
+        match a
+        | false => match b | false => Eq/refl() | true => Eq/refl() end
+        | true => match b | false => Eq/refl() | true => Eq/refl() end
+        end,
+}
+
+-- The byte one bit encodes as, named so a run's head and its encoding's head cannot be confused for each other.
+let byte_of_bit(h: Bool) -> Byte =
+    match h | true => 0x1 | false => 0x0 end;
+
+-- The bit a one-byte encoding stands for, read back. Total, so congruence can take an encoding apart.
+let bit_of(k: Byte) -> Bool =
+    k == 0x1;
+
+-- One bit's byte round-trips through it, which is the head half of the induction below.
+let bit_round(h: Bool) -> Eq()(bit_of(byte_of_bit(h)), h) =
+    match h | true => Eq/refl() | false => Eq/refl() end;
+
+-- An encoding of no bits is no encoding of a cons: the lengths differ, and zero against a successor is refuted by the comparison deciding it.
+let no_empty(k: Byte, r: Bytes, e: Eq()(x[], x[k, ..r])) -> False =
+    Eq/subst((m) => Holds(0 == m), Eq/cong(Bytes/len, e), True/qed());
+
+-- Distinct bit runs encode distinctly.
+--
+-- Structural induction on the left run, carrying the claim for every right run: `Hash(Bits)` states its encoding through the packed eliminator, so `hash(b[h, ..t])` *is* `x[<h>, ..hash(t)]`, and the two sides come apart with `/std/Bytes`'s cons injections. A run against a run of another length is refuted on the encoding's own length, which the byte-per-bit reading makes the run's.
+let bits_injective(a: Bits, b: Bits, same: Eq()(Hash/hash(a), Hash/hash(b))) -> Eq()(a, b) =
+    match a: (m) => (y: Bits, e: Eq()(Hash/hash(m), Hash/hash(y))) -> Eq()(m, y)
+    | b[] =>
+        (y, e) =>
+            match y
+            | b[] => Eq/refl()
+            | b[k, ..r] => match no_empty(byte_of_bit(k), Hash/hash(r), e) end
+            end
+    | b[h, ..t]; ih =>
+        (y, e) =>
+            match y
+            | b[] => match no_empty(byte_of_bit(h), Hash/hash(t), Eq/sym(e)) end
+            | b[k, ..r] =>
+                Bits/cong_cons2(
+                    Eq/trans(
+                        Eq/sym(bit_round(h)),
+                        Eq/trans(Eq/cong(bit_of, Bytes/cons_inj_head(e)), bit_round(k))),
+                    ih(r, Bytes/cons_inj_tail(e)))
+            end
+    end(b, same);
+
+-- Two bit runs are in the order of their encodings: both orders read the first place the runs differ, a clear bit below a set one and its byte below the other's, and a run that ends below one that goes on.
+let bits_monotone(a: Bits, b: Bits) -> Eq()(Bits/ord(a, b), Bytes/ord(Hash/hash(a), Hash/hash(b))) =
+    match a: (m) => (y: Bits) -> Eq()(Bits/ord(m, y), Bytes/ord(Hash/hash(m), Hash/hash(y)))
+    | b[] => (y) => match y | b[] => Eq/refl() | b[_, .._] => Eq/refl() end
+    | b[h, .._]; ih =>
+        (y) =>
+            match y
+            | b[] => Eq/refl()
+            | b[k, ..r] =>
+                match h
+                | false => match k | false => ih(r) | true => Eq/refl() end
+                | true => match k | false => Eq/refl() | true => ih(r) end
+                end
+            end
+    end(b);
+
+--- One byte per bit, so a run's length is its encoding's, no two runs share one, and the runs are ordered as their bytes are.
+satisfy Key(Bits) {
+    injective = bits_injective,
+    monotone = bits_monotone,
+}
+
+--- The code in the order of the numbers, whose injectivity is that order's.
+satisfy Key(Int) {
+    injective = Hash/int/injective,
+    monotone = Hash/int/monotone,
+}
+
+--- A key's order answers the flipped answer with its operands swapped, as the order of bytes does.
+---
+--- Proved once for every key from [`monotone`], so no witness states it and a sort under `use Key(K)` has its law from the dictionary.
+pub let flips(@K: Type, use Key(K)) -> Ord/Flips((a: K, b: K) => Ord/ord(a, b)) =
+    (a, b) =>
+        Eq/trans(
+            Key/monotone(b, a),
+            Eq/trans(
+                Bytes/ord/flips(Hash/hash(a), Hash/hash(b)),
+                Eq/cong(Ordering/flip, Eq/sym(Key/monotone(a, b)))));
+
+--- A key's order as a relation carries across a middle key, as the order of bytes does.
+pub let transitive(@K: Type, use Key(K)) -> Ord/Transitive(Ord/le((a: K, b: K) => Ord/ord(a, b))) =
+    (a, b, c, p, q) =>
+        Eq/subst(
+            (o: Ordering) => Holds(Ordering/is_le(o)),
+            Eq/sym(Key/monotone(a, c)),
+            Bytes/ord/transitive(
+                Hash/hash(a),
+                Hash/hash(b),
+                Hash/hash(c),
+                Eq/subst((o: Ordering) => Holds(Ordering/is_le(o)), Key/monotone(a, b), p),
+                Eq/subst((o: Ordering) => Holds(Ordering/is_le(o)), Key/monotone(b, c), q)));
