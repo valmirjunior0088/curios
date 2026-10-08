@@ -3,7 +3,7 @@ pub use /sys/Flt/{add, sub, mul, div, fma, rem, min, max, eql, neq, lt, gt, le, 
     round, floor, ceil, trunc, nearest, copysign, to_nat, to_int, mantissa, exponent, to_le_bytes,
     of_le_bytes};
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Result, Bytes, List, Ordering, Show, Spell, Ord,
-    Dyadic, Parse, Vec, Eq};
+    Dyadic, Parse, Vec, Eq, WellFounded};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
@@ -355,57 +355,105 @@ pub let try_to_int(f: Flt) -> Option(Int) =
 let pow2(k: Nat) -> Nat =
     Nat/shl(1, k);
 
---- The quotient and remainder of `r` by `s`. Every caller's `s` is positive; a zero one answers `(0, r)` so the precondition `/` asks for is discharged by the match rather than carried in.
-let div_mod(r: Nat, s: Nat) -> {Nat, Nat} =
-    match s | 0 => (0, r) | sp + 1 => (r / (sp + 1), r % (sp + 1)) end;
+--- The quotient and remainder of `r` by a positive `s`.
+let div_mod(r: Nat, s: Nat, @positive: Holds(0 < s)) -> {Nat, Nat} =
+    (r / s, r % s);
 
---- How many decimal places the two scalings may move the exponent. A finite binary64 lies between `4.9 · 10⁻³²⁴` and `1.8 · 10³⁰⁸`, so neither moves it past 324 places: the count never runs out and changes no answer, and it is what lets `to_str` stand in a type.
-let scaling_fuel: Nat =
-    330;
+-- A scale and the decimal exponent it stands at, the scale positive.
+let Scaled: Type =
+    {s: Nat, k: Int, positive: Holds(0 < s)};
 
---- How many digits `generate` may write. Seventeen significant digits tell every binary64 apart, so the shortest spelling stops by then: the count never runs out and changes no answer.
-let digit_fuel: Nat =
-    20;
+--- `s` raised by tens until `rpm` is no longer above it, and `k` by one each time. A positive scale grows under each ten, so every step leaves less of `rpm` above it, and the walk descends on what is left: it is what lets `to_str` stand in a type with no count beside it.
+let scale_up(rpm: Nat, s: Nat, k: Int, @positive: Holds(0 < s)) -> Scaled =
+    WellFounded/recurse(
+        (gap: Nat) =>
+            (s: Nat, k: Int, @positive: Holds(0 < s), @within: Holds(rpm - s <= gap)) -> Scaled,
+        (gap, ih) =>
+            (s, k, @positive, @within) =>
+                match rpm > s
+                | true => ih(rpm - s * 10, True/proved())(s * 10, k + 1)
+                | false => (s = s, k = k, positive = positive)
+                end,
+        rpm - s,
+        WellFounded/lt(rpm - s))(s, k);
 
-let scale_up(fuel: Nat, rpm: Nat, s: Nat, k: Int) -> {Nat, Int} =
-    match fuel
-    | 0 => (s, k)
-    | pred + 1 => match rpm > s | true => scale_up(pred, rpm, s * 10, k + 1) | false => (s, k) end
+-- A remainder and the two half-gaps beside it, lowered to the decimal exponent they stand at, the gap below positive.
+let Lowered: Type =
+    {r: Nat, mp: Nat, mm: Nat, k: Int, below: Holds(0 < mm)};
+
+--- `r`, `mp` and `mm` raised by tens while ten of `r + mp` still fit in `s`, and `k` lowered by one each time. The gap above is positive, so every step leaves less of `s` above `r + mp`, which the walk descends on.
+let scale_down(
+    r: Nat,
+    mp: Nat,
+    mm: Nat,
+    s: Nat,
+    k: Int,
+    @above: Holds(0 < mp),
+    @below: Holds(0 < mm),
+) -> Lowered =
+    WellFounded/recurse(
+        (gap: Nat) =>
+            (
+                r: Nat,
+                mp: Nat,
+                mm: Nat,
+                k: Int,
+                @above: Holds(0 < mp),
+                @below: Holds(0 < mm),
+                @within: Holds(s - (r + mp) <= gap)) -> Lowered,
+        (gap, ih) =>
+            (r, mp, mm, k, @above, @below, @within) =>
+                match (r + mp) * 10 <= s
+                | true => ih(s - (r * 10 + mp * 10), True/proved())(r * 10, mp * 10, mm * 10, k - 1)
+                | false => (r = r, mp = mp, mm = mm, k = k, below = below)
+                end,
+        s - (r + mp),
+        WellFounded/lt(s - (r + mp)))(r, mp, mm, k);
+
+-- The digit that ends a spelling: `d`, or the one above it. Where the interval admits one of the two, that one; where it admits both, the nearer to the remainder `rem` of `s`, a tie going up.
+let closing(d: Nat, rem: Nat, s: Nat, low: Bool, high: Bool) -> Nat =
+    choose
+    | Bool/not(low) => d + 1
+    | Bool/not(high) => d
+    | rem * 2 < s => d
+    | _ => d + 1
     end;
 
-let scale_down(fuel: Nat, r: Nat, mp: Nat, mm: Nat, s: Nat, k: Int) -> {Nat, Nat, Nat, Int} =
-    match fuel
-    | 0 => (r, mp, mm, k)
-    | pred + 1 =>
-        match (r + mp) * 10 <= s
-        | true => scale_down(pred, r * 10, mp * 10, mm * 10, s, k - 1)
-        | false => (r, mp, mm, k)
-        end
-    end;
-
-let generate(fuel: Nat, r: Nat, s: Nat, mp: Nat, mm: Nat, even: Bool) -> List(Nat) =
-    match fuel
-    | 0 => []
-    | pred + 1 =>
-        let r10 = r * 10;
-        let mp10 = mp * 10;
-        let mm10 = mm * 10;
-        let (d, rem) = div_mod(r10, s);
-        let low = match even | true => rem <= mm10 | false => rem < mm10 end;
-        let high = match even | true => rem + mp10 >= s | false => rem + mp10 > s end;
-        match low || high
-        | true =>
-            let last =
-                choose
-                | Bool/not(low) => d + 1
-                | Bool/not(high) => d
-                | rem * 2 < s => d
-                | _ => d + 1
-                end;
-            [last]
-        | false => [d, ..generate(pred, rem, s, mp10, mm10, even)]
-        end
-    end;
+--- The shortest digits that tell the float apart: one digit a step, until what is left of `r` falls within a half-gap of an end of the interval. The gap below is positive and grows tenfold a step, and a step that goes on found it at or under a remainder of `s`, so every step leaves less of `s` above it, which the walk descends on.
+let generate(
+    r: Nat,
+    s: Nat,
+    mp: Nat,
+    mm: Nat,
+    even: Bool,
+    @scale: Holds(0 < s),
+    @below: Holds(0 < mm),
+) -> List(Nat) =
+    WellFounded/recurse(
+        (gap: Nat) =>
+            (
+                r: Nat,
+                mp: Nat,
+                mm: Nat,
+                @below: Holds(0 < mm),
+                @within: Holds(s - mm <= gap)) -> List(Nat),
+        (gap, ih) =>
+            (r, mp, mm, @below, @within) =>
+                let mp10 = mp * 10;
+                let mm10 = mm * 10;
+                let (d, rem) = div_mod(r * 10, s);
+                let high = match even | true => rem + mp10 >= s | false => rem + mp10 > s end;
+                match rem < mm10
+                | true => [closing(d, rem, s, true, high)]
+                | false =>
+                    let low = even && rem == mm10;
+                    match low || high
+                    | true => [closing(d, rem, s, low, high)]
+                    | false => [d, ..ih(s - mm10, True/proved())(rem, mp10, mm10)]
+                    end
+                end,
+        s - mm,
+        WellFounded/lt(s - mm))(r, mp, mm);
 
 let digits_to_str(ds: List(Nat)) -> Str =
     List/fold(ds, "", (d, acc) => Str/concat(acc, Nat/to_str(d)));
@@ -430,20 +478,63 @@ let normalize(ds: List(Nat)) -> {List(Nat), Bool} =
         end
     end;
 
-let setup(f_mant: Nat, exp_field: Nat) -> {Nat, Nat, Nat, Nat} =
+-- What a float's digits are read from: the significand as a remainder `r` of a scale `s`, and the half-gaps to its neighbours above and below, all whole numbers. The scale and both gaps are positive, which the walks over them descend by.
+let Start: Type =
+    {
+        r: Nat,
+        s: Nat,
+        mp: Nat,
+        mm: Nat,
+        scale: Holds(0 < s),
+        above: Holds(0 < mp),
+        below: Holds(0 < mm)};
+
+let setup(f_mant: Nat, exp_field: Nat) -> Start =
     let hidden = pow2(52);
     match exp_field >= 1075
     | true =>
         let ep = exp_field - 1075;
         match f_mant == hidden
-        | true => (Nat/shl(f_mant, ep + 2), 4, pow2(ep + 1), pow2(ep))
-        | false => (Nat/shl(f_mant, ep + 1), 2, pow2(ep), pow2(ep))
+        | true =>
+            (
+                r = Nat/shl(f_mant, ep + 2),
+                s = 4,
+                mp = pow2(ep + 1),
+                mm = pow2(ep),
+                scale = True/proved(),
+                above = True/proved(),
+                below = True/proved())
+        | false =>
+            (
+                r = Nat/shl(f_mant, ep + 1),
+                s = 2,
+                mp = pow2(ep),
+                mm = pow2(ep),
+                scale = True/proved(),
+                above = True/proved(),
+                below = True/proved())
         end
     | false =>
         let abs_e = 1075 - Nat/max(exp_field, 1);
         match exp_field < 2 || Bool/not(f_mant == hidden)
-        | true => (f_mant * 2, pow2(abs_e + 1), 1, 1)
-        | false => (f_mant * 4, pow2(abs_e + 2), 2, 1)
+        | true =>
+            (
+                r = f_mant * 2,
+                s = pow2(abs_e + 1),
+                mp = 1,
+                mm = 1,
+                scale = True/proved(),
+                above = True/proved(),
+                below = True/proved())
+        | false =>
+            (
+                r = f_mant * 4,
+                s = pow2(abs_e + 2),
+                mp = 2,
+                mm = 1,
+                scale = True/proved(),
+                above = True/proved(),
+                below = True/proved())
         end
     end;
 
@@ -470,12 +561,12 @@ let layout(ds: List(Nat), k: Int) -> Str =
     end;
 
 let render(f_mant: Nat, exp_field: Nat, even: Bool) -> Str =
-    let (r0, s0, mp0, mm0) = setup(f_mant, exp_field);
-    let (s1, k1) = scale_up(scaling_fuel, r0 + mp0, s0, +0);
-    let (r1, mp1, mm1, k2) = scale_down(scaling_fuel, r0, mp0, mm0, s1, k1);
-    let digits = generate(digit_fuel, r1, s1, mp1, mm1, even);
+    let start = setup(f_mant, exp_field);
+    let up = scale_up(start.r + start.mp, start.s, +0, @start.scale);
+    let down = scale_down(start.r, start.mp, start.mm, up.s, up.k, @start.above, @start.below);
+    let digits = generate(down.r, up.s, down.mp, down.mm, even, @up.positive, @down.below);
     let (norm, carry) = normalize(digits);
-    match carry | true => layout([1, ..norm], k2 + 1) | false => layout(norm, k2) end;
+    match carry | true => layout([1, ..norm], down.k + 1) | false => layout(norm, down.k) end;
 
 --- The two in IEEE 754's total order, which tells every `Flt` apart: the negative NaNs, then `-inf` up through `-0`, then `+0` up through `+inf`, then the positive NaNs. NaNs order by their bits outward from the infinity of their sign, so a signaling NaN sits nearer it than a quiet one, as §5.10 orders them.
 ---
@@ -588,6 +679,10 @@ let clamped(r: Rounding, negative: Bool, below: Bool) -> Flt =
     | false => exact/round(r, negative, 1, +1100, false)
     end;
 
+-- A numerator over a positive denominator.
+let Ratio: Type =
+    {numerator: Nat, denominator: Nat, positive: Holds(0 < denominator)};
+
 --- `of_decimal` in the direction `r`. The sign goes into the rounding rather than after it, since a directed rounding reads it.
 let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =
     choose
@@ -595,25 +690,38 @@ let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) -> F
     | e >= +0 && (exact/bit_len(d) >= 1025 || e >= +309) => clamped(r, negative, false)
     | e < +0 && Nat/to_int(digits) + e <= -324 => clamped(r, negative, true)
     | _ =>
-        let (n0, d0) =
-            match e >= +0: (_) => {Nat, Nat}
-            | true => (d * Nat/pow(10, Int/abs(e)), 1)
-            | false => (d, Nat/pow(10, Int/abs(e)))
+        let spelled: Ratio =
+            match e >= +0: (_) => Ratio
+            | true =>
+                (numerator = d * Nat/pow(10, Int/abs(e)), denominator = 1, positive = True/proved())
+            | false =>
+                (numerator = d, denominator = Nat/pow(10, Int/abs(e)), positive = True/proved())
             end;
-        let sh = Nat/to_int(54 + exact/bit_len(d0)) - Nat/to_int(exact/bit_len(n0));
-        let (n1, d1) =
-            match sh >= +0: (_) => {Nat, Nat}
-            | true => (Nat/shl(n0, Int/abs(sh)), d0)
-            | false => (n0, Nat/shl(d0, Int/abs(sh)))
+        let whole: Holds(0 < spelled.denominator) = spelled.positive;
+        let sh =
+            Nat/to_int(54 + exact/bit_len(spelled.denominator))
+                - Nat/to_int(exact/bit_len(spelled.numerator));
+        let aligned: Ratio =
+            match sh >= +0: (_) => Ratio
+            | true =>
+                (
+                    numerator = Nat/shl(spelled.numerator, Int/abs(sh)),
+                    denominator = spelled.denominator,
+                    positive = whole)
+            | false =>
+                (
+                    numerator = spelled.numerator,
+                    denominator = Nat/shl(spelled.denominator, Int/abs(sh)),
+                    positive = True/proved())
             end;
-        let top = Nat/shl(d1, 54);
+        let top = Nat/shl(aligned.denominator, 54);
         let (n2, sh2) =
-            match n1 < top: (_) => {Nat, Int}
-            | true => (Nat/shl(n1, 1), sh + +1)
-            | false => (n1, sh)
+            match aligned.numerator < top: (_) => {Nat, Int}
+            | true => (Nat/shl(aligned.numerator, 1), sh + +1)
+            | false => (aligned.numerator, sh)
             end;
-        -- `n2` lies in `[top, 2 · top)`, so its quotient by `d1` has exactly 55 bits, `q · 2^-sh2` with the remainder the sticky part: the exact layer rounds it once.
-        let (q, rest) = div_mod(n2, d1);
+        -- `n2` lies in `[top, 2 · top)`, so its quotient by the denominator has exactly 55 bits, `q · 2^-sh2` with the remainder the sticky part: the exact layer rounds it once.
+        let (q, rest) = div_mod(n2, aligned.denominator, @aligned.positive);
         exact/round(r, negative, q, +0 - sh2, rest != 0)
     end;
 
@@ -766,20 +874,12 @@ let hex_value(s: Str) -> Option(Nat) =
                 Option/some(a * 16 + digit))
     end;
 
---- How many hex digits `hex_str` may write: a payload has at most thirteen and a significand's fraction thirteen, so the count never runs out.
-let hex_fuel: Nat =
-    20;
-
 --- `n`'s hex digits, most significant first and lowercase, `0` for zero.
 let hex_str(n: Nat) -> Str =
-    let go(fuel: Nat, n: Nat, acc: Str) -> Str =
-        match fuel
-        | 0 => acc
-        | pred + 1 =>
-            let written = Str/concat(Str/of_char(Char/hex_digit(n % 16)), acc);
-            match n < 16 | true => written | false => go(pred, n / 16, written) end
-        end;
-    go(hex_fuel, n, "");
+    let go(n: Nat, acc: Str) -> Str =
+        let written = Str/concat(Str/of_char(Char/hex_digit(n % 16)), acc);
+        match n < 16 | true => written | false => go(n / 16, written) end;
+    go(n, "");
 
 --- `f` as a hex significand and a binary exponent (§5.12.3), always signed and exact, since the digits are the significand's own bits: `+0x1.8p+1` for `3`, `+0x0.0000000000001p-1022` for the least subnormal, `+0x0p+0` and `-0x0p+0` for the zeros, and the infinities and NaNs as `to_str` spells them.
 pub let to_hex_str(f: Flt) -> Str =
