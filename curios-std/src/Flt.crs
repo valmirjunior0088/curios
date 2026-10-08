@@ -3,7 +3,7 @@ pub use /sys/Flt/{add, sub, mul, div, fma, rem, min, max, eql, neq, lt, gt, le, 
     round, floor, ceil, trunc, nearest, copysign, to_nat, to_int, mantissa, exponent, to_le_bytes,
     of_le_bytes};
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Result, Bytes, List, Ordering, Show, Spell, Ord,
-    Dyadic, Parse, Vec, Eq, WellFounded};
+    Dyadic, Parse, Vec, Eq};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
@@ -365,7 +365,8 @@ let Scaled: Type =
 
 --- `s` raised by tens until `rpm` is no longer above it, and `k` by one each time. A positive scale grows under each ten, so every step leaves less of `rpm` above it, and the walk descends on what is left: it is what lets `to_str` stand in a type with no count beside it.
 let scale_up(rpm: Nat, s: Nat, k: Int, @positive: Holds(0 < s)) -> Scaled =
-    WellFounded/recurse(
+    Nat/descend(
+        (gap: Nat) => gap,
         (gap: Nat) =>
             (s: Nat, k: Int, @positive: Holds(0 < s), @within: Holds(rpm - s <= gap)) -> Scaled,
         (gap, ih) =>
@@ -374,8 +375,7 @@ let scale_up(rpm: Nat, s: Nat, k: Int, @positive: Holds(0 < s)) -> Scaled =
                 | true => ih(rpm - s * 10, True/proved())(s * 10, k + 1)
                 | false => (s = s, k = k, positive = positive)
                 end,
-        rpm - s,
-        WellFounded/lt(rpm - s))(s, k);
+        rpm - s)(s, k);
 
 -- A remainder and the two half-gaps beside it, lowered to the decimal exponent they stand at, the gap below positive.
 let Lowered: Type =
@@ -391,7 +391,8 @@ let scale_down(
     @above: Holds(0 < mp),
     @below: Holds(0 < mm),
 ) -> Lowered =
-    WellFounded/recurse(
+    Nat/descend(
+        (gap: Nat) => gap,
         (gap: Nat) =>
             (
                 r: Nat,
@@ -407,8 +408,7 @@ let scale_down(
                 | true => ih(s - (r * 10 + mp * 10), True/proved())(r * 10, mp * 10, mm * 10, k - 1)
                 | false => (r = r, mp = mp, mm = mm, k = k, below = below)
                 end,
-        s - (r + mp),
-        WellFounded/lt(s - (r + mp)))(r, mp, mm, k);
+        s - (r + mp))(r, mp, mm, k);
 
 -- The digit that ends a spelling: `d`, or the one above it. Where the interval admits one of the two, that one; where it admits both, the nearer to the remainder `rem` of `s`, a tie going up.
 let closing(d: Nat, rem: Nat, s: Nat, low: Bool, high: Bool) -> Nat =
@@ -429,7 +429,8 @@ let generate(
     @scale: Holds(0 < s),
     @below: Holds(0 < mm),
 ) -> List(Nat) =
-    WellFounded/recurse(
+    Nat/descend(
+        (gap: Nat) => gap,
         (gap: Nat) =>
             (
                 r: Nat,
@@ -452,8 +453,7 @@ let generate(
                     | false => [d, ..ih(s - mm10, True/proved())(rem, mp10, mm10)]
                     end
                 end,
-        s - mm,
-        WellFounded/lt(s - mm))(r, mp, mm);
+        s - mm)(r, mp, mm);
 
 let digits_to_str(ds: List(Nat)) -> Str =
     List/fold(ds, "", (d, acc) => Str/concat(acc, Nat/to_str(d)));

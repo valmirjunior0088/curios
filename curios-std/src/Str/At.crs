@@ -1,5 +1,5 @@
-use /std/{Nat, Bytes, Bool, Char, Option, Str, Eq, Ord, WellFounded};
-use /std/Bool/{True, False, Holds};
+use /std/{Nat, Bytes, Bool, Char, Option, Str, Eq, Ord};
+use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp};
 
 --- Whether a character may begin at the front of `rest`: it is empty, or its first byte continues none.
@@ -190,78 +190,6 @@ pub let try_prev(
 ) -> Option({char: Char, past: At(s), progress: Holds(past.offset < at.offset)}) =
     match 0 < at.offset | true => Option/some(prev(s, at)) | false => Option/none() end;
 
---- What is left of a text past `b` is within `k`, where what is left past `a` is within `k + 1` and `b` lies past `a`, inside the text.
-let fewer_left(
-    len: Nat,
-    a: Nat,
-    b: Nat,
-    k: Nat,
-    past: Holds(a < b),
-    within: Holds(b <= len),
-    left: Holds(len - a <= k + 1),
-) -> Holds(len - b <= k) =
-    True/proved();
-
---- No offset inside a text lies past one that nothing is left past.
-let none_past(
-    len: Nat,
-    a: Nat,
-    b: Nat,
-    past: Holds(a < b),
-    within: Holds(b <= len),
-    left: Holds(len - a <= 0),
-) -> False =
-    False/refuted();
-
---- A position is accessible under "lies past": `k` bounds what is left of `s` past `at`, and a position past `at` leaves less. One proof a step, by recursion on `k` inside the proof, where the relation read through a measure and then narrowed is three.
-let ahead(
-    s: Str,
-    k: Nat,
-    at: At(s),
-    left: Holds(Bytes/len(s.bytes) - at.offset <= k),
-) -> WellFounded/Accessible((p: At(s), q: At(s)) => Holds(q.offset < p.offset))(at) =
-    match k
-    | 0 =>
-        WellFounded/Accessible/intro((p, past) =>
-            match none_past(Bytes/len(s.bytes), at.offset, p.offset, past, p.within, left) end)
-    | kp + 1 =>
-        WellFounded/Accessible/intro((p, past) =>
-            ahead(
-                s,
-                kp,
-                p,
-                fewer_left(Bytes/len(s.bytes), at.offset, p.offset, kp, past, p.within, left)))
-    end;
-
---- A position past another is well-founded: what is left of `s` past a position shrinks as the position moves on.
-let onward(s: Str) -> WellFounded((p: At(s), q: At(s)) => Holds(q.offset < p.offset)) =
-    (at) =>
-        ahead(s, Bytes/len(s.bytes) - at.offset, at, Nat/le/refl(Bytes/len(s.bytes) - at.offset));
-
---- An offset before one within `k + 1` is within `k`.
-let lower(a: Nat, b: Nat, k: Nat, before: Holds(a < b), under: Holds(b <= k + 1)) -> Holds(a <= k) =
-    True/proved();
-
---- No offset lies before zero.
-let none_before(a: Nat, b: Nat, before: Holds(a < b), under: Holds(b <= 0)) -> False =
-    False/refuted();
-
---- A position is accessible under "lies before": `k` bounds its offset, and a position before it has a smaller one. One proof a step, as [`ahead`] is.
-let behind(
-    s: Str,
-    k: Nat,
-    at: At(s),
-    under: Holds(at.offset <= k),
-) -> WellFounded/Accessible((p: At(s), q: At(s)) => Holds(p.offset < q.offset))(at) =
-    match k
-    | 0 =>
-        WellFounded/Accessible/intro((p, before) =>
-            match none_before(p.offset, at.offset, before, under) end)
-    | kp + 1 =>
-        WellFounded/Accessible/intro((p, before) =>
-            behind(s, kp, p, lower(p.offset, at.offset, kp, before, under)))
-    end;
-
 --- Recursion forward through the positions of `s`: `step` answers `P(at)` and may recur at any position past `at` — with the proof that it lies past, which is what [`next`] and [`skip`] answer — so a walk forward is total without recursing on its own, and computes wherever a value is demanded, in a type as at runtime.
 pub let forward(
     @s: Str,
@@ -269,16 +197,20 @@ pub let forward(
     step: (at: At(s), again: (p: At(s), progress: Holds(at.offset < p.offset)) -> P(p)) -> P(at),
     at: At(s),
 ) -> P(at) =
-    WellFounded/recurse(P, step, at, onward(s)(at));
+    Nat/descend(
+        (p: At(s)) => Bytes/len(s.bytes) - p.offset,
+        P,
+        (at, again) => step(at, (p, progress) => again(p, True/proved())),
+        at);
 
---- Recursion back through the positions of `s`: `step` may recur at any position before `at`, with the proof that it lies before, which is what [`prev`] answers. [`forward`] read the other way, and well-founded as `<` on offsets is.
+--- Recursion back through the positions of `s`: `step` may recur at any position before `at`, with the proof that it lies before, which is what [`prev`] answers. [`forward`] read the other way, the offset itself the measure that descends.
 pub let backward(
     @s: Str,
     P: (At(s)) -> Type,
     step: (at: At(s), again: (p: At(s), progress: Holds(p.offset < at.offset)) -> P(p)) -> P(at),
     at: At(s),
 ) -> P(at) =
-    WellFounded/recurse(P, step, at, behind(s, at.offset, at, Nat/le/refl(at.offset)));
+    Nat/descend((p: At(s)) => p.offset, P, step, at);
 
 --- A position in `a` stays one with `rest` appended, when a character may begin at the front of `rest`.
 let starts_before(

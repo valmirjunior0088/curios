@@ -1,4 +1,4 @@
-use /std/{Nat, Eq, WellFounded};
+use /std/{Nat, Eq};
 use /std/Nat/{Divides};
 use /std/Bool/{True, Holds};
 
@@ -28,9 +28,10 @@ pub let step(a: Nat, b: Nat, @ok: Holds(0 < b), below: Gcd(b, a % b)) -> Gcd(a, 
 
 --- The greatest common divisor of `a` and `b` with its proofs, `a` itself where `b` is zero.
 ---
---- Recursion on well-founded `<` over `b`: a step hands on `b` and `a % b`, and a remainder is below its divisor by reduction. On closed operands it computes where a type mentions it.
+--- A descent on `b`: a step hands on `b` and `a % b`, and a remainder is below its divisor by reduction. On closed operands it computes where a type mentions it.
 pub let of(a: Nat, b: Nat) -> Gcd(a, b) =
-    WellFounded/recurse(
+    Nat/descend(
+        (y: Nat) => y,
         (y: Nat) => (x: Nat) -> Gcd(x, y),
         (y, ih) =>
             (x) =>
@@ -43,8 +44,7 @@ pub let of(a: Nat, b: Nat) -> Gcd(a, b) =
                         greatest(_, p, _) = p }
                 | yp + 1 => step(x, yp + 1, ih(x % (yp + 1), True/qed())(yp + 1))
                 end,
-        b,
-        WellFounded/lt(b))(a);
+        b)(a);
 
 --- A value with the three properties is the greatest common divisor: each of two such values divides the other.
 ---
@@ -81,7 +81,8 @@ let common(
     p: Divides(d, a * c),
     q: Divides(d, b * c),
 ) -> Divides(d, Nat/gcd(a, b) * c) =
-    WellFounded/recurse(
+    Nat/descend(
+        (y: Nat) => y,
         (y: Nat) =>
             (x: Nat, p: Divides(d, x * c), q: Divides(d, y * c)) -> Divides(d, Nat/gcd(x, y) * c),
         (y, ih) =>
@@ -100,8 +101,7 @@ let common(
                         Eq/sym(euclid(x, yp + 1)),
                         ih(x % (yp + 1), True/qed())(yp + 1, q, rest))
                 end,
-        b,
-        WellFounded/lt(b))(a, p, q);
+        b)(a, p, q);
 
 -- A divisor scaled divides what it divides, scaled.
 let scale(@d: Nat, @a: Nat, p: Divides(d, a), c: Nat) -> Divides(d * c, a * c) =

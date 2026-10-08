@@ -1312,8 +1312,11 @@ pub(super) const A_RECURSIVE_FUNCTION_MATCHING_ITS_PROOF_CONVERTS: &str = r#"
 
 pub(super) const TWO_ACCESSIBILITY_PROOFS_AT_ONE_RECURSIVE_CALL_CONVERT: &str = r#"
         use /std/{Eq, Nat};
-        use /std/WellFounded/{Accessible};
         use /std/Bool/{Holds};
+
+        induct Accessible(@A : Type, R : (A, A) -> Prop) : (A) -> Prop
+        | intro(@x : A, below : (y : A, r : R(y, x)) -> Accessible(R)(y)) : (x)
+        end
 
         let R(y : Nat, x : Nat) -> Prop = Holds(x < y);
 

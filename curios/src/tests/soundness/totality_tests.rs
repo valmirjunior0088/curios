@@ -512,28 +512,27 @@ fn a_call_through_a_parameter_bound_function_does_not_descend() {
     );
 }
 
-// The library form of the fixture above: `/std/WellFounded` declares the accessibility predicate, `recurse` is the fixpoint and `lt` proves `<` on `Nat` well-founded, so a proposition recursing along `<` is written once against the library and accepted for the reason the inline fixture is. The proof is consumed in `List/get`'s erased bound, so nothing about it runs.
+// The library's recursion along `<` needs no accessibility: `/std/Nat/descend` recurses on a bound its measure fits under, so a proposition recursing along `<` is written once against the library and is total by the successor's descent. The proof is consumed in `List/get`'s erased bound, so nothing about it runs.
 #[test]
-fn the_library_well_founded_recursion_serves_a_proof() {
+fn the_library_recursion_on_a_bound_serves_a_proof() {
     let source = r#"
-        use /std/{Nat, Str, WellFounded, Char, List};
+        use /std/{Nat, Str, Char, List};
         use /std/Bool/{True, Holds};
         let two_more(n: Nat) -> Holds(n < n + 2) =
-            WellFounded/recurse((k) => Holds(k < k + 2), (k, ih) => True/qed(), n, WellFounded/lt(n));
-        let lt_is_well_founded: WellFounded((a: Nat, b: Nat) => Holds(a < b)) = WellFounded/lt;
+            Nat/descend((k: Nat) => k, (k) => Holds(k < k + 2), (k, ih) => True/qed(), n);
         /std/print(Str/of_char(List/get(@Char, ['a', 'b', 'c'], 1, @two_more(1))))
         "#;
     assert_eq!(run(source), b"b");
 }
 
-// The same fixpoint at a motive that is a type depending on its argument: `pick(n)` has type `Shape(n)`, the unit type at zero and `Nat` above it. Written in a type, `pick(5)` puts the fixpoint, its local loop and `lt` under obligation (T), and the checkers reduce it through the accessibility proof to `4`; the running program computes the same value with that proof erased.
+// The same recursion at a motive that is a type depending on its argument: `pick(n)` has type `Shape(n)`, the unit type at zero and `Nat` above it. Written in a type, `pick(5)` puts `descend` and its local loop under obligation (T), and the checkers reduce it on the bound to `4` with no proof read; the running program computes the same value with the bound's proofs erased.
 #[test]
-fn the_library_well_founded_recursion_computes_at_a_dependent_motive() {
+fn the_library_recursion_on_a_bound_computes_at_a_dependent_motive() {
     let source = r#"
-        use /std/{Nat, Eq, WellFounded};
+        use /std/{Nat, Eq};
         let Shape(n: Nat) -> Type = match n | 0 => {} | _ + 1 => Nat end;
         let pick(n: Nat) -> Shape(n) =
-            WellFounded/recurse(Shape, (k, _) => match k | 0 => () | kp + 1 => kp end, n, WellFounded/lt(n));
+            Nat/descend((k: Nat) => k, Shape, (k, _) => match k | 0 => () | kp + 1 => kp end, n);
         let _computed: Eq()(pick(5), 4) = Eq/refl();
         /std/print(Nat/to_str(pick(5)))
         "#;

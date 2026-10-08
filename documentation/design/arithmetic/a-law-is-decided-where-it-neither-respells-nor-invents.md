@@ -32,7 +32,7 @@ An operation is declared with the theory it is decided in ([The carriers' algebr
 - **Reducing a tautology to `true`**, which takes the table into the fold; `Bool/holds_of_eq` over `Eq/refl()` proves it in one written step.
 - **Reducing through a window with a library lemma**, which makes the trusted reducer's output name a `/std` declaration and fail where the slot is unfilled, as while the library compiles itself.
 - **Asking conversion whether a mapped function is the identity**, which only equates, so `len` and `get` would not see through the map, and which makes a fold's reduct depend on a conversion verdict.
-- **`gcd` as an operation conversion decides**: its certified form recurses on well-founded `<` in the library, and nothing in conversion needs it.
+- **`gcd` as an operation conversion decides**: its certified form recurses on a bound in the library, and nothing in conversion needs it.
 - **A right shift through a division node**: `NatDiv` carries a proof its divisor is nonzero that a reducer may not invent.
 - **Teaching conversion the mirror**, or keeping `Gt`/`Ge` heads below the rows: a case in the trusted comparison, or a head no producer reaches and no test exercises, where a mirrored row is one line.
 - **Rewriting the decided propositions to the canonical spelling**, which leaves one spelling a user must match.

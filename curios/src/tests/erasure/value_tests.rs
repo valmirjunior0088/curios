@@ -8,17 +8,18 @@ use crate::tests::run;
 #[test]
 fn every_printed_value_is_the_one_its_proof_states() {
     let source = r#"
-        use /std/{Eq, Nat, Str, Io, print, WellFounded};
+        use /std/{Eq, Nat, Str, Io, print};
         use /std/Nat/{le};
-        use /std/WellFounded/{Accessible};
         use /std/Bool/{Holds};
 
         -- `refl(@z) : (z, z)` pins its payload twice; the payload is the index.
         let z_of(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Nat = match e | refl(@z) => z + 1 end;
 
-        -- A pinned payload beside a proof payload: `below` erases, `w` is the index.
-        let point(@x: Nat, acc: Accessible((a: Nat, b: Nat) => Holds(a < b))(x)) -> Nat =
-            match acc | intro(@w, _below) => w + 1 end;
+        -- A pinned payload beside a proof payload: `small` erases, `w` is the index.
+        induct Marked: (Nat) -> pub Prop
+        | mark(@w: Nat, small: Holds(w < 100)): (w)
+        end
+        let point(@x: Nat, m: Marked(x)) -> Nat = match m | mark(@w, _small) => w + 1 end;
 
         -- Targets that swap their binders: each payload is read from its own position.
         induct Swap: (Nat, Nat) -> pub Prop
@@ -37,7 +38,7 @@ fn every_printed_value_is_the_one_its_proof_states() {
         let keep(n: Nat, _p: Holds(n <= n)) -> Nat = n + 1;
 
         let _refl_payload: Eq()(z_of(Eq/refl(@Nat, @41)), 42) = Eq/refl();
-        let _accessible_payload: Eq()(point(WellFounded/lt(41)), 42) = Eq/refl();
+        let _marked_payload: Eq()(point(Marked/mark(@41, /std/Bool/True/qed())), 42) = Eq/refl();
         let _swapped_payloads: Eq()(digits(Swap/mk(@2, @1)), 21) = Eq/refl();
         let _erased_parameters: Eq()(pick(Nat, Eq/refl(), 41), 42) = Eq/refl();
         let _erased_field: Eq()(Bounded { n = 41, ok = /std/Bool/True/qed() }.n + 1, 42) = Eq/refl();
@@ -46,7 +47,7 @@ fn every_printed_value_is_the_one_its_proof_states() {
         let show(n: Nat) -> Io({}) = print(Str/concat(Nat/to_str(n), "\n"));
 
         let _ = show(z_of(Eq/refl(@Nat, @41)))!;
-        let _ = show(point(WellFounded/lt(41)))!;
+        let _ = show(point(Marked/mark(@41, /std/Bool/True/qed())))!;
         let _ = show(digits(Swap/mk(@2, @1)))!;
         let _ = show(pick(Nat, Eq/refl(), 41))!;
         let _ = show(Bounded { n = 41, ok = /std/Bool/True/qed() }.n + 1)!;

@@ -177,12 +177,6 @@ pub use Dyadic/{let Dyadic};
 pub mod Eq;
 pub use Eq/{let Eq};
 
---- Well-founded recursion.
----
---- `recurse` is the fixpoint along any relation proved well-founded, at a motive that is a proof or a program; `lt` proves `<` on `Nat` well-founded, and `on` and `narrow` carry that through a measure and into a narrower relation.
-pub mod WellFounded;
-pub use WellFounded/{let WellFounded};
-
 --- Pure state threading: a computation that reads and writes a state and performs nothing.
 ---
 --- The value parameter sits last so the family partially applies as a monad. There is no edge from `Io` into a `State` region.

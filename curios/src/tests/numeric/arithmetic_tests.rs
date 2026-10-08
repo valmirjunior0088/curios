@@ -2,7 +2,7 @@
 
 use crate::tests::{error, run};
 
-// `sqrt`'s iteration descends on a comparison of two computed values, which the totality analysis does not grade, so it is retained as a partial program and refused where a proposition would depend on it. `log2` halves under a guard, which the arithmetic rung reads as a decrease, and `gcd` recurses through `/std/WellFounded/recurse`, whose descent is its accessibility proof's, so the same position accepts both.
+// `sqrt`'s iteration descends on a comparison of two computed values, which the totality analysis does not grade, so it is retained as a partial program and refused where a proposition would depend on it. `log2` halves under a guard, which the arithmetic rung reads as a decrease, and `gcd` recurses through `/std/Nat/descend`, whose descent is its bound's, so the same position accepts both.
 #[test]
 fn sqrt_is_refused_in_a_type_and_log2_and_gcd_are_accepted() {
     let refused = r#"

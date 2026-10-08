@@ -13,7 +13,7 @@ It amends [`Prop` is strict, proof-irrelevant, and definitionally K](../../desig
 | A proposition eliminates into data where it is empty or has one constructor whose every payload is a proof or pinned by the indices | To change | `guard_large_elimination` (`curios-cert/src/kernel/infer/eliminate.rs`), `singleton_eliminable` (`curios-elab/src/elaborate/match_.rs`) |
 | That elimination reduces by forcing the proof to its constructor | To change | the `Match` arm of `whnf` (`curios-cert/src/kernel/whnf.rs`), `reduce_match` (`curios-elab/src/reduce.rs`), the machine's `Cases::Induct` step (`curios-core/src/machine.rs`) |
 | An application of a constructor's payload is graded a child of the constructor | Stands, on sizing | `curios-analysis/src/totality.rs` |
-| `/std` recurses on an accessibility proof where a measure descends | To change | `curios-std/src/WellFounded.crs` and its callers |
+| `/std` recurses on a bound where a measure descends, and declares no accessibility predicate | In the tree | [`curios-std`'s README](../../../curios-std/README.md#a-measure-descends-on-a-bound) |
 
 What `/std` uses of all this, counted over `/sys` and `/std` by the protocol under *Verification*:
 
@@ -53,9 +53,8 @@ What `/std` uses of all this, counted over `/sys` and `/std` by the protocol und
 
 ## Stages
 
-Each is one commit on its own check, and none waits for a later one. The first, a level on `Prop` and the sizing it brings, is in the tree.
+Each is one commit on its own check, and none waits for a later one. The first two, a level on `Prop` with the sizing it brings and `/std`'s recursion on a bound, are in the tree.
 
-2. **`/std` recurses on a bound.** `Nat/descend` lands and every caller of `WellFounded/recurse` moves to it; `Str/At`'s `forward` and `backward` are stated over a measure, their accessibility proofs deleted; `WellFounded.crs` is deleted. Check: `cargo xtask clippy`, `cargo xtask test curios-std`, and `descend`'s reported type read back.
 3. **A proposition reaches data only where empty or wholly pinned.** One classifier in `curios-analysis` beside `pinned_by_targets`, called by both guards; the clause admitting a proof payload goes, and erasure's branch for an unpinned payload with it. Check: the elimination, erasure and board suites.
 4. **The match fires without reading its proof.** The elaborator writes the arm free of its binders and the kernel's guard refuses one that is not; the rule enters both reducers through one function of `curios-analysis` and the closed machine by its own; nothing forces a proposition's proof any longer. Check: rows for a cast between algebra-equal ends, a cast along a hypothesis whose ends differ and a closed cast along a lemma, put to each checker alone; `kernel_memo_parity`; the respelling grid.
 

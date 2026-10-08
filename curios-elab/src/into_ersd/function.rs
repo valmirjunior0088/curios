@@ -155,7 +155,7 @@ impl Lowering<'_> {
         }
     }
 
-    /// The content-free stand-in for an erased value in a slot, shaped by the slot's type. A proof or a type is the unit constant. A proof-valued *function* — a `Type`-valued parameter instantiated at a proposition, `WellFounded/recurse`'s `step` at a `Prop` motive — is a function of its telescope's length whose body is the stand-in for its codomain, one layer per curried arrow: the callee applies what is in the slot, and applying the unit constant traps where applying this returns. The two sides of the seam agree as every call and its function do, on the telescope's length.
+    /// The content-free stand-in for an erased value in a slot, shaped by the slot's type. A proof or a type is the unit constant. A proof-valued *function* — a `Type`-valued parameter instantiated at a proposition, `Nat/descend`'s `step` at a `Prop` motive — is a function of its telescope's length whose body is the stand-in for its codomain, one layer per curried arrow: the callee applies what is in the slot, and applying the unit constant traps where applying this returns. The two sides of the seam agree as every call and its function do, on the telescope's length.
     fn proof_stub(
         &mut self,
         context: &mut Retyping,
