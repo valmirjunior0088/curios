@@ -279,10 +279,12 @@ pub fn typecheck_entrypoint(
             }
         })?;
 
+    let cores = predecessors.cores();
+    let established = Established::over(&cores);
     let mut context = Context::new(budget, *syntax);
     let ((program, _, _), obligations) = elaborate_entry(
         &mut context,
-        predecessors,
+        &established,
         syntax,
         lowered,
         EntryTail::Authored,
@@ -441,10 +443,12 @@ where
     curios_profile::profile!("elaborate_and_zonk");
 
     let mut findings = Findings::take(&mut lowered);
+    let cores = predecessors.cores();
+    let established = Established::over(&cores);
     let mut context = Context::new(budget, *syntax);
     let verdict = elaborate_entry(
         &mut context,
-        predecessors,
+        &established,
         syntax,
         lowered,
         tail,
@@ -463,9 +467,9 @@ enum Obligations {
 }
 
 /// The one elaboration of an entry, in `context`, which the caller reads its credits and its consumption from however this ends: the compile path's and the type-checking path's alike, so the entry's contract is stated once. Beside the program come the obligations it reported, none where they are raised.
-fn elaborate_entry<O>(
-    context: &mut Context,
-    predecessors: Predecessors<'_>,
+fn elaborate_entry<'s, O>(
+    context: &mut Context<'s>,
+    established: &'s Established<'_>,
     syntax: &SyntaxRegistry,
     lowered: LoweredEntry,
     tail: EntryTail,
@@ -475,7 +479,7 @@ fn elaborate_entry<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    let cores = predecessors.cores();
+    let cores = established.modules();
     let LoweredEntry {
         program: mut lowered,
         minted,
@@ -522,17 +526,13 @@ where
     context.set_imports(spellings.imports.clone());
     context.set_broken(broken.iter().filter_map(|item| item.declares).collect());
     let elaborated = match obligations {
-        Obligations::Raised => elaborate_and_zonk_program(
-            context,
-            Established::over(&cores),
-            &lowered.module,
-            &minted,
-            elab_tail,
-        )
-        .map(|(module, entry)| (module, entry, Vec::new())),
+        Obligations::Raised => {
+            elaborate_and_zonk_program(context, established, &lowered.module, &minted, elab_tail)
+                .map(|(module, entry)| (module, entry, Vec::new()))
+        }
         Obligations::Reported => elaborate_and_zonk_program_reporting(
             context,
-            Established::over(&cores),
+            established,
             &lowered.module,
             &minted,
             elab_tail,
@@ -550,7 +550,7 @@ where
         Ok(built) => (None, Ok(built)),
         Err(error) => {
             let reported = CompileError::of(&error, |member| {
-                member.reports_with_hints(&lowered.module, &cores, syntax, &unbound, &spellings)
+                member.reports_with_hints(&lowered.module, cores, syntax, &unbound, &spellings)
             });
 
             (Some(Box::new(error)), Err(reported))
@@ -562,13 +562,7 @@ where
     let obligations = obligations
         .into_iter()
         .map(|error| Obligation {
-            reported: error.format_with_hints(
-                &lowered.module,
-                &cores,
-                syntax,
-                &unbound,
-                &spellings,
-            ),
+            reported: error.format_with_hints(&lowered.module, cores, syntax, &unbound, &spellings),
             error,
         })
         .collect();
@@ -875,28 +869,24 @@ pub fn compile_unit(
     let mut lowered = into_core_unit(source, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
+    let established = Established::over(&cores);
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
     let core = with_broken(
         lowered.broken(),
-        elaborate_and_zonk_unit(
-            &mut context,
-            Established::over(&cores),
-            lowered.core(),
-            lowered.minted(),
-        )
-        .map_err(|error| {
-            CompileError::of(&error, |member| {
-                member.reports_with_hints(
-                    lowered.core(),
-                    &cores,
-                    syntax,
-                    lowered.unbound(),
-                    lowered.spellings(),
-                )
-            })
-        }),
+        elaborate_and_zonk_unit(&mut context, &established, lowered.core(), lowered.minted())
+            .map_err(|error| {
+                CompileError::of(&error, |member| {
+                    member.reports_with_hints(
+                        lowered.core(),
+                        &cores,
+                        syntax,
+                        lowered.unbound(),
+                        lowered.spellings(),
+                    )
+                })
+            }),
     )?;
     lowered.credit(&context.credited());
 

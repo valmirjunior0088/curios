@@ -407,12 +407,13 @@ fn std_replay_census() {
 
                 let reused = whole.restricted(|name| !closure.contains(name));
                 let changed = lowered_core.restricted(|name| closure.contains(name));
+                let established = Established::over(&cores);
                 let mut context = Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
                 context.set_imports(lowered.imports().clone());
                 context.set_broken(lowered.broken_names());
                 let replayed = elaborate_and_zonk_unit_over(
                     &mut context,
-                    Established::over(&cores),
+                    &established,
                     Recompile {
                         reused: &reused,
                         closure: &changed,

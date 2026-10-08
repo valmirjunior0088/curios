@@ -41,12 +41,12 @@ fn build() {
     }
 
     // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each image is framed as every store slot is, holding the unit before certification, so the prelude `curios-prelude` certifies and restores is a fold of two units and not a shape of its own.
-    let sys = archive("sys", sys_text, Established::nothing(), &[], &[]);
+    let sys = archive("sys", sys_text, &Established::nothing(), &[], &[]);
     let std_predecessors = [sys.core()];
     let std = archive(
         "std",
         std_text,
-        Established::over(&std_predecessors),
+        &Established::over(&std_predecessors),
         &std_predecessors,
         &[sys.erased()],
     );
@@ -81,7 +81,7 @@ fn lower(
 fn archive(
     root: &str,
     mut prepared: PreparedText,
-    established: Established<'_>,
+    established: &Established<'_>,
     predecessors: &[&curios_core::Module],
     erased: &[&ErasedUnit],
 ) -> Uncertified {

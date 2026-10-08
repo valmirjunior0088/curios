@@ -42,6 +42,7 @@ pub fn compile_unit_over(
     let reused = baseline.core().restricted(|name| !closure.contains(name));
     let changed = lowered.core().restricted(|name| closure.contains(name));
 
+    let established = Established::over(&cores);
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
@@ -49,7 +50,7 @@ pub fn compile_unit_over(
         lowered.broken(),
         elaborate_and_zonk_unit_over(
             &mut context,
-            Established::over(&cores),
+            &established,
             Recompile {
                 reused: &reused,
                 closure: &changed,

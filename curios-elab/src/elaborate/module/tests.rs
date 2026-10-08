@@ -275,7 +275,6 @@ fn baseline_reading_through() -> Module {
 #[test]
 fn the_vocabulary_reaches_what_it_reads_through_a_baselines_items() {
     let baseline = baseline_reading_through();
-    let modules = [&baseline];
     let order = written(&[
         lemma(),
         nominal("between"),
@@ -284,20 +283,19 @@ fn the_vocabulary_reaches_what_it_reads_through_a_baselines_items() {
     ]);
 
     assert_eq!(
-        vocabulary_reach(&context(), Established::over(&modules), &order),
+        vocabulary_reach(&context(), Some(&baseline), &order),
         BTreeSet::from([lemma(), nominal("between"), nominal("read")]),
     );
 }
 
-/// A unit that declares none of the vocabulary asks for nothing first, whatever its scope holds.
+/// A unit that declares none of the vocabulary asks for nothing first, whatever it reuses.
 #[test]
 fn a_unit_declaring_none_of_the_vocabulary_asks_for_nothing_first() {
-    let scope = baseline_reading_through();
-    let modules = [&scope];
+    let reused = baseline_reading_through();
     let order = written(&[nominal("read"), nominal("apart")]);
 
     assert_eq!(
-        vocabulary_reach(&context(), Established::over(&modules), &order),
+        vocabulary_reach(&context(), Some(&reused), &order),
         BTreeSet::new(),
     );
 }

@@ -413,7 +413,7 @@ impl<'s> Context<'s> {
         self.underway.needs.nothing()
     }
 
-    /// Publish a finished item: bind each of its names to what it elaborated to and file the registry entries it declares, each zonked ([`zonk_published`](crate::zonk_published)), as a unit in scope is replayed ([`Established::replay_definitions`](crate::Established)). What another declaration reads of this one then holds no metavariable of the state it was elaborated in, which the next declaration replaces, and is what a recompile that reuses the item reads.
+    /// Publish a finished item: bind each of its names to what it elaborated to and file the registry entries it declares, each zonked ([`zonk_published`](crate::zonk_published)), as a recompile's reused items are replayed (`replay_reused`). What another declaration reads of this one then holds no metavariable of the state it was elaborated in, which the next declaration replaces, and is what a recompile that reuses the item reads.
     pub(crate) fn publish(&mut self, published: &Published) {
         for (name, declaration) in &published.induct_decls {
             self.update_induct(name, declaration.clone());
@@ -1671,6 +1671,11 @@ impl<'s> Context<'s> {
 
     pub(crate) fn concept(&self, name: &Global) -> Option<&ConceptDecl> {
         self.reads_entry(name);
+        self.typing.program.concept(name)
+    }
+
+    /// The concept registered under `name`, the unit's own or a unit's in scope, read as [`Context::concepts`] reads the unit's table: no read is recorded. It is what the registry's validation follows a superclass edge by, which decides nothing of the declaration being elaborated and so is no need of it.
+    pub(crate) fn registered_concept(&self, name: &Global) -> Option<&ConceptDecl> {
         self.typing.program.concept(name)
     }
 

@@ -202,7 +202,10 @@ pub(super) fn written_type(id: usize) -> curios_core::Term {
 }
 
 /// `src` lowered and elaborated as a program against `established`, its entry inferred.
-fn elaborate_program(src: &str, established: curios_elab::Established<'_>) -> curios_core::Program {
+fn elaborate_program(
+    src: &str,
+    established: &curios_elab::Established<'_>,
+) -> curios_core::Program {
     let (program, minted, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
         &RootSource::none(),
@@ -226,7 +229,7 @@ fn elaborate_program(src: &str, established: curios_elab::Established<'_>) -> cu
 
 /// `src` elaborated with nothing in scope, and the term it closes with.
 pub(super) fn elaborate_source_program(src: &str) -> curios_core::Program {
-    elaborate_program(src, curios_elab::Established::nothing())
+    elaborate_program(src, &curios_elab::Established::nothing())
 }
 
 /// The module `src` elaborates to with nothing in scope.
@@ -257,10 +260,10 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core
     )
     .unwrap();
 
-    let full = elaborate_program(src, curios_elab::Established::nothing());
+    let full = elaborate_program(src, &curios_elab::Established::nothing());
     let cached = elaborate_program(
         src,
-        curios_elab::Established::over(std::slice::from_ref(&&prelude)),
+        &curios_elab::Established::over(std::slice::from_ref(&&prelude)),
     );
     (full, cached)
 }

@@ -15,9 +15,9 @@ use {
         check_type_totality, check_written_type_totality, compared_levels, decide_polarities,
         definition_variances, family_levels, goal_sites, hold_variances, is_prop,
         record_definition_totality, record_superclasses, record_variances, reduce_with,
-        register_witness, report_goals, sort_term, stamp_totality, superclass_targets,
-        test_program_tail, zonk, zonk_arity, zonk_entry, zonk_module, zonk_published,
-        zonk_solved_term_metas,
+        register_witness, replay_reused, report_goals, seed_reused, sort_term, stamp_totality,
+        superclass_targets, test_program_tail, zonk, zonk_arity, zonk_entry, zonk_module,
+        zonk_published, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_core::{
@@ -1428,7 +1428,7 @@ fn declared_witnesses(module: &Module, order: &BTreeMap<Global, usize>) -> Vec<(
 /// Empty for a unit that declares none of the vocabulary, which is every unit but the library's.
 fn vocabulary_reach(
     context: &Context,
-    established: Established<'_>,
+    reused: Option<&Module>,
     order: &BTreeMap<Global, usize>,
 ) -> BTreeSet<Global> {
     let mut pending = context
@@ -1443,10 +1443,9 @@ fn vocabulary_reach(
     }
 
     // The unit's items that arrive elaborated, each with the module that says what it reaches.
-    let reused = established
-        .modules()
-        .iter()
-        .flat_map(|module| module.items.iter().map(move |item| (*module, item)))
+    let reused = reused
+        .into_iter()
+        .flat_map(|module| module.items.iter().map(move |item| (module, item)))
         .flat_map(|(module, item)| {
             item.declared_names()
                 .into_iter()
@@ -1494,18 +1493,28 @@ struct ElaboratedSuffix {
 ///
 /// **One protocol serves both entry points**, and that is the point. `established` is [`Established::nothing`] for a from-scratch elaboration and the units in scope otherwise; every step below degenerates to the whole-module reading when it is empty, so there is no second implementation to keep in agreement by reading — the shape of a configuration-dependent defect, a rule correct in the configuration its author was looking at and wrong in the other one.
 ///
-/// The scope diverges at exactly one point: after [`check_concept_registry`], its definitions are *replayed* into the context rather than elaborated.
-fn elaborate_module_suffix(
-    context: &mut Context,
-    established: Established<'_>,
+/// A scope is read through where it stands and nothing of it is elaborated or brought in ([`Context::read_through`]). What is replayed is `reused`, the items a recompile takes from its baseline: they are the unit's own, and go into the base frame after [`check_concept_registry`] as the items elaborated beside them will.
+fn elaborate_module_suffix<'s>(
+    context: &mut Context<'s>,
+    established: Option<&'s Established<'_>>,
+    reused: Option<&Module>,
     module: &Module,
     lowered: &Module,
     minted: &Minted,
     tail: Option<Tail<'_>>,
 ) -> Result<ElaboratedSuffix, Error> {
     curios_profile::profile!("elaborate_module_suffix");
-    // What is already in scope goes in before any item is checked; `register_*` rejects a duplicate key, and the unit declares only its own, so the two cannot collide.
-    established.seed_registries(context)?;
+    // The scope is read through, and nothing of it goes in but each unit's mounts, which a privilege question is answered out of and which the unit's own items may ask while they elaborate. `register_*` rejects a key the scope holds, and the unit declares only its own, so the two cannot collide.
+    if let Some(established) = established {
+        established.coherent()?;
+        context.read_through(established);
+        for unit in established.modules() {
+            context.mount(&unit.mounts);
+        }
+    }
+    if let Some(reused) = reused {
+        seed_reused(context, reused)?;
+    }
     // The unit's own mounts, after its scope's. Mount sets are pairwise disjoint, so the order only fixes which entry a lookup finds first among equals, and there are none.
     context.mount(&module.mounts);
 
@@ -1528,7 +1537,9 @@ fn elaborate_module_suffix(
     }
     check_concept_registry(context)?;
 
-    established.replay_definitions(context)?;
+    if let Some(reused) = reused {
+        replay_reused(context, reused)?;
+    }
 
     // Elaboration goes on minting in the spaces the unit's lowering minted in, so each counter starts above the lowering's count: a lowered hole and an inserted implicit are distinct metavariables, and an unbound name — a free local the lowering minted — is never an elaborated binder, which would find it bound instead of reporting it. The scope's terms carry neither, so nothing a predecessor minted can meet these.
     context.seed(minted);
@@ -1547,7 +1558,7 @@ fn elaborate_module_suffix(
     for (name, declared) in declared_witnesses(module, &order) {
         context.declare_witness(name, declared);
     }
-    let vocabulary = vocabulary_reach(context, established, &order);
+    let vocabulary = vocabulary_reach(context, reused, &order);
     context.begin_unit(
         order,
         module
@@ -1904,14 +1915,7 @@ pub fn elaborate_and_zonk_module(
 ) -> Result<Module, Error> {
     curios_profile::profile!("elaborate_and_zonk_module");
     grown(|| {
-        let suffix = elaborate_module_suffix(
-            context,
-            Established::nothing(),
-            module,
-            module,
-            minted,
-            None,
-        )?;
+        let suffix = elaborate_module_suffix(context, None, None, module, module, minted, None)?;
         let finalized = finalize_and_check(
             context,
             suffix.module,
@@ -1938,14 +1942,14 @@ pub enum Tail<'a> {
 
 /// Elaborate one [`Module`] against the units already established, then zonk and check it.
 ///
-/// `established` is that scope: the modules elaborated ahead of this one, in dependency order and *borrowed* rather than merged. What a predecessor contributes is its nominal registries, its mounts and its recorded totality verdicts, seeded into the [`Context`] before the unit's first item is checked — never its items.
+/// `established` is that scope: the modules elaborated ahead of this one, in dependency order and *borrowed* rather than merged. What a predecessor contributes is read where it stands — a name's type and body, a registry entry, a totality verdict, the witness at a key — and nothing of it is seeded into the [`Context`] but its mounts.
 ///
 /// Sound because a scope is unit-independent: its items never see this unit's code, and — since top-level definitions are excluded from a metavariable's Γ (`Context::identity_snapshot`) — an item elaborates against the identical local context it would with no scope at all, so the solutions (and the zonked output) are identical.
 ///
 /// **The returned module holds this unit's items and no one else's.** That is a contract rather than an artifact of how the elaboration happens to be written: [`crate::erase_unit`] erases a unit *onto* what its scope already erased, and re-deriving the standard library on every compilation is exactly what carrying it here would cost.
-pub fn elaborate_and_zonk_unit(
-    context: &mut Context,
-    established: Established<'_>,
+pub fn elaborate_and_zonk_unit<'s>(
+    context: &mut Context<'s>,
+    established: &'s Established<'_>,
     module: &Module,
     minted: &Minted,
 ) -> Result<Module, Error> {
@@ -1956,9 +1960,9 @@ pub fn elaborate_and_zonk_unit(
 /// [`elaborate_and_zonk_unit`] for a program: `module` and the term `tail` closes it with, both elaborated, zonked and checked.
 ///
 /// The entry comes back `None` only where it was withheld for reaching an item the lowering could not read. Withholding records no refusal — that is `recovery`'s decision for every dependent of a broken item — so the caller, which holds the broken items, reports them, and a program with none always has its entry.
-pub fn elaborate_and_zonk_program(
-    context: &mut Context,
-    established: Established<'_>,
+pub fn elaborate_and_zonk_program<'s>(
+    context: &mut Context<'s>,
+    established: &'s Established<'_>,
     module: &Module,
     minted: &Minted,
     tail: Tail<'_>,
@@ -1975,9 +1979,9 @@ pub fn elaborate_and_zonk_program(
 /// [`elaborate_and_zonk_program`] with the erasure obligations *reported* rather than raised.
 ///
 /// Elaboration is no less checked: everything that decides whether the program is well-typed still short-circuits. What is handed back instead of thrown is the pair of obligations `curios-cert` also decides — (T) and (V) — and the reason is that a fixture this checker refuses must still be able to reach the kernel. Raising leaves no program, so whether the kernel would have refused the same program is unobservable, and that is precisely the disagreement worth seeing: an obligation only this side enforces is the trusted base resting on an elaborator-only analysis. The two-checker fixture harness in `curios` is the caller; every other caller wants [`elaborate_and_zonk_program`].
-pub fn elaborate_and_zonk_program_reporting(
-    context: &mut Context,
-    established: Established<'_>,
+pub fn elaborate_and_zonk_program_reporting<'s>(
+    context: &mut Context<'s>,
+    established: &'s Established<'_>,
     module: &Module,
     minted: &Minted,
     tail: Tail<'_>,
@@ -1996,17 +2000,24 @@ pub fn elaborate_and_zonk_program_reporting(
 }
 
 /// The walk every unit and program is elaborated by: the items, then the term `tail` closes a program with, finalized together.
-fn elaborate_and_zonk(
-    context: &mut Context,
-    established: Established<'_>,
+fn elaborate_and_zonk<'s>(
+    context: &mut Context<'s>,
+    established: &'s Established<'_>,
     module: &Module,
     minted: &Minted,
     tail: Option<Tail<'_>>,
 ) -> Result<Finalized, Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
     grown(|| {
-        let elaborated =
-            elaborate_module_suffix(context, established, module, module, minted, tail)?;
+        let elaborated = elaborate_module_suffix(
+            context,
+            Some(established),
+            None,
+            module,
+            module,
+            minted,
+            tail,
+        )?;
         let finalized = finalize_and_check(
             context,
             elaborated.module,
@@ -2017,7 +2028,7 @@ fn elaborate_and_zonk(
         if !elaborated.refusals.is_empty() {
             return Err(refused(elaborated.refusals, finalized));
         }
-        // Nothing is merged back in. The unit's items, the unit's declarations: what a predecessor contributes is scope, and every consumer past this point takes it as such — `Globals` at the certifier, a replayed context at erasure.
+        // Nothing is merged back in. The unit's items, the unit's declarations: what a predecessor contributes is scope, and every consumer past this point takes it as such — `Globals` at the certifier, a view at erasure.
         let Finalized {
             module,
             entry,
@@ -2032,7 +2043,7 @@ fn elaborate_and_zonk(
     })
 }
 
-/// What an item-level recompile hands elaboration: the baseline's items it reuses, replayed as one more predecessor; the closure it re-elaborates, restricted out of the new lowering, whose seeds come beside it in the whole unit's [`Minted`]; and that lowering, which says which items the unit holds.
+/// What an item-level recompile hands elaboration: the baseline's items it reuses, replayed into the base frame; the closure it re-elaborates, restricted out of the new lowering, whose seeds come beside it in the whole unit's [`Minted`]; and that lowering, which says which items the unit holds.
 ///
 /// The closure is closed under reverse reachability over the baseline's elaborated graph — the caller's obligation. A reused declaration's cells stand as the baseline published them — its vectors, its totality — and nothing here writes one again: nothing a reused declaration read is in the closure, so what decided them has not moved.
 pub struct Recompile<'a> {
@@ -2041,14 +2052,14 @@ pub struct Recompile<'a> {
     pub lowered: &'a Module,
 }
 
-/// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the closure alone is elaborated, against the scope with the reused items replayed as one more predecessor, and the result is reassembled with them into one module, put in the order a whole compile stores it in (`Module::ordered`).
+/// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the closure alone is elaborated, against the scope with the reused items replayed into the base frame, and the result is reassembled with them into one module, put in the order a whole compile stores it in (`Module::ordered`).
 ///
 /// Everything decided of a declaration narrows to the closure by construction: each of its declarations decides its own vectors, totality and erasure obligations as it is published, reading a reused declaration's as the baseline left them, and a reused item is zonked and stamped already. A cycle is met among the closure's items as they are asked for: one through a reused witness would need that witness to reach a closure item, which contradicts the closure being closed, and a cycle among reused witnesses was refused when the baseline compiled.
 ///
 /// **A run that refused nothing may still have kept fewer items than it was handed**, so the reassembly is told what was dropped rather than left to read it off an absence. An item withheld for reaching a broken name records no refusal — that is `recovery`'s decision and the whole-unit path's behaviour — and the early return below therefore does not catch it. Such a run never becomes a unit: poison exists only where something was refused or the lowering reported an item broken, and `with_broken` turns the second into a failure before anything is judged, erased or filed.
-pub fn elaborate_and_zonk_unit_over(
-    context: &mut Context,
-    established: Established<'_>,
+pub fn elaborate_and_zonk_unit_over<'s>(
+    context: &mut Context<'s>,
+    established: &'s Established<'_>,
     recompile: Recompile<'_>,
     minted: &Minted,
 ) -> Result<Module, Error> {
@@ -2056,19 +2067,16 @@ pub fn elaborate_and_zonk_unit_over(
     grown(|| elaborate_and_zonk_unit_over_within(context, established, recompile, minted))
 }
 
-fn elaborate_and_zonk_unit_over_within(
-    context: &mut Context,
-    established: Established<'_>,
+fn elaborate_and_zonk_unit_over_within<'s>(
+    context: &mut Context<'s>,
+    established: &'s Established<'_>,
     recompile: Recompile<'_>,
     minted: &Minted,
 ) -> Result<Module, Error> {
-    let mut modules = established.modules().to_vec();
-    modules.push(recompile.reused);
-    let extended = Established::over(&modules);
-
     let elaborated = elaborate_module_suffix(
         context,
-        extended,
+        Some(established),
+        Some(recompile.reused),
         recompile.closure,
         recompile.lowered,
         minted,

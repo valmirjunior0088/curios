@@ -1076,9 +1076,10 @@ pub(crate) fn record_superclasses(
 pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
     let concepts = context.concepts();
 
+    // A superclass is the unit's own or a unit's in scope, so each edge is followed through the registry as the context holds it, the scope beneath the unit's own table, and by the lookup that records no read: validating the registry is no declaration's need of another.
     for (name, concept) in concepts {
         for target in &concept.supers {
-            if !concepts.contains_key(target) {
+            if context.registered_concept(target).is_none() {
                 return Err(Error::unknown_superclass(
                     name.symbol(),
                     Term::free_var(&Free::Global(*target)),
@@ -1087,9 +1088,9 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
         }
     }
 
-    // Three-color DFS over the superclass edges. A direct self-edge is just the shortest cycle: it revisits its own name while `visiting` still holds it, so no separate check precedes the walk. Every target was proven present above, which is what lets the lookup expect.
+    // Three-color DFS over the superclass edges, from the unit's own concepts. A direct self-edge is just the shortest cycle: it revisits its own name while `visiting` still holds it, so no separate check precedes the walk. Every target was proven present above, and a concept of a unit in scope had its own proven where that unit was compiled, which is what lets the lookup expect.
     fn visit(
-        concepts: &BTreeMap<Global, ConceptDecl>,
+        context: &Context,
         name: &Global,
         visiting: &mut BTreeSet<Global>,
         done: &mut BTreeSet<Global>,
@@ -1100,11 +1101,11 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
         if !visiting.insert(*name) {
             return Err(Error::cyclic_superclass(name.symbol()));
         }
-        let concept = concepts
-            .get(name)
+        let concept = context
+            .registered_concept(name)
             .expect("every superclass target is a registered concept");
         for target in &concept.supers {
-            visit(concepts, target, visiting, done)?;
+            visit(context, target, visiting, done)?;
         }
         visiting.remove(name);
         done.insert(*name);
@@ -1114,7 +1115,7 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
     let mut visiting = BTreeSet::new();
     let mut done = BTreeSet::new();
     for name in concepts.keys() {
-        visit(concepts, name, &mut visiting, &mut done)?;
+        visit(context, name, &mut visiting, &mut done)?;
     }
 
     Ok(())
