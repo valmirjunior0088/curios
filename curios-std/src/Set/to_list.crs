@@ -1,0 +1,25 @@
+use /std/{List, Ord, Map};
+use /std/Bool/{Holds};
+use /std/List/{Pairwise};
+use /std/Map/{Key};
+use /std/Set/{Set};
+
+--- The elements, in their type's own order: each is before every one after it, by [`pairwise`].
+pub let to_list(@K: Type, use Key(K), s: Set(K)) -> List(K) =
+    Map/keys(s.map);
+
+--- The elements of a set are in strict order by their type's own order, each before every one after it: `Map/keys/pairwise` of the map under it.
+pub let pairwise(
+    @K: Type,
+    use Key(K),
+    s: Set(K),
+) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(to_list(s)) =
+    Map/keys/pairwise(s.map);
+
+--- The elements of a set are in strict order at adjacent elements, as a decision.
+pub let ordered(
+    @K: Type,
+    use Key(K),
+    s: Set(K),
+) -> Holds(List/ordered(to_list(s), Ord/lt((a: K, b: K) => Ord/ord(a, b)))) =
+    Map/keys/ordered(s.map);

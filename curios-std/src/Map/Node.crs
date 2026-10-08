@@ -1,8 +1,9 @@
-use /std/{Bytes, Nat, Bool, Option, Eq, Hash};
+use /std/{Bytes, Nat, Bool, Option, List, Eq, Hash, Ord, Ordering};
 use /std/Bool/{True, Holds};
+use /std/List/{Member, Pairwise};
 use /std/Map/{Key};
 use /std/Map/bits/{bit, crit, Apart, Parting, parting, turned, carried, reheaded, other_clear,
-    other_set, below_clear, below_set};
+    other_set, below_clear, below_set, before};
 
 --- A trie's node: a key with its value, or a fork at the bit its two sides first differ at, the keys clear at it on the zero side.
 pub induct Node(K: Type, V: Type): pub Type
@@ -673,4 +674,139 @@ pub let mapped(
                     (e: Bytes) => Holds(Bool/not(bit(e, c))),
                     Eq/sym(map_first(z, f)),
                     sound.clear) }
+    end;
+
+--- The keys under a node, the zero side's first.
+pub let keys(@K: Type, @V: Type, t: Node(K, V)) -> List(K) =
+    match t | leaf(k, _) => [k] | fork(_, z, o) => [..keys(z), ..keys(o)] end;
+
+--- The keys under a node appended to `acc`, the zero side's first: [`keys`] by one walk that builds its answer from the back.
+pub let collect(@K: Type, @V: Type, t: Node(K, V), acc: List(K)) -> List(K) =
+    match t | leaf(k, _) => [..acc, k] | fork(_, z, o) => collect(o, collect(z, acc)) end;
+
+--- The walk leaves the node's keys behind what it began with.
+pub let collected(
+    @K: Type,
+    @V: Type,
+    t: Node(K, V),
+    acc: List(K),
+) -> Eq()(collect(t, acc), [..acc, ..keys(t)]) =
+    match t
+    | leaf(_, _) => Eq/refl()
+    | fork(_, z, o) =>
+        Eq/trans(
+            Eq/cong((s: List(K)) => collect(o, s), collected(z, acc)),
+            collected(o, [..acc, ..keys(z)]))
+    end;
+
+-- Every key under a sound node agrees with the node's first key through any bit the node forks past.
+let within(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    t: Node(K, V),
+    sound: Sound(t),
+    c: Nat,
+    past: Holds(deeper(t, c)),
+    x: K,
+    i: Member()(x, keys(t)),
+    j: Nat,
+    le: Holds(j <= c),
+) -> Eq()(bit(Hash/hash(x), j), bit(first(t), j)) =
+    match t
+    | leaf(_, _) =>
+        Member/uncons(
+            i,
+            (e) => Eq/cong((y: K) => bit(Hash/hash(y), j), e),
+            (rest) => match Member/absent(rest) end)
+    | fork(d, z, o) =>
+        Member/split(
+            keys(z),
+            i,
+            (in_zero) =>
+                within(
+                    z,
+                    sound.zero,
+                    c,
+                    deeper_down(z, d, c, sound.under_zero, True/proved()),
+                    x,
+                    in_zero,
+                    j,
+                    le),
+            (in_one) =>
+                Eq/trans(
+                    within(
+                        o,
+                        sound.one,
+                        c,
+                        deeper_down(o, d, c, sound.under_one, True/proved()),
+                        x,
+                        in_one,
+                        j,
+                        le),
+                    Eq/sym(sound.apart.below(j, True/proved()))))
+    end;
+
+--- A key under the zero side of a sound fork is before every key under its one side, as `Bytes/ord` reads their encodings: the two are apart at the fork's bit, which the first has clear.
+pub let across(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    c: Nat,
+    z: Node(K, V),
+    o: Node(K, V),
+    sound: Sound(Node/fork(c, z, o)),
+    x: K,
+    y: K,
+    in_zero: Member()(x, keys(z)),
+    in_one: Member()(y, keys(o)),
+) -> Eq()(Bytes/ord(Hash/hash(x), Hash/hash(y)), Ordering/lt()) =
+    let from_zero: Apart(Hash/hash(x), first(o), c) =
+        reheaded(
+            first(z),
+            Hash/hash(x),
+            first(o),
+            c,
+            sound.apart,
+            (j, le) => within(z, sound.zero, c, sound.under_zero, x, in_zero, j, le));
+    before(
+        Hash/hash(x),
+        Hash/hash(y),
+        c,
+        turned(
+            Hash/hash(y),
+            Hash/hash(x),
+            c,
+            reheaded(
+                first(o),
+                Hash/hash(y),
+                Hash/hash(x),
+                c,
+                turned(Hash/hash(x), first(o), c, from_zero),
+                (j, le) => within(o, sound.one, c, sound.under_one, y, in_one, j, le))),
+        Eq/subst(
+            (v: Bool) => Holds(Bool/not(v)),
+            Eq/sym(within(z, sound.zero, c, sound.under_zero, x, in_zero, c, True/qed())),
+            sound.clear));
+
+--- The keys under a sound node are in strict order, each before every one after it.
+pub let ascending(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    t: Node(K, V),
+    sound: Sound(t),
+) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(keys(t)) =
+    match t
+    | leaf(_, _) => Pairwise/cons((_, i) => match Member/absent(i) end, Pairwise/empty())
+    | fork(c, z, o) =>
+        Pairwise/joined(
+            keys(z),
+            ascending(z, sound.zero),
+            ascending(o, sound.one),
+            (x, y, i, j) =>
+                Eq/subst(
+                    (r: Ordering) => Holds(Ordering/is_lt(r)),
+                    Eq/sym(Eq/trans(Key/monotone(x, y), across(c, z, o, sound, x, y, i, j))),
+                    True/qed()))
     end;

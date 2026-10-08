@@ -132,7 +132,7 @@ pub let remove(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Map(K, V
         end
     end;
 
---- Over the entries in the order of their encoded keys, with `f(key, value, acc)`.
+--- Over the entries in the order of their keys, with `f(key, value, acc)`.
 pub let fold(
     @K: Type,
     use Key(K),
@@ -150,15 +150,15 @@ pub let fold(
         go(n, init)
     end;
 
---- The entries, in the order of their encoded keys.
+--- The entries, in the order of their keys.
 pub let entries(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List({K, V}) =
     fold(m, [], (k, v, acc) => [..acc, (k, v)]);
 
---- The keys, in the order of their encodings.
-pub let keys(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List(K) =
-    fold(m, [], (k, _, acc) => [..acc, k]);
+--- A map's keys, with the theorem that they are in their type's own order.
+pub mod keys;
+pub use keys/{let keys};
 
---- The values, in the order of their keys' encodings.
+--- The values, in the order of their keys.
 pub let values(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List(V) =
     fold(m, [], (_, v, acc) => [..acc, v]);
 

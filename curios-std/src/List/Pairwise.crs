@@ -118,3 +118,55 @@ pub let everywhere(
     | [] => Pairwise/empty()
     | [h, .._]; ih => Pairwise/cons((y, _) => holds(h, y), ih)
     end;
+
+--- Two pairwise lists are pairwise joined, where every element of the first stands in `le` to every element of the second.
+pub let joined(
+    @T: Type,
+    @le: (T, T) -> Bool,
+    a: List(T),
+    @b: List(T),
+    first: Pairwise(le)(a),
+    second: Pairwise(le)(b),
+    across: (x: T, y: T, Member()(x, a), Member()(y, b)) -> Holds(le(x, y)),
+) -> Pairwise(le)([..a, ..b]) =
+    match a: (m) =>
+        (
+            first: Pairwise(le)(m),
+            across: (x: T, y: T, Member()(x, m), Member()(y, b)) -> Holds(le(x, y))) -> Pairwise(
+            le)([..m, ..b])
+    | [] => (_, _) => second
+    | [h, ..t]; ih =>
+        (first, across) =>
+            Pairwise/cons(
+                (y, i) =>
+                    Member/split(
+                        t,
+                        i,
+                        (in_first) => head(first)(y, in_first),
+                        (in_second) => across(h, y, Member/here(), in_second)),
+                ih(tail(first), (x, y, i, j) => across(x, y, Member/there(i), j)))
+    end(first, across);
+
+--- A pairwise list is in order at adjacent elements: what `of_ordered` asks transitivity for, the other way round, asks nothing.
+pub let adjacent(
+    @T: Type,
+    le: (T, T) -> Bool,
+    l: List(T),
+    whole: Pairwise(le)(l),
+) -> Holds(ordered(l, le)) =
+    match l: (m) => (whole: Pairwise(le)(m)) -> Holds(ordered(m, le))
+    | [] => (_) => True/qed()
+    | [h, ..t]; ih =>
+        (whole) =>
+            ordered/cons(
+                le,
+                h,
+                t,
+                match t: (r) =>
+                    (leading: (y: T, Member()(y, r)) -> Holds(le(h, y))) -> Holds(
+                        ordered/leads(le, h, r))
+                | [] => (_) => True/qed()
+                | [k, .._] => (leading) => leading(k, Member/here())
+                end(head(whole)),
+                ih(tail(whole)))
+    end(whole);

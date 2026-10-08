@@ -42,6 +42,10 @@ pub let Transitive(@T: Type, le: (T, T) -> Bool) -> Prop =
 pub let le(@T: Type, ord: (T, T) -> Ordering) -> (T, T) -> Bool =
     (a, b) => Ordering/is_le(ord(a, b));
 
+--- `ord` as a strict relation: what it answers `lt` at.
+pub let lt(@T: Type, ord: (T, T) -> Ordering) -> (T, T) -> Bool =
+    (a, b) => Ordering/is_lt(ord(a, b));
+
 --- `ord`, and `second` among what `ord` ties: the relation that holds where `ord` answers `lt`, and where it answers `eq` and `second` holds.
 ---
 --- At a `second` that always holds it is `le(ord)`. It is the order two sorts in a row leave a list in, the later sort's comparator first.

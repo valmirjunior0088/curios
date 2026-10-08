@@ -1,0 +1,50 @@
+use /std/{List, Option, Eq, Ord};
+use /std/Bool/{Holds};
+use /std/List/{Pairwise};
+use /std/Map/{Map, Key, Node, Grounded, grounded};
+use /std/Map/Node/{let Node};
+
+--- The keys, in their type's own order: each is before every one after it, by [`pairwise`].
+pub let keys(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List(K) =
+    match m.root | none() => [] | some(n) => Node/collect(n, []) end;
+
+-- The keys under a sound root are in strict order.
+let of_root(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    root: Option(Node(K, V)),
+    ground: Grounded(root),
+) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(
+    match root | none() => [] | some(n) => Node/collect(n, []) end) =
+    match root: (r) =>
+        (ground: Grounded(r)) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(
+            match r | none() => [] | some(n) => Node/collect(n, []) end)
+    | none() => (_) => Pairwise/empty()
+    | some(n) =>
+        (ground) =>
+            Eq/subst(
+                (l: List(K)) => Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(l),
+                Eq/sym(Node/collected(n, [])),
+                Node/ascending(n, ground))
+    end(ground);
+
+--- The keys of a map are in strict order by their type's own order, each before every one after it.
+---
+--- A map's trie is sound, so a key under a fork's zero side is before every key under its one side as `Bytes/ord` reads their encodings, and `Key/monotone` makes that the keys' own order. It asks nothing beyond the map's `Key(K)`.
+pub let pairwise(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    m: Map(K, V),
+) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(keys(m)) =
+    of_root(m.root, grounded(m.sound));
+
+--- The keys of a map are in strict order at adjacent elements, as a decision.
+pub let ordered(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    m: Map(K, V),
+) -> Holds(List/ordered(keys(m), Ord/lt((a: K, b: K) => Ord/ord(a, b)))) =
+    Pairwise/adjacent(Ord/lt((a: K, b: K) => Ord/ord(a, b)), keys(m), pairwise(m));

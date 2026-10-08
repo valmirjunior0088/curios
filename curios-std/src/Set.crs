@@ -29,13 +29,13 @@ pub let insert(@K: Type, use Key(K), s: Set(K), k: K) -> Set(K) =
 pub let remove(@K: Type, use Key(K), s: Set(K), k: K) -> Set(K) =
     Set { map = Map/remove(s.map, k) };
 
---- Over the elements in the order of their encodings, with `f(elem, acc)`.
+--- Over the elements in their order, with `f(elem, acc)`.
 pub let fold(@K: Type, use Key(K), @A: Type, s: Set(K), init: A, f: (K, A) -> A) -> A =
     Map/fold(s.map, init, (k, _, acc) => f(k, acc));
 
---- The elements, in the order of their encodings.
-pub let to_list(@K: Type, use Key(K), s: Set(K)) -> List(K) =
-    Map/keys(s.map);
+--- A set's elements, with the theorem that they are in their type's own order.
+pub mod to_list;
+pub use to_list/{let to_list};
 
 --- The set of the elements of `l`.
 pub let of(@K: Type, use Key(K), l: List(K)) -> Set(K) =
