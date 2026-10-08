@@ -64,6 +64,25 @@ pub fn wholly_pinned(binders: &[Free], targets: &[Term]) -> bool {
     binders.iter().all(|binder| pinned.contains(binder))
 }
 
+/// What a scrutinee's indices `actuals` state of a wholly pinned constructor: its payload, each of `binders` read off the first index position that pins it, and the indices of the instance it builds at that payload. A match on such a proposition puts that instance beside the scrutinee's, by its checker's conversion: where the two are one the proof can be no other value, and the match is its arm at that payload with the proof unreduced. `None` where a target pins some binder at no position.
+pub fn pinned_instance(
+    binders: &[Free],
+    targets: &[Term],
+    actuals: &[Term],
+) -> Option<(Vec<Term>, Vec<Term>)> {
+    let pinned = pinned_by_targets(targets);
+    let read = binders
+        .iter()
+        .map(|binder| Some((*binder, actuals.get(pinned.position(binder)?)?.clone())))
+        .collect::<Option<Vec<_>>>()?;
+    let built = targets
+        .iter()
+        .map(|target| target.substitute(&read))
+        .collect();
+
+    Some((read.into_iter().map(|(_, value)| value).collect(), built))
+}
+
 /// The outcome of inversion: either every index position decomposed (or refused) cleanly, yielding the forced arm-binder solutions, or some position clashed definitely and the arm is unreachable.
 pub enum Invert {
     Solved(Vec<(Free, Term)>),

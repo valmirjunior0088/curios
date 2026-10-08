@@ -15,15 +15,20 @@ use {
     super::{
         Context, Settled, hold_at_one_instance, levels_clash_to_conversion, zonk_solved_term_metas,
     },
-    crate::{Error, classing, convert_at, is_prop, reduce_with, same_uncommitted},
-    curios_analysis::{Answered, Driver, answers, answers_classed, could_reduce_to},
+    crate::{
+        Binders, Error, classing, convert_at, is_prop, reduce_with, same_uncommitted, synth_neutral,
+    },
+    curios_analysis::{
+        Answered, Driver, answers, answers_classed, case_target_indices, could_reduce_to,
+        pinned_instance,
+    },
     curios_core::{
-        Advance, Apply, Argument, Bound, Carrier, Cases, Classes, ClosedHost, Cost, Demand, Field,
-        Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead,
-        Intrinsic, Layer, Let, Level, Match, MatchResult, Metavar, Nat, Polarity, Probe, Proj, Rec,
-        RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType, Subterm, Telescope, Term,
-        Tuple, TupleType, Var, Variant, Visit, accelerable, atoms_within, classable,
-        instantiate_universe_levels_scoped, probe_spellings, project_erased_universes,
+        Advance, Apply, Argument, Atom, Bound, Carrier, Cases, Classes, ClosedHost, Cost, Demand,
+        Field, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType, Instance,
+        InstanceHead, Intrinsic, Layer, Let, Level, Match, MatchResult, Metavar, Nat, Polarity,
+        Probe, Proj, Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType, Subterm,
+        Telescope, Term, Tuple, TupleType, Var, Variant, Visit, accelerable, atoms_within,
+        classable, instantiate_universe_levels_scoped, probe_spellings, project_erased_universes,
         reduce_closed, reduce_intrinsic, refold,
     },
     curios_utilities::{SyntaxRegistry, recurse},
@@ -34,6 +39,16 @@ use {
 impl ClosedHost for Context<'_> {
     fn closed_body(&self, name: &Free) -> Option<&Term> {
         self.var_reduct(name)
+    }
+
+    fn stated_payload(
+        &mut self,
+        head: &Term,
+        tag: &Atom,
+    ) -> Result<Option<Vec<Term>>, ReduceError> {
+        let head = structural(self, head.clone())?;
+
+        Ok(stated(self, &head, tag)?.map(|stated| stated.payload))
     }
 
     fn closed_body_at(&self, name: &Free) -> Option<&Term> {
@@ -501,6 +516,136 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
         }
         _ => Ok(Reduce::Break(Term::from(Subterm::Func(func)))),
     }
+}
+
+/// `head` stepped through the redexes that unfold no definition: a `let` released, and a function literal applied where it stands. What is left is the scrutinee a lookup types where one can, with no proof read to reach it.
+fn structural(context: &mut Context, mut head: Term) -> Result<Term, ReduceError> {
+    loop {
+        head = match Term::unwrap_or_clone(head) {
+            Subterm::Let(let_) => match reduce_let(context, let_)? {
+                Reduce::Continue(tail) | Reduce::Break(tail) => tail,
+            },
+            Subterm::Apply(Apply {
+                head: function,
+                arguments,
+            }) => match &*function {
+                Subterm::Func(Func { telescope, .. }) if telescope.len() == arguments.len() => {
+                    let refs = arguments
+                        .iter()
+                        .map(|argument| &argument.term)
+                        .collect::<Vec<_>>();
+
+                    telescope.open(&refs)
+                }
+                _ => {
+                    return Ok(Term::from(Subterm::Apply(Apply {
+                        head: function,
+                        arguments,
+                    })));
+                }
+            },
+            other => return Ok(other.into()),
+        };
+    }
+}
+
+/// What a scrutinee's type states of a match with one arm: the type, the instance the arm's constructor builds at the payload the type's indices state, and that payload.
+struct Stated {
+    type_: Term,
+    built: Term,
+    payload: Vec<Term>,
+}
+
+/// What `head`'s type states of `tag`'s payload, `head` not reduced: the family instance read off binders and declarations ([`synth_neutral`]), where that family is a proposition and its indices pin every component. `None` where no lookup types `head`, its family is no such proposition, or a side still holds a metavariable, which is left to the ordinary rule: what conversion would answer of it moves with the solver.
+fn stated(context: &mut Context, head: &Term, tag: &Atom) -> Result<Option<Stated>, ReduceError> {
+    // Read through the solutions that have landed: a type under elaboration holds a solved metavariable where its solution will stand, an implicit argument's among them, and only one still open is the solver's to move.
+    let head = zonk_solved_term_metas(context, head);
+    if head.has_metavar() {
+        return Ok(None);
+    }
+    let Some(type_) = synth_neutral(context, &Binders::default(), &[], &head)? else {
+        return Ok(None);
+    };
+    let type_ = reduce_forced(context, type_)?;
+    let type_ = zonk_solved_term_metas(context, &type_);
+    if type_.has_metavar() {
+        return Ok(None);
+    }
+    let Subterm::InductType(family) = &*type_ else {
+        return Ok(None);
+    };
+    let Some(declaration) = context.induct_decl(&family.name).cloned() else {
+        return Ok(None);
+    };
+    let Ok(declaration) = context.instantiate_induct_decl_at(&declaration, &family.universes)
+    else {
+        return Ok(None);
+    };
+    if !matches!(&*declaration.result_sort, Subterm::Prop(_)) {
+        return Ok(None);
+    }
+    let Some(signature) = declaration.instantiate(tag, &family.params) else {
+        return Ok(None);
+    };
+
+    let binders = (0..signature.len())
+        .map(|_| context.fresh(None))
+        .collect::<Vec<_>>();
+    let opened = binders.iter().map(Term::free_var).collect::<Vec<_>>();
+    let targets = case_target_indices(signature, &opened);
+    let Some((payload, indices)) = pinned_instance(&binders, &targets, &family.indices) else {
+        return Ok(None);
+    };
+    let built = Term::induct_type_at(
+        family.name,
+        family.universes.clone(),
+        family.params.clone(),
+        indices,
+    );
+
+    Ok(Some(Stated {
+        type_,
+        built,
+        payload,
+    }))
+}
+
+/// What a match with one arm and no catch-all ([`Cases::sole_arm`]) binds at `head`, which is not reduced: `None` where the rule does not speak and the scrutinee is reduced as for any other match, the payload where the match fires, and no payload where it stands.
+///
+/// The kernel's reducer takes the same steps, each checker asking its own conversion. The scrutinee's type states the payload ([`stated`]), and the instance the constructor builds at it is put beside the scrutinee's own: where the two are one the proof can be no other value, and the match is its arm at that payload. Plain reduction asks nothing and holds the two to one spelling.
+///
+/// **Two instances apart in levels alone are held to one.** Each occurrence of a polymorphic constructor written in a signature takes a level of its own until its declaration closes, so the two indices of `Eq()(Option/some(x), Option/some(x))` stand at two instances while the question is asked, and a comparison that commits nothing declines them. They are committed equal, as a case equation read at another instance commits its two ([`hold_at_one_instance`]): the match fires on the two being one, and the kernel, which compares with every level, is handed them so.
+fn unread_payload(
+    context: &mut Context,
+    head: &Term,
+    tag: &Atom,
+) -> Result<Option<Option<Vec<Term>>>, ReduceError> {
+    let Some(Stated {
+        type_,
+        built,
+        payload,
+    }) = stated(context, head, tag)?
+    else {
+        return Ok(None);
+    };
+
+    let fires = match context.plain() {
+        true => built == type_,
+        false => {
+            context.note_question();
+            let same = context.plainly(|context| {
+                Ok::<_, ReduceError>(
+                    same_uncommitted(context, &type_, &built)
+                        .probed()?
+                        .unwrap_or(false),
+                )
+            })?;
+
+            same || hold_at_one_instance(context, &type_, &built)?
+        }
+    };
+
+    Ok(Some(fires.then_some(payload)))
 }
 
 /// Dispatch a `match` over its scrutinee's already-reduced-and-forced value, where `forced` is what `reduce_forced` produced for it.
@@ -1192,6 +1337,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                 break 'step Reduce::Continue(value);
             }
 
+            let closed = !term.has_local_free() && !term.has_metavar();
             match Term::unwrap_or_clone(term) {
                 // **The one arm that answers a normal form and breaks, so the one that has to ask the store a second time.** Every other arm `Continue`s when it makes progress and the loop comes back around, which re-runs the probe above on the new term — that is how a refinement keeps up with reduction, and why no other arm needs anything here. This one folds and leaves, so a fold that turns the term *into* the registered shape would never be asked about again: `Le(s + l, len b)` instantiated at a call is `NatLe(0 + n, len b)`, whose sum folds to `n` only inside `reduce_intrinsic`, and every window bound in the language has that shape.
                 //
@@ -1206,9 +1352,44 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                 }
                 // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for. The nested call probes and stores the reduction cache under the scrutinee itself, so a warm scrutinee needs no special case here.
                 Subterm::Match(m) => {
-                    let value = reduce(context, m.head)?;
+                    // A match its scrutinee's type decides does not reduce the scrutinee, which is only stepped through the redexes that unfold nothing. Closed, it is its arm: at no payload where the arm names none, as the closed machine takes it, and at the payload the scrutinee's type states where it names one. Open, over a proposition whose indices pin its payload, it is its arm at that payload where the indices are the constructor's, and stands where they are not.
+                    let fired = match m.cases.sole_arm() {
+                        None => None,
+                        Some((tag, arm)) => {
+                            let stepped = structural(context, m.head.clone())?;
+                            let payload = match closed {
+                                true => match m.cases.unread() {
+                                    Some(_) => Some(Some(Vec::new())),
+                                    None => stated(context, &stepped, tag)?
+                                        .map(|stated| Some(stated.payload)),
+                                },
+                                false => unread_payload(context, &stepped, tag)?,
+                            };
 
-                    reduce_match(force_rec(context, value)?, m.result, m.cases)
+                            match payload {
+                                None => None,
+                                Some(None) => {
+                                    Some(Reduce::Break(Term::from(Subterm::Match(m.clone()))))
+                                }
+                                Some(Some(_)) if m.cases.unread().is_some() => {
+                                    m.cases.unread().map(Reduce::Continue)
+                                }
+                                Some(Some(payload)) if payload.len() == arm.arity() => Some(
+                                    Reduce::Continue(arm.open(&payload.iter().collect::<Vec<_>>())),
+                                ),
+                                Some(Some(_)) => None,
+                            }
+                        }
+                    };
+
+                    match fired {
+                        Some(step) => step,
+                        None => {
+                            let value = reduce(context, m.head)?;
+
+                            reduce_match(force_rec(context, value)?, m.result, m.cases)
+                        }
+                    }
                 }
                 Subterm::Apply(apply) => reduce_apply(context, apply)?,
                 Subterm::Proj(proj) => reduce_proj(context, proj)?,

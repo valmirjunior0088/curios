@@ -928,10 +928,12 @@ fn elaborate_induct_match(
     }
 
     // Large-elimination guard: a strict proposition may not be eliminated into a relevant (data) result — observing which inhabitant it was would break proof irrelevance. Permitted only by *empty* elimination (no arm, every constructor ruled out) or by the elimination of a family with one constructor whose every payload its indices pin.
-    if is_prop(context, &head_type)? && !is_prop(context, &result_type)? {
+    // Whether the scrutinee's family is a proposition whose one constructor has every payload pinned: the only kind a match may take into data once it has an arm, and the kind whose arms are written over what their equations state below.
+    let proposition = is_prop(context, &head_type)?;
+    let pinned = proposition && singleton_eliminable(context, &induct_decl, &params);
+    if proposition && !is_prop(context, &result_type)? {
         // A match with no arm is vacuous: the coverage check below proves every constructor ruled out at the scrutinee's indices, so nothing is eliminated. Any other is judged by the family's declared constructors, as the kernel judges it, so a second constructor the indices rule out here counts all the same. A catch-all default stands in for more than one constructor — a relevant result branching on an erased scrutinee's tag is exactly what this guard forbids — so it is never permitted here. (A prop-into-prop defaulted match never reaches this branch.)
-        let permitted = default.is_none()
-            && (cases.is_empty() || singleton_eliminable(context, &induct_decl, &params));
+        let permitted = default.is_none() && (cases.is_empty() || pinned);
         if !permitted {
             return Err(Error::large_elim_of_prop(name.symbol()));
         }
@@ -1065,7 +1067,7 @@ fn elaborate_induct_match(
             vars.clone(),
         );
 
-        let body_elaborated = context
+        let (body_elaborated, held) = context
             .with_frame(|context| {
                 let ix_c = assume_payload(context, telescope, &labels);
                 refine_head(context, &head_elaborated, &ctor_val)?;
@@ -1081,6 +1083,12 @@ fn elaborate_induct_match(
 
                 // The result at this case: a family's index binders take the case's target indices and its scrutinee binder the constructed value; an ambient goal has the case's targets and value substituted for its variable indices and scrutinee.
                 let expected = result.at(&head_elaborated, &actual_indices, &ix_c, &ctor_val);
+                // What the equations hold each payload binder to, kept for the arm that is rebuilt below.
+                let held = solutions
+                    .iter()
+                    .filter(|(name, _)| labels.contains(name))
+                    .cloned()
+                    .collect::<Vec<_>>();
                 retype_locals(context, &head_elaborated, &ctor_val, solutions);
 
                 // The body is closed over the binders the arm wrote, which the alignment matched to their payloads in order.
@@ -1090,9 +1098,15 @@ fn elaborate_induct_match(
                     .filter(|(_, fill)| fill.is_some())
                     .map(|(var, _)| var)
                     .collect::<Vec<_>>();
-                check(context, &scope.open(&var_refs), expected)
+                check(context, &scope.open(&var_refs), expected).map(|body| (body, held))
             })
             .map_err(|error| from_arm(context, &head_elaborated, &ctor_val, error))?;
+
+        // A match on a proposition whose one constructor is wholly pinned writes a payload binder as what the arm's equations hold it to, which is the index that pins it wherever the scrutinee's indices unify with the constructor's. An arm written so names no payload, and on a closed term the match is its body with the proof unreduced. A binder the equations leave open stays named: the arm is typed at it, and reduction binds it to the index when the match fires.
+        let body_elaborated = match pinned {
+            true => body_elaborated.substitute(&held),
+            false => body_elaborated,
+        };
 
         let label_strs = labels.iter().collect::<Vec<_>>();
         // Rebuild the arm over every payload under the constructor's canonical marks, so a re-elaborated arm writes each binder and re-checks identically (idempotence). Each binder states what its payload's does of whether it binds a proof, which the constructor's declaration said when it was published.

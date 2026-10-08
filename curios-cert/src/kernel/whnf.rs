@@ -20,7 +20,7 @@ mod rules_tests;
 mod test_support;
 
 use {
-    super::{Kernel, asked_classes},
+    super::{Kernel, asked_classes, stated_payload, unread_payload},
     crate::{
         accelerable, answers, answers_classed, atoms_within, classable,
         instantiate_universe_levels_scoped, probe_spellings, reduce_closed, reduce_intrinsic,
@@ -28,9 +28,9 @@ use {
     },
     curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS},
     curios_core::{
-        Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
-        Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe, Proj, Rec,
-        RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var, Variant, Visit,
+        Apply, Atom, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid,
+        Func, Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe, Proj,
+        Rec, RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var, Variant, Visit,
     },
     curios_utilities::recurse,
 };
@@ -39,6 +39,16 @@ use {
 impl ClosedHost for Kernel<'_> {
     fn closed_body(&self, name: &Free) -> Option<&Term> {
         self.value(name)
+    }
+
+    fn stated_payload(
+        &mut self,
+        head: &Term,
+        tag: &Atom,
+    ) -> Result<Option<Vec<Term>>, ReduceError> {
+        let head = structural(self, head.clone())?;
+
+        stated_payload(self, &head, tag)
     }
 
     fn closed_body_at(&self, name: &Free) -> Option<&Term> {
@@ -155,6 +165,7 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
             continue;
         }
 
+        let closed = !term.has_local_free();
         let step = match Term::unwrap_or_clone(term) {
             Subterm::Intrinsic(intrinsic) => {
                 Step::Stop(reduce_intrinsic(kernel, &intrinsic)?.into())
@@ -171,9 +182,42 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
                 result,
                 cases,
             }) => {
-                let value = whnf(kernel, head)?;
+                // A match its scrutinee's type decides does not reduce the scrutinee, which is only stepped through the redexes that unfold nothing. Closed, it is its arm: at no payload where the arm names none, as the closed machine takes it, and at the payload the scrutinee's type states where it names one. Open, over a proposition whose indices pin its payload, it is its arm at that payload where the indices are the constructor's, and stands where they are not.
+                let fired = match cases.sole_arm() {
+                    None => None,
+                    Some((tag, arm)) => {
+                        let stepped = structural(kernel, head.clone())?;
+                        match closed {
+                            true => match cases.unread() {
+                                Some(body) => Some(Some(body)),
+                                None => stated_payload(kernel, &stepped, tag)?
+                                    .filter(|payload| payload.len() == arm.arity())
+                                    .map(|payload| {
+                                        Some(arm.open(&payload.iter().collect::<Vec<_>>()))
+                                    }),
+                            },
+                            false => unread_payload(kernel, &stepped, tag)?.map(|payload| {
+                                payload
+                                    .filter(|payload| payload.len() == arm.arity())
+                                    .map(|payload| arm.open(&payload.iter().collect::<Vec<_>>()))
+                            }),
+                        }
+                    }
+                };
 
-                step_match(force(kernel, value)?, result, cases)
+                match fired {
+                    Some(Some(body)) => Step::Continue(body),
+                    Some(None) => Step::Stop(Term::from(Subterm::Match(Match {
+                        head,
+                        result,
+                        cases,
+                    }))),
+                    None => {
+                        let value = whnf(kernel, head)?;
+
+                        step_match(force(kernel, value)?, result, cases)
+                    }
+                }
             }
             // `InductType`/`Variant`, `StructType`/`Struct`, `Tuple`, `FuncType`, `Type`/`Prop`, `Rec`, and a `Metavar` no kernel input should contain are all weak-head normal already: their sub-terms are not reduced in this position.
             other => Step::Stop(other.into()),
@@ -553,6 +597,39 @@ fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, Reduce
             instantiate_universe_levels_scoped(&reduct, &levels).map_err(ReduceError::Universe)?
         }
     }))
+}
+
+/// `head` stepped through the redexes that unfold no definition: a `let` released, and a function literal applied where it stands. What is left is the scrutinee a lookup types where one can, with no proof read to reach it.
+fn structural(kernel: &mut Kernel, mut head: Term) -> Result<Term, ReduceError> {
+    loop {
+        head = match Term::unwrap_or_clone(head) {
+            Subterm::Let(let_) => step_let(kernel, let_)?,
+            Subterm::Apply(Apply {
+                head: function,
+                arguments,
+            }) => match &*function {
+                Subterm::Func(Func { telescope, .. }) if telescope.len() == arguments.len() => {
+                    kernel
+                        .spend(Cost::collection(arguments.len() as u64).saturating_add(
+                            Cost::term(1).saturating_mul(arguments.len() as u64),
+                        ))?;
+                    let refs = arguments
+                        .iter()
+                        .map(|argument| &argument.term)
+                        .collect::<Vec<_>>();
+
+                    telescope.open(&refs)
+                }
+                _ => {
+                    return Ok(Term::from(Subterm::Apply(Apply {
+                        head: function,
+                        arguments,
+                    })));
+                }
+            },
+            other => return Ok(other.into()),
+        };
+    }
 }
 
 /// Iota: dispatch a `match` on the value `forced` its scrutinee reduced to.

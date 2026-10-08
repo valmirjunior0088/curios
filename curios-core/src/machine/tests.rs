@@ -14,6 +14,8 @@ struct Host {
     budget: u64,
     by_category: BTreeMap<Category, u64>,
     minted: u32,
+    /// What this host reads for a payload off a scrutinee's type: nothing, unless a test states one.
+    stated: Option<Vec<Term>>,
 }
 
 impl Host {
@@ -23,6 +25,7 @@ impl Host {
             budget,
             by_category: BTreeMap::new(),
             minted: 0,
+            stated: None,
         }
     }
 }
@@ -59,6 +62,14 @@ impl ClosedHost for Host {
 
     fn closed_body_at(&self, name: &Free) -> Option<&Term> {
         self.definitions.get(name)
+    }
+
+    fn stated_payload(
+        &mut self,
+        _head: &Term,
+        _tag: &crate::Atom,
+    ) -> Result<Option<Vec<Term>>, ReduceError> {
+        Ok(self.stated.clone())
     }
 }
 
@@ -563,7 +574,8 @@ fn a_let_and_an_arm_bind_a_proof_as_written() {
         Term::variant(name, Vec::<Term>::new(), "box", [unaffordable()]),
         None,
         nat_type(),
-        [("box", vec![x], nat(5))],
+        // A second arm, so this is a match that reads its scrutinee: with one arm naming no payload it is that arm's body, and nothing is bound.
+        [("box", vec![x], nat(5)), ("empty", Vec::new(), nat(6))],
     );
 
     let marked = |term: &Term| match Term::unwrap_or_clone(term.clone()) {
@@ -583,9 +595,10 @@ fn a_let_and_an_arm_bind_a_proof_as_written() {
                     .into_iter()
                     .map(|(tag, arm)| {
                         let plicities = arm.plicities().to_vec();
+                        let proofs = vec![true; arm.arity()];
                         (
                             tag,
-                            InductArm::new(arm.body.with_proofs(&[true]), plicities),
+                            InductArm::new(arm.body.with_proofs(&proofs), plicities),
                         )
                     })
                     .collect(),
@@ -605,6 +618,44 @@ fn a_let_and_an_arm_bind_a_proof_as_written() {
                 .is_err_and(|refusal| refusal.is_exhausted())
         );
     }
+}
+
+/// A match with one arm, no catch-all and no payload named is its arm's body, its scrutinee unevaluated: the scrutinee here is a term no budget evaluates. The control names the payload, and the scrutinee is then run for the constructor that binds it.
+#[test]
+fn a_match_that_reads_nothing_of_its_scrutinee_does_not_evaluate_it() {
+    let x = binder(0, "x");
+    let unread = Term::induct_match(unaffordable(), None, nat_type(), [("box", vec![x], nat(5))]);
+    let read = Term::induct_match(
+        unaffordable(),
+        None,
+        nat_type(),
+        [("box", vec![x], Term::free_var(&x))],
+    );
+
+    assert_eq!(
+        reduce_closed(&mut Host::new(100_000), unread, Demand::Forced),
+        Ok(nat(5))
+    );
+    assert!(
+        reduce_closed(&mut Host::new(100_000), read, Demand::Forced)
+            .is_err_and(|refusal| refusal.is_exhausted())
+    );
+}
+
+/// An arm that names its payload is bound to what the host reads off the scrutinee's type, the scrutinee unevaluated: the same match that runs out of steps above is its payload where the host states one.
+#[test]
+fn an_arm_that_names_its_payload_is_bound_to_what_the_host_states() {
+    let x = binder(0, "x");
+    let read = Term::induct_match(
+        unaffordable(),
+        None,
+        nat_type(),
+        [("box", vec![x], Term::free_var(&x))],
+    );
+    let mut host = Host::new(100_000);
+    host.stated = Some(vec![nat(5)]);
+
+    assert_eq!(reduce_closed(&mut host, read, Demand::Forced), Ok(nat(5)));
 }
 
 /// What the three fold shapes spend per element, printed rather than asserted — the assertions live in the budget bounds of the ordinary tests above. Set `CURIOS_MACHINE_TRACE` to shrink the ladder and print every dispatch.

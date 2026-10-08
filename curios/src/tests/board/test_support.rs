@@ -1342,6 +1342,77 @@ pub(super) const A_PROPOSITION_HOLDING_A_PROOF_STILL_ELIMINATES_INTO_A_PROPOSITI
         /std/print(Nat/to_str(1))
         "#;
 
+pub(super) const A_CAST_ALONG_A_HYPOTHESIS_THE_ALGEBRA_EQUATES_IS_ITS_ARGUMENT: &str = r#"
+        use /std/{Eq, Nat};
+
+        let along(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
+            -> Eq()(Eq/subst(P, p, v), v) = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const A_CAST_ALONG_A_PROOF_WRITTEN_AS_A_REDEX_IS_ITS_ARGUMENT: &str = r#"
+        use /std/{Eq, Nat};
+
+        let through_a_let(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
+            -> Eq()(Eq/subst(P, (let q = p; q), v), v) = Eq/refl();
+
+        let through_a_function(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
+            -> Eq()(Eq/subst(P, ((q : Eq()(a + b, b + a)) => q)(p), v), v) = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const A_CAST_ALONG_A_HYPOTHESIS_WHOSE_ENDS_DIFFER_STANDS: &str = r#"
+        use /std/{Eq, Nat};
+
+        let along(a : Nat, b : Nat, p : Eq()(a, b), v : Nat) -> Eq()(Eq/subst((_) => Nat, p, v), v) =
+            Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const A_CAST_ALONG_A_LEMMA_RUNS_NONE_OF_THE_LEMMA: &str = r#"
+        use /std/{Eq, Nat};
+
+        let slow(n : Nat) -> Eq()(n, n) =
+            match n : (k) => Eq()(k, k)
+            | 0 => Eq/refl()
+            | k + 1; ih => Eq/cong((m : Nat) => m + 1, ih)
+            end;
+
+        let _closed : Eq()(Eq/subst((_) => Nat, slow(100000000000), 7), 7) = Eq/refl();
+
+        let _open(n : Nat, v : Nat) -> Eq()(Eq/subst((_) => Nat, slow(n), v), v) = Eq/refl();
+
+        let inner(@x : Nat, @y : Nat, e : Eq()(x + 1, y + 1)) -> Nat = match e | refl(@z) => z end;
+        let widen(n : Nat) -> Eq()(n + 1, n + 1) = Eq/cong((m : Nat) => m + 1, slow(n));
+        let _named : Eq()(inner(widen(100000000000)), 100000000001) = Eq/refl();
+
+        /std/print(Nat/to_str(Eq/subst((_) => Nat, slow(100000000000), 7)))
+        "#;
+
+pub(super) const AN_ARM_THAT_NAMES_A_PINNED_PAYLOAD_READS_THE_INDEX: &str = r#"
+        use /std/{Eq, Nat, Option};
+
+        let z_of(@a : Nat, @b : Nat, e : Eq()(a, b)) -> Nat = match e | refl(@z) => z + 1 end;
+
+        let _open(a : Nat, e : Eq()(a, a)) -> Eq()(z_of(e), a + 1) = Eq/refl();
+        let _closed : Eq()(z_of(Eq/refl(@Nat, @41)), 42) = Eq/refl();
+
+        let inner(@x : Nat, @y : Nat, e : Eq()(x + 1, y + 1)) -> Nat = match e | refl(@z) => z end;
+
+        let _left_open(x : Nat, e : Eq()(x + 1, x + 1)) -> Eq()(inner(e), x + 1) = Eq/refl();
+
+        let boxed(@x : Nat, @y : Nat, e : Eq()(Option/some(x), Option/some(y))) -> Option(Nat) =
+            match e | refl(@z) => z end;
+
+        let _one_instance(x : Nat, e : Eq()(Option/some(x), Option/some(x)))
+            -> Eq()(boxed(e), Option/some(x)) = Eq/refl();
+
+        /std/print(Nat/to_str(z_of(Eq/refl(@Nat, @41))))
+        "#;
+
 pub(super) const A_CONSTRUCTOR_AN_INDEX_RULES_OUT_STILL_COUNTS: &str = r#"
         use /std/{Nat};
 

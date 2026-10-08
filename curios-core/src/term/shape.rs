@@ -495,6 +495,38 @@ pub enum Cases {
     FreeMonoid { carrier: Carrier },
 }
 
+impl Cases {
+    /// The one arm of a match that has no other and no catch-all beside it, with its constructor: the match a scrutinee's type decides, since no value of it is another case. `None` for every other match.
+    pub fn sole_arm(&self) -> Option<(&Atom, &InductArm)> {
+        let Cases::Induct {
+            cases,
+            default: None,
+        } = self
+        else {
+            return None;
+        };
+        let [(tag, arm)] = cases.as_slice() else {
+            return None;
+        };
+
+        Some((tag, arm))
+    }
+
+    /// The body of a match that reads nothing of its scrutinee: its [sole arm](Self::sole_arm), naming none of its payload. `None` for every other match.
+    ///
+    /// On a closed term such a match is its arm's body with the scrutinee unevaluated, which is how a cast along a proof runs none of the proof.
+    pub fn unread(&self) -> Option<Term> {
+        let (_, arm) = self.sole_arm()?;
+        if (0..arm.arity()).any(|index| arm.body.uses(index)) {
+            return None;
+        }
+
+        // No binder is named, so what the arm is opened at is read by nothing.
+        let unread = Term::prop();
+        Some(arm.open(&vec![&unread; arm.arity()]))
+    }
+}
+
 /// The native free-monoid intrinsic a `Cases::FreeMonoid` eliminates, with its type parameters and its two eliminator arms. `Nat` is the free monoid on one (payload-less) generator; `Bin` carries none; `List` carries its element type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose arity is fixed by the carrier — `Scope<Two>` for `Nat` (predecessor, ih), `Scope<Three>` for `Bin`/`List` (head, tail, ih).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]

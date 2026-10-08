@@ -2,8 +2,8 @@
 
 use {
     super::test_support::*,
-    crate::{Error, infer},
-    curios_core::{Free, Intrinsic, Many, Scope, Term, UniverseContext},
+    crate::{Error, Kernel, infer},
+    curios_core::{Free, Global, Intrinsic, Many, Reducer, Scope, Term, UniverseContext},
     curios_utilities::Plicity,
 };
 
@@ -328,7 +328,7 @@ fn a_catch_all_at_another_value_of_the_family_is_refused() {
     );
 }
 
-/// A proposition whose single constructor's payload is *pinned* by its index target — the `Eq`/`refl` shape. Matching `(z)` against a value recovers `z`, so eliminating tells a program nothing it did not already know, and the large elimination is admitted. Without this, `Eq/subst` is unstatable.
+/// A proposition whose single constructor's payload is *pinned* by its index target — the `Eq`/`refl` shape. Matching `(z)` against a value recovers `z`, so eliminating tells a program nothing it did not already know, and the large elimination is admitted, Without this, `Eq/subst` is unstatable.
 #[test]
 fn a_singleton_whose_index_pins_its_payload_eliminates_into_a_type() {
     let mut kernel = kernel();
@@ -688,4 +688,83 @@ fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
             ),
         }
     }
+}
+
+/// `Same : (Nat, Nat) -> Prop | same(z : Nat) : (z, z)`, the shape of an equality: one constructor, its payload both of its indices.
+fn same(kernel: &mut Kernel) -> Global {
+    let z = binder(0, "z");
+
+    declare_at(
+        kernel,
+        "Same",
+        Term::prop(),
+        vec![nat_type(), nat_type()],
+        vec![carrying_at(
+            "same",
+            z,
+            nat_type(),
+            vec![Term::free_var(&z), Term::free_var(&z)],
+        )],
+    )
+}
+
+/// A match on a proposition whose indices pin its payload fires with its scrutinee unreduced, binding the payload to the index that states it: the scrutinee is a variable, which no reduction takes to a constructor, and its type's two indices are one, which is everything `same` would say.
+#[test]
+fn an_arm_that_names_a_pinned_payload_is_bound_to_the_index() {
+    let mut kernel = kernel();
+    let family = same(&mut kernel);
+    let n = binder(60, "n");
+    let arm_binder = binder(10, "z");
+    kernel.assume(&n, &nat_type());
+
+    let term = eliminate_at(
+        &mut kernel,
+        &family,
+        vec![Term::free_var(&n), Term::free_var(&n)],
+        nat_type(),
+        vec![("same", vec![arm_binder], Term::free_var(&arm_binder))],
+    );
+
+    assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
+    assert_eq!(kernel.reduce(term), Ok(Term::free_var(&n)));
+}
+
+/// An arm that names no payload fires the same way, with nothing to bind.
+#[test]
+fn an_arm_written_over_the_index_fires_with_its_proof_unreduced() {
+    let mut kernel = kernel();
+    let family = same(&mut kernel);
+    let n = binder(60, "n");
+    kernel.assume(&n, &nat_type());
+
+    let term = eliminate_at(
+        &mut kernel,
+        &family,
+        vec![Term::free_var(&n), Term::free_var(&n)],
+        nat_type(),
+        vec![("same", vec![binder(10, "z")], Term::free_var(&n))],
+    );
+
+    assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
+    assert_eq!(kernel.reduce(term), Ok(Term::free_var(&n)));
+}
+
+/// The control: at two indices nothing holds one, the match stands. The scrutinee is the same variable, so a rule that fired on the shape of the match alone would answer here too.
+#[test]
+fn a_match_over_indices_that_differ_stands() {
+    let mut kernel = kernel();
+    let family = same(&mut kernel);
+    let (n, m) = (binder(60, "n"), binder(61, "m"));
+    kernel.assume(&n, &nat_type());
+    kernel.assume(&m, &nat_type());
+
+    let term = eliminate_at(
+        &mut kernel,
+        &family,
+        vec![Term::free_var(&n), Term::free_var(&m)],
+        nat_type(),
+        vec![("same", vec![binder(10, "z")], Term::free_var(&n))],
+    );
+
+    assert_eq!(kernel.reduce(term.clone()), Ok(term));
 }

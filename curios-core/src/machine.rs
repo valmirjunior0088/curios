@@ -18,6 +18,8 @@
 //!
 //! **A witness named at an instance is left as written.** An argument at a `use` position that is a global name at a universe instance is bound as that name, as a monomorphic witness's bare name is by the rule for names: the hosts leave it so, a method projected off it unfolds it where the method is demanded, and evaluated here its dictionary stands wherever an alias over the witness unfolds, in a type a report prints and resolution can no longer restore. The application states the position, since a function literal's binder does not. A family passed at an instance is no witness, and is evaluated as the paragraph above says.
 //!
+//! **A match that reads nothing of its scrutinee does not evaluate it.** One arm, no catch-all and no payload named ([`Cases::unread`]): the match is its arm's body, since a closed scrutinee can be no other case. A cast along a proof is written in that form, and the elaborator writes a payload as the index that pins it wherever the arm's equations hold the two one, so such a match runs none of its proof. An arm that still names a payload is bound to what the scrutinee's type states of it, which the host reads ([`ClosedHost::stated_payload`]). The hosts take the same steps on a closed term, and on an open one over a proposition fire by the scrutinee's indices, which state the payload.
+//!
 //! **Eta is contracted, with the hosts' own probe.** `(x) => f(x)` steps to `f` exactly as under the strategies, through the fresh binder identities [`Reducer::fresh_binder`] mints. Skipping the probe on the theory that conversion decides eta anyway would starve the elaborator's witness keying, which reads rigid heads off weak-head forms and would not find `Async` under `(A) => Async(A)`.
 //!
 //! **`Induct` arms bind payload values.** The kernel binds an arm to the scrutinee's payload directly; the elaborator binds projections of the original head, guarding annotation holes a reduced payload could carry. A closed, metavariable-free payload carries none, so the machine uses the kernel's rule on both sides.
@@ -28,9 +30,9 @@
 
 use {
     super::{
-        Apply, Argument, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid, Func,
-        Instance, InstanceHead, Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult, Nat,
-        Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Subterm, Telescope, Term,
+        Apply, Argument, Atom, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid,
+        Func, Instance, InstanceHead, Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult,
+        Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Subterm, Telescope, Term,
         instantiate_universe_levels_scoped, reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
@@ -50,6 +52,10 @@ pub trait ClosedHost: Reducer {
 
     /// What `name` unfolds to at a stated universe instance — the one position a polymorphic definition may be unfolded from.
     fn closed_body_at(&self, name: &Free) -> Option<&Term>;
+
+    /// The payload the one arm of a closed match binds, read off its scrutinee's type with the scrutinee unevaluated: the payload of `tag`, where `head`'s family is a proposition whose indices state every component of it, and `None` where the scrutinee has to be evaluated to bind one. A closed proof of such a family is that constructor, so the indices are asked nothing. The machine holds no type to read, which is why this is the host's.
+    fn stated_payload(&mut self, head: &Term, tag: &Atom)
+    -> Result<Option<Vec<Term>>, ReduceError>;
 }
 
 /// Whether `term` is in the machine's domain: no local frees and no metavariables, read off the per-node cached bits in O(1). The hosts add their own judgment-side condition — no refinements in scope — at the call site.
@@ -366,6 +372,18 @@ impl Machine {
                 else {
                     unreachable!("rebuilt from the same value")
                 };
+                // A match with one arm and no catch-all, naming none of its scrutinee's payload, is its arm's body: on a closed term the scrutinee can be no other case, so nothing evaluates it, a proof least of all.
+                if let Some(body) = cases.unread() {
+                    return Ok(Step::Eval(body, demand));
+                }
+                // An arm that names its payload is bound to what its scrutinee's type states of it, where the host reads one: the scrutinee is no more evaluated than above.
+                if let Some((tag, arm)) = cases.sole_arm()
+                    && let Some(payload) = host.stated_payload(&head, tag)?
+                    && payload.len() == arm.arity()
+                {
+                    let refs = payload.iter().collect::<Vec<_>>();
+                    return Ok(Step::Eval(arm.open(&refs), demand));
+                }
                 self.push(host, Frame::Memo { key, demand })?;
                 self.push(
                     host,

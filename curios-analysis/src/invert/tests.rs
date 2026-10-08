@@ -58,3 +58,33 @@ fn a_payload_beside_a_pinned_one_is_not_wholly_pinned() {
 
     assert!(!wholly_pinned(&[x, below], &[Term::free_var(&x)]));
 }
+
+/// `refl(@z) : (z, z)` at a scrutinee of `Eq()(a, b)` has `a` for its payload and builds `(a, a)`, which is the scrutinee's instance exactly where `a` and `b` are one.
+#[test]
+fn a_pinned_instance_reads_each_binder_off_its_first_index() {
+    let (z, a, b) = (binder(1, "z"), binder(2, "a"), binder(3, "b"));
+
+    let instance = pinned_instance(
+        &[z],
+        &[Term::free_var(&z), Term::free_var(&z)],
+        &[Term::free_var(&a), Term::free_var(&b)],
+    );
+
+    assert_eq!(
+        instance,
+        Some((
+            vec![Term::free_var(&a)],
+            vec![Term::free_var(&a), Term::free_var(&a)]
+        ))
+    );
+}
+
+/// `intro(@x, below) : (x)` builds none: no index says what `below` is.
+#[test]
+fn a_binder_no_index_pins_builds_no_instance() {
+    let (x, below, n) = (binder(1, "x"), binder(2, "below"), binder(3, "n"));
+
+    let instance = pinned_instance(&[x, below], &[Term::free_var(&x)], &[Term::free_var(&n)]);
+
+    assert_eq!(instance, None);
+}

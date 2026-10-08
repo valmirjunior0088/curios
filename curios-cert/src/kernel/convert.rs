@@ -40,9 +40,12 @@ mod variance_tests;
 
 use {
     super::{Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
-    crate::{instantiate_universe_levels_scoped, struct_reaches_itself},
+    crate::{
+        case_target_indices, instantiate_universe_levels_scoped, pinned_instance,
+        struct_reaches_itself,
+    },
     curios_core::{
-        Apply, Bound, Carrier, Cases, Classes, Cost, Cursor, Field, Func, FuncType, Global,
+        Apply, Atom, Bound, Carrier, Cases, Classes, Cost, Cursor, Field, Func, FuncType, Global,
         InductType, Instance, InstanceHead, Level, Lockstep, Many, Match, MatchResult, Probe, Proj,
         ReduceError, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple,
         TupleType, Variant,
@@ -1593,6 +1596,91 @@ pub(super) fn grounded(kernel: &mut Kernel, this: &Term, that: &Term) -> Result<
 pub(crate) fn asked_classes(kernel: &mut Kernel, atoms: &[Term]) -> Result<Classes, ReduceError> {
     curios_profile::profile!("convert::asked_classes");
     kernel.plainly(|kernel| classing(kernel, atoms, grounded))
+}
+
+/// What a scrutinee's type states of a match with one arm: the type, the instance the arm's constructor builds at the payload the type's indices state, and that payload.
+struct Stated {
+    type_: Term,
+    built: Term,
+    payload: Vec<Term>,
+}
+
+/// What `head`'s type states of `tag`'s payload, `head` not reduced: the family instance read off binders and declarations ([`synth_neutral`]), where that family is a proposition and its indices pin every component. `None` where no lookup types `head`, or its family is no such proposition.
+fn stated(kernel: &mut Kernel, head: &Term, tag: &Atom) -> Result<Option<Stated>, ReduceError> {
+    if !names_a_type(head) {
+        return Ok(None);
+    }
+    let Some(type_) = synth_neutral(kernel, head).probed_refusal()?.flatten() else {
+        return Ok(None);
+    };
+    let type_ = kernel.reduce_forced(type_)?;
+    let Subterm::InductType(family) = &*type_ else {
+        return Ok(None);
+    };
+    let Ok(at) = kernel.induct_at(family) else {
+        return Ok(None);
+    };
+    if !matches!(&**at.result_sort(), Subterm::Prop(_)) {
+        return Ok(None);
+    }
+    let Some(signature) = at.signature(tag) else {
+        return Ok(None);
+    };
+
+    let binders = (0..signature.len())
+        .map(|_| kernel.fresh(None))
+        .collect::<Vec<_>>();
+    let opened = binders.iter().map(Term::free_var).collect::<Vec<_>>();
+    let targets = case_target_indices(signature, &opened);
+    let Some((payload, indices)) = pinned_instance(&binders, &targets, &family.indices) else {
+        return Ok(None);
+    };
+    let built = Term::induct_type_at(
+        family.name,
+        family.universes.clone(),
+        family.params.clone(),
+        indices,
+    );
+
+    Ok(Some(Stated {
+        type_,
+        built,
+        payload,
+    }))
+}
+
+/// What a match with one arm and no catch-all ([`Cases::sole_arm`]) binds at `head`, which is not reduced: `None` where the rule does not speak and the scrutinee is reduced as for any other match, the payload where the match fires, and no payload where it stands.
+///
+/// The scrutinee's type states the payload ([`stated`]), and the instance the constructor builds at it is put beside the scrutinee's own: where the two are one the proof can be no other value, and the match is its arm at that payload. The kernel's conversion decides it, as reduction asks of a missed equation; plain reduction asks nothing and holds the two to one spelling.
+pub(crate) fn unread_payload(
+    kernel: &mut Kernel,
+    head: &Term,
+    tag: &Atom,
+) -> Result<Option<Option<Vec<Term>>>, ReduceError> {
+    let Some(Stated {
+        type_,
+        built,
+        payload,
+    }) = stated(kernel, head, tag)?
+    else {
+        return Ok(None);
+    };
+
+    let fires = match kernel.plain() {
+        true => built == type_,
+        false => kernel.plainly(|kernel| grounded(kernel, &type_, &built))?,
+    };
+
+    Ok(Some(fires.then_some(payload)))
+}
+
+/// [`unread_payload`] for a closed scrutinee, which is asked nothing: a closed proof of a family with one constructor is that constructor, so its indices are the constructor's. What the closed machine binds an arm's payload to ([`ClosedHost::stated_payload`](curios_core::ClosedHost::stated_payload)).
+pub(crate) fn stated_payload(
+    kernel: &mut Kernel,
+    head: &Term,
+    tag: &Atom,
+) -> Result<Option<Vec<Term>>, ReduceError> {
+    Ok(stated(kernel, head, tag)?.map(|stated| stated.payload))
 }
 
 /// Which of `atoms` are one by `same`, as a classing asks of them (`curios-core`'s `Classes::of`): each pair stands as the pair asked while it is compared, so a classing made inside that comparison is held inside the two atoms, and this one inside the pair a classing in progress asked about.

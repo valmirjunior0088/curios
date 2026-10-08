@@ -52,6 +52,48 @@ fn a_constructor_an_index_rules_out_still_counts() {
     );
 }
 
+// A match that takes a proposition into data fires on its scrutinee's indices, with the proof unreduced. `p` is a hypothesis, so no reduction takes it to `refl`, and conversion already holds `a + b` and `b + a` one number: the cast along it is its argument, where it stood before on a proof nothing could reduce.
+#[test]
+fn a_cast_along_a_hypothesis_the_algebra_equates_is_its_argument() {
+    assert_eq!(
+        run(A_CAST_ALONG_A_HYPOTHESIS_THE_ALGEBRA_EQUATES_IS_ITS_ARGUMENT),
+        b"1"
+    );
+}
+
+// The scrutinee's type is looked up, so a proof written as a `let` or as a function applied where it stands is first stepped to the hypothesis it is: neither step unfolds a definition, and a cast along either is the cast along the hypothesis.
+#[test]
+fn a_cast_along_a_proof_written_as_a_redex_is_its_argument() {
+    assert_eq!(
+        run(A_CAST_ALONG_A_PROOF_WRITTEN_AS_A_REDEX_IS_ITS_ARGUMENT),
+        b"1"
+    );
+}
+
+// The control: where conversion does not hold the two ends one, the cast stands. Its statement is true, and proved by matching on `p`; a rule that fired on the shape of the match alone would accept it by reflexivity.
+#[test]
+fn a_cast_along_a_hypothesis_whose_ends_differ_stands() {
+    rejected_by(
+        A_CAST_ALONG_A_HYPOTHESIS_WHOSE_ENDS_DIFFER_STANDS,
+        "type mismatch",
+    );
+}
+
+// No checker reduces a proof to take it into data. `slow(n)` proves `n = n` by an induction that reads its hypothesis, so at a hundred billion its proof is a hundred billion steps from `refl`, and a cast that reduced it to fire would run out of steps: closed, the cast is its argument outright; open, `slow(n)` is stuck on `n` and the indices are one all the same; and where a closed match's arm names a payload its equations leave open, as `inner`'s does, the closed machine is handed the payload its scrutinee's type states and evaluates no more of the proof. The running program casts along it too, with the proof erased.
+#[test]
+fn a_cast_along_a_lemma_runs_none_of_the_lemma() {
+    assert_eq!(run(A_CAST_ALONG_A_LEMMA_RUNS_NONE_OF_THE_LEMMA), b"7");
+}
+
+// An arm may name the payload its indices pin. Where the arm's equations hold the two one, as in `z_of`, the elaborator writes the name as the index; where they leave it open, as in `inner`, whose two indices `x + 1` and `y + 1` do not unify, the arm keeps the name and reduction binds it to the index. Either way the match fires with its proof unreduced: each scrutinee here is a hypothesis. `boxed` is `inner` over a constructor that takes a level: each `Option/some` written takes one of its own until its declaration closes, and the two instances the indices stand at are held to one where the match fires.
+#[test]
+fn an_arm_that_names_a_pinned_payload_reads_the_index() {
+    assert_eq!(
+        run(AN_ARM_THAT_NAMES_A_PINNED_PAYLOAD_READS_THE_INDEX),
+        b"42"
+    );
+}
+
 // `Prop` non-informativeness, which is what makes proof irrelevance safe: a proposition whose inhabitants differ observably is not a subsingleton, so identifying them would identify the data they carry.
 #[test]
 fn a_proposition_may_not_carry_informative_fields() {
