@@ -4,10 +4,10 @@ mod tests;
 use {
     super::{
         Binders, Context, Error, FrozenFrame, Mode, Opened, Outcome, ParkedProblem, ParkedWork,
-        Problem, Sort, Watched, callee, convert, convert_outcome, diagnose_embedding,
-        diagnose_shape, elaborate, elaborate_func_settle, embeds, is_monad, monad_shape, normalize,
-        problem_outcome, reduce_forced, refold_recs, refused_scrutinee, retry_discharge,
-        retry_match, retry_projection, retry_witness, shallow_scrutinee, subsume_outcome,
+        Problem, Sort, Watched, callee, convert, diagnose_embedding, diagnose_shape, elaborate,
+        elaborate_func_settle, embeds, is_monad, monad_shape, normalize, problem_outcome,
+        reduce_forced, refold_recs, refused_scrutinee, retry_discharge, retry_match,
+        retry_projection, retry_witness, shallow_scrutinee, subsume_outcome,
         zonk_solved_term_metas,
     },
     curios_analysis::{
@@ -525,11 +525,6 @@ impl Context<'_> {
                 continue;
             };
 
-            if self.metavar_solution(*placeholder).is_some() {
-                self.repark(work, origin, frame);
-                continue;
-            }
-
             let (term, expected, placeholder) = (term.clone(), expected.clone(), *placeholder);
             let settled_term = self.with_retry_frame(&frame, |context| {
                 settle_against(context, &term, &expected, SettleTier::Drain)
@@ -544,7 +539,7 @@ impl Context<'_> {
             };
 
             // A failure here is not the literal's. Solving the expectation wakes whatever was parked on it, and a woken obligation reports for itself — `Show/show((true, false))` settles the tuple to `{Bool, Bool}` and *then* discovers no witness of `Show({Bool, Bool})`, which is the answer the program deserves. Swallowing that would report the tuple's own check as the survivor and bury the real one.
-            self.solve_metavar(placeholder, rebuilt?);
+            self.fill_placeholder(placeholder, rebuilt?);
             settled = true;
         }
 
@@ -853,38 +848,9 @@ fn retry_one(context: &mut Context, parked: ParkedProblem) -> Result<(), Error> 
     }
 }
 
-/// Solve a parked problem's `placeholder` to the term its retry rebuilt, at `type_`. Unification may have reached the placeholder first: reconcile rather than overwrite, since `Solutions::solve` replaces silently and goals already discharged against the earlier solution would be standing on a value that just changed under them. The rebuilt term must convert with what the tree committed to, at the type both inhabit; a disagreement is an honest mismatch at `origin`, and an undecidable comparison parks like any conversion.
-pub(crate) fn fill_placeholder(
-    context: &mut Context,
-    placeholder: MetavarId,
-    type_: &Term,
-    rebuilt: Term,
-    origin: &Term,
-) -> Result<(), Error> {
-    let Some(existing) = context.metavar_solution(placeholder).cloned() else {
-        context.solve_metavar(placeholder, rebuilt);
-        return Ok(());
-    };
-    let outcome = convert_outcome(context, type_, &rebuilt, &existing).map_err(|error| {
-        Error::from_reduce(error, |refusal| {
-            Error::convert_exhausted(rebuilt.clone(), existing.clone(), refusal)
-        })
-    })?;
-    match outcome {
-        Outcome::Converts => Ok(()),
-        Outcome::Mismatch(declined) => Err(display_mismatch(context, origin, &rebuilt, &existing)
-            .declined(declined)
-            .at_opt(origin.extent())),
-        Outcome::Blocked(goals) => {
-            for goal in goals {
-                context.park(ParkedWork::Conversion(goal), origin.clone());
-            }
-            Ok(())
-        }
-    }
-}
-
-/// Retry a parked *checking problem*: under the frozen frame, the expected type either still reduces to a bare metavariable (re-park) or has gained structure — run the check for real and solve the placeholder with the rebuilt term. Errors propagate carrying the term's own extents.
+/// Retry a parked *checking problem*: under the frozen frame, the expected type either still reduces to a bare metavariable (re-park) or has gained structure — run the check for real and fill the placeholder with the rebuilt term. Errors propagate carrying the term's own extents.
+///
+/// The term is elaborated here for the first time, and no second: a term's lowering-minted holes are birthed where it is first elaborated, and an occurrence rebuilt by another run would drop their spines. So whatever runs a parked check holds it out of the store, and nothing but its check fills its placeholder ([`Context::fill_placeholder`]).
 fn retry_checking(
     context: &mut Context,
     term: Term,
@@ -893,11 +859,6 @@ fn retry_checking(
     origin: Term,
     frame: FrozenFrame,
 ) -> Result<(), Error> {
-    // Discharged already — by the force tier at its own apply (the same obligation's check, run in the richer live context), or by a unification commitment downstream checking will judge. Re-running the check here would re-elaborate a term whose lowering-minted holes are already birthed, and the rebuilt occurrence would drop their spines.
-    if context.metavar_solution(placeholder).is_some() {
-        return Ok(());
-    }
-
     let rebuilt = context.with_retry_frame(&frame, |context| {
         // Re-park while the term is still blocked on its expected type's structure — the same predicate that parked it, with the result-directed refinements off: at retry there is no output turnaround left to wait for, so a codomain-only block checks eagerly.
         if blocked_on_metavar(context, &term, &expected, &BTreeSet::new(), false)? {
@@ -908,20 +869,19 @@ fn retry_checking(
     })?;
 
     match rebuilt {
-        Some(rebuilt) => fill_placeholder(context, placeholder, &expected, rebuilt, &origin),
-        None => {
-            context.repark(
-                ParkedWork::Checking {
-                    term,
-                    expected,
-                    placeholder,
-                },
-                origin,
-                frame,
-            );
-            Ok(())
-        }
+        Some(rebuilt) => context.fill_placeholder(placeholder, rebuilt),
+        None => context.repark(
+            ParkedWork::Checking {
+                term,
+                expected,
+                placeholder,
+            },
+            origin,
+            frame,
+        ),
     }
+
+    Ok(())
 }
 
 /// Register a counterfactual match-arm refinement of a scrutinee, so a context hypothesis whose type mentions it reduces at the arm's value. The frame holding the refinement is scoped to the arm, so the (counterfactual) assumption does not leak. Three keyings, by head shape:

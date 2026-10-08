@@ -1925,6 +1925,11 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.is_rec_slot(id)
     }
 
+    /// [`Solutions::owner_fills`].
+    pub(crate) fn owner_fills(&self, id: MetavarId) -> bool {
+        self.underway.attempt.solutions.owner_fills(id)
+    }
+
     pub(crate) fn fill_rec_slot(&mut self, id: MetavarId, term: Term) {
         let entry = self
             .underway
@@ -1934,6 +1939,23 @@ impl<'s> Context<'s> {
             .expect("recursive slot has a birth entry");
         assert_eq!(entry.kind, MetaKind::RecSlot, "filled a non-rec slot");
         assert!(entry.solution.is_none(), "recursive slot filled twice");
+        self.solve_metavar(id, term);
+    }
+
+    /// Fill a parked problem's placeholder with the term the problem rebuilt. Only the problem does, and once: conversion waits on a placeholder ([`Solutions::owner_fills`]), and whatever runs a parked problem holds it out of the store, so a second fill would be a second elaboration of one written term.
+    pub(crate) fn fill_placeholder(&mut self, id: MetavarId, term: Term) {
+        let entry = self
+            .underway
+            .attempt
+            .solutions
+            .entry(id)
+            .expect("placeholder has a birth entry");
+        assert_eq!(
+            entry.kind,
+            MetaKind::Placeholder,
+            "filled a hole that is no placeholder"
+        );
+        assert!(entry.solution.is_none(), "placeholder filled twice");
         self.solve_metavar(id, term);
     }
 
@@ -1987,8 +2009,12 @@ impl<'s> Context<'s> {
 
     /// Mint a silent hole — the stand-in type a written goal in synthesis position gets, so the goal survives to zonk's report instead of dying with `CannotInfer` (`elaborate_metavar`).
     pub(crate) fn fresh_hole_metavar(&mut self, result: Term, extent: Option<Extent>) -> Term {
+        self.fresh_hole(result, extent).1
+    }
+
+    /// [`Context::fresh_hole_metavar`] with the hole's identity beside it, for a site that reads whether unification solved it: an operator's operand type, defaulted where no operand pins it.
+    pub(crate) fn fresh_hole(&mut self, result: Term, extent: Option<Extent>) -> (MetavarId, Term) {
         self.fresh_metavar_with(result, extent, MetavarOrigin::Hole)
-            .1
     }
 
     /// Mint a metavariable identity with no birth record, for a term built ahead of its elaboration exactly as `into_core` builds one: an omitted motive, a list literal's element type, a witness goal with a provenance of its own. Birth happens where elaboration first meets the term, in checking position, as it does for every lowered hole.
@@ -2569,6 +2595,11 @@ impl<'s> Context<'s> {
 
     pub(crate) fn take_parked(&mut self) -> Vec<ParkedProblem> {
         self.underway.attempt.solutions.take_parked()
+    }
+
+    /// [`Solutions::take_checking`].
+    pub(crate) fn take_checking(&mut self, placeholder: MetavarId) -> Option<ParkedProblem> {
+        self.underway.attempt.solutions.take_checking(placeholder)
     }
 
     /// How many metavariables are awaited: the mark a term takes before it awaits any ([`Context::settle_bounds`]).

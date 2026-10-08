@@ -2,8 +2,8 @@ use {
     super::{Context, Error, Misaligned, Mode, align, check, elaborate, expect, stands_at},
     crate::{
         BinderSite, FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_intrinsic_head,
-        check_motive, contradicted_guard, fill_placeholder, is_prop, reduce_with, refine_head,
-        same_uncommitted, stuck_on_metavar, unreachable_arm,
+        check_motive, contradicted_guard, is_prop, reduce_with, refine_head, same_uncommitted,
+        stuck_on_metavar, unreachable_arm,
     },
     curios_analysis::{
         Invert, invert_indices, pinned_by_targets, retyped, scrutinee_solution, solve_indices,
@@ -597,18 +597,11 @@ pub(crate) fn retry_match(
     })?;
 
     match rebuilt {
-        Some(rebuilt) => fill_placeholder(
-            context,
-            parked.placeholder,
-            &parked.result,
-            rebuilt,
-            &origin,
-        ),
-        None => {
-            context.repark(ParkedWork::Match(parked), origin, frame);
-            Ok(())
-        }
+        Some(rebuilt) => context.fill_placeholder(parked.placeholder, rebuilt),
+        None => context.repark(ParkedWork::Match(parked), origin, frame),
     }
+
+    Ok(())
 }
 
 /// The refusal a match's eliminator gives a scrutinee of `type_`, for a parked match whose scrutinee's type never reached a carrier.

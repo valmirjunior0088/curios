@@ -511,7 +511,7 @@ fn elaborate_apply_awaiting(
     let output = cursor.body().expect("a cursor past every entry");
 
     if let Mode::Check(expected) = &mode {
-        // The output carries any pending's placeholder, which *blocks* rather than manufacturing a raw substitution's false mismatches — so this turnaround runs unbracketed, a mismatch propagates as genuine, and its pins wake parked checks through the ordinary retry machinery with every discharged obligation's solutions kept.
+        // The output carries any pending's placeholder, which *blocks* rather than manufacturing a raw substitution's false mismatches — conversion waits on a placeholder, never solving one to what the expectation states in its argument's place — so this turnaround runs unbracketed, a mismatch propagates as genuine, and its pins wake parked checks through the ordinary retry machinery with every discharged obligation's solutions kept.
         expect(context, term, &output, expected)?;
     }
 
@@ -519,23 +519,24 @@ fn elaborate_apply_awaiting(
     context.settle_bounds(awaited)?;
 
     if !pendings.is_empty() {
-        // The force tier: a pending still undischarged after the turnaround above is checked now, under whatever it pinned. A lambda whose domain only its own body can ground is grounded by that body here; the placeholder takes the checked term, so no pending outlives its apply undischarged. The parked copy of the obligation reconciles against this solution when its retry fires. A bracketed best-effort expect over the *raw* spellings before this tier would add nothing: measured across the corpus, it discharges no pending the wake machinery and this tier do not.
+        // The force tier: a pending still undischarged after the turnaround above is checked now, under whatever it pinned. A lambda whose domain only its own body can ground is grounded by that body here; the placeholder takes the checked term, so no pending outlives its apply undischarged. The tier takes each pending out of the store before it checks it, so a wake its own check sets off cannot run the written term a second time; one the turnaround's wakes already ran is gone from the store, its placeholder filled. A bracketed best-effort expect over the *raw* spellings before this tier would add nothing: measured across the corpus, it discharges no pending the wake machinery and this tier do not.
         //
         // The tier runs in both modes. In checking mode the turnaround above has consulted the expectation; in inference mode there is no expectation to consult, and without the tier a `let z = id((1, true))` would leave its tuple parked until the item's drain, where `z.0` would already have met a bare metavariable. Either way no later slot opens through this one, so the tier's premise holds: nothing is left to give the expectation structure, and an inferred call commits to its argument's product exactly as a bare literal does.
         for (slot, placeholder, written) in &pendings {
-            if context.metavar_solution(*placeholder).is_none() {
-                let slot_ty = original
-                    .clone()
-                    .nth(*slot, |k| elaborated[k].clone())
-                    .expect("pending slot is within the telescope");
-                // A form that can be synthesized takes its product *here* rather than at the item's drain, so the rest of the item sees a real type — a projection off the result would otherwise check against a metavariable that only settles after every expression around it.
-                let checked = match settle_against(context, written, &slot_ty, SettleTier::Force)? {
-                    Some(settled) => settled,
-                    None => check(context, written, slot_ty)?,
-                };
-                context.solve_metavar(*placeholder, checked.clone());
-                elaborated[*slot] = checked;
+            if context.take_checking(*placeholder).is_none() {
+                continue;
             }
+            let slot_ty = original
+                .clone()
+                .nth(*slot, |k| elaborated[k].clone())
+                .expect("pending slot is within the telescope");
+            // A form that can be synthesized takes its product *here* rather than at the item's drain, so the rest of the item sees a real type — a projection off the result would otherwise check against a metavariable that only settles after every expression around it.
+            let checked = match settle_against(context, written, &slot_ty, SettleTier::Force)? {
+                Some(settled) => settled,
+                None => check(context, written, slot_ty)?,
+            };
+            context.fill_placeholder(*placeholder, checked.clone());
+            elaborated[*slot] = checked;
         }
 
         // The authoritative turnaround, through fully settled arguments.

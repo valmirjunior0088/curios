@@ -349,3 +349,112 @@ fn reflexivity_at_two_lambdas_that_differ_is_a_mismatch() {
     );
     assert!(report.contains("type mismatch"), "{report}");
 }
+
+// A written argument is checked as written, and then held to its call's type. A list or a tuple at a slot whose type is still a metavariable waits behind a placeholder, and the call's expected type states the slot's value before the argument is checked. Conversion waits on the placeholder as it waits on a recursive group's slot, so nothing but the argument's own check fills it, and the value the type states meets the argument that was written. Mutation-checked: letting conversion solve a placeholder accepts both, with the type's list standing where the argument was written.
+#[test]
+fn a_hidden_argument_is_held_to_the_value_its_calls_type_states() {
+    let tagged = error(
+        r#"
+        use /std/{List, Nat};
+        induct Tagged(@A : Type) : (A) -> Type
+        | tag(@z : A) : (z)
+        end
+        let relevant : Tagged()([7, 8, 9]) = Tagged/tag(@_, @[1]);
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(tagged.contains("type mismatch"), "{tagged}");
+
+    let reflexive = error(
+        r#"
+        use /std/{Eq, List, Nat};
+        let also(x : Nat, y : Nat) -> Eq()([x], [x]) = Eq/refl(@_, @[y]);
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(reflexive.contains("type mismatch"), "{reflexive}");
+}
+
+// A plain argument as well, where what would stand in its place is a value the program runs with. Mutation-checked, as above: the payload read back is the type's.
+#[test]
+fn a_plain_argument_is_held_to_the_value_its_calls_type_states() {
+    let list = error(
+        r#"
+        use /std/{List, Nat};
+        induct Boxed(@A : Type) : (A) -> Type
+        | box(z : A) : (z)
+        end
+        let boxed : Boxed()([7, 8, 9]) = Boxed/box([1]);
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(list.contains("type mismatch"), "{list}");
+
+    let tuple = error(
+        r#"
+        use /std/{Nat};
+        induct Boxed(@A : Type) : (A) -> Type
+        | box(z : A) : (z)
+        end
+        let boxed : Boxed()((7, 8)) = Boxed/box((1, 2));
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(tuple.contains("type mismatch"), "{tuple}");
+}
+
+// A literal that parks inside an argument — a match arm's tuple, a `let` body's — is no pending of the call's own, so no force tier runs it and only its retry does. It is held to the type as the argument itself is. Mutation-checked, as above.
+#[test]
+fn a_literal_inside_an_argument_is_held_to_the_value_its_calls_type_states() {
+    let arm = error(
+        r#"
+        use /std/{Nat, Bool};
+        induct Boxed(@A : Type) : (A) -> Type
+        | box(z : A) : (z)
+        end
+        let boxed : Boxed()((7, 8)) =
+            Boxed/box(match true | true => (1, 2) | false => (3, 4) end);
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(arm.contains("type mismatch"), "{arm}");
+
+    let body = error(
+        r#"
+        use /std/{Nat};
+        induct Boxed(@A : Type) : (A) -> Type
+        | box(z : A) : (z)
+        end
+        let boxed : Boxed()((7, 8)) = Boxed/box(let t = 1; (t, 2));
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(body.contains("type mismatch"), "{body}");
+}
+
+// What the wait gives: the argument is checked first, so what it says reaches the metavariables its call's type leaves open — `h` and `l` are read off the written list — and an argument that agrees with the type up to conversion is the one the program holds. Mutation-checked: with conversion solving the placeholder, the written list is never compared and `h` is reported as not inferred.
+#[test]
+fn a_written_argument_solves_what_its_calls_type_leaves_open() {
+    let source = r#"
+        use /std/{Eq, List, Nat, Str};
+        induct Boxed(@A : Type) : (A) -> Type
+        | box(z : A) : (z)
+        end
+
+        let tail_of(@T : Type, @h : T, @l : List(T), p : Eq()([h, ..l], [h, ..l])) -> List(T) =
+            l;
+        let literal(x : Nat, y : Nat) -> List(Nat) =
+            tail_of(Eq/refl(@_, @[y, x]));
+
+        let computed(x : Nat) -> Boxed()([x + 0, 2]) = Boxed/box([x, 1 + 1]);
+        let held(@A : Type, @a : A, b : Boxed()(a)) -> A =
+            match b | box(z) => z end;
+
+        /std/print(Str/join(" ", [
+            Nat/to_str(List/len(literal(1, 2))),
+            Nat/to_str(List/len(held(computed(5)))),
+        ]))
+        "#;
+
+    assert_eq!(run(source), b"1 2");
+}

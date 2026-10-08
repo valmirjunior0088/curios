@@ -2,7 +2,7 @@ use {
     super::{FieldSource, check_dependent_fields, park_checking},
     crate::{
         Context, Error, FrozenFrame, Mode, ParkedProjection, ParkedWork, Sort, check,
-        check_is_sort, elaborate, expect, fill_placeholder, reduce_with, stuck_on_metavar,
+        check_is_sort, elaborate, expect, reduce_with, stuck_on_metavar,
     },
     curios_core::{
         Bound, Field, InductType, Level, Proj, SelfReference, StructType, Subterm, Telescope, Term,
@@ -176,7 +176,7 @@ fn park_projection(
     (stand_in, result)
 }
 
-/// Retry a parked projection: under the frozen frame, its head's type is either still stuck (re-park) or has reached a tuple or a struct, and then the field is read off it, its type met with the stand-in type, and the placeholder solved to the projection — reconciled with a solution unification reached first, as a parked check's is.
+/// Retry a parked projection: under the frozen frame, its head's type is either still stuck (re-park) or has reached a tuple or a struct, and then the field is read off it, its type met with the stand-in type, and the placeholder filled with the projection, which nothing else fills ([`Context::fill_placeholder`]).
 pub(crate) fn retry_projection(
     context: &mut Context,
     parked: ParkedProjection,
@@ -196,18 +196,11 @@ pub(crate) fn retry_projection(
     })?;
 
     match projected {
-        Some(projection) => fill_placeholder(
-            context,
-            parked.placeholder,
-            &parked.result,
-            projection,
-            &origin,
-        ),
-        None => {
-            context.repark(ParkedWork::Projection(parked), origin, frame);
-            Ok(())
-        }
+        Some(projection) => context.fill_placeholder(parked.placeholder, projection),
+        None => context.repark(ParkedWork::Projection(parked), origin, frame),
     }
+
+    Ok(())
 }
 
 /// Read `field` off `head`, whose type has reduced to `head_type`: a tuple's field or a struct's, the struct's privacy enforced here.

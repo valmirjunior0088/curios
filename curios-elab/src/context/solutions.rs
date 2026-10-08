@@ -26,7 +26,7 @@ pub(crate) struct MetaEntry {
     pub result: Term,
     /// `None` while unsolved; `Some(t)` once solved. `t`'s free `Var`s are a subset of `telescope`'s names.
     pub solution: Option<Term>,
-    /// Ordinary inference holes may be solved by conversion. Recursive elaboration slots are filled only by the owning `rec` elaborator; conversion treats an unfilled slot as a blocking dependency.
+    /// Ordinary inference holes may be solved by conversion. A recursive elaboration slot is filled only by the owning `rec` elaborator and a placeholder only by the problem parked behind it; conversion treats either, unfilled, as a blocking dependency ([`Solutions::owner_fills`]).
     pub kind: MetaKind,
     /// Whether `result` is a proposition, decided once where an omitted implicit is minted. It is what tells a *bound* nothing discharged — `Holds(i < n)`, the whole of why a call was refused — from a type argument nothing determined, `@T: Type`, which never was an obligation; the report reads differently for the two, and zonk, which raises it, holds the context immutably and cannot ask the sort itself.
     pub proposition: bool,
@@ -40,7 +40,7 @@ pub(crate) struct MetaEntry {
 pub(crate) enum MetaKind {
     Inference,
     RecSlot,
-    /// A parked checking problem's stand-in for the term it will rebuild ([`ParkedWork::Checking`]). Unification may reach it first with a value, which the retry reconciles with its own; nothing may solve it to less than one, since the retry reads any solution as the check discharged and the term would never be elaborated.
+    /// A parked problem's stand-in for the term it will rebuild: a check's ([`ParkedWork::Checking`]), a projection's or a match's. Only that problem fills it, with the term it rebuilt, so what stands in the tree is what the program wrote: conversion waits on a placeholder, and nothing re-expresses one in another context.
     Placeholder,
 }
 
@@ -49,7 +49,7 @@ pub(crate) enum MetaKind {
 pub(crate) enum ParkedWork {
     /// A conversion constraint that quiesced blocked on unsolved metavariables.
     Conversion(Problem),
-    /// A whole checking problem: a checked-only introduction form met an expected type whose structure is still an unsolved metavariable. The `placeholder` metavariable stands in for the rebuilt term in the tree and is solved with it once the check can run — the spine machinery then splices it everywhere the occurrence travelled.
+    /// A whole checking problem: a checked-only introduction form met an expected type whose structure is still an unsolved metavariable. The `placeholder` metavariable stands in for the rebuilt term in the tree and is solved with it once the check can run — the spine machinery then splices it everywhere the occurrence travelled. The term is elaborated once: whatever runs the check — a wake's retry, its apply's force tier, the drain's settle — holds the problem out of the store while it does.
     Checking {
         term: Term,
         expected: Term,
@@ -239,6 +239,12 @@ impl Solutions {
             .is_some_and(|entry| entry.kind == MetaKind::RecSlot)
     }
 
+    /// Whether something other than conversion fills `id`: a recursive group its slot, a parked problem its placeholder. Conversion waits on such a hole rather than solve it.
+    pub(crate) fn owner_fills(&self, id: MetavarId) -> bool {
+        self.entry(id)
+            .is_some_and(|entry| matches!(entry.kind, MetaKind::RecSlot | MetaKind::Placeholder))
+    }
+
     /// Commit a solution: sets the entry, records the wake signal, and journals for rollback. The façade stamps the write.
     ///
     /// An unborn id is the caller's broken contract, not a program error: every minting path births immediately, and the conversion solver's no-birth-record arm refuses before committing. A silent no-op here would surface as an unsolved metavariable far from the violation.
@@ -423,6 +429,15 @@ impl Solutions {
     /// Take every parked goal — the drain's final sweep.
     pub(crate) fn take_parked(&mut self) -> Vec<ParkedProblem> {
         mem::take(&mut self.parked)
+    }
+
+    /// Take the checking problem parked behind `placeholder`, where it still waits: what an apply's force tier runs itself, out of reach of the wakes its own check sets off.
+    pub(crate) fn take_checking(&mut self, placeholder: MetavarId) -> Option<ParkedProblem> {
+        let index = self.parked.iter().position(|parked| {
+            matches!(&parked.work, ParkedWork::Checking { placeholder: held, .. } if *held == placeholder)
+        })?;
+
+        Some(self.parked.remove(index))
     }
 
     pub(crate) fn parked_len(&self) -> usize {

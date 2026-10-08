@@ -553,8 +553,8 @@ fn region_monad(
     let sort = context.fresh_classifier_type("region monad");
     let binder = context.fresh(None);
     let former = Term::func_type([(binder, sort.clone())], sort.clone());
-    let (_, monad) = context.fresh_placeholder(former, extent);
-    let (_, value) = context.fresh_placeholder(sort.clone(), extent);
+    let monad = context.fresh_hole_metavar(former, extent);
+    let value = context.fresh_hole_metavar(sort.clone(), extent);
     let applied = Term::apply(monad.clone(), [value]);
     // The imitation is a probe: a conversion that fails for any reason but the budget falls back to the abstraction.
     let imitated = convert(context, &sort, &applied, region)
@@ -902,7 +902,7 @@ pub(super) fn elaborate_infix(
 ) -> Result<(Term, Term), Error> {
     // `?T`: the operand type shared by both sides.
     let classifier = context.fresh_classifier_type("infix operand classifier");
-    let (operand_id, operand_type) = context.fresh_placeholder(classifier, term.extent());
+    let (operand_id, operand_type) = context.fresh_hole(classifier, term.extent());
 
     let target = context.syntax().operator.concept_field(infix.op);
     let field_name = target.field;

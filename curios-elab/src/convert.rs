@@ -1467,7 +1467,8 @@ impl Convert {
     ) -> Result<Solved, ReduceError> {
         curios_profile::profile!("convert::solve");
         let id = metavar.id;
-        if context.is_rec_slot(id) {
+        // No unknown of conversion's: a recursive group fills its slot and a parked problem its placeholder, and a problem that meets either waits for it.
+        if context.owner_fills(id) {
             return Ok(Solved::Postponed);
         }
 
@@ -1845,7 +1846,7 @@ impl Convert {
         let Some(metavar) = as_metavar(&apply.head).cloned() else {
             return Ok(None);
         };
-        if context.is_rec_slot(metavar.id) {
+        if context.owner_fills(metavar.id) {
             return Ok(None);
         }
         let Some(variables) = pattern_variables(context, &metavar, apply) else {
@@ -2499,12 +2500,12 @@ impl Convert {
                         }
                     }
 
-                    // Rec slots, and distinct heads (or an undecided probe): flex–flex does no intersection — postpone.
+                    // Holes their owner fills, and distinct heads (or an undecided probe): flex–flex does no intersection — postpone.
                     self.blocked.push(raw_problem(&type_));
                     continue;
                 }
                 (Some(metavar), None) => {
-                    if context.is_rec_slot(metavar.id) {
+                    if context.owner_fills(metavar.id) {
                         self.blocked.push(raw_problem(&type_));
                         continue;
                     }
@@ -2519,7 +2520,7 @@ impl Convert {
                     }
                 }
                 (None, Some(metavar)) => {
-                    if context.is_rec_slot(metavar.id) {
+                    if context.owner_fills(metavar.id) {
                         self.blocked.push(raw_problem(&type_));
                         continue;
                     }
