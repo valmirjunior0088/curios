@@ -62,6 +62,9 @@ use {
     },
 };
 
+#[cfg(feature = "archive")]
+use std::borrow::Cow;
+
 #[cfg(test)]
 mod binding_tests;
 #[cfg(test)]
@@ -281,7 +284,10 @@ pub struct PreparedText {
     /// Where each source declaration this unit was lowered from lies: what a position in one of its terms is resolved against where a report is made — see `curios_core::Anchors`.
     anchors: curios_core::Anchors,
     /// What each source declaration lowered to beside its items, and what it asked of its scope: one for each entry of `minted`'s declarations, held by pointer, since a unit lowered over this one keeps the ones that stand — see `lowered`.
-    declarations: Vec<Rc<LoweredDeclaration>>,
+    ///
+    /// **The unit's baseline half: what a later lowering of the same sources reads, and nothing compiled after this unit does.** So it is no part of what the unit is stored as for its successors. It is stored beside that ([`PreparedText::baseline_bytes`]), handed back as bytes where the unit is restored ([`PreparedText::with_baseline`]), and read out of them when a lowering first asks.
+    #[archived_with(curios_archive::Skip)]
+    declarations: curios_archive::Deferred<Vec<Rc<LoweredDeclaration>>>,
 }
 
 /// An item the parser could not read, as the lowering carries it: the parser's report, and the name its head declared, registered so a reference to it resolves to this name — which the elaborator withholds, as it withholds every dependent of a refusal — rather than reporting as unbound. `None` where the head did not parse as far as a name, whose references then report as the unbound names they are.
@@ -365,20 +371,49 @@ impl PreparedText {
         &self.unbound
     }
 
+    /// What each source declaration of this unit lowered to beside its items — see the field. Read out of the unit's baseline half now, where the unit was restored and no lowering has asked before.
+    fn lowerings(&self) -> &[Rc<LoweredDeclaration>] {
+        #[cfg(feature = "archive")]
+        let lowerings = self
+            .declarations
+            .get()
+            .unwrap_or_else(|error| panic!("a unit's baseline half failed to restore: {error}"));
+        #[cfg(not(feature = "archive"))]
+        let lowerings = self
+            .declarations
+            .peek()
+            .expect("a unit that was never stored holds what it lowered to");
+
+        lowerings
+    }
+
+    /// The bytes of this unit's baseline half: what a later lowering of the same sources keeps this unit's lowerings by, stored apart from what the unit is for its successors.
+    #[cfg(feature = "archive")]
+    pub fn baseline_bytes(&self) -> Result<Cow<'_, [u8]>, String> {
+        self.declarations.bytes()
+    }
+
+    /// This unit with `bytes` as its baseline half, read when a lowering over the unit first asks: what a unit restored without one is given, since restoring it leaves the half empty.
+    #[cfg(feature = "archive")]
+    pub fn with_baseline(mut self, bytes: Cow<'static, [u8]>) -> Self {
+        self.declarations = curios_archive::Deferred::stored(bytes);
+        self
+    }
+
     /// The names this unit declares by a lowering it took from `baseline` whole: each one's item is the baseline's own under the same name, with the registry entries the baseline holds for it. What a recompile has no need to compare.
     ///
     /// **By the record, never by the text.** A declaration is the baseline's where this unit holds the very record the baseline does, which only a kept lowering leaves behind; and under the same name, since a kept witness is named anew and may take the name another held.
     pub fn kept_from(&self, baseline: &PreparedText) -> BTreeSet<curios_core::Global> {
-        let mut held = HashMap::with_capacity(baseline.declarations.len());
+        let mut held = HashMap::with_capacity(baseline.lowerings().len());
         let mut first = 0;
-        for declaration in &baseline.declarations {
+        for declaration in baseline.lowerings() {
             held.insert(Rc::as_ptr(declaration), first);
             first += declaration.facts().len();
         }
 
         let mut kept = BTreeSet::new();
         let mut first = 0;
-        for declaration in &self.declarations {
+        for declaration in self.lowerings() {
             let count = declaration.facts().len();
             if let Some(&from) = held.get(&Rc::as_ptr(declaration)) {
                 let ours = &self.core.items[first..first + count];
@@ -2006,7 +2041,7 @@ fn into_core_unit_within(
         credited: BTreeSet::new(),
         reached: reached.into_inner(),
         anchors: anchoring.into_anchors(),
-        declarations,
+        declarations: curios_archive::Deferred::held(declarations),
     };
 
     Ok((unit, entry))

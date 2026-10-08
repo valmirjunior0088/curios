@@ -190,11 +190,13 @@ fn write_image(
     reads: Vec<(PathBuf, Arc<Source>)>,
     predecessors: Vec<String>,
 ) -> String {
-    let first = curios_archive::to_bytes(image)
+    let first = image
+        .stored()
         .unwrap_or_else(|error| panic!("/{root} archive serialization failed: {error}"));
-    let second = curios_archive::to_bytes(image)
+    let second = image
+        .stored()
         .unwrap_or_else(|error| panic!("/{root} archive repeat serialization failed: {error}"));
-    assert_eq!(&*first, &*second, "/{root} archive is not deterministic");
+    assert_eq!(first, second, "/{root} archive is not deterministic");
 
     let record = Record::of(reads, predecessors, digest(&first));
     let recorded = curios_archive::to_bytes(&record)

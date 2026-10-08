@@ -2,8 +2,10 @@
 
 use {
     curios_document::Documentation,
-    curios_unit::{ArchivedRecord, ArchivedUncertified, Record, Stored, Uncertified, segments},
-    std::{cell::LazyCell, sync::OnceLock},
+    curios_unit::{
+        ArchivedRecord, ArchivedUncertified, Record, Stored, Uncertified, halves, segments,
+    },
+    std::{borrow::Cow, cell::LazyCell, sync::OnceLock},
 };
 
 // From `OUT_DIR`, where the build script files them.
@@ -18,8 +20,15 @@ const DOCUMENTATION_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/doc
 /// The prelude's roots in dependency order, as the build script folded them: `/sys` is lowered against nothing and `/std` against `/sys`, so restoring them in any other order would hand a successor a scope its own names were never resolved in.
 const ROOTS: [(&str, &[u8]); 2] = [("sys", SYS_BYTES), ("std", STD_BYTES)];
 
-/// One image validated: its record and its unit, each as the zero-copy view bytecheck confirmed.
-type Validated = Result<(&'static ArchivedRecord, &'static ArchivedUncertified), String>;
+/// One image validated: its record and its unit, each as the zero-copy view bytecheck confirmed, and the unit's baseline half as the bytes it is, which nothing here reads.
+type Validated = Result<
+    (
+        &'static ArchivedRecord,
+        &'static ArchivedUncertified,
+        &'static [u8],
+    ),
+    String,
+>;
 
 static ARCHIVES: OnceLock<[Validated; 2]> = OnceLock::new();
 
@@ -40,14 +49,16 @@ fn validate_archives() -> [Validated; 2] {
 ///
 /// The record is not checked against anything here either, for the same reason: nothing in this process is about to believe a verdict on its strength, nor reads it at all. It is carried because the image is framed exactly as a slot is, and this crate's tests hold it to the tree.
 fn validate_bytes(root: &str, bytes: &'static [u8]) -> Validated {
-    let (record, unit) =
+    let (record, artifact) =
         segments(bytes).ok_or_else(|| format!("invalid archived /{root}: not a stored unit"))?;
+    let (unit, baseline) = halves(artifact)
+        .ok_or_else(|| format!("invalid archived /{root}: not a unit's artifact"))?;
     let record = curios_archive::access::<ArchivedRecord>(record)
         .map_err(|error| format!("invalid archived /{root} record: {error}"))?;
     let unit = curios_archive::access::<ArchivedUncertified>(unit)
         .map_err(|error| format!("invalid archived /{root}: {error}"))?;
 
-    Ok((record, unit))
+    Ok((record, unit, baseline))
 }
 
 fn archived() -> &'static [Validated; 2] {
@@ -62,7 +73,7 @@ fn archived() -> &'static [Validated; 2] {
 pub fn restore_archives() -> [Stored; 2] {
     curios_profile::profile!("restore_archives");
     let mut units = archived().iter().zip(ROOTS).map(|(archived, (root, _))| {
-        let (record, unit) = match archived {
+        let (record, unit, baseline) = match archived {
             Ok(archived) => *archived,
             Err(error) => panic!("{error}"),
         };
@@ -71,9 +82,12 @@ pub fn restore_archives() -> [Stored; 2] {
             record: curios_archive::deserialize::<Record>(record).unwrap_or_else(|error| {
                 panic!("validated archived /{root} record failed to restore: {error}")
             }),
-            unit: curios_archive::deserialize::<Uncertified>(unit).unwrap_or_else(|error| {
-                panic!("validated archived /{root} failed to restore: {error}")
-            }),
+            // The baseline half stays the slice of the executable it is: a compilation that lowers nothing over this root never reads it.
+            unit: curios_archive::deserialize::<Uncertified>(unit)
+                .unwrap_or_else(|error| {
+                    panic!("validated archived /{root} failed to restore: {error}")
+                })
+                .with_baseline(Cow::Borrowed(baseline)),
         }
     });
 

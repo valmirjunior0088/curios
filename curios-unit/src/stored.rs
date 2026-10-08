@@ -107,3 +107,23 @@ pub fn segments(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
 
     (length <= rest.len()).then(|| rest.split_at(length))
 }
+
+/// The bytes of a unit's artifact: the unit as what is compiled after it restores it, then its baseline half, which only a later compile of the same unit reads — behind the first's length, since each half is an archive read from its end.
+///
+/// **Two halves by reader, in the one segment a record vouches for.** A slot's record digests its artifact, so both halves are believed together, and a slot stays one file replaced by one rename. What differs is who decodes which: opening a unit decodes the first and keeps the second as bytes.
+pub fn halved(unit: &[u8], baseline: &[u8]) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(8 + unit.len() + baseline.len());
+    bytes.extend_from_slice(&(unit.len() as u64).to_le_bytes());
+    bytes.extend_from_slice(unit);
+    bytes.extend_from_slice(baseline);
+
+    bytes
+}
+
+/// The unit and the baseline half of the artifact `bytes`, or `None` for bytes that are not a unit's artifact. The one place [`halved`]'s layout is read.
+pub fn halves(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
+    let (length, rest) = bytes.split_first_chunk::<8>()?;
+    let length = usize::try_from(u64::from_le_bytes(*length)).ok()?;
+
+    (length <= rest.len()).then(|| rest.split_at(length))
+}

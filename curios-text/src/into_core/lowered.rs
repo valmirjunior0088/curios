@@ -114,10 +114,10 @@ pub(super) struct Baseline<'a> {
 
 impl<'a> Baseline<'a> {
     pub(super) fn of(unit: &'a PreparedText) -> Self {
-        let mut by_text = HashMap::with_capacity(unit.declarations.len());
-        let mut first = Vec::with_capacity(unit.declarations.len());
+        let mut by_text = HashMap::with_capacity(unit.lowerings().len());
+        let mut first = Vec::with_capacity(unit.lowerings().len());
         let mut next = 0;
-        for (index, declaration) in unit.declarations.iter().enumerate() {
+        for (index, declaration) in unit.lowerings().iter().enumerate() {
             first.push(next);
             next += declaration.items.len();
             if let Some(key) = declaration.key {
@@ -141,7 +141,7 @@ impl<'a> Baseline<'a> {
             (self.unit.anchors.text(key.0, key.1) == Some(text)).then_some(index)
         })??;
 
-        let stands = self.unit.declarations[index]
+        let stands = self.unit.lowerings()[index]
             .trace
             .stands(|lookup, found| context.answers(lookup, found));
         context.forget_asked();
@@ -151,7 +151,7 @@ impl<'a> Baseline<'a> {
 
     /// Take the declaration at `index` whole into `lowered`, as lowering it again would have written it: its items under the names this lowering gives them, their registry entries and rows, what it minted, its import scopes and its lints.
     pub(super) fn kept(&self, index: usize, context: &Context, lowered: &mut Lowering) {
-        let declaration = &self.unit.declarations[index];
+        let declaration = &self.unit.lowerings()[index];
         let first = self.first[index];
 
         let mut names = Vec::new();

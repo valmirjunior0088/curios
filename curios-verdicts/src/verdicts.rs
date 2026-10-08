@@ -276,7 +276,7 @@ impl Verdicts {
         let contained = record.unit;
         let restored = match self.decoded(source, &slot, &contained) {
             Some(decoded) => decoded,
-            None => curios_archive::from_bytes::<Unit>(bytes).ok()?,
+            None => Unit::restored(bytes).ok()?,
         };
         // Held as a compiled unit is, so the first edit to this unit is recompiled over the copy in hand rather than over the slot read back again.
         self.hold(source, slot.clone(), &restored, Some(contained.clone()));
@@ -307,7 +307,7 @@ impl Verdicts {
             return None;
         }
 
-        curios_archive::from_bytes::<Unit>(bytes).ok()
+        Unit::restored(bytes).ok()
     }
 
     /// Place `unit` in the chain without filing it: what the `wonder` engine, answering a question, does with a unit it compiled and may not file — one compiled from text the disk does not hold, or after one that was.
@@ -322,11 +322,7 @@ impl Verdicts {
     /// The place `unit` takes in the chain after everything placed so far, and the bytes it would be filed as — `None` when it may not be placed at all.
     ///
     /// Shared by [`Verdicts::place`] and [`Cache::put`], so the two cannot come to different answers about which units enter the chain: a unit this refuses is one neither may place, or a successor's record would vouch for a predecessor that nothing here can produce again.
-    fn placement(
-        &self,
-        source: &UnitSource<'_>,
-        unit: &Unit,
-    ) -> Option<(Placed, curios_archive::Serialized)> {
+    fn placement(&self, source: &UnitSource<'_>, unit: &Unit) -> Option<(Placed, Vec<u8>)> {
         curios_profile::profile!("verdicts::placement");
         let slot = self.slot(source, &self.placed.borrow())?;
 

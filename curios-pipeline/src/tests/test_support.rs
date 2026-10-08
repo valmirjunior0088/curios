@@ -296,14 +296,24 @@ pub(super) fn assert_modules_agree(whole: &Module, incremental: &Module) {
 /// A unit is stored with its elaborated module consed up to spelling under no position ([`Unit::stored`]), so what is left to differ is what the two compilations concluded.
 pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
     let stored = |unit: &Unit| unit.stored().expect("a unit serializes");
-    if stored(whole)[..] == stored(incremental)[..] {
+    if stored(whole) == stored(incremental) {
         return;
     }
 
     let consed = |unit: &Unit| {
         curios_archive::to_bytes(&unit.core().shared(&Sharing::new())).expect("a module serializes")
     };
+    let baseline = |unit: &Unit| {
+        unit.text()
+            .baseline_bytes()
+            .expect("a baseline half serializes")
+            .into_owned()
+    };
     let parts = [
+        (
+            "the baseline half",
+            baseline(whole) == baseline(incremental),
+        ),
         (
             "the text stage's part",
             curios_archive::to_bytes(whole.text()).unwrap()[..]

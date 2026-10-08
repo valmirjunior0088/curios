@@ -37,6 +37,9 @@
 
 pub use curios_archive_derive::archived;
 
+mod deferred;
+pub use deferred::*;
+
 #[cfg(feature = "enabled")]
 mod proxy;
 #[cfg(feature = "enabled")]
