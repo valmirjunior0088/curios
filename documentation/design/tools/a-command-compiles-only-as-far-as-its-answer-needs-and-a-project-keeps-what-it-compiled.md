@@ -16,7 +16,7 @@
 - **A question that files nothing**, which spares a server a slot per keystroke at the price of starting every question cold; filing text on disk alone spares it that without the price.
 - **Filing unsaved text**, a slot per keystroke for text the next keystroke replaces and nobody may save.
 - **Filing a unit compiled over a baseline while it differs from the one a whole compile stores**: the store would hold slots no build reaches, each successor's record vouching for bytes only a recompile produces.
-- **A slot marked as compiled over a baseline**, believed by a question and not by a build: two kinds of slot for one unit, and a mistake in a closure kept across sessions until a build.
+- **A slot marked as compiled over a baseline**, believed by one command and not by another: two kinds of slot for one unit, which is stored as the same bytes however it was compiled.
 - **A store of the question's own**, the second build directory an editor's checker is handed elsewhere: nothing a build files would be a question's, nor the reverse.
 - **Compiling a saved document whole so that it is filed**, a whole compile of the unit its author is editing, on every save, to spare the next build one.
 - **A question that builds past its answer** — a payload for a `wonder` query — which needs a runtime a question does not link and spends compile time no answer reads.
