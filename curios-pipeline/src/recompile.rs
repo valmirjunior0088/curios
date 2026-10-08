@@ -1,24 +1,21 @@
-//! One unit compiled over a baseline: lowered whole, walked whole, and each declaration kept as the baseline holds it where everything its elaboration asked there is answered as it was, with every other elaborated, judged and erased.
+//! One unit compiled over a baseline: lowered whole, walked whole, and each declaration kept as the baseline holds it where everything its elaboration asked there is answered as it was, with every other elaborated and judged; and each erased form kept where what its erasure asked is.
 //!
-//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its declarations stand is decided by no one stage for another. The lowering keeps a declaration whose text and resolutions stand (`PreparedText::kept_from`). The elaborator keeps one of those where every question its elaboration put to the declarations around it is answered as it was, asked again in order as the unit is walked (`curios_elab::Traces`), so an edit elaborates again what read the part it changed and nothing behind that: a declaration elaborated again that came out as it was moves none of its readers. The kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)).
+//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its declarations stand is decided by no one stage for another. The lowering keeps a declaration whose text and resolutions stand (`PreparedText::kept_from`). The elaborator keeps one of those where every question its elaboration put to the declarations around it is answered as it was, asked again in order as the unit is walked (`curios_elab::Traces`), so an edit elaborates again what read the part it changed and nothing behind that: a declaration elaborated again that came out as it was moves none of its readers. The kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). Erasure keeps the erased form of a declaration the elaborator kept where every question its erasure put is answered as it was, of the declarations around it and of the erased forms it read a binding in (`curios_elab::ErasedBaseline`).
 //!
 //! **A declaration lowered again is elaborated again.** Nothing compares two lowerings: an edit that leaves a declaration's meaning alone costs that declaration's elaboration, and what it comes to is compared part by part with what the baseline holds, by whatever read it.
 
 use {
     crate::{CompileError, anchors_of, globals, kernel_refusal, with_broken},
     curios_cert::{Baseline, Rechecked, certify_module_over},
-    curios_core::{Global, Module, Zonked},
+    curios_core::{Module, Zonked},
     curios_elab::{
-        Context, Erasures, Established, Recompile, Recompiled, elaborate_and_zonk_unit_over,
-        erase_unit_over,
+        Context, ErasedBaseline, Erasures, Established, Recompile, Recompiled,
+        elaborate_and_zonk_unit_over, erase_unit_over,
     },
     curios_text::{UnitSource, into_core_unit_over},
     curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::SyntaxRegistry,
-    std::{
-        collections::{BTreeMap, BTreeSet},
-        rc::Rc,
-    },
+    std::{collections::BTreeSet, rc::Rc},
 };
 
 /// Compile one unit against `predecessors` over `baseline`: lower whole, then elaborate, judge and erase what does not stand.
@@ -96,24 +93,19 @@ pub fn compile_unit_over(
     }
     let certification = rechecked.certification;
 
-    // An item's erasure reads the types and registry entries of the names it reaches and how each is bound, so it is erased again where it reaches, through any number of items, one that was elaborated again.
-    let made = core
-        .as_module()
-        .items
-        .iter()
-        .flat_map(|item| item.declared_names())
-        .filter(|name| !kept.contains(*name))
-        .copied()
-        .collect();
-    let redone = reverse_closure(core.as_module(), made);
+    // Erasure decides what it keeps by its own record: an erased form stands where the elaborator kept its declaration and what its erasure asked is answered as it was.
     let erased = predecessors.erased();
     let ersd = erase_unit_over(
         budget,
         *syntax,
         Erasures::of(&cores, &erased),
         &core,
-        baseline.erased(),
-        &|name| redone.contains(name),
+        ErasedBaseline {
+            core: baseline.core(),
+            places: baseline.places(),
+            erased: baseline.erased(),
+            kept: &kept,
+        },
     )
     .map_err(|error| {
         CompileError::Failure(error.reports_with(
@@ -148,40 +140,4 @@ pub(crate) fn recheck_over(
         },
         *syntax,
     )
-}
-
-/// The reverse transitive closure of `seeds` over what `core`'s items reach: every item that reaches a seed, transitively, by every name it declares. A seed `core` does not declare — an added name — is in the closure with no dependents.
-fn reverse_closure(core: &Module, seeds: BTreeSet<Global>) -> BTreeSet<Global> {
-    let owner = core
-        .items
-        .iter()
-        .enumerate()
-        .flat_map(|(index, item)| {
-            item.declared_names()
-                .into_iter()
-                .map(move |name| (*name, index))
-        })
-        .collect::<BTreeMap<Global, usize>>();
-    let mut dependents: BTreeMap<Global, Vec<usize>> = BTreeMap::new();
-    for (index, item) in core.items.iter().enumerate() {
-        for name in core.reaches(item) {
-            if owner.contains_key(&name) {
-                dependents.entry(name).or_default().push(index);
-            }
-        }
-    }
-
-    let mut closure = seeds;
-    let mut work = closure.iter().cloned().collect::<Vec<_>>();
-    while let Some(name) = work.pop() {
-        for &index in dependents.get(&name).map_or(&[][..], Vec::as_slice) {
-            for declared in core.items[index].declared_names() {
-                if closure.insert(*declared) {
-                    work.push(*declared);
-                }
-            }
-        }
-    }
-
-    closure
 }

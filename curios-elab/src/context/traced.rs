@@ -6,6 +6,8 @@
 //!
 //! **Asked once, in the order first asked.** A judgment asks after one name thousands of times, and the trace keeps the first.
 //!
+//! **Erasure asks through the same doors.** An item is erased by a reader of finished terms (`Retyping`), which is a context, so what erasing it asks of the declarations around it is noted here as an elaboration's is; and it asks one thing more, of another item's erased form, which is a question of its own.
+//!
 //! **Of the declarations around it, so not of itself.** What a declaration asks of a name it declares — a recursive call's signature, the former a constructor is checked against, the witness it declares found at its own key — is answered by the attempt under way, and stands wherever the declaration does.
 
 use {
@@ -44,6 +46,8 @@ pub enum Question<N = Global, K = WitnessKey> {
     WitnessDeclared(N, K),
     /// Whether the unit's lemmas are on offer to a proof the elaborator writes.
     Lemmas,
+    /// The erased form of the item declaring a name, as an item that names it reads it: how the name is bound where it is erased, and the row it declares. Erasure's alone.
+    Erased(N),
 }
 
 impl<N, K> Question<N, K> {
@@ -59,7 +63,8 @@ impl<N, K> Question<N, K> {
             | Question::Struct(name)
             | Question::Concept(name)
             | Question::Witness(name, _)
-            | Question::WitnessDeclared(name, _) => Some(name),
+            | Question::WitnessDeclared(name, _)
+            | Question::Erased(name) => Some(name),
             Question::Lemmas => None,
         }
     }
@@ -85,6 +90,7 @@ impl<N, K> Question<N, K> {
                 Question::WitnessDeclared(name(subject)?, key(at)?)
             }
             Question::Lemmas => Question::Lemmas,
+            Question::Erased(subject) => Question::Erased(name(subject)?),
         })
     }
 }

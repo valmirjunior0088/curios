@@ -4,9 +4,9 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Certification, Certified, Definition, DefinitionKind, Entrypoint, Free, Global,
-        InductDecl, InductParam, Intrinsic, Item, Level, Module, Nat, Program, RecItem, StructDecl,
-        StructType, Subterm, Telescope, Term, Totality, UniverseContext, UniverseMetaId,
-        UniverseParam, Zonkable, Zonked, project_erased_universes,
+        InductDecl, InductParam, Intrinsic, Item, Level, Module, Nat, Places, Program, RecItem,
+        StructDecl, StructType, Subterm, Telescope, Term, Totality, UniverseContext,
+        UniverseMetaId, UniverseParam, Zonkable, Zonked, project_erased_universes,
     },
     curios_ersd::{FieldShape, test_support::shape},
     curios_utilities::{Plicity, Qualifier, grown},
@@ -514,7 +514,7 @@ fn an_erased_form_keeps_no_binder_its_erasure_opened() {
             &view,
             Erasures::nothing(),
             unit.as_module(),
-            |_| None,
+            None,
         )
         .expect("the unit erases")
     };
@@ -524,9 +524,36 @@ fn an_erased_form_keeps_no_binder_its_erasure_opened() {
     assert_eq!(format!("{first:?}"), format!("{second:?}"));
 }
 
-/// A unit erased over a baseline erases the items it is told to redo and no other. `kept` is given another body since the baseline was erased and is not named among the redone, so what the unit holds for it is still what the baseline erased it to: an item erased again would show the new body, as `redone` does.
+/// A unit of two definitions, `callee` and `caller`, which is `callee` by name, and the same unit erased whole.
+fn calling(callee: usize) -> (Zonked<Module>, ErasedUnit) {
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let unit = zonked(
+        &module(
+            vec![
+                definition("callee", nat.clone(), nat_lit(callee)),
+                definition("caller", nat, Term::free_var(&global("callee"))),
+            ],
+            nat_lit(0),
+        )
+        .module,
+    );
+    let erased = erase_unit(DEFAULT_STEP_BUDGET, SYNTAX, Erasures::nothing(), &unit)
+        .expect("the unit erases whole");
+
+    (unit, erased)
+}
+
+/// How a unit holds the item declaring `name`, as its printed erased form.
+fn form(unit: &ErasedUnit, name: &str) -> String {
+    format!(
+        "{:?}",
+        unit.find(&nominal(name)).expect("the unit declares it")
+    )
+}
+
+/// A unit erased over a baseline erases the items the elaborator did not keep and keeps the others. `kept` is given another body since the baseline was erased and is named among the kept, so what the unit holds for it is still what the baseline erased it to: an item erased again would show the new body.
 #[test]
-fn a_unit_erased_over_a_baseline_erases_what_it_redoes_and_no_other() {
+fn a_unit_erased_over_a_baseline_erases_what_was_elaborated_again_and_no_other() {
     let nat = Term::intrinsic(Intrinsic::NatType);
     let unit = |kept: usize, redone: usize| {
         zonked(
@@ -540,37 +567,82 @@ fn a_unit_erased_over_a_baseline_erases_what_it_redoes_and_no_other() {
             .module,
         )
     };
-    let form = |unit: &ErasedUnit, name: &str| {
-        format!(
-            "{:?}",
-            unit.find(&nominal(name)).expect("the unit declares it")
-        )
-    };
 
-    let baseline = erase_unit(
-        DEFAULT_STEP_BUDGET,
-        SYNTAX,
-        Erasures::nothing(),
-        &unit(1, 2),
-    )
-    .expect("the baseline erases");
+    let before = unit(1, 2);
+    let baseline = erase_unit(DEFAULT_STEP_BUDGET, SYNTAX, Erasures::nothing(), &before)
+        .expect("the baseline erases");
     let edited = unit(3, 4);
     let whole = erase_unit(DEFAULT_STEP_BUDGET, SYNTAX, Erasures::nothing(), &edited)
         .expect("the unit erases whole");
-    let redone = nominal("redone");
     let over = erase_unit_over(
         DEFAULT_STEP_BUDGET,
         SYNTAX,
         Erasures::nothing(),
         &edited,
-        &baseline,
-        &|name| *name == redone,
+        ErasedBaseline {
+            core: before.as_module(),
+            places: &Places::of(before.as_module()),
+            erased: &baseline,
+            kept: &BTreeSet::from([nominal("kept")]),
+        },
     )
     .expect("the unit erases over its baseline");
 
     assert_eq!(form(&over, "kept"), form(&baseline, "kept"));
     assert_ne!(form(&over, "kept"), form(&whole, "kept"));
     assert_eq!(form(&over, "redone"), form(&whole, "redone"));
+}
+
+/// An erased form the elaborator kept is erased again where a name it uses is bound another way: `caller` reads `callee` as the constant it is bound to, so with `callee` elaborated again to another constant, `caller`'s erased form is the one a whole erasure makes, though its declaration is the baseline's.
+///
+/// Mutation-checked against the question about a binding: with no erased form's reads noted, `caller` keeps the baseline's, which holds the old constant.
+#[test]
+fn an_erased_form_is_erased_again_where_a_name_it_uses_is_bound_another_way() {
+    let (before, baseline) = calling(1);
+    let (edited, whole) = calling(2);
+
+    let over = erase_unit_over(
+        DEFAULT_STEP_BUDGET,
+        SYNTAX,
+        Erasures::nothing(),
+        &edited,
+        ErasedBaseline {
+            core: before.as_module(),
+            places: &Places::of(before.as_module()),
+            erased: &baseline,
+            kept: &BTreeSet::from([nominal("caller")]),
+        },
+    )
+    .expect("the unit erases over its baseline");
+
+    assert_ne!(form(&whole, "caller"), form(&baseline, "caller"));
+    assert_eq!(form(&over, "caller"), form(&whole, "caller"));
+}
+
+/// An erased form the elaborator kept is kept where everything its erasure asked is answered as it was, whatever was elaborated again beside it: `callee` is elaborated again to the constant it was, so `caller`, which read that binding, holds the baseline's own erased form.
+#[test]
+fn an_erased_form_is_kept_where_what_it_read_came_out_as_it_was() {
+    let (before, baseline) = calling(1);
+    let (edited, _) = calling(1);
+
+    let over = erase_unit_over(
+        DEFAULT_STEP_BUDGET,
+        SYNTAX,
+        Erasures::nothing(),
+        &edited,
+        ErasedBaseline {
+            core: before.as_module(),
+            places: &Places::of(before.as_module()),
+            erased: &baseline,
+            kept: &BTreeSet::from([nominal("caller")]),
+        },
+    )
+    .expect("the unit erases over its baseline");
+    let held = |unit: &ErasedUnit| {
+        std::ptr::from_ref(unit.find(&nominal("caller")).expect("the unit declares it"))
+    };
+
+    assert_eq!(held(&over), held(&baseline), "`caller` was erased again");
 }
 
 #[test]
@@ -1563,7 +1635,7 @@ fn chain_cost(
             &view,
             Erasures::nothing(),
             unit.as_module(),
-            |_| None,
+            None,
         )
         .expect("the unit erases");
 

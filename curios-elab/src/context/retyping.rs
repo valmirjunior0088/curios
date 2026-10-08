@@ -7,12 +7,12 @@
 //! It lives in the context's module tree because its frame bracket hands the closure the reader itself: that takes the two halves of `Context::with_frame`, which no module outside the tree can call apart, so the bracket stays the only way into a frame.
 
 use {
-    super::{Context, InScope},
+    super::{Answered, Context, InScope, Question},
     crate::{Binders, Error, is_erasable_in, reduce_with, refine_head, sort_term, synth_neutral},
     curios_analysis::{Invert, solve_indices},
     curios_core::{
         Advance, Cost, DefinitionKind, Free, Global, InductDecl, Level, ReduceError, StructDecl,
-        Term, UniverseContext, UniverseError,
+        Term, Trace, UniverseContext, UniverseError,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -41,6 +41,24 @@ impl<'s> Retyping<'s> {
         Self {
             context: Context::new(budget, syntax),
         }
+    }
+
+    /// Begin the trace of what erasing the item declaring `own` asks of the declarations around it: the next question is its first.
+    pub(crate) fn begin_trace(&mut self, own: &[&Global]) {
+        self.context.typing.traced.begin(own);
+    }
+
+    /// Note that the erasure under way read the erased form of the item declaring `name`.
+    pub(crate) fn asks_erased(&self, name: &Global) {
+        self.context
+            .typing
+            .traced
+            .note(Question::Erased(*name), Answered::Part);
+    }
+
+    /// What the erasure under way asked, taken ([`Context::take_trace`]).
+    pub(crate) fn take_trace(&mut self) -> Trace<Question, Answered> {
+        self.context.take_trace()
     }
 
     /// [`Context::syntax`].

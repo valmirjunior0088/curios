@@ -7,9 +7,6 @@ use own_method::*;
 mod recovery;
 use recovery::*;
 
-mod same;
-use same::*;
-
 #[cfg(test)]
 mod tests;
 

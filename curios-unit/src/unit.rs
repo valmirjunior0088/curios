@@ -108,10 +108,12 @@ impl Uncertified {
         traces
     }
 
-    /// The bytes of this unit's baseline half: the text's part, then the elaborator's ([`halved`]).
+    /// The bytes of this unit's baseline half, a part for each stage that keeps a record: the text's, then the elaborator's, then erasure's, each behind the length of the one before ([`halved`]).
     #[cfg(feature = "archive")]
     pub fn baseline_bytes(&self) -> Result<Vec<u8>, String> {
-        Ok(halved(&self.text.baseline_bytes()?, &self.traces.bytes()?))
+        let later = halved(&self.traces.bytes()?, &self.erased.baseline_bytes()?);
+
+        Ok(halved(&self.text.baseline_bytes()?, &later))
     }
 
     /// The bytes this unit is imaged as: itself, then its baseline half ([`halved`]).
@@ -125,19 +127,22 @@ impl Uncertified {
     /// This unit with `bytes` as its baseline half ([`Uncertified::baseline_bytes`]), each part read when a compile over the unit first asks — see [`PreparedText::with_baseline`]. `Err` is bytes that hold no baseline half.
     #[cfg(feature = "archive")]
     pub fn with_baseline(self, bytes: Cow<'static, [u8]>) -> Result<Self, String> {
-        let (text, traces) = match bytes {
-            Cow::Borrowed(bytes) => {
-                let (text, traces) = halves(bytes).ok_or("not a unit's baseline half")?;
-                (Cow::Borrowed(text), Cow::Borrowed(traces))
-            }
-            Cow::Owned(bytes) => {
-                let (text, traces) = halves(&bytes).ok_or("not a unit's baseline half")?;
-                (Cow::Owned(text.to_vec()), Cow::Owned(traces.to_vec()))
-            }
+        /// The three parts of a baseline half, as slices of it.
+        fn parts(bytes: &[u8]) -> Result<[&[u8]; 3], String> {
+            let (text, later) = halves(bytes).ok_or("not a unit's baseline half")?;
+            let (traces, erased) = halves(later).ok_or("not a unit's baseline half")?;
+
+            Ok([text, traces, erased])
+        }
+
+        let [text, traces, erased] = match bytes {
+            Cow::Borrowed(bytes) => parts(bytes)?.map(Cow::Borrowed),
+            Cow::Owned(bytes) => parts(&bytes)?.map(|part| Cow::Owned(part.to_vec())),
         };
 
         Ok(Self {
             text: Rc::new(Rc::unwrap_or_clone(self.text).with_baseline(text)),
+            erased: Rc::new(Rc::unwrap_or_clone(self.erased).with_baseline(erased)),
             traces: Rc::new(Deferred::stored(traces)),
             ..self
         })

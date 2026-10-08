@@ -346,6 +346,11 @@ pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
             traces(whole) == traces(incremental),
         ),
         (
+            "what its erasures asked",
+            whole.erased().baseline_bytes().unwrap()
+                == incremental.erased().baseline_bytes().unwrap(),
+        ),
+        (
             "the text stage's part",
             curios_archive::to_bytes(whole.text()).unwrap()[..]
                 == curios_archive::to_bytes(incremental.text()).unwrap()[..],

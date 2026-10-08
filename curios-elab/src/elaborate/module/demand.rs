@@ -12,10 +12,13 @@
 
 use {
     super::{
-        Elaborated, Holding, ItemMark, ItemStamp, Poison, Same, Survivors, concepts_alike,
-        elaborate_module_item, entries_alike, inducts_alike, structs_alike, withhold,
+        Elaborated, Holding, ItemMark, ItemStamp, Poison, Survivors, elaborate_module_item,
+        withhold,
     },
-    crate::{Answered, Context, Error, Established, GoalSite, Question, Traces},
+    crate::{
+        Answered, Context, Error, Established, GoalSite, Question, Same, Traces, concepts_alike,
+        entries_alike, inducts_alike, structs_alike,
+    },
     curios_core::{DefinitionKind, Enter, Extent, Global, Item, Module, Places, Term, Trace},
     curios_utilities::recurse,
     std::{

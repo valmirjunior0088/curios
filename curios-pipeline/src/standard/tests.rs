@@ -194,6 +194,15 @@ fn std_unit_reproduction() {
         if stored!(first.traces()) != stored!(second.traces()) {
             differing.push("what its declarations asked".to_string());
         }
+        let erasures = |unit: &Unit| {
+            unit.erased()
+                .baseline_bytes()
+                .expect("an erased unit's traces serialize")
+                .into_owned()
+        };
+        if erasures(&first) != erasures(&second) {
+            differing.push("what its erasures asked".to_string());
+        }
         for (one, other) in first.core().items.iter().zip(&second.core().items) {
             if stored!(one) != stored!(other) {
                 differing.push(one.describe());
@@ -205,7 +214,8 @@ fn std_unit_reproduction() {
         println!("  differing   {differing:?}");
         assert!(
             stored!(&first) == stored!(&second)
-                && stored!(first.traces()) == stored!(second.traces()),
+                && stored!(first.traces()) == stored!(second.traces())
+                && erasures(&first) == erasures(&second),
             "two compilations of the standard library store two units, differing in {differing:?}"
         );
     });

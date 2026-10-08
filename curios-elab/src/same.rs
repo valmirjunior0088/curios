@@ -1,6 +1,6 @@
 //! Which parts of a declaration elaborated again are the parts its baseline holds, as a unit stores them.
 //!
-//! A declaration kept over a baseline asked parts of the declarations around it, and stands where each is as it was. Of a declaration that was itself kept, every part is. Of one elaborated again, a part is where it came out equal — which is what lets an edit stop at the declarations that read what it changed: a body respelled to the same signature moves no declaration that read the signature alone.
+//! A declaration kept over a baseline asked parts of the declarations around it, and stands where each is as it was; so does an erased form, by what its erasure asked. Of a declaration that was itself kept, every part is. Of one elaborated again, a part is where it came out equal — which is what lets an edit stop at the declarations that read what it changed: a body respelled to the same signature moves no declaration that read the signature alone.
 //!
 //! **Equal as stored, so by spelling.** A binder's name moves no judgment, and a term's equality reads none; it is in what a unit stores all the same, the declaration's own and a dependent's that was handed its signature. So a part is compared under its binders' names ([`Term::equal_modulo_metas`], over terms that hold no metavariable), and a parameter renamed is a signature changed. A position is in no comparison: a declaration moved, or respaced, has moved no part.
 //!
@@ -16,7 +16,7 @@ use {
 
 /// Which parts of one name elaborated again came out as the baseline holds them: what a kept declaration's question about the name is answered by.
 #[derive(Clone, Copy, Default)]
-pub(super) struct Same {
+pub(crate) struct Same {
     signature: bool,
     body: bool,
     kind: bool,
@@ -29,7 +29,7 @@ pub(super) struct Same {
 
 impl Same {
     /// The parts of the definition at `member` of `made` that are those of `held`, the baseline's item under the same name. The registry entries the name keys are the caller's to compare ([`Same::keying`]).
-    pub(super) fn of(made: &Item, held: &Item, member: usize) -> Self {
+    pub(crate) fn of(made: &Item, held: &Item, member: usize) -> Self {
         match (made, held) {
             (Item::Let(made), Item::Let(held)) => Self::of_definition(made, held),
             (Item::Rec(made), Item::Rec(held)) => Self::of_member(made, held, member),
@@ -78,7 +78,7 @@ impl Same {
     }
 
     /// These parts, with whether each registry entry the name keys is the baseline's.
-    pub(super) fn keying(self, induct: bool, struct_: bool, concept: bool) -> Self {
+    pub(crate) fn keying(self, induct: bool, struct_: bool, concept: bool) -> Self {
         Self {
             induct,
             struct_,
@@ -88,7 +88,7 @@ impl Same {
     }
 
     /// Whether the part `question` asks is as the baseline holds it.
-    pub(super) fn answers(&self, question: &Question) -> bool {
+    pub(crate) fn answers(&self, question: &Question) -> bool {
         match question {
             Question::Signature(_) => self.signature,
             Question::Body(_) => self.body,
@@ -98,7 +98,10 @@ impl Same {
             Question::Induct(_) => self.induct,
             Question::Struct(_) => self.struct_,
             Question::Concept(_) => self.concept,
-            Question::Witness(..) | Question::WitnessDeclared(..) | Question::Lemmas => false,
+            Question::Witness(..)
+            | Question::WitnessDeclared(..)
+            | Question::Lemmas
+            | Question::Erased(_) => false,
         }
     }
 }
@@ -125,7 +128,7 @@ fn groups_alike(this: &RecItem, that: &RecItem) -> bool {
 }
 
 /// Whether a name keys one registry entry on both sides, compared by `alike`, or none on either.
-pub(super) fn entries_alike<D>(
+pub(crate) fn entries_alike<D>(
     this: Option<&D>,
     that: Option<&D>,
     alike: impl FnOnce(&D, &D) -> bool,
@@ -137,7 +140,7 @@ pub(super) fn entries_alike<D>(
     }
 }
 
-pub(super) fn inducts_alike(this: &InductDecl, that: &InductDecl) -> bool {
+pub(crate) fn inducts_alike(this: &InductDecl, that: &InductDecl) -> bool {
     this.universe_context == that.universe_context
         && this.module == that.module
         && this.rep_public == that.rep_public
@@ -164,7 +167,7 @@ pub(super) fn inducts_alike(this: &InductDecl, that: &InductDecl) -> bool {
         )
 }
 
-pub(super) fn structs_alike(this: &StructDecl, that: &StructDecl) -> bool {
+pub(crate) fn structs_alike(this: &StructDecl, that: &StructDecl) -> bool {
     this.universe_context == that.universe_context
         && this.module == that.module
         && this.rep_public == that.rep_public
@@ -174,7 +177,7 @@ pub(super) fn structs_alike(this: &StructDecl, that: &StructDecl) -> bool {
         && spelled_alike(&this.result_sort, &that.result_sort)
 }
 
-pub(super) fn concepts_alike(this: &ConceptDecl, that: &ConceptDecl) -> bool {
+pub(crate) fn concepts_alike(this: &ConceptDecl, that: &ConceptDecl) -> bool {
     this.universe_context == that.universe_context
         && this.fields == that.fields
         && this.supers == that.supers

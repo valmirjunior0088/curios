@@ -4,13 +4,20 @@
 //!
 //! **A unit holds its items' erased forms and no arena**, which is what lets a unit compiled over a baseline erase the items it redoes and take every other's as it stands, and what leaves nothing for two units to be ordered by.
 //!
+//! **A unit keeps what erasing each item asked.** An item's erased form is a function of its elaborated declaration and of what its erasure reads of the declarations around it: their types and registry entries, through the doors an elaboration reads them by, and how each name it uses is bound in the erased form of the item that declares it. Each is noted as the item is erased (`Traced`), and the unit keeps each item's trace as its baseline half: a unit erased over this one keeps an erased form where everything its erasure asked is answered as it was, and nothing compiled after the unit reads the traces.
+//!
 //! **A scope is the units' own, borrowed.** Erasing an item reads another's erased form for one thing, how its name is bound — to nothing at run time, to a constant, to a value or to a function of some arity and interface — and reads it where the name is first used.
 
 use {
     super::{Binding, Environment},
-    curios_core::{Extent, Free, Global, Item, Module},
+    crate::{Answered, Question, Traces},
+    curios_archive::Deferred,
+    curios_core::{Extent, Free, Global, Item, Module, Trace},
     std::{collections::BTreeMap, rc::Rc},
 };
+
+#[cfg(feature = "archive")]
+use std::borrow::Cow;
 
 /// One item's erased form — see the module documentation.
 #[derive(Debug, Clone)]
@@ -31,6 +38,7 @@ pub struct ErasedItem {
 }
 
 /// How a name is bound, as an item that uses it reads it.
+#[derive(PartialEq)]
 pub(super) enum Export<'a> {
     /// To nothing at run time: a proof or a type.
     Dropped,
@@ -104,6 +112,51 @@ impl ErasedItem {
         &self.functions
     }
 
+    /// Whether an item that names `name` reads this erased form and `other` alike: the name bound the same way, and the row it declares, where it declares one, of the same shape under the same mask. What an importing item holds of a row is no more ([`ErasedItem::struct_row_read`], [`ErasedItem::induct_row_read`]).
+    pub(super) fn read_alike(&self, other: &ErasedItem, name: &Global) -> bool {
+        self.export(name) == other.export(name)
+            && self.struct_row_read(name) == other.struct_row_read(name)
+            && self.induct_row_read(name) == other.induct_row_read(name)
+    }
+
+    /// What an item importing the structure `name` reads of the row this item declares for it: its mask, and of its schema the name, the width and whether it is shared.
+    fn struct_row_read(&self, name: &Global) -> Option<StructRowRead<'_>> {
+        let declared = self.environment.declared_struct_row(name)?;
+        let schema = declared.schema.map(|schema| {
+            let held = self
+                .module
+                .product(schema)
+                .expect("a declared row's schema is its fragment's");
+
+            (held.debug_name.as_deref(), held.width(), held.shared)
+        });
+
+        Some((schema, &declared.mask))
+    }
+
+    /// What an item importing the inductive `name` reads of the row this item declares for it: the family's name, and each constructor's name, width and mask.
+    fn induct_row_read(&self, name: &Global) -> Option<InductRowRead<'_>> {
+        let declared = self.environment.declared_induct_row(name)?;
+        let family = self
+            .module
+            .family(declared.family)
+            .expect("a declared row's family is its fragment's");
+        let constructors = declared
+            .constructors
+            .iter()
+            .map(|constructor| {
+                let held = self
+                    .module
+                    .constructor(constructor.id)
+                    .expect("a declared row's constructor is its fragment's");
+
+                (held.debug_name.as_deref(), held.width(), &constructor.mask)
+            })
+            .collect();
+
+        Some((family.debug_name.as_deref(), constructors))
+    }
+
     /// How the item binds `name`, where it declares it.
     pub(super) fn export(&self, name: &Global) -> Option<Export<'_>> {
         Some(match self.environment.lookup(&Free::from(name))? {
@@ -133,6 +186,15 @@ impl ErasedItem {
     }
 }
 
+/// A schema's name, its width and whether it is shared, where a structure's row has one, and the row's mask.
+type StructRowRead<'a> = (Option<(Option<&'a str>, usize, bool)>, &'a Vec<bool>);
+
+/// A family's name, and each of its constructors' name, width and mask.
+type InductRowRead<'a> = (
+    Option<&'a str>,
+    Vec<(Option<&'a str>, usize, &'a Vec<bool>)>,
+);
+
 /// A unit's items' erased forms, in the order the unit stores its items.
 ///
 /// Each is held by pointer: a unit compiled over a baseline keeps the baseline's own erased form for every item it does not erase again, and copies none.
@@ -145,6 +207,11 @@ pub struct ErasedUnit {
     declared: BTreeMap<Global, u32>,
     /// The items whose evaluation at initialization computes ([`curios_ersd::Module::computes`]), ascending: what a program links whether or not it names them, since whether one is observable is the program's to say.
     computing: Vec<u32>,
+    /// What erasing each item asked of the declarations around it, by the first name the item declares — see the module documentation.
+    ///
+    /// **The unit's baseline half**, as a lowered unit keeps its own: stored beside what the unit is for its successors ([`ErasedUnit::baseline_bytes`]), handed back as bytes where the unit is restored ([`ErasedUnit::with_baseline`]), and read out of them when an erasure over the unit first asks.
+    #[archived_with(curios_archive::Skip)]
+    asked: Deferred<Traces>,
 }
 
 impl ErasedUnit {
@@ -188,6 +255,41 @@ impl ErasedUnit {
     /// The places of the items that compute at initialization, ascending.
     pub(super) fn computing(&self) -> impl Iterator<Item = usize> {
         self.computing.iter().map(|place| *place as usize)
+    }
+
+    /// This unit with `asked` as what erasing each of its items asked.
+    pub(super) fn asking(mut self, asked: Traces) -> Self {
+        self.asked = Deferred::held(asked);
+        self
+    }
+
+    /// What erasing the item declaring `name` first asked, as the unit holds it. Read out of the unit's baseline half now, where the unit was restored and no erasure over it has asked before.
+    pub(super) fn asked(&self, name: &Global) -> Option<&Rc<Trace<Question, Answered>>> {
+        #[cfg(feature = "archive")]
+        let asked = self
+            .asked
+            .get()
+            .unwrap_or_else(|error| panic!("an erased unit's traces failed to restore: {error}"));
+        #[cfg(not(feature = "archive"))]
+        let asked = self
+            .asked
+            .peek()
+            .expect("an erased unit that was never stored holds its traces");
+
+        asked.held(name)
+    }
+
+    /// The bytes of this unit's baseline half: what erasing each of its items asked, stored apart from what the unit is for its successors.
+    #[cfg(feature = "archive")]
+    pub fn baseline_bytes(&self) -> Result<Cow<'_, [u8]>, String> {
+        self.asked.bytes()
+    }
+
+    /// This unit with `bytes` as its baseline half, read when an erasure over the unit first asks: what a unit restored without one is given, since restoring it leaves the half empty.
+    #[cfg(feature = "archive")]
+    pub fn with_baseline(mut self, bytes: Cow<'static, [u8]>) -> Self {
+        self.asked = Deferred::stored(bytes);
+        self
     }
 }
 
