@@ -289,3 +289,32 @@ fn a_parse_failure_is_reported_and_leaves_the_last_good_parse_in_place() {
         "the failure evicted nothing"
     );
 }
+
+/// A file read for its text and parsed afterwards is one source, so a position taken from what was read and one taken from the tree lie in the same file; and a read alone evicts no parse, as a failure does not.
+#[test]
+fn a_text_read_is_the_source_its_parse_lies_in() {
+    let root = tree(
+        "memo-read",
+        &[("lib.crs", "pub mod parse;\n"), ("parse.crs", "")],
+    );
+    let qualifier = Qualifier::from(["json"]);
+
+    let first = json(&root);
+    let read = first
+        .read(&qualifier)
+        .unwrap()
+        .expect("a module read from a file has a text");
+    first.load(&qualifier).unwrap();
+    assert!(Arc::ptr_eq(&read, &header_read(&first)));
+
+    fs::write(root.join("lib.crs"), "pub mod parse;\n\n").unwrap();
+    json(&root).read(&qualifier).unwrap();
+
+    fs::write(root.join("lib.crs"), "pub mod parse;\n").unwrap();
+    let restored = json(&root);
+    restored.load(&qualifier).unwrap();
+    assert!(
+        Arc::ptr_eq(&read, &header_read(&restored)),
+        "a text read and never parsed evicted the parse before it"
+    );
+}

@@ -186,13 +186,35 @@ pub(super) fn mounted(prefix: &str, source: &str) -> RootSource {
 /// [`mounted`] is the strict `FromStr` spelling, which refuses such a text whole: right for a fixture written to compile, where a typo should fail at the fixture rather than as a diagnostic about a program nobody wrote, and wrong for one written *not* to. The guard comes back with the source because the file has to outlive every read of it.
 pub(super) fn written(prefix: &str, source: &str) -> (Temporary, RootSource) {
     let directory = Temporary::new("pipeline", prefix);
-    let header = directory.join("lib.crs");
     fs::create_dir_all(&*directory).expect("a fixture directory");
-    fs::write(&header, source).expect("a fixture is written");
+    fs::write(directory.join("lib.crs"), source).expect("a fixture is written");
 
-    let modules = RootSource::mounted(prefix, RootKind::Ordinary, header, directory.to_path_buf());
+    let modules = read_from(prefix, &directory);
 
     (directory, modules)
+}
+
+/// `files` written under a directory of their own, named for the fixture, and mounted as `/lib` with `lib.crs` its header: a unit of several files, each read as the compiler reads any.
+pub(super) fn written_files(name: &str, files: &[(&str, &str)]) -> (Temporary, RootSource) {
+    let directory = Temporary::new("pipeline", name);
+    fs::create_dir_all(&*directory).expect("a fixture directory");
+    for (file, source) in files {
+        fs::write(directory.join(file), source).expect("a fixture is written");
+    }
+
+    let modules = read_from("lib", &directory);
+
+    (directory, modules)
+}
+
+/// The unit mounted at `prefix` as the files under `directory` hold it now: what a fixture reads again once it has rewritten one.
+pub(super) fn read_from(prefix: &str, directory: &Temporary) -> RootSource {
+    RootSource::mounted(
+        prefix,
+        RootKind::Ordinary,
+        directory.join("lib.crs"),
+        directory.to_path_buf(),
+    )
 }
 
 /// `source` compiled whole as the unit `/lib`, against the prelude.

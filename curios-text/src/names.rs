@@ -1,14 +1,16 @@
 use {
-    curios_utilities::{Qualifier, Span},
+    curios_utilities::{Qualifier, Source, Span},
     std::{
         fmt,
         hash::{Hash, Hasher},
         ops::Deref,
+        sync::Arc,
     },
 };
 
 /// A surface reference, exactly as written in source: a [`Qualifier`] plus an `is_abs` flag marking a leading `/` (an absolute, root-anchored path). It is *not* a canonical identity — resolution turns a `Name` into an always-absolute `Qualifier` — so equality and hashing compare the written form (ignoring the spans, as everywhere in this crate).
 #[derive(Debug, Clone)]
+#[curios_archive::archived]
 pub struct Name {
     span: Option<Span>,
     /// Where the *last* segment alone was written, when it was written apart from the path that reaches it — a `use m/{a, b}` group member, whose path is the group's and whose word is its own. `None` for a name written as one run of text, where [`Name::span`] already covers the last segment.
@@ -20,6 +22,13 @@ pub struct Name {
 }
 
 impl Name {
+    /// Place this name in `source`, the text it was written in: a name read back from a scan lies in the source the scan was stored with, and the file is read again as another that holds the same text.
+    pub(crate) fn rebase(&mut self, source: &Arc<Source>) {
+        for span in [&mut self.span, &mut self.leaf].into_iter().flatten() {
+            span.source = Arc::clone(source);
+        }
+    }
+
     pub(crate) fn new(is_abs: bool, qualifier: Qualifier) -> Self {
         Self {
             span: None,
@@ -121,12 +130,20 @@ where
 
 /// A written identifier at a declaring position — a binder, a declaration's name, a `use` selector — with the span of the word itself, where a [`Term`](super::Term)'s span covers the whole form it heads. Equality and hashing compare the text alone, as [`Name`]'s do: tests build spanless expected trees, and two labels spelled alike are one name however they were located.
 #[derive(Debug, Clone)]
+#[curios_archive::archived]
 pub struct Label {
     text: String,
     span: Option<Span>,
 }
 
 impl Label {
+    /// Place this label in `source` — see [`Name::rebase`].
+    pub(crate) fn rebase(&mut self, source: &Arc<Source>) {
+        if let Some(span) = &mut self.span {
+            span.source = Arc::clone(source);
+        }
+    }
+
     pub(crate) fn spanned(text: impl Into<String>, span: Span) -> Self {
         Self {
             text: text.into(),

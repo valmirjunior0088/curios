@@ -52,6 +52,7 @@ impl PartialEq for TopMod {
 
 /// One name in a `use` group, carrying which namespace the writer pinned: `mod x` (child module only), `let x` (binding only), or bare `x` (`Both`). Modules and bindings occupy separate namespaces, so one label can name both; a bare item imports whichever exist, requiring at least one.
 #[derive(Debug, Clone, PartialEq)]
+#[curios_archive::archived]
 pub enum GroupItem {
     Mod(Label),
     Let(Label),
@@ -66,8 +67,28 @@ impl GroupItem {
     }
 }
 
+impl TopUse {
+    /// Place this declaration in `source` — see [`Name::rebase`].
+    pub(crate) fn rebase(&mut self, source: &Arc<Source>) {
+        if let Some(span) = &mut self.span {
+            span.source = Arc::clone(source);
+        }
+        self.name.rebase(source);
+        if let UseGroup::Named(items) = &mut self.group {
+            for item in items {
+                match item {
+                    GroupItem::Mod(label) | GroupItem::Let(label) | GroupItem::Both(label) => {
+                        label.rebase(source)
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// The tail of a `use` path: a braced list of named items (`use m/{a, mod b};`) or the glob `use m/*;`, which imports everything the module publicly exposes.
 #[derive(Debug, Clone, PartialEq)]
+#[curios_archive::archived]
 pub enum UseGroup {
     Named(Vec<GroupItem>),
     Glob,
@@ -75,6 +96,7 @@ pub enum UseGroup {
 
 /// A `use` declaration: imports the `group`'s items from the module `name` names into the local scope at its own source position (scoping is point-of-use, not file-wide). `pub use` additionally re-exports the items from the declaring module — that interface effect is computed in resolution's fixed point, separately from the lexical one. The span covers the whole declaration, `use` through `;`, and is excluded from `PartialEq` as `TopMod`'s is.
 #[derive(Debug, Clone)]
+#[curios_archive::archived]
 pub struct TopUse {
     pub span: Option<Span>,
     pub vis_pub: bool,
@@ -441,7 +463,7 @@ impl Module {
         Ok((module.trimmed(&comments), comments))
     }
 
-    /// Read and parse a standalone module while retaining its source path for diagnostics. `curios-package` reads a library's header with it to learn what the library declares; ordinary compilation reaches file-backed modules through [`RootSource`], which parses each text once.
+    /// Read and parse a standalone module while retaining its source path for diagnostics. `curios-package` reads a library's header with it to learn what the library declares; ordinary compilation reaches file-backed modules through [`RootSource`], which parses each text at most once.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
         Self::read(path.as_ref()).map(|(module, _)| module)
     }

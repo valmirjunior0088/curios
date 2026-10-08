@@ -5,11 +5,12 @@
 use {
     super::test_support::{
         assert_modules_agree, assert_stored_alike, carried_variances, compile_modules,
-        keeps_lowered, mounted, recompile_modules, recompile_over, reuses_body, unit_of,
-        unused_binders, written,
+        keeps_lowered, mounted, read_from, recompile_modules, recompile_over, reuses_body, unit_of,
+        unused_binders, written, written_files,
     },
     curios_core::{Enter, Item, Variance},
     curios_unit::Unit,
+    std::fs,
 };
 
 /// Three items: `twice` reaches `double`, and `unrelated` reaches neither.
@@ -643,4 +644,58 @@ pub let y: /std/Nat = /lib/b/x;
         "a path through an export that is gone still resolved"
     );
     answers_as_the_whole_compile_does(&edited, &baseline);
+}
+
+/// A library of five files: `a` reads `x` through the export `b` makes of `c`'s, beside a declaration that reads nothing and an import nothing reads.
+const FILES: [(&str, &str); 5] = [
+    (
+        "lib.crs",
+        "pub mod a;\npub mod b;\npub mod c;\npub mod d;\n",
+    ),
+    (
+        "a.crs",
+        "use /std/{Nat, Bool};\n\npub let y: Nat = /lib/b/x;\n\npub let z: Nat = 3;\n",
+    ),
+    ("b.crs", "pub use /lib/c/{x};\n"),
+    ("c.crs", "pub let x: /std/Nat = 1;\n"),
+    ("d.crs", "pub let x: /std/Nat = 2;\n"),
+];
+
+/// A file no edit touched is read as the text the baseline read and is not parsed, until a declaration of it is lowered again: `y` wrote a path through an export another file moved. The baseline is a stored unit restored, which holds what each file declared in a source of its own, and the unit is stored as the whole compile of the edited files stores it — the standing file's lint with it, placed in the file as it was read.
+#[test]
+fn a_standing_files_declaration_is_lowered_again_where_another_files_edit_moves_a_name_it_wrote() {
+    let (directory, modules) = written_files("standing-file", &FILES);
+    let compiled = compile_modules(&modules).expect("the unit compiles");
+    let baseline = Unit::restored(&compiled.stored().expect("a unit serializes"))
+        .expect("a stored unit restores");
+
+    fs::write(directory.join("b.crs"), "pub use /lib/d/{x};\n").expect("a fixture is rewritten");
+    let incremental = recompile_modules(&read_from("lib", &directory), &baseline).unwrap();
+    let whole = compile_modules(&read_from("lib", &directory)).unwrap();
+
+    assert!(
+        !keeps_lowered(&baseline, &incremental, "y"),
+        "a declaration whose name resolves elsewhere kept the lowering that named the other"
+    );
+    assert!(
+        keeps_lowered(&baseline, &incremental, "z"),
+        "a declaration that read nothing the edit moved was lowered again"
+    );
+    let placed = incremental
+        .text()
+        .lints()
+        .iter()
+        .map(|lint| {
+            let span = lint.report.span.as_ref().expect("a lint is placed");
+
+            span.source.path.clone().expect("in a file")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        placed,
+        [directory.join("a.crs")],
+        "the import nothing reads is reported in the file it is written in"
+    );
+    assert_modules_agree(whole.core(), incremental.core());
+    assert_stored_alike(&whole, &incremental);
 }

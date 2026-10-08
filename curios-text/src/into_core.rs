@@ -2,9 +2,9 @@
 //!
 //! [`into_core_unit`] runs a unit through these passes, in order:
 //!
-//! 1. **Discovery** (`Resolved::of`): the prefixes the unit claims checked disjoint from the predecessors', then every module they declare loaded through its source.
+//! 1. **Discovery** (`Resolved::of`): the prefixes the unit claims checked disjoint from the predecessors', then every module they declare read through its source, for what its items declare (`head`). A file a baseline read as the same text is not parsed: what it declares is what the baseline kept of it.
 //! 2. **Interface resolution** (`interface::resolve_unit`): each module's declarations seeded into its interface, then every `pub use` resolved to a fixed point, before any body is lowered.
-//! 3. **Lowering** (`process_items`): each item's names resolved against those interfaces, its sugar undone and its matches compiled (`match_compile`), then the entry's final term. A declaration a baseline lowered from the same text, every name it resolved resolving as it did, is taken from the baseline and not lowered (`lowered`).
+//! 3. **Lowering** (`process_items`): each item's names resolved against those interfaces, its sugar undone and its matches compiled (`match_compile`), then the entry's final term. A declaration a baseline lowered from the same text, every name it resolved resolving as it did, is taken from the baseline and not lowered (`lowered`), and a file is parsed where the first of its declarations is.
 //! 4. **Witness names** (`witness`): each witness given the name its signature spells, which is read through the unit's definitions and so only once every item is lowered.
 //! 5. **Audit** (`audit`, `lint`): what the public interface exposes, and the declarations nothing reaches.
 //!
@@ -51,7 +51,7 @@ use {
         Apply, Argument, Entrypoint, Error, FuncTypeParam, GroupItem, Label, LetSignature, Lint,
         LintedBinder, Module, Name, RootSource, StructLit, StructLitEntry, Subterm, Term, TopItem,
         TupleField, UseGroup, foreign_signature, func_sugar_lambda, func_sugar_type_params,
-        ordered,
+        ordered, tree_of,
     },
     curios_abi::ForeignStore,
     curios_document::Documentation,
@@ -59,9 +59,10 @@ use {
         Entropy, Mount, Plicity, Qualifier, Report, RootKind, Source, Span, SyntaxRegistry, grown,
     },
     std::{
-        cell::{Cell, RefCell},
+        cell::{Cell, OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
+        sync::Arc,
     },
 };
 
@@ -82,6 +83,8 @@ mod lower_tests;
 mod ordering_tests;
 #[cfg(test)]
 mod re_export_tests;
+#[cfg(test)]
+mod scan_tests;
 #[cfg(test)]
 mod sys_tests;
 #[cfg(test)]
@@ -250,37 +253,123 @@ fn claims(source: &UnitSource<'_>, own: &[Mount]) -> Vec<(String, Qualifier)> {
     mounts.chain(modules).collect()
 }
 
-/// One file-backed module as a lowering holds it: what its items declare, and their trees.
+/// One file-backed module as a lowering holds it: what its items declare, and their trees where anything has needed them.
 pub(super) struct Loaded {
-    pub heads: Vec<Headed>,
-    pub tree: Module,
+    module: Qualifier,
+    /// What the module's items declare: read off its tree, or a baseline's scan of the same text.
+    pub heads: Rc<Vec<Headed>>,
+    /// The text the module was read from. `None` for a module supplied already parsed.
+    source: Option<Arc<Source>>,
+    /// The module's tree: in hand where the file was parsed for its heads, and otherwise parsed when a declaration of it is first lowered.
+    tree: OnceCell<Module>,
 }
 
 impl Loaded {
-    fn of(tree: Module) -> Self {
+    /// A module whose tree is in hand.
+    fn parsed(module: Qualifier, tree: Module, source: Option<Arc<Source>>) -> Self {
         Self {
-            heads: Headed::of(&tree),
-            tree,
+            module,
+            heads: Rc::new(Headed::of(&tree)),
+            source,
+            tree: OnceCell::from(tree),
         }
+    }
+
+    /// The module `module` of `source`, read without being parsed where `scans` hold what the very text declared.
+    fn of(
+        source: &UnitSource<'_>,
+        scans: Option<&BTreeMap<Qualifier, Scan>>,
+        module: &Qualifier,
+    ) -> Result<Self, Error> {
+        let Some(text) = source.source.read(module)? else {
+            return Ok(Self::parsed(*module, source.source.load(module)?, None));
+        };
+
+        if let Some(scan) = scans.and_then(|scans| scans.get(module))
+            && scan.source.text == text.text
+        {
+            // A scan this thread made lies in the very source the file was read as, and is shared. One restored from a store lies in a source of its own, so its heads are placed in the one just read.
+            let heads = match Arc::ptr_eq(&scan.source, &text) {
+                true => Rc::clone(&scan.heads),
+                false => Rc::new(
+                    scan.heads
+                        .iter()
+                        .map(|headed| headed.rebased(&text))
+                        .collect(),
+                ),
+            };
+
+            return Ok(Self {
+                module: *module,
+                heads,
+                source: Some(text),
+                tree: OnceCell::new(),
+            });
+        }
+
+        let tree = tree_of(&text).map_err(|cause| Error::ModuleLoadFailed {
+            label: module.join(),
+            cause: Box::new(cause),
+        })?;
+
+        Ok(Self::parsed(*module, tree, Some(text)))
+    }
+
+    /// The module's tree, parsed now where its heads were a scan's.
+    fn tree(&self) -> Result<&Module, Error> {
+        if let Some(tree) = self.tree.get() {
+            return Ok(tree);
+        }
+
+        let source = self
+            .source
+            .as_ref()
+            .expect("a module with no tree in hand was read from a file");
+        let tree = tree_of(source).map_err(|cause| Error::ModuleLoadFailed {
+            label: self.module.join(),
+            cause: Box::new(cause),
+        })?;
+
+        Ok(self.tree.get_or_init(|| tree))
+    }
+
+    /// The module's tree, handed over.
+    fn into_tree(self) -> Result<Module, Error> {
+        self.tree()?;
+
+        Ok(self
+            .tree
+            .into_inner()
+            .expect("a tree just asked for is in hand"))
+    }
+
+    /// What the unit keeps of the module's file for a later lowering: its heads, in the text they were read from. `None` for a module supplied already parsed.
+    fn scan(&self) -> Option<Scan> {
+        Some(Scan {
+            source: Arc::clone(self.source.as_ref()?),
+            heads: Rc::clone(&self.heads),
+        })
     }
 }
 
-/// Where the trees of a run of heads are: a module's items, or an inline module's, at its place among its parent's. Asked only where a declaration is lowered.
+/// Where the trees of a run of heads are: a file's module, the entry's items, or an inline module's, at its place among its parent's. Asked only where a declaration is lowered, which is what parses a file a scan stood in for.
 #[derive(Clone, Copy)]
 enum Body<'a> {
+    File(&'a Loaded),
     Items(&'a [TopItem]),
     Inline(&'a Body<'a>, usize),
 }
 
 impl<'a> Body<'a> {
-    fn items(&self) -> &'a [TopItem] {
+    fn items(&self) -> Result<&'a [TopItem], Error> {
         match self {
-            Body::Items(items) => items,
-            Body::Inline(parent, index) => match &parent.items()[*index] {
+            Body::File(loaded) => Ok(&loaded.tree()?.items),
+            Body::Items(items) => Ok(items),
+            Body::Inline(parent, index) => match &parent.items()?[*index] {
                 TopItem::Mod(crate::TopMod {
                     module: Some(module),
                     ..
-                }) => &module.items,
+                }) => Ok(&module.items),
                 _ => unreachable!("an inline module's head stands where its tree does"),
             },
         }
@@ -323,11 +412,11 @@ pub struct PreparedText {
     broken: Vec<BrokenItem>,
     /// Where each source declaration this unit was lowered from lies: what a position in one of its terms is resolved against where a report is made — see `curios_core::Anchors`.
     anchors: curios_core::Anchors,
-    /// What each source declaration lowered to beside its items, and what it asked of its scope: one for each entry of `minted`'s declarations, held by pointer, since a unit lowered over this one keeps the ones that stand — see `lowered`.
+    /// What each source declaration lowered to beside its items, with what it asked of its scope, held by pointer since a unit lowered over this one keeps the ones that stand, and what each of the unit's files declared — see `lowered`.
     ///
     /// **The unit's baseline half: what a later lowering of the same sources reads, and nothing compiled after this unit does.** So it is no part of what the unit is stored as for its successors. It is stored beside that ([`PreparedText::baseline_bytes`]), handed back as bytes where the unit is restored ([`PreparedText::with_baseline`]), and read out of them when a lowering first asks.
     #[archived_with(curios_archive::Skip)]
-    declarations: curios_archive::Deferred<Vec<Rc<LoweredDeclaration>>>,
+    baseline: curios_archive::Deferred<BaselineHalf>,
 }
 
 /// An item the parser could not read, as the lowering carries it: the parser's report, and the name its head declared, registered so a reference to it resolves to this name — which the elaborator withholds, as it withholds every dependent of a refusal — rather than reporting as unbound. `None` where the head did not parse as far as a name, whose references then report as the unbound names they are.
@@ -413,30 +502,40 @@ impl PreparedText {
 
     /// What each source declaration of this unit lowered to beside its items — see the field. Read out of the unit's baseline half now, where the unit was restored and no lowering has asked before.
     fn lowerings(&self) -> &[Rc<LoweredDeclaration>] {
+        &self.half().declarations
+    }
+
+    /// What each file of this unit declared, by the module it backs — see [`Scan`].
+    fn scans(&self) -> &BTreeMap<Qualifier, Scan> {
+        &self.half().scans
+    }
+
+    /// The unit's baseline half, read out of its bytes now where the unit was restored and nothing has asked before.
+    fn half(&self) -> &BaselineHalf {
         #[cfg(feature = "archive")]
-        let lowerings = self
-            .declarations
+        let half = self
+            .baseline
             .get()
             .unwrap_or_else(|error| panic!("a unit's baseline half failed to restore: {error}"));
         #[cfg(not(feature = "archive"))]
-        let lowerings = self
-            .declarations
+        let half = self
+            .baseline
             .peek()
-            .expect("a unit that was never stored holds what it lowered to");
+            .expect("a unit that was never stored holds its baseline half");
 
-        lowerings
+        half
     }
 
     /// The bytes of this unit's baseline half: what a later lowering of the same sources keeps this unit's lowerings by, stored apart from what the unit is for its successors.
     #[cfg(feature = "archive")]
     pub fn baseline_bytes(&self) -> Result<Cow<'_, [u8]>, String> {
-        self.declarations.bytes()
+        self.baseline.bytes()
     }
 
     /// This unit with `bytes` as its baseline half, read when a lowering over the unit first asks: what a unit restored without one is given, since restoring it leaves the half empty.
     #[cfg(feature = "archive")]
     pub fn with_baseline(mut self, bytes: Cow<'static, [u8]>) -> Self {
-        self.declarations = curios_archive::Deferred::stored(bytes);
+        self.baseline = curios_archive::Deferred::stored(bytes);
         self
     }
 
@@ -499,6 +598,7 @@ impl<'a> Resolved<'a> {
     fn of(
         source: &UnitSource<'_>,
         root: &[Headed],
+        scans: Option<&BTreeMap<Qualifier, Scan>>,
         predecessor_tables: &'a [&'a BTreeMap<Qualifier, ModuleInfo>],
         predecessor_mounts: &[Mount],
         own: &[Mount],
@@ -520,12 +620,12 @@ impl<'a> Resolved<'a> {
         resolved.table.insert(Qualifier::empty(), root_info);
 
         // The entry's children hang off the root, whose `ModuleInfo` was just built by hand; a mounted unit has no root items, so this recurses over nothing for it.
-        resolved.discover_children(root, &Qualifier::empty(), source)?;
+        resolved.discover_children(root, &Qualifier::empty(), source, scans)?;
 
         for mount in own.iter().filter(|mount| !mount.prefix.is_root()) {
-            let header = Rc::new(Loaded::of(source.source.load(&mount.prefix)?));
+            let header = Rc::new(Loaded::of(source, scans, &mount.prefix)?);
             resolved.modules.insert(mount.prefix, Rc::clone(&header));
-            resolved.discover(&header.heads, &mount.prefix, source)?;
+            resolved.discover(&header.heads, &mount.prefix, source, scans)?;
         }
 
         Ok(resolved)
@@ -537,9 +637,10 @@ impl<'a> Resolved<'a> {
         heads: &[Headed],
         prefix: &Qualifier,
         source: &UnitSource<'_>,
+        scans: Option<&BTreeMap<Qualifier, Scan>>,
     ) -> Result<(), Error> {
         self.table.insert(*prefix, scan_module_info(heads)?);
-        self.discover_children(heads, prefix, source)
+        self.discover_children(heads, prefix, source, scans)
     }
 
     // The child-recursion half of `discover`, split out so `of` can build the compilation root's `ModuleInfo` itself (with every mounted prefix pre-registered as a child) and recurse into its children without a second, unconditional `scan_module_info` call clobbering that registration.
@@ -548,6 +649,7 @@ impl<'a> Resolved<'a> {
         heads: &[Headed],
         prefix: &Qualifier,
         source: &UnitSource<'_>,
+        scans: Option<&BTreeMap<Qualifier, Scan>>,
     ) -> Result<(), Error> {
         for headed in heads {
             if let Head::Mod {
@@ -563,16 +665,17 @@ impl<'a> Resolved<'a> {
                 }
 
                 match inline {
-                    Some(heads) => self.discover(heads, &path, source)?,
+                    Some(heads) => self.discover(heads, &path, source, scans)?,
                     None => {
-                        let module = source.source.load(&path).map_err(|error| match span {
-                            Some(span) => error.at(span.clone()),
-                            None => error,
-                        })?;
-                        let module = Rc::new(Loaded::of(module));
+                        let module =
+                            Loaded::of(source, scans, &path).map_err(|error| match span {
+                                Some(span) => error.at(span.clone()),
+                                None => error,
+                            })?;
+                        let module = Rc::new(module);
 
                         self.modules.insert(path, Rc::clone(&module));
-                        self.discover(&module.heads, &path, source)?;
+                        self.discover(&module.heads, &path, source, scans)?;
                     }
                 }
             }
@@ -839,7 +942,7 @@ fn process_items(
 
                         process_items(
                             &module.heads,
-                            Body::Items(&module.tree.items),
+                            Body::File(module),
                             &mut context.nested(label),
                             lowered,
                             modules,
@@ -892,7 +995,7 @@ fn process_items(
             _ => {}
         }
         // Only a declaration reaches here, and only here is its tree read.
-        match &body.items()[index] {
+        match &body.items()?[index] {
             TopItem::Broken(_) | TopItem::Mod(_) | TopItem::Use(_) => {
                 unreachable!("a head stands where its item does")
             }
@@ -1891,6 +1994,9 @@ fn into_core_unit_within(
         .entrypoint()
         .map(|entrypoint| Headed::of(&entrypoint.module))
         .unwrap_or_default();
+    // What the baseline kept of each file. A baseline restored from a store holds its half as bytes until this, the lowering's first read of it.
+    let baseline_scans =
+        curios_profile::profile!("into_core_unit::baseline" => baseline.map(PreparedText::scans));
 
     let Resolved {
         mut table,
@@ -1899,6 +2005,7 @@ fn into_core_unit_within(
     } = Resolved::of(
         source,
         &root,
+        baseline_scans,
         &predecessor_tables,
         &predecessor_mounts,
         &own,
@@ -1995,7 +2102,7 @@ fn into_core_unit_within(
 
         curios_profile::profile!("process_items" => process_items(
             &content.heads,
-            Body::Items(&content.tree.items),
+            Body::File(content),
             &mut nested,
             &mut lowered,
             &modules,
@@ -2014,6 +2121,11 @@ fn into_core_unit_within(
         foreigns,
         broken,
     } = lowered;
+    // What each file declared, kept for the lowering that reads the same text again.
+    let scans = modules
+        .iter()
+        .filter_map(|(module, loaded)| Some((*module, loaded.scan()?)))
+        .collect::<BTreeMap<_, _>>();
     let facts = declarations
         .iter()
         .flat_map(|declaration| declaration.facts())
@@ -2125,7 +2237,10 @@ fn into_core_unit_within(
         credited: BTreeSet::new(),
         reached: reached.into_inner(),
         anchors: anchoring.into_anchors(),
-        declarations: curios_archive::Deferred::held(declarations),
+        baseline: curios_archive::Deferred::held(BaselineHalf {
+            declarations,
+            scans,
+        }),
     };
 
     Ok((unit, entry))
@@ -2180,6 +2295,7 @@ pub fn document_unit(
     let Resolved { modules, .. } = Resolved::of(
         source,
         &[],
+        None,
         &predecessor_tables,
         &predecessor_mounts,
         &unit.mounts,
@@ -2189,9 +2305,9 @@ pub fn document_unit(
         .map(|(module, loaded)| {
             let loaded = Rc::into_inner(loaded).expect("discovery hands its modules over whole");
 
-            (module, Rc::new(loaded.tree))
+            Ok((module, Rc::new(loaded.into_tree()?)))
         })
-        .collect::<HashMap<_, _>>();
+        .collect::<Result<HashMap<_, _>, Error>>()?;
 
     // The unit's own tables as the nearest base, where the lowering held them as the layer it wrote: every read answers alike, since mount sets are disjoint.
     let tables = predecessor_tables

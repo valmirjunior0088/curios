@@ -7,10 +7,13 @@
 //! **Found by its text, confirmed by its text.** A lowered declaration is held under its anchor and the stamp of the text it was lowered from, which is how a position finds its declaration too; a stamp is thirty-two bits, so the text itself is compared before a lowering is believed.
 
 use {
-    super::{Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering},
+    super::{Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, Scan},
     crate::{Lint, LintKind, LintedBinder, PreparedText},
     curios_utilities::{Qualifier, Report},
-    std::{collections::HashMap, rc::Rc},
+    std::{
+        collections::{BTreeMap, HashMap},
+        rc::Rc,
+    },
 };
 
 /// A name a declaration's lowering resolved through its scope, as it was written: a path of several segments or an absolute one through the modules it may see, a bare one through the bindings in scope where it stands.
@@ -100,6 +103,16 @@ impl LoweredDeclaration {
     pub(super) fn facts(&self) -> &[LoweredItem] {
         &self.items
     }
+}
+
+/// A unit's baseline half: what a later lowering of the same sources reads of it, and nothing compiled after the unit does.
+#[derive(Debug, Clone, Default)]
+#[curios_archive::archived]
+pub(crate) struct BaselineHalf {
+    /// What each source declaration lowered to beside its items, one for each entry of the unit's `minted` declarations.
+    pub declarations: Vec<Rc<LoweredDeclaration>>,
+    /// Each file-backed module's scan, by the module.
+    pub scans: BTreeMap<Qualifier, Scan>,
 }
 
 /// A unit an earlier text of the same sources lowered to, as a later one is lowered over it: its declarations by the text each was lowered from, and where each one's items lie in its module.

@@ -4,7 +4,7 @@
 //!
 //! A stem is never part of a name. `<dir>` and `main` are spelling, and `/util` is the qualifier — which is why [`RootSource::mounted`] takes the header and the directory as two arguments rather than deriving one from the other: a package's library header sits beside its manifest while its namespace *is* the manifest's directory, and that exception is the manifest's to state, not this crate's to guess. See `curios-package`'s `layout` module.
 //!
-//! Every file a source reads passes through one seam, [`RootSource::load`], and that seam parses each distinct text once per thread: see [`parsed`].
+//! Every file a source reads passes through one of two doors, [`RootSource::read`] for its text and [`RootSource::load`] for its tree, which hold one source for each distinct text of a file per thread and parse it at most once: see [`parsed`].
 
 use {
     super::{Error, Form, LoadError, Module, TopItem},
@@ -245,6 +245,37 @@ impl RootSource {
         self.bases.iter().map(|(mount, _)| mount.clone()).collect()
     }
 
+    /// The text of the module `qualifier` names, unparsed: the file a [`load`](Self::load) of it would parse, read through the overlay as that would read it, and logged as read whether or not anything goes on to parse it. `None` for a module supplied already parsed, which has no text.
+    ///
+    /// **One source for each text of a file.** What this hands back is the source a later parse of the same text is parsed from ([`tree_of`]), so a span taken from a head read here and one taken from the tree lie in one source, which is how a span knows its file.
+    pub(crate) fn read(&self, qualifier: &Qualifier) -> Result<Option<Arc<Source>>, Error> {
+        let missing = || Error::ModuleNotFound {
+            path: qualifier.join(),
+        };
+
+        let Some((mount, base)) = self.owning(qualifier) else {
+            return Err(missing());
+        };
+        let Base::Disk { header, directory } = base else {
+            return Ok(None);
+        };
+        let path = match qualifier == &mount.prefix {
+            true => header.clone().ok_or_else(missing)?,
+            false => file(directory, qualifier, mount.prefix.segments().len()),
+        };
+
+        let source =
+            sourced(&path, self.overlay.get(&path)).map_err(|cause| Error::ModuleLoadFailed {
+                label: qualifier.join(),
+                cause: Box::new(cause),
+            })?;
+        self.reads
+            .borrow_mut()
+            .insert(path.canonicalize().unwrap_or(path), Arc::clone(&source));
+
+        Ok(Some(source))
+    }
+
     /// The module `qualifier` names, from whichever base claims it.
     pub(crate) fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
         let missing = || Error::ModuleNotFound {
@@ -422,17 +453,24 @@ impl Default for RootSource {
     }
 }
 
-thread_local! {
-    /// Every file this thread has parsed, by the one spelling of its path, with the text it held then. See [`parsed`].
-    static PARSED: RefCell<HashMap<PathBuf, (Arc<Source>, Module)>> = RefCell::new(HashMap::new());
+/// One file as a thread holds it: the last text of it that parsed, with its tree, and the text it was last read as where nothing has parsed that one.
+///
+/// Two texts and never more, so the memo is bounded by how many files a process reads and never by how often one is edited. They differ where the file was read and not parsed since — a text that does not parse, or one whose tree nothing has asked for.
+#[derive(Default)]
+struct Held {
+    parsed: Option<(Arc<Source>, Module)>,
+    read: Option<Arc<Source>>,
 }
 
-/// The module at `path`, parsed once per distinct text per thread — from `held` when an overlay holds the file, from the disk otherwise.
+thread_local! {
+    /// Every file this thread has read, by the one spelling of its path. See [`sourced`] and [`tree_of`].
+    static PARSED: RefCell<HashMap<PathBuf, Held>> = RefCell::new(HashMap::new());
+}
+
+/// The source of the file at `path` — its text from `held` when an overlay holds the file, from the disk otherwise — one for each text the thread holds of it: a text read again is the source it was.
 ///
-/// **A hit hands back the same `Arc<Source>` the memo parsed and a clone of its tree**, so the read record digests exactly the text that was parsed, and the clone is an `Rc` bump per term and one vector per item. Keyed by the path's one spelling and validated by text equality rather than keyed by a digest: one entry per file, replaced when the file changes, so the memo is bounded by how many files a process reads and never by how often one is edited. A parse failure is not entered and evicts nothing, so the last good parse of a file being edited stays where the next read of that text wants it.
-///
-/// Thread-local because a surface module is an `Rc` tree, which cannot cross a thread; its spans could, since a source is shared by `Arc`. A one-shot compilation parses each file once already, except where the fold asks for a header twice, which discovery and the declared-module walk do; the language server's one analyst thread keeps the memo across every check it runs, which is where parsing an unchanged tree on every keystroke went. Nothing evicts: the bound is the file count, and a file deleted or renamed leaves one entry nothing asks for again.
-fn parsed(path: &Path, held: Option<&str>) -> Result<(Module, Arc<Source>), LoadError> {
+/// A text the thread does not hold takes the place of the one last read and not parsed, and of no parse: reading a file evicts nothing a later read of its last good text wants.
+fn sourced(path: &Path, held: Option<&str>) -> Result<Arc<Source>, LoadError> {
     let text = match held {
         Some(text) => text.to_owned(),
         None => fs::read_to_string(path).map_err(|error| LoadError::Read {
@@ -443,25 +481,71 @@ fn parsed(path: &Path, held: Option<&str>) -> Result<(Module, Arc<Source>), Load
     let key = identity(path);
 
     let hit = PARSED.with(|parsed| {
-        parsed
-            .borrow()
-            .get(&key)
-            .filter(|(source, _)| source.text == text)
-            .map(|(source, module)| (module.clone(), Arc::clone(source)))
+        let parsed = parsed.borrow();
+        let held = parsed.get(&key)?;
+
+        held.parsed
+            .iter()
+            .map(|(source, _)| source)
+            .chain(&held.read)
+            .find(|source| source.text == text)
+            .cloned()
     });
     if let Some(hit) = hit {
         return Ok(hit);
     }
 
     let source = Source::held(path, text);
-    let module = Module::parse(&source).map_err(LoadError::Parse)?;
     PARSED.with(|parsed| {
-        parsed
-            .borrow_mut()
-            .insert(key, (Arc::clone(&source), module.clone()));
+        parsed.borrow_mut().entry(key).or_default().read = Some(Arc::clone(&source));
     });
 
-    Ok((module, source))
+    Ok(source)
+}
+
+/// The tree `source` parses to, parsed once per thread for as long as the thread holds that text of the file: the half of [`parsed`] a reader of [`RootSource::read`] calls once it needs the tree after all.
+///
+/// A parse that succeeds is the file's last good one from then on. One that fails is not entered and evicts nothing, and a source the thread does not hold — an earlier text of its file, or a text with no file — is parsed and not remembered.
+pub(crate) fn tree_of(source: &Arc<Source>) -> Result<Module, LoadError> {
+    let key = source.path.as_deref().map(identity);
+
+    let hit = PARSED.with(|parsed| {
+        let parsed = parsed.borrow();
+        let (held, tree) = parsed.get(key.as_ref()?)?.parsed.as_ref()?;
+
+        Arc::ptr_eq(held, source).then(|| tree.clone())
+    });
+    if let Some(hit) = hit {
+        return Ok(hit);
+    }
+
+    let tree = Module::parse(source).map_err(LoadError::Parse)?;
+    PARSED.with(|parsed| {
+        let mut parsed = parsed.borrow_mut();
+
+        if let Some(held) = key.as_ref().and_then(|key| parsed.get_mut(key))
+            && held
+                .read
+                .as_ref()
+                .is_some_and(|read| Arc::ptr_eq(read, source))
+        {
+            held.parsed = Some((Arc::clone(source), tree.clone()));
+            held.read = None;
+        }
+    });
+
+    Ok(tree)
+}
+
+/// The module at `path`, parsed once per distinct text per thread — from `held` when an overlay holds the file, from the disk otherwise.
+///
+/// **A hit hands back the same `Arc<Source>` the memo parsed and a clone of its tree**, so the read record digests exactly the text that was parsed, and the clone is an `Rc` bump per term and one vector per item. Keyed by the path's one spelling and validated by text equality rather than keyed by a digest: one entry per file ([`Held`]), its parse replaced when a later text of the file parses. A parse failure is not entered and evicts nothing, so the last good parse of a file being edited stays where the next read of that text wants it.
+///
+/// Thread-local because a surface module is an `Rc` tree, which cannot cross a thread; its spans could, since a source is shared by `Arc`. A one-shot compilation parses each file once already, except where the fold asks for a header twice, which discovery and the declared-module walk do; the language server's one analyst thread keeps the memo across every check it runs, which is where parsing an unchanged tree on every keystroke went. Nothing evicts: the bound is the file count, and a file deleted or renamed leaves one entry nothing asks for again.
+fn parsed(path: &Path, held: Option<&str>) -> Result<(Module, Arc<Source>), LoadError> {
+    let source = sourced(path, held)?;
+
+    Ok((tree_of(&source)?, source))
 }
 
 /// Text standing in for files: `path → text`, consulted before the disk by every [`RootSource`] it is handed to, and by the entry opened through [`Entrypoint::overlaid`](crate::Entrypoint::overlaid).
