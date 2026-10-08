@@ -14,7 +14,7 @@ The parser combinator DSL behind both the `.crs` surface grammar (`curios-text`)
 
 **Decision.** Every combinator that holds a parser it may not run takes an `IntoParser`: a `Parser` in hand, or a nonterminal, a function that builds one, which the combinator calls where the parser would run and nowhere else. A grammar hands a combinator its nonterminal, `term.and_drop(parse_whitespace)`, and a parameterized one behind a closure where the parser is rarely reached, `open.or(|| parse_literal("["))`. An operand written as a call is built where the combinator is.
 
-**Rationale.** A grammar function answers a parser by building it, a box for every combinator that captures anything, and an ordered choice reaches a fraction of what it is handed: the alternatives after the one that matched, and whatever follows a token that was not there. Built as operands, most of a grammar's parsers were built to be dropped, the whitespace after every token that did not match among them. A function that captures nothing is no allocation, so a nonterminal handed over as itself costs nothing until its combinator gets that far.
+**Rationale.** A grammar function answers a parser by building it, a box for every combinator that captures anything, and an ordered choice reaches a fraction of what it is handed: the alternatives after the one that matched, and whatever follows a token that was not there. Built as operands, most of a grammar's parsers are built to be dropped, the whitespace after every token that did not match among them. A function that captures nothing is no allocation, so a nonterminal handed over as itself costs nothing until its combinator gets that far.
 
 **Rejected.** A nonterminal whose body is wrapped in `lazy`, which every grammar function would carry and a reader would read past. An operand that is always a function: a parser made of values in hand, a literal or a prefix already parsed, would be wrapped in a closure that defers nothing. A parser generic over its closure, with no box at all: every grammar function would state its whole shape in its return type, and a recursive grammar needs the boxes back wherever it recurs.
 
@@ -22,7 +22,7 @@ The parser combinator DSL behind both the `.crs` surface grammar (`curios-text`)
 
 **Decision.** A `ParserError` holds what its message is made of, and `report` renders it: a message the grammar wrote, borrowed where it is a constant, or the literal a primitive did not find, with what stood in its place read off the source when a report asks.
 
-**Rationale.** A grammar tries a literal wherever an alternative could begin, so nearly every failure is backtracked and dropped unread. Formatted where it was raised, each of them allocated the text it obtained and the sentence around it.
+**Rationale.** A grammar tries a literal wherever an alternative could begin, so nearly every failure is backtracked and dropped unread. Formatted where it is raised, each of them allocates the text it obtained and the sentence around it.
 
 **Rejected.** A message built by a closure the error carries, which boxes what the enumeration states in a word.
 
