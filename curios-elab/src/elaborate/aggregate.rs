@@ -2,7 +2,7 @@ use {
     super::{FieldSource, check_dependent_fields, park_checking},
     crate::{
         Context, Error, FrozenFrame, Mode, ParkedProjection, ParkedWork, Sort, check,
-        check_is_sort, elaborate, expect, reduce_with, stuck_on_metavar,
+        check_is_sort, elaborate, expect, reduce_with, resolved_for_display, stuck_on_metavar,
     },
     curios_core::{
         Bound, Field, InductType, Level, Proj, SelfReference, StructType, Subterm, Telescope, Term,
@@ -247,7 +247,7 @@ fn project(
 
             arity.open(&params.iter().collect::<Vec<_>>())
         }
-        other => return Err(Error::not_a_tuple(other.clone())),
+        _ => return Err(Error::not_a_tuple(resolved_for_display(context, head_type))),
     };
 
     // A label and a written position each resolve to their slot here, and the projection is rebuilt as the slot — nothing below elaboration ever sees either, and an elaborated projection elaborated again reads its slot as one. A label's lookup is unambiguous because duplicate labels are rejected when the tuple type itself elaborates. A position counts the plain fields: a hidden one takes none, and is reached by its label or not at all.

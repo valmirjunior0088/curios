@@ -15,8 +15,8 @@ use {
     },
     curios_core::{
         Advance, Apply, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin,
-        Intrinsic, IntrinsicHead, Level, Many, Metavar, MetavarId, MetavarOrigin, Proj,
-        ReduceError, Scope, Spelling, Subterm, Telescope, Term, Transient, UniverseConstraintKind,
+        Intrinsic, Level, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError, Scope,
+        Spelling, Subterm, Telescope, Term, Transient, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseRole, Visit,
     },
     std::{
@@ -182,7 +182,11 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
     match &*reduce_with(context, &inferred)? {
         Subterm::Prop(level) => Ok((rebuilt, Sort::Prop(level.clone()))),
         Subterm::Type(level) => Ok((rebuilt, Sort::Type(level.clone()))),
-        other => Err(Error::type_mismatch(other.clone(), Term::type_ground())),
+        // The reduct is not what is reported: it spells a recursive name as its group, which the display form gives back its name.
+        _ => Err(Error::type_mismatch(
+            resolved_for_display(context, &inferred),
+            Term::type_ground(),
+        )),
     }
 }
 
@@ -1260,29 +1264,6 @@ fn check_written_motive(
         let binders = labels.iter().collect::<Vec<_>>();
         Ok(Scope::close(Many(arity), &binders, body))
     })
-}
-
-/// Accept `head_type` (already reduced) when it is `expected`'s type-former, else the matching `not_*_type` error. The shared core of `expect_intrinsic_head` and the match elaborator's `Scrutinee::of_intrinsic` — one source of truth for the `IntrinsicHead` → type-former / error mapping.
-pub(crate) fn check_intrinsic_head(
-    expected: IntrinsicHead,
-    head_type: Term,
-) -> Result<Term, Error> {
-    let matches = match expected {
-        IntrinsicHead::Nat => matches!(&*head_type, Subterm::Intrinsic(Intrinsic::NatType)),
-        IntrinsicHead::Bool => matches!(&*head_type, Subterm::Intrinsic(Intrinsic::BoolType)),
-        IntrinsicHead::Bin(grain) => {
-            matches!(&*head_type, Subterm::Intrinsic(Intrinsic::BinType(actual)) if *actual == grain)
-        }
-    };
-
-    match matches {
-        true => Ok(head_type),
-        false => Err(match expected {
-            IntrinsicHead::Nat => Error::not_nat_type(head_type),
-            IntrinsicHead::Bool => Error::not_bool_type(head_type),
-            IntrinsicHead::Bin(grain) => Error::not_bin_type(grain, head_type),
-        }),
-    }
 }
 
 /// The error for the *root* of a blocking chain, when a surviving conversion goal waited on a metavariable that was itself blocked.

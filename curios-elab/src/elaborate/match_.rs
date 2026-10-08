@@ -1,9 +1,9 @@
 use {
     super::{Context, Error, Misaligned, Mode, align, check, elaborate, expect, stands_at},
     crate::{
-        BinderSite, FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_intrinsic_head,
-        check_motive, contradicted_guard, is_prop, reduce_with, refine_head, same_uncommitted,
-        stuck_on_metavar, unreachable_arm,
+        BinderSite, FrozenFrame, MotiveShape, ParkedMatch, ParkedWork, check_motive,
+        contradicted_guard, is_prop, reduce_with, refine_head, resolved_for_display,
+        same_uncommitted, stuck_on_metavar, unreachable_arm,
     },
     curios_analysis::{
         Invert, invert_indices, pinned_by_targets, retyped, scrutinee_solution, solve_indices,
@@ -24,10 +24,29 @@ struct Scrutinee {
 }
 
 impl Scrutinee {
-    /// The rebuilt scrutinee and its type, required to be the given intrinsic type. The authoritative analogue of `expect_intrinsic_head` (kept for `erase`).
-    fn of_intrinsic(self, expected: IntrinsicHead) -> Result<(Term, Term), Error> {
-        let Self { term, type_ } = self;
-        check_intrinsic_head(expected, type_).map(|type_| (term, type_))
+    /// The rebuilt scrutinee and its type, required to be the given intrinsic type; any other is refused as `term`'s eliminator refuses it.
+    fn of_intrinsic(
+        self,
+        context: &mut Context,
+        term: &Term,
+        expected: IntrinsicHead,
+    ) -> Result<(Term, Term), Error> {
+        let Self { term: head, type_ } = self;
+        let carrier = match expected {
+            IntrinsicHead::Nat => matches!(&*type_, Subterm::Intrinsic(Intrinsic::NatType)),
+            IntrinsicHead::Bool => matches!(&*type_, Subterm::Intrinsic(Intrinsic::BoolType)),
+            IntrinsicHead::Bin(grain) => {
+                matches!(&*type_, Subterm::Intrinsic(Intrinsic::BinType(actual)) if *actual == grain)
+            }
+        };
+
+        match carrier {
+            true => Ok((head, type_)),
+            false => Err(refused_scrutinee(
+                term,
+                resolved_for_display(context, &type_),
+            )),
+        }
     }
 }
 
@@ -147,7 +166,7 @@ fn elaborate_nat_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = scrutinee.of_intrinsic(IntrinsicHead::Nat)?;
+    let (head_elaborated, _) = scrutinee.of_intrinsic(context, term, IntrinsicHead::Nat)?;
 
     let reads_hypothesis = may_read_hypothesis(succ_case, 1);
     let result = resolve_fold_result(
@@ -233,7 +252,12 @@ fn elaborate_list_match(
     } = scrutinee;
     let elem = match &*head_type {
         Subterm::Intrinsic(Intrinsic::ListType(elem)) => elem.clone(),
-        _ => return Err(Error::not_list_type(head_type)),
+        _ => {
+            return Err(refused_scrutinee(
+                term,
+                resolved_for_display(context, &head_type),
+            ));
+        }
     };
 
     let reads_hypothesis = may_read_hypothesis(cons_case, 2);
@@ -333,7 +357,8 @@ fn elaborate_bin_match(
 ) -> Result<(Term, Term), Error> {
     let (empty_case, cons_case) = cases;
     // `Bin` is a parameterless carrier (like `Nat`/`Bool`), so the scrutinee's type is just `Bin` — no element type to read off the head as `List` needs.
-    let (head_elaborated, head_type) = scrutinee.of_intrinsic(IntrinsicHead::Bin(grain))?;
+    let (head_elaborated, head_type) =
+        scrutinee.of_intrinsic(context, term, IntrinsicHead::Bin(grain))?;
 
     let reads_hypothesis = may_read_hypothesis(cons_case, 2);
     let result = resolve_fold_result(
@@ -448,7 +473,7 @@ fn elaborate_switch(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = scrutinee.of_intrinsic(IntrinsicHead::Nat)?;
+    let (head_elaborated, _) = scrutinee.of_intrinsic(context, term, IntrinsicHead::Nat)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`, or the ambient goal.
     let result = resolve_intrinsic_result(
@@ -604,10 +629,10 @@ pub(crate) fn retry_match(
     Ok(())
 }
 
-/// The refusal a match's eliminator gives a scrutinee of `type_`, for a parked match whose scrutinee's type never reached a carrier.
+/// The refusal a match's eliminator gives a scrutinee of `type_`, which is the type in its display form: an eliminator holds the reduct, which spells a recursive name as its group.
 pub(crate) fn refused_scrutinee(term: &Term, type_: Term) -> Error {
     let Subterm::Match(Match { cases, .. }) = &**term else {
-        unreachable!("a parked match is a match");
+        unreachable!("an eliminator's term is a match");
     };
     match cases {
         Cases::Bool { .. } => Error::not_bool_type(type_),
@@ -749,7 +774,7 @@ fn elaborate_bool_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let (head_elaborated, _) = scrutinee.of_intrinsic(IntrinsicHead::Bool)?;
+    let (head_elaborated, _) = scrutinee.of_intrinsic(context, term, IntrinsicHead::Bool)?;
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`, or the ambient goal.
     let result = resolve_intrinsic_result(
@@ -861,10 +886,10 @@ fn elaborate_induct_match(
             params,
             indices,
         }) => (*name, universes.clone(), params.clone(), indices.clone()),
-        other => {
-            return Err(Error::not_a_induct_type(
-                other.clone(),
-                cases.is_empty() && default.is_none(),
+        _ => {
+            return Err(refused_scrutinee(
+                term,
+                resolved_for_display(context, &head_type),
             ));
         }
     };

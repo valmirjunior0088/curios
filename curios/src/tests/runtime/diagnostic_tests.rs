@@ -142,3 +142,56 @@ fn keeps_the_name_of_a_stalled_unfolding() {
         "recursive body leaked into the report: {error}"
     );
 }
+
+// The same name where a report is raised on a type's reduct with no second side to put in display form beside it: a member that is no type, a projection off what is no tuple and an elimination of what is not its carrier each reduce a type to learn it is the wrong one, and the reduct spells a family under its parameters alone as the group it unfolds to. Each names the family.
+#[test]
+fn names_a_family_in_a_report_raised_on_a_reduct() {
+    let report = |declaration: &str| {
+        error(&format!(
+            r#"
+            use /std/{{Nat}};
+            induct Sized(T: Type): (length: Nat) -> pub Type
+            | empty(): (0)
+            end
+            induct Holder(F: (Nat) -> Type): pub Type
+            | hold(x: F(0))
+            end
+            let Wrap(F: (Nat) -> Type) -> Type = (F(0)) -> Nat;
+            pub let held: Holder(Sized(Nat)) = Holder/hold(Sized/empty());
+            pub let wrapped: Wrap(Sized(Nat)) = (_s) => 0;
+            {declaration}
+            /std/print("unreachable")
+            "#
+        ))
+    };
+
+    for (declaration, said) in [
+        (
+            "pub let member: Type = { held };",
+            "inferred: Holder(Sized(Nat))",
+        ),
+        (
+            "pub let field: Nat = held.0;",
+            "head has type: Holder(Sized(Nat))",
+        ),
+        (
+            "pub let field: Nat = wrapped.0;",
+            "head has type: (Sized(Nat)(0)) -> Nat",
+        ),
+        (
+            "pub let arm: Nat = match wrapped | x() => 0 end;",
+            "head has type: (Sized(Nat)(0)) -> Nat",
+        ),
+        (
+            "pub let count: Nat = match held | 0 => 0 | _ + 1 => 1 end;",
+            "Holder(Sized(Nat))",
+        ),
+    ] {
+        let error = report(declaration);
+        assert!(error.contains(said), "{declaration}\n{error}");
+        assert!(
+            !error.contains("rec "),
+            "a group leaked into the report of {declaration}\n{error}"
+        );
+    }
+}

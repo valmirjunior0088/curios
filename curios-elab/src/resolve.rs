@@ -580,7 +580,9 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
                 params,
             }) = &*reduced
             else {
-                return Err(Error::not_a_tuple(Term::unwrap_or_clone(reduced)));
+                return Err(Error::not_a_tuple(resolved_for_display(
+                    context, &head_type,
+                )));
             };
             let struct_decl = context
                 .struct_decl(name)
