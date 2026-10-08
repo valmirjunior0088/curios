@@ -3,9 +3,9 @@
 use {
     super::{test_support::*, unfold_rec},
     crate::Kernel,
-    curios_core::{Free, Global, Intrinsic, Many, Reducer, Scope, Subterm, Term},
+    curios_core::{Free, Global, Intrinsic, Level, Many, Reducer, Scope, Subterm, Term},
     curios_num::{Binary, Grain},
-    curios_utilities::Qualifier,
+    curios_utilities::{Plicity, Qualifier},
 };
 
 /// A global name handed to a closed function stays a name in what the machine hands back, exactly as it does under the strategy: `twice(g)` at a plain demand is `(x) => g(g(x))` with `g` *named*, not `g`'s body substituted twice. A machine that evaluates every beta argument and substitutes its value would inline a function-valued global's definition once per occurrence — and a web of definitions each naming the one before it twice would come back as a graph whose tree is `2^n`. The strategy substitutes the argument as written, so the two reducts would differ here, and this fixture is the one that sees it.
@@ -63,6 +63,79 @@ fn the_closed_machine_keeps_a_global_argument_as_a_name() {
     assert!(
         reduct.mentions_free(&g),
         "the argument survives as the name it was passed as:\n{reduct}"
+    );
+}
+
+/// A witness named at a universe instance stays that name where it is passed as one: `twice(use g.{0})` hands back `g` at its instance, as the strategy does, where a machine that evaluated it put the witness's dictionary wherever an alias over the witness unfolded, in a reported type included. Passed as an ordinary argument the same instance is evaluated, which is what tells two instances of a family apart in a level from one: the function handed back holds `g`'s body and no name.
+#[test]
+fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
+    let g = Free::global(Qualifier::from(["g"]));
+    let twice = Free::global(Qualifier::from(["twice"]));
+    let (x, f) = (binder(0, "x"), binder(1, "f"));
+    let unary = Term::func_type([(x, nat_type())], nat_type());
+
+    let define = |kernel: &mut Kernel| {
+        kernel
+            .define(
+                &g,
+                &unary,
+                &Term::func(
+                    [(x, nat_type())],
+                    Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(1))),
+                ),
+                &polymorphic(),
+            )
+            .expect("a name is declared once");
+        kernel
+            .define(
+                &twice,
+                &Term::func_type([(f, unary.clone())], unary.clone()),
+                &Term::func(
+                    [(f, unary.clone())],
+                    Term::func(
+                        [(x, nat_type())],
+                        Term::apply(
+                            Term::free_var(&f),
+                            [Term::apply(Term::free_var(&f), [Term::free_var(&x)])],
+                        ),
+                    ),
+                ),
+                &monomorphic(),
+            )
+            .expect("a name is declared once");
+    };
+
+    let passed = |plicity: Plicity| {
+        Term::apply_marked(
+            Term::free_var(&twice),
+            [(plicity, Term::instance_of(&g, vec![Level::zero()]))],
+        )
+    };
+
+    let mut machined = kernel();
+    define(&mut machined);
+    let mut strategy = strategy_kernel();
+    define(&mut strategy);
+
+    let witness = machined
+        .reduce(passed(Plicity::Witness))
+        .expect("the machine reduces");
+    assert_eq!(
+        Some(witness.clone()),
+        strategy.reduce(passed(Plicity::Witness)).ok(),
+        "the machine and the strategy agree on the function handed back"
+    );
+    assert!(
+        witness.mentions_free(&g),
+        "the witness survives as the instance it was passed as:\n{witness}"
+    );
+
+    let ordinary = machined
+        .reduce(passed(Plicity::Explicit))
+        .expect("the machine reduces");
+    assert!(
+        !ordinary.mentions_free(&g),
+        "an instance passed as an ordinary argument is evaluated:\n{ordinary}"
     );
 }
 

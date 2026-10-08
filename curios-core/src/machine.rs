@@ -16,6 +16,8 @@
 //!
 //! **A proof is left as written.** A substituend at a binder that states it binds a proof is: an argument, a `let`'s value and an arm's payload at one are a proof, whose value no judgment reads, so they are bound unreduced, and a body that eliminates one demands it where it does, the run's memo keeping the demand to one evaluation. The binder states it because the machine holds a value and a closed body where it substitutes, and no telescope to read a sort under ([`Scope::binds_proof`]). So is the proof of an operation's bound: no fold reads it ([`Intrinsic::bound`]), so the intrinsic arm, which forces the operands it folds over, never enters it. A type is evaluated as any substituend is, a family among them: conversion compares the reduct it is handed, and two instances of a definition apart in a level are told from one by whether they reach it as written or as what they unfold to.
 //!
+//! **A witness named at an instance is left as written.** An argument at a `use` position that is a global name at a universe instance is bound as that name, as a monomorphic witness's bare name is by the rule for names: the hosts leave it so, a method projected off it unfolds it where the method is demanded, and evaluated here its dictionary stands wherever an alias over the witness unfolds, in a type a report prints and resolution can no longer restore. The application states the position, since a function literal's binder does not. A family passed at an instance is no witness, and is evaluated as the paragraph above says.
+//!
 //! **Eta is contracted, with the hosts' own probe.** `(x) => f(x)` steps to `f` exactly as under the strategies, through the fresh binder identities [`Reducer::fresh_binder`] mints. Skipping the probe on the theory that conversion decides eta anyway would starve the elaborator's witness keying, which reads rigid heads off weak-head forms and would not find `Async` under `(A) => Async(A)`.
 //!
 //! **`Induct` arms bind payload values.** The kernel binds an arm to the scrutinee's payload directly; the elaborator binds projections of the original head, guarding annotation holes a reduced payload could carry. A closed, metavariable-free payload carries none, so the machine uses the kernel's rule on both sides.
@@ -27,11 +29,12 @@
 use {
     super::{
         Apply, Argument, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid, Func,
-        InstanceHead, Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult, Nat, Proj, Rec,
-        RecGroup, ReduceError, Reducer, Scope, Subterm, Telescope, Term,
+        Instance, InstanceHead, Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult, Nat,
+        Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Subterm, Telescope, Term,
         instantiate_universe_levels_scoped, reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
+    curios_utilities::Plicity,
     std::{collections::HashMap, sync::Arc},
 };
 
@@ -106,7 +109,7 @@ enum Finish {
 ///
 /// `catch` marks the positions the hosts substitute unreduced — beta arguments and arm payload binds — where an evaluation error must fall back to the original spelling rather than surface, because the host would have deferred it until the position was demanded. Intrinsic and foreign operands are strict in the hosts too, so their runs do not catch.
 ///
-/// `written` says which of those positions are bound as they are written, one answer per term and none where no position is: the ones whose binder states that it binds a proof ([`Scope::binds_proof`]). No judgment reads a proof's value, so the run does not compute it; a body that eliminates one demands it where it does, once, through the run's memo.
+/// `written` says which of those positions are bound as they are written, one answer per term and none where no position is: the ones whose binder states that it binds a proof ([`Scope::binds_proof`]), and at a beta step a witness named at an instance. No judgment reads a proof's value, so the run does not compute it; a body that eliminates one demands it where it does, once, through the run's memo.
 struct Args {
     originals: Vec<Term>,
     written: Vec<bool>,
@@ -127,7 +130,7 @@ enum Frame {
     },
     /// A forced recursive application waiting for its member's body to expose a function.
     RecBody {
-        params: Vec<Term>,
+        params: Vec<Argument>,
         folded: Term,
         group: RecGroup,
     },
@@ -565,10 +568,7 @@ impl Machine {
                         Demand::Forced => {
                             let (group, index) = value.as_rec_proj().expect("checked above");
                             let (group, index) = (group.clone(), index);
-                            let params = arguments
-                                .iter()
-                                .map(|argument| argument.term.clone())
-                                .collect();
+                            let params = arguments.clone();
                             let folded = Term::from(Subterm::Apply(Apply {
                                 head: value,
                                 arguments,
@@ -602,11 +602,7 @@ impl Machine {
                         Ok(Step::Eval(unfold_rec(rec), Demand::Whnf))
                     }
                     Subterm::Func(Func { telescope, .. }) if telescope.len() == arguments.len() => {
-                        let params = arguments
-                            .into_iter()
-                            .map(|argument| argument.term)
-                            .collect();
-                        self.beta(host, telescope, params, demand)
+                        self.beta(host, telescope, arguments, demand)
                     }
                     // A head evaluated at the plain demand comes back a folded call when the application is a member's call applied past its own parameters. A forced demand reaches through it, as the strategies' `unfold_rec_apply` does: force the call, and apply what it becomes to these arguments. A plain demand stops at the folded spine, its normal form.
                     head if matches!(demand, Demand::Forced) && head.spine_rec_proj().is_some() => {
@@ -622,11 +618,7 @@ impl Machine {
 
             Frame::Spine { arguments, demand } => match Term::unwrap_or_clone(value) {
                 Subterm::Func(Func { telescope, .. }) if telescope.len() == arguments.len() => {
-                    let params = arguments
-                        .into_iter()
-                        .map(|argument| argument.term)
-                        .collect();
-                    self.beta(host, telescope, params, demand)
+                    self.beta(host, telescope, arguments, demand)
                 }
                 // The call did not expose a saturated function — it restuck, and `force` keeps it folded — so its application stays the normal form. Nothing is forced again, which is what keeps a restuck spine from looping here.
                 head => Ok(Step::Value(Term::from(Subterm::Apply(Apply {
@@ -731,12 +723,12 @@ impl Machine {
         }
     }
 
-    /// Charge and perform a beta step: open `telescope` over the *values* of `params`, evaluated left to right with the error fallback substitution positions get.
+    /// Charge and perform a beta step: open `telescope` over the *values* of `params`, evaluated left to right with the error fallback substitution positions get. A proof, and a witness named at an instance, are bound as written.
     fn beta<H: ClosedHost>(
         &mut self,
         host: &mut H,
         telescope: Telescope<Term>,
-        params: Vec<Term>,
+        params: Vec<Argument>,
         demand: Demand,
     ) -> Result<Step, ReduceError> {
         host.spend(
@@ -745,11 +737,27 @@ impl Machine {
         )?;
 
         let count = params.len();
+        let written = telescope
+            .proofs()
+            .into_iter()
+            .zip(&params)
+            .map(|(proof, argument)| {
+                proof
+                    || argument.plicity == Plicity::Witness
+                        && matches!(
+                            &*argument.term,
+                            Subterm::Instance(Instance {
+                                head: InstanceHead::Var(_),
+                                ..
+                            })
+                        )
+            })
+            .collect();
         self.args(
             host,
             Args {
-                originals: params,
-                written: telescope.proofs(),
+                originals: params.into_iter().map(|argument| argument.term).collect(),
+                written,
                 done: Vec::with_capacity(count),
                 next: 0,
                 item_demand: Demand::Whnf,
