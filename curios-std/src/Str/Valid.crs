@@ -284,8 +284,7 @@ let finish(
                         p);
                 Char {
                     code = partial * 0x40 + (Byte/to_nat(c) - 0x80),
-                    @valid = concluded(lo, hi, partial, Byte/to_nat(c), last, True/qed()),
-                }
+                    @valid = concluded(lo, hi, partial, Byte/to_nat(c), last, True/qed()) }
             | false =>
                 finish(
                     rem - 1,

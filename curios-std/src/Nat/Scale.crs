@@ -24,8 +24,7 @@ pub let of(n: Nat, @ok: Holds(0 < n)) -> Scale(n) =
             Scale {
                 count = 0,
                 half = n / 2,
-                joined = Nat/le/antisym(n, 2 * (n / 2) + 1, True/proved(), True/proved()),
-            }
+                joined = Nat/le/antisym(n, 2 * (n / 2) + 1, True/proved(), True/proved()) }
         | false =>
             let inner = of(n / 2);
             let even: Eq()(n, 2 * (n / 2)) =
@@ -33,8 +32,7 @@ pub let of(n: Nat, @ok: Holds(0 < n)) -> Scale(n) =
             Scale {
                 count = inner.count + 1,
                 half = inner.half,
-                joined = Eq/subst((q: Nat) => Eq()(n, 2 * q), inner.joined, even),
-            }
+                joined = Eq/subst((q: Nat) => Eq()(n, 2 * q), inner.joined, even) }
         end
     | false => match ok end
     end;

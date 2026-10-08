@@ -121,8 +121,7 @@ pub let of_timestamp(t: Timestamp) -> Utc =
         weekday = weekday_from_sunday(days + 4),
         hour = within / 3600,
         minute = within % 3600 / 60,
-        second = within % 60,
-    };
+        second = within % 60 };
 
 --- The weekday in the three letters the Internet message format writes it in.
 pub let weekday_name(d: Weekday) -> Str =

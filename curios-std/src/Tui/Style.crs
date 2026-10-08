@@ -28,5 +28,4 @@ pub let plain: Style =
         italic = false,
         underline = false,
         reverse = false,
-        strike = false,
-    };
+        strike = false };

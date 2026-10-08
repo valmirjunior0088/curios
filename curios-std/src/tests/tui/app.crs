@@ -25,8 +25,7 @@ let counter: Tui(Nat, Nat) =
             | _ => (model, Directive/none())
             end,
         view(model, w, h) = Frame/of_lines(Style/plain, [Nat/to_str(model)], w, h),
-        cursor(_model, _w, _h) = Option/none(),
-    };
+        cursor(_model, _w, _h) = Option/none() };
 
 let press(c: Char) -> Event(Nat) =
     Event/key(Key/plain(Code/char(c)));

@@ -194,8 +194,7 @@ test a_url_reaches_the_wire_percent_encoded =
         Url {
             ..Url/lit("http://h/"),
             path = "/a b\r\nX-Injected: two",
-            query = Option/some("q=café"),
-        };
+            query = Option/some("q=café") };
     Test/all([
         Test/equal(
             wire(Request/render(Request/get(built))),

@@ -24,8 +24,7 @@ pub let byte: Parse(Bytes, Byte) =
             match Nat/lt/try(at.offset, Bytes/len(input))
             | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
             | some(ok) => Result/success((step(at, ok), Bytes/get(input, at.offset, @ok)))
-            end,
-    };
+            end };
 
 --- The next byte when `pred` accepts it; declines otherwise, consuming nothing.
 pub let byte_if(pred: (Byte) -> Bool) -> Parse(Bytes, Byte) =
@@ -39,8 +38,7 @@ pub let peek_byte: Parse(Bytes, Byte) =
             match Nat/lt/try(at.offset, Bytes/len(input))
             | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
             | some(ok) => Result/success((at, Bytes/get(input, at.offset, @ok)))
-            end,
-    };
+            end };
 
 --- The next byte without consuming it, or `none` at the end of the input.
 pub let peek: Parse(Bytes, Option(Byte)) =
@@ -70,8 +68,7 @@ pub let expect(expected: Byte) -> Parse(Bytes, Byte) =
                 | true => Result/success((step(at, ok), got))
                 | false => Result/failure(Error/declined(message, at.offset))
                 end
-            end,
-    };
+            end };
 
 --- The position past `lit` read from `at`, byte by byte, or `none` where the input is not it.
 let literal_past(@input: Bytes, lit: Bytes, at: Pos(Bytes, input)) -> Option(Pos(Bytes, input)) =
@@ -96,8 +93,7 @@ pub let literal(lit: Str) -> Parse(Bytes, {}) =
             match literal_past(Str/to_bytes(lit), at)
             | some(stop) => Result/success((stop, ()))
             | none() => Result/failure(Error/declined(message, at.offset))
-            end,
-    };
+            end };
 
 --- `taken` and how many bytes at the front of `rest` `pred` accepts: a walk over the bytes it reads, which stops at the first one refused.
 let leading(rest: Bytes, pred: (Byte) -> Bool, taken: Nat) -> Nat =
@@ -127,8 +123,7 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes, Bytes) =
             let fits = leading_within(rest, pred, 0);
             Result/success((
                 At { offset = at.offset + taken, holds = True/proved() },
-                Bytes/slice(input, at.offset, taken))),
-    };
+                Bytes/slice(input, at.offset, taken))) };
 
 --- Everything from the current position to the end of the input.
 pub let rest: Parse(Bytes, Bytes) =
@@ -136,8 +131,7 @@ pub let rest: Parse(Bytes, Bytes) =
         run(input, at) =
             Result/success((
                 At { offset = Bytes/len(input), holds = Nat/le/refl(Bytes/len(input)) },
-                Bytes/drop(input, at.offset, @at.holds))),
-    };
+                Bytes/drop(input, at.offset, @at.holds))) };
 
 --- The next `n` bytes, or everything that remains when fewer are left.
 pub let take(n: Nat) -> Parse(Bytes, Bytes) =
@@ -149,5 +143,4 @@ pub let take(n: Nat) -> Parse(Bytes, Bytes) =
                     At { offset = at.offset + n, holds = within },
                     Bytes/slice(input, at.offset, n, @within)))
             | none() => rest.run(input, at)
-            end,
-    };
+            end };

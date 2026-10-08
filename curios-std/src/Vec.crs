@@ -78,8 +78,7 @@ pub let append(@T: Type, @n: Nat, @m: Nat, v: Vec(T, n), w: Vec(T, m)) -> Vec(T,
             Eq/subst(
                 (x: Nat) => Eq()(x + List/len(w.list), n + m),
                 Eq/sym(v.counted),
-                Eq/subst((y: Nat) => Eq()(n + y, n + m), Eq/sym(w.counted), Eq/refl())),
-    };
+                Eq/subst((y: Nat) => Eq()(n + y, n + m), Eq/sym(w.counted), Eq/refl())) };
 
 --- `f` on every element.
 pub let map(@A: Type, @B: Type, @n: Nat, f: (A) -> B, v: Vec(A, n)) -> Vec(B, n) =

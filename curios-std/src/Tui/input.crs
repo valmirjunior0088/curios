@@ -12,8 +12,7 @@ let modified(code: Code, m: Nat) -> Key =
         code = code,
         shift = Nat/and(bits, 1) > 0,
         alt = Nat/and(bits, 2) > 0,
-        ctrl = Nat/and(bits, 4) > 0,
-    };
+        ctrl = Nat/and(bits, 4) > 0 };
 
 -- The character of a code below the surrogates, which every code this decoder builds one from is.
 let low(code: Nat, @below: Holds(code < 0xD800)) -> Char =

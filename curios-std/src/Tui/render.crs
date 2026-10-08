@@ -21,8 +21,7 @@ let paint(pen: Pen, x: Nat, y: Nat, tile: Tile, before: Option(Tile)) -> Pen =
         Pen {
             out = x[..pen.out, ..move, ..sgr, ..Str/to_bytes(tile.symbol)],
             style = Option/some(tile.style),
-            at = Option/some((x + width, y)),
-        }
+            at = Option/some((x + width, y)) }
     end;
 
 let paint_row(@w: Nat, pen: Pen, y: Nat, row: Vec(Tile, w), before: Option(Vec(Tile, w))) -> Pen =
@@ -56,8 +55,7 @@ pub let render(
         Pen {
             out = x[..ansi/sync_begin, ..ansi/cursor_hide, ..clear],
             style = Option/none(),
-            at = Option/none(),
-        };
+            at = Option/none() };
     let painted =
         List/fold(
             List/zip(rows, before),

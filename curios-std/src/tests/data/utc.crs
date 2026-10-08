@@ -21,8 +21,7 @@ test the_epoch_is_a_thursday =
             weekday = Weekday/thursday(),
             hour = 0,
             minute = 0,
-            second = 0,
-        });
+            second = 0 });
 
 -- A leap day is the twenty-ninth of February, in a year four divides and in a century four hundred divides; a century it does not has none, so the day after its twenty-eighth of February is the first of March.
 test a_leap_day_falls_where_the_calendar_puts_it =

@@ -56,8 +56,7 @@ pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
         Metadata {
             kind = kind_of(s.kind),
             size = s.size,
-            mtime = Timestamp/of_unix(s.mtime_secs, s.mtime_nanos),
-        });
+            mtime = Timestamp/of_unix(s.mtime_secs, s.mtime_nanos) });
 
 let kind_is(path: Path, want: (Kind) -> Bool) -> Try(Io, Io/Error, Bool) =
     let r = Try/run(stat(path))!;

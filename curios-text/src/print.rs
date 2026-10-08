@@ -31,7 +31,7 @@ fn print_plicity(plicity: Plicity) -> Printer {
 
 /// A bracketed **sequence**: flat when the group fits (`f(a, b)`), otherwise one element per line at the next indent with the closer *riding* the last one (`c)`).
 ///
-/// The closer rides because the last element already ends the sequence; following it with `,` and a bracket on a line of its own spends two lines on punctuation. Calls, list and packed literals, tuple literals and types, and variant payloads are all this shape — what they delimit is a run of expressions, and none of them cares what kind the last one is. [`listed_block`] is the other shape, for the brace forms that read as records.
+/// The closer rides because the last element already ends the sequence; following it with `,` and a bracket on a line of its own spends two lines on punctuation. Calls, list and packed literals, tuple literals and types, and variant payloads are all this shape — what they delimit is a run of expressions, and none of them cares what kind the last one is. [`listed_block`] is this shape padded, for the brace forms that read as records.
 fn listed(open: impl Into<String>, items: Vec<Printer>, close: &'static str) -> Printer {
     let open = pure(open);
     if items.is_empty() {
@@ -87,9 +87,9 @@ fn packs_atoms(segments: &[BinSegment]) -> bool {
     })
 }
 
-/// A bracketed **record**: padded flat (`{ a, b }`), and broken with a trailing comma and the closer on a line of its own.
+/// A bracketed **record**: [`listed`] with its braces padded — `{ a, b }` flat, and broken one field per line with the closer riding the last after a space (`c }`). Struct literals and patterns take this shape.
 ///
-/// The one shape that does *not* ride its closer, and the difference is about editing rather than looks. A record's fields are the thing that grows: with the brace riding, adding one is a two-line change, because the field above has to give the brace up and take a comma. A sequence's elements do not grow that way, so [`listed`] rides and this does not. Struct literals and patterns take this shape, matching the declaration bodies in [`listed_hard`] — a literal and the `struct` it inhabits close the same way.
+/// The padding is what sets a record's braces apart from a tuple type's, which [`listed`] prints bare (`{a: Nat}`), and the riding closer keeps it for the same reason.
 fn listed_block(open: impl Into<String>, items: Vec<Printer>, close: &'static str) -> Printer {
     let open = pure(open);
     if items.is_empty() {
@@ -100,17 +100,16 @@ fn listed_block(open: impl Into<String>, items: Vec<Printer>, close: &'static st
         indent(flat([
             line(),
             sep_flat(items, || flat([pure(","), line()])),
-            if_break("", ","),
             ends(),
         ])),
-        line(),
+        pure(" "),
         pure(close),
     ]))
 }
 
 /// A parenthesized **binder telescope** — a `let`, `satisfy`, `struct`, `concept` or `induct` parameter list: flat with no padding (`(a: Nat, b: Nat)`), and broken with a trailing comma and the closer on a line of its own.
 ///
-/// [`listed_block`]'s shape rather than [`listed`]'s, for [`listed_block`]'s reason and one of its own. A telescope is a thing that *grows*: with the closer riding, adding a parameter is a two-line change, because the line above has to give the bracket up and take a comma. And where the declaration that follows opens a brace body — every one of these but `let` — a riding closer leaves the last parameter and the first field at one indent, with only the `)` buried mid-line to say which is which.
+/// A closer that does not ride, where [`listed`]'s does, for two reasons. A telescope is a thing that *grows*: with the closer riding, adding a parameter is a two-line change, because the line above has to give the bracket up and take a comma. And where the declaration that follows opens a brace body — every one of these but `let` — a riding closer leaves the last parameter and the first field at one indent, with only the `)` buried mid-line to say which is which.
 ///
 /// No enclosing `group`, because the extent of the group is the caller's: a `let` measures the telescope together with its `-> output`, and a `satisfy` with the application it concludes, so the parameters break first and what follows them gets a fresh line, while the others measure the parentheses alone.
 fn telescope(items: Vec<Printer>) -> Printer {

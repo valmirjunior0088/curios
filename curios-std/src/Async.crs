@@ -482,15 +482,13 @@ let register_wait(q: Queues, slot: Slot, w: Wait) -> Io(Queues) =
         Io/pure(
             Queues {
                 ..q,
-                blocked = [..q.blocked, Parked { handle = h, interest = interest, slot = slot }],
-            })
+                blocked = [..q.blocked, Parked { handle = h, interest = interest, slot = slot }] })
     | elapsed(d) =>
         let now = Duration/now()!;
         Io/pure(
             Queues {
                 ..q,
-                sleeping = [..q.sleeping, Sleeper { due = Duration/add(now, d), slot = slot }],
-            })
+                sleeping = [..q.sleeping, Sleeper { due = Duration/add(now, d), slot = slot }] })
     | probe(p) =>
         Io/pure(Queues { ..q, probes = [..q.probes, Probed { ready = p.0, slot = slot }] })
     end;
@@ -610,8 +608,7 @@ let root_job(@A: Type, root: Async(A), answer: Cell(A), token: Token) -> Job =
     Job {
         resume = bind(root, (a) => bind(lift(Cell/fill(answer, a)), (_) => pure(()))),
         token = token,
-        guards = [],
-    };
+        guards = [] };
 
 let drive(@A: Type, q: Queues, answer: Cell(A)) -> Io(Result(Deadlock, A)) =
     let finished = Cell/poll(answer)!;
@@ -653,8 +650,7 @@ pub let block_on(@A: Type, root: Async(A)) -> Io(Result(Deadlock, A)) =
             blocked = [],
             sleeping = [],
             waiting = [],
-            probes = [],
-        };
+            probes = [] };
     drive(q, answer);
 
 --- Drive `main` to its end; a deadlock is reported on standard error and exits with 1.

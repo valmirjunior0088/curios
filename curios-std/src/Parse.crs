@@ -64,8 +64,7 @@ let chain(
             match p.run(input, at)
             | success((next, a)) => f(a).run(input, next)
             | failure(refusal) => Result/failure(refusal)
-            end,
-    };
+            end };
 
 --- `a`, consuming nothing.
 pub let pure(@I: Type, use Input(I), @A: Type, a: A) -> Parse(I, A) =
@@ -89,8 +88,7 @@ pub let map(
             match p.run(input, at)
             | success((next, a)) => Result/success((next, f(a)))
             | failure(refusal) => Result/failure(refusal)
-            end,
-    };
+            end };
 
 --- `p`, then `f` on its value from where it stopped.
 pub let bind(
@@ -122,8 +120,7 @@ pub let or(@I: Type, use Input(I), @A: Type, p: Parse(I, A), q: Parse(I, A)) -> 
                         end
                     end
                 end
-            end,
-    };
+            end };
 
 --- `p` as the shape the input has been recognized to have: a refusal inside it is committed, so an enclosing `or` reports it rather than trying an alternative.
 pub let commit(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, A) =
@@ -132,8 +129,7 @@ pub let commit(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, A) 
             match p.run(input, at)
             | success(pair) => Result/success(pair)
             | failure(refusal) => Result/failure(Error/commit(refusal))
-            end,
-    };
+            end };
 
 --- `p`, declining with `msg` where it started in place of its own reason. A committed refusal is reported as it is.
 pub let label(@I: Type, use Input(I), @A: Type, p: Parse(I, A), msg: Str) -> Parse(I, A) =
@@ -146,8 +142,7 @@ pub let label(@I: Type, use Input(I), @A: Type, p: Parse(I, A), msg: Str) -> Par
                 | true => Result/failure(e)
                 | false => Result/failure(Error/declined(msg, at.offset))
                 end
-            end,
-    };
+            end };
 
 --- `p`'s value, or `none` when it declines, consuming nothing then.
 pub let optional(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, Option(A)) =
@@ -171,8 +166,7 @@ pub let and(
                 | failure(refusal) => Result/failure(refusal)
                 end
             | failure(refusal) => Result/failure(refusal)
-            end,
-    };
+            end };
 
 --- `p` for its value alone: the position is left where `p` started.
 pub let lookahead(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, A) =
@@ -181,8 +175,7 @@ pub let lookahead(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, 
             match p.run(input, at)
             | success((_, a)) => Result/success((at, a))
             | failure(refusal) => Result/failure(refusal)
-            end,
-    };
+            end };
 
 --- The end of the input; declines while anything remains.
 pub let eof(@I: Type, use Input(I)) -> Parse(I, {}) =
@@ -191,8 +184,7 @@ pub let eof(@I: Type, use Input(I)) -> Parse(I, {}) =
             match at.offset < Bytes/len(input)
             | true => Result/failure(Error/declined("expected end of input", at.offset))
             | false => Result/success((at, ()))
-            end,
-    };
+            end };
 
 --- `p` repeated until it declines or consumes nothing, the values collected.
 pub let many0(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, List(A)) =
@@ -211,8 +203,7 @@ pub let many0(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, List
                     | false => go([..acc, a], next)
                     end
                 end;
-            go([], at),
-    };
+            go([], at) };
 
 --- `many0` with a first value owed: where `p` declines at the start, its refusal is the parser's rather than an empty list.
 pub let many1(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, List(A)) =
@@ -268,8 +259,7 @@ let separated(
                         end
                     end;
                 go([first], first_end)
-            end,
-    };
+            end };
 
 --- `elem` separated by `sep`, zero or more times, the elements collected. Once a separator is read the next element is owed, so its refusal is the list's: a list a separator may close is `sep_by0_trailing`.
 pub let sep_by0(

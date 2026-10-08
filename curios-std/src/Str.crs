@@ -312,15 +312,13 @@ pub let concat(a: Str, b: Str) -> Str =
 pub let before(s: Str, at: At(s)) -> Str =
     Str {
         bytes = Bytes/slice(s.bytes, 0, at.offset, @at.within),
-        @valid = Valid/before(s.valid, at.offset, at.within, at.boundary),
-    };
+        @valid = Valid/before(s.valid, at.offset, at.within, at.boundary) };
 
 --- The text from `at` on, cut in O(1).
 pub let after(s: Str, at: At(s)) -> Str =
     Str {
         bytes = Bytes/drop(s.bytes, at.offset, @at.within),
-        @valid = Valid/after(s.valid, at.offset, at.within, at.boundary),
-    };
+        @valid = Valid/after(s.valid, at.offset, at.within, at.boundary) };
 
 --- The text from `from` to `to`, cut in O(1): what lies before `to` in the text after `from`.
 pub let between(s: Str, from: At(s), to: At(s), @ordered: Holds(from.offset <= to.offset)) -> Str =
@@ -403,8 +401,7 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                                                 acc.1,
                                                 Byte/to_nat(h),
                                                 last,
-                                                True/qed()),
-                                    },
+                                                True/qed()) },
                                     acc.0),
                                 0),
                             True/qed())

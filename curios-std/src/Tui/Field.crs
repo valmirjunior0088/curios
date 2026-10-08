@@ -19,8 +19,7 @@ pub let of_str(s: Str) -> Field =
 let joined(left: Str, right: Str) -> Field =
     Field {
         text = Str/concat(left, right),
-        cursor = Str/At/of_left(left, right, Str/At/finish(left)),
-    };
+        cursor = Str/At/of_left(left, right, Str/At/finish(left)) };
 
 --- Insert a character, delete before or after the cursor, or move it; any other key leaves the field.
 pub let handle(i: Field, k: Key) -> Field =

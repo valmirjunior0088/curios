@@ -22,8 +22,7 @@ pub let none: Exceptions =
         division_by_zero = false,
         overflow = false,
         underflow = false,
-        inexact = false,
-    };
+        inexact = false };
 
 --- What either raised.
 pub let union(a: Exceptions, b: Exceptions) -> Exceptions =
@@ -32,8 +31,7 @@ pub let union(a: Exceptions, b: Exceptions) -> Exceptions =
         division_by_zero = a.division_by_zero || b.division_by_zero,
         overflow = a.overflow || b.overflow,
         underflow = a.underflow || b.underflow,
-        inexact = a.inexact || b.inexact,
-    };
+        inexact = a.inexact || b.inexact };
 
 --- What both raised.
 pub let intersection(a: Exceptions, b: Exceptions) -> Exceptions =
@@ -42,8 +40,7 @@ pub let intersection(a: Exceptions, b: Exceptions) -> Exceptions =
         division_by_zero = a.division_by_zero && b.division_by_zero,
         overflow = a.overflow && b.overflow,
         underflow = a.underflow && b.underflow,
-        inexact = a.inexact && b.inexact,
-    };
+        inexact = a.inexact && b.inexact };
 
 --- What `a` raised that `b` did not.
 pub let difference(a: Exceptions, b: Exceptions) -> Exceptions =
@@ -52,8 +49,7 @@ pub let difference(a: Exceptions, b: Exceptions) -> Exceptions =
         division_by_zero = a.division_by_zero && Bool/not(b.division_by_zero),
         overflow = a.overflow && Bool/not(b.overflow),
         underflow = a.underflow && Bool/not(b.underflow),
-        inexact = a.inexact && Bool/not(b.inexact),
-    };
+        inexact = a.inexact && Bool/not(b.inexact) };
 
 --- Whether anything was raised.
 pub let any(e: Exceptions) -> Bool =

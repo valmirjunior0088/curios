@@ -58,8 +58,7 @@ pub struct Octet: pub Type {
 pub let cons(o: Octet, v: Value) -> Value =
     Value {
         bytes = x[o.byte, ..v.bytes],
-        @Bool/both(admits(o.byte), Bytes/all(v.bytes, admits), o.clean, v.clean),
-    };
+        @Bool/both(admits(o.byte), Bytes/all(v.bytes, admits), o.clean, v.clean) };
 
 --- `a` then `b`: octets that may each stand in a value may stand in one together.
 pub let append(a: Value, b: Value) -> Value =

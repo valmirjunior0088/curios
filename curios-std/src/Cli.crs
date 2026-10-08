@@ -22,8 +22,7 @@ pub let nat: Value =
                 match Nat/of_str(s)
                 | some(n) => Result/success(n)
                 | none() => Result/failure(Str/flatten(["expected a number, found '", s, "'"]))
-                end,
-    };
+                end };
 
 --- An integer in decimal, with an optional sign.
 pub let int: Value =
@@ -35,8 +34,7 @@ pub let int: Value =
                 match Int/of_str(s)
                 | some(n) => Result/success(n)
                 | none() => Result/failure(Str/flatten(["expected an integer, found '", s, "'"]))
-                end,
-    };
+                end };
 
 --- A floating-point number.
 pub let flt: Value =
@@ -48,8 +46,7 @@ pub let flt: Value =
                 match Flt/of_str(s)
                 | some(x) => Result/success(x)
                 | none() => Result/failure(Str/flatten(["expected a number, found '", s, "'"]))
-                end,
-    };
+                end };
 
 --- A reader of a program's own type, shown as `metavar` in help.
 pub let reader(@A: Type, metavar: Str, f: (Str) -> Result(Str, A)) -> Value =
@@ -97,8 +94,7 @@ pub let option(long: Str, v: Value, help: Str) -> Arg =
         long = long,
         short = Option/none(),
         help = help,
-        kind = Kind/option(v, Presence/required()),
-    };
+        kind = Kind/option(v, Presence/required()) };
 
 --- An option that may be absent, read as an `Option`.
 pub let optional(long: Str, v: Value, help: Str) -> Arg =
@@ -106,8 +102,7 @@ pub let optional(long: Str, v: Value, help: Str) -> Arg =
         long = long,
         short = Option/none(),
         help = help,
-        kind = Kind/option(v, Presence/optional()),
-    };
+        kind = Kind/option(v, Presence/optional()) };
 
 --- An option that stands for `fallback` when absent.
 pub let default(long: Str, v: Value, fallback: v.A, help: Str) -> Arg =
@@ -115,8 +110,7 @@ pub let default(long: Str, v: Value, fallback: v.A, help: Str) -> Arg =
         long = long,
         short = Option/none(),
         help = help,
-        kind = Kind/option(v, Presence/default(fallback)),
-    };
+        kind = Kind/option(v, Presence/default(fallback)) };
 
 --- An option that keeps every value it is given.
 pub let many(long: Str, v: Value, help: Str) -> Arg =

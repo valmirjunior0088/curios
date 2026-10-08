@@ -40,8 +40,7 @@ pub let config(baud: Nat) -> Config =
         data_bits = 8,
         parity = Parity/none(),
         stop_bits = 1,
-        flow = Flow/none(),
-    };
+        flow = Flow/none() };
 
 let of_parity(parity: Parity) -> Nat =
     match parity

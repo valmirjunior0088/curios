@@ -24,11 +24,9 @@ let of_mask(mask: Byte) -> Readiness =
         fired =
             Interest {
                 readable = flagged(mask, /sys/event/read),
-                writable = flagged(mask, /sys/event/write),
-            },
+                writable = flagged(mask, /sys/event/write) },
         failed = flagged(mask, /sys/event/err),
-        hung_up = flagged(mask, /sys/event/hup),
-    };
+        hung_up = flagged(mask, /sys/event/hup) };
 
 --- A poll's masks cross as one byte per handle, in the handles' order.
 let to_masks(interests: List(Interest)) -> Bytes =

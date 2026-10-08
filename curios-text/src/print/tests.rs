@@ -19,6 +19,18 @@ fn render(source: &str, width: usize) -> String {
 }
 
 #[test]
+fn an_overflowing_record_breaks_one_field_per_line_with_its_closer_riding_after_a_space() {
+    assert_eq!(
+        render("Point { alpha = 1, bravo = 2 }", 80),
+        "Point { alpha = 1, bravo = 2 }"
+    );
+    assert_eq!(
+        render("Point { alpha = 1, bravo = 2 }", 20),
+        "Point {\n    alpha = 1,\n    bravo = 2 }"
+    );
+}
+
+#[test]
 fn a_fitting_application_stays_flat() {
     assert_eq!(render("f(alpha, bravo)", 80), "f(alpha, bravo)");
 }

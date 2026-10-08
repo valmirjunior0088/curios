@@ -24,8 +24,7 @@ pub let step(a: Nat, b: Nat, @ok: Holds(0 < b), below: Gcd(b, a % b)) -> Gcd(a, 
         value = below.value,
         left = Divides/add(Divides/mul(below.left, a / b), below.right),
         right = below.left,
-        greatest(d, p, q) = below.greatest(d, q, Divides/rem(a, b, p, q)),
-    };
+        greatest(d, p, q) = below.greatest(d, q, Divides/rem(a, b, p, q)) };
 
 --- The greatest common divisor of `a` and `b` with its proofs, `a` itself where `b` is zero.
 ---
@@ -41,8 +40,7 @@ pub let of(a: Nat, b: Nat) -> Gcd(a, b) =
                         value = x,
                         left = Divides/refl(x),
                         right = Divides/zero(x),
-                        greatest(_, p, _) = p,
-                    }
+                        greatest(_, p, _) = p }
                 | yp + 1 => step(x, yp + 1, ih(x % (yp + 1), True/qed())(yp + 1))
                 end,
         b,
@@ -64,8 +62,7 @@ pub let symmetric(a: Nat, b: Nat) -> Eq()(Nat/gcd(a, b), Nat/gcd(b, a)) =
             value = g.value,
             left = g.right,
             right = g.left,
-            greatest(d, p, q) = g.greatest(d, q, p),
-        });
+            greatest(d, p, q) = g.greatest(d, q, p) });
 
 --- `gcd(a, b)` is `gcd(b, a % b)`: the equation Euclid's algorithm computes by, at a divisor reduction does not open.
 pub let euclid(a: Nat, b: Nat, @ok: Holds(0 < b)) -> Eq()(Nat/gcd(a, b), Nat/gcd(b, a % b)) =

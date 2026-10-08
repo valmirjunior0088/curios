@@ -73,8 +73,7 @@ pub let to_after(
                     (within: Holds(n <= Bytes/len(s.bytes))) -> Holds(
                         starts(Bytes/drop(s.bytes, n, @within))),
                 back,
-                (_) => p.boundary)(True/proved()),
-    };
+                (_) => p.boundary)(True/proved()) };
 
 --- How many bytes continuing a character open `rest`.
 let run(rest: Bytes) -> Nat =
@@ -311,8 +310,7 @@ pub let of_left(s: Str, t: Str, at: At(s)) -> At(Str/concat(s, t)) =
                 at.offset,
                 at.within,
                 at.boundary,
-                Str/Valid/begins(t.valid)),
-    };
+                Str/Valid/begins(t.valid)) };
 
 --- A position in `t` as the position it is in `s` followed by `t`.
 pub let of_right(s: Str, t: Str, at: At(t)) -> At(Str/concat(s, t)) =

@@ -146,8 +146,7 @@ pub let redirect(url: Url) -> Response =
     Response {
         status = Status/of(303),
         headers = [Field { name = Name { text = "Location" }, value = Url/to_value(url) }],
-        body = x[],
-    };
+        body = x[] };
 
 --- A `404 Not Found` with an empty body.
 pub let not_found: Response =

@@ -27,8 +27,7 @@ let _a_number_is_its_own_greatest_common_divisor(a: Nat) -> Eq()(a, Nat/gcd(a, a
             value = a,
             left = Divides/refl(a),
             right = Divides/refl(a),
-            greatest(_, p, _) = p,
-        });
+            greatest(_, p, _) = p });
 
 let _the_operands_swap(a: Nat, b: Nat) -> Eq()(Nat/gcd(a, b), Nat/gcd(b, a)) =
     Gcd/symmetric(a, b);

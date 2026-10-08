@@ -44,8 +44,7 @@ pub let new(program: Str, args: List(Str)) -> Command =
         env = [],
         stdin = Stdio/inherit(),
         stdout = Stdio/inherit(),
-        stderr = Stdio/inherit(),
-    };
+        stderr = Stdio/inherit() };
 
 let stdio_of(s: Stdio) -> Nat =
     match s

@@ -45,8 +45,7 @@ const POSITIONS: [&str; 9] = [
         "let point: Point =\n",
         "    Point {\n",
         "        first_field_name = some_long_function_name(argument_one, argument_two),\n",
-        "        second_field_name = another_long_function_name(argument_three, argument_four),\n",
-        "    };\n",
+        "        second_field_name = another_long_function_name(argument_three, argument_four) };\n",
         "\n",
         "let run(queue: Queue, resumed: Job) -> Io(Queue) =\n",
         "    let widened = (queue + resumed) * some_long_function_name(argument_one, argument_two);\n",
@@ -331,6 +330,27 @@ fn a_comment_riding_an_opener_and_one_leading_the_first_member_keep_their_lines(
     assert_eq!(formatted(source), source);
 }
 
+/// A record's closer rides its last field after a space, and a comment riding that field rides on past the closer, as it does past a list's — whether the closer was written riding or on a line of its own.
+#[test]
+fn a_comment_riding_a_records_last_field_follows_the_closer() {
+    let canonical = concat!(
+        "let point: Point =\n",
+        "    Point {\n",
+        "        first = some_long_function_name(argument_one, argument_two), -- rides the first\n",
+        "        second = another_long_function_name(argument_three, argument_four) }; -- rides the last\n",
+    );
+    let written = concat!(
+        "let point: Point =\n",
+        "    Point {\n",
+        "        first = some_long_function_name(argument_one, argument_two), -- rides the first\n",
+        "        second = another_long_function_name(argument_three, argument_four), -- rides the last\n",
+        "    };\n",
+    );
+
+    assert_eq!(formatted(canonical), canonical);
+    assert_eq!(formatted(written), canonical);
+}
+
 /// A comment written before a closer stays in its block, at the members' column, with the closer on the line below: one fixture for every shape that closes — a `use` group, an inline module, the three declaration bodies, a telescope and its item's terminator, a tuple, a list, a packed literal, a tuple type, a struct literal, a call in both layouts, a parenthesized operand, a tuple of one, an empty call and a ladder.
 #[test]
 fn a_comment_before_a_closer_stays_at_its_members_column() {
@@ -395,7 +415,7 @@ fn a_comment_before_a_closer_stays_at_its_members_column() {
         "\n",
         "let point: Point =\n",
         "    Point {\n",
-        "        first = 1,\n",
+        "        first = 1\n",
         "        -- second = 2,\n",
         "    };\n",
         "\n",

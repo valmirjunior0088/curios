@@ -20,8 +20,7 @@ let from_exact(r: Rounding, e: Dyadic, sticky: Bool, result: Flt) -> Exceptions 
         ..Exceptions/none,
         overflow = overflow,
         underflow = exact/tiny(magnitude, e.exponent) && inexact,
-        inexact = inexact,
-    };
+        inexact = inexact };
 
 --- What `rounded/add(r, a, b)` raises: invalid for a signaling NaN or infinities of opposite signs, and otherwise what rounding the exact sum raises.
 pub let add(r: Rounding, a: Flt, b: Flt) -> Exceptions =
