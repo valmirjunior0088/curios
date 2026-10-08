@@ -2,7 +2,7 @@
 
 use {
     super::{Original, Owed, run_printer_placing},
-    crate::{Printer, fill, flat, group, hard_line, indent, line, pure, reached, soft_line},
+    crate::{Printer, ends, fill, flat, group, hard_line, indent, line, pure, reached, soft_line},
     std::{cell::Cell, fmt},
 };
 
@@ -52,6 +52,45 @@ fn call() -> Printer {
         indent(flat([soft_line(), pure("a"), pure(","), line(), pure("b")])),
         pure(")"),
     ]))
+}
+
+/// `[a, b]` as a list printer builds it, its members ending in the note.
+fn list() -> Printer {
+    group(flat([
+        pure("["),
+        indent(flat([
+            soft_line(),
+            pure("a"),
+            pure(","),
+            line(),
+            pure("b"),
+            ends(),
+        ])),
+        pure("]"),
+    ]))
+}
+
+#[test]
+fn a_comment_before_a_closer_takes_its_line_at_the_members_indentation() {
+    assert_eq!(
+        placed(list(), "[\n  a,\n  b,\n  -- c\n]", 80),
+        "[\n  a,\n  b\n  -- c\n]"
+    );
+}
+
+#[test]
+fn a_comment_riding_the_last_member_past_its_comma_keeps_the_closer_on_its_line() {
+    assert_eq!(placed(list(), "[a, b, -- last\n]", 80), "[a, b] -- last");
+}
+
+#[test]
+fn a_comment_in_an_empty_block_takes_a_line_inside_it() {
+    let document = flat([pure("{"), indent(ends()), pure("}")]);
+
+    assert_eq!(
+        placed(document, "{\n  -- nothing yet\n}", 80),
+        "{\n  -- nothing yet\n}"
+    );
 }
 
 #[test]

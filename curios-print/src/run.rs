@@ -181,6 +181,17 @@ impl<'a, 'b, 'c> PrinterState<'a, 'b, 'c> {
         }
     }
 
+    /// The members of a block end here — see [`Printer::Ends`]. What was written past the last of them is due and takes its line now, at their indentation; the document offers this line start, so nothing hangs from it.
+    fn ends(&mut self) -> Result<(), fmt::Error> {
+        if let Some((original, mut cursor)) = self.following {
+            cursor.close(original);
+            self.following = Some((original, cursor));
+            self.arrivals();
+        }
+
+        self.pay(false)
+    }
+
     /// Note that the document holds the original up to `at` — see [`Printer::Mark`].
     fn reach(&mut self, at: usize) {
         if let Some((original, mut cursor)) = self.following {
@@ -398,6 +409,17 @@ impl Cursor {
         }
     }
 
+    /// Step over what the document may equally write or leave out — a list's last comma — where a block's members end. It carries no position: what is written past it stands before the closer as much as what is written ahead of it.
+    fn close(&mut self, original: &Original<'_>) {
+        while let Some(next) = self
+            .next(original)
+            .filter(|next| !self.held && (original.added)(*next) && (original.dropped)(*next))
+        {
+            self.offset += next.len_utf8();
+            self.settle(original);
+        }
+    }
+
     /// The document holds the original up to `at`: a hold ends, and a cursor behind it moves up.
     fn reach(&mut self, at: usize, original: &Original<'_>) {
         self.held = false;
@@ -448,6 +470,12 @@ impl Arriving<'_> {
     fn reach(&mut self, at: usize) {
         let from = self.cursor.arrived;
         self.cursor.reach(at, self.original);
+        self.note(from);
+    }
+
+    fn close(&mut self) {
+        let from = self.cursor.arrived;
+        self.cursor.close(self.original);
         self.note(from);
     }
 
@@ -617,6 +645,12 @@ fn fits(
                     arriving.reach(*at);
                 }
             }
+            // Zero width too: what was written past the last member arrives here, as it will when the note is printed.
+            Printer::Ends => {
+                if inside && let Some(arriving) = arriving.as_mut() {
+                    arriving.close();
+                }
+            }
             // Reversed, because the stack pops last-in first.
             Printer::Concat(parts) => {
                 stack.extend(parts.iter_mut().rev().map(|part| Measured {
@@ -779,6 +813,7 @@ fn run<'b, 'c>(
                     state.text(&spelling)?;
                 }
                 Printer::Mark(at) => state.reach(*at),
+                Printer::Ends => state.ends()?,
             },
             // One item per turn: measure it against what is left of the line, emit the gap it earned, print it flat, and queue the remainder. Printing the item flat is what makes it atomic — a fill decides *between* items, never inside one.
             Step::Fill(mut items) => {

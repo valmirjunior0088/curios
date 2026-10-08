@@ -15,7 +15,7 @@ use {
     curios_abi::{ResultShape, WireResults, WireSignature, WireType, stdio},
     curios_num::{Floating, Grain, Natural, Rounding},
     curios_print::{
-        Printer, fill, flat, group, hard_line, if_break, indent, line, named, pure, reached,
+        Printer, ends, fill, flat, group, hard_line, if_break, indent, line, named, pure, reached,
         sep_flat, soft_line,
     },
     curios_utilities::Plicity,
@@ -35,13 +35,14 @@ fn print_plicity(plicity: Plicity) -> Printer {
 fn listed(open: impl Into<String>, items: Vec<Printer>, close: &'static str) -> Printer {
     let open = pure(open);
     if items.is_empty() {
-        return flat([open, pure(close)]);
+        return flat([open, indent(ends()), pure(close)]);
     }
     group(flat([
         open,
         indent(flat([
             soft_line(),
             sep_flat(items, || flat([pure(","), line()])),
+            ends(),
         ])),
         pure(close),
     ]))
@@ -54,7 +55,7 @@ fn listed(open: impl Into<String>, items: Vec<Printer>, close: &'static str) -> 
 /// The closer rides the last element, as [`listed`]'s does and for the same reason.
 fn listed_block_wrapped(open: &'static str, items: Vec<Printer>, close: &'static str) -> Printer {
     if items.is_empty() {
-        return flat([pure(open), pure(close)]);
+        return flat([pure(open), indent(ends()), pure(close)]);
     }
 
     let last = items.len() - 1;
@@ -69,7 +70,7 @@ fn listed_block_wrapped(open: &'static str, items: Vec<Printer>, close: &'static
 
     group(flat([
         pure(open),
-        indent(flat([soft_line(), fill(entries)])),
+        indent(flat([soft_line(), fill(entries), ends()])),
         pure(close),
     ]))
 }
@@ -92,7 +93,7 @@ fn packs_atoms(segments: &[BinSegment]) -> bool {
 fn listed_block(open: impl Into<String>, items: Vec<Printer>, close: &'static str) -> Printer {
     let open = pure(open);
     if items.is_empty() {
-        return flat([open, pure(close)]);
+        return flat([open, indent(ends()), pure(close)]);
     }
     group(flat([
         open,
@@ -100,6 +101,7 @@ fn listed_block(open: impl Into<String>, items: Vec<Printer>, close: &'static st
             line(),
             sep_flat(items, || flat([pure(","), line()])),
             if_break("", ","),
+            ends(),
         ])),
         line(),
         pure(close),
@@ -118,6 +120,7 @@ fn telescope(items: Vec<Printer>) -> Printer {
             soft_line(),
             sep_flat(items, || flat([pure(","), line()])),
             if_break("", ","),
+            ends(),
         ])),
         soft_line(),
         pure(")"),
@@ -142,7 +145,11 @@ fn filled(open: &'static str, items: Vec<String>, close: &'static str) -> Printe
             false => pure(format!("{item},")),
         })
         .collect::<Vec<_>>();
-    flat([pure(open), indent(fill(entries)), pure(close)])
+    flat([
+        pure(open),
+        indent(flat([fill(entries), ends()])),
+        pure(close),
+    ])
 }
 
 /// Whether a term prints as one indivisible piece — a name, a numeral, a character, a one-line string, or a projection off one — so that a run of them has no break of its own.
@@ -187,6 +194,7 @@ fn riding_call(head: Term, arguments: Vec<Argument>) -> Printer {
             print_suffix_head(head),
             pure("("),
             sep_flat(items, || pure(", ")),
+            indent(ends()),
             pure(")"),
         ]);
     }
@@ -197,6 +205,7 @@ fn riding_call(head: Term, arguments: Vec<Argument>) -> Printer {
             indent(flat([
                 soft_line(),
                 sep_flat(items, || flat([pure(","), line()])),
+                ends(),
             ])),
             pure(")"),
         ])),
@@ -247,7 +256,7 @@ fn spell_block_line(line: &str) -> String {
 /// The always-broken brace block a `struct`, `concept`, or `satisfy` body is: one field per line at the next indent with a trailing comma, the closing brace at the opening's column, regardless of how little would fit flat. An empty body prints the bare delimiters.
 fn listed_hard(open: &'static str, items: Vec<Printer>, close: &'static str) -> Printer {
     if items.is_empty() {
-        return flat([pure(open), pure(close)]);
+        return flat([pure(open), indent(ends()), pure(close)]);
     }
     flat([
         pure(open),
@@ -255,6 +264,7 @@ fn listed_hard(open: &'static str, items: Vec<Printer>, close: &'static str) -> 
             hard_line(),
             sep_flat(items, || flat([pure(","), hard_line()])),
             pure(","),
+            ends(),
         ])),
         hard_line(),
         pure(close),
@@ -1155,7 +1165,7 @@ fn print_operand(term: Term, min_prec: u8) -> Printer {
         _ => false,
     };
     match parenthesized {
-        true => flat([pure("("), print_term(term), pure(")")]),
+        true => flat([pure("("), print_term(term), indent(ends()), pure(")")]),
         false => print_term(term),
     }
 }
@@ -1164,7 +1174,7 @@ fn print_operand(term: Term, min_prec: u8) -> Printer {
 fn print_suffix_head(term: Term) -> Printer {
     match term.as_subterm() {
         Subterm::NumLit(_) | Subterm::Literal(Literal::Flt(_)) => {
-            flat([pure("("), print_term(term), pure(")")])
+            flat([pure("("), print_term(term), indent(ends()), pure(")")])
         }
         _ => print_operand(term, u8::MAX),
     }
@@ -1237,8 +1247,14 @@ fn print_term_inner(term: Term) -> Printer {
             if fields.len() == 1 {
                 let field = fields.into_iter().next().unwrap();
                 // A labeled one-element tuple needs no trailing comma — the `=` already disambiguates it from a parenthesized term.
-                let trailer = if field.label.is_some() { ")" } else { ",)" };
-                flat([pure("("), print_tuple_field(field), pure(trailer)])
+                let comma = if field.label.is_some() { "" } else { "," };
+                flat([
+                    pure("("),
+                    print_tuple_field(field),
+                    pure(comma),
+                    indent(ends()),
+                    pure(")"),
+                ])
             } else {
                 listed(
                     "(",
@@ -1476,7 +1492,7 @@ fn print_top_test(test: TopTest) -> Printer {
         pure(test.label),
         pure(" ="),
         hard_line(),
-        indent(print_term(test.body)),
+        indent(flat([print_term(test.body), ends()])),
         pure(";"),
     ])
 }
@@ -1507,6 +1523,8 @@ fn print_top_let(items: Vec<TopLet>) -> Printer {
                 })
                 .collect::<Vec<_>>(),
         ),
+        // Only the last body ends the item: a comment written under an earlier one stands above the `and` that follows it.
+        indent(ends()),
         pure(";"),
     ])
 }
@@ -1574,7 +1592,7 @@ fn print_top_mod(item: TopMod) -> Printer {
             pure("mod "),
             pure(item.label),
             hard_line(),
-            indent(print_module_items(module.items)),
+            indent(flat([print_module_items(module.items), ends()])),
             hard_line(),
             pure("end"),
         ]),
@@ -1882,7 +1900,7 @@ fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
         ]),
         None => flat([
             pure(" {"),
-            indent(flat([hard_line(), pure("..")])),
+            indent(flat([hard_line(), pure(".."), ends()])),
             hard_line(),
             pure("}"),
         ]),

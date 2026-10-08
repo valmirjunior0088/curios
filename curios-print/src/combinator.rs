@@ -109,3 +109,8 @@ pub fn named(text: impl Into<String>) -> Printer {
 pub fn reached(offset: usize) -> Printer {
     Printer::Mark(offset)
 }
+
+/// Note that the members of a block end here — see [`Printer::Ends`]. Zero width and no output.
+pub fn ends() -> Printer {
+    Printer::Ends
+}

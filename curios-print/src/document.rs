@@ -40,6 +40,8 @@ pub enum Printer {
     ///
     /// The renderer finds its own way through the original, a character at a time, and needs no note to do it. This is for the one place it cannot: where the document spells something another way than it was written — a literal respelled from its value — the characters stop agreeing and the renderer waits, and the note at the far end of what was respelled is where it picks the text up again. Emits nothing and measures as nothing, so a document carrying none renders as it would without them.
     Mark(usize),
+    /// A zero-width note that the members of a block end here, for a renderer following an original — see [`Original`](crate::Original). A comment written past the last member and before the closer is due by now, and takes its line here, at the members' indentation, where it would otherwise wait for the closer and take the closer's. Emits nothing and measures as nothing.
+    Ends,
 }
 
 impl Printer {
@@ -53,7 +55,7 @@ impl Printer {
     /// Whether this node's children are already gone, so dropping it cannot reach another node.
     fn is_dismantled(&self) -> bool {
         match self {
-            Printer::Text(_) | Printer::Named(_) | Printer::Mark(_) => true,
+            Printer::Text(_) | Printer::Named(_) | Printer::Mark(_) | Printer::Ends => true,
             Printer::Concat(parts) | Printer::Fill(parts) => parts.is_empty(),
             Printer::Indent(inner) | Printer::Group(inner) => {
                 matches!(**inner, Printer::Text(_))
@@ -87,6 +89,7 @@ impl Drop for Printer {
                 Printer::Line { .. } => {}
                 Printer::IfBreak { .. } => {}
                 Printer::Mark(_) => {}
+                Printer::Ends => {}
             }
             // `printer` is dismantled now, so its own drop returns at once.
         }
