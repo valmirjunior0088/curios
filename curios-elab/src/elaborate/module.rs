@@ -1,6 +1,9 @@
 mod demand;
 use demand::*;
 
+mod own_method;
+use own_method::*;
+
 mod recovery;
 use recovery::*;
 
@@ -807,6 +810,11 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
 
     let body = check(context, &def.body, type_.clone())?;
     context.sweep_parked()?;
+    // A witness that reads one of its own methods reads that method's term, so its body names itself only where a method reaches itself.
+    let body = match context.is_witness_declaration(&def.name) {
+        true => own_methods_read(context, &name, &zonk_solved_term_metas(context, &body)),
+        false => body,
+    };
 
     // Define the *rebuilt* body at the *rebuilt* type, not the lowered ones: implicit-argument insertion saturates applications during elaboration, and the untyped reducer (type-level evaluation in later items' types) would meet a lowered form's under-applied calls and open a telescope at the wrong arity.
     context.define_assuming(&name, &type_, &body, Some(&def.kind));

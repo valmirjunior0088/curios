@@ -984,10 +984,25 @@ impl fmt::Display for Displayed<'_> {
                         }
                     })
                     .collect::<Vec<_>>();
+                // Neither group's spelling holds a definition beside a witness, so a cycle through both is pointed at the two ways out it does have.
+                let across = members
+                    .iter()
+                    .any(|member| matches!(member, CycleMember::Named(_)))
+                    && members
+                        .iter()
+                        .any(|member| matches!(member, CycleMember::Witness(_)));
+                let way_out = match across {
+                    true => {
+                        "no group holds a definition beside a witness: let the definition call by its name the function it means, the witness delegating to it, or write its body in the witness, which may read its own methods"
+                    }
+                    false => {
+                        "declare definitions that call one another as one group, 'let ... and ...', and witnesses that resolve through one another as 'satisfy C(A) { ... } and D(B) { ... }'"
+                    }
+                };
                 match named.split_last() {
                     Some((last, rest)) if !rest.is_empty() => write!(
                         f,
-                        "{} and {last} need one another\n  a declaration elaborates after what it reads, and each of these reads another before it can finish — by a name it writes, or by the witness a goal of its resolves to\n  a definition may call itself and a witness may resolve through its own entry, but a cycle through two has no order to elaborate them in\n  declare definitions that call one another as one group, 'let ... and ...', and witnesses that resolve through one another as 'satisfy C(A) {{ ... }} and D(B) {{ ... }}'",
+                        "{} and {last} need one another\n  a declaration elaborates after what it reads, and each of these reads another before it can finish — by a name it writes, or by the witness a goal of its resolves to\n  a definition may call itself and a witness may resolve through its own entry, but a cycle through two has no order to elaborate them in\n  {way_out}",
                         rest.join(", ")
                     ),
                     _ => write!(

@@ -1062,7 +1062,7 @@ satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) => Show({A, B}) {
 
 A function type is **not** keyed: a `satisfy` whose concept parameter reduces to one is refused as unkeyable, with the same report a variable head gets. A function becomes a monad by being wrapped in a nominal type, which is `/std/State`'s idiom. Why is [Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md).
 
-Witnesses that resolve through each other are declared as one group with `and` — see [Recursive groups](#recursive-groups). A lone witness may resolve through its own entry with nothing said.
+Witnesses that resolve through each other are declared as one group with `and` — see [Recursive groups](#recursive-groups). A lone witness may resolve through its own entry with nothing said. A method written by another of its witness's methods — `neq(a, b) = Bool/not(a == b)` — reads that method alone, so only a method that reaches itself makes its witness recursive.
 
 ```crs
 satisfy Show(Tree) {

@@ -4,7 +4,81 @@
 //!
 //! A cycle between *two* witnesses has no such binding unless the source declares it: one witness naming a later one is ordinary and works, because a declaration elaborates after what it reads, wherever each is written; two naming each other are declared as one `satisfy … and …` group, whose members register before any body elaborates and are bound in one another, and an undeclared pair is refused here, in the language's own terms, rather than reaching the kernel as an unbound internal name.
 
-use crate::tests::{error, run};
+use crate::tests::{core_elab, error, run};
+
+// A method stated by another of its witness's methods reads that method, not the witness: `neq` reads `eql`, which names nothing of the witness, so the body recurses nowhere and the witness is an ordinary definition — where a group of one is a knot forced at every `!=`.
+#[test]
+fn a_witness_reading_another_of_its_methods_is_no_group() {
+    let source = r#"
+        use /std/{Nat, Bool};
+        use /std/ops/{Eql};
+        pub struct Box: pub Type { value: Nat }
+        satisfy Eql(Box) {
+            eql(a, b) = a.value == b.value,
+            neq(a, b) = Bool/not(a == b),
+        }
+        /std/print(Bool/to_str(Box { value = 1 } != Box { value = 2 }))
+        "#;
+
+    assert_eq!(run(source), b"true");
+    let elaborated = core_elab(source);
+    assert!(
+        elaborated.contains("let /witness@/std/ops/Eql(/Box)")
+            && !elaborated.contains("rec /witness@/std/ops/Eql(/Box)"),
+        "expected the witness as a definition, not a group of one:\n{elaborated}"
+    );
+}
+
+// The same under parameters: the read stands at the witness's own binders, and is the method's term at them.
+#[test]
+fn a_parameterized_witness_reading_another_of_its_methods_is_no_group() {
+    let source = r#"
+        use /std/{Nat, Bool};
+        use /std/ops/{Eql};
+        pub struct Wrap(A: Type): pub Type { value: A }
+        satisfy (@A: Type, use Eql(A)) => Eql(Wrap(A)) {
+            eql(a, b) = a.value == b.value,
+            neq(a, b) = Bool/not(a == b),
+        }
+        /std/print(Bool/to_str(Wrap { value = 1 } != Wrap { value = 1 }))
+        "#;
+
+    assert_eq!(run(source), b"false");
+    let elaborated = core_elab(source);
+    assert!(
+        elaborated.contains("let /witness@/std/ops/Eql(/Wrap)")
+            && !elaborated.contains("rec /witness@/std/ops/Eql(/Wrap)"),
+        "expected the witness as a definition, not a group of one:\n{elaborated}"
+    );
+}
+
+// A method that reaches itself keeps its witness a group, and so does the one beside it that reads it: `eql` compares two chains link by link through its own entry, and `neq` reads that `eql`.
+#[test]
+fn a_method_reading_one_that_recurses_stays_in_its_group() {
+    let source = r#"
+        use /std/{Nat, Bool};
+        use /std/ops/{Eql};
+        induct Chain: pub Type | end_of() | link(Nat, Chain) end
+        satisfy Eql(Chain) {
+            eql(a, b) =
+                match a
+                | end_of() => match b | end_of() => true | link(_, _) => false end
+                | link(x, xs) => match b | end_of() => false | link(y, ys) => x == y && xs == ys end
+                end,
+            neq(a, b) = Bool/not(a == b),
+        }
+        let one = Chain/link(1, Chain/link(2, Chain/end_of()));
+        let other = Chain/link(1, Chain/link(3, Chain/end_of()));
+        /std/print(Bool/to_str(one != other))
+        "#;
+
+    assert_eq!(run(source), b"true");
+    let elaborated = core_elab(source);
+    assert!(
+        elaborated.contains("rec /witness@/std/ops/Eql(/Chain)"),
+        "expected the witness as a group of one:\n{elaborated}"
+    );
+}
 
 // The shape the derived bodies of a structural concept take: match the constructors, call the concept's own method on each recursive payload.
 #[test]
@@ -117,6 +191,11 @@ fn a_definition_and_the_witness_it_resolves_to_are_refused_as_a_cycle_in_either_
         assert!(
             !report.contains("unbound name"),
             "the kernel was left to refuse the cycle:\n{report}"
+        );
+        assert!(
+            report.contains("no group holds a definition beside a witness")
+                && !report.contains("'let ... and ...'"),
+            "expected the way out a definition and a witness have, not a group neither fits:\n{report}"
         );
     }
 }

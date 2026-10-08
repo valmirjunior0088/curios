@@ -203,13 +203,16 @@ pub let balanced(
         end;
     go(n, 0, n, Nat/le/refl(n));
 
+--- Whether the two hold equal elements in the same order.
+pub let eql(@A: Type, use Eql(A), a: List(A), b: List(A)) -> Bool =
+    match a
+    | [] => match b | [] => true | _ => false end
+    | [x, ..xs] => match b | [] => false | [y, ..ys] => x == y && eql(xs, ys) end
+    end;
+
 satisfy (@A: Type, use Eql(A)) => Eql(List(A)) {
-    eql(a, b) =
-        match a
-        | [] => match b | [] => true | _ => false end
-        | [x, ..xs] => match b | [] => false | [y, ..ys] => x == y && xs == ys end
-        end,
-    neq(a, b) = Bool/not(a == b),
+    eql = eql,
+    neq(a, b) = Bool/not(eql(a, b)),
 }
 
 satisfy (@A: Type, use Show(A)) => Show(List(A)) {
