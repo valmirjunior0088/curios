@@ -1,6 +1,6 @@
-//! The builder of a unit's [`Documentation`] record — `curios-document`'s plain data: one record per module the unit exposes, each declaration's head printed as the author wrote it with every name it mentions resolved, and the prose attached to each — built by the lowering as the last thing it does and carried on the unit it lowered.
+//! The builder of a unit's [`Documentation`] record — `curios-document`'s plain data: one record per module the unit exposes, each declaration's head printed as the author wrote it with every name it mentions resolved, and the prose attached to each — built where a command asks for it, by `document_unit`, and carried by no unit.
 //!
-//! **Built by the compilation that builds the unit, from the tables it just built.** Which modules and declarations a page shows is the export view resolution built to a fixed point, so a private declaration is absent rather than hidden and a re-export is listed as a link to the declaration it names — unless the declaration's own module has no page, the facade pattern, where the declaration is read off that module and filed under the re-exporting one, since the re-export is the only way it reaches a consumer. A referent is looked up with the visibility functions the lowering resolves a name with, over the same tables, seeded by the import scopes the lowering recorded per definition — nothing here resolves a name by a rule of its own. Nothing is read from the elaborated module either: every declaration states its signature, so the surface tree the lowering parsed is the whole of what a page prints, and a signature is printed by the printers `curios format` prints it with. Riding on the unit, the record travels wherever the unit does — the prelude image, a verdict slot, the browser bundle — so a unit is documented from its stored form without its sources.
+//! **Built from the compilation that builds the unit: the tables its lowering stored.** Which modules and declarations a page shows is the export view resolution built to a fixed point, so a private declaration is absent rather than hidden and a re-export is listed as a link to the declaration it names — unless the declaration's own module has no page, the facade pattern, where the declaration is read off that module and filed under the re-exporting one, since the re-export is the only way it reaches a consumer. A referent is looked up with the visibility functions the lowering resolves a name with, over the same tables, seeded by the import scopes the lowering recorded per definition — nothing here resolves a name by a rule of its own. Nothing is read from the elaborated module either: every declaration states its signature, so the surface tree the lowering parsed is the whole of what a page prints, and a signature is printed by the printers `curios format` prints it with. Riding on the unit, the record travels wherever the unit does — the prelude image, a verdict slot, the browser bundle — so a unit is documented from its stored form without its sources.
 //!
 //! **A library is documented for its consumers.** That is the one audience this record knows: a constructor appears only when the representation is public, a field likewise, and a test never. A program has no consumer, so nothing here documents one; which mount is documented, and with what description, is the resolver's to say.
 
@@ -30,8 +30,6 @@ const WIDTH: usize = 100;
 /// The indent a broken signature continues at — the formatter's.
 const INDENT: usize = 4;
 
-/// The interface of the unit mounted at `prefix`, read off the tables the lowering just built: `modules` are the file-backed modules discovery parsed, `table` and `public` the direct interface and the export view over the whole scope, and `imports` what each definition's `use` lines brought into scope.
-///
 /// The mounts whose declarations reach a consumer only through the documented one, each with the word a page chips onto them.
 ///
 /// **Decided here, from the prefixes this unit may name.** A root is adopted because a consumer cannot name it, this unit can, and it is not the one being documented — a fact about what this compilation mounts, not about the source the documented unit was read from. That distinction is what the prelude's split forces: the adopted root is a *different unit's* mount, so no source could claim it and no assertion against its own bases could hold.
@@ -56,8 +54,14 @@ fn chip(prefix: &Qualifier) -> Option<String> {
     }
 }
 
+/// The interface of the unit mounted at `prefix`, read off the tables its lowering built: `modules` are the file-backed modules discovery parsed, `table` and `public` the direct interface and the export view over the whole scope, and `imports` what each definition's `use` lines brought into scope.
+///
 /// Infallible, because every module it visits is one discovery loaded a moment ago: a prefix without a module in the map is a broken invariant of this stage, not a condition a caller can meet.
-// One over the lint's line, and every argument is a table the lowering just built or a fact about the scope it built them in — there is one caller, which has each of them to hand under these names, so a struct here would be a second spelling of the same eight things.
+///
+/// # Panics
+///
+/// Where `mounts` adopts a root no record of `records` documents.
+// One over the lint's line, and every argument is a table the lowering built or a fact about the scope it built them in — there is one caller, which has each of them to hand under these names, so a struct here would be a second spelling of the same eight things.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn document(
     modules: &HashMap<Qualifier, Rc<Module>>,
@@ -71,6 +75,14 @@ pub(super) fn document(
 ) -> Documentation {
     curios_profile::profile!("document");
     let adopted = adopted_mounts(mounts, prefix);
+    for (root, _) in &adopted {
+        assert!(
+            records.iter().any(|record| record.prefix == *root),
+            "'{}' adopts '{}', whose record it was not handed",
+            prefix.join(),
+            root.join()
+        );
+    }
     let mut reader = Reader {
         modules,
         table,
@@ -104,9 +116,9 @@ struct Reader<'a> {
     prefix: &'a Qualifier,
     /// The unit's own roots that no consumer may name — its internal mounts. Their declarations reach a consumer only through a `pub use` in the documented mount, so a page shows them and no page names where they were written.
     adopted: &'a [(Qualifier, Option<String>)],
-    /// The records the units already compiled carry, which is where an adopted declaration is read from.
+    /// The records of the units this one adopts a root of, which is where an adopted declaration is read from.
     ///
-    /// **An adopted root is a different unit, and a unit keeps no surface tree.** Its declarations were rendered while it was being lowered and its items were in hand; by the time this unit is lowered they exist only in the record it carried away. So a `pub use` into an adopted root is answered out of that record rather than re-derived from items nothing here can reach; re-derived, the adopted half would go missing silently, because every check of it asserts the absence of a path rather than the presence of a card.
+    /// **An adopted root is a different unit, and a unit keeps no surface tree.** Its declarations are rendered from its own source, by its own record, which is made before this one. So a `pub use` into an adopted root is answered out of that record rather than re-derived from items nothing here can reach; re-derived, the adopted half would go missing silently, because every check of it asserts the absence of a path rather than the presence of a card.
     records: &'a [&'a Documentation],
     /// What a consumer calls each declaration that no page of its own shows: its declaration site, to the path of the page that exposes it. One entry per declaration a private child or an adopted root holds and a page re-exports.
     public_names: HashMap<Qualifier, Qualifier>,
@@ -176,7 +188,7 @@ impl Reader<'_> {
         )
     }
 
-    /// Whether this bundle can render the declarations of `module`: its own, out of the items discovery parsed, or an adopted unit's, out of the record it carried.
+    /// Whether this bundle can render the declarations of `module`: its own, out of the items discovery parsed, or an adopted unit's, out of its record.
     fn has_declarations(&self, module: &Qualifier) -> bool {
         self.items_of(module).is_some() || self.adopted_page(module).is_some()
     }

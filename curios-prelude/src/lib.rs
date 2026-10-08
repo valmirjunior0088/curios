@@ -7,7 +7,10 @@
 //! Depend on *this* crate, never on `curios-prelude-archive` directly: that one hands out an image no kernel has seen, and its uncertified restoration and its own `with_prelude` are for the build script, not for anything this crate lends.
 
 use {
-    curios_core::Certification, curios_prelude_archive::restore_archives, curios_unit::Unit,
+    curios_core::Certification,
+    curios_document::Documentation,
+    curios_prelude_archive::{restore_archives, restore_documentation},
+    curios_unit::Unit,
     std::cell::LazyCell,
 };
 
@@ -37,4 +40,11 @@ pub fn with_prelude<R>(use_prelude: impl FnOnce(&[&Unit]) -> R) -> R {
         let [sys, std] = &**prelude;
         use_prelude(&[sys, std])
     })
+}
+
+/// The documentation record of each of the prelude's roots, in the fold's order: what `document --std` renders, and what a unit adopting a root's declarations reads them out of.
+///
+/// Apart from [`with_prelude`], because no unit carries a record: a compilation restores none, and a command that documents restores these and no unit for them.
+pub fn documentation() -> Vec<Documentation> {
+    restore_documentation()
 }

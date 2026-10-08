@@ -6,7 +6,7 @@ use {
     curios_utilities::RootKind,
 };
 
-/// What `/sys` is, for the record it carries. No consumer reads this page — `curios document --std` renders `/std`'s — but the record is what `/std` adopts its declarations out of, and a record states what it is about.
+/// What `/sys` is, for its record. No consumer reads this page — `curios document --std` renders `/std`'s — but the record is what `/std` adopts its declarations out of, and a record states what it is about.
 const SYS_NAME: &str = "sys";
 
 /// See [`SYS_NAME`].
@@ -14,7 +14,7 @@ const SYS_DESCRIPTION: &str = "The compiler's own root: every intrinsic type for
 
 /// The `/sys` root, supplied whole by `sys_module` — the first unit of the prelude fold, which nothing precedes.
 ///
-/// **It documents itself, and that is what makes `/std`'s pages possible.** A declaration `/std` re-exports out of `/sys` is rendered from `/sys`'s *surface tree*, which stops existing the moment `/sys` is a unit of its own — a `PreparedText` carries resolution tables and an elaborated module, never the items they were read from. So `/sys` builds a record while its own tree is in hand, and `/std` adopts declarations out of that record rather than re-deriving them from items it cannot reach.
+/// **It documents itself, and that is what makes `/std`'s pages possible.** A declaration `/std` re-exports out of `/sys` is rendered from `/sys`'s *surface tree*, which no unit keeps — a `PreparedText` carries resolution tables and a lowered module, never the items they were read from. So `/sys`'s record is made from this source, and `/std`'s adopts declarations out of it rather than re-deriving them from items it cannot reach.
 pub fn sys_source() -> RootSource {
     let mut modules = RootSource::supplied();
     modules.insert_root(

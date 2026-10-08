@@ -1,11 +1,14 @@
 use {
     curios_core::{Global, Item, Sharing, Zonked, validate_stored_identities},
+    curios_document::Documentation,
     curios_elab::{
         Context, DEFAULT_STEP_BUDGET, ErasedUnit, Erasures, Established, elaborate_and_zonk_unit,
         erase_unit, validate_lowered_universe_seeds, validate_universes,
     },
     curios_std::std_source,
-    curios_text::{PreparedText, SYNTAX, prepare_prelude, sys_source},
+    curios_text::{
+        PreparedText, RootSource, SYNTAX, UnitSource, document_unit, prepare_prelude, sys_source,
+    },
     curios_unit::{Record, Uncertified, framed},
     curios_utilities::{Report, Source, digest},
     std::{
@@ -35,6 +38,10 @@ fn build() {
     let std_text = lower("std", &std_modules, &[&sys_text]);
     validate_syntax_targets(&[sys_text.core(), std_text.core()]);
 
+    // The records `document --std` renders, made while each root's lowered tables are in hand and filed as an image of their own: nothing that compiles reads one, so neither unit holds one. `/sys` first, because `/std` adopts its intrinsic declarations out of that record.
+    let sys_record = documented("sys", &sys_modules, &sys_text, &[], &[]);
+    let std_record = documented("std", &std_modules, &std_text, &[&sys_text], &[&sys_record]);
+
     // Each file the lowering read, rather than the directory: the read set is closed — a module joins `/std` only through a `mod` in a header that is itself a read, so the edit that adds a file changes a file already watched, and the rerun then records the new one. Watching the directory would also rerun this build for anything else written under it, and a question asked about a `/std` module writes its store's memo there.
     for (path, _) in std_modules.reads() {
         println!("cargo:rerun-if-changed={}", path.display());
@@ -58,14 +65,11 @@ fn build() {
     // Each image carries the record a slot carries: what the root was compiled from, by the read log the lowering kept, and what came before it. `/sys` is supplied whole and reads nothing; `/std` reads its tree and follows `/sys`, whose image is what its record's one predecessor digests.
     let sys_digest = write_image(&out, "sys", &sys, sys_modules.reads(), Vec::new());
     write_image(&out, "std", &std, std_modules.reads(), vec![sys_digest]);
+    write_documentation(&out, &vec![sys_record, std_record]);
 }
 
 /// Resolve and lower one prelude root against the roots already lowered, with every invariant the lowered form is trusted to satisfy asserted here.
-fn lower(
-    root: &str,
-    modules: &curios_text::RootSource,
-    predecessors: &[&PreparedText],
-) -> PreparedText {
+fn lower(root: &str, modules: &RootSource, predecessors: &[&PreparedText]) -> PreparedText {
     let prepared = prepare_prelude(modules, predecessors, &SYNTAX)
         .unwrap_or_else(|error| panic!("/{root} failed to lower: {}", error.format()));
     validate_lowered_universe_seeds(prepared.core(), prepared.minted()).unwrap_or_else(|error| {
@@ -73,6 +77,19 @@ fn lower(
     });
 
     prepared
+}
+
+/// One prelude root's documentation record, from the source it was read from and the unit it lowered to, over the records of the roots before it.
+fn documented(
+    root: &str,
+    modules: &RootSource,
+    text: &PreparedText,
+    predecessors: &[&PreparedText],
+    records: &[&Documentation],
+) -> Documentation {
+    document_unit(&UnitSource::mounted(modules), text, predecessors, records)
+        .unwrap_or_else(|error| panic!("/{root} failed to document: {}", error.format()))
+        .unwrap_or_else(|| panic!("/{root} marks no mount as documented"))
 }
 
 /// Elaborate, validate, erase and hash-cons one lowered root into the unit its image is, against what the roots before it established.
@@ -189,6 +206,22 @@ fn write_image(
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
 
     record.unit
+}
+
+/// Serialize the roots' documentation records, in the fold's order, to `documentation.rkyv`, twice, refusing a serializer that does not agree with itself.
+///
+/// Unframed, where a root's image is framed as a store slot is: a record is no unit, nothing compiles against one, and no slot holds one.
+fn write_documentation(directory: &Path, records: &Vec<Documentation>) {
+    let first = curios_archive::to_bytes(records)
+        .unwrap_or_else(|error| panic!("documentation serialization failed: {error}"));
+    let second = curios_archive::to_bytes(records)
+        .unwrap_or_else(|error| panic!("documentation repeat serialization failed: {error}"));
+    assert_eq!(&*first, &*second, "the documentation is not deterministic");
+
+    let path = directory.join("documentation.rkyv");
+    println!("documentation archived to {} bytes", first.len());
+    fs::write(&path, &first)
+        .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
 }
 
 /// Check every registered syntax target against the lowered prelude, over the **union** of its roots.

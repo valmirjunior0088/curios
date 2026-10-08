@@ -20,6 +20,7 @@ profile = [
 
 [dependencies]
 curios-profile = { workspace = true }
+curios-document = { workspace = true, features = ["archive"] }
 curios-utilities = { workspace = true, features = ["archive"] }
 curios-core = { workspace = true, features = ["archive"] }
 curios-text = { workspace = true, features = ["archive"] }
@@ -35,6 +36,7 @@ curios-archive = { workspace = true, features = ["enabled"] }
 # this crate's README, "Why this is not `curios-prelude`".
 [build-dependencies]
 curios-abi = { workspace = true, features = ["archive"] }
+curios-document = { workspace = true, features = ["archive"] }
 curios-utilities = { workspace = true, features = ["archive"] }
 curios-core = { workspace = true, features = ["archive"] }
 curios-elab = { workspace = true, features = ["archive"] }

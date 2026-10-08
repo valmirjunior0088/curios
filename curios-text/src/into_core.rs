@@ -7,7 +7,8 @@
 //! 3. **Lowering** (`process_items`): each item's names resolved against those interfaces, its sugar undone and its matches compiled (`match_compile`), then the entry's final term.
 //! 4. **Witness names** (`witness`): each witness given the name its signature spells, which is read through the unit's definitions and so only once every item is lowered.
 //! 5. **Audit** (`audit`, `lint`): what the public interface exposes, and the declarations nothing reaches.
-//! 6. **Documentation** (`document`): the unit's documentation record, where it documents a mount.
+//!
+//! A unit's documentation record is no pass of these: [`document_unit`] builds it where a command asks for one, from the tables this lowering stored and the surface tree its sources parse to.
 
 mod audit;
 use audit::*;
@@ -274,8 +275,6 @@ pub struct PreparedText {
     broken: Vec<BrokenItem>,
     /// Where each source declaration this unit was lowered from lies: what a position in one of its terms is resolved against where a report is made — see `curios_core::Anchors`.
     anchors: curios_core::Anchors,
-    /// This unit's interface for its consumers, when its resolver marked a mount as documented — built here, as the last thing the lowering does, so it travels with the unit. See `document`.
-    documentation: Option<Documentation>,
 }
 
 /// An item the parser could not read, as the lowering carries it: the parser's report, and the name its head declared, registered so a reference to it resolves to this name — which the elaborator withholds, as it withholds every dependent of a refusal — rather than reporting as unbound. `None` where the head did not parse as far as a name, whose references then report as the unbound names they are.
@@ -342,11 +341,6 @@ impl PreparedText {
 
     pub fn core(&self) -> &curios_core::Module {
         &self.core
-    }
-
-    /// This unit's interface for its consumers, or `None` for a unit whose resolver marked nothing as documented — an entry program, or a prelude mount nobody reaches for by name.
-    pub fn documentation(&self) -> Option<&Documentation> {
-        self.documentation.as_ref()
     }
 
     /// The `foreign` rows this unit declares.
@@ -1885,26 +1879,6 @@ fn into_core_unit_within(
     // As they are written. No item is moved for another's sake: elaboration asks for each declaration when it is read, wherever it sits, refuses the ones that need one another by name, and stores the module in an order of its own (`curios_elab`'s `Demand`, `curios_core::Module::ordered`).
     let items = flat_items.into_iter().map(FlatItem::into_core).collect();
 
-    // Read last, when the export view is final and every definition's import scope has been recorded, and before the tables below are taken out of their scoped views.
-    let documentation = source.documented().map(|(prefix, description)| {
-        // The predecessors' own records, for the declarations this unit adopts out of a root a consumer cannot name. A unit keeps no surface tree, so the record it carried away is the only place its declarations survive — see `document`'s `records`.
-        let records = predecessors
-            .iter()
-            .filter_map(|unit| unit.documentation())
-            .collect::<Vec<_>>();
-
-        document(
-            &modules,
-            &table,
-            &public,
-            &imports.borrow(),
-            &prefix,
-            &visible_mounts,
-            &records,
-            description,
-        )
-    });
-
     let paths = writable_paths(&public, &table, &reach, &own);
     curios_profile::sample!("into_core_unit::imports", imports.borrow().entries.len());
     let unit = PreparedText {
@@ -1941,7 +1915,6 @@ fn into_core_unit_within(
         credited: BTreeSet::new(),
         reached: reached.into_inner(),
         anchors: anchoring.into_anchors(),
-        documentation,
     };
 
     Ok((unit, entry))
@@ -1963,6 +1936,65 @@ pub fn into_core(
         unit.minted,
         unit.foreigns,
     ))
+}
+
+/// The interface of the unit `unit` was lowered into from `source`, for its consumers, or `None` where the source marks no mount as documented: an entry program, which has no consumer.
+///
+/// **Built where a command asks for it, and carried by no unit.** Two commands read a record, so no compilation builds one and no image holds one. What a page shows is still read off the compilation that built the library: the direct interface, the export view and each definition's import scope are the ones `unit`'s lowering stored, and the surface tree is discovery's, read again through `source`, which parses a text once for each thread, so a command that lowered the unit a moment ago parses nothing twice.
+///
+/// `predecessors` are the units `unit` was lowered against, in that order. `records` are the records of the ones this unit adopts a root of — a root a consumer cannot name and this unit can, whose declarations reach a consumer only through it. An adopted root is another unit, read from another source, so its record is made by this door before its adopter's is.
+///
+/// # Panics
+///
+/// Where the unit adopts a root no record of `records` documents: its declarations would be missing from every page that exposes them, with nothing said.
+pub fn document_unit(
+    source: &UnitSource<'_>,
+    unit: &PreparedText,
+    predecessors: &[&PreparedText],
+    records: &[&Documentation],
+) -> Result<Option<Documentation>, Error> {
+    let Some((prefix, description)) = source.documented() else {
+        return Ok(None);
+    };
+
+    let predecessor_tables = predecessors
+        .iter()
+        .map(|earlier| &earlier.table)
+        .collect::<Vec<_>>();
+    let predecessor_mounts = predecessors
+        .iter()
+        .flat_map(|earlier| earlier.mounts.iter().cloned())
+        .collect::<Vec<_>>();
+    // The surface tree alone is taken of this: the tables are the ones the lowering stored, which the export view's fixed point wrote into after discovery had built them.
+    let Resolved { modules, .. } = Resolved::of(
+        source,
+        &predecessor_tables,
+        &predecessor_mounts,
+        &unit.mounts,
+    )?;
+
+    // The unit's own tables as the nearest base, where the lowering held them as the layer it wrote: every read answers alike, since mount sets are disjoint.
+    let tables = predecessor_tables
+        .iter()
+        .copied()
+        .chain([&unit.table])
+        .collect::<Vec<_>>();
+    let exports = predecessors
+        .iter()
+        .map(|earlier| &earlier.public)
+        .chain([&unit.public])
+        .collect::<Vec<_>>();
+
+    Ok(Some(document(
+        &modules,
+        &Scoped::over(&tables),
+        &Scoped::over(&exports),
+        &unit.spellings.imports,
+        &prefix,
+        &source.visible_mounts(predecessors, &unit.mounts),
+        records,
+        description,
+    )))
 }
 
 /// Resolve and lower one fixed root once for build-time archival, against the fixed roots already lowered.

@@ -19,6 +19,7 @@ curios-prelude-archive = { workspace = true }
 # `curios-unit`'s unit.
 curios-archive = { workspace = true, features = ["enabled"] }
 curios-core = { workspace = true, features = ["archive"] }
+curios-document = { workspace = true }
 curios-unit = { workspace = true }
 
 # The certifying half of the prelude's build: `curios-prelude-archive`

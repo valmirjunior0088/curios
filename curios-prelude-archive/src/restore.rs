@@ -1,6 +1,7 @@
 //! One-time validation and per-thread restoration of the generated images: two units, `/sys` then `/std`, each framed by the build script as a store slot frames one — a record of what the root was compiled from, ahead of the [`Uncertified`] unit, since no certifier has walked it yet.
 
 use {
+    curios_document::Documentation,
     curios_unit::{ArchivedRecord, ArchivedUncertified, Record, Stored, Uncertified, segments},
     std::{cell::LazyCell, sync::OnceLock},
 };
@@ -10,6 +11,9 @@ use {
 // Two images rather than one paired file, because each is framed as a store slot is: a pair would be a second framing beside the one `curios-unit` defines, and the fold that consumes these wants them separately anyway.
 const SYS_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/sys.rkyv"));
 const STD_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/std.rkyv"));
+
+/// The documentation record of each root, in the fold's order: an image of its own, which nothing that compiles reads.
+const DOCUMENTATION_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/documentation.rkyv"));
 
 /// The prelude's roots in dependency order, as the build script folded them: `/sys` is lowered against nothing and `/std` against `/sys`, so restoring them in any other order would hand a successor a scope its own names were never resolved in.
 const ROOTS: [(&str, &[u8]); 2] = [("sys", SYS_BYTES), ("std", STD_BYTES)];
@@ -77,6 +81,15 @@ pub fn restore_archives() -> [Stored; 2] {
         units.next().expect("the prelude has two roots"),
         units.next().expect("the prelude has two roots"),
     ]
+}
+
+/// The documentation record of each root, `/sys`'s then `/std`'s, restored for the caller: what a command that documents reads, and no compilation.
+///
+/// Restored on each call and kept by nothing here, since a process documents once. Public for `curios-prelude`, which hands the records out beside the prelude it certifies.
+pub fn restore_documentation() -> Vec<Documentation> {
+    curios_profile::profile!("restore_documentation");
+    curios_archive::from_bytes::<Vec<Documentation>>(DOCUMENTATION_BYTES)
+        .unwrap_or_else(|error| panic!("the prelude's documentation failed to restore: {error}"))
 }
 
 /// Borrow this thread's reusable restored prelude, uncertified, in dependency order — for the walk that certifies it and for this crate's own tests. A compilation borrows the certified prelude `curios-prelude` lends instead.

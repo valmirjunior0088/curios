@@ -119,7 +119,7 @@ pub(crate) fn payload_of(
     compiled
 }
 
-/// The interface of the last of `units` — a package's library, compiled against everything before it — read off the compilation that builds it, and filed into `store` when there is one.
+/// The interface of the last of `units` — a package's library, compiled against everything before it — made from the compilation that builds it, whose units are filed into `store` when there is one.
 ///
 /// **A build, where the `wonder` engine's reading of the same record is a question.** A library documented is a library compiled, and what was compiled is worth what `run` and `test` keep of theirs; the engine's `documentation` files the units a build would have and writes no pages, which is as far as a question goes. The compilation runs to completion first, the kernel included, so a library that does not check is not documented and reports what stopped it exactly as `run` would.
 pub(crate) fn documentation_of(
@@ -127,20 +127,8 @@ pub(crate) fn documentation_of(
     units: &[RootSource],
     store: Option<&Verdicts>,
 ) -> Result<Documentation, CompileError> {
-    let documented = Fold::new(budget, units, store.map(|store| store as &dyn Cache)).units(
-        |_| {},
-        |_, produced| {
-            produced
-                .last()
-                .and_then(|unit| unit.text().documentation().cloned())
-                .ok_or_else(|| {
-                    CompileError::failure(
-                        "nothing to document: the scope's last unit carries no interface"
-                            .to_string(),
-                    )
-                })
-        },
-    );
+    let documented =
+        Fold::new(budget, units, store.map(|store| store as &dyn Cache)).documentation(|_| {});
 
     if let Some(refusal) = store.and_then(Verdicts::refused) {
         fact(

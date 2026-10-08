@@ -26,7 +26,7 @@ use {
 /// Lookup is longest-match over the claimed prefixes, exactly as [`Mount::owning`] is everywhere else, and the mounts of one source are pairwise disjoint because a unit claims each of its prefixes once.
 pub struct RootSource {
     bases: Vec<(Mount, Base)>,
-    /// The mount whose interface the unit documents, with its description — a package's library with the manifest's sentence, the standard library with a constant. At most one, so a unit file carries one record; `None` for every other unit, since a program has no consumer and a prelude mount nobody names has no page. See [`RootSource::documented`].
+    /// The mount whose interface the unit documents, with its description — a package's library with the manifest's sentence, the standard library with a constant. At most one, so a unit has one record; `None` for every other unit, since a program has no consumer and a prelude mount nobody names has no page. See [`RootSource::documented`].
     documented: Option<(Qualifier, Option<String>)>,
     /// The prefixes this unit declared a dependency on, and so the only ones its names may resolve into — `None` when nothing declared any, which is every caller with no manifest to read one out of. See [`RootSource::declaring`].
     declares: Option<Vec<Qualifier>>,
@@ -134,7 +134,7 @@ impl RootSource {
         }
     }
 
-    /// This source with the mount `prefix` marked as the one the unit documents, described by `description` — what makes the lowering build the unit's documentation record and carry it on the unit. The prefix must be one this source claims.
+    /// This source with the mount `prefix` marked as the one the unit documents, described by `description` — the mount `document_unit` makes the unit's documentation record of. The prefix must be one this source claims.
     pub fn documented(mut self, prefix: &str, description: Option<&str>) -> Self {
         let prefix = Qualifier::from([prefix]);
         assert!(

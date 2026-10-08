@@ -12,8 +12,9 @@ use {
         declared_test_paths, examine_entrypoint, recheck, recheck_measured, typecheck_entrypoint,
     },
     curios_abi::ForeignStore,
+    curios_document::Documentation,
     curios_prelude::with_prelude,
-    curios_text::{RootSource, SYNTAX, UnitSource},
+    curios_text::{RootSource, SYNTAX, UnitSource, document_unit},
     curios_unit::{Predecessors, Unit},
     curios_utilities::Qualifier,
 };
@@ -126,7 +127,7 @@ impl<'a> Fold<'a> {
     where
         P: FnMut(Progress<'_>),
     {
-        self.scoped(progress, |_, _, _| Ok(()))
+        self.scoped(progress, |_, _, _, _| Ok(()))
     }
 
     /// The declaration-ordered test paths of the last unit — what `wonder tests` answers for a library. The same fold [`Fold::check_units`] runs, read for its `Module::tests` instead of its verdicts; nothing executes.
@@ -134,7 +135,7 @@ impl<'a> Fold<'a> {
     where
         P: FnMut(Progress<'_>),
     {
-        self.scoped(progress, |_, produced, _| {
+        self.scoped(progress, |_, _, produced, _| {
             Ok(produced
                 .last()
                 .map(|unit| declared_test_paths(unit.core()))
@@ -151,7 +152,48 @@ impl<'a> Fold<'a> {
     where
         P: FnMut(Progress<'_>),
     {
-        self.scoped(progress, |prelude, produced, _| then(prelude, &produced))
+        self.scoped(progress, |prelude, _, produced, _| then(prelude, &produced))
+    }
+
+    /// The interface of the last unit — a package's library, compiled against everything before it — for its consumers. The same fold [`Fold::check_units`] runs, the kernel included, so a library that does not check is not documented and reports what stopped it as `run` would. The record is then made from the unit's stored tables and its sources ([`document_unit`]), whether the unit was compiled now or reused from the store: no unit carries one.
+    ///
+    /// **The prelude's records are the ones handed over.** A unit adopts a root no consumer can name, and the prelude holds the only one: `/sys`, which a package named `std` adopts as the archived `/std` does.
+    pub fn documentation<P>(self, progress: P) -> Result<Documentation, CompileError>
+    where
+        P: FnMut(Progress<'_>),
+    {
+        self.scoped(progress, |roots, sources, produced, _| {
+            let undocumented = || {
+                CompileError::failure(
+                    "nothing to document: the scope's last unit carries no interface",
+                )
+            };
+            let ((source, _), (unit, earlier)) = sources
+                .last()
+                .zip(produced.split_last())
+                .ok_or_else(undocumented)?;
+            let predecessors = roots
+                .iter()
+                .copied()
+                .chain(earlier)
+                .map(Unit::text)
+                .collect::<Vec<_>>();
+            // Of the roots in scope alone: a root this fold withheld is the unit being documented.
+            let records = prelude_documentation();
+            let records = records
+                .iter()
+                .filter(|record| {
+                    roots
+                        .iter()
+                        .flat_map(|root| root.mounts())
+                        .any(|mount| mount.prefix == record.prefix)
+                })
+                .collect::<Vec<_>>();
+
+            document_unit(source, unit.text(), &predecessors, &records)
+                .map_err(|error| CompileError::Failure(vec![error.report()]))?
+                .ok_or_else(undocumented)
+        })
     }
 
     /// The fold with an entry on top: the prelude, the units, then `entry` over all of them, bracketed by the progress events the entry step cannot announce for itself.
@@ -160,7 +202,7 @@ impl<'a> Fold<'a> {
         P: FnMut(Progress<'_>),
         E: FnOnce(Predecessors<'_>) -> Result<T, CompileError>,
     {
-        self.scoped(progress, |prelude, produced, progress| {
+        self.scoped(progress, |prelude, _, produced, progress| {
             let predecessors = prelude
                 .iter()
                 .copied()
@@ -176,11 +218,16 @@ impl<'a> Fold<'a> {
         })
     }
 
-    /// The standard predecessors, assembled once: the fixed prelude's roots, then the units compiled in order against them — what every method here compiles against — handed to `then` as the prelude, the units produced, and the progress reporter for whatever follows. The one spelling of them this type exists to write once; the methods differ only in what they do with it.
+    /// The standard predecessors, assembled once: the fixed prelude's roots, then the units compiled in order against them — what every method here compiles against — handed to `then` as the prelude, each unit's source as it was compiled, the units produced, and the progress reporter for whatever follows. The one spelling of them this type exists to write once; the methods differ only in what they do with it.
     fn scoped<P, T>(
         self,
         mut progress: P,
-        then: impl FnOnce(&[&Unit], Vec<Unit>, &mut P) -> Result<T, CompileError>,
+        then: impl FnOnce(
+            &[&Unit],
+            &[(UnitSource<'_>, Option<&Unit>)],
+            Vec<Unit>,
+            &mut P,
+        ) -> Result<T, CompileError>,
     ) -> Result<T, CompileError>
     where
         P: FnMut(Progress<'_>),
@@ -222,7 +269,7 @@ impl<'a> Fold<'a> {
                 &mut progress,
             )?;
 
-            then(&roots, produced, &mut progress)
+            then(&roots, &sources, produced, &mut progress)
         })
     }
 }
@@ -252,6 +299,11 @@ fn granted(prelude: &[&Unit], withheld: usize, unit: &RootSource) -> Vec<Qualifi
     prefixes.extend(source.declared().unwrap_or(&[]).iter().cloned());
 
     prefixes
+}
+
+/// The documentation record of each of the prelude's roots, in the fold's order — off the image this compiler was built with: no sources, no store, nothing compiled and no unit restored.
+pub fn prelude_documentation() -> Vec<Documentation> {
+    curios_prelude::documentation()
 }
 
 /// Lower and type-check `entrypoint` against the fixed prelude, stopping short of the kernel. See [`typecheck_entrypoint`].
