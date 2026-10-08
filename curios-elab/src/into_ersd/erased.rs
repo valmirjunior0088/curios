@@ -7,7 +7,7 @@
 //! **A scope is the units' own, borrowed.** Erasing an item reads another's erased form for one thing, how its name is bound — to nothing at run time, to a constant, to a value or to a function of some arity and interface — and reads it where the name is first used.
 
 use {
-    super::{Binding, Environment, UniverseErased},
+    super::{Binding, Environment},
     curios_core::{Free, Global, Item, Module},
     curios_utilities::Span,
     std::collections::BTreeMap,
@@ -187,7 +187,7 @@ impl ErasedUnit {
 
 /// The units in scope, as what erasing another reads: the Core each was erased from, and its items' erased forms.
 ///
-/// The two halves describe the same units, in dependency order, and pairing them in one value is the point: as two parameters nothing would say they correspond. The Core is re-seeded so the unit's own re-derived types reduce through it; the erased forms answer how each name is bound.
+/// The two halves describe the same units, in dependency order, and pairing them in one value is the point: as two parameters nothing would say they correspond. The Core is read through, each declaration out of its universes when it is first read (`Projected`), so the types the unit's erasure reads reduce through it; the erased forms answer how each name is bound.
 #[derive(Clone, Copy, Default)]
 pub struct Erasures<'a> {
     /// Universes are taken as already validated — `curios-prelude` validates the archive as it restores, which is where untrusted bytes become a `Module`, and the value is immutable from then on.
@@ -212,11 +212,9 @@ impl<'a> Erasures<'a> {
         Self { cores, erased }
     }
 
-    pub(super) fn projected_cores(&self) -> Vec<Module> {
+    /// The Core each unit was erased from, in dependency order.
+    pub(super) fn cores(&self) -> &'a [&'a Module] {
         self.cores
-            .iter()
-            .map(|core| UniverseErased::<Module>::project_validated(core).into_inner())
-            .collect()
     }
 
     /// The units' erased forms, in dependency order.

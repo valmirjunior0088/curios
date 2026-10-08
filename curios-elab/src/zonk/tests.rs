@@ -10,7 +10,7 @@ use {
     std::sync::Arc,
 };
 
-fn context() -> Context {
+fn context() -> Context<'static> {
     Context::with_default_budget(SYNTAX)
 }
 

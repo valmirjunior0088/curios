@@ -4,13 +4,13 @@
 
 use {
     super::{
-        Binding, Bound, Environment, ErasedItem, ErasedUnit, Erasures, Error, Export, InductDecl,
-        Intrinsic, Let, Retyping, Subterm, Telescope, Term, emitted, intrinsic, link,
+        Binding, Bound, Environment, ErasedItem, ErasedUnit, Erasures, Error, Export, Intrinsic,
+        Let, Projected, Retyping, Subterm, Telescope, Term, emitted, intrinsic, link,
     },
     crate::{validate_entry_universes, validate_universes},
     curios_core::{
-        Certification, ConceptDecl, Definition, Entrypoint, Free, Global, InductParam, Item,
-        Module, Operand, Program, StructDecl, Zonked, foreign_operands, project_erased_universes,
+        Certification, Entrypoint, Free, Global, Item, Module, Operand, Program, Zonked,
+        foreign_operands, project_erased_universes,
     },
     curios_utilities::{Span, SyntaxRegistry, grown},
     std::{
@@ -51,139 +51,6 @@ pub(super) struct Lowering<'s> {
     pub(super) types: HashMap<Term, Term>,
     /// The span of each computed recursive member's initializer, by the identity it was minted as. The erased verifier refuses a member by that identity after the module holding it is gone, so the frame for the refusal is kept here rather than in the representation, whose nodes are the stored-unit format and carry no spans.
     pub(super) spans: BTreeMap<curios_ersd::ValueId, Span>,
-}
-
-pub(super) struct UniverseErased<T>(T);
-
-impl<T> UniverseErased<T> {
-    pub(super) fn into_inner(self) -> T {
-        self.0
-    }
-}
-
-impl UniverseErased<Zonked<Module>> {
-    /// The composed evidence for the unit being erased: the input arrived zonked, and this projection removed its universe data — each layer justifying one family of impossible states in the walk below, no `Metavar` and no `Instance`. The outer layer claims the rewrite preserves the inner one, which `Zonked::map` re-validates in debug builds.
-    pub(super) fn project(module: &Zonked<Module>) -> Result<Self, Error> {
-        validate_universes(module.as_module())?;
-        Ok(Self(module.clone().map(|module| project_module(&module))))
-    }
-}
-
-impl UniverseErased<Module> {
-    /// Project a module whose universes were already validated by the boundary that produced it, skipping the check rather than repeating it.
-    ///
-    /// The archived prelude is the case this exists for: `curios-prelude` validates it as it restores, which is the point where untrusted bytes become a `Module`, and the value is immutable from then on. Re-validating at every use would walk the whole standard library a second time per compilation — inside the erasure context's step budget, at that — to re-derive an answer the restore already has.
-    pub(super) fn project_validated(module: &Module) -> Self {
-        Self(project_module(module))
-    }
-}
-
-fn project_definition(definition: &Definition) -> Definition {
-    Definition {
-        name: definition.name,
-        kind: definition.kind.clone(),
-        universe_context: Default::default(),
-        island: definition.island,
-        // Carried as every field is, and read by nothing below: the erased functions' termination flags are marked from the certifier's record where the sealed program meets it (see `curios_ersd::Function::total`), never from this stamp.
-        totality: definition.totality,
-        variances: Vec::new(),
-        type_: project_erased_universes(&definition.type_),
-        body: project_erased_universes(&definition.body),
-    }
-}
-
-/// Build the representation sealed by [`UniverseErased<Module>`]. Universe arguments have no runtime identity; projecting them once also prevents reduction from repeatedly specializing polymorphic Core bodies while lowering them.
-fn project_module(module: &Module) -> Module {
-    Module {
-        items: module
-            .items
-            .iter()
-            .map(|item| match item {
-                Item::Let(definition) => Item::Let(project_definition(definition)),
-                // Projected in place. Opening the group and re-closing it rebuilds every node twice over and discards every memoized derivation on the way, where the rewrite itself is uniform under the group's own binders and needs neither.
-                Item::Rec(rec) => Item::Rec(rec.projected()),
-            })
-            .collect(),
-        mounts: module.mounts.clone(),
-        induct_decls: module
-            .induct_decls
-            .iter()
-            .map(|(name, declaration)| {
-                (
-                    *name,
-                    InductDecl {
-                        universe_context: Default::default(),
-                        arity: project_erased_universes(&declaration.arity),
-                        constructors: declaration
-                            .constructors
-                            .iter()
-                            .map(|(tag, constructor)| {
-                                (
-                                    tag.clone(),
-                                    InductParam {
-                                        telescope: project_erased_universes(&constructor.telescope),
-                                    },
-                                )
-                            })
-                            .collect(),
-                        result_sort: project_erased_universes(&declaration.result_sort),
-                        module: declaration.module,
-                        rep_public: declaration.rep_public,
-                        // Polarity is elaboration-only metadata, projected out here alongside the universe context.
-                        polarities: Vec::new(),
-                        variances: Vec::new(),
-                    },
-                )
-            })
-            .collect(),
-        struct_decls: module
-            .struct_decls
-            .iter()
-            .map(|(name, declaration)| {
-                (
-                    *name,
-                    StructDecl {
-                        universe_context: Default::default(),
-                        arity: project_erased_universes(&declaration.arity),
-                        result_sort: project_erased_universes(&declaration.result_sort),
-                        module: declaration.module,
-                        rep_public: declaration.rep_public,
-                        // Polarity is elaboration-only metadata, projected out here alongside the universe context.
-                        polarities: Vec::new(),
-                        variances: Vec::new(),
-                    },
-                )
-            })
-            .collect(),
-        concepts: module
-            .concepts
-            .iter()
-            .map(|(name, concept)| {
-                (
-                    *name,
-                    ConceptDecl {
-                        universe_context: Default::default(),
-                        params: project_erased_universes(&concept.params),
-                        fields: concept.fields.clone(),
-                        supers: concept.supers.clone(),
-                    },
-                )
-            })
-            .collect(),
-        witnesses: module.witnesses.clone(),
-        tests: module.tests.clone(),
-    }
-}
-
-/// Seed the erasure context's registries with `module`'s declarations — the re-derived types every item consults — for each scope unit and then the unit being erased.
-fn seed_registries(context: &mut Retyping, module: &Module) -> Result<(), Error> {
-    for (name, induct_decl) in &module.induct_decls {
-        context.register_induct(name, induct_decl.clone())?;
-    }
-    for (name, struct_decl) in &module.struct_decls {
-        context.register_struct(name, struct_decl.clone())?;
-    }
-    Ok(())
 }
 
 /// Erase the entrypoint body into the entry block of a fragment of its own — [`erase_program`]'s tail. The program's own body owns what it mints, the same way an item owns what its body mints: the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from. The verifier is the rejection point for the recursion classes the language does not admit — an evaluation cycle, an initializer that performs an effect — and hands those back as the refusal; a malformed fragment is an erasure fault, which the verifier panics on rather than returning here.
@@ -456,7 +323,7 @@ impl<'s> Lowering<'s> {
             | Subterm::InductType(_)
             | Subterm::StructType(_) => Ok(Outcome::Emitted(self.unit())),
             Subterm::Instance(_) => {
-                unreachable!("Instance survived the UniverseErased<Module> projection")
+                unreachable!("an instance survived the projection out of universes")
             }
             Subterm::Var(var) => {
                 let name = var.unwrap();
@@ -562,7 +429,7 @@ impl ErasedProgram {
 
 /// Erase one unit's items, each into a fragment of its own, over what its scope erased to.
 ///
-/// The reader erasure reads through is its own, made here on `budget` and handed in by no caller (`Retyping`). It is seeded with the scope's definitions and the unit's own, so every re-derived type reduces through them, and the items erase in the order the module stores them, every item after the items it reaches — so the erased form of every name an item uses is in hand when it is asked for.
+/// The reader erasure reads through is its own, made here on `budget` over the unit and its scope out of their universes (`Retyping`, `Projected`) and handed in by no caller. Nothing is seeded: a declaration is projected when an item's erasure first reads it or when it is erased, so a unit pays for what its items read. The items erase in the order the module stores them, every item after the items it reaches — so the erased form of every name an item uses is in hand when it is asked for.
 ///
 /// **A unit and a program are erased by one walk, and only a program is linked.** The entry is not a unit's to carry: a program is its module and the term it closes with ([`Program`]), so [`erase_program`] runs this same walk, erases the entry at the type it states, which [`Zonked`] holds, and links what the entry reaches.
 pub fn erase_unit(
@@ -571,19 +438,12 @@ pub fn erase_unit(
     scope: Erasures<'_>,
     module: &Zonked<Module>,
 ) -> Result<ErasedUnit, Error> {
-    erase_unit_in(&mut Retyping::new(budget, syntax), scope, module)
-}
-
-/// [`erase_unit`] through a reader its caller holds.
-pub(crate) fn erase_unit_in(
-    context: &mut Retyping,
-    scope: Erasures<'_>,
-    module: &Zonked<Module>,
-) -> Result<ErasedUnit, Error> {
     curios_profile::profile!("erase_unit");
     grown(|| {
-        let module = seed(context, scope, module)?;
-        erase_items(context, scope, &module, |_| None)
+        let module = module.as_module();
+        let view = projected(scope, module)?;
+        let context = &mut Retyping::over(budget, syntax, &view);
+        erase_items(context, &view, scope, module, |_| None)
     })
 }
 
@@ -599,10 +459,11 @@ pub fn erase_unit_over(
     redone: &dyn Fn(&Global) -> bool,
 ) -> Result<ErasedUnit, Error> {
     curios_profile::profile!("erase_unit");
-    let context = &mut Retyping::new(budget, syntax);
     grown(|| {
-        let module = seed(context, scope, module)?;
-        erase_items(context, scope, &module, |item| {
+        let module = module.as_module();
+        let view = projected(scope, module)?;
+        let context = &mut Retyping::over(budget, syntax, &view);
+        erase_items(context, &view, scope, module, |item| {
             let names = item.declared_names();
             match names.iter().any(|name| redone(name)) {
                 true => None,
@@ -619,21 +480,13 @@ pub fn erase_program(
     scope: Erasures<'_>,
     program: &Zonked<Program>,
 ) -> Result<ErasedProgram, Error> {
-    erase_program_in(&mut Retyping::new(budget, syntax), scope, program)
-}
-
-/// [`erase_program`] through a reader its caller holds.
-pub(crate) fn erase_program_in(
-    context: &mut Retyping,
-    scope: Erasures<'_>,
-    program: &Zonked<Program>,
-) -> Result<ErasedProgram, Error> {
     curios_profile::profile!("erase_unit");
     grown(|| {
+        let module = &program.as_program().module;
         let (body, type_) = program.entry();
         // The entry's universes are held to its module's schemes before projection erases them.
         validate_entry_universes(
-            program.module().as_module(),
+            module,
             &Entrypoint {
                 body: body.clone(),
                 type_: Some(type_.clone()),
@@ -644,8 +497,9 @@ pub(crate) fn erase_program_in(
             project_erased_universes(type_),
         );
 
-        let module = seed(context, scope, &program.module())?;
-        let own = erase_items(context, scope, &module, |_| None)?;
+        let view = projected(scope, module)?;
+        let context = &mut Retyping::over(budget, syntax, &view);
+        let own = erase_items(context, &view, scope, module, |_| None)?;
         let entry = {
             let externals = |name: &Global| own.find(name).or_else(|| scope.find(name));
             seal_entry(Lowering::over(&externals), context, &body, &type_)?
@@ -655,79 +509,31 @@ pub(crate) fn erase_program_in(
     })
 }
 
-/// Seed the erasure context with what every item's re-derived types reduce through — the scope's registries and definitions, then the unit's own — and hand back the unit projected out of its universes.
-fn seed(
-    context: &mut Retyping,
-    scope: Erasures<'_>,
-    module: &Zonked<Module>,
-) -> Result<Module, Error> {
-    let predecessors = scope.projected_cores();
-    let module = UniverseErased::<Zonked<Module>>::project(module)?
-        .into_inner()
-        .into_module();
-    // Every half: `module` declares only its own, so each scope unit's nominal entries reach the context from that unit itself. They are disjoint by mount — no unit can reuse another's name — which is why `register_*` rejecting a duplicate key is not a constraint here.
-    for unit in &predecessors {
-        seed_registries(context, unit)?;
-    }
-    seed_registries(context, &module)?;
+/// `module` and its scope as erasure reads them, out of their universes, with `module`'s universes held to its schemes first: what the projection erases is validated before it goes. The scope's were validated where its units were stored, which is where untrusted bytes become a module.
+pub(super) fn projected<'a>(
+    scope: Erasures<'a>,
+    module: &'a Module,
+) -> Result<Projected<'a>, Error> {
+    validate_universes(module)?;
 
-    // Every definition, the unit's own with the scope's: an item is erased in a fragment of its own, and which of the unit's items are erased at all is the caller's to say, so none of them is defined by the erasure of the one before it.
-    for item in predecessors
-        .iter()
-        .flat_map(|unit| &unit.items)
-        .chain(&module.items)
-    {
-        define(context, item);
-    }
-
-    Ok(module)
+    Ok(Projected::over(scope.cores(), module))
 }
 
-/// Define `item`'s names in the Core context: a definition at its type and body, a group's members each at its type and its selection.
-fn define(context: &mut Retyping, item: &Item) {
-    match item {
-        Item::Let(definition) => {
-            context.define_assuming_scheme(
-                &Free::from(&definition.name),
-                &definition.type_,
-                &definition.body,
-                Some(&definition.kind),
-                definition.universe_context.clone(),
-            );
-        }
-        Item::Rec(rec) => {
-            let definitions = rec.definitions();
-            for definition in &definitions {
-                let name = Free::from(&definition.name);
-                context.assume(&name, &definition.type_);
-                context
-                    .set_assumption_universe_context(&name, rec.group.universe_context().clone());
-            }
-            for (index, definition) in definitions.iter().enumerate() {
-                context.define(
-                    &Free::from(&definition.name),
-                    &Term::rec_proj(rec.group.clone(), index),
-                    Some(&definition.kind),
-                );
-            }
-        }
-    }
-}
-
-/// Erase `module`'s items in the order it stores them, each into a fragment of its own, but for those `reused` hands an erased form for.
-fn erase_items(
-    context: &mut Retyping,
+/// Erase `module`'s items in the order it stores them, each into a fragment of its own and each read out of its universes through `view`, but for those `reused` hands an erased form for, which are never projected.
+pub(super) fn erase_items<'s>(
+    context: &mut Retyping<'s>,
+    view: &'s Projected<'_>,
     scope: Erasures<'_>,
     module: &Module,
     reused: impl Fn(&Item) -> Option<ErasedItem>,
 ) -> Result<ErasedUnit, Error> {
     let mut unit = ErasedUnit::default();
-    for item in &module.items {
+    for (place, item) in module.items.iter().enumerate() {
         let erased = match reused(item) {
             Some(erased) => erased,
             None => {
                 let externals = |name: &Global| unit.find(name).or_else(|| scope.find(name));
-                erase_item(context, &externals, item)?
+                erase_item(context, &externals, view.own(place))?
             }
         };
         unit.push(item, erased);

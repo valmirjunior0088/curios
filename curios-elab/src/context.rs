@@ -19,6 +19,9 @@ pub(crate) use declared::*;
 mod frames;
 pub(crate) use frames::*;
 
+mod in_scope;
+pub(crate) use in_scope::*;
+
 mod needs;
 pub(crate) use needs::*;
 
@@ -154,9 +157,9 @@ pub(crate) struct SolutionMark {
 
 /// The elaborator's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure, in two halves: what any judgment reads and the machine it runs on (`Typing`), and what exists because a unit is being elaborated (`Underway`), which a context that only reads finished terms holds empty. Two lifetimes coexist across them: the *frame-scoped* lexical state (`Frames`), pushed and popped as binders and match arms are entered, and the *flat monotonic facts* about the program (`Solutions`, `Program`), which frames never touch. The `Caches` police both with their write stamps, and this façade is where the stores coordinate: any method that writes a store *and* must stamp or clear a cache lives here, naming both sub-stores explicitly. Reduction is bounded by a step budget restored at every declaration boundary — see [`Context::new`].
 #[derive(Debug)]
-pub struct Context {
+pub struct Context<'s> {
     // What any judgment reads, and the machine it runs on; see [`Typing`].
-    typing: Typing,
+    typing: Typing<'s>,
     // What exists because a unit is being elaborated; see [`Underway`].
     underway: Underway,
 }
@@ -168,7 +171,7 @@ pub(crate) struct EmbeddingSite {
     pub(crate) region: Term,
 }
 
-impl Context {
+impl<'s> Context<'s> {
     /// A fresh, empty context at [`DEFAULT_STEP_BUDGET`] — what every caller that is not threading a user-supplied budget wants.
     pub fn with_default_budget(syntax: SyntaxRegistry) -> Self {
         Self::new(DEFAULT_STEP_BUDGET, syntax)
@@ -184,6 +187,12 @@ impl Context {
             typing: Typing::new(budget, syntax),
             underway: Underway::default(),
         }
+    }
+
+    /// Read through to `scope` wherever this context's own stores hold nothing under a name: the units already judged, which a unit is judged against and nothing of which is brought in (`InScope`).
+    pub(crate) fn read_through(&mut self, scope: &'s dyn InScope) {
+        self.typing.frames.read_through(scope);
+        self.typing.program.read_through(scope);
     }
 
     /// [`Attempt::note_solve_blockers`].
@@ -1694,13 +1703,7 @@ impl Context {
         self.underway.witnesses.is_marked(name)
     }
 
-    pub(crate) fn witness_keyed_entries(
-        &self,
-    ) -> impl Iterator<Item = (&Global, &WitnessKey, &Witness)> {
-        self.typing.program.witness_keyed_entries()
-    }
-
-    pub(crate) fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<&Witness> {
+    pub(crate) fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<Witness> {
         self.typing.program.witness(concept, key)
     }
 
@@ -1723,7 +1726,7 @@ impl Context {
 
     /// Whether a witness stands under `(concept, key)`: one registered, or one the unit declares there and has not elaborated. A question of membership, answered the same whichever witnesses have elaborated.
     pub(crate) fn witness_declared(&self, concept: &Global, key: &WitnessKey) -> bool {
-        self.typing.program.witness(concept, key).is_some()
+        self.typing.program.witness_registered(concept, key)
             || self.underway.witnesses.at(concept, key).is_some()
     }
 
@@ -1740,17 +1743,12 @@ impl Context {
 
     /// Every key a witness of `concept` stands under, with the module declaring it: the registered ones, then the ones the unit declares and has not elaborated — the raw material for reachability questions over one concept's edges (the missing-embedding chain report), the same whichever witnesses have elaborated.
     pub(crate) fn witness_keys(&self, concept: &Global) -> Vec<(WitnessKey, Qualifier)> {
-        let registered = self
-            .typing
-            .program
-            .witness_keyed_entries()
-            .filter(|(registered, _, _)| *registered == concept)
-            .map(|(_, key, witness)| (*key, witness.module));
+        let registered = self.typing.program.witness_keys(concept).into_iter();
         let declared = self
             .underway
             .witnesses
             .keys(concept)
-            .filter(|(key, _)| self.typing.program.witness(concept, key).is_none())
+            .filter(|(key, _)| !self.typing.program.witness_registered(concept, key))
             .map(|(key, module)| (*key, *module));
 
         registered.chain(declared).collect()

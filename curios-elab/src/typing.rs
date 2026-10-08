@@ -375,7 +375,7 @@ pub(crate) fn transitively_ground(context: &Context, id: MetavarId) -> bool {
     }
 }
 
-impl Context {
+impl Context<'_> {
     /// Retry parked constraints woken by freshly landed solutions, to fixpoint. A woken goal re-runs under its frozen frame: converts and is dropped, mismatches and errors at its origin, or re-parks still blocked. Each round consumes wake signals and ids solve exactly once, so this terminates.
     pub(crate) fn retry_parked(&mut self) -> Result<(), Error> {
         // Never retry inside an oracle: re-validation reads every failure but exhaustion as a rejected candidate, so a woken goal's mismatch would vanish along with the goal itself — a silently dropped obligation. The wake signals stay queued; the next unsuppressed turnaround retries them.

@@ -4,7 +4,7 @@
 //!
 //! Erasure is a transcription under the **operand law**: every source subexpression erases to exactly one operand ([`curios_ersd::Atom`]) — an atomic value directly, a compound one bound by a statement in the builder's innermost open block, in evaluation order — and every reuse references the bound atom, never a re-erased copy. Divergence is explicit: an expression that provably never yields a value (a process exit, a vacuous elimination) reports the terminator that seals its block instead of an atom, and dead code after it is never erased.
 //!
-//! Core classifies and traverses; the builder owns construction. An item erases into a fragment of its own, which names what another item binds as an import ([`ErasedItem`]), and a unit holds its items' fragments ([`ErasedUnit`]). Production compilation erases the fixed prelude once at compiler build time, archived by `curios-prelude-archive`, and every later unit reads how its names are bound ([`Erasures`]). [`erase_unit`] erases a unit, the prelude's included, and [`erase_program`] is the same walk with the entry erased and what it reaches linked into one module. Every entrypoint projects its Core module through the private `UniverseErased<Module>` boundary, which removes universe instances, declaration contexts, and nominal vectors once; no universe data reaches Ersd and reduction never specializes runtime code by universe instance.
+//! Core classifies and traverses; the builder owns construction. An item erases into a fragment of its own, which names what another item binds as an import ([`ErasedItem`]), and a unit holds its items' fragments ([`ErasedUnit`]). Production compilation erases the fixed prelude once at compiler build time, archived by `curios-prelude-archive`, and every later unit reads how its names are bound ([`Erasures`]). [`erase_unit`] erases a unit, the prelude's included, and [`erase_program`] is the same walk with the entry erased and what it reaches linked into one module. Every entrypoint reads its Core module and its scope's through one view (`Projected`), which removes universe instances, declaration contexts, and nominal vectors from each declaration the first time it is read; no universe data reaches Ersd and reduction never specializes runtime code by universe instance.
 //!
 //! The boundary validates what it has not already seen validated, and projects what is not already projected — which for a unit erased over a scope is the unit's own items and the registry entries it adds. The prelude arrives immutable and checked from `curios-prelude-archive`'s restore, so validating and projecting it again would be a walk of the whole standard library, inside the erasure context's step budget, for an answer already in hand.
 
@@ -32,6 +32,9 @@ pub use erased::*;
 
 mod link;
 use link::*;
+
+mod projected;
+use projected::*;
 
 mod binding;
 

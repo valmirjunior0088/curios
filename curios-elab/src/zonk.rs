@@ -38,12 +38,12 @@ pub(crate) fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {
 ///
 /// It derefs to the [`Context`], so the walk below reads the context through it, and hands it to anything that takes one.
 struct Zonk<'a> {
-    context: &'a Context,
+    context: &'a Context<'a>,
     zonked: RefCell<NodeMemo>,
 }
 
 impl<'a> Zonk<'a> {
-    fn new(context: &'a Context) -> Self {
+    fn new(context: &'a Context<'a>) -> Self {
         Self {
             context,
             zonked: RefCell::new(NodeMemo::default()),
@@ -51,10 +51,10 @@ impl<'a> Zonk<'a> {
     }
 }
 
-impl std::ops::Deref for Zonk<'_> {
-    type Target = Context;
+impl<'a> std::ops::Deref for Zonk<'a> {
+    type Target = Context<'a>;
 
-    fn deref(&self) -> &Context {
+    fn deref(&self) -> &Context<'a> {
         self.context
     }
 }

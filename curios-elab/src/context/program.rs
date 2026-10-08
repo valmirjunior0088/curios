@@ -3,6 +3,7 @@
 //! Everything here is registry state — inductive, struct, and concept declarations, the witness table, and per-definition totality verdicts and variance vectors. None of it is lexically scoped: `enter_frame`/`leave_frame` never touch these stores, and entries are only ever added or refined in place, never popped — except a refused declaration's, which the item loop takes out whole (`remove_induct` and its siblings, `remove_witness`) so nothing a later item reads was written by an item that failed. The writes that must reach the cache stamps (`insert_witness`, `update_witness_scheme`, the removals) are stamped by the `Context` façade, which alone holds the [`Caches`](super::Caches).
 
 use {
+    super::InScope,
     crate::{Error, Witness},
     curios_core::{
         ConceptDecl, Global, HeadKey, InductDecl, StructDecl, Term, Totality, UniverseContext,
@@ -14,7 +15,9 @@ use {
 
 /// The declaration registries and the witness table. `Context` holds exactly one of these.
 #[derive(Debug, Default)]
-pub(crate) struct Program {
+pub(crate) struct Program<'s> {
+    /// The units in scope: asked where these stores hold nothing under a name, and never written.
+    scope: Option<&'s dyn InScope>,
     /// Inductive declarations, keyed by the type's qualified name ("Result").
     induct_decls: BTreeMap<Global, InductDecl>,
     /// Struct declarations, keyed the same way. Consulted by `elaborate_struct`/`elaborate_proj`/`erase`.
@@ -31,9 +34,14 @@ pub(crate) struct Program {
     mounts: Vec<Mount>,
 }
 
-impl Program {
+impl<'s> Program<'s> {
     pub(crate) fn new() -> Self {
         Self::default()
+    }
+
+    /// Read through to `scope` where these stores hold nothing under a name.
+    pub(crate) fn read_through(&mut self, scope: &'s dyn InScope) {
+        self.scope = Some(scope);
     }
 
     /// Record a new inductive declaration's metadata. Called once per `induct` declaration as a module is seeded into the context. Errs with `DuplicateInduct` (leaving the existing entry untouched) if `name` is already registered — the registry is shared across every root elaborated into this context, so a collision is rejected rather than silently overwriting a prior root's declaration. Mid-elaboration rebuilds of an already-registered entry go through [`Program::update_induct`] instead.
@@ -42,7 +50,7 @@ impl Program {
         name: &Global,
         induct_decl: InductDecl,
     ) -> Result<(), Error> {
-        if self.induct_decls.contains_key(name) {
+        if self.induct_decl(name).is_some() {
             return Err(Error::duplicate_induct(name.symbol()));
         }
         self.induct_decls.insert(*name, induct_decl);
@@ -60,7 +68,9 @@ impl Program {
 
     /// Look up an inductive declaration by the type's qualified name.
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
-        self.induct_decls.get(name)
+        self.induct_decls
+            .get(name)
+            .or_else(|| self.scope?.induct_decl(name))
     }
 
     /// Take `name`'s inductive entry out, if it has one — a refused declaration's, or a withheld one's. Nothing elaborated against a removed entry survives it: the item that declared it is out, and every item that could reach it is withheld.
@@ -74,7 +84,7 @@ impl Program {
         name: &Global,
         struct_decl: StructDecl,
     ) -> Result<(), Error> {
-        if self.struct_decls.contains_key(name) {
+        if self.struct_decl(name).is_some() {
             return Err(Error::duplicate_struct(name.symbol()));
         }
         self.struct_decls.insert(*name, struct_decl);
@@ -92,7 +102,9 @@ impl Program {
 
     /// Look up a struct declaration by the type's qualified name.
     pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
-        self.struct_decls.get(name)
+        self.struct_decls
+            .get(name)
+            .or_else(|| self.scope?.struct_decl(name))
     }
 
     /// Take `name`'s struct entry out, if it has one — see [`Program::remove_induct`].
@@ -106,7 +118,7 @@ impl Program {
         name: &Global,
         concept: ConceptDecl,
     ) -> Result<(), Error> {
-        if self.concepts.contains_key(name) {
+        if self.concept(name).is_some() {
             return Err(Error::duplicate_concept(name.symbol()));
         }
         self.concepts.insert(*name, concept);
@@ -115,7 +127,9 @@ impl Program {
 
     /// Look up a concept by its qualified name.
     pub(crate) fn concept(&self, name: &Global) -> Option<&ConceptDecl> {
-        self.concepts.get(name)
+        self.concepts
+            .get(name)
+            .or_else(|| self.scope?.concept(name))
     }
 
     pub(crate) fn update_concept(&mut self, name: &Global, concept: ConceptDecl) {
@@ -126,7 +140,7 @@ impl Program {
         self.concepts.insert(*name, concept);
     }
 
-    /// The registered concepts, for whole-registry validation (superclass acyclicity) at seed time.
+    /// The concepts the unit registers, for validation at seed time (superclass acyclicity): a unit in scope validated its own where it was compiled.
     pub(crate) fn concepts(&self) -> &BTreeMap<Global, ConceptDecl> {
         &self.concepts
     }
@@ -165,34 +179,71 @@ impl Program {
         }
     }
 
-    /// The witness registered under `(concept, key)`, if any.
-    pub(crate) fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<&Witness> {
-        self.witness_table.get(&(*concept, *key))
+    /// The witness registered under `(concept, key)`, if any: the unit's own, or the one a unit in scope declares there, made of its definition's own type, universe context and module.
+    pub(crate) fn witness(&self, concept: &Global, key: &WitnessKey) -> Option<Witness> {
+        if let Some(witness) = self.witness_table.get(&(*concept, *key)) {
+            return Some(witness.clone());
+        }
+        let scope = self.scope?;
+        let name = scope.witness(concept, key)?;
+        let defined = scope.definition(&name)?;
+
+        Some(Witness {
+            name,
+            module: defined.island,
+            universe_context: defined.universe_context.clone(),
+            signature: defined.type_.clone(),
+        })
     }
 
-    /// Every registered witness with its concept and key — the raw material for reachability questions over one concept's edges (the missing-embedding chain report).
-    pub(crate) fn witness_keyed_entries(
-        &self,
-    ) -> impl Iterator<Item = (&Global, &WitnessKey, &Witness)> {
-        self.witness_table
+    /// Whether a witness is registered under `(concept, key)`, the unit's own or a unit's in scope.
+    pub(crate) fn witness_registered(&self, concept: &Global, key: &WitnessKey) -> bool {
+        self.witness_table.contains_key(&(*concept, *key))
+            || self
+                .scope
+                .is_some_and(|scope| scope.witness(concept, key).is_some())
+    }
+
+    /// Every key a witness of `concept` is registered under, with the module declaring it, in key order — the raw material for reachability questions over one concept's edges (the missing-embedding chain report).
+    pub(crate) fn witness_keys(&self, concept: &Global) -> Vec<(WitnessKey, Qualifier)> {
+        let own = self
+            .witness_table
             .iter()
-            .map(|((concept, key), witness)| (concept, key, witness))
+            .filter(|((registered, _), _)| registered == concept)
+            .map(|((_, key), witness)| (*key, witness.module));
+        let scope = self
+            .scope
+            .into_iter()
+            .flat_map(|scope| scope.witnesses())
+            .filter(|(registered, _, _)| registered == concept)
+            .filter_map(|(_, key, name)| match name {
+                Global::Witness(id) => Some((key, *id.module())),
+                Global::Authored(_) => None,
+            });
+        let mut keys = own.chain(scope).collect::<Vec<_>>();
+        keys.sort_by_key(|(key, _)| *key);
+
+        keys
     }
 
-    /// Insert a witness under its key, returning the previous occupant's declaring module on a collision (the caller reports `DuplicateWitness`, which reports modules rather than the anonymous witnesses' compiler-minted names). The façade stamps the write on an actual insert.
+    /// Insert a witness under its key, returning the previous occupant's declaring module on a collision (the caller reports `DuplicateWitness`, which reports modules rather than the witnesses' names): the unit's own, or the one a unit in scope declares there. The façade stamps the write on an actual insert.
     pub(crate) fn insert_witness(
         &mut self,
         concept: Global,
         key: WitnessKey,
         witness: Witness,
     ) -> Option<Qualifier> {
-        match self.witness_table.get(&(concept, key)) {
-            Some(existing) => Some(existing.module),
-            None => {
-                self.witness_table.insert((concept, key), witness);
-                None
-            }
+        if let Some(existing) = self.witness_table.get(&(concept, key)) {
+            return Some(existing.module);
         }
+        if let Some(Global::Witness(id)) =
+            self.scope.and_then(|scope| scope.witness(&concept, &key))
+        {
+            return Some(*id.module());
+        }
+        self.witness_table.insert((concept, key), witness);
+
+        None
     }
 
     /// Take every table entry the witness `name` holds, handing back the keys it stood under — what a refused declaration's registration leaves behind, for the caller to poison. A witness registers before its body elaborates, so a refused one may well be in the table.
@@ -251,11 +302,15 @@ impl Program {
         self.variances
             .get(name)
             .map(|(variances, arity)| (variances.as_slice(), *arity))
+            .or_else(|| self.scope?.definition(name)?.irrelevance())
     }
 
     /// A definition's recorded totality, or `None` for a name not yet classified — a member of the group currently elaborating, which `group_totality` settles for the group as a whole.
     pub(crate) fn definition_totality(&self, name: &Global) -> Option<Totality> {
-        self.totality.get(name).copied()
+        self.totality
+            .get(name)
+            .copied()
+            .or_else(|| Some(self.scope?.definition(name)?.totality))
     }
 
     /// Seed the recorded verdicts with a replayed prefix's, which its own archive settled.

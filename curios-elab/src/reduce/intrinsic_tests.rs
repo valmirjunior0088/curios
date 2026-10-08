@@ -8,7 +8,7 @@ use {
     curios_num::{Binary, Grain, Natural},
 };
 
-fn context() -> Context {
+fn context() -> Context<'static> {
     Context::with_default_budget(SYNTAX)
 }
 

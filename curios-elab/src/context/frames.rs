@@ -5,7 +5,7 @@
 //! Three brackets narrow what a lookup reads, each for its own reason. Suppression withholds the refinements a judgment must not rest on — every one but those a checked term was born under; withholding hides a settlement's own frame and every frame inside it; and the retry floor hides the live local frames a parked problem's retry happens to run inside, so the problem is decided in exactly the context it froze.
 
 use {
-    super::{SharedSpine, SharedTelescope},
+    super::{Defined, InScope, SharedSpine, SharedTelescope},
     crate::UniverseStateToken,
     curios_core::{
         DefinitionKind, Free, Global, HeadTag, RecGroup, Term, UniverseContext,
@@ -222,7 +222,9 @@ impl<K: Eq + Hash + Clone, V> Recorded<K, V> {
 
 /// The frame-scoped lexical stores. `Context` holds exactly one of these; see the module documentation for the cache-coordination contract.
 #[derive(Debug)]
-pub(crate) struct Frames {
+pub(crate) struct Frames<'s> {
+    /// The units in scope, beneath the base frame: asked where no frame holds a name, and never written.
+    scope: Option<&'s dyn InScope>,
     assumptions: Vec<HashMap<Free, Term>>,
     assumption_universes: Vec<HashMap<Free, UniverseContext>>,
     definitions: Vec<Recorded<Free, DefEntry>>,
@@ -267,9 +269,10 @@ pub(crate) struct Frames {
     refinement_cache: Option<(usize, SharedRefinements)>,
 }
 
-impl Frames {
+impl<'s> Frames<'s> {
     pub(crate) fn new() -> Self {
         Self {
+            scope: None,
             assumptions: vec![HashMap::new()],
             assumption_universes: vec![HashMap::new()],
             definitions: vec![Recorded::new()],
@@ -289,6 +292,19 @@ impl Frames {
             identity_cache: None,
             refinement_stamp: Entropy::new(),
             refinement_cache: None,
+        }
+    }
+
+    /// Read through to `scope` where no frame holds a name.
+    pub(crate) fn read_through(&mut self, scope: &'s dyn InScope) {
+        self.scope = Some(scope);
+    }
+
+    /// What a unit in scope declares under `name`, which only a global names.
+    fn in_scope(&self, name: &Free) -> Option<Defined<'s>> {
+        match name {
+            Free::Global(global) => self.scope?.definition(global),
+            _ => None,
         }
     }
 
@@ -384,6 +400,7 @@ impl Frames {
         self.visible(&self.assumptions)
             .rev()
             .find_map(|assumptions| assumptions.get(name))
+            .or_else(|| self.in_scope(name).map(|defined| defined.type_))
     }
 
     /// The frames a lookup may read: the base frame, then every frame from the retry floor up — all of them when no retry runs.
@@ -462,6 +479,7 @@ impl Frames {
         self.visible(&self.assumption_universes)
             .rev()
             .find_map(|contexts| contexts.get(name))
+            .or_else(|| self.in_scope(name).map(|defined| defined.universe_context))
             .cloned()
     }
 
@@ -504,6 +522,7 @@ impl Frames {
         self.definitions
             .iter()
             .any(|frame| frame.contains_key(name))
+            || self.in_scope(name).is_some()
     }
 
     /// The local assumption context in binding order (outermost first) — while a retry runs, only the part past its floor, which is the whole of the retried problem's local context. The dependent-match generalizer (`elaborate_match`) walks this to find the hypotheses whose type depends on a scrutinee index being abstracted: they must ride into the motive as Π-binders, or the synthesized motive is ill-typed. Binding order matters — a hypothesis's type can only mention earlier binders, so the telescope it yields is already well-ordered.
@@ -553,18 +572,25 @@ impl Frames {
 
     /// The globals the base frame defines `group`'s members under, in member order, where it defines every one.
     pub(crate) fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {
-        self.members.get(group)?.iter().copied().collect()
+        match self.members.get(group) {
+            Some(names) => names.iter().copied().collect(),
+            None => self.scope?.member_names(group),
+        }
     }
 
     /// The [`DefinitionKind`] of the module item that defined `label`, or `None` for a local binding or an undefined name.
     ///
     /// The structural replacement for splitting a definition's qualified name into a family and a case and looking the family up in a registry: the kind was known where the definition was generated, so it is read back rather than re-derived from the name's spelling.
     pub(crate) fn definition_kind(&self, name: &Free) -> Option<&DefinitionKind> {
-        self.definitions
+        match self
+            .definitions
             .iter()
             .rev()
             .find_map(|definitions| definitions.get(name))
-            .and_then(|entry| entry.kind.as_ref())
+        {
+            Some(entry) => entry.kind.as_ref(),
+            None => self.in_scope(name).map(|defined| defined.kind),
+        }
     }
 
     /// What `name` unfolds to through its *definition* alone — never through a refinement. The shared analyses read through this: a definitions-only lookup needs no invariant about when the refinement store happens to be empty, where [`Frames::var_reduct_at`] would silently mean something else inside a match arm.
@@ -574,6 +600,7 @@ impl Frames {
             .rev()
             .find_map(|definitions| definitions.get(name))
             .map(|entry| &entry.term)
+            .or_else(|| self.in_scope(name).map(|defined| defined.body))
     }
 
     /// Every top-level `rec` group defined in any frame, each with its members' global names in member order. A member's definition is the group with a projecting tail, so the groups are read off the members and their names gathered by index; a group read only partially — a member never defined — is dropped, since a spelling with a gap is no spelling.
@@ -605,6 +632,7 @@ impl Frames {
                 let names = names.into_iter().collect::<Option<Vec<_>>>()?;
                 Some((group, names))
             })
+            .chain(self.scope.into_iter().flat_map(|scope| scope.groups()))
             .collect()
     }
 
@@ -619,6 +647,7 @@ impl Frames {
             .rev()
             .find_map(|definitions| definitions.get(name))
             .map(|entry| &entry.term)
+            .or_else(|| self.in_scope(name).map(|defined| defined.body))
     }
 
     /// Reduce a bare variable only when its definition is monomorphic.
@@ -630,6 +659,7 @@ impl Frames {
             .iter()
             .rev()
             .find_map(|contexts| contexts.get(name))
+            .or_else(|| self.in_scope(name).map(|defined| defined.universe_context))
             .is_some_and(|context| context.parameter_count != 0);
         (!is_polymorphic)
             .then(|| self.raw_var_reduct(name))
@@ -972,6 +1002,7 @@ impl Frames {
         self.assumptions
             .first()
             .is_some_and(|frame| frame.contains_key(name))
+            || self.in_scope(name).is_some()
     }
 
     /// The frozen telescope and identity spine for the *current* Γ, shared: rebuilt only when `local` has changed since the last birth, so minting a metavariable is O(1) amortized instead of O(|Γ|) per mint — the difference between linear and quadratic elaboration over a module.

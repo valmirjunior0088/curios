@@ -14,7 +14,7 @@ pub(super) fn nominal(path: &str) -> Global {
     Global::Authored(Qualifier::from([path]))
 }
 
-pub(super) fn context() -> Context {
+pub(super) fn context() -> Context<'static> {
     Context::new(100_000, SYNTAX)
 }
 

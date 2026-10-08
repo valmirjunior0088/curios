@@ -19,7 +19,7 @@ pub(crate) fn qed() -> Term {
     Term::free_var(&Free::local(9_999, Some("qed")))
 }
 
-pub(super) fn context() -> Context {
+pub(super) fn context() -> Context<'static> {
     Context::new(100_000, SYNTAX)
 }
 

@@ -1,13 +1,13 @@
 //! A reader of finished terms.
 //!
-//! Erasure walks terms that are elaborated, zonked and projected out of their universes, and asks of them what the elaborator's engine answers: a type's head, its sort, what a name is assumed at, which equations an arm stands under. It elaborates nothing, so nothing that exists because a unit is being elaborated is its to reach — no attempt's metavariables, no unfinished declaration, no use site's module. [`Retyping`] is how that is held: it owns a context it made, whose elaboration half is the empty one a fresh context has, and it offers the binder supply, the frame bracket, the lookups, the budget and the engine's entries a walk over finished terms needs, each by name, and nothing else of the context.
+//! Erasure walks terms that are elaborated, zonked and projected out of their universes, and asks of them what the elaborator's engine answers: a type's head, its sort, what a name is assumed at, which equations an arm stands under. It elaborates nothing, so nothing that exists because a unit is being elaborated is its to reach — no attempt's metavariables, no unfinished declaration, no use site's module. [`Retyping`] is how that is held: it owns a context it made over the scope it is handed, which it reads through and brings nothing in of (`InScope`), whose elaboration half is the empty one a fresh context has, and it offers the binder supply, the frame bracket, the lookups, the budget and the engine's entries a walk over finished terms needs, each by name, and nothing else of the context.
 //!
 //! **Its reduction asks conversion, as the reduction that accepted the term did.** A type's head may show only where a stuck fold's atoms are classed or an arm's equation is met at another spelling, and erasure needs the head of every callee, record and scrutinee it eliminates. A reader whose reduction asked nothing (`Context::plainly`) would meet a type both checkers read and have no head to read off it.
 //!
 //! It lives in the context's module tree because its frame bracket hands the closure the reader itself: that takes the two halves of `Context::with_frame`, which no module outside the tree can call apart, so the bracket stays the only way into a frame.
 
 use {
-    super::Context,
+    super::{Context, InScope},
     crate::{Binders, Error, is_prop_in, reduce_with, refine_head, sort_term, synth_neutral},
     curios_analysis::{Invert, solve_indices},
     curios_core::{
@@ -22,12 +22,21 @@ use curios_core::Consumption;
 
 /// A context that reads finished terms, made by its reader and handed to no one.
 #[derive(Debug)]
-pub(crate) struct Retyping {
-    context: Context,
+pub(crate) struct Retyping<'s> {
+    context: Context<'s>,
 }
 
-impl Retyping {
-    /// A reader with nothing in scope, in which each item read may spend `budget` units, naming what `syntax` registers.
+impl<'s> Retyping<'s> {
+    /// A reader over `scope`, in which each item read may spend `budget` units, naming what `syntax` registers. What it reads of a declaration it reads through to `scope`, and its own stores start empty.
+    pub(crate) fn over(budget: u64, syntax: SyntaxRegistry, scope: &'s dyn InScope) -> Self {
+        let mut context = Context::new(budget, syntax);
+        context.read_through(scope);
+
+        Self { context }
+    }
+
+    /// A reader with nothing in scope, for a test that reads terms naming no declaration.
+    #[cfg(test)]
     pub(crate) fn new(budget: u64, syntax: SyntaxRegistry) -> Self {
         Self {
             context: Context::new(budget, syntax),
@@ -105,19 +114,6 @@ impl Retyping {
         self.context.define_assuming(name, type_, term, kind);
     }
 
-    /// [`Context::define_assuming_scheme`].
-    pub(crate) fn define_assuming_scheme(
-        &mut self,
-        name: &Free,
-        type_: &Term,
-        term: &Term,
-        kind: Option<&DefinitionKind>,
-        universe_context: UniverseContext,
-    ) {
-        self.context
-            .define_assuming_scheme(name, type_, term, kind, universe_context);
-    }
-
     /// [`Context::definition_kind`].
     pub(crate) fn definition_kind(&self, name: &Free) -> Option<&DefinitionKind> {
         self.context.definition_kind(name)
@@ -133,15 +129,6 @@ impl Retyping {
         self.context.refine(name, term);
     }
 
-    /// [`Context::register_induct`].
-    pub(crate) fn register_induct(
-        &mut self,
-        name: &Global,
-        induct_decl: InductDecl,
-    ) -> Result<(), Error> {
-        self.context.register_induct(name, induct_decl)
-    }
-
     /// [`Context::induct_decl`].
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
         self.context.induct_decl(name)
@@ -154,15 +141,6 @@ impl Retyping {
         levels: &[Level],
     ) -> Result<InductDecl, UniverseError> {
         self.context.instantiate_induct_decl_at(induct_decl, levels)
-    }
-
-    /// [`Context::register_struct`].
-    pub(crate) fn register_struct(
-        &mut self,
-        name: &Global,
-        struct_decl: StructDecl,
-    ) -> Result<(), Error> {
-        self.context.register_struct(name, struct_decl)
     }
 
     /// [`Context::struct_decl`].

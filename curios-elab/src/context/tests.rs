@@ -10,7 +10,7 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-fn context() -> Context {
+fn context() -> Context<'static> {
     Context::with_default_budget(SYNTAX)
 }
 

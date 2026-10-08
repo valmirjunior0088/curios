@@ -55,14 +55,17 @@ pub(crate) fn callee(context: &Context, func: &CalleeId) -> Callee {
             }
         }
         // A witness with no table entry is left as the bare identity: coherence has nothing to rename it by, and a report naming the global beats one naming nothing.
-        CalleeId::Witness(name) => context
-            .witness_keyed_entries()
-            .find(|(_, _, witness)| &witness.name == name)
-            .map(|(concept, key, _)| Callee::Witness {
-                concept: *concept,
-                key: *key,
-            })
-            .unwrap_or_else(|| Callee::Function(Free::Global(*name))),
+        CalleeId::Witness(name) => match name {
+            Global::Witness(id) => id.spelled(),
+            Global::Authored(_) => None,
+        }
+        .filter(|(concept, key)| {
+            context
+                .witness(concept, key)
+                .is_some_and(|witness| witness.name == *name)
+        })
+        .map(|(concept, key)| Callee::Witness { concept, key })
+        .unwrap_or_else(|| Callee::Function(Free::Global(*name))),
         CalleeId::Constructor { owner, tag } => Callee::Constructor {
             owner: *owner,
             tag: tag.clone(),
@@ -500,7 +503,7 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
     }
     let key = WitnessKey::from(heads);
 
-    let Some(witness) = context.witness(&concept_name, &key).cloned() else {
+    let Some(witness) = context.witness(&concept_name, &key) else {
         if context.is_poisoned_witness(&concept_name, &key) {
             return Ok(Resolution::Poisoned);
         }

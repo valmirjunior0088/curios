@@ -15,7 +15,7 @@ fn nominal(path: &str) -> Global {
     Global::Authored(Qualifier::from([path]))
 }
 
-fn context() -> Context {
+fn context() -> Context<'static> {
     Context::with_default_budget(SYNTAX)
 }
 

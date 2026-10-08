@@ -8,7 +8,7 @@ use {
 
 /// What every fixture here reduces under: `small(x) = x < 10` and `n: Nat`.
 struct Guarded {
-    context: Context,
+    context: Context<'static>,
     small: Free,
     n: Free,
 }

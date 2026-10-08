@@ -114,12 +114,12 @@ fn classes(context: &mut Context, atoms: &[Term]) -> Result<Classes, ReduceError
 }
 
 /// The elaborator as the shared chain's driver: its context reduces, and its queue takes the solving views' goals.
-struct Elaborating<'a> {
+struct Elaborating<'a, 's> {
     cmp: &'a mut Convert,
-    context: &'a mut Context,
+    context: &'a mut Context<'s>,
 }
 
-impl Reducer for Elaborating<'_> {
+impl Reducer for Elaborating<'_, '_> {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         Reducer::reduce(self.context, term)
     }
@@ -137,7 +137,7 @@ impl Reducer for Elaborating<'_> {
     }
 }
 
-impl Driver for Elaborating<'_> {
+impl Driver for Elaborating<'_, '_> {
     /// **A summand meets its own spelling only once its solved metavariables are substituted.** Every peel pairs by identity — a summand cancels against a summand, a leaf joins a leaf set, an atom indexes a truth table — and while the signature holding them is being checked, two occurrences of `a + 1` are two terms: an operator reaches its concept through a witness metavariable of its own, solved to the one witness and not yet spliced. Unprepared, `f(a + 1) + f(c + 1)` against its commutation would share no summand, fall to the positional congruence, and be refused there as `a` against `c` — where the kernel, handed zonked terms, accepts the equation.
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
         let solved = zonk_solved_term_metas(self.context, &Term::intrinsic(intrinsic.clone()));

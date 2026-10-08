@@ -9,7 +9,7 @@ use {
         UniverseParam, Zonkable, Zonked, project_erased_universes,
     },
     curios_ersd::{FieldShape, test_support::shape},
-    curios_utilities::{Plicity, Qualifier},
+    curios_utilities::{Plicity, Qualifier, grown},
     std::{
         collections::{BTreeMap, BTreeSet},
         sync::Arc,
@@ -21,7 +21,7 @@ fn nominal(path: &str) -> Global {
     Global::Authored(Qualifier::from([path]))
 }
 
-fn context() -> Retyping {
+fn context() -> Retyping<'static> {
     Retyping::new(DEFAULT_STEP_BUDGET, SYNTAX)
 }
 
@@ -75,21 +75,18 @@ fn stating(program: &Program, type_: Term) -> Program {
 }
 
 /// `program` erased with nothing in scope, its entry stating `type_`.
-fn try_erase(
-    context: &mut Retyping,
-    program: &Program,
-    type_: Term,
-) -> Result<curios_ersd::Module, Error> {
-    erase_program_in(
-        context,
+fn try_erase(program: &Program, type_: Term) -> Result<curios_ersd::Module, Error> {
+    erase_program(
+        DEFAULT_STEP_BUDGET,
+        SYNTAX,
         Erasures::nothing(),
         &zonked(&stating(program, type_)),
     )
     .map(ErasedProgram::into_module)
 }
 
-fn erase(context: &mut Retyping, program: &Program, type_: Term) -> curios_ersd::Module {
-    try_erase(context, program, type_).expect("the program erases")
+fn erase(program: &Program, type_: Term) -> curios_ersd::Module {
+    try_erase(program, type_).expect("the program erases")
 }
 
 /// The recorded payload row — field hint and carrier shape — of the one constructor of the single-constructor family whose debug name ends in `name`. The arena is what erasure wrote; the header the printer renders from it is a second spelling, and a test that scraped that spelling would pass by matching nothing if it moved.
@@ -147,7 +144,6 @@ fn a_scalar_expression_erases_in_evaluation_order() {
         Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x_binder), nat_lit(3))),
     );
     let erased = erase(
-        &mut context,
         &module(Vec::new(), body),
         Term::intrinsic(Intrinsic::NatType),
     );
@@ -180,7 +176,6 @@ fn bool_and_byte_keep_their_shapes() {
         )),
     );
     let erased = erase(
-        &mut context,
         &module(Vec::new(), body),
         Term::intrinsic(Intrinsic::ByteType),
     );
@@ -197,7 +192,6 @@ entry
 
 #[test]
 fn a_nat_spine_over_a_variable_erases_to_one_addition() {
-    let mut context = context();
     let items = vec![definition(
         "x",
         Term::intrinsic(Intrinsic::NatType),
@@ -207,11 +201,7 @@ fn a_nat_spine_over_a_variable_erases_to_one_addition() {
         3u32.into(),
         Term::free_var(&global("x")),
     )));
-    let erased = erase(
-        &mut context,
-        &module(items, body),
-        Term::intrinsic(Intrinsic::NatType),
-    );
+    let erased = erase(&module(items, body), Term::intrinsic(Intrinsic::NatType));
     assert_eq!(
         shape(&erased),
         "\
@@ -225,7 +215,6 @@ entry
 /// Erasure takes a module's items as they are stored, every item after the items it reaches: `a` is written before the `b` it names, and the order a module is stored in puts `b` first.
 #[test]
 fn items_erase_in_the_order_the_module_stores_them() {
-    let mut context = context();
     let items = vec![
         definition(
             "a",
@@ -236,7 +225,7 @@ fn items_erase_in_the_order_the_module_stores_them() {
     ];
     let mut program = module(items, Term::free_var(&global("a")));
     program.module = program.module.ordered();
-    let erased = erase(&mut context, &program, Term::intrinsic(Intrinsic::NatType));
+    let erased = erase(&program, Term::intrinsic(Intrinsic::NatType));
     assert_eq!(
         shape(&erased),
         "\
@@ -263,7 +252,6 @@ fn an_exit_seals_the_thunk_that_describes_it() {
         nat_lit(7),
     );
     let erased = erase(
-        &mut context,
         &module(Vec::new(), body),
         Term::intrinsic(Intrinsic::NatType),
     );
@@ -314,7 +302,7 @@ fn a_bound_call(binder: Binder, returns_a_type: bool) -> curios_ersd::Module {
             nat_lit(7)
         }
     };
-    erase(&mut context, &module(items, body), nat)
+    erase(&module(items, body), nat)
 }
 
 fn calls(erased: &curios_ersd::Module) -> usize {
@@ -339,8 +327,9 @@ fn identity_arena(stamp: Totality) -> ErasedProgram {
     declared.totality = stamp;
     let body = Term::apply(Term::free_var(&global("identity")), [nat_lit(4)]);
 
-    erase_program_in(
-        &mut context,
+    erase_program(
+        DEFAULT_STEP_BUDGET,
+        SYNTAX,
         Erasures::nothing(),
         &zonked(&stating(&module(items, body), nat)),
     )
@@ -450,7 +439,6 @@ fn sequences_transcribe_without_carrier_choices() {
         }),
     );
     let erased = erase(
-        &mut context,
         &module(Vec::new(), body),
         Term::intrinsic(Intrinsic::NatType),
     );
@@ -467,10 +455,9 @@ entry
 
 #[test]
 fn erasure_is_deterministic() {
-    let mut context = context();
-    let x = context.fresh(Some("x"));
-    // Both runs erase the *same* term under a fresh context, so any difference would be erasure's own, not a difference in the binders handed to it.
-    let build = |context: &mut Retyping| {
+    let x = context().fresh(Some("x"));
+    // Both runs erase the *same* term, each through a reader made for it, so any difference would be erasure's own, not a difference in the binders handed to it.
+    let build = || {
         let body = Term::let_(
             &x,
             Term::intrinsic(Intrinsic::NatType),
@@ -478,21 +465,21 @@ fn erasure_is_deterministic() {
             Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat_lit(3))),
         );
         let erased = erase(
-            context,
             &module(Vec::new(), body),
             Term::intrinsic(Intrinsic::NatType),
         );
         shape(&erased)
     };
-    assert_eq!(build(&mut context), build(&mut self::context()));
+    assert_eq!(build(), build());
 }
 
 /// What an item's erasure hands on holds no binder it opened. A binder's identity counts the binders its context had minted before it, so two erasures of one unit would part on every binder they kept, and an item that read the erased form would hold an identity it mints again.
 #[test]
 fn an_erased_form_keeps_no_binder_its_erasure_opened() {
-    let erased = |context: &mut Retyping| {
-        let x = context.fresh(Some("x"));
-        let y = context.fresh(Some("y"));
+    let erased = |opened: usize| {
+        let mut names = context();
+        let x = names.fresh(Some("x"));
+        let y = names.fresh(Some("y"));
         let nat = Term::intrinsic(Intrinsic::NatType);
         // One constant: the module indexes its constants by hash, and two would print in an order of the table's own.
         let body = Term::func(
@@ -514,14 +501,25 @@ fn an_erased_form_keeps_no_binder_its_erasure_opened() {
         )
         .module;
 
-        erase_unit_in(context, Erasures::nothing(), &zonked(&unit)).expect("the unit erases")
+        let unit = zonked(&unit);
+        let view = super::lower::projected(Erasures::nothing(), unit.as_module())
+            .expect("the unit's universes are its schemes'");
+        let mut context = Retyping::over(DEFAULT_STEP_BUDGET, SYNTAX, &view);
+        for _ in 0..opened {
+            context.fresh(None);
+        }
+
+        super::lower::erase_items(
+            &mut context,
+            &view,
+            Erasures::nothing(),
+            unit.as_module(),
+            |_| None,
+        )
+        .expect("the unit erases")
     };
-    let first = erased(&mut context());
-    let mut later = context();
-    for _ in 0..8 {
-        later.fresh(None);
-    }
-    let second = erased(&mut later);
+    let first = erased(0);
+    let second = erased(8);
 
     assert_eq!(format!("{first:?}"), format!("{second:?}"));
 }
@@ -604,12 +602,10 @@ fn universe_erasure_is_a_validated_structural_projection() {
         Term::type_at(Level::constant(3)),
     );
 
-    let projected =
-        super::lower::UniverseErased::<Zonked<Module>>::project(&zonked(&source.module))
-            .unwrap()
-            .into_inner()
-            .into_module();
-    let Item::Let(definition) = &projected.items[0] else {
+    let source_module = zonked(&source.module);
+    let projected = super::lower::projected(Erasures::nothing(), source_module.as_module())
+        .expect("the module's universes are its schemes'");
+    let Item::Let(definition) = projected.own(0) else {
         panic!("expected definition")
     };
     assert_eq!(definition.universe_context, UniverseContext::empty());
@@ -633,7 +629,7 @@ fn universe_erasure_is_a_validated_structural_projection() {
         nat_lit(0),
     );
     assert!(
-        super::lower::UniverseErased::<Zonked<Module>>::project(&zonked(&invalid.module)).is_err()
+        super::lower::projected(Erasures::nothing(), zonked(&invalid.module).as_module()).is_err()
     );
 }
 
@@ -662,11 +658,7 @@ fn a_function_erases_with_dropped_type_params_and_no_captures() {
         Term::free_var(&global("id")),
         [Term::intrinsic(Intrinsic::NatType), nat_lit(4)],
     );
-    let erased = erase(
-        &mut context,
-        &module(items, body),
-        Term::intrinsic(Intrinsic::NatType),
-    );
+    let erased = erase(&module(items, body), Term::intrinsic(Intrinsic::NatType));
     assert_eq!(
         shape(&erased),
         "\
@@ -716,11 +708,7 @@ fn a_capturing_closure_stores_no_capture_list() {
             Term::intrinsic(Intrinsic::NatType),
         ),
     );
-    let erased = erase(
-        &mut context,
-        &module(items, Term::free_var(&global("make"))),
-        expected,
-    );
+    let erased = erase(&module(items, Term::free_var(&global("make"))), expected);
 
     assert!(
         bound(&erased).any(|rhs| matches!(
@@ -782,7 +770,6 @@ fn opt_induct() -> InductDecl {
 
 #[test]
 fn a_variant_constructs_with_its_registered_schema() {
-    let mut context = context();
     let mut induct_decls = BTreeMap::new();
     induct_decls.insert(nominal("Opt"), opt_induct());
     let body = Term::variant(
@@ -803,7 +790,7 @@ fn a_variant_constructs_with_its_registered_schema() {
         },
         entry: Entrypoint { body, type_: None },
     };
-    let erased = erase(&mut context, &fixture, opt_type());
+    let erased = erase(&fixture, opt_type());
     assert_eq!(
         shape(&erased),
         "\
@@ -912,7 +899,7 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
     assert_eq!(payload(fragment("six")), vec![FieldShape::Opaque]);
 
     assert_eq!(
-        payload(&erase(&mut context(), &fixture, opt_type())),
+        payload(&erase(&fixture, opt_type())),
         vec![FieldShape::Number]
     );
 }
@@ -934,7 +921,6 @@ fn a_multi_field_tuple_shares_the_width_schema() {
         Term::proj(Term::free_var(&pair), 1),
     );
     let erased = erase(
-        &mut context,
         &module(Vec::new(), body),
         Term::intrinsic(Intrinsic::NatType),
     );
@@ -971,7 +957,6 @@ fn a_subset_tuple_collapses_to_its_relevant_field() {
         Term::proj(Term::free_var(&sub), 0),
     );
     let erased = erase(
-        &mut context,
         &module(Vec::new(), body),
         Term::intrinsic(Intrinsic::NatType),
     );
@@ -986,7 +971,6 @@ entry
 
 #[test]
 fn a_bool_match_erases_to_a_switch_bool() {
-    let mut context = context();
     let body = Term::bool_match(
         Term::intrinsic(Intrinsic::Bool(true)),
         None,
@@ -995,7 +979,6 @@ fn a_bool_match_erases_to_a_switch_bool() {
         nat_lit(20),
     );
     let erased = erase(
-        &mut context,
         &module(Vec::new(), body),
         Term::intrinsic(Intrinsic::NatType),
     );
@@ -1033,11 +1016,7 @@ fn a_dead_hypothesis_nat_match_peels_to_a_dispatch() {
         &ih,
         Term::free_var(&pred),
     );
-    let erased = erase(
-        &mut context,
-        &module(items, body),
-        Term::intrinsic(Intrinsic::NatType),
-    );
+    let erased = erase(&module(items, body), Term::intrinsic(Intrinsic::NatType));
     assert_eq!(
         shape(&erased),
         "\
@@ -1073,11 +1052,7 @@ fn a_live_hypothesis_nat_match_erases_to_a_fold() {
         &ih,
         Term::intrinsic(Intrinsic::nat_add(Term::free_var(&ih), nat_lit(2))),
     );
-    let erased = erase(
-        &mut context,
-        &module(items, body),
-        Term::intrinsic(Intrinsic::NatType),
-    );
+    let erased = erase(&module(items, body), Term::intrinsic(Intrinsic::NatType));
     assert_eq!(
         shape(&erased),
         "\
@@ -1120,11 +1095,7 @@ fn a_live_hypothesis_list_match_erases_to_a_sequence_fold() {
         &ih,
         Term::intrinsic(Intrinsic::nat_add(Term::free_var(&ih), nat_lit(1))),
     );
-    let erased = erase(
-        &mut context,
-        &module(items, body),
-        Term::intrinsic(Intrinsic::NatType),
-    );
+    let erased = erase(&module(items, body), Term::intrinsic(Intrinsic::NatType));
     assert_eq!(
         shape(&erased),
         "\
@@ -1175,7 +1146,7 @@ fn a_variant_match_binds_payload_without_projections() {
         },
         entry: Entrypoint { body, type_: None },
     };
-    let erased = erase(&mut context, &fixture, Term::intrinsic(Intrinsic::NatType));
+    let erased = erase(&fixture, Term::intrinsic(Intrinsic::NatType));
     assert_eq!(
         shape(&erased),
         "\
@@ -1216,11 +1187,7 @@ fn an_effectful_scrutinee_is_erased_once() {
         &ih,
         Term::free_var(&pred),
     );
-    let erased = erase(
-        &mut context,
-        &module(items, body),
-        Term::intrinsic(Intrinsic::NatType),
-    );
+    let erased = erase(&module(items, body), Term::intrinsic(Intrinsic::NatType));
     let read = erased.function_ids().next().expect("the read function");
     let applications = bound(&erased)
         .filter(|rhs| {
@@ -1261,7 +1228,6 @@ fn a_recursive_function_group_erases_to_functions() {
         Term::apply(Term::free_var(&f), [nat_lit(3)]),
     );
     let erased = erase(
-        &mut context,
         &module(Vec::new(), body),
         Term::intrinsic(Intrinsic::NatType),
     );
@@ -1301,7 +1267,7 @@ fn a_mixed_recursive_group_erases_to_a_rec_group() {
         ],
         Term::free_var(&consume),
     );
-    let erased = erase(&mut context, &module(Vec::new(), body), produce_type);
+    let erased = erase(&module(Vec::new(), body), produce_type);
     assert_eq!(
         shape(&erased),
         "\
@@ -1330,8 +1296,8 @@ fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
         ],
         Term::free_var(&a),
     );
-    let error = try_erase(&mut context, &module(Vec::new(), body), type_)
-        .expect_err("the value-level cycle is rejected");
+    let error =
+        try_erase(&module(Vec::new(), body), type_).expect_err("the value-level cycle is rejected");
     assert!(matches!(error, Error::EvaluationCycle { .. }), "{error:?}");
 }
 
@@ -1357,11 +1323,7 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
         ),
     }]))];
     let body = Term::apply(Term::free_var(&global("go")), [nat_lit(1)]);
-    let erased = erase(
-        &mut context,
-        &module(items, body),
-        Term::intrinsic(Intrinsic::NatType),
-    );
+    let erased = erase(&module(items, body), Term::intrinsic(Intrinsic::NatType));
     assert_eq!(
         shape(&erased),
         "\
@@ -1493,7 +1455,7 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
         },
         entry: Entrypoint { body, type_: None },
     };
-    let erased = erase(&mut context, &fixture, expected);
+    let erased = erase(&fixture, expected);
 
     assert_eq!(
         payload(&erased, "/Wrapped"),
@@ -1547,7 +1509,7 @@ fn an_applied_lambda_with_a_witness_slot_erases() {
         .struct_decls
         .insert(nominal("Dict"), newtype_struct("held", nat.clone()));
 
-    let erased = erase(&mut context, &fixture, nat);
+    let erased = erase(&fixture, nat);
 
     assert_eq!(
         shape(&erased),
@@ -1562,7 +1524,7 @@ entry
     );
 }
 
-/// What erasing a function over a chain of `depth` eliminations spends, in budget units. `step` wraps the type one level deeper and `eliminate` the term.
+/// What erasing a function over a chain of `depth` eliminations spends, in budget units, read off the reader its erasure ran through. `step` wraps the type one level deeper and `eliminate` the term.
 fn chain_cost(
     depth: usize,
     step: impl Fn(&mut Retyping, Term) -> Term,
@@ -1582,16 +1544,29 @@ fn chain_cost(
     let function = Term::func([(x, domain.clone())], body);
     let function_type = Term::func_type_marked([(Plicity::Explicit, x, domain)], nat.clone());
 
-    erase(
-        &mut context,
+    let unit = zonked(
         &module(
             vec![definition("reads", function_type, function)],
             nat_lit(0),
-        ),
-        nat,
+        )
+        .module,
     );
+    // On a grown stack, as every entry point erases: a chain this deep is walked a frame a level.
+    grown(|| {
+        let view = super::lower::projected(Erasures::nothing(), unit.as_module())
+            .expect("the unit's universes are its schemes'");
+        let mut reader = Retyping::over(DEFAULT_STEP_BUDGET, SYNTAX, &view);
+        super::lower::erase_items(
+            &mut reader,
+            &view,
+            Erasures::nothing(),
+            unit.as_module(),
+            |_| None,
+        )
+        .expect("the unit erases");
 
-    context.consumed().units()
+        reader.consumed().units()
+    })
 }
 
 /// A head's type is read once however many eliminations stand on it, so twice the chain is at most twice the work. Reading each head afresh at every level it sits under makes it four times.

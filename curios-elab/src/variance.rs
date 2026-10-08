@@ -19,7 +19,7 @@ use {
 };
 
 /// The registries as conversion's level alignment reads them: a family's vector is the one its entry holds while the unit elaborates, empty for a family still inside its own group, so every level of it is compared there, and a definition's is the one it finished with.
-impl Families for Context {
+impl Families for Context<'_> {
     fn induct(&self, name: &Global) -> Option<&InductDecl> {
         self.induct_decl(name)
     }
@@ -34,7 +34,7 @@ impl Families for Context {
 }
 
 /// The registries as the structural arms read them, where no type is at hand for eta to apply two curried heads at: the families' vectors, no definition's, and a head short of its full application compared level by level, which is the kernel's rule for two instances that reduction leaves standing.
-pub(crate) struct Structural<'a>(pub(crate) &'a Context);
+pub(crate) struct Structural<'a>(pub(crate) &'a Context<'a>);
 
 impl Families for Structural<'_> {
     fn induct(&self, name: &Global) -> Option<&InductDecl> {

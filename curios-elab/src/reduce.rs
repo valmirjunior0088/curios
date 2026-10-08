@@ -31,7 +31,7 @@ use {
 };
 
 /// The elaborator's side of the closed-machine seam: the same delta `reduce_var` and `reduce_instance` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
-impl ClosedHost for Context {
+impl ClosedHost for Context<'_> {
     fn closed_body(&self, name: &Free) -> Option<&Term> {
         self.var_reduct(name)
     }
@@ -49,7 +49,7 @@ fn machine_admissible(context: &Context, term: &Term) -> bool {
 /// The elaborator's reduction strategy, supplied to `curios-core`'s intrinsic folds. It is the full-strength one: definitions unfold, metavariables resolve, scrutinee refinements fire, and every step is charged against the declaration's budget.
 ///
 /// **A reduct is handed over with its solved metavariables substituted.** A fold pairs by identity — a summand with a summand, a remainder with its quotient's dividend — and reduction opens nothing inside a stuck call, where an operator still reaches its concept through a witness metavariable of its own, solved and not yet spliced: two occurrences of `f(a + b)` are two terms until both are substituted. The kernel is handed substituted terms, so read as they stand the elaborator alone would refuse what a fold decides.
-impl Reducer for Context {
+impl Reducer for Context<'_> {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         let reduct = reduce(self, term)?;
         Ok(zonk_solved_term_metas(self, &reduct))
@@ -72,7 +72,7 @@ impl Reducer for Context {
 /// The elaborator's side of the shared-analysis seam.
 ///
 /// Both methods are `typing`'s wrappers: they exist so a failure reaches the user as a spanned diagnostic naming the offending term rather than as a bare `ReduceError`, which is precisely the split [`Env::Error`](curios_analysis::Env::Error) formalizes.
-impl curios_analysis::Env for Context {
+impl curios_analysis::Env for Context<'_> {
     type Error = Error;
 
     /// Plain reduction, as the seam asks: a shared analysis borrows no opinion of the elaborator's conversion through the term it reads.
@@ -107,7 +107,7 @@ impl curios_analysis::Env for Context {
     }
 }
 
-impl curios_analysis::Judge for Context {
+impl curios_analysis::Judge for Context<'_> {
     fn convert_at(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, Self::Error> {
         convert_at(self, type_, this, that)
     }
@@ -903,9 +903,9 @@ fn asked_scrutinee(
 }
 
 /// The elaborator as the conversion chain's driver where no comparison stands open, which is how a case equation's lookup reads the chain's readers from inside reduction. It substitutes the metavariables already solved, as the comparing driver does, and has no packed-literal view, since that view hands goals to a queue a lookup does not hold.
-struct Reading<'a>(&'a mut Context);
+struct Reading<'a, 's>(&'a mut Context<'s>);
 
-impl Reducer for Reading<'_> {
+impl Reducer for Reading<'_, '_> {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         Reducer::reduce(self.0, term)
     }
@@ -923,7 +923,7 @@ impl Reducer for Reading<'_> {
     }
 }
 
-impl Driver for Reading<'_> {
+impl Driver for Reading<'_, '_> {
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
         let solved = zonk_solved_term_metas(self.0, &Term::intrinsic(intrinsic.clone()));
         match &*solved {
