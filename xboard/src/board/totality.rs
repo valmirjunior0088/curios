@@ -1,22 +1,70 @@
 use {
-    curios_core::{Free, Level, Module, Term},
+    curios_core::{
+        Atom, Free, Global, InductDecl, InductParam, Level, Module, Telescope, Term,
+        UniverseContext,
+    },
+    curios_utilities::{Plicity, Qualifier},
     xboard::{Date, Part, Proof, Status, Ticket, Witness, false_type, refused},
 };
 
 /// Does this recursion end, and is what is erased total? The erasure obligations and the descent they rest on.
 pub(super) const TOTALITY: Part = Part {
     name: "totality",
-    tickets: &[Ticket {
-        title: "A member reached through an instance is a call the kernel does not record",
-        found_on: Date::new(2026, 10, 2),
-        status: Status::Fixed,
-        witnesses: &[Witness {
-            what: "a nullary group at `False` whose body is an instance of its own member",
-            proof: Proof::Module(a_member_reached_through_an_instance),
-            expect: refused![kernel: curios_cert::Error::NotDescending { .. }],
-        }],
-    }],
+    tickets: &[
+        Ticket {
+            title: "A member reached through an instance is a call the kernel does not record",
+            found_on: Date::new(2026, 10, 2),
+            status: Status::Fixed,
+            witnesses: &[Witness {
+                what: "a nullary group at `False` whose body is an instance of its own member",
+                proof: Proof::Module(a_member_reached_through_an_instance),
+                expect: refused![kernel: curios_cert::Error::NotDescending { .. }],
+            }],
+        },
+        Ticket {
+            title: "A payload that quantifies over `Prop` is applied at its own family, and the application is graded below its constructor",
+            found_on: Date::new(2026, 10, 8),
+            status: Status::Open,
+            witnesses: &[
+                Witness {
+                    what: "a proof by recursion on what a payload returns of the scrutinee, the payload the polymorphic identity",
+                    proof: Proof::Program(A_PAYLOAD_RETURNS_THE_SCRUTINEE_IT_IS_APPLIED_TO),
+                    expect: refused![elaborator],
+                },
+                Witness {
+                    what: "the same recursion on what the payload returns of its constructor built again",
+                    proof: Proof::Program(A_PAYLOAD_RETURNS_ITS_CONSTRUCTOR_BUILT_AGAIN),
+                    expect: refused![elaborator],
+                },
+                Witness {
+                    what: "the recursion on what the payload returns of the scrutinee, as a term",
+                    proof: Proof::Module(a_payload_applied_at_its_own_family),
+                    expect: refused![kernel],
+                },
+            ],
+        },
+    ],
 };
+
+/// `f` quantifies over every proposition, `Bad` among them, so `f(Bad)(b)` is a `Bad`, and an application of a payload is graded a child of its constructor. With `f` the identity it is `b` itself, and the recursion that was judged to descend takes the same value for ever.
+const A_PAYLOAD_RETURNS_THE_SCRUTINEE_IT_IS_APPLIED_TO: &str = r#"
+    use /std/Bool/{False};
+    induct Bad: Prop
+    | c(f: (A: Prop) -> (A) -> A)
+    end
+    let bad(b: Bad) -> False = match b | c(f) => bad(f(Bad)(b)) end;
+    bad(Bad/c((A) => (x) => x))
+    "#;
+
+/// The argument names no variable the arm was handed but the payload: what is graded is the application, whatever it is applied to.
+const A_PAYLOAD_RETURNS_ITS_CONSTRUCTOR_BUILT_AGAIN: &str = r#"
+    use /std/Bool/{False};
+    induct Bad: Prop
+    | c(f: (A: Prop) -> (A) -> A)
+    end
+    let bad(b: Bad) -> False = match b | c(f) => bad(f(Bad)(Bad/c(f))) end;
+    bad(Bad/c((A) => (x) => x))
+    "#;
 
 /// `rec bad : False = bad` with the self-reference spelled as an instance of the member rather than as a bare occurrence.
 ///
@@ -34,4 +82,91 @@ fn a_member_reached_through_an_instance() -> (Module, Term) {
     );
 
     (Module::default(), proof)
+}
+
+/// `induct Bad : Prop | c(f : (A : Prop) -> (x : A) -> A) end` and `rec bad : (b : Bad) -> False = (b) => match b | c(f) => bad(f(Bad)(b)) end`, closed with `bad(Bad/c((A) => (x) => x))`.
+///
+/// A `Prop`-sorted family carries no size condition, so `Bad` holds a payload that quantifies over the sort `Bad` is in, and the payload's declared type names `Bad` nowhere, so strict positivity has nothing to refuse. The size order reads an application of a payload as a child of its constructor, on the premise that a payload of a foreign type cannot hand back a value of the family; applied at `Bad` this one does, and at the identity it hands back the scrutinee.
+fn a_payload_applied_at_its_own_family() -> (Module, Term) {
+    let family = Global::Authored(Qualifier::from(["Bad"]));
+    let family_type = Term::induct_type(family, Vec::<Term>::new(), Vec::<Term>::new());
+
+    // (A : Prop) -> (x : A) -> A
+    let proposition = Free::local(920, Some("A"));
+    let payload_type = Term::func_type(
+        [(proposition, Term::prop())],
+        Term::func_type(
+            [(Free::local(921, Some("x")), Term::free_var(&proposition))],
+            Term::free_var(&proposition),
+        ),
+    );
+
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: vec![(
+            Atom::from("c"),
+            InductParam::new(
+                Telescope::build([(Free::local(922, Some("f")), payload_type)], Vec::new()),
+                vec![Plicity::Explicit],
+            ),
+        )],
+        result_sort: Term::prop(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+
+    let module = Module {
+        induct_decls: [(family, declaration)].into_iter().collect(),
+        ..Module::default()
+    };
+
+    let member = Free::local(923, Some("bad"));
+    let subject = Free::local(924, Some("b"));
+    let payload = Free::local(925, Some("f"));
+
+    // (b) => match b | c(f) => bad(f(Bad)(b)) end
+    let body = Term::func(
+        [(subject, family_type.clone())],
+        Term::induct_match(
+            Term::free_var(&subject),
+            None,
+            false_type(),
+            [(
+                "c",
+                vec![payload],
+                Term::apply(
+                    Term::free_var(&member),
+                    [Term::apply(
+                        Term::apply(Term::free_var(&payload), [family_type.clone()]),
+                        [Term::free_var(&subject)],
+                    )],
+                ),
+            )],
+        ),
+    );
+
+    // (A) => (x) => x
+    let chosen = Free::local(926, Some("A"));
+    let handed = Free::local(927, Some("x"));
+    let identity = Term::func(
+        [(chosen, Term::prop())],
+        Term::func([(handed, Term::free_var(&chosen))], Term::free_var(&handed)),
+    );
+
+    let proof = Term::rec(
+        [(
+            member,
+            Term::func_type([(Free::local(928, Some("b")), family_type)], false_type()),
+            body,
+        )],
+        Term::apply(
+            Term::free_var(&member),
+            [Term::variant(family, Vec::<Term>::new(), "c", [identity])],
+        ),
+    );
+
+    (module, proof)
 }
