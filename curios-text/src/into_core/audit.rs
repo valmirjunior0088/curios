@@ -4,7 +4,8 @@
 
 use {
     super::{
-        AliasEdge, Audiences, Entry, FlatItem, ModuleInfo, PublicInterface, Scoped, flat_aliases,
+        AliasEdge, Audiences, Entry, FlatItem, Lowered, ModuleInfo, PublicInterface, Scoped,
+        aliases, globals,
     },
     crate::Error,
     curios_core::Bound,
@@ -13,11 +14,11 @@ use {
 };
 
 /// Follow a directly attached representation provenance or a chain of bare, transparent type aliases to the underlying nominal registry entry.
-fn exposed_nominal(
+fn exposed_nominal<'a>(
     entry: &Entry,
-    aliases: &HashMap<curios_core::Global, AliasEdge>,
+    aliases: &HashMap<curios_core::Global, &'a AliasEdge>,
     scope: NominalScope<'_>,
-) -> Option<(curios_core::Global, Vec<AliasEdge>)> {
+) -> Option<(curios_core::Global, Vec<&'a AliasEdge>)> {
     let mut current =
         curios_core::Global::Authored(*entry.representation.as_ref().unwrap_or(&entry.target));
     let mut seen = HashSet::new();
@@ -30,7 +31,7 @@ fn exposed_nominal(
         if !seen.insert(current) {
             return None;
         }
-        let edge = aliases.get(&current)?.clone();
+        let edge = *aliases.get(&current)?;
         current = edge.target;
         traversed.push(edge);
     }
@@ -86,7 +87,7 @@ impl<'a> NominalScope<'a> {
 
 /// Invert the alias map to its transitive closure: for each canonical name, the bare transparent aliases that reach it. A name is as visible as the widest alias that stands for it, so an exported alias carries its target's audience even when the target itself is never exported.
 fn alias_sources(
-    aliases: &HashMap<curios_core::Global, AliasEdge>,
+    aliases: &HashMap<curios_core::Global, &AliasEdge>,
 ) -> HashMap<curios_core::Global, HashSet<curios_core::Global>> {
     let mut sources: HashMap<curios_core::Global, HashSet<curios_core::Global>> = HashMap::new();
 
@@ -119,15 +120,6 @@ fn alias_sources(
     }
 
     sources
-}
-
-/// The top-level definitions among `names`. A binder is nobody's dependency: it is introduced and discharged inside the very signature being audited.
-fn globals(
-    names: impl IntoIterator<Item = curios_core::Free>,
-) -> impl Iterator<Item = curios_core::Global> {
-    names
-        .into_iter()
-        .filter_map(|name| name.as_global().cloned())
 }
 
 /// Everyone who can see `referent`, whether by its own name or through a transparent alias that stands for it.
@@ -180,24 +172,26 @@ pub(super) fn audit_public_exposures(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
     items: &[FlatItem],
+    facts: &[&Lowered],
     scope: NominalScope<'_>,
 ) -> Result<(), Error> {
     curios_profile::profile!("audit_public_exposures");
-    let aliases = flat_aliases(items);
+    let aliases = aliases(items, facts);
     let sources = alias_sources(&aliases);
     let audiences = Audiences::compute(public, table);
 
-    for let_ in items.iter().flat_map(|item| match item {
-        FlatItem::Let(let_) => std::slice::from_ref(let_),
-        FlatItem::Rec(lets) => lets.as_slice(),
-    }) {
-        // Only definitions the source actually wrote. A member synthesized into a nested namespace — an inductive's constructor, a concept's method wrapper — sits below its declaring module rather than in it, and its signature is the declaration's business, not an interface the author wrote: a constructor facade may legitimately hand out values of a type the consumer cannot name.
+    let definitions = items
+        .iter()
+        .zip(facts)
+        .flat_map(|(item, lowered)| item.declared().zip(&lowered.definitions));
+    for ((name, _, island), declared) in definitions {
+        // Only definitions the source actually wrote. A member synthesized into a nested namespace — an inductive's constructor, a concept's method wrapper — sits below its declaring module rather than in it, and is audited through the declaration that produced it.
         //
-        // A witness has no authored path at all, which is the same answer arrived at structurally: "who can see this by its name" is not a question an anonymous declaration has. Its reach is the coherence table's, governed by the orphan rule at registration.
-        let Some(path) = let_.name.qualifier() else {
+        // A witness has no authored path at all, which is the same answer arrived at structurally: "who can see this by its name" is not a question an anonymous declaration has. Its reach is the coherence check's.
+        let Some(path) = name.qualifier() else {
             continue;
         };
-        if path.without_last() != let_.island {
+        if path.without_last() != island {
             continue;
         }
 
@@ -206,8 +200,8 @@ pub(super) fn audit_public_exposures(
             &audiences,
             &sources,
             &exposure,
-            &let_.name.symbol(),
-            globals(let_.type_.free_vars()),
+            &name.symbol(),
+            declared.signature.iter().copied(),
         )?;
     }
 
@@ -220,8 +214,14 @@ pub(super) fn audit_public_exposures(
             let exposure = audiences.module(module);
 
             for alias in traversed {
-                if let Some(dependencies) = alias.dependencies {
-                    audit_dependencies(&audiences, &sources, &exposure, &item, dependencies)?;
+                if let Some(dependencies) = &alias.dependencies {
+                    audit_dependencies(
+                        &audiences,
+                        &sources,
+                        &exposure,
+                        &item,
+                        dependencies.iter().copied(),
+                    )?;
                 }
             }
 

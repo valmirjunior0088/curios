@@ -571,18 +571,42 @@ fn anchored(top_item: &TopItem, context: &Context) -> Option<curios_core::Anchor
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// What a unit's declarations lower to, as the walk over its modules gathers it.
+///
+/// This unit's own, never the predecessors' extended in place. What a predecessor declares stays its own, and the one pass that asks about one — the public-exposure audit, whose alias walk may land on a predecessor's type — takes them to query rather than to own.
+#[derive(Default)]
+struct Lowering {
+    items: Vec<FlatItem>,
+    /// What the unit-wide passes read of each item, beside it — see [`Lowered`].
+    facts: Vec<Lowered>,
+    induct_decls: BTreeMap<curios_core::Global, curios_core::InductDecl>,
+    struct_decls: BTreeMap<curios_core::Global, curios_core::StructDecl>,
+    concepts: BTreeMap<curios_core::Global, curios_core::ConceptDecl>,
+    witnesses: BTreeSet<curios_core::Global>,
+    tests: Vec<curios_core::Global>,
+    foreigns: ForeignStore,
+    broken: Vec<BrokenItem>,
+}
+
+impl Lowering {
+    /// Take what the unit-wide passes read of the items the declaration `context` has just lowered: the unit's from `from` on, each while its registry entries and the text it was written in are at hand.
+    fn note(&mut self, context: &Context, from: usize) {
+        for item in &self.items[from..] {
+            self.facts.push(Lowered::of(
+                item,
+                |span| context.extent(span),
+                &self.induct_decls,
+                &self.struct_decls,
+                &context.syntax(),
+            ));
+        }
+    }
+}
+
 fn process_items(
     module: &Module,
     context: &mut Context,
-    flat_items: &mut Vec<FlatItem>,
-    induct_decls: &mut BTreeMap<curios_core::Global, curios_core::InductDecl>,
-    struct_decls: &mut BTreeMap<curios_core::Global, curios_core::StructDecl>,
-    concepts: &mut BTreeMap<curios_core::Global, curios_core::ConceptDecl>,
-    witnesses: &mut BTreeSet<curios_core::Global>,
-    tests: &mut Vec<curios_core::Global>,
-    foreigns: &mut ForeignStore,
-    broken: &mut Vec<BrokenItem>,
+    lowered: &mut Lowering,
     modules: &HashMap<Qualifier, Rc<Module>>,
 ) -> Result<(), Error> {
     for top_item in &module.items {
@@ -634,7 +658,7 @@ fn process_items(
     for (index, top_item) in module.items.iter().enumerate() {
         // A source declaration mints in a space of its own, shared by every item it lowers to; a nested module's declarations each take theirs.
         let declares = !matches!(top_item, TopItem::Mod(_));
-        let lowered_from = flat_items.len();
+        let lowered_from = lowered.items.len();
         if declares {
             context.begin_declaration();
             // And is written in a text of its own: what it lowers to holds positions in that text, wherever the file holds it. A module built rather than parsed has no text, and its terms no position.
@@ -646,7 +670,7 @@ fn process_items(
         }
         match top_item {
             // Nothing lowers: the item is carried as its report, under the name it declared, for the compile boundary to refuse the unit by and the elaborator to withhold dependents of.
-            TopItem::Broken(b) => broken.push(BrokenItem {
+            TopItem::Broken(b) => lowered.broken.push(BrokenItem {
                 declares: b
                     .declares
                     .as_ref()
@@ -658,14 +682,7 @@ fn process_items(
                     process_items(
                         module,
                         &mut context.nested(&mod_item.label),
-                        flat_items,
-                        induct_decls,
-                        struct_decls,
-                        concepts,
-                        witnesses,
-                        tests,
-                        foreigns,
-                        broken,
+                        lowered,
                         modules,
                     )?;
                 }
@@ -677,14 +694,7 @@ fn process_items(
                     process_items(
                         module,
                         &mut context.nested(&mod_item.label),
-                        flat_items,
-                        induct_decls,
-                        struct_decls,
-                        concepts,
-                        witnesses,
-                        tests,
-                        foreigns,
-                        broken,
+                        lowered,
                         modules,
                     )?;
                 }
@@ -751,7 +761,7 @@ fn process_items(
                     .collect::<Result<Vec<_>, Error>>()?;
 
                 let recursive = items.len() > 1 || items.iter().any(|let_| let_.mentions_itself());
-                flat_items.push(match recursive {
+                lowered.items.push(match recursive {
                     true => FlatItem::Rec(items),
                     false => FlatItem::Let(items.pop().expect("a `let` item has a member")),
                 });
@@ -768,8 +778,8 @@ fn process_items(
                 let type_ = lower.func_type_under(&func_sugar_type_params(&[]), || Ok(output))?;
                 let body = func_sugar_lambda(&[], &test.body);
                 let name = curios_core::Global::Authored(context.prefixed(&test.label));
-                tests.push(name);
-                flat_items.push(FlatItem::Let(FlatLet {
+                lowered.tests.push(name);
+                lowered.items.push(FlatItem::Let(FlatLet {
                     kind: curios_core::DefinitionKind::Test,
                     span: None,
                     name,
@@ -781,13 +791,13 @@ fn process_items(
             TopItem::Foreign(f) => {
                 // All FFI-specific bookkeeping (the `ForeignFunction`, its registration, and `host_fn`'s wire-typed signature shape) stays inside `sys_module`'s `host_rows`; from here a `foreign` declaration lowers exactly like an ordinary `TopItem::Let`.
                 let path = context.prefixed(&f.label);
-                let signature = foreign_signature(f, foreigns, path.join());
+                let signature = foreign_signature(f, &mut lowered.foreigns, path.join());
 
                 let name = curios_core::Global::Authored(path);
                 context.record_import_scope(Some(&name));
                 let lower = Lowerer::new(context, Some(name));
                 let type_ = lower.term(&signature.type_())?;
-                flat_items.push(FlatItem::Let(FlatLet {
+                lowered.items.push(FlatItem::Let(FlatLet {
                     kind: curios_core::DefinitionKind::Authored,
                     span: f.label.span().cloned(),
                     name: curios_core::Global::Authored(path),
@@ -907,7 +917,7 @@ fn process_items(
                         // The declared result sort (`Type`/`Prop`) — closed, so it lowers in the base context. It is both the registry entry's sort and the type-constructor's codomain.
                         let result_sort = lower.term(&u.result_sort)?;
 
-                        induct_decls.insert(
+                        lowered.induct_decls.insert(
                             name,
                             curios_core::InductDecl {
                                 universe_context: curios_core::UniverseContext::empty(),
@@ -960,7 +970,7 @@ fn process_items(
                 // Making this conditional is not the two-line change the neighbours make it look like, and both halves were measured rather than reasoned. `mentions_itself` reads `free_vars_shared()`, but an inductive's recursion lives in its *registry entry* — `InductType` holds `name: Global` as a field, not a `Var` — so the test is false for every inductive, recursive ones included, and reaching for it lowers a recursive inductive such as `/std/Cli/Values` as a `Let` that loses `elaborate_module_rec`'s `context.assume` and leaves its own name unbound while the registry telescopes rebuild. Reading the reach through `references::induct_free_vars` instead clears that and then fails at `/std/Async/Future/State` with `universe instance has 1 arguments but its scheme expects 0`: the group is also where a universe-polymorphic inductive's levels are generalized, and as a `Let` the scheme comes out monomorphic while occurrences still pass a level.
                 //
                 // So the wrapper does double duty, and dropping it needs `elaborate_module_let` to do both jobs. Nothing depends on that — a folded spelling reduces correctly, `curios-elab`'s `unfold_rec_apply` applying a group that dissolved to its member's value — which leaves this an optimization with no measurement behind it.
-                flat_items.push(FlatItem::Rec(type_flat_items));
+                lowered.items.push(FlatItem::Rec(type_flat_items));
 
                 // Step 2: constructor bindings. Each is a function whose body injects the variant, an intrinsic `Variant` normal form.
                 for u in group {
@@ -1052,7 +1062,7 @@ fn process_items(
                         // The value constructor carries the same calling convention as `ctor_type`: every inductive parameter is hidden, each payload keeps its declared mark.
                         let ctor_body = curios_core::Term::func_marked(param_tys, inject);
 
-                        flat_items.push(FlatItem::Let(FlatLet {
+                        lowered.items.push(FlatItem::Let(FlatLet {
                             span: None,
                             kind: curios_core::DefinitionKind::InductiveConstructor {
                                 owner: context.prefixed(&u.label),
@@ -1132,7 +1142,7 @@ fn process_items(
                     // Registry entry: the parameter telescope, and the full field telescope (parameter binders first — field types may mention them — then field binders), as in `Inductive::indices`. The declared result sort (`Type`/`Prop`) — closed; both the registry entry's sort and the type-former's codomain.
                     let result_sort = lower.term(&s.result_sort)?;
 
-                    struct_decls.insert(
+                    lowered.struct_decls.insert(
                         name,
                         curios_core::StructDecl {
                             universe_context: curios_core::UniverseContext::empty(),
@@ -1169,7 +1179,7 @@ fn process_items(
                         body,
                     });
                 }
-                flat_items.push(match formers.len() {
+                lowered.items.push(match formers.len() {
                     1 => FlatItem::Let(formers.pop().expect("a `struct` item has a member")),
                     _ => FlatItem::Rec(formers),
                 });
@@ -1260,7 +1270,7 @@ fn process_items(
                         param_tys.clone(),
                         curios_core::Telescope::build_marked(field_tys, ()),
                     );
-                    struct_decls.insert(
+                    lowered.struct_decls.insert(
                         name,
                         curios_core::StructDecl {
                             universe_context: curios_core::UniverseContext::empty(),
@@ -1274,7 +1284,7 @@ fn process_items(
                         },
                     );
 
-                    concepts.insert(
+                    lowered.concepts.insert(
                         name,
                         curios_core::ConceptDecl {
                             universe_context: curios_core::UniverseContext::empty(),
@@ -1373,7 +1383,7 @@ fn process_items(
                             ),
                         };
 
-                        flat_items.push(FlatItem::Let(FlatLet {
+                        lowered.items.push(FlatItem::Let(FlatLet {
                             span: None,
                             kind: curios_core::DefinitionKind::ConceptMethod {
                                 owner: context.prefixed(&concept.label),
@@ -1387,7 +1397,7 @@ fn process_items(
                         }));
                     }
                 }
-                flat_items.push(match formers.len() {
+                lowered.items.push(match formers.len() {
                     1 => FlatItem::Let(formers.pop().expect("a `concept` item has a member")),
                     _ => FlatItem::Rec(formers),
                 });
@@ -1461,19 +1471,24 @@ fn process_items(
                             type_: lower.signature_type(&signature, declared.as_ref())?,
                             body: lower.signature_value(&signature, |body| lower.value(body))?,
                         };
-                        witnesses.insert(name);
+                        lowered.witnesses.insert(name);
                         Ok(item)
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
 
-                flat_items.push(match items.len() {
+                lowered.items.push(match items.len() {
                     1 => FlatItem::Let(items.pop().expect("a `satisfy` item has a member")),
                     _ => FlatItem::Rec(items),
                 });
             }
         }
-        if declares && flat_items.len() > lowered_from {
-            context.end_declaration(flat_items[lowered_from..].iter().flat_map(FlatItem::names));
+        if declares && lowered.items.len() > lowered_from {
+            context.end_declaration(
+                lowered.items[lowered_from..]
+                    .iter()
+                    .flat_map(FlatItem::names),
+            );
+            lowered.note(context, lowered_from);
         }
     }
 
@@ -1773,29 +1788,14 @@ fn into_core_unit_within(
         }
     }
 
-    let mut flat_items = Vec::new();
-    // This unit's own, never the predecessors' extended in place. What a predecessor declares stays its own, and the one pass here that asks about one — the public-exposure audit, whose alias walk may land on a predecessor's type — takes them to query rather than as entries copied into these maps.
-    let mut induct_decls = BTreeMap::new();
-    let mut struct_decls = BTreeMap::new();
-    let mut concepts = BTreeMap::new();
-    let mut witnesses = BTreeSet::new();
-    let mut tests = Vec::new();
-    let mut foreigns = ForeignStore::new();
-    let mut broken = Vec::new();
+    let mut lowered = Lowering::default();
 
     // The compilation root's own items — the entry's, and none for a unit with no entrypoint — then one pass per prefix this unit claims. Exactly one of the two does any work, because owning the empty prefix is what makes a unit the entry.
     if let Some(entrypoint) = source.entrypoint() {
         curios_profile::profile!("process_items" => process_items(
             &entrypoint.module,
             &mut context,
-            &mut flat_items,
-            &mut induct_decls,
-            &mut struct_decls,
-            &mut concepts,
-            &mut witnesses,
-            &mut tests,
-            &mut foreigns,
-            &mut broken,
+            &mut lowered,
             &modules,
         ))?;
     }
@@ -1810,17 +1810,23 @@ fn into_core_unit_within(
         curios_profile::profile!("process_items" => process_items(
             content,
             &mut nested,
-            &mut flat_items,
-            &mut induct_decls,
-            &mut struct_decls,
-            &mut concepts,
-            &mut witnesses,
-            &mut tests,
-            &mut foreigns,
-            &mut broken,
+            &mut lowered,
             &modules,
         ))?;
     }
+
+    let Lowering {
+        items: mut flat_items,
+        facts,
+        induct_decls,
+        struct_decls,
+        concepts,
+        mut witnesses,
+        tests,
+        foreigns,
+        broken,
+    } = lowered;
+    let facts = facts.iter().collect::<Vec<_>>();
 
     // Every item is lowered, so every definition a witness's signature may name is at hand.
     name_witnesses(
@@ -1870,19 +1876,19 @@ fn into_core_unit_within(
         &public,
         &table,
         &flat_items,
+        &facts,
         NominalScope::new(&predecessor_modules, &induct_decls, &struct_decls),
     )?;
 
     let dead = unused_declarations(&Declarations {
         items: &flat_items,
+        facts: &facts,
+        placed: &|extent| anchoring.resolved(extent),
         entry: entry.as_ref(),
         table: &table,
         public: &public,
         own: &own,
         mod_spans: &mod_spans,
-        induct_decls: &induct_decls,
-        struct_decls: &struct_decls,
-        syntax,
     });
 
     // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.

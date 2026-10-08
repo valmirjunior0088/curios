@@ -39,6 +39,11 @@ impl Anchoring {
     pub(super) fn into_anchors(self) -> curios_core::Anchors {
         self.anchors.into_inner()
     }
+
+    /// The span `extent` lies on, among the declarations this lowering has reached.
+    pub(super) fn resolved(&self, extent: &curios_core::Extent) -> Option<Span> {
+        self.anchors.borrow().resolve(extent)
+    }
 }
 
 #[derive(Clone)]
@@ -105,6 +110,15 @@ impl FlatItem {
             FlatItem::Let(let_) => std::slice::from_mut(let_),
             FlatItem::Rec(lets) => lets.as_mut_slice(),
         }
+    }
+
+    /// Each definition of the item: its name, its kind and the module declaring it.
+    pub(super) fn declared(
+        &self,
+    ) -> impl Iterator<Item = (curios_core::Global, &curios_core::DefinitionKind, Qualifier)> {
+        self.lets()
+            .iter()
+            .map(|let_| (let_.name, &let_.kind, let_.island))
     }
 
     /// Every global this item names — the reachability prune's edges (see [`FlatItem::names`]). Locals are dropped: an item's binders are its own business, and reachability is a question about definitions.

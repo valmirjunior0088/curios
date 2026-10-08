@@ -5,17 +5,19 @@
 //! A private module none of whose declarations is reachable is reported once, at the `mod`, and its members are not: the fix is one deletion, and one line says so.
 
 use {
-    super::{
-        FlatItem, FlatLet, ModuleInfo, PublicInterface, Scoped, node_reference_names, owner_of,
-    },
+    super::{FlatItem, Lowered, ModuleInfo, PublicInterface, Scoped, owner_of},
     crate::Lint,
-    curios_utilities::{Mount, Qualifier, Span, SyntaxRegistry},
-    std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    curios_utilities::{Mount, Qualifier, Span},
+    std::collections::{BTreeSet, HashMap, HashSet},
 };
 
 /// What the walk is asked over: the unit's items and the tables the roots and the report are read from.
 pub(super) struct Declarations<'a> {
     pub items: &'a [FlatItem],
+    /// What was taken of each item where it was lowered — see [`Lowered`].
+    pub facts: &'a [&'a Lowered],
+    /// The span an extent of one of the unit's declarations lies on.
+    pub placed: &'a dyn Fn(&curios_core::Extent) -> Option<Span>,
     pub entry: Option<&'a curios_core::Entrypoint>,
     pub table: &'a Scoped<'a, ModuleInfo>,
     pub public: &'a Scoped<'a, PublicInterface>,
@@ -23,9 +25,6 @@ pub(super) struct Declarations<'a> {
     pub own: &'a [Mount],
     /// Where each `mod` the unit declares was written, by the module it declares.
     pub mod_spans: &'a HashMap<Qualifier, Span>,
-    pub induct_decls: &'a BTreeMap<curios_core::Global, curios_core::InductDecl>,
-    pub struct_decls: &'a BTreeMap<curios_core::Global, curios_core::StructDecl>,
-    pub syntax: &'a SyntaxRegistry,
 }
 
 /// Every `unused-declaration` lint of the unit, in item order; the caller sorts.
@@ -33,14 +32,13 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
     curios_profile::profile!("unused_declarations");
     let Declarations {
         items,
+        facts,
+        placed,
         entry,
         table,
         public,
         own,
         mod_spans,
-        induct_decls,
-        struct_decls,
-        syntax,
     } = declarations;
 
     let nodes = (0..items.len()).collect::<Vec<_>>();
@@ -58,9 +56,9 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
         root(&curios_core::Global::Authored(target), &mut pending);
     }
     for (node, item) in items.iter().enumerate() {
-        if item.lets().iter().any(|let_| {
+        if item.declared().any(|(_, kind, _)| {
             matches!(
-                let_.kind,
+                kind,
                 curios_core::DefinitionKind::Witness | curios_core::DefinitionKind::Test
             )
         }) {
@@ -80,28 +78,29 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
         if !reached.insert(node) {
             continue;
         }
-        let item = &items[node];
-        for name in node_reference_names(item, &item.names(), induct_decls, struct_decls, syntax) {
-            root(&name, &mut pending);
+        for name in &facts[node].reaches {
+            root(name, &mut pending);
         }
     }
 
-    // A declaration the reader wrote, by the name it was written under: what the lint may report. Kept by a `_` prefix on its own name or on a module above it, exactly as a binder is.
+    // A declaration the reader wrote, by the name it was written under and where that name stands: what the lint may report. Kept by a `_` prefix on its own name or on a module above it, exactly as a binder is.
     let dead = items
         .iter()
+        .zip(facts.iter())
         .enumerate()
         .filter(|(node, _)| !reached.contains(node))
-        .flat_map(|(_, item)| item.lets())
-        .filter(|let_| let_.span.is_some() && is_reportable(let_))
-        .filter(|let_| !let_.name.qualifier().is_some_and(kept))
+        .flat_map(|(_, (item, lowered))| item.declared().zip(&lowered.definitions))
+        .filter(|((_, kind, _), _)| is_reportable(kind))
+        .filter_map(|((name, _, _), declared)| Some((name, declared.label.as_ref()?)))
+        .filter(|(name, _)| !name.qualifier().is_some_and(kept))
         .collect::<Vec<_>>();
     let live = items
         .iter()
         .enumerate()
         .filter(|(node, _)| reached.contains(node))
-        .flat_map(|(_, item)| item.lets())
-        .filter(|let_| is_reportable(let_))
-        .filter_map(|let_| let_.name.qualifier().cloned())
+        .flat_map(|(_, item)| item.declared())
+        .filter(|(_, kind, _)| is_reportable(kind))
+        .filter_map(|(name, _, _)| name.qualifier().cloned())
         .collect::<Vec<_>>();
 
     // A private module every reportable declaration of which is dead is reported once, and its subtree is folded into it. Ancestors first, so a dead module inside a dead module is folded too.
@@ -119,7 +118,7 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
         let within = |qualifier: &Qualifier| qualifier.is_within(module);
         let has_dead = dead
             .iter()
-            .filter_map(|let_| let_.name.qualifier())
+            .filter_map(|(name, _)| name.qualifier())
             .any(within);
         let has_live = live.iter().any(within);
         let folded = dead_modules
@@ -136,16 +135,15 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
         .collect::<Vec<_>>();
     lints.extend(
         dead.iter()
-            .filter(|let_| {
-                !let_
-                    .name
+            .filter(|(name, _)| {
+                !name
                     .qualifier()
                     .is_some_and(|name| dead_modules.iter().any(|dead| name.is_within(dead)))
             })
-            .map(|let_| {
+            .map(|(name, label)| {
                 Lint::unused_declaration(
-                    let_.name.qualifier().map_or("", Qualifier::last),
-                    let_.span.clone().expect("filtered to the spanned"),
+                    name.qualifier().map_or("", Qualifier::last),
+                    placed(label).expect("a name lies in the text its declaration was sited at"),
                 )
             }),
     );
@@ -158,9 +156,9 @@ fn kept(name: &Qualifier) -> bool {
 }
 
 /// Whether a definition is one the reader declared under its own name: a `let`, a `foreign`, or the type former of an `induct`, `struct` or `concept`. A constructor, a method wrapper, a witness and a test are reached through their owner or are roots, and are never reported.
-fn is_reportable(let_: &FlatLet) -> bool {
+fn is_reportable(kind: &curios_core::DefinitionKind) -> bool {
     matches!(
-        let_.kind,
+        kind,
         curios_core::DefinitionKind::Authored
             | curios_core::DefinitionKind::InductiveType
             | curios_core::DefinitionKind::StructType

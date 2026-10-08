@@ -5,9 +5,76 @@
 use {
     super::{FlatItem, FlatLet},
     curios_core::Bound,
-    curios_utilities::SyntaxRegistry,
-    std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    curios_utilities::{Span, SyntaxRegistry},
+    std::collections::{BTreeMap, HashMap, HashSet},
 };
+
+/// What the unit-wide passes read of one lowered item, taken once, where it is lowered and its terms are open: the passes then read no term.
+pub(super) struct Lowered {
+    /// Every name the item's declaration references ([`node_reference_names`]), in the names' order.
+    pub reaches: Vec<curios_core::Global>,
+    /// What each of its definitions declares, in the item's order.
+    pub definitions: Vec<Declared>,
+}
+
+/// One definition of a lowered item, as the exposure audit and the `unused-declaration` lint read it.
+pub(super) struct Declared {
+    /// Where its name was written, in the text of its declaration: what the `unused-declaration` lint underlines. `None` for a definition the compiler named — a constructor, a method wrapper, a witness, a test — and for one that was built rather than written.
+    pub label: Option<curios_core::Extent>,
+    /// The top-level definitions its declared type names, in the order a term lists its free variables. Taken of a definition written under its own name alone, the only kind the audit asks of.
+    pub signature: Vec<curios_core::Global>,
+    /// What it is a bare, transparent alias of, where it is one.
+    pub alias: Option<AliasEdge>,
+}
+
+impl Lowered {
+    /// What the passes read of `item`, whose registry entries `induct_decls` and `struct_decls` already hold. `placed` gives the extent of a span in the text of the declaration the item was lowered from.
+    pub(super) fn of(
+        item: &FlatItem,
+        placed: impl Fn(&Span) -> Option<curios_core::Extent>,
+        induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
+        struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
+        syntax: &SyntaxRegistry,
+    ) -> Self {
+        let mut reaches =
+            node_reference_names(item, &item.names(), induct_decls, struct_decls, syntax)
+                .into_iter()
+                .collect::<Vec<_>>();
+        reaches.sort();
+
+        Self {
+            reaches,
+            definitions: item
+                .lets()
+                .iter()
+                .map(|let_| Declared {
+                    label: let_.span.as_ref().and_then(&placed),
+                    signature: match written_under_its_name(let_) {
+                        true => globals(let_.type_.free_vars()).collect(),
+                        false => Vec::new(),
+                    },
+                    alias: alias_of(let_),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Whether the source wrote this definition under its own name, in the module that declares it. A member synthesized into a nested namespace — an inductive's constructor, a concept's method wrapper — sits below its declaring module, and a witness has no authored path at all.
+fn written_under_its_name(let_: &FlatLet) -> bool {
+    let_.name
+        .qualifier()
+        .is_some_and(|path| path.without_last() == let_.island)
+}
+
+/// The top-level definitions among `names`. A binder is nobody's dependency: it is introduced and discharged inside the very signature being read.
+pub(super) fn globals(
+    names: impl IntoIterator<Item = curios_core::Free>,
+) -> impl Iterator<Item = curios_core::Global> {
+    names
+        .into_iter()
+        .filter_map(|name| name.as_global().cloned())
+}
 
 /// The full set of names one node's declaration references: its own free vars, plus (for a declared inductive/struct) its registry entry's free vars. An inductive's declaration is wider than its items: the registry entry's constructor payload and target types are elaborated alongside the type-binding group (`curios_elab::elaborate_module_rec` rebuilds the registry telescopes there), so a node declaring a registered name references everything its registry entry does — those names live nowhere in the type binding's own `type_`/`body`. Struct field types live in the registry too.
 pub(super) fn node_reference_names(
@@ -126,38 +193,35 @@ fn struct_free_vars(struct_decl: &curios_core::StructDecl) -> HashSet<curios_cor
         .collect()
 }
 
-#[derive(Clone)]
+/// A definition whose body is a bare top-level name: what it stands for and, where it is a type alias written out in full, every top-level name its body mentions.
 pub(super) struct AliasEdge {
     pub(super) target: curios_core::Global,
-    pub(super) dependencies: Option<BTreeSet<curios_core::Global>>,
+    pub(super) dependencies: Option<Vec<curios_core::Global>>,
 }
 
-pub(super) fn flat_aliases(items: &[FlatItem]) -> HashMap<curios_core::Global, AliasEdge> {
-    let lets = items.iter().flat_map(|item| match item {
-        FlatItem::Let(let_) => std::slice::from_ref(let_),
-        FlatItem::Rec(lets) => lets.as_slice(),
-    });
+/// The alias `let_` is, where its body is one.
+fn alias_of(let_: &FlatLet) -> Option<AliasEdge> {
+    // An alias target is a top-level definition. A body that is a bare *local* is not an alias — a discriminant test, not a leading-`/` test on the spelling.
+    let direct = let_.body.direct_type_alias_target(&let_.type_);
+    let target = *direct
+        .or_else(|| let_.body.transparent_alias_target())
+        .and_then(curios_core::Free::as_global)?;
 
-    lets.filter_map(|let_| {
-        // An alias target is a top-level definition. A body that is a bare *local* is not an alias — a discriminant test, not a leading-`/` test on the spelling.
-        let direct = let_.body.direct_type_alias_target(&let_.type_);
-        let target = *direct
-            .or_else(|| let_.body.transparent_alias_target())
-            .and_then(curios_core::Free::as_global)?;
-
-        Some((
-            let_.name,
-            AliasEdge {
-                target,
-                dependencies: direct.map(|_| {
-                    let_.body
-                        .free_vars()
-                        .into_iter()
-                        .filter_map(|name| name.as_global().cloned())
-                        .collect()
-                }),
-            },
-        ))
+    Some(AliasEdge {
+        target,
+        dependencies: direct.map(|_| globals(let_.body.free_vars()).collect()),
     })
-    .collect()
+}
+
+/// Every alias among `items`, by the name that is one, read off the facts taken of each.
+pub(super) fn aliases<'a>(
+    items: &[FlatItem],
+    facts: &[&'a Lowered],
+) -> HashMap<curios_core::Global, &'a AliasEdge> {
+    items
+        .iter()
+        .zip(facts)
+        .flat_map(|(item, lowered)| item.declared().zip(&lowered.definitions))
+        .filter_map(|((name, _, _), declared)| Some((name, declared.alias.as_ref()?)))
+        .collect()
 }
