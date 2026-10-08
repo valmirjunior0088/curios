@@ -150,6 +150,8 @@ pub enum Error {
         declared: Plicity,
         written: Plicity,
     },
+    /// A binder that states it binds a proof, at a type that is no proposition and no function into one. A mark is what the closed machine reads to bind a substituend unreduced, so one is held to what no judgment reads the value of.
+    NoProof(Term),
     /// A proposition eliminated into a relevant result while carrying something a program could read back. Permitted only for an empty proposition or a singleton whose payload is entirely determined.
     LargeElimination(Global),
     /// Elaboration-only syntax — a metavariable, an unresolved infix operator, or a polymorphic numeric literal — reached the kernel. The term was handed over before elaboration finished with it.
@@ -277,6 +279,13 @@ impl fmt::Display for Displayed<'_> {
             Error::NotASort(term) => {
                 let term = term.spelled(spelling);
                 write!(formatter, "`{term}` is not a universe")
+            }
+            Error::NoProof(type_) => {
+                let type_ = type_.spelled(spelling);
+                write!(
+                    formatter,
+                    "a binder states it binds a proof at `{type_}`, which is no proposition"
+                )
             }
             Error::NotAMotive { stated, refusal } => {
                 let stated = stated.spelled(spelling);

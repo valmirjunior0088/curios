@@ -15,7 +15,9 @@
 use {
     super::{Error, Globals, Kernel, Position, Sort, declared_into_prop},
     curios_analysis::Erased,
-    curios_core::{Enter, Free, Global, Item, RecGroup, Reducer, Subterm, Term, Totality},
+    curios_core::{
+        Enter, Free, FuncType, Global, Item, RecGroup, Reducer, Subterm, Term, Totality,
+    },
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
 
@@ -202,6 +204,37 @@ pub(crate) fn check_positions(
     }
 
     Ok(())
+}
+
+/// Whether a value of `type_` is a proof: `type_` is a proposition, or a function that ultimately answers one. It is what a binder states of what it binds where it is marked ([`curios_core::Scope::binds_proof`]), read here of the binder's type by this kernel's own rules. A sort is neither, so a binder at a type bears no mark: conversion reads a type's reduct, and a type is evaluated before it is bound.
+///
+/// **Held one way.** A mark is the closed machine's leave to bind a substituend as it was written, and a term left unreduced changes no reduct, so a binder that could be marked and is not costs a reduction and is refused nowhere. A binder marked at a type this reads as no proposition is refused ([`Error::NoProof`]): the machine this kernel runs leaves alone what no judgment reads the value of, and nothing else.
+pub(crate) fn bears_proof(kernel: &mut Kernel, type_: &Term) -> Result<bool, Error> {
+    if matches!(erased_half(kernel, type_)?, Some(Erased::Proof)) {
+        return Ok(true);
+    }
+    let reduced = kernel.reduce_forced(type_.clone())?;
+    let Subterm::FuncType(FuncType { telescope }) = &*reduced else {
+        return Ok(false);
+    };
+
+    kernel.scoped(|kernel| {
+        let mut cursor = telescope.cursor();
+        while let Some((_, domain)) = cursor.entry() {
+            kernel.advance_assumed(&mut cursor, &domain);
+        }
+        let codomain = cursor.body().expect("a cursor past every entry");
+
+        bears_proof(kernel, &codomain)
+    })
+}
+
+/// [`bears_proof`] held of a binder: refused where the binder states that it binds a proof and its type is no proposition.
+pub(crate) fn hold_proof(kernel: &mut Kernel, stated: bool, type_: &Term) -> Result<(), Error> {
+    match stated && !bears_proof(kernel, type_)? {
+        true => Err(Error::NoProof(type_.clone())),
+        false => Ok(()),
+    }
 }
 
 /// The erased half a term judged at `type_` belongs to, or `None` when the type is relevant and the obligations have nothing to say about it.

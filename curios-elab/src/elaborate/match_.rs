@@ -1007,6 +1007,7 @@ fn elaborate_induct_match(
         // An arm's written binders meet the payload's slots as a lambda's meet a function type's ([`align`]): the plain binders are the plain payloads, in order, and between two of them the hidden binders written are the first of their run. A hidden payload no binder was written for is bound all the same, hintless, so nothing in the arm names it and it is in scope as its mark makes it.
         let arity = telescope.len();
         let payload_plicities = telescope.marks();
+        let payload_proofs = telescope.proofs();
         let written = scope.plicities();
         let plain = |marks: &[Plicity]| {
             marks
@@ -1092,11 +1093,12 @@ fn elaborate_induct_match(
             .map_err(|error| from_arm(context, &head_elaborated, &ctor_val, error))?;
 
         let label_strs = labels.iter().collect::<Vec<_>>();
-        // Rebuild the arm over every payload under the constructor's canonical marks, so a re-elaborated arm writes each binder and re-checks identically (idempotence).
+        // Rebuild the arm over every payload under the constructor's canonical marks, so a re-elaborated arm writes each binder and re-checks identically (idempotence). Each binder states what its payload's does of whether it binds a proof, which the constructor's declaration said when it was published.
         cases_elaborated.push((
             tag.clone(),
             InductArm::new(
-                Scope::close(Many(arity), &label_strs, body_elaborated),
+                Scope::close(Many(arity), &label_strs, body_elaborated)
+                    .with_proofs(&payload_proofs),
                 payload_plicities,
             ),
         ));

@@ -747,12 +747,14 @@ fn a_growing_accumulation_is_bounded_by_what_it_has_already_built() {
 }
 
 /// A `Bits` fold over `width` bits returning a pair, and its single-value twin. `let (a, b) = go(…)` is projection sugar, so the pair form demands the *same* recursive call once per component; the twin demands it once. Everything else about the two is identical, so the gap between their curves is the cost of that second demand and nothing else.
+///
+/// Each program claims the fold's length, an equation the claim's check decides by running the fold. A call that only handed the fold's result on would not be run by a type at all: a divisor's bound over it is decided by what the sum is, whatever its operand comes to.
 fn paired_fold(width: usize, paired: bool) -> String {
     let ones = vec!["1"; 32].join(", ");
     match paired {
         true => format!(
             r#"
-            use /std/{{Nat, Bool, Bits}};
+            use /std/{{Nat, Bool, Bits, Eq}};
             let xor3(a: Bool, b: Bool, c: Bool) -> Bool =
                 match a
                 | true => match b | true => c | false => Bool/not(c) end
@@ -766,13 +768,13 @@ fn paired_fold(width: usize, paired: bool) -> String {
                     (b[xor3(h, c, c), ..rest], out)
                 end;
             let (bits, _) = go(Bits/slice(b[{ones}], 0, {width}), false);
-            let n : Nat = Nat/div(100, Bits/len(bits) + 3);
+            let _counted: Eq()(Bits/len(bits), {width}) = Eq/refl();
             /std/print("")
             "#
         ),
         false => format!(
             r#"
-            use /std/{{Nat, Bool, Bits}};
+            use /std/{{Nat, Bool, Bits, Eq}};
             let xor3(a: Bool, b: Bool, c: Bool) -> Bool =
                 match a
                 | true => match b | true => c | false => Bool/not(c) end
@@ -783,7 +785,7 @@ fn paired_fold(width: usize, paired: bool) -> String {
                 | b[] => b[]
                 | b[h, ..t] => b[xor3(h, c, c), ..go(t, xor3(h, c, c))]
                 end;
-            let n : Nat = Nat/div(100, Bits/len(go(Bits/slice(b[{ones}], 0, {width}), false)) + 3);
+            let _counted: Eq()(Bits/len(go(Bits/slice(b[{ones}], 0, {width}), false)), {width}) = Eq/refl();
             /std/print("")
             "#
         ),
@@ -794,19 +796,9 @@ fn paired_fold(width: usize, paired: bool) -> String {
 ///
 /// The machine records a forced application's value under the application itself, the path whose head is a recursive member included. That *a member selection's calls never repeat within a run because the fold argument strictly shrinks* is false for every tuple-returning recursion: `let (a, b) = go(…)` lowers to two projections of one call, so without the record each level would demand the same call twice and the fold would cost `2^n`.
 ///
-/// What this asserts is the *shape* rather than a figure: the pair form's increment per four bits must not grow. The single-value twin is the control — it makes one demand per level, so it grows by the same amount every four bits, and a regression that slowed both equally would not read as this defect. What is read is the heaviest single judgment, which here is the elaboration of the declaration that calls the fold.
+/// What this asserts is the *shape* rather than a figure: the pair form's increment per four bits must not grow. The single-value twin is the control — it makes one demand per level, so it grows by the same amount every four bits, and a regression that slowed both equally would not read as this defect. What is read is the heaviest single judgment, which here is the elaboration of the declaration that claims the fold's length.
 ///
 /// **Run against the defect and observed to fail**, which is what makes it a detector rather than a description: with the record removed the pair form's increments grow with every four bits, and the assertion names them. Reproduce by deleting the `Frame::Memo` push at the head frame's entry in `curios-core`'s machine.
-///
-/// The figures, `cargo xtask test curios a_recursive_call_read_twice`, counted at `526b55a0f`:
-///
-/// ```text
-///   width   single   paired
-///       4     6954     9947
-///       8     7382    10611
-///      12     7810    11275
-///      16     8238    11939
-/// ```
 #[test]
 fn a_recursive_call_read_twice_is_evaluated_once() {
     let units = |width: usize, paired: bool| {
@@ -921,6 +913,68 @@ fn a_claim_over_a_solved_metavariable_costs_what_the_claim_written_out_costs() {
             named.units()
         );
     }
+}
+
+/// A published item's binders state whether they bind a proof, each asked at its declared type under the binders before it: a function's proof does, and its type parameter, its number and a value at the type parameter do not; of two `let`s, the equation does and the sum does not.
+#[test]
+fn a_published_binder_states_whether_it_binds_a_proof() {
+    let source = "use /std/{Nat, Eq};\nuse /std/Bool/{Holds};\n\nlet through(A: Type, n: Nat, h: Holds(0 <= n), x: A) -> Nat =\n    let twice = n + n;\n    let same: Eq()(n, n) = Eq/refl();\n    twice;\n\n/std/print(\"ok\")\n";
+    let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
+    let program = typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+        .expect("the program elaborates within the default budget")
+        .program;
+    let through = program
+        .module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            curios_core::Item::Let(definition) if definition.name.to_string() == "/through" => {
+                Some(definition)
+            }
+            _ => None,
+        })
+        .expect("the program defines `through`");
+
+    let curios_core::Subterm::Func(function) = &*through.body else {
+        panic!("a function literal: {:?}", through.body);
+    };
+    assert_eq!(function.telescope.proofs(), [false, false, true, false]);
+
+    let curios_core::Subterm::Let(block) = &**function.telescope.terminal() else {
+        panic!("a `let`: {:?}", function.telescope.terminal());
+    };
+    assert_eq!(
+        [block.tail.binds_proof(0), block.tail.binds_proof(1)],
+        [false, true]
+    );
+}
+
+/// A claim over a call with a proof argument: `through` hands its number on and never reads its proof, and `proof` is the argument written at it.
+///
+/// `checked` is no recursive member's call: it eliminates the lemma, so taking it to a weak-head value runs the lemma's induction, `steps` deep, where a recursive call alone would stay folded.
+fn proof_argument_claim(steps: usize, proof: &str) -> String {
+    format!(
+        "use /std/{{Nat, Eq}};\n\nlet lemma(n: Nat) -> Eq()(n, n) =\n    match n\n    | 0 => Eq/refl()\n    | k + 1 => match lemma(k) | refl() => Eq/refl() end\n    end;\n\nlet checked(n: Nat) -> Eq()(n, n) =\n    match lemma(n) | refl() => Eq/refl() end;\n\nlet through(n: Nat, h: Eq()(n, n)) -> Nat = n;\n\nlet _claim: Eq()(through({steps}, {proof}), {steps}) = Eq/refl();\n\n/std/print(\"ok\")\n"
+    )
+}
+
+/// A type does not run a proof it only binds. The claim's call hands `through` a proof that costs an induction a thousand deep, at a binder that states it binds one, so both checkers bind it as written and the claim costs what it costs with `Eq/refl()` there. Evaluated before it is bound, the proof is the whole of the claim's cost, twenty times the rest.
+#[test]
+fn a_type_does_not_run_a_proof_it_only_binds() {
+    let (proved_elaborated, proved_checked) =
+        declaration_cost(&proof_argument_claim(1000, "checked(1000)"));
+    let (plain_elaborated, plain_checked) =
+        declaration_cost(&proof_argument_claim(1000, "Eq/refl()"));
+
+    assert!(
+        proved_elaborated.units() * 4 <= plain_elaborated.units() * 5
+            && proved_checked.units() * 4 <= plain_checked.units() * 5,
+        "the elaborator spends {} units with the proof computed and {} with it trivial, and the kernel {} and {}",
+        proved_elaborated.units(),
+        plain_elaborated.units(),
+        proved_checked.units(),
+        plain_checked.units()
+    );
 }
 
 /// What each claim of the type-level benchmark set costs each checker: an equality a type states and `Eq/refl()` proves, so that checking the program is reducing the claim's left side to its right. Six take a `Str` apart, one reads a `Flt`, one searches a `Str` and maps the position found.

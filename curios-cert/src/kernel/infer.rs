@@ -25,6 +25,8 @@ mod declaration_tests;
 #[cfg(test)]
 mod intrinsic_tests;
 #[cfg(test)]
+mod proof_binder_tests;
+#[cfg(test)]
 mod signature_tests;
 #[cfg(test)]
 mod sort_tests;
@@ -39,7 +41,7 @@ use {
     super::{
         Counted, Error, Kernel, Sort, as_sort, check_group, convert, infer_sort, synth_neutral,
     },
-    crate::{foreign_signature, spine},
+    crate::{foreign_signature, hold_proof, spine},
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance,
         InstanceHead, Intrinsic, Let, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj,
@@ -910,6 +912,7 @@ fn under_bindings<T>(
                 infer_type(kernel, &type_)?;
                 let partial = kernel.partial_groups();
                 check(kernel, &value, &type_)?;
+                hold_proof(kernel, tail.binds_proof(index), &type_)?;
                 let binder = kernel.fresh(tail.hint(index));
                 kernel.bind(&binder, &type_, &value, kernel.partial_groups() > partial);
                 binders.push(Term::free_var(&binder));
@@ -1165,6 +1168,7 @@ fn infer_telescope(
         while let Some((_, domain)) = cursor.entry() {
             let mark = cursor.mark().expect("a mark stands at an entry");
             infer_type(kernel, &domain)?;
+            hold_proof(kernel, cursor.binds_proof(), &domain)?;
 
             let binder = kernel.advance_assumed(&mut cursor, &domain);
             if let Some(argument) = arguments.get(entries.len()) {

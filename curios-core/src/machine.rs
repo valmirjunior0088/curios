@@ -14,6 +14,8 @@
 //!
 //! **Substituted terms are evaluated first.** Arguments, `let` values, and `Induct` payload binds are taken to weak-head values before substitution, where the hosts substitute them unreduced. On a closed term the result is the same by confluence; what changes is cost, which is the point. Two consequences are handled rather than hoped away: a substituend whose evaluation *errors* falls back to its unreduced spelling — the hosts defer such an error until the position is demanded, and the fallback preserves exactly that — and a substituend whose evaluation exhausts the budget propagates, because spend is never refunded. An induction hypothesis is the deliberate exception: it is bound unreduced exactly as the hosts bind it, because evaluating one eagerly would run the whole tail fold whether or not the arm uses it. Once an arm does demand it, its value is recorded in the run-scoped memo under the hypothesis term, so an arm projecting a tuple-valued hypothesis several times runs the tail fold once rather than once per projection.
 //!
+//! **A proof is left as written.** A substituend at a binder that states it binds a proof is: an argument, a `let`'s value and an arm's payload at one are a proof, whose value no judgment reads, so they are bound unreduced, and a body that eliminates one demands it where it does, the run's memo keeping the demand to one evaluation. The binder states it because the machine holds a value and a closed body where it substitutes, and no telescope to read a sort under ([`Scope::binds_proof`]). So is the proof of an operation's bound: no fold reads it ([`Intrinsic::bound`]), so the intrinsic arm, which forces the operands it folds over, never enters it. A type is evaluated as any substituend is, a family among them: conversion compares the reduct it is handed, and two instances of a definition apart in a level are told from one by whether they reach it as written or as what they unfold to.
+//!
 //! **Eta is contracted, with the hosts' own probe.** `(x) => f(x)` steps to `f` exactly as under the strategies, through the fresh binder identities [`Reducer::fresh_binder`] mints. Skipping the probe on the theory that conversion decides eta anyway would starve the elaborator's witness keying, which reads rigid heads off weak-head forms and would not find `Async` under `(A) => Async(A)`.
 //!
 //! **`Induct` arms bind payload values.** The kernel binds an arm to the scrutinee's payload directly; the elaborator binds projections of the original head, guarding annotation holes a reduced payload could carry. A closed, metavariable-free payload carries none, so the machine uses the kernel's rule on both sides.
@@ -103,8 +105,11 @@ enum Finish {
 /// A left-to-right evaluation of a fixed list of terms, then a [`Finish`] over the values.
 ///
 /// `catch` marks the positions the hosts substitute unreduced — beta arguments and arm payload binds — where an evaluation error must fall back to the original spelling rather than surface, because the host would have deferred it until the position was demanded. Intrinsic and foreign operands are strict in the hosts too, so their runs do not catch.
+///
+/// `written` says which of those positions are bound as they are written, one answer per term and none where no position is: the ones whose binder states that it binds a proof ([`Scope::binds_proof`]). No judgment reads a proof's value, so the run does not compute it; a body that eliminates one demands it where it does, once, through the run's memo.
 struct Args {
     originals: Vec<Term>,
+    written: Vec<bool>,
     done: Vec<Term>,
     next: usize,
     item_demand: Demand,
@@ -407,21 +412,19 @@ impl Machine {
             },
 
             Subterm::Intrinsic(intrinsic) => {
-                let subterm = Subterm::Intrinsic(intrinsic);
+                // The operands the operation computes with, and not the proof of its bound: no fold reads it ([`Intrinsic::bound`]), and forced, a certificate that is a lemma proved by induction runs its induction at every closed call.
                 let mut operands = Vec::new();
-                subterm.any_child_term(&mut |child| {
-                    operands.push(child.clone());
+                intrinsic.any_computed(&mut |operand| {
+                    operands.push(operand.clone());
                     false
                 });
-                let Subterm::Intrinsic(intrinsic) = subterm else {
-                    unreachable!("rebuilt from the same value")
-                };
 
                 let count = operands.len();
                 self.args(
                     host,
                     Args {
                         originals: operands,
+                        written: Vec::new(),
                         done: Vec::with_capacity(count),
                         next: 0,
                         // The hosts' intrinsic folds force their operands, so operand errors surface here exactly as they do there.
@@ -443,6 +446,7 @@ impl Machine {
                     host,
                     Args {
                         originals: operands,
+                        written: Vec::new(),
                         done: Vec::with_capacity(count),
                         next: 0,
                         item_demand: Demand::Whnf,
@@ -745,6 +749,7 @@ impl Machine {
             host,
             Args {
                 originals: params,
+                written: telescope.proofs(),
                 done: Vec::with_capacity(count),
                 next: 0,
                 item_demand: Demand::Whnf,
@@ -762,7 +767,8 @@ impl Machine {
             let next = args.originals[args.next].clone();
             let demand = args.item_demand;
             args.next += 1;
-            if args.catch && matches!(&*next, Subterm::Var(_)) {
+            let written = args.written.get(args.next - 1).copied().unwrap_or(false);
+            if args.catch && (written || matches!(&*next, Subterm::Var(_))) {
                 args.done.push(next);
                 continue;
             }
@@ -815,9 +821,19 @@ impl Machine {
         tail: Scope<Many>,
         demand: Demand,
     ) -> Result<Step, ReduceError> {
-        if next < bindings.len() {
-            let refs = released.iter().collect::<Vec<_>>();
-            let current = bindings[next].value().release(&refs);
+        let (mut released, mut next) = (released, next);
+        while next < bindings.len() {
+            let current = {
+                let refs = released.iter().collect::<Vec<_>>();
+                bindings[next].value().release(&refs)
+            };
+            // A proof is bound as it is written, as an argument at such a binder is ([`Args`]).
+            if tail.binds_proof(next) {
+                released.push(current);
+                next += 1;
+                continue;
+            }
+
             self.push(
                 host,
                 Frame::LetK {
@@ -894,6 +910,9 @@ impl Machine {
                             host,
                             Args {
                                 originals: ctor.payload.clone(),
+                                written: (0..arm.arity())
+                                    .map(|position| arm.body.binds_proof(position))
+                                    .collect(),
                                 done: Vec::with_capacity(ctor.payload.len()),
                                 next: 0,
                                 item_demand: Demand::Whnf,

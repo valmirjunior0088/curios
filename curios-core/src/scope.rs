@@ -22,6 +22,9 @@ use {
 mod telescope;
 pub use telescope::*;
 
+mod proof_binders;
+pub use proof_binders::*;
+
 // === Arity ===================================================================
 
 /// A [`Scope`]'s binder count, lifted to the type level: the fixed arities ([`One`]/[`Two`]/[`Three`]) make `close`/`open` take exactly-sized arrays, so an arity mismatch on the common eliminator shapes is a compile error; [`Many`] defers the check to a runtime assert.
@@ -451,10 +454,13 @@ pub fn stamp_declaration_instance<B: Bound>(
 pub(crate) enum Label {
     /// A global a `rec` group's binder closes over, rendered as its path as a free occurrence of it would be.
     Global(Global),
-    /// A local binder: its display hint, `None` where it was minted hintless, and where it sits among its declaration's written binders, when the lowering wrote it.
+    /// A local binder: its display hint, `None` where it was minted hintless, where it sits among its declaration's written binders, when the lowering wrote it, and whether it binds a proof.
+    ///
+    /// **`proof` is stated once, when the binder's declaration is published**, of the binder's final type: a proposition, or a function that ultimately answers one. It is `false` until then and wherever nothing decided it. It is what the closed machine reads to leave a substituend as it was written, so a `false` that should be `true` costs a reduction and changes no reduct. Like the hint it is no part of a scope's identity.
     Local {
         hint: Option<Symbol>,
         written: Option<u32>,
+        proof: bool,
     },
 }
 
@@ -466,6 +472,7 @@ impl Label {
             Free::Local(mint) => Label::Local {
                 hint: mint.hint_symbol(),
                 written: mint.written(),
+                proof: false,
             },
         }
     }
@@ -475,11 +482,32 @@ impl Label {
     /// The empty hint is *no* hint, and restoring it as one is not the same thing. [`Telescope::labels`](crate::Telescope::labels) renders a hintless binder as `""` — the convention a positional field is compared under — so a rebuild that relabels from those labels would otherwise hand every unlabeled position a hint that is present but says nothing. A printer then reads "present" as "labeled" and a rename map disambiguates the shared spelling into `2`, `3`, turning `{Nat, Bool, Str}` into `{: Nat, 2: Bool, 3: Str}` in every report that names one.
     fn relabelled(&self, hint: &str) -> Self {
         match self {
-            Label::Local { written, .. } => Label::Local {
+            Label::Local { written, proof, .. } => Label::Local {
                 hint: (!hint.is_empty()).then(|| Symbol::new(hint)),
                 written: *written,
+                proof: *proof,
             },
             Label::Global(_) => *self,
+        }
+    }
+
+    /// The same label stating whether its binder binds a proof. A global binds a `rec` group's member, which is none by its binder, so it is returned unchanged.
+    fn proving(&self, proof: bool) -> Self {
+        match self {
+            Label::Local { hint, written, .. } => Label::Local {
+                hint: *hint,
+                written: *written,
+                proof,
+            },
+            Label::Global(_) => *self,
+        }
+    }
+
+    /// Whether this binder binds a proof, as its declaration stated when it was published; `false` for a global, and for a binder nothing has decided.
+    pub(crate) fn binds_proof(&self) -> bool {
+        match self {
+            Label::Local { proof, .. } => *proof,
+            Label::Global(_) => false,
         }
     }
 
@@ -599,6 +627,36 @@ impl<A: Arity, B: Bound> Scope<A, B> {
     /// Where the binder at position `index` sits among its declaration's written binders, when the lowering wrote it: what the elaborator records of the local it opens from it, so a proof reading the local credits the binder a lint names.
     pub fn written(&self, index: usize) -> Option<u32> {
         self.label(index)?.written()
+    }
+
+    /// Whether the binder at position `index` binds a proof, as its declaration stated when it was published: what the closed machine reads to bind a substituend as it was written.
+    pub fn binds_proof(&self, index: usize) -> bool {
+        self.label(index).is_some_and(Label::binds_proof)
+    }
+
+    /// This scope with each binder stating whether it binds a proof, one answer per binder in order; every binder keeps its hint, and the body is left as it is.
+    pub fn with_proofs(self, proofs: &[bool]) -> Self {
+        assert_eq!(
+            proofs.len(),
+            self.arity(),
+            "one answer per binder of the scope"
+        );
+        let unlabelled = Label::Local {
+            hint: None,
+            written: None,
+            proof: false,
+        };
+        let labels = proofs
+            .iter()
+            .enumerate()
+            .map(|(index, proof)| self.label(index).unwrap_or(&unlabelled).proving(*proof))
+            .collect();
+
+        Self {
+            arity: self.arity,
+            labels: Some(labels),
+            body: self.body,
+        }
     }
 
     pub fn first_hint(&self) -> Option<&'static str> {

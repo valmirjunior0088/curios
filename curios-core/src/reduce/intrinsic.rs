@@ -308,7 +308,6 @@ fn reduce_bin_pointwise(
 ) -> Result<Subterm, ReduceError> {
     let left = reducer.reduce_forced(left.clone())?;
     let right = reducer.reduce_forced(right.clone())?;
-    let same_length = reducer.reduce(same_length.clone())?;
 
     if let (
         Subterm::Intrinsic(Intrinsic::Bin(found_left, run_left)),
@@ -327,7 +326,12 @@ fn reduce_bin_pointwise(
         )));
     }
 
-    Ok(Subterm::Intrinsic(rebuild(grain, left, right, same_length)))
+    Ok(Subterm::Intrinsic(rebuild(
+        grain,
+        left,
+        right,
+        same_length.clone(),
+    )))
 }
 
 pub fn reduce_intrinsic(
@@ -1530,7 +1534,6 @@ pub fn reduce_intrinsic(
         } => {
             let grain = *grain;
             let bin = reducer.reduce_forced(bin.clone())?;
-            let aligned = reducer.reduce(aligned.clone())?;
 
             // Reading a run at the other grain and back is the run — `Intrinsic::undone`, both directions, each regrouping the other's inverse.
             if let Some(operand) = intrinsic.undone(&bin) {
@@ -1557,7 +1560,9 @@ pub fn reduce_intrinsic(
             }
 
             Ok(Subterm::Intrinsic(Intrinsic::bin_reinterp(
-                grain, bin, aligned,
+                grain,
+                bin,
+                aligned.clone(),
             )))
         }
         Intrinsic::BinAnd {
@@ -2132,7 +2137,7 @@ pub fn reduce_intrinsic(
         } => Ok(Subterm::Intrinsic(Intrinsic::Channel {
             element: reducer.reduce(element.clone())?,
             capacity: reducer.reduce(capacity.clone())?,
-            positive: reducer.reduce(positive.clone())?,
+            positive: positive.clone(),
         })),
         Intrinsic::ChannelPush {
             element,

@@ -74,5 +74,8 @@ pub use into_ersd::*;
 mod zonk;
 pub use zonk::*;
 
+mod proof_binders;
+pub(crate) use proof_binders::*;
+
 mod test_tail;
 pub use test_tail::*;

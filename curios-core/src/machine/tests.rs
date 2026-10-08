@@ -1,8 +1,8 @@
 use {
     super::{ClosedHost, Demand, reduce_closed, unfold_rec},
     crate::{
-        Category, Cost, Exhaustion, Free, Intrinsic, Many, ReduceError, Reducer, Scope, Subterm,
-        Term,
+        Cases, Category, Cost, Exhaustion, Free, Func, InductArm, Intrinsic, Let, Many, Match,
+        ReduceError, Reducer, Scope, Subterm, Term,
     },
     curios_num::{Binary, Grain},
     std::collections::BTreeMap,
@@ -424,6 +424,187 @@ fn a_definition_unfolds_through_the_host() {
         reduce_closed(&mut host, occurrence.clone(), Demand::Forced),
         Ok(occurrence)
     );
+}
+
+/// A term whose value no budget reaches: a group that calls itself on what it was handed, applied. It stands for a certificate that costs, as a lemma proved by induction does at a large number.
+fn spinning() -> Term {
+    let (loop_, n) = (binder(90, "loop"), binder(91, "n"));
+    let body = Term::func(
+        [(n, nat_type())],
+        Term::apply(Term::free_var(&loop_), [Term::free_var(&n)]),
+    );
+
+    Term::rec(
+        [(loop_, Term::func_type([(n, nat_type())], nat_type()), body)],
+        Term::apply(Term::free_var(&loop_), [nat(1)]),
+    )
+}
+
+/// The proof of a bound is not run: no fold reads it, so a quotient is its operands' whatever its certificate would cost. Forced beside them, as every operand of an operation once was, the certificate below spends the budget.
+#[test]
+fn the_proof_of_a_bound_is_not_run() {
+    let mut host = Host::new(100_000);
+    let quotient = Term::intrinsic(Intrinsic::NatDiv {
+        dividend: nat(6),
+        divisor: nat(3),
+        non_zero: spinning(),
+    });
+
+    assert_eq!(
+        reduce_closed(&mut host, quotient, Demand::Forced),
+        Ok(nat(2))
+    );
+}
+
+/// An operation that does not fold keeps the proof of its bound as it was written: the three folds that rebuild their node over a proof — a pointwise operation, a regrouping and a channel's creation — hand it on unreduced.
+#[test]
+fn an_operation_that_does_not_fold_keeps_its_proof_as_written() {
+    let mut host = Host::new(100_000);
+    let (left, right) = (binder(92, "left"), binder(93, "right"));
+    let stuck = [
+        Intrinsic::bin_reinterp(Grain::X, Term::free_var(&left), spinning()),
+        Intrinsic::BinAnd {
+            grain: Grain::X,
+            left: Term::free_var(&left),
+            right: Term::free_var(&right),
+            same_length: spinning(),
+        },
+        Intrinsic::Channel {
+            element: nat_type(),
+            capacity: Term::free_var(&left),
+            positive: spinning(),
+        },
+    ];
+
+    for operation in stuck {
+        let written = Term::intrinsic(operation);
+
+        assert_eq!(
+            reduce_closed(&mut host, written.clone(), Demand::Forced),
+            Ok(written)
+        );
+    }
+}
+
+/// An argument no budget this file's hosts hold could reduce: a tower of powers, which a position that evaluates it is refused on.
+fn unaffordable() -> Term {
+    Term::intrinsic(Intrinsic::NatPow(
+        nat(10),
+        Term::intrinsic(Intrinsic::NatPow(nat(10), nat(10))),
+    ))
+}
+
+/// `function`, a function literal, with each binder stating what `proofs` says of whether it binds a proof.
+fn stating(function: Term, proofs: &[bool]) -> Term {
+    let Subterm::Func(Func { telescope }) = Term::unwrap_or_clone(function) else {
+        panic!("a function literal");
+    };
+
+    Term::from(Subterm::Func(Func {
+        telescope: telescope.with_proofs(proofs),
+    }))
+}
+
+/// An argument at a binder that states it binds a proof is bound as written: the function below never reads its second argument, and applied to one no budget reduces it answers its first. The same function with the binder unmarked evaluates the argument before it binds it, and is refused.
+#[test]
+fn an_argument_at_a_proof_binder_is_bound_as_written() {
+    let mut host = Host::new(100_000);
+    let (n, h) = (binder(0, "n"), binder(1, "h"));
+    let function = Term::func([(n, nat_type()), (h, nat_type())], Term::free_var(&n));
+
+    assert_eq!(
+        reduce_closed(
+            &mut host,
+            Term::apply(
+                stating(function.clone(), &[false, true]),
+                [nat(7), unaffordable()]
+            ),
+            Demand::Forced
+        ),
+        Ok(nat(7))
+    );
+    assert!(
+        reduce_closed(
+            &mut host,
+            Term::apply(function, [nat(7), unaffordable()]),
+            Demand::Forced
+        )
+        .is_err_and(|refusal| refusal.is_exhausted())
+    );
+}
+
+/// A body that eliminates what a proof binder binds still demands it: a mark is the machine's leave to bind a term as written and changes no value, so the sum below is its operands' whichever binder says what.
+#[test]
+fn a_body_that_reads_a_proof_binder_demands_it() {
+    let mut host = Host::new(100_000);
+    let h = binder(0, "h");
+    let function = stating(
+        Term::func(
+            [(h, nat_type())],
+            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&h), nat(1))),
+        ),
+        &[true],
+    );
+    let argument = Term::intrinsic(Intrinsic::nat_add(nat(2), nat(3)));
+
+    assert_eq!(
+        reduce_closed(&mut host, Term::apply(function, [argument]), Demand::Forced),
+        Ok(nat(6))
+    );
+}
+
+/// A `let` binds a value at a proof binder as written, and an arm a payload at one: neither tail below reads what it binds, and each answers over a term no budget reduces. Unmarked, each evaluates it first and is refused.
+#[test]
+fn a_let_and_an_arm_bind_a_proof_as_written() {
+    let x = binder(0, "x");
+    let block = Term::let_(&x, nat_type(), unaffordable(), nat(5));
+    let name = crate::Global::Authored(curios_utilities::Qualifier::from(["Box"]));
+    let matched = Term::induct_match(
+        Term::variant(name, Vec::<Term>::new(), "box", [unaffordable()]),
+        None,
+        nat_type(),
+        [("box", vec![x], nat(5))],
+    );
+
+    let marked = |term: &Term| match Term::unwrap_or_clone(term.clone()) {
+        Subterm::Let(Let { bindings, tail }) => Term::from(Subterm::Let(Let {
+            bindings,
+            tail: tail.with_proofs(&[true]),
+        })),
+        Subterm::Match(Match {
+            head,
+            result,
+            cases: Cases::Induct { cases, default },
+        }) => Term::from(Subterm::Match(Match {
+            head,
+            result,
+            cases: Cases::Induct {
+                cases: cases
+                    .into_iter()
+                    .map(|(tag, arm)| {
+                        let plicities = arm.plicities().to_vec();
+                        (
+                            tag,
+                            InductArm::new(arm.body.with_proofs(&[true]), plicities),
+                        )
+                    })
+                    .collect(),
+                default,
+            },
+        })),
+        other => panic!("neither a `let` nor a match: {other:?}"),
+    };
+
+    for term in [block, matched] {
+        assert_eq!(
+            reduce_closed(&mut Host::new(100_000), marked(&term), Demand::Forced),
+            Ok(nat(5))
+        );
+        assert!(
+            reduce_closed(&mut Host::new(100_000), term, Demand::Forced)
+                .is_err_and(|refusal| refusal.is_exhausted())
+        );
+    }
 }
 
 /// What the three fold shapes spend per element, printed rather than asserted — the assertions live in the budget bounds of the ordinary tests above. Set `CURIOS_MACHINE_TRACE` to shrink the ladder and print every dispatch.

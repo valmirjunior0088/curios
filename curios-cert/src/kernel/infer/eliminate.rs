@@ -123,8 +123,22 @@ fn check_arm(
         }
     }
 
+    let declared = signature.proofs();
+
     kernel.scoped(|kernel| {
         open_payload(kernel, signature, |kernel, binders, payload, targets| {
+            // An arm binds as written only what its constructor's payload says is a proof, which the declaration was held to where it was checked.
+            for (position, binder) in binders.iter().enumerate() {
+                if arm.body.binds_proof(position) && !declared[position] {
+                    let domain = kernel
+                        .local_type(binder)
+                        .cloned()
+                        .expect("a payload binder is assumed at its type");
+
+                    return Err(Error::NoProof(domain));
+                }
+            }
+
             // The forced equations of this case, as one substitution. An unreachable arm (a definite clash) is checked as written, exactly as the elaborator checks one.
             let mut solutions = specialize(kernel, family, targets, binders)?;
 

@@ -795,6 +795,33 @@ impl Intrinsic {
 
     /// Visit each `Term` operand of `self`, in field order. The single source of truth for which fields of an intrinsic are its term operands — `reach`, `any_metavar`, and `collect_construction_names` all read it. (`traverse` keeps its own match: it rebuilds rather than visits.) The closure is taken `impl FnMut` so it monomorphises and inlines, leaving the de Bruijn / region hot path allocation- and indirection-free.
     fn for_each_operand<'a>(&'a self, visit: &mut impl FnMut(&'a Term)) {
+        self.for_each_role(visit, |visit, proof| visit(proof));
+    }
+
+    /// The proof of this operation's bound, where it states one.
+    ///
+    /// **The one operand no fold reads.** A bound is what the type demands of a call and the checker enforces; a fold computes with the operands the bound is stated over and hands the proof on as it was written, in the node it rebuilds where it does not fold. So an evaluator has nothing to force here, and one that forces it runs whatever the proof is — a lemma proved by induction runs its induction — at every closed call.
+    pub fn bound(&self) -> Option<&Term> {
+        let mut proof = None;
+        self.for_each_role(&mut |_| {}, |_, found| proof = Some(found));
+
+        proof
+    }
+
+    /// Whether any operand this operation computes with satisfies `pred`: every operand but the proof of its bound ([`Intrinsic::bound`]), in field order.
+    pub fn any_computed<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
+        let mut found = false;
+        self.for_each_role(&mut |operand| found = found || pred(operand), |_, _| {});
+
+        found
+    }
+
+    /// [`Intrinsic::for_each_operand`] with each operand handed to the closure of its role: `visit` for one the operation computes with, `bound` for the proof of its bound, which is handed `visit` beside it so a reader of every operand passes one closure through. One match states which is which, so the walk every reader shares and the one operand an evaluator leaves alone cannot disagree. The proof stands last wherever there is one, matching `signature`'s order.
+    fn for_each_role<'a, V: FnMut(&'a Term)>(
+        &'a self,
+        visit: &mut V,
+        mut bound: impl FnMut(&mut V, &'a Term),
+    ) {
         match self {
             Intrinsic::BoolType
             | Intrinsic::Bool(_)
@@ -972,7 +999,7 @@ impl Intrinsic {
             } => {
                 visit(a);
                 visit(b);
-                visit(p);
+                bound(visit, p);
             }
 
             Intrinsic::FltOfLeBytes {
@@ -991,7 +1018,7 @@ impl Intrinsic {
                 aligned: p,
             } => {
                 visit(a);
-                visit(p);
+                bound(visit, p);
             }
 
             // The four sequence accessors, beside the division family for the same reason. Their arity differs by carrier — a `List` operation leads with its element type — so they group by operand count rather than by which one is the proof, and the proof is last in every one of them, matching `signature`'s order.
@@ -1021,7 +1048,7 @@ impl Intrinsic {
             } => {
                 visit(a);
                 visit(b);
-                visit(p);
+                bound(visit, p);
             }
 
             Intrinsic::BinSlice {
@@ -1040,7 +1067,7 @@ impl Intrinsic {
                 visit(a);
                 visit(b);
                 visit(c);
-                visit(p);
+                bound(visit, p);
             }
 
             Intrinsic::ListSlice {
@@ -1054,7 +1081,7 @@ impl Intrinsic {
                 visit(b);
                 visit(c);
                 visit(d);
-                visit(p);
+                bound(visit, p);
             }
 
             Intrinsic::BinConcat {
@@ -1119,15 +1146,19 @@ impl Intrinsic {
                 element: a,
                 channel: b,
                 value: c,
-            }
-            | Intrinsic::Channel {
-                element: a,
-                capacity: b,
-                positive: c,
             } => {
                 visit(a);
                 visit(b);
                 visit(c);
+            }
+            Intrinsic::Channel {
+                element: a,
+                capacity: b,
+                positive: p,
+            } => {
+                visit(a);
+                visit(b);
+                bound(visit, p);
             }
         }
     }

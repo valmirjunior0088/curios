@@ -2195,6 +2195,14 @@ impl Term {
         }
     }
 
+    /// This term carrying `subterm` on a node of its own, whatever `subterm` equals: for a rewrite of what equality does not read. [`Term::rebuilt`] hands back the node it was given where the payload is equal, and a payload apart in a binder's label alone is equal, so a walk that states something on a label would be handed back the term it started from.
+    pub(crate) fn respelled(&self, subterm: Subterm) -> Self {
+        Self {
+            span: self.span.clone(),
+            inner: Rc::new(Node::new(subterm)),
+        }
+    }
+
     /// Rewrite a potentially deep constructor/application spine without putting one native frame per link on the stack. Term hooks and universe-level rewrites are structurally local at these nodes: neither former changes binder depth, and every nested scope still delegates to ordinary traversal.
     fn traverse_rewrite_spine<F>(&self, visit: &mut Visit<F>) -> Self
     where

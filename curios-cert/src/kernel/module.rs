@@ -13,7 +13,7 @@ mod tests;
 
 use {
     super::{Counted, Error, Kernel, Sort, carries_information, check, convert, infer_type},
-    crate::yields_a_sort,
+    crate::{hold_proof, yields_a_sort},
     curios_core::{
         Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term, Totality,
         UniverseContext,
@@ -415,6 +415,7 @@ fn check_signature<B: Bound + Clone>(
 
         while let Some((_, domain)) = cursor.entry() {
             let sort = infer_type(kernel, &domain)?;
+            hold_proof(kernel, cursor.binds_proof(), &domain)?;
 
             if let Some((bound, raised)) = &sized
                 && let Sort::Type(level) = sort

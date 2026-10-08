@@ -153,6 +153,55 @@ impl<B: Bound> Telescope<B> {
         out
     }
 
+    /// Whether each member binds a proof, in order, as the telescope's declaration stated when it was published ([`Scope::binds_proof`]).
+    pub fn proofs(&self) -> Vec<bool> {
+        let mut out = Vec::new();
+        let mut cur = self;
+        while let Telescope::Cons(_, _, rest) = cur {
+            out.push(rest.binds_proof(0));
+            cur = &rest.body;
+        }
+        out
+    }
+
+    /// This telescope with each member stating whether it binds a proof, one answer per member in order, every type, mark and hint left as it is.
+    pub fn with_proofs(self, proofs: &[bool]) -> Self {
+        assert_eq!(
+            proofs.len(),
+            self.len(),
+            "one answer per member of the telescope"
+        );
+        let mut entries = Vec::with_capacity(proofs.len());
+        let mut current = self;
+        let body = loop {
+            match current {
+                Telescope::Done(body) => break body,
+                Telescope::Cons(mark, ty, rest) => {
+                    let Scope {
+                        arity,
+                        labels,
+                        body,
+                    } = rest;
+                    entries.push((mark, ty, arity, labels));
+                    current = *body;
+                }
+            }
+        };
+
+        entries.into_iter().zip(proofs).rev().fold(
+            Telescope::Done(body),
+            |rest, ((mark, ty, arity, labels), proof)| {
+                let scope = Scope {
+                    arity,
+                    labels,
+                    body: Box::new(rest),
+                };
+
+                Telescope::Cons(mark, ty, scope.with_proofs(&[*proof]))
+            },
+        )
+    }
+
     /// Whether `other` states the same marks in the same order, read off the two spines: what a function type's identity asks of two telescopes before a domain is compared.
     pub fn same_marks(&self, other: &Self) -> bool {
         let (mut this, mut that) = (self, other);
@@ -378,6 +427,11 @@ impl<'a, B: Bound> Cursor<'a, B> {
     /// Where the binder at this position sits among its declaration's written binders, when the lowering wrote it — see [`Scope::written`].
     pub fn written(&self) -> Option<u32> {
         self.label()?.written()
+    }
+
+    /// Whether the binder at this position binds a proof — see [`Scope::binds_proof`]; `false` once every entry is passed.
+    pub fn binds_proof(&self) -> bool {
+        self.label().is_some_and(Label::binds_proof)
     }
 
     /// Whether anything after the entry at this position names its binder. Read off the unopened remainder, which opening earlier binders does not change.

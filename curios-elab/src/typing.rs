@@ -104,6 +104,71 @@ pub(crate) fn is_declared_prop_in(
     })
 }
 
+/// Whether a value of `type_` carries nothing at run time, under the binders a surrounding walk has opened, each with its declared type: `type_` is a sort, so the value is a type; a proposition, so the value is a proof; or a function that ultimately answers one of those. The empty tuple is none of them, being what an effect answers, so `{}` and `X -> {}` are kept.
+///
+/// A domain that is a bound variable of `Prop` sort — `proof: P` under `P: Prop` — is a proof only through `opened`, which is threaded rather than assumed for the reason [`is_prop_in`] states.
+///
+/// **One reading's answer.** A domain that is a variable here is a proof where the variable is instantiated at a proposition, so a `false` says only that this reading keeps the value. A `true` holds at every instantiation: a sort, a proposition and a function into one stay what they are under any substitution. Erasure asks through its reader ([`crate::Retyping`]), of a declaration's signature for what the declaration stores and of a slot's type for what the slot holds.
+pub(crate) fn is_erasable_in(
+    context: &mut Context,
+    opened: &mut Vec<(Free, Term)>,
+    type_: &Term,
+) -> Result<bool, Error> {
+    // A proposition known by its head is erased with nothing run to read it.
+    if is_declared_prop_in(context, opened, type_)? {
+        return Ok(true);
+    }
+
+    match Term::unwrap_or_clone(reduce_with(context, type_)?) {
+        Subterm::Type(_) | Subterm::Prop => Ok(true),
+        Subterm::Instance(instance) => is_erasable_in(context, opened, &instance.head.to_term()),
+        // A function erases iff what it ultimately returns does — a proof-/type-producing function is pure, content-free; an effectful `X -> {}` is not. Recurse past the parameters into the codomain, each opened binder joining `opened` so the codomain can read its sort.
+        Subterm::FuncType(FuncType { telescope, .. }) => {
+            let mark = opened.len();
+            let mut cursor = telescope.cursor();
+            while let Some((_, domain)) = cursor.entry() {
+                opened.push((cursor.advance_fresh(|hint| context.fresh(hint)), domain));
+            }
+            let output = cursor.body().expect("a cursor past every entry");
+            let result = is_erasable_in(context, opened, &output);
+            opened.truncate(mark);
+            result
+        }
+        _ => is_prop_in(context, opened, type_),
+    }
+}
+
+/// Whether a value of `type_` is a proof, under the binders a surrounding walk has opened, each with its declared type: `type_` is a proposition, or a function that ultimately answers one. A sort is neither, so a type and a family are not.
+///
+/// It is what a published item's binders are asked, once, as the item is published ([`crate::state_proof_binders`]), and what the closed machine then leaves as written. The question is narrower than [`is_erasable_in`]'s on purpose. Erasure computes neither a proof nor a type, but a judgment reads a type: conversion compares the reduct it is handed, and two instances of a definition apart in a level are one type or two by whether they reach it as written or as what they unfold to. A proof's value is read by nothing.
+///
+/// A `true` holds at every instantiation, as [`is_erasable_in`]'s does, and a `false` says only that this reading computes the value.
+pub(crate) fn is_proof_in(
+    context: &mut Context,
+    opened: &mut Vec<(Free, Term)>,
+    type_: &Term,
+) -> Result<bool, Error> {
+    // A proposition known by its head is one with nothing run to read it.
+    if is_declared_prop_in(context, opened, type_)? {
+        return Ok(true);
+    }
+
+    match Term::unwrap_or_clone(reduce_with(context, type_)?) {
+        Subterm::FuncType(FuncType { telescope, .. }) => {
+            let mark = opened.len();
+            let mut cursor = telescope.cursor();
+            while let Some((_, domain)) = cursor.entry() {
+                opened.push((cursor.advance_fresh(|hint| context.fresh(hint)), domain));
+            }
+            let output = cursor.body().expect("a cursor past every entry");
+            let result = is_proof_in(context, opened, &output);
+            opened.truncate(mark);
+            result
+        }
+        _ => is_prop_in(context, opened, type_),
+    }
+}
+
 /// Elaborate `term` as a type/proposition without inventing an arbitrary expected universe upper bound.
 pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term, Sort), Error> {
     let (rebuilt, inferred) = if matches!(&**term, Subterm::Metavar(_)) {

@@ -8,7 +8,7 @@ use {
 ///
 /// The telescope is the constructor's *full* signature — the parameter binders first, then the payload binders, terminating in the constructed type. E.g. `success ↦ (A : Type, E : Type, A) -> InductType { Result, [A, E] }`. For an indexed inductive the terminal is *per-case*: its indices are that case's target expressions over the payload binders. Instantiating peels the leading `params.len()` binders by opening each with the corresponding parameter.
 ///
-/// Erasure is sort-driven: `erase` drops a payload field whose type is a proof or a type — no per-payload mark is stored.
+/// Erasure is sort-driven: `erase` drops a payload field whose type is a proof or a type, by its own reading of the signature. Each binder states besides whether it binds a proof ([`Scope::binds_proof`](crate::Scope::binds_proof)), said when the declaration is published: an arm binds under it and the closed machine reads it, and it decides no layout.
 #[derive(Debug, Clone, PartialEq)]
 #[curios_archive::archived]
 pub struct InductParam {

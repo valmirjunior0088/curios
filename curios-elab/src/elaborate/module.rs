@@ -16,8 +16,8 @@ use {
         definition_variances, family_levels, goal_sites, hold_variances, is_prop,
         record_definition_totality, record_superclasses, record_variances, reduce_with,
         register_witness, replay_reused, report_goals, seed_reused, sort_term, stamp_totality,
-        superclass_targets, test_program_tail, zonk, zonk_arity, zonk_entry, zonk_module,
-        zonk_published, zonk_solved_term_metas,
+        state_proof_binders, superclass_targets, test_program_tail, zonk, zonk_arity, zonk_entry,
+        zonk_module, zonk_published, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_core::{
@@ -1301,6 +1301,9 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     }
 
     let mut published = zonk_published(context, &elaborated)
+        .map_err(|error| error.in_declaration(&item_names, owner))?;
+    // Each binder says whether it binds a proof before any declaration can read it: the closed machine reads that where it substitutes.
+    state_proof_binders(context, &mut published)
         .map_err(|error| error.in_declaration(&item_names, owner))?;
     context.publish(&published);
     context

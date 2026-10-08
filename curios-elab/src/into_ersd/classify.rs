@@ -6,52 +6,20 @@ use {
     super::Lowering,
     crate::{Error, Retyping},
     curios_core::{
-        Advance, Bound, Free, FuncType, Global, Intrinsic, Subterm, Telescope, Term, TupleType,
+        Advance, Bound, FuncType, Global, Intrinsic, Subterm, Telescope, Term, TupleType,
     },
     curios_num::Grain,
     std::collections::BTreeSet,
 };
 
-/// Whether a value of type `type_` is dropped at runtime. Erasure is sort-driven: a value erases iff it is a *type/prop-as-value* (`type_` reduces to the universe `Type` or `Prop`), a *genuine proposition* — a `Prop`-sorted nominal/neutral type (`Eq`, `False`, a stuck `Holds` match such as `Holds(a < b)` over symbolic operands) whose inhabitants are pure proof-irrelevant witnesses — or a *function into* such a thing (a proof-/type-producing function is itself pure content-free).
-///
-/// [`Sort::of`](crate::Sort::of) classifies the empty tuple `{}` as `Type`, not a prop — `{}` is the result type of effects (`print`'s `let _ = write(..); ()`) and must be kept — so `{}`, `{ .., {} }`, and `X -> {}` are not erased. A `FuncType` erases only when its ultimate codomain does, recursing past the parameters into the return type, which lands on `{}` (kept) or on a genuine proposition / universe (erased).
+/// Whether a value of type `type_` carries nothing at run time, by the engine's rule read through erasure's reader ([`crate::is_erasable_in`]): a type, a proof, or a function that ultimately answers one. The empty tuple is none of them, so `{}`, `{ .., {} }` and `X -> {}` are kept.
 ///
 /// CRITICAL: an answer here is one reading's. A polymorphic field `value : A` is kept (its abstract `A` is neither prop nor type) and reads as a proof at a construction where `A := SomeProp`. So a runtime shape is decided from this only for a nominal declaration, against its *declared* signature opened with the surrounding binders as opaque variables ([`constructor_entries`]); everywhere else the answer decides what a slot holds and never whether the slot is there.
 pub(crate) fn is_erasable(context: &mut Retyping, type_: &Term) -> Result<bool, Error> {
-    is_erasable_in(context, &mut Vec::new(), type_)
+    context.is_erasable_in(&mut Vec::new(), type_)
 }
 
-/// [`is_erasable`] under the binders a surrounding telescope walk has opened, each carried with its declared type — threaded rather than assumed for the reason [`crate::is_prop_in`] states. A domain that is a bound variable of `Prop` sort — `proof: P` under `P: Prop` — classifies as a proof only through this record, and every telescope walk in this module threads it so the declaration's mask and the application's agree.
-fn is_erasable_in(
-    context: &mut Retyping,
-    opened: &mut Vec<(Free, Term)>,
-    type_: &Term,
-) -> Result<bool, Error> {
-    // A proposition known by its head is erased with nothing run to read it.
-    if context.is_declared_prop_in(opened, type_)? {
-        return Ok(true);
-    }
-
-    match Term::unwrap_or_clone(context.reduce_with(type_)?) {
-        Subterm::Type(_) | Subterm::Prop => Ok(true),
-        Subterm::Instance(instance) => is_erasable_in(context, opened, &instance.head.to_term()),
-        // A function erases iff what it ultimately returns does — a proof-/type-producing function is pure, content-free; an effectful `X -> {}` is not. Recurse past the parameters into the codomain, each opened binder joining `opened` so the codomain can read its sort.
-        Subterm::FuncType(FuncType { telescope, .. }) => {
-            let mark = opened.len();
-            let mut cursor = telescope.cursor();
-            while let Some((_, domain)) = cursor.entry() {
-                opened.push((cursor.advance_fresh(|hint| context.fresh(hint)), domain));
-            }
-            let output = cursor.body().expect("a cursor past every entry");
-            let result = is_erasable_in(context, opened, &output);
-            opened.truncate(mark);
-            result
-        }
-        _ => context.is_prop_in(opened, type_),
-    }
-}
-
-/// The payload view of a nominal declaration's telescope: one entry per binder — its label, whether it is erased, and the recorded carrier shape of a kept one — classifying each domain with the *preceding* binders opened as fresh opaque variables carrying their declared types (see [`is_erasable_in`]). That opaque-open discipline is what makes a row a fact of its declaration, the same at every instantiation, so this is the only walk that computes one; the terminal body is ignored. It pairs with a concrete walk over the actual values: the row decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types. An erased entry's shape is `Opaque`; nothing reads it.
+/// The payload view of a nominal declaration's telescope: one entry per binder — its label, whether it is erased, and the recorded carrier shape of a kept one — classifying each domain with the *preceding* binders opened as fresh opaque variables carrying their declared types (see [`crate::is_erasable_in`]). That opaque-open discipline is what makes a row a fact of its declaration, the same at every instantiation, so this is the only walk that computes one; the terminal body is ignored. It pairs with a concrete walk over the actual values: the row decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types. An erased entry's shape is `Opaque`; nothing reads it.
 pub(crate) fn constructor_entries<B: Bound>(
     lowering: &mut Lowering<'_>,
     context: &mut Retyping,
@@ -62,7 +30,7 @@ pub(crate) fn constructor_entries<B: Bound>(
     let mut cursor = telescope.cursor();
     while let Some((hint, type_)) = cursor.entry() {
         let label = hint.map(str::to_string);
-        let erasable = is_erasable_in(context, &mut opened, &type_)?;
+        let erasable = context.is_erasable_in(&mut opened, &type_)?;
         let shape = match erasable {
             true => curios_ersd::FieldShape::Opaque,
             false => field_shape(lowering, context, &mut BTreeSet::new(), &type_)?,
@@ -177,7 +145,7 @@ fn relevant_chain<B: Bound>(
     let mut opened = Vec::new();
     let mut cursor = telescope.cursor();
     while let Some((_, type_)) = cursor.entry() {
-        if !is_erasable_in(context, &mut opened, &type_)? {
+        if !context.is_erasable_in(&mut opened, &type_)? {
             relevant += 1;
             if first.is_none() {
                 first = Some(type_.clone());

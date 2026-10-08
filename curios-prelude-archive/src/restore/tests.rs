@@ -6,7 +6,7 @@ use {
         Error, Globals, certify_module, recheck_module_measured, recheck_module_verdicts_uncached,
     },
     curios_core::{
-        Bound, Cases, Enter, Global, Item, Match, Subterm, Term, Variance, Visit, Zonked,
+        Bound, Cases, Enter, Global, Item, Match, Subterm, Telescope, Term, Variance, Visit, Zonked,
     },
     curios_elab::{DEFAULT_STEP_BUDGET, Erasures, erase_unit},
     curios_text::SYNTAX,
@@ -493,6 +493,50 @@ fn the_restored_prelude_pairs_every_arm_mark_with_its_binder() {
             drifted.borrow().is_empty(),
             "drifted mark vectors survived into the archive: {:?}",
             drifted.borrow()
+        );
+    });
+}
+
+/// The function literals of the restored standard library state which of their binders bind a proof, and none says so of a binder whose type is written as a sort. A mark lives in what a scope remembers of its binder, which is no part of a term, so a pass that rebuilt a scope from its body alone, or a store that kept a term without its labels, would leave every binder unmarked and change no verdict: the closed machine would evaluate each proof it binds, and only a floor would say so. A binder at a sort binds a type, which the machine evaluates, and is the one kind this can name without the classifier.
+#[test]
+fn the_restored_prelude_marks_binders_and_none_at_a_sort() {
+    with_prelude(|prelude| {
+        let at_a_sort = Rc::new(RefCell::new(Vec::new()));
+        let marked = Rc::new(Cell::new(0usize));
+        let (sink, counter) = (Rc::clone(&at_a_sort), Rc::clone(&marked));
+        let mut visit = Visit::rewriting(
+            |_, _| None,
+            Box::new(move |_, term: &Term| {
+                if let Subterm::Func(function) = &**term {
+                    let mut telescope = &function.telescope;
+                    while let Telescope::Cons(_, type_, rest) = telescope {
+                        if rest.binds_proof(0) {
+                            counter.set(counter.get() + 1);
+                            if matches!(&**type_, Subterm::Type(_) | Subterm::Prop) {
+                                sink.borrow_mut().push(term.clone());
+                            }
+                        }
+                        telescope = rest.body();
+                    }
+                }
+                None
+            }),
+        );
+
+        for definition in items(prelude).flat_map(Item::definitions) {
+            definition.type_.traverse(&mut visit);
+            definition.body.traverse(&mut visit);
+        }
+
+        assert!(
+            marked.get() > 0,
+            "no binder of the library says it binds a proof"
+        );
+        assert!(
+            at_a_sort.borrow().is_empty(),
+            "{} binders at a sort say they bind a proof, the first under: {:?}",
+            at_a_sort.borrow().len(),
+            at_a_sort.borrow().first()
         );
     });
 }
