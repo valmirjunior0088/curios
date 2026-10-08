@@ -680,16 +680,6 @@ pub let ordered(
     let nothing: Across(second, [], l) = (_, _, iu, _) => match Member/absent(iu) end;
     drive_ordered(ord, flips, second, [], l, True/qed(), Layered/bottom(), nothing, given);
 
--- The relation that always holds, and every list pairwise in it.
-let always(@T: Type, _: T, _: T) -> Bool =
-    true;
-
-let pairwise_always(@T: Type, l: List(T)) -> Pairwise((a: T, b: T) => always(a, b))(l) =
-    match l: (m) => Pairwise((a: T, b: T) => always(a, b))(m)
-    | [] => Pairwise/empty()
-    | [_, .._]; ih => Pairwise/cons((_, _) => True/qed(), ih)
-    end;
-
 --- The sort's answer is in order by `ord`, under `ord`'s flip.
 pub let sorted(
     @T: Type,
@@ -697,4 +687,4 @@ pub let sorted(
     flips: Ord/Flips(ord),
     l: List(T),
 ) -> Holds(List/ordered(sort_by(l, ord), Ord/le(ord))) =
-    ordered(ord, flips, (a, b) => always(a, b), l, pairwise_always(l));
+    ordered(ord, flips, (_, _) => true, l, Pairwise/everywhere((_, _) => True/qed(), l));

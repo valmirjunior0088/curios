@@ -106,3 +106,15 @@ pub let of_ordered(
                         i),
                 ih(ordered/tail(le, h, t, given)))
     end(given);
+
+--- A relation that holds of every pair has every list pairwise in it.
+pub let everywhere(
+    @T: Type,
+    @le: (T, T) -> Bool,
+    holds: (a: T, b: T) -> Holds(le(a, b)),
+    l: List(T),
+) -> Pairwise(le)(l) =
+    match l: (m) => Pairwise(le)(m)
+    | [] => Pairwise/empty()
+    | [h, .._]; ih => Pairwise/cons((y, _) => holds(h, y), ih)
+    end;
