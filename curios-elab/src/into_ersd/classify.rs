@@ -1,4 +1,6 @@
-//! Sort-driven erasability classification, shared by every erasure walk: whether a type's values are dropped at runtime, and the signature view of a telescope — one walk ([`signature_entries`]) with a labelled and a mask-only ([`erasure_mask`]) reading. Beside it, the carrier-shape classification of constructor payloads ([`field_shape`], [`constructor_entries`]): erasure is the last walk that still holds the Core field types, so the shape is recorded here and read by `curios-ersd`'s lowering when it decides a family's encoding.
+//! Sort-driven erasability classification, shared by every erasure walk: whether a type's values carry anything at runtime, and the view of a nominal declaration's payload that says which of its fields are stored ([`constructor_entries`]), with the carrier shape of each ([`field_shape`]): erasure is the last walk that still holds the Core field types, so the shape is recorded here and read by `curios-ersd`'s lowering when it decides a family's encoding.
+//!
+//! **Only a declaration drops.** A structure's fields and a constructor's payload are classified once, against the declaration's own signature, and every construction and elimination reads that one row. A function type and an anonymous tuple type have no declaration: the type a value of one stands at differs from site to site by a substitution or a refinement, and a domain one site reads as a proof or a type another reads as a variable. So neither is classified for its shape at all — a function has a parameter for each binder and a tuple a field for each member — and what [`is_erasable`] decides of a slot is only what fills it.
 
 use {
     super::Lowering,
@@ -14,7 +16,7 @@ use {
 ///
 /// [`Sort::of`](crate::Sort::of) classifies the empty tuple `{}` as `Type`, not a prop — `{}` is the result type of effects (`print`'s `let _ = write(..); ()`) and must be kept — so `{}`, `{ .., {} }`, and `X -> {}` are not erased. A `FuncType` erases only when its ultimate codomain does, recursing past the parameters into the return type, which lands on `{}` (kept) or on a genuine proposition / universe (erased).
 ///
-/// CRITICAL: evaluate against the binder's *declared* (signature) type, opened only with the surrounding binders as opaque variables — never with concrete call arguments. A polymorphic field `value : A` is kept (its abstract `A` is neither prop nor type); re-classifying it at a call where `A := SomeProp` would diverge the construction's arity from the constructor function's fixed arity. [`signature_entries`] enforces the opaque-open discipline.
+/// CRITICAL: an answer here is one reading's. A polymorphic field `value : A` is kept (its abstract `A` is neither prop nor type) and reads as a proof at a construction where `A := SomeProp`. So a runtime shape is decided from this only for a nominal declaration, against its *declared* signature opened with the surrounding binders as opaque variables ([`constructor_entries`]); everywhere else the answer decides what a slot holds and never whether the slot is there.
 pub(crate) fn is_erasable(context: &mut Retyping, type_: &Term) -> Result<bool, Error> {
     is_erasable_in(context, &mut Vec::new(), type_)
 }
@@ -44,36 +46,7 @@ fn is_erasable_in(
     }
 }
 
-/// The signature view of a telescope: one entry per binder — its label and whether it is erased — classifying each domain with the *preceding* binders opened as fresh opaque variables carrying their declared types (see [`is_erasable_in`]). That opaque-open discipline is what keeps a function's runtime arity fixed across every instantiation, so this is the only walk that computes it; the terminal body is ignored. Pairs with a concrete walk over the actual values: the signature decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types.
-pub(crate) fn signature_entries<B: Bound>(
-    context: &mut Retyping,
-    telescope: Telescope<B>,
-) -> Result<Vec<(Option<String>, bool)>, Error> {
-    let mut entries = Vec::new();
-    let mut opened = Vec::new();
-    let mut cursor = telescope.cursor();
-    while let Some((hint, type_)) = cursor.entry() {
-        let label = hint.map(str::to_string);
-        let erasable = is_erasable_in(context, &mut opened, &type_)?;
-        let name = cursor.advance_fresh(|hint| context.fresh(hint));
-        entries.push((label, erasable));
-        opened.push((name, type_));
-    }
-    Ok(entries)
-}
-
-/// The label-free reading of [`signature_entries`]: the per-binder erasability mask, for the sites that decide drops without naming the slots.
-pub(crate) fn erasure_mask<B: Bound>(
-    context: &mut Retyping,
-    telescope: Telescope<B>,
-) -> Result<Vec<bool>, Error> {
-    Ok(signature_entries(context, telescope)?
-        .into_iter()
-        .map(|(_, erased)| erased)
-        .collect())
-}
-
-/// The constructor-payload view of a telescope: [`signature_entries`] plus the recorded carrier shape of each kept domain. An erased entry's shape is `Opaque`; nothing reads it.
+/// The payload view of a nominal declaration's telescope: one entry per binder — its label, whether it is erased, and the recorded carrier shape of a kept one — classifying each domain with the *preceding* binders opened as fresh opaque variables carrying their declared types (see [`is_erasable_in`]). That opaque-open discipline is what makes a row a fact of its declaration, the same at every instantiation, so this is the only walk that computes one; the terminal body is ignored. It pairs with a concrete walk over the actual values: the row decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types. An erased entry's shape is `Opaque`; nothing reads it.
 pub(crate) fn constructor_entries<B: Bound>(
     lowering: &mut Lowering<'_>,
     context: &mut Retyping,
@@ -96,7 +69,7 @@ pub(crate) fn constructor_entries<B: Bound>(
     Ok(entries)
 }
 
-/// The erased carrier shape of a kept field's declared type — the full recorder behind [`curios_ersd::FieldShape`]. `Immediate` iff every runtime value of the type lives in the uniform carrier's immediate population — an intrinsic head riding the i31 carrier, or a chain of single-relevant-field collapses (newtype structs, subset tuples) landing on one. `Number` is a `Nat` or `Int`, an i31 while small and a boxed magnitude past it. The other shaped answers name the erased carrier the type always takes: the boxed `Flt` struct, a packed grain (a `Handle` token is its bytes at the byte grain, the ABI's encoding), a list rope, a closure at its kept arity, a boxed product row at its relevant width, or a multi-constructor family. Everything unstated answers `Opaque`, and the asymmetry is the point: a conservative answer only misses an encoding or a census entry, an aggressive one would corrupt what is spent on it.
+/// The erased carrier shape of a kept field's declared type — the full recorder behind [`curios_ersd::FieldShape`]. `Immediate` iff every runtime value of the type lives in the uniform carrier's immediate population — an intrinsic head riding the i31 carrier, or a chain of single-field collapses (a structure with one relevant field, a tuple of one field) landing on one. `Number` is a `Nat` or `Int`, an i31 while small and a boxed magnitude past it. The other shaped answers name the erased carrier the type always takes: the boxed `Flt` struct, a packed grain (a `Handle` token is its bytes at the byte grain, the ABI's encoding), a list rope, a closure at its telescope's arity, a boxed product row at its relevant width, or a multi-constructor family. Everything unstated answers `Opaque`, and the asymmetry is the point: a conservative answer only misses an encoding or a census entry, an aggressive one would corrupt what is spent on it.
 ///
 /// `visited` makes the chain-chasing terminate: a self-referential struct elaborates (it is merely uninhabited), so the recursion through nominal declarations can cycle, and a cycle classifies `Opaque`. The chain recurses into at most one field per level, so the set is the ancestor chain and never needs unwinding.
 pub(crate) fn field_shape(
@@ -117,12 +90,9 @@ pub(crate) fn field_shape(
         Subterm::Intrinsic(Intrinsic::BinType(grain)) => Ok(curios_ersd::FieldShape::Packed(grain)),
         Subterm::Intrinsic(Intrinsic::HandleType) => Ok(curios_ersd::FieldShape::Packed(Grain::X)),
         Subterm::Intrinsic(Intrinsic::ListType(_)) => Ok(curios_ersd::FieldShape::List),
-        // The field is kept, so the codomain does not erase; the value is a closure over the kept binders of the outermost telescope, which is the arity the lowering gives it.
+        // The field is kept, so the codomain does not erase; the value is a closure over every binder of the outermost telescope, which is the arity the lowering gives it.
         Subterm::FuncType(FuncType { telescope, .. }) => {
-            let entries = signature_entries(context, telescope)?;
-            Ok(curios_ersd::FieldShape::Closure(
-                entries.iter().filter(|(_, erased)| !erased).count(),
-            ))
+            Ok(curios_ersd::FieldShape::Closure(telescope.len()))
         }
         Subterm::StructType(struct_type) => {
             let Some(struct_decl) = context.struct_decl(&struct_type.name).cloned() else {
@@ -147,10 +117,14 @@ pub(crate) fn field_shape(
                 },
             }
         }
-        // An anonymous tuple's row is shared by every tuple of its width and records no shape, so there is no type to declare a slot at — the chain still runs through a one-field tuple, which is a newtype like any other.
-        Subterm::TupleType(TupleType { telescope }) => match relevant_chain(context, telescope)? {
-            Chain::One(domain) => field_shape(lowering, context, visited, &domain),
-            Chain::None | Chain::Many => Ok(curios_ersd::FieldShape::Opaque),
+        // An anonymous tuple's row is shared by every tuple of its width and records no shape, so there is no type to declare a slot at — the chain still runs through a tuple of one field, which is that field. A tuple drops no field, so its width is its telescope's.
+        Subterm::TupleType(TupleType { telescope }) => match telescope.len() {
+            1 => {
+                let (_, domain) = telescope.cursor().entry().expect("a tuple of one field");
+
+                field_shape(lowering, context, visited, &domain)
+            }
+            _ => Ok(curios_ersd::FieldShape::Opaque),
         },
         // A multi-constructor family is its own shape, and its *identity* is what a typed slot needs — never chased, whatever its encoding. A single-constructor family is always its payload row under the collapsed encoding, so the chain continues through it exactly as through a newtype struct; the `visited` guard cuts the cycle a legitimately recursive one would otherwise spin in.
         Subterm::InductType(induct_type) => {

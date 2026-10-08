@@ -634,11 +634,11 @@ fn universe_erasure_is_a_validated_structural_projection() {
 }
 
 #[test]
-fn a_function_erases_with_dropped_type_params_and_no_captures() {
+fn a_function_erases_with_a_parameter_for_each_binder_and_no_captures() {
     let mut context = context();
     let type_param = context.fresh(Some("A"));
     let x = context.fresh(Some("x"));
-    // (A : Type, x : A) => x — the type parameter is dropped; the runtime function takes one parameter and stores no captures.
+    // (A : Type, x : A) => x — the type parameter is a parameter like the other, filled with the unit constant where a type is passed; the function stores no captures.
     let func_type = Term::func_type(
         [
             (type_param, Term::type_ground()),
@@ -664,11 +664,11 @@ fn a_function_erases_with_dropped_type_params_and_no_captures() {
         "\
 items
   Functions
-    function ~f0$/id(~v0$x)
-      Return ~v0$x
+    function ~f0$/id(~v0$A, ~v1$x)
+      Return ~v1$x
 entry
-  Let ~v1 = Apply ~f0$/id [Nat(4)]
-  Return ~v1
+  Let ~v2 = Apply ~f0$/id [Unit, Nat(4)]
+  Return ~v2
 "
     );
 }
@@ -942,12 +942,12 @@ entry
 }
 
 #[test]
-fn a_subset_tuple_collapses_to_its_relevant_field() {
+fn an_anonymous_tuple_keeps_a_field_for_its_proof() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let w = context.fresh(Some("w"));
     let sub = context.fresh(Some("sub"));
-    // { x : Nat, w : Prop-valued } erases to the bare Nat; its projection vanishes.
+    // { x : Nat, w : Prop-valued } is two fields, the proof's holding the unit constant: an anonymous tuple has no declaration to say which it keeps, and a reader that knows `w`'s type as a variable reads two.
     let subset_type =
         Term::tuple_type([(x, Term::intrinsic(Intrinsic::NatType)), (w, Term::prop())]);
     let body = Term::let_(
@@ -964,7 +964,9 @@ fn a_subset_tuple_collapses_to_its_relevant_field() {
         shape(&erased),
         "\
 entry
-  Return Nat(9)
+  Let ~v0$sub = Product ~p0 [Nat(9), Unit]
+  Let ~v1 = Project ~p0.0 ~v0$sub
+  Return ~v1
 "
     );
 }

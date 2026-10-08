@@ -8,7 +8,7 @@ use {
     super::{
         ConstructorRow, Error, FamilyRow, Lowering, Outcome, ProductRow, Proj, Retyping, Struct,
         StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, constructor_entries,
-        emitted, erasure_mask,
+        emitted,
     },
     curios_core::Bound,
 };
@@ -224,7 +224,7 @@ impl Lowering<'_> {
         schema
     }
 
-    /// Lower a tuple against its checked tuple type. Erasable fields drop; a type left with one relevant field collapses to it, whether or not a drop produced that width — the same relevant-arity rule [`struct_row`](Self::struct_row) applies, and the rule [`erase_proj`](Self::erase_proj) reads back.
+    /// Lower a tuple against its checked tuple type. Every field has its slot, a proof or a type there as the stand-in, and a tuple of one field is that field: its width is its telescope's length, which [`erase_proj`](Self::erase_proj) reads back.
     pub(super) fn erase_tuple(
         &mut self,
         context: &mut Retyping,
@@ -242,9 +242,8 @@ impl Lowering<'_> {
             "erase: tuple width disagrees with the tuple type",
         );
 
-        // Anonymous tuples have no declaration; the per-site signature mask is the layout, and construction and projection read the same concrete tuple type, so they agree.
-        let mask = erasure_mask(context, telescope.clone())?;
-        let atoms = match self.masked_fields(context, &mask, telescope, &tuple.fields)? {
+        // An anonymous tuple has no declaration, and the type it is built at is one of the several it is read at: a field one reads as a proof or a type, another reads as a variable. So no field is dropped, and construction and projection agree on the one thing every reading has, the telescope's length.
+        let atoms = match self.slots(context, telescope, &tuple.fields)? {
             Ok(atoms) => atoms,
             Err(diverged) => return Ok(diverged),
         };
@@ -331,7 +330,7 @@ impl Lowering<'_> {
         ))
     }
 
-    /// Lower a projection by relevant-field arithmetic. A head left with a single relevant field already *is* that field, so the projection vanishes.
+    /// Lower a projection: by relevant-field arithmetic out of a structure, whose declaration says which fields it keeps, and by position out of an anonymous tuple, which keeps them all. A head left with a single field already *is* that field, so the projection vanishes.
     pub(super) fn erase_proj(
         &mut self,
         context: &mut Retyping,
@@ -352,11 +351,10 @@ impl Lowering<'_> {
 
         let (row, width) = match &*head_type {
             Subterm::TupleType(TupleType { telescope }) => {
-                let mask = erasure_mask(context, telescope.clone())?;
-                let relevant = mask.iter().filter(|&&erased| !erased).count();
-                let schema =
-                    (!ProductRow::collapses(relevant)).then(|| self.tuple_schema(relevant));
-                (ProductRow { schema, mask }, telescope.len())
+                let width = telescope.len();
+                let schema = (!ProductRow::collapses(width)).then(|| self.tuple_schema(width));
+                let mask = vec![false; width];
+                (ProductRow { schema, mask }, width)
             }
             Subterm::StructType(StructType { name, .. }) => {
                 let row = self.struct_row(context, name)?;

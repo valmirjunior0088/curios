@@ -39,8 +39,6 @@ pub(super) struct Lowering<'s> {
     values: Vec<Global>,
     /// The name each function the fragment imports stands for, in the order the builder minted them.
     functions: Vec<Global>,
-    /// Dropped binder labels referenced from a retained position. Consumed by the function-body collapse: a proof-valued body that dangles a binder its own lambda dropped is replaced by the unit constant.
-    pub(super) dangled: BTreeSet<Free>,
     /// The definition each emitted function descends from, innermost last, paired with how many anonymous ones have been minted under it. See [`Lowering::derived_hint`].
     owners: Vec<(String, usize)>,
     /// The family identity of each inductive whose row is being registered right now. An inductive is legitimately recursive, so classifying its fields reaches itself; the identity is minted before that walk begins, so the recursive lookup answers from here rather than re-entering the registration.
@@ -111,7 +109,6 @@ impl<'s> Lowering<'s> {
             externals,
             values: Vec::new(),
             functions: Vec::new(),
-            dangled: BTreeSet::new(),
             owners: Vec::new(),
             pending_families: BTreeMap::new(),
             in_flight: BTreeSet::new(),
@@ -228,7 +225,7 @@ impl<'s> Lowering<'s> {
 
     /// Erase each value against its telescope domain under `mask`, opening the telescope with the un-erased value so later dependent domains stay correct. Erasable slots are dropped entirely; kept slots erase through [`kept_operand`](Self::kept_operand).
     ///
-    /// The one walk that consumes a signature mask, shared by every site that fills a telescope: struct, variant, and tuple construction, and the argument list of an application. Its slot-for-slot agreement with [`erasure_mask`](super::erasure_mask) is what fixes a function's runtime arity, so it must stay a single implementation.
+    /// The one walk that consumes a mask, which only a nominal declaration has: a structure's fields and a constructor's payload, dropped by the declaration's own signature, read once where its row is registered. A structural type has no declaration to read and drops nothing ([`Lowering::slots`]).
     pub(super) fn masked_fields<B: Bound>(
         &mut self,
         context: &mut Retyping,
@@ -250,6 +247,16 @@ impl<'s> Lowering<'s> {
             cursor.advance(value.clone());
         }
         Ok(Ok(atoms))
+    }
+
+    /// Erase each value into a slot of its own, against its telescope domain: the arguments of an application and the fields of an anonymous tuple, whose runtime shape is the telescope's length whatever its domains are read as.
+    pub(super) fn slots<B: Bound>(
+        &mut self,
+        context: &mut Retyping,
+        telescope: Telescope<B>,
+        values: &[Term],
+    ) -> Result<Result<Vec<curios_ersd::Atom>, Outcome>, Error> {
+        self.masked_fields(context, &vec![false; values.len()], telescope, values)
     }
 
     /// Erase one expression to an operand. `expected` is the type the expression was checked against, consumed where a runtime shape must be read off it; `hint` names the statement when this expression binds one.
@@ -335,10 +342,7 @@ impl<'s> Lowering<'s> {
                 };
                 match binding {
                     Binding::Atom(atom) => Ok(Outcome::Emitted(atom)),
-                    Binding::Dropped => {
-                        self.dangled.insert(*name);
-                        Ok(Outcome::Emitted(self.unit()))
-                    }
+                    Binding::Dropped => Ok(Outcome::Emitted(self.unit())),
                 }
             }
             Subterm::Let(binding) => self.erase_let(context, binding, expected, hint),
