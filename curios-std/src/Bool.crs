@@ -49,6 +49,18 @@ pub let both(a: Bool, b: Bool, p: Holds(a), q: Holds(b)) -> Holds(a && b) =
     | false => match p end
     end;
 
+--- The first of two decisions that hold as one: `a` holds where `a && b` does. By cases on `a`, as [`both`] is.
+pub let first(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(a) =
+    match a: (s) => (Holds(s && b)) -> Holds(s) | true => (_) => True/qed() | false => (h) => h end(
+        p);
+
+--- The second of them: `b` holds where `a && b` does.
+pub let second(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(b) =
+    match a: (s) => (Holds(s && b)) -> Holds(b)
+    | true => (h) => h
+    | false => (h) => match h end
+    end(p);
+
 satisfy Eql(Bool) {
     eql = eql,
     neq = xor,

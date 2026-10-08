@@ -1,5 +1,7 @@
-use /std/{Str, Bytes, Byte, Bool, Option, Result, Spell};
-use /std/Bool/{Holds};
+use /std/{Str, Bytes, Byte, Nat, Bool, List, Option, Result, Spell};
+use /std/Bool/{True, Holds};
+use /std/time/Timestamp/{Utc};
+use /std/time/Timestamp/Utc/{Month, Weekday};
 use /std/ops/{Eql};
 
 --- Whether `b` may stand in a field value: the tab, the space, and every octet past them but DEL, obs-text included (RFC 9110 §5.5). No other control octet may, a line's end least of all.
@@ -58,3 +60,97 @@ pub let cons(o: Octet, v: Value) -> Value =
         bytes = x[o.byte, ..v.bytes],
         @Bool/both(admits(o.byte), Bytes/all(v.bytes, admits), o.clean, v.clean),
     };
+
+--- `a` then `b`: octets that may each stand in a value may stand in one together.
+pub let append(a: Value, b: Value) -> Value =
+    match a.bytes: (m) => (Holds(Bytes/all(m, admits))) -> Value
+    | x[] => (_) => b
+    | x[h, ..t]; rest =>
+        (clean) =>
+            cons(
+                Octet { byte = h, @clean = Bool/first(admits(h), Bytes/all(t, admits), clean) },
+                rest(Bool/second(admits(h), Bytes/all(t, admits), clean)))
+    end(a.clean);
+
+-- The ten decimal digits, each an octet a value may hold.
+let digit_octets: List(Octet) =
+    [
+        Octet { byte = '0' },
+        Octet { byte = '1' },
+        Octet { byte = '2' },
+        Octet { byte = '3' },
+        Octet { byte = '4' },
+        Octet { byte = '5' },
+        Octet { byte = '6' },
+        Octet { byte = '7' },
+        Octet { byte = '8' },
+        Octet { byte = '9' }];
+
+let digit(n: Nat, @below: Holds(n < 10)) -> Octet =
+    List/get(digit_octets, n);
+
+-- `n` in two digits ahead of `rest`, what is past its tens left out.
+let two_digits(n: Nat, rest: Value) -> Value =
+    cons(digit(n / 10 % 10), cons(digit(n % 10), rest));
+
+-- `n` in the digits it takes, ahead of `rest`.
+let decimal(n: Nat, rest: Value) -> Value =
+    match n < 10
+    | true => cons(digit(n), rest)
+    | false => decimal(n / 10, cons(digit(n % 10), rest))
+    end;
+
+-- `n` in four digits ahead of `rest`, or in the digits it takes past 9999.
+let year_digits(n: Nat, rest: Value) -> Value =
+    match n < 10000
+    | true => cons(digit(n / 1000), cons(digit(n / 100 % 10), two_digits(n, rest)))
+    | false => decimal(n, rest)
+    end;
+
+-- A weekday's and a month's three letters may each stand in a value: by cases, a literal's reason at each.
+let weekday_admitted(d: Weekday) -> Holds(Bytes/all(Str/to_bytes(Utc/weekday_name(d)), admits)) =
+    match d
+    | sunday() => True/qed()
+    | monday() => True/qed()
+    | tuesday() => True/qed()
+    | wednesday() => True/qed()
+    | thursday() => True/qed()
+    | friday() => True/qed()
+    | saturday() => True/qed()
+    end;
+
+let month_admitted(m: Month) -> Holds(Bytes/all(Str/to_bytes(Utc/month_name(m)), admits)) =
+    match m
+    | january() => True/qed()
+    | february() => True/qed()
+    | march() => True/qed()
+    | april() => True/qed()
+    | may() => True/qed()
+    | june() => True/qed()
+    | july() => True/qed()
+    | august() => True/qed()
+    | september() => True/qed()
+    | october() => True/qed()
+    | november() => True/qed()
+    | december() => True/qed()
+    end;
+
+--- The moment as a field's value, in the fixed-length form HTTP sends a date in (RFC 9110 §5.6.7): the octets of `Utc/to_imf_fixdate`, each built as one a value may hold, so a message is dated with no check that could refuse.
+pub let of_utc(d: Utc) -> Value =
+    let clock =
+        two_digits(
+            d.hour,
+            append(
+                lit(":"),
+                two_digits(d.minute, append(lit(":"), two_digits(d.second, lit(" GMT"))))));
+    append(
+        lit(Utc/weekday_name(d.weekday), @weekday_admitted(d.weekday)),
+        append(
+            lit(", "),
+            two_digits(
+                d.day,
+                append(
+                    lit(" "),
+                    append(
+                        lit(Utc/month_name(d.month), @month_admitted(d.month)),
+                        append(lit(" "), year_digits(d.year, append(lit(" "), clock))))))));

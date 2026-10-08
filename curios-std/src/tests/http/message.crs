@@ -1,5 +1,7 @@
 -- The messages a program makes: the method, the fields, the status, and the bytes a request and a reply are written as.
-use /std/{Str, Bytes, List, Option, Result, Parse, Show, Test, Html};
+use /std/{Str, Bytes, Nat, List, Option, Result, Parse, Show, Test, Html};
+use /std/time/{Timestamp};
+use /std/time/Timestamp/{Utc};
 use /std/http/{Method, Url, Field, Status, Request, Response, Limits};
 use /std/http/Field/{Name, Value};
 use /std/http/Url/{Scheme};
@@ -203,6 +205,15 @@ test a_url_reaches_the_wire_percent_encoded =
             Response/header(Response/redirect(built), "Location"),
             Option/some(Value/lit("http://h/a%20b%0D%0AX-Injected:%20two?q=caf%C3%A9"))),
         Test/equal(Url/escaped("/x?y=1%20z"), Value/lit("/x?y=1%20z"))]);
+
+-- A date is a field's value in the octets its text spells, built with no check that could refuse: the epoch, a leap day, the last second of 9999 and the first of the year after, which takes a fifth digit.
+test a_date_is_a_value_in_the_octets_its_text_spells =
+    Test/all(
+        List/map(
+            [0, 784111777, 951782400, 253402300799, 253402300800],
+            (secs: Nat) =>
+                let d = Utc/of_timestamp(Timestamp/of_unix(secs, 0));
+                Test/equal(Value/of_utc(d).bytes, Str/to_bytes(Utc/to_imf_fixdate(d)))));
 
 -- A status carries content unless it is 1xx, 204, 205 or 304, and a reply of all but the 205 among those ends at its head whatever its fields say.
 test a_status_says_whether_it_carries_content =

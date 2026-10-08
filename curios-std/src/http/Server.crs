@@ -4,6 +4,7 @@ use /std/time/Timestamp/{Utc};
 use /std/tcp/{Socket, Listener};
 use /std/http/{Method, Url, Field, Status, Request, Response, Version, Limits, Refusal, Framing,
     read, stream};
+use /std/http/Field/{Name, Value};
 use /std/http/Url/{Scheme};
 
 --- How a server reads a request and ends a connection: how much of a request it takes, how long a request may take to arrive whole, and how long it reads on from a peer that has gone quiet once it has answered.
@@ -149,18 +150,15 @@ let drain(c: Socket, quiet: Duration, left: Nat) -> Async({}) =
         end
     end;
 
--- `reply` with the `Date` of the moment it is sent, which an origin server with a clock owes (RFC 9110 §6.6.1), unless its handler dated it. A date is letters, digits, a comma, colons and spaces, so the field reads; were it not to, none would be sent.
+-- `reply` with the `Date` of the moment it is sent, which an origin server with a clock owes (RFC 9110 §6.6.1), unless its handler dated it.
 let dated(reply: Response) -> Async(Response) =
     match Response/header(reply, "Date")
     | some(_) => Async/pure(reply)
     | none() =>
         let now = Timestamp/now()!;
-        Async/pure(
-            match Field/read("Date", Str/to_bytes(Utc/to_imf_fixdate(Utc/of_timestamp(now))))
-            | some(date) =>
-                Response { ..reply, headers = [date, ..reply.headers], @bodied = reply.bodied }
-            | none() => reply
-            end)
+        let date =
+            Field { name = Name { text = "Date" }, value = Value/of_utc(Utc/of_timestamp(now)) };
+        Async/pure(Response { ..reply, headers = [date, ..reply.headers], @bodied = reply.bodied })
     end;
 
 -- `reply` written to `c` in answer to a request of `method` — its head alone where the method is `HEAD`, stating the length its body has — and the connection ended as RFC 9112 §9.6 asks: the sending half first, then what the peer still sends read on, since a close over unread bytes would reset the connection under the reply.

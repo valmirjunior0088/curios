@@ -124,7 +124,8 @@ pub let of_timestamp(t: Timestamp) -> Utc =
         second = within % 60,
     };
 
-let weekday_name(d: Weekday) -> Str =
+--- The weekday in the three letters the Internet message format writes it in.
+pub let weekday_name(d: Weekday) -> Str =
     match d
     | sunday() => "Sun"
     | monday() => "Mon"
@@ -135,7 +136,8 @@ let weekday_name(d: Weekday) -> Str =
     | saturday() => "Sat"
     end;
 
-let month_name(m: Month) -> Str =
+--- The month in the three letters the Internet message format writes it in.
+pub let month_name(m: Month) -> Str =
     match m
     | january() => "Jan"
     | february() => "Feb"
