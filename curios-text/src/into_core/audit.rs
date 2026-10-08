@@ -4,7 +4,7 @@
 
 use {
     super::{
-        AliasEdge, Audiences, Entry, FlatItem, Lowered, ModuleInfo, PublicInterface, Scoped,
+        AliasEdge, Audiences, Entry, FlatItem, LoweredItem, ModuleInfo, PublicInterface, Scoped,
         aliases, globals,
     },
     crate::Error,
@@ -172,7 +172,7 @@ pub(super) fn audit_public_exposures(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
     items: &[FlatItem],
-    facts: &[&Lowered],
+    facts: &[&LoweredItem],
     scope: NominalScope<'_>,
 ) -> Result<(), Error> {
     curios_profile::profile!("audit_public_exposures");

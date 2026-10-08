@@ -71,6 +71,9 @@ pub use extent::*;
 mod witness;
 pub use witness::*;
 
+mod trace;
+pub use trace::*;
+
 mod term;
 pub use term::*;
 

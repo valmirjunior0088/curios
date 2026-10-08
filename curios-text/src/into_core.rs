@@ -4,7 +4,7 @@
 //!
 //! 1. **Discovery** (`Resolved::of`): the prefixes the unit claims checked disjoint from the predecessors', then every module they declare loaded through its source.
 //! 2. **Interface resolution** (`interface::resolve_unit`): each module's declarations seeded into its interface, then every `pub use` resolved to a fixed point, before any body is lowered.
-//! 3. **Lowering** (`process_items`): each item's names resolved against those interfaces, its sugar undone and its matches compiled (`match_compile`), then the entry's final term.
+//! 3. **Lowering** (`process_items`): each item's names resolved against those interfaces, its sugar undone and its matches compiled (`match_compile`), then the entry's final term. A declaration a baseline lowered from the same text, every name it resolved resolving as it did, is taken from the baseline and not lowered (`lowered`).
 //! 4. **Witness names** (`witness`): each witness given the name its signature spells, which is read through the unit's definitions and so only once every item is lowered.
 //! 5. **Audit** (`audit`, `lint`): what the public interface exposes, and the declarations nothing reaches.
 //!
@@ -12,6 +12,9 @@
 
 mod audit;
 use audit::*;
+
+mod lowered;
+use lowered::*;
 
 mod context;
 use context::*;
@@ -277,6 +280,8 @@ pub struct PreparedText {
     broken: Vec<BrokenItem>,
     /// Where each source declaration this unit was lowered from lies: what a position in one of its terms is resolved against where a report is made — see `curios_core::Anchors`.
     anchors: curios_core::Anchors,
+    /// What each source declaration lowered to beside its items, and what it asked of its scope: one for each entry of `minted`'s declarations, held by pointer, since a unit lowered over this one keeps the ones that stand — see `lowered`.
+    declarations: Vec<Rc<LoweredDeclaration>>,
 }
 
 /// An item the parser could not read, as the lowering carries it: the parser's report, and the name its head declared, registered so a reference to it resolves to this name — which the elaborator withholds, as it withholds every dependent of a refusal — rather than reporting as unbound. `None` where the head did not parse as far as a name, whose references then report as the unbound names they are.
@@ -575,10 +580,12 @@ fn anchored(top_item: &TopItem, context: &Context) -> Option<curios_core::Anchor
 ///
 /// This unit's own, never the predecessors' extended in place. What a predecessor declares stays its own, and the one pass that asks about one — the public-exposure audit, whose alias walk may land on a predecessor's type — takes them to query rather than to own.
 #[derive(Default)]
-struct Lowering {
+struct Lowering<'a> {
+    /// The unit an earlier text of these sources lowered to, when this one is lowered over it.
+    baseline: Option<&'a Baseline<'a>>,
     items: Vec<FlatItem>,
-    /// What the unit-wide passes read of each item, beside it — see [`Lowered`].
-    facts: Vec<Lowered>,
+    /// What each declaration lowered to beside its items, in the walk's order, holding what the unit-wide passes read of them — see [`LoweredDeclaration`].
+    declarations: Vec<Rc<LoweredDeclaration>>,
     induct_decls: BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: BTreeMap<curios_core::Global, curios_core::StructDecl>,
     concepts: BTreeMap<curios_core::Global, curios_core::ConceptDecl>,
@@ -588,18 +595,26 @@ struct Lowering {
     broken: Vec<BrokenItem>,
 }
 
-impl Lowering {
-    /// Take what the unit-wide passes read of the items the declaration `context` has just lowered: the unit's from `from` on, each while its registry entries and the text it was written in are at hand.
+impl Lowering<'_> {
+    /// Record what the declaration `context` has just lowered to, the unit's items from `from` on: what the unit-wide passes read of each, taken while its registry entries and the text it was written in are at hand, and what the declaration asked of its scope.
     fn note(&mut self, context: &Context, from: usize) {
-        for item in &self.items[from..] {
-            self.facts.push(Lowered::of(
-                item,
-                |span| context.extent(span),
-                &self.induct_decls,
-                &self.struct_decls,
-                &context.syntax(),
-            ));
-        }
+        let facts = self.items[from..]
+            .iter()
+            .map(|item| {
+                LoweredItem::of(
+                    item,
+                    |span| context.extent(span),
+                    &self.induct_decls,
+                    &self.struct_decls,
+                    &context.syntax(),
+                )
+            })
+            .collect();
+        self.declarations.push(Rc::new(LoweredDeclaration::made(
+            context,
+            &self.items[from..],
+            facts,
+        )));
     }
 }
 
@@ -666,6 +681,13 @@ fn process_items(
                 (anchored(top_item, context), module.spans.get(index))
             {
                 context.anchor(anchored, span);
+            }
+            // A declaration the baseline lowered from this text, every name it resolved standing, is the baseline's.
+            if let Some(baseline) = lowered.baseline
+                && let Some(standing) = baseline.standing(context)
+            {
+                baseline.kept(standing, context, lowered);
+                continue;
             }
         }
         match top_item {
@@ -1660,7 +1682,17 @@ pub fn into_core_unit(
     predecessors: &[&PreparedText],
     syntax: &SyntaxRegistry,
 ) -> Result<PreparedText, Error> {
-    lower_unit(source, predecessors, syntax).map(|(unit, _)| unit)
+    lower_unit(source, predecessors, syntax, None).map(|(unit, _)| unit)
+}
+
+/// [`into_core_unit`] over `baseline`, the unit an earlier text of the same sources lowered to: a declaration the baseline lowered from the text it is written in now, every name it resolved resolving as it did, is the baseline's and is not lowered again. The unit is the one lowering the whole of it gives.
+pub fn into_core_unit_over(
+    source: &UnitSource<'_>,
+    predecessors: &[&PreparedText],
+    syntax: &SyntaxRegistry,
+    baseline: &PreparedText,
+) -> Result<PreparedText, Error> {
+    lower_unit(source, predecessors, syntax, Some(baseline)).map(|(unit, _)| unit)
 }
 
 /// [`into_core_unit`], with the final term an entry source closes with, lowered beside the unit.
@@ -1668,15 +1700,17 @@ fn lower_unit(
     source: &UnitSource<'_>,
     predecessors: &[&PreparedText],
     syntax: &SyntaxRegistry,
+    baseline: Option<&PreparedText>,
 ) -> Result<(PreparedText, Option<curios_core::Entrypoint>), Error> {
     curios_profile::profile!("into_core_unit");
-    grown(|| into_core_unit_within(source, predecessors, syntax))
+    grown(|| into_core_unit_within(source, predecessors, syntax, baseline))
 }
 
 fn into_core_unit_within(
     source: &UnitSource<'_>,
     predecessors: &[&PreparedText],
     syntax: &SyntaxRegistry,
+    baseline: Option<&PreparedText>,
 ) -> Result<(PreparedText, Option<curios_core::Entrypoint>), Error> {
     // Every predecessor, in every reading but one. Per-dependency visibility narrows nothing here: a prefix this unit did not declare stays discoverable and its names stay resolvable, and what refuses is the reference itself — see `Reach::guard`. Hiding the tables instead would turn an undeclared dependency into an unbound name, which is the one diagnostic an undeclared dependency must not produce.
     let predecessor_tables = predecessors
@@ -1788,7 +1822,11 @@ fn into_core_unit_within(
         }
     }
 
-    let mut lowered = Lowering::default();
+    let baseline = baseline.map(Baseline::of);
+    let mut lowered = Lowering {
+        baseline: baseline.as_ref(),
+        ..Lowering::default()
+    };
 
     // The compilation root's own items — the entry's, and none for a unit with no entrypoint — then one pass per prefix this unit claims. Exactly one of the two does any work, because owning the empty prefix is what makes a unit the entry.
     if let Some(entrypoint) = source.entrypoint() {
@@ -1816,8 +1854,9 @@ fn into_core_unit_within(
     }
 
     let Lowering {
+        baseline: _,
         items: mut flat_items,
-        facts,
+        declarations,
         induct_decls,
         struct_decls,
         concepts,
@@ -1826,7 +1865,15 @@ fn into_core_unit_within(
         foreigns,
         broken,
     } = lowered;
-    let facts = facts.iter().collect::<Vec<_>>();
+    let facts = declarations
+        .iter()
+        .flat_map(|declaration| declaration.facts())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        facts.len(),
+        flat_items.len(),
+        "every lowered item belongs to a declaration"
+    );
 
     // Every item is lowered, so every definition a witness's signature may name is at hand.
     name_witnesses(
@@ -1929,6 +1976,7 @@ fn into_core_unit_within(
         credited: BTreeSet::new(),
         reached: reached.into_inner(),
         anchors: anchoring.into_anchors(),
+        declarations,
     };
 
     Ok((unit, entry))
@@ -1940,7 +1988,7 @@ pub fn into_core(
     loader: &RootSource,
     syntax: &SyntaxRegistry,
 ) -> Result<(curios_core::Program, curios_core::Minted, ForeignStore), Error> {
-    let (unit, entry) = lower_unit(&UnitSource::entry(entrypoint, loader), &[], syntax)?;
+    let (unit, entry) = lower_unit(&UnitSource::entry(entrypoint, loader), &[], syntax, None)?;
 
     Ok((
         curios_core::Program {
@@ -2126,7 +2174,12 @@ pub fn into_core_with_prelude(
     predecessors: &[&PreparedText],
     syntax: &SyntaxRegistry,
 ) -> Result<LoweredEntry, Error> {
-    let (unit, entry) = lower_unit(&UnitSource::entry(entrypoint, loader), predecessors, syntax)?;
+    let (unit, entry) = lower_unit(
+        &UnitSource::entry(entrypoint, loader),
+        predecessors,
+        syntax,
+        None,
+    )?;
 
     Ok(LoweredEntry {
         program: curios_core::Program {

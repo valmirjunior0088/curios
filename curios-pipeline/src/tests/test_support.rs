@@ -354,6 +354,29 @@ pub(super) fn reuses_body(baseline: &Unit, unit: &Unit, name: &str) -> bool {
     std::ptr::eq(&*before, &*after)
 }
 
+/// Whether `unit` holds the very allocation `baseline` holds for the lowered body of the `let` named `name`: its lowering was the baseline's, kept, since every lowering builds its own terms.
+pub(super) fn keeps_lowered(baseline: &Unit, unit: &Unit, name: &str) -> bool {
+    let body = |unit: &Unit| {
+        unit.text()
+            .core()
+            .items
+            .iter()
+            .find(|item| {
+                item.declared_names()
+                    .first()
+                    .is_some_and(|declared| declared.symbol().ends_with(&format!("/{name}")))
+            })
+            .and_then(|item| match item {
+                Item::Let(definition) => Some(definition.body.clone()),
+                Item::Rec(_) => None,
+            })
+            .unwrap_or_else(|| panic!("{name} is a let item of the unit"))
+    };
+    let (before, after) = (body(baseline), body(unit));
+
+    std::ptr::eq(&*before, &*after)
+}
+
 /// The variance vector `unit` carries for the inductive family named `family`.
 pub(super) fn carried_variances(unit: &Unit, family: &str) -> Vec<Variance> {
     unit.core()

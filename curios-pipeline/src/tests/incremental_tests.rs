@@ -5,7 +5,8 @@
 use {
     super::test_support::{
         assert_modules_agree, assert_stored_alike, carried_variances, compile_modules,
-        recompile_modules, recompile_over, reuses_body, unit_of, unused_binders, written,
+        keeps_lowered, mounted, recompile_modules, recompile_over, reuses_body, unit_of,
+        unused_binders, written,
     },
     curios_core::{Enter, Item, Variance},
     curios_unit::Unit,
@@ -502,4 +503,144 @@ fn a_kept_declaration_whose_text_changed_is_placed_at_the_declaration() {
         vec![(3, "pub let double(n: Nat) -> Nat =\n    n + n;".to_string())],
     );
     assert_modules_agree(unit_of(&edited).core(), incremental.core());
+}
+
+/// Two modules each declaring `x`, a declaration reading the one a `use` above it brings in, and one that reads neither.
+const SHADOWED: &str = "pub mod a
+    pub let x: /std/Nat = 1;
+end
+
+pub mod b
+    pub let x: /std/Nat = 2;
+end
+
+use /lib/a/{x};
+
+pub let y: /std/Nat = x;
+
+pub let z: /std/Nat = 3;
+";
+
+/// A declaration's lowered form is the baseline's where its text stands and every name it resolved resolves as it did, and is lowered again where one does not: an edit to the `use` above `y` touches no character of `y`, and the `x` it names is another declaration.
+///
+/// Mutation-checked: kept by its text alone, `y` goes on naming `/lib/a/x`, and the unit is not the one a whole compile stores.
+#[test]
+fn a_declaration_is_lowered_again_where_a_name_it_wrote_resolves_elsewhere() {
+    let edited = SHADOWED.replace("use /lib/a/{x};", "use /lib/b/{x};");
+    let baseline = unit_of(SHADOWED);
+
+    let incremental = recompile_over(&edited, &baseline).unwrap();
+
+    assert!(
+        !keeps_lowered(&baseline, &incremental, "y"),
+        "a declaration whose name resolves elsewhere kept the lowering that named the other"
+    );
+    assert!(
+        keeps_lowered(&baseline, &incremental, "z"),
+        "a declaration that read nothing the edit moved was lowered again"
+    );
+    assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert_stored_alike(&unit_of(&edited), &incremental);
+}
+
+/// A declaration written between two others is lowered, and the ones around it are not: nothing a declaration lowers to says where it stands among the others.
+#[test]
+fn a_declaration_written_between_two_others_leaves_their_lowerings_kept() {
+    let edited = BASE.replace(
+        "pub let twice",
+        "pub let thrice: Nat = double(3);\n\npub let twice",
+    );
+    let baseline = unit_of(BASE);
+
+    let incremental = recompile_over(&edited, &baseline).unwrap();
+
+    for name in ["double", "twice", "unrelated"] {
+        assert!(
+            keeps_lowered(&baseline, &incremental, name),
+            "{name} was lowered again"
+        );
+    }
+    assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert_stored_alike(&unit_of(&edited), &incremental);
+}
+
+/// `edited` compiled over `baseline` answers what compiling it whole answers: the same unit, stored alike, or the same refusal.
+fn answers_as_the_whole_compile_does(edited: &str, baseline: &Unit) {
+    let whole = compile_modules(&mounted("lib", edited));
+    let incremental = recompile_over(edited, baseline);
+
+    match (whole, incremental) {
+        (Ok(whole), Ok(incremental)) => {
+            assert_modules_agree(whole.core(), incremental.core());
+            assert_stored_alike(&whole, &incremental);
+        }
+        (Err(whole), Err(incremental)) => assert_eq!(
+            incremental, whole,
+            "a recompile refuses as the whole compile of the same text refuses"
+        ),
+        (whole, incremental) => panic!(
+            "one compiles and the other does not: whole {:?}, over the baseline {:?}",
+            whole.map(|_| ()),
+            incremental.map(|_| ())
+        ),
+    }
+}
+
+/// A module a glob imports gains a member under a name the scope already holds: `y` wrote that name and no character of it changed, and what the recompile makes of it is what the whole compile does.
+#[test]
+fn a_globbed_module_gaining_a_member_is_answered_as_the_whole_compile_answers() {
+    let base = "use /std/{Nat};
+
+pub mod a
+    pub let one: /std/Nat = 1;
+end
+
+pub mod b
+    pub let two: /std/Nat = 2;
+end
+
+use /lib/b/{two};
+use /lib/a/*;
+
+pub let y: Nat = one + two;
+";
+    let edited = base.replace(
+        "    pub let one: /std/Nat = 1;\n",
+        "    pub let one: /std/Nat = 1;\n    pub let two: /std/Nat = 22;\n",
+    );
+    let baseline = unit_of(base);
+
+    answers_as_the_whole_compile_does(&edited, &baseline);
+}
+
+/// An export moves from one module to another, and a declaration that wrote the path through the first is untouched: its lowering is not kept, and the refusal is the whole compile's.
+#[test]
+fn a_path_through_an_export_that_moved_is_refused_as_the_whole_compile_refuses_it() {
+    let base = "pub mod a
+    pub let x: /std/Nat = 1;
+end
+
+pub mod b
+    pub use /lib/a/{x};
+
+    pub let w: /std/Nat = 0;
+end
+
+pub mod c
+    pub let v: /std/Nat = 0;
+end
+
+pub let y: /std/Nat = /lib/b/x;
+";
+    let edited = base.replace("    pub use /lib/a/{x};\n\n", "").replace(
+        "    pub let v: /std/Nat = 0;\n",
+        "    pub use /lib/a/{x};\n\n    pub let v: /std/Nat = 0;\n",
+    );
+    let baseline = unit_of(base);
+
+    assert!(
+        recompile_over(&edited, &baseline).is_err(),
+        "a path through an export that is gone still resolved"
+    );
+    answers_as_the_whole_compile_does(&edited, &baseline);
 }

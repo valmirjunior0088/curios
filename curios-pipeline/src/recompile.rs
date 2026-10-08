@@ -14,7 +14,7 @@ use {
     curios_elab::{
         Context, Erasures, Established, Recompile, elaborate_and_zonk_unit_over, erase_unit_over,
     },
-    curios_text::{UnitSource, into_core_unit},
+    curios_text::{UnitSource, into_core_unit_over},
     curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::{SyntaxRegistry, grown},
     std::{
@@ -37,7 +37,7 @@ pub fn compile_unit_over(
     let text = predecessors.text();
     let cores = predecessors.cores();
 
-    let mut lowered = into_core_unit(source, &text, syntax)
+    let mut lowered = into_core_unit_over(source, &text, syntax, baseline.text())
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
     let closure = invalidated(baseline, lowered.core());

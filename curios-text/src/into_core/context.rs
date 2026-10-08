@@ -1,5 +1,5 @@
 use {
-    super::{PublicInterface, Reach, Scoped, visible_binding, visible_child},
+    super::{Lookup, PublicInterface, Reach, Scoped, visible_binding, visible_child},
     crate::{Error, Label, Lint, Name},
     curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
@@ -32,6 +32,21 @@ pub(super) struct Anchoring {
     anchors: RefCell<curios_core::Anchors>,
     /// `None` between declarations, and within one that was built rather than written: a term lowered then holds no position.
     within: RefCell<Option<curios_core::Within>>,
+    /// What the declaration being lowered has asked of its scope and reported so far.
+    journal: RefCell<Journal>,
+}
+
+/// What a declaration's lowering asked of its scope and wrote beside its items, since [`Context::begin_declaration`]: what is recorded of it beside its items.
+#[derive(Default)]
+pub(super) struct Journal {
+    /// Every name it resolved through its scope, with what each resolved to, in the order it asked.
+    pub trace: curios_core::Trace<Lookup, Qualifier>,
+    /// The names it recorded an import scope for.
+    pub scoped: Vec<curios_core::Global>,
+    /// The lints its lowerers reported.
+    pub lints: Vec<Lint>,
+    /// Whether a name it wrote resolved to nothing. Elaboration refuses such a declaration, and no later lowering keeps what it lowered to.
+    pub unbound: bool,
 }
 
 impl Anchoring {
@@ -86,6 +101,8 @@ impl FlatLet {
 pub(super) enum FlatItem {
     Let(FlatLet),
     Rec(Vec<FlatLet>),
+    /// A recursive group taken from a baseline as it was closed: no member's terms are opened again, and what the unit-wide passes read of it was taken where it was lowered.
+    Kept(curios_core::RecItem),
 }
 
 impl FlatItem {
@@ -93,14 +110,20 @@ impl FlatItem {
         match self {
             FlatItem::Let(let_) => vec![let_.name],
             FlatItem::Rec(lets) => lets.iter().map(|let_| let_.name).collect(),
+            FlatItem::Kept(rec) => rec
+                .definitions
+                .iter()
+                .map(|definition| definition.name)
+                .collect(),
         }
     }
 
-    /// The item's members: one for a `let`, every one of a group.
+    /// The item's members as the walk lowered them: one for a `let`, every one of a group, and none of a group kept closed.
     pub(super) fn lets(&self) -> &[FlatLet] {
         match self {
             FlatItem::Let(let_) => std::slice::from_ref(let_),
             FlatItem::Rec(lets) => lets.as_slice(),
+            FlatItem::Kept(_) => &[],
         }
     }
 
@@ -109,6 +132,7 @@ impl FlatItem {
         match self {
             FlatItem::Let(let_) => std::slice::from_mut(let_),
             FlatItem::Rec(lets) => lets.as_mut_slice(),
+            FlatItem::Kept(_) => &mut [],
         }
     }
 
@@ -116,19 +140,24 @@ impl FlatItem {
     pub(super) fn declared(
         &self,
     ) -> impl Iterator<Item = (curios_core::Global, &curios_core::DefinitionKind, Qualifier)> {
+        let kept = match self {
+            FlatItem::Kept(rec) => rec.definitions.as_slice(),
+            FlatItem::Let(_) | FlatItem::Rec(_) => &[],
+        };
+
         self.lets()
             .iter()
             .map(|let_| (let_.name, &let_.kind, let_.island))
+            .chain(
+                kept.iter()
+                    .map(|definition| (definition.name, &definition.kind, definition.island)),
+            )
     }
 
     /// Every global this item names — the reachability prune's edges (see [`FlatItem::names`]). Locals are dropped: an item's binders are its own business, and reachability is a question about definitions.
     pub(super) fn free_vars(&self) -> HashSet<curios_core::Global> {
-        let lets = match self {
-            FlatItem::Let(let_) => std::slice::from_ref(let_),
-            FlatItem::Rec(lets) => lets.as_slice(),
-        };
-
-        lets.iter()
+        self.lets()
+            .iter()
             .flat_map(|let_| {
                 // Construction head names (`Struct`/`Variant`/type-former normal forms) are reachability edges too — a body that *builds* a struct (the string-literal meta-emitter's `/std/Str/Str`) must keep its backing type-former and field-type definitions alive even though no `Var` names them. See `Subterm::construction_names`.
                 let_.type_
@@ -145,6 +174,7 @@ impl FlatItem {
     pub(super) fn into_core(self) -> curios_core::Item {
         match self {
             FlatItem::Let(let_) => curios_core::Item::Let(let_.into_core()),
+            FlatItem::Kept(rec) => curios_core::Item::Rec(rec),
             FlatItem::Rec(items) => curios_core::Item::Rec(curios_core::RecItem::new(
                 items.into_iter().map(FlatLet::into_core).collect(),
             )),
@@ -400,6 +430,12 @@ impl<'a> Context<'a> {
     }
 
     pub(super) fn report(&self, lints: impl IntoIterator<Item = Lint>) {
+        let lints = lints.into_iter().collect::<Vec<_>>();
+        self.anchoring
+            .journal
+            .borrow_mut()
+            .lints
+            .extend(lints.iter().cloned());
         self.lints.borrow_mut().extend(lints);
     }
 
@@ -444,6 +480,28 @@ impl<'a> Context<'a> {
         self.universe_seeds.borrow_mut().clear();
         self.universe_allocations.borrow_mut().clear();
         *self.anchoring.within.borrow_mut() = None;
+        *self.anchoring.journal.borrow_mut() = Journal::default();
+    }
+
+    /// What the declaration begun last has asked and reported, taken: its lowering is over.
+    pub(super) fn journal(&self) -> Journal {
+        std::mem::take(&mut self.anchoring.journal.borrow_mut())
+    }
+
+    /// The text the declaration being lowered was sited at, read by the anchor it is a text of with its stamp, and by the text itself. `None` between declarations and within one that was built rather than written.
+    pub(super) fn sited<T>(
+        &self,
+        read: impl FnOnce((curios_core::Anchor, u32), &str) -> T,
+    ) -> Option<T> {
+        let within = self.anchoring.within.borrow();
+        let within = within.as_ref()?;
+
+        Some(read(within.key(), within.text()))
+    }
+
+    /// The span `extent` lies on, among the declarations this lowering has reached.
+    pub(super) fn resolved(&self, extent: &curios_core::Extent) -> Option<Span> {
+        self.anchoring.resolved(extent)
     }
 
     /// Lower what follows as the text of the source declaration `anchored` names, which `span` covers: every span written within it becomes an extent of it, so nothing the declaration lowers to says where in its file it stands.
@@ -480,7 +538,15 @@ impl<'a> Context<'a> {
 
     /// End the declaration begun last, which lowered to the items declaring `names`: record what it minted, for every one of them.
     pub(super) fn end_declaration(&self, names: impl IntoIterator<Item = curios_core::Global>) {
-        let mints = self.mints();
+        self.keep_declaration(self.mints(), names);
+    }
+
+    /// Record that the items declaring `names` are one declaration's, which minted `mints`: [`Context::end_declaration`], for a declaration whose lowering is taken from a baseline with what it minted there.
+    pub(super) fn keep_declaration(
+        &self,
+        mints: curios_core::Mints,
+        names: impl IntoIterator<Item = curios_core::Global>,
+    ) {
         let mut minted = self.minted.borrow_mut();
         let declaration = minted.declarations.len();
         minted.declarations.push(mints);
@@ -597,10 +663,6 @@ impl<'a> Context<'a> {
         self.prefix
     }
 
-    pub(super) fn bindings(&self) -> &HashMap<String, Qualifier> {
-        &self.bindings
-    }
-
     /// Every public interface in scope that `carries` `label`, as the absolute path `label` names there — the candidates an unresolved name's report spells the way out with. Read off the public interfaces, where a `pub use` is a binding of the re-exporting module, rather than the declaration table, because the facade's spelling is the one a reader is told everything comes from: `/std/Bool` is `pub use Bool/{let Bool}`, and Core knows only the `/sys/Bool/Bool` it stands for. Only the shortest paths are kept — a longer one is the same name through a deeper module — in the path's own order, which is deterministic and nothing more.
     ///
     /// A candidate this module may not reference is dropped first, because a report that offered one would spell a way out the next compile refuses — and refuses with the redirect that belonged in *this* message. Dropping before the shortest paths are kept rather than after is what makes the rule reachability instead of depth: `/sys/Nat` stands beside `/std/Nat` at the same length, and a reachable route below an internal one is still worth offering.
@@ -628,6 +690,7 @@ impl<'a> Context<'a> {
 
         let binder = self.fresh_binder(Some(label));
         self.unbound.borrow_mut().insert(binder, found);
+        self.anchoring.journal.borrow_mut().unbound = true;
         binder
     }
 
@@ -847,6 +910,7 @@ impl<'a> Context<'a> {
         match owner {
             Some(owner) => {
                 imports.by_item.insert(*owner, self.in_scope.clone());
+                self.anchoring.journal.borrow_mut().scoped.push(*owner);
             }
             None => imports.tail = self.in_scope.clone(),
         }
@@ -943,6 +1007,7 @@ impl<'a> Context<'a> {
             match visible_binding(self.public, self.table, &self.prefix, &parent, &label) {
                 Some(target) => {
                     self.note_spelled(&parent);
+                    self.asked(name, target);
                     Ok(target)
                 }
                 None => Err(
@@ -954,6 +1019,44 @@ impl<'a> Context<'a> {
             }
         })();
         result.map_err(|e| attach(e, name))
+    }
+
+    /// What the bare name `name` is bound to in this module's scope, where it is: a declaration of the module or a label a `use` brought in, whose `use` is then used. A binder of the declaration itself is the lowerer's to find first.
+    pub(super) fn resolve_bare(&self, name: &Name) -> Option<Qualifier> {
+        let target = *self.bindings.get(name.head())?;
+        self.note_binding_use(name.head());
+        self.asked(name, target);
+
+        Some(target)
+    }
+
+    /// Record that the declaration being lowered resolved `name`, as written, to `found`.
+    fn asked(&self, name: &Name, found: Qualifier) {
+        let lookup = Lookup {
+            absolute: name.is_abs(),
+            path: *name.qualifier(),
+        };
+        self.anchoring
+            .journal
+            .borrow_mut()
+            .trace
+            .record(lookup, found);
+    }
+
+    /// Whether `lookup` resolves to `found` where this context stands, asked through the door the lowerer asked it through: a bare name of this module's scope, any other of the modules it may see. A resolution the scope now refuses answers no.
+    pub(super) fn answers(&self, lookup: &Lookup, found: &Qualifier) -> bool {
+        let name = Name::new(lookup.absolute, lookup.path);
+        let answer = match name.is_abs() || !name.is_single() {
+            true => self.resolve_term_name(&name).ok(),
+            false => self.resolve_bare(&name),
+        };
+
+        answer.as_ref() == Some(found)
+    }
+
+    /// Drop what has been asked since the declaration began: the questions of a trace asked again are no questions of the declaration.
+    pub(super) fn forget_asked(&self) {
+        self.anchoring.journal.borrow_mut().trace = curios_core::Trace::default();
     }
 }
 

@@ -9,8 +9,10 @@ use {
     std::collections::{BTreeMap, HashMap, HashSet},
 };
 
-/// What the unit-wide passes read of one lowered item, taken once, where it is lowered and its terms are open: the passes then read no term.
-pub(super) struct Lowered {
+/// What the unit-wide passes read of one lowered item, taken once, where it is lowered and its terms are open: the passes then read no term, so an item a later lowering keeps answers them as one it lowers does.
+#[derive(Debug, Clone)]
+#[curios_archive::archived]
+pub(crate) struct LoweredItem {
     /// Every name the item's declaration references ([`node_reference_names`]), in the names' order.
     pub reaches: Vec<curios_core::Global>,
     /// What each of its definitions declares, in the item's order.
@@ -18,7 +20,9 @@ pub(super) struct Lowered {
 }
 
 /// One definition of a lowered item, as the exposure audit and the `unused-declaration` lint read it.
-pub(super) struct Declared {
+#[derive(Debug, Clone)]
+#[curios_archive::archived]
+pub(crate) struct Declared {
     /// Where its name was written, in the text of its declaration: what the `unused-declaration` lint underlines. `None` for a definition the compiler named — a constructor, a method wrapper, a witness, a test — and for one that was built rather than written.
     pub label: Option<curios_core::Extent>,
     /// The top-level definitions its declared type names, in the order a term lists its free variables. Taken of a definition written under its own name alone, the only kind the audit asks of.
@@ -27,7 +31,7 @@ pub(super) struct Declared {
     pub alias: Option<AliasEdge>,
 }
 
-impl Lowered {
+impl LoweredItem {
     /// What the passes read of `item`, whose registry entries `induct_decls` and `struct_decls` already hold. `placed` gives the extent of a span in the text of the declaration the item was lowered from.
     pub(super) fn of(
         item: &FlatItem,
@@ -101,12 +105,8 @@ pub(super) fn node_reference_names(
 ///
 /// **Every name a body *writes*, and nothing it merely dispatches through.** A concept reached by infix operator is not here and must not be: `&&` in the equality body is rebuilt by `elaborate_infix` as a projection off a resolved witness, never a wrapper `Var`, so it names no global at all.
 fn derived_vocabulary(item: &FlatItem, syntax: &SyntaxRegistry) -> Vec<curios_core::Global> {
-    let lets = match item {
-        FlatItem::Let(let_) => std::slice::from_ref(let_),
-        FlatItem::Rec(lets) => lets.as_slice(),
-    };
     let mut vocabulary = Vec::new();
-    for let_ in lets.iter().filter(|let_| let_.body.has_derive()) {
+    for let_ in item.lets().iter().filter(|let_| let_.body.has_derive()) {
         let Some(concept) = witness_concept(let_).and_then(|name| name.qualifier().cloned()) else {
             continue;
         };
@@ -127,7 +127,7 @@ fn derived_vocabulary(item: &FlatItem, syntax: &SyntaxRegistry) -> Vec<curios_co
     vocabulary
 }
 
-/// The concept a witness row registers into — the head of its signature's terminal concept application, peeled through the premise telescope. Lowered form only: pre-elaboration the terminal is an `Apply`/`Var` spine, so the head is a free global rather than a `StructType` normal form (kept as a fallback for synthetic inputs).
+/// The concept a witness row registers into — the head of its signature's terminal concept application, peeled through the premise telescope. LoweredItem form only: pre-elaboration the terminal is an `Apply`/`Var` spine, so the head is a free global rather than a `StructType` normal form (kept as a fallback for synthetic inputs).
 fn witness_concept(let_: &FlatLet) -> Option<curios_core::Global> {
     fn head_of(term: &curios_core::Term) -> Option<curios_core::Global> {
         match &**term {
@@ -194,9 +194,11 @@ fn struct_free_vars(struct_decl: &curios_core::StructDecl) -> HashSet<curios_cor
 }
 
 /// A definition whose body is a bare top-level name: what it stands for and, where it is a type alias written out in full, every top-level name its body mentions.
-pub(super) struct AliasEdge {
-    pub(super) target: curios_core::Global,
-    pub(super) dependencies: Option<Vec<curios_core::Global>>,
+#[derive(Debug, Clone)]
+#[curios_archive::archived]
+pub(crate) struct AliasEdge {
+    pub target: curios_core::Global,
+    pub dependencies: Option<Vec<curios_core::Global>>,
 }
 
 /// The alias `let_` is, where its body is one.
@@ -216,7 +218,7 @@ fn alias_of(let_: &FlatLet) -> Option<AliasEdge> {
 /// Every alias among `items`, by the name that is one, read off the facts taken of each.
 pub(super) fn aliases<'a>(
     items: &[FlatItem],
-    facts: &[&'a Lowered],
+    facts: &[&'a LoweredItem],
 ) -> HashMap<curios_core::Global, &'a AliasEdge> {
     items
         .iter()

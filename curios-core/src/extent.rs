@@ -220,6 +220,13 @@ impl Anchors {
         }
     }
 
+    /// The text of `anchor` that carries `stamp`, where this table holds one: what a declaration lowered from it is known again by, since a stamp narrows and only the text decides.
+    pub fn text(&self, anchor: Anchor, stamp: u32) -> Option<&str> {
+        let sited = self.texts.get(&(anchor, stamp))?;
+
+        Some(&sited.source.text[sited.start..sited.end])
+    }
+
     /// The span `extent` lies on: its range in the text it was taken from, where this table holds that text; the whole of the anchor's text where that text is gone and the anchor has one; and nothing otherwise.
     pub fn resolve(&self, extent: &Extent) -> Option<Span> {
         let (start, end) = (extent.start as usize, extent.end as usize);
@@ -255,6 +262,16 @@ pub struct Within {
 }
 
 impl Within {
+    /// The anchor this is a text of, and the text's stamp: what the table it was sited in holds it under.
+    pub fn key(&self) -> (Anchor, u32) {
+        (self.anchor, self.stamp)
+    }
+
+    /// The text itself.
+    pub fn text(&self) -> &str {
+        &self.sited.source.text[self.sited.start..self.sited.end]
+    }
+
     /// The extent of `span` in this text. `None` for a span that does not lie in it: one of another source, or one reaching outside the text.
     pub fn extent(&self, span: &Span) -> Option<Extent> {
         let sited = &self.sited;

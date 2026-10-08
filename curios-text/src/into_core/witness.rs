@@ -68,6 +68,11 @@ fn witness_names(
                     unit.insert(let_.name, (&let_.kind, None));
                 }
             }
+            FlatItem::Kept(rec) => {
+                for definition in &rec.definitions {
+                    unit.insert(definition.name, (&definition.kind, None));
+                }
+            }
         }
     }
     // What every unit in scope declares under each name, read as a name of the unit is. Built the first time a signature reads outside the unit.

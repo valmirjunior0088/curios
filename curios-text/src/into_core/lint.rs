@@ -5,7 +5,7 @@
 //! A private module none of whose declarations is reachable is reported once, at the `mod`, and its members are not: the fix is one deletion, and one line says so.
 
 use {
-    super::{FlatItem, Lowered, ModuleInfo, PublicInterface, Scoped, owner_of},
+    super::{FlatItem, LoweredItem, ModuleInfo, PublicInterface, Scoped, owner_of},
     crate::Lint,
     curios_utilities::{Mount, Qualifier, Span},
     std::collections::{BTreeSet, HashMap, HashSet},
@@ -14,8 +14,8 @@ use {
 /// What the walk is asked over: the unit's items and the tables the roots and the report are read from.
 pub(super) struct Declarations<'a> {
     pub items: &'a [FlatItem],
-    /// What was taken of each item where it was lowered — see [`Lowered`].
-    pub facts: &'a [&'a Lowered],
+    /// What was taken of each item where it was lowered — see [`LoweredItem`].
+    pub facts: &'a [&'a LoweredItem],
     /// The span an extent of one of the unit's declarations lies on.
     pub placed: &'a dyn Fn(&curios_core::Extent) -> Option<Span>,
     pub entry: Option<&'a curios_core::Entrypoint>,
