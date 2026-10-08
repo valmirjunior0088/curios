@@ -1,4 +1,4 @@
-use /std/{Nat, Str, List};
+use /std/{Nat, Bool, Str, List, Vec};
 use /std/Tui/{Frame};
 
 --- How a child claims its share of an axis: an exact length, a floor a fill may grow past, a percentage of the whole, or a weighted share of what the others leave.
@@ -74,14 +74,13 @@ pub use Sizes/*;
 pub use Column/*;
 pub use Row/*;
 
-let share_head(shares: List(Nat)) -> Nat =
-    match shares | [] => 0 | [x, .._] => x end;
-
-let share_tail(shares: List(Nat)) -> List(Nat) =
-    match shares | [] => [] | [_, ..rest] => rest end;
-
---- `avail` shared among `cs` in one deterministic pass: lengths and floors first, percentages next, the rest to the fills by weight, the rounding shortfall to the last fill. An over-committed axis answers the claims as written.
-pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =
+-- `avail` shared among `items` by the constraint `claim` reads off each, one share an item by its type, so a walk beside the items reads a share for every one of them.
+let shared(
+    @A: Type,
+    items: List(A),
+    claim: (A) -> Constraint,
+    avail: Nat,
+) -> Vec(Nat, List/len(items)) =
     let fixed(c: Constraint) -> Nat =
         match c
         | length(n) => n
@@ -90,31 +89,32 @@ pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =
         | fill(_) => 0
         end;
     let weight(c: Constraint) -> Nat = match c | fill(k) => k | _ => 0 end;
+    let cs = List/map(items, claim);
     let claimed = List/fold(List/map(cs, fixed), 0, (n, total) => n + total);
     let weights = List/fold(List/map(cs, weight), 0, (n, total) => n + total);
     let spare = avail - claimed;
-    let shares =
-        match Nat/lt/try(0, weights)
-        | none() => List/map(cs, fixed)
-        | some(ok) => List/map(cs, (c) => fixed(c) + spare * weight(c) / weights)
-        end;
-    let used = List/fold(shares, 0, (n, total) => n + total);
+    let weighed = Nat/lt/try(0, weights);
+    let share(c: Constraint) -> Nat =
+        match weighed | none() => fixed(c) | some(ok) => fixed(c) + spare * weight(c) / weights end;
+    let used = List/fold(List/map(cs, share), 0, (n, total) => n + total);
     let short = avail - used;
-    let empty: List(Nat) = [];
-    let settled =
-        List/fold(
-            List/reverse(List/zip(cs, shares)),
-            (done = false, out = empty),
-            (entry, acc) =>
-                match acc.done
-                | true => (done = true, out = [entry.1, ..acc.out])
-                | false =>
-                    match weight(entry.0)
-                    | 0 => (done = false, out = [entry.1, ..acc.out])
-                    | _ => (done = true, out = [entry.1 + short, ..acc.out])
-                    end
-                end);
-    settled.out;
+    -- From the last item back, so the first fill met is the last one, which takes the shortfall.
+    let settle(rest: List(A)) -> {given: Bool, out: Vec(Nat, List/len(rest))} =
+        match rest
+        | [] => (given = false, out = Vec/nil())
+        | [item, ..more] =>
+            let after = settle(more);
+            let c = claim(item);
+            match after.given || weight(c) == 0
+            | true => (given = after.given, out = Vec/cons(share(c), after.out))
+            | false => (given = true, out = Vec/cons(share(c) + short, after.out))
+            end
+        end;
+    settle(items).out;
+
+--- `avail` shared among `cs` in one deterministic pass: lengths and floors first, percentages next, the rest to the fills by weight, the rounding shortfall to the last fill. An over-committed axis answers the claims as written.
+pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =
+    Vec/to_list(shared(cs, (c) => c, avail));
 
 --- Every pane painted at its size and the results joined as the tree says. `paint` answers one pane by name at the size the split gave it, typed at that size.
 pub let render(
@@ -158,34 +158,34 @@ pub let split(l: Layout, w: Nat, h: Nat) -> Sizes(l, w, h) =
     match l
     | pane(_) => leaf(w, h)
     | rows(ps) =>
-        let built = split_column(ps, w, distribute(List/map(ps, (p) => p.0), h));
+        let built = split_column(ps, w, shared(ps, (p) => p.0, h));
         fitted(w, h, stacked(built.col))
     | cols(ps) =>
-        let built = split_row(ps, h, distribute(List/map(ps, (p) => p.0), w));
+        let built = split_row(ps, h, shared(ps, (p) => p.0, w));
         fitted(w, h, ranged(built.row))
     end
 and split_column(
     ps: List({Constraint, Layout}),
     w: Nat,
-    shares: List(Nat),
+    shares: Vec(Nat, List/len(ps)),
 ) -> {th: Nat, col: Column(ps, w, th)} =
     match ps
     | [] => (th = 0, col = col_stop())
     | [entry, ..rest] =>
-        let mine = share_head(shares);
-        let below = split_column(rest, w, share_tail(shares));
+        let mine = Vec/first(shares);
+        let below = split_column(rest, w, Vec/rest(shares));
         (th = mine + below.th, col = col_part(split(entry.1, w, mine), below.col))
     end
 and split_row(
     ps: List({Constraint, Layout}),
     h: Nat,
-    shares: List(Nat),
+    shares: Vec(Nat, List/len(ps)),
 ) -> {tw: Nat, row: Row(ps, tw, h)} =
     match ps
     | [] => (tw = 0, row = row_stop())
     | [entry, ..rest] =>
-        let mine = share_head(shares);
-        let alongside = split_row(rest, h, share_tail(shares));
+        let mine = Vec/first(shares);
+        let alongside = split_row(rest, h, Vec/rest(shares));
         (tw = mine + alongside.tw, row = row_part(split(entry.1, mine, h), alongside.row))
     end;
 
