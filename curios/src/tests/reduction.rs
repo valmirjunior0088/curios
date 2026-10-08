@@ -507,29 +507,29 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 ///
 /// # What it last printed
 ///
-/// **Debug**, on `aarch64-apple-darwin`. The unit columns do not depend on the profile — a debug run of a ladder reproduces its release units exactly — and the table carries no wall clock.
+/// Counted, at `85da54b97`. The unit columns do not depend on the profile — a debug run of a ladder reproduces its release units exactly — and the table carries no wall clock.
 ///
 /// ```text
-///   program                      units   depth      other      retained       units   depth      other      retained  kernel/elab
-///   Str literal, n=250           27130       2      25082         64997       28411       6      22267             0     1.0x
-///   Str literal, n=500           39445       1      38421         65028       39489       1      38465             0     1.0x
-///   Str literal, n=1000          73945       1      72921         65090       73989       1      72965             0     1.0x
-///   Str literal, n=2000         142945       1     141921         65215      142989       1     141965             0     1.0x
-///   Str literal, n=4000         280945       1     279921         65465      280989       1     279965             0     1.0x
-///   Str literal, n=8000         556945       1     555921         65965      556989       1     555965             0     1.0x
-///   Str n=500, 1 uses            39445       1      38421         65192       39489       1      38465             0     1.0x
-///   Str n=500, 3 uses            39445       1      38421         65192       39489       1      38465             0     1.0x
-///   Bytes literal, n=500         27130       2      25082         64715       28411       6      22267             0     1.0x
-///   Str n=500, cut               39445       1      38421         67423       39489       1      38465             0     1.0x
+///   program                      units   depth      other       units   depth      other  kernel/elab
+///   Str literal, n=250           22195       1      21171       22242       1      21218     1.0x
+///   Str literal, n=500           39445       1      38421       39492       1      38468     1.0x
+///   Str literal, n=1000          73945       1      72921       73992       1      72968     1.0x
+///   Str literal, n=2000         142945       1     141921      142992       1     141968     1.0x
+///   Str literal, n=4000         280945       1     279921      280992       1     279968     1.0x
+///   Str literal, n=8000         556945       1     555921      556992       1     555968     1.0x
+///   Str n=500, 1 uses            39445       1      38421       39492       1      38468     1.0x
+///   Str n=500, 3 uses            39445       1      38421       39492       1      38468     1.0x
+///   Bytes literal, n=500          1170       1        146        1254       1        230     1.1x
+///   Str n=500, cut               39445       1      38421       39492       1      38468     1.0x
 /// ```
 ///
-/// **A character costs 69 units on each checker**, read between the `n=4000` and `n=8000` rows. Dividing the default budget by it puts the ceiling near 434 000 characters, by arithmetic rather than by bisection. Guarded depth is flat in the literal's length on both checkers, and so is the cost in use count.
+/// **A character costs 69 units on each checker**, at every rung of the ladder. Dividing the default budget by it puts the ceiling near 434 000 characters, by arithmetic rather than by bisection. Guarded depth is flat in the literal's length on both checkers, and so is the cost in use count.
 ///
-/// **Cutting costs nothing a unit column sees.** The cut row, which cuts through `Str/before` at a position whose boundary is decided by the one byte there, spends exactly the bare `n=500` row's units on both checkers; its elaborator retention is 2 395 units, 3.7%, above the bare row's.
+/// **Cutting costs nothing a unit column sees.** The cut row, which cuts through `Str/before` at a position whose boundary is decided by the one byte there, spends exactly the bare `n=500` row's units on both checkers.
 ///
-/// **The `kernel/elab` column reads 1.0× at every size, and the elaborator's retention is flat**: 64 997 to 65 965 units across the ladder, one unit per eight characters.
+/// **The `kernel/elab` column reads 1.0× on every `Str` row**, the kernel 47 units over the elaborator at each.
 ///
-/// **The `n=250` and `Bytes` rows do not measure a literal.** Each checker reports its heaviest declaration, and in those two programs that is none of the program's own: a program that only prints spends about 27 000 units on standard-library terms, work every compilation repeats over `/std`. The `Bytes` control says nothing about a proof-free literal until that floor sits below one.
+/// **The `Bytes` row is the control**: the same bytes with no proof over them cost each checker under 1 300 units, so a `Str` literal's units are its validity's.
 #[test]
 #[ignore = "measurement: reports what a Str literal costs rather than asserting"]
 fn str_literal_cost_measurements() {
@@ -574,26 +574,30 @@ fn str_literal_cost_measurements() {
 ///
 /// # What it last printed
 ///
-/// **Release**, `aarch64-apple-darwin`.
+/// Counted, at `85da54b97`.
 ///
 /// ```text
-///   program                      units   depth      other      retained       units   depth      other      retained  kernel/elab
-///   web n=8, applied              9302       2       7254         48649       22400       6      16256        186809     2.4x
-///   web n=8, scrutinized          9302       2       7254         65685       22400       6      16256        208459     2.4x
-///   web n=8, closed               9302       2       7254         65685       22400       6      16256        196313     2.4x
-///   web n=13, applied             9302       2       7254         52729       22400       6      16256        189089     2.4x
-///   web n=13, scrutinized         9302       2       7254         69765       22400       6      16256        210739     2.4x
-///   web n=13, closed              9302       2       7254         69765       22400       6      16256        198593     2.4x
-///   web n=20, applied             9302       2       7254         58441       22400       6      16256        192281     2.4x
-///   web n=20, scrutinized         9302       2       7254         75477       22400       6      16256        213931     2.4x
-///   web n=20, closed              9302       2       7254         75477       22400       6      16256        201785     2.4x
+///   program                      units   depth      other       units   depth      other  kernel/elab
+///   web n=8, applied              5161       5         41        3771       3        699     0.7x
+///   web n=8, scrutinized          9429       8       1237       10680       9       1464     1.1x
+///   web n=8, closed               5161       5         41        3771       3        699     0.7x
+///   web n=12, applied             5161       5         41        3771       3        699     0.7x
+///   web n=12, scrutinized         9429       8       1237       10680       9       1464     1.1x
+///   web n=12, closed              5161       5         41        3771       3        699     0.7x
+///   web n=13, applied             5161       5         41        3771       3        699     0.7x
+///   web n=13, scrutinized         9429       8       1237       10680       9       1464     1.1x
+///   web n=13, closed              5161       5         41        3771       3        699     0.7x
+///   web n=14, applied             5161       5         41        3771       3        699     0.7x
+///   web n=14, scrutinized         9429       8       1237       10680       9       1464     1.1x
+///   web n=14, closed              5161       5         41        3771       3        699     0.7x
+///   web n=20, applied             5161       5         41        3771       3        699     0.7x
+///   web n=20, scrutinized         9429       8       1237       10680       9       1464     1.1x
+///   web n=20, closed              5161       5         41        3771       3        699     0.7x
 /// ```
 ///
-/// **Every unit column is constant**, across the sizes and all three consumptions, and the ratio is 2.4× everywhere: twenty definitions cost what eight do.
+/// **Every unit column is constant across the sizes**, under each consumption and on both checkers: twenty definitions cost what eight do. Keyed on the reduced spelling rather than the written one, the middle row would grow by a factor of two per definition.
 ///
-/// The heaviest declaration is the same one in every row, and that is what the flatness is *about*: it is `probe`, the declaration holding the `match`, and what it costs has nothing to do with the web it scrutinizes. Keyed on the reduced spelling rather than the written one, this row would grow by a factor of two per definition.
-///
-/// Retention is the one column that separates the rows, linearly in the web: an equation is *recorded* rather than reduced, so what a scrutinee adds is one more term held for the length of an arm.
+/// **A `match` at a binder is paid in guarded depth**: three levels more than applying on the elaborator and six more on the kernel, a frame each, which is most of what its row adds. A `match` at a literal costs what applying does.
 #[test]
 #[ignore = "measurement: reports what a combinator web costs each checker rather than asserting"]
 fn combinator_web_cost_measurements() {
@@ -977,31 +981,173 @@ fn a_type_does_not_run_a_proof_it_only_binds() {
     );
 }
 
+/// A program whose one claim is that `/std/http/Url/lit` reads a URL of `characters` characters: `lit` discharges `Valid(s)` by running `/std/http/Url/of_str` in a type, so what the declaration costs is what the reader costs a type.
+fn url_literal(characters: usize) -> String {
+    let literal = match characters {
+        32 => "https://example.com:8443/a/b?x=1",
+        64 => "https://example.com:8443/api/v1/items/42/parts?sort=name&page=12",
+        128 => {
+            "https://example.com:8443/api/v1/items/42/parts/7/revisions/2024/attachments/photo.png?sort=name&page=12&size=50&filter=open&x=12"
+        }
+        other => panic!("no literal of {other} characters"),
+    };
+    assert_eq!(literal.len(), characters);
+
+    format!(
+        "use /std/http/{{Url}};\n\nlet home: Url =\n    Url/lit(\"{literal}\");\n\n/std/print(Url/to_str(home))\n"
+    )
+}
+
+/// What reading the 32-character literal cost the heavier checker while `/std/http/Url/of_str` read the bytes of its text, counted at `eef14bad1`: the least budget under which the program is accepted.
+const URL_OVER_BYTES_AT_32: u64 = 69_816;
+
+/// **A URL literal costs a type what its length does, read as text.** `/std/http/Url/of_str` reads `Parse(Str, Url)`, each piece a cut of the input between two positions, and `lit` runs it in a type. A position's bound is a proof and a walk's step carries one, and neither checker runs a proof it only binds, so the reader over text costs under twice what the reader over bytes did, and a literal twice as long costs no more than twice as much.
+///
+/// With the proofs run, a doubling costs more than a doubling, since each step's bound is a lemma by induction on the offset it stands at.
+#[test]
+fn a_url_literal_read_as_text_costs_a_type_what_its_length_does() {
+    let heavier = |characters: usize| {
+        let (elaborator, kernel) = declaration_cost(&url_literal(characters));
+
+        elaborator.units().max(kernel.units())
+    };
+    let [short, middle, long] = [32, 64, 128].map(heavier);
+
+    assert!(
+        short < 2 * URL_OVER_BYTES_AT_32,
+        "the 32-character literal costs {short} units, where the reader over bytes cost {URL_OVER_BYTES_AT_32}"
+    );
+    assert!(
+        middle <= 2 * short && long <= 2 * middle,
+        "a doubling costs more than a doubling: {short}, {middle} and {long} units at 32, 64 and 128 characters"
+    );
+}
+
+/// A program whose claim is that `parser` reads `input`, stated over whether it succeeded and over a declaration bound to the read, so the claim holds nothing of what was read and no member left to inference.
+fn primitive_claim(carrier: &str, parser: &str, input: &str) -> String {
+    format!(
+        "use /std/{{Str, Bytes, Byte, Char, Nat, Parse, Result, Bool}};\nuse /std/Bool/{{Holds, True}};\n\nlet ok(@A: Type, r: Result(Parse/Error, A)) -> Bool =\n    match r\n    | success(_) => true\n    | failure(_) => false\n    end;\n\nlet times(@I: Type, use Parse/Input(I), @A: Type, n: Nat, p: Parse(I, A)) -> Parse(I, {{}}) =\n    match n\n    | 0 => Parse/pure(())\n    | k + 1 =>\n        let _ = p!;\n        times(k, p)\n    end;\n\nlet reader: Parse({carrier}, {{}}) =\n    let _ = {parser}!;\n    Parse/pure(());\n\nlet read: Result(Parse/Error, {{}}) = Parse/run(reader, {input});\n\nlet _claim: Holds(ok(read)) = True/qed();\n\n/std/print(\"ok\")\n"
+    )
+}
+
+/// What each primitive of `/std/Parse/text` costs each checker beside its twin in `/std/Parse/bytes`, over 32 letters: a text primitive steps by a character and hands on a position that is a boundary of valid text, where its twin steps by a byte.
+///
+/// ```sh
+/// cargo test --package curios --all-features -- --ignored --nocapture parse_primitive_measurements
+/// ```
+///
+/// Counted, so a reading transports between machines. A change to `/std/Parse`, to `/std/Str/At` or to what the closed machine evaluates retakes it.
+///
+/// # What it last printed
+///
+/// At `85da54b97`:
+///
+/// ```text
+///   primitive            text elab      kernel  bytes elab      kernel
+///   literal                  74947       74973       18387       18413
+///   take_while               48931       48957        9910        9936
+///   char, byte               58355       58381       31930       31956
+///   char_if, byte_if         64538       64564       38120       38146
+///   expect                   60868       60894       35133       35159
+///   rest                      8391        6494        8699        6515
+///   until                    49208       49234
+/// ```
+///
+/// **A text primitive costs four to five times its twin where the primitive is the walk**, `literal` and `take_while`, and under twice where each step is a parser run through `times`: `char`, `char_if` and `expect`. `rest` cuts once and reads nothing.
+#[test]
+#[ignore = "measurement, counted: reports what each parser primitive costs over text and over bytes rather than asserting"]
+fn parse_primitive_measurements() {
+    let letters = "a".repeat(32);
+    let text = format!("\"{letters}\"");
+    let bytes = format!("Str/to_bytes(\"{letters}\")");
+    let rows: [(&str, String, Option<String>); 7] = [
+        (
+            "literal",
+            format!("Parse/text/literal({text})"),
+            Some(format!("Parse/bytes/literal({text})")),
+        ),
+        (
+            "take_while",
+            "Parse/text/take_while((c) => Char/to_nat(c) == 'a')".to_string(),
+            Some("Parse/bytes/take_while((b) => Byte/to_nat(b) == 'a')".to_string()),
+        ),
+        (
+            "char, byte",
+            "times(32, Parse/text/char)".to_string(),
+            Some("times(32, Parse/bytes/byte)".to_string()),
+        ),
+        (
+            "char_if, byte_if",
+            "times(32, Parse/text/char_if((c) => Char/to_nat(c) == 'a'))".to_string(),
+            Some("times(32, Parse/bytes/byte_if((b) => Byte/to_nat(b) == 'a'))".to_string()),
+        ),
+        (
+            "expect",
+            "times(32, Parse/text/expect('a'))".to_string(),
+            Some("times(32, Parse/bytes/expect('a'))".to_string()),
+        ),
+        (
+            "rest",
+            "Parse/text/rest".to_string(),
+            Some("Parse/bytes/rest".to_string()),
+        ),
+        ("until", "Parse/text/until(\"b\")".to_string(), None),
+    ];
+
+    println!(
+        "\n  {:<18}  {:>10}  {:>10}  {:>10}  {:>10}",
+        "primitive", "text elab", "kernel", "bytes elab", "kernel"
+    );
+    for (label, over_text, over_bytes) in rows {
+        let input = match label {
+            "until" => format!("\"{letters}b\""),
+            _ => text.clone(),
+        };
+        let (elaborator, kernel) = declaration_cost(&primitive_claim("Str", &over_text, &input));
+        let twin = over_bytes
+            .map(|parser| declaration_cost(&primitive_claim("Bytes", &parser, &bytes)))
+            .map_or_else(
+                || format!("{:>10}  {:>10}", "", ""),
+                |(elaborator, kernel)| {
+                    format!("{:>10}  {:>10}", elaborator.units(), kernel.units())
+                },
+            );
+
+        println!(
+            "  {label:<18}  {:>10}  {:>10}  {twin}",
+            elaborator.units(),
+            kernel.units(),
+        );
+    }
+}
+
 /// What each claim of the type-level benchmark set costs each checker: an equality a type states and `Eq/refl()` proves, so that checking the program is reducing the claim's left side to its right. Six take a `Str` apart, one reads a `Flt`, one searches a `Str` and maps the position found.
 ///
 /// ```sh
 /// cargo test --package curios --all-features -- --ignored --nocapture type_level_claim_measurements
 /// ```
 ///
-/// Counted, so a reading transports between machines. A change to how a `Str` or a `Flt` is read at the type level retakes it and accounts for each row that moved. Each checker reports its heaviest declaration, so a claim cheaper than a program that only prints — about 27 000 units — reads as that floor and measures nothing.
+/// Counted, so a reading transports between machines. A change to how a `Str` or a `Flt` is read at the type level retakes it and accounts for each row that moved. Each checker reports its heaviest declaration, and a program that states no claim reads under 1 300 units ([`str_literal_cost_measurements`]'s `Bytes` row), so each row is its claim's.
 ///
 /// # What it last printed
 ///
-/// At `3cd8ef597`:
+/// At `85da54b97`:
 ///
 /// ```text
 ///   claim                        units   depth      other       units   depth      other  kernel/elab
-///   Str/split                   197171      19     177715      174068       3     170996     0.9x
-///   Str/split_once              139839       4     135743      128166       3     125094     0.9x
-///   Str/lines                   118029      12     105741      110142       3     107070     0.9x
-///   Str/replace                 119040      15     103680       99687       3      96615     0.8x
-///   Str/trim                    130509       4     126413      117479       3     114407     0.9x
-///   Str/strip_suffix             61321       4      57225       87020       5      81900     1.4x
-///   Flt/of_str                   78970       4      74874      149228       3     146156     1.9x
-///   Str/index_of                 94631       7      87463      141503       3     138431     1.5x
+///   Str/split                    83140      19      63684       49308       1      48284     0.6x
+///   Str/split_once               63539       3      60467       50454       2      48406     0.8x
+///   Str/lines                    54444      12      42156       36276       1      35252     0.7x
+///   Str/replace                  65974      15      50614       36669       1      35645     0.6x
+///   Str/trim                     60698       3      57626       47570       1      46546     0.8x
+///   Str/strip_suffix             55609       3      52537       55317       2      53269     1.0x
+///   Flt/of_str                   67798       3      64726       66955       2      64907     1.0x
+///   Str/index_of                 42154       3      39082       41630       2      39582     1.0x
 /// ```
 ///
-/// **A builder nests in the elaborator**: `Str/split`, `Str/lines` and `Str/replace` hand on what they have built, an argument the elaborator's reducer holds a level deeper for each piece, where the kernel's depth stays at three and its cost a little under the elaborator's.
+/// **A builder nests in the elaborator**: `Str/split`, `Str/lines` and `Str/replace` hand on what they have built, an argument the elaborator's reducer holds a level deeper for each piece, where the kernel's depth stays at one.
+///
+/// **The first five rows cost the kernel six to eight tenths of what they cost the elaborator**, and the last three cost the two alike.
 ///
 /// **`Flt/of_str` is a grammar run**: reading `"-Infinity"` runs the reader's `Parse(Str, Flt)` grammar over nine characters, so its row is what the grammar costs each checker.
 #[test]

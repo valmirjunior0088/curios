@@ -82,7 +82,7 @@ use {
 ///
 /// # What it is set against
 ///
-/// **The prelude floor**, read rather than bisected. Both checkers sample each declaration's consumption as `budget::consumed` where the budget is restored, so the prelude build's profiles carry the floor as that sample's maximum. The heaviest declaration `/std` holds spends **1 712 446 units on the elaborator** and **212 852 on the kernel**. Thirty million keeps a seventeenfold margin over the elaborator's; the constant is chosen to keep roughly ten over the worst real declaration.
+/// **The prelude floor**, read rather than bisected. Both checkers sample each declaration's consumption as `budget::consumed` where the budget is restored, so the prelude build's profiles carry the floor as that sample's maximum. At `85da54b97` the heaviest declaration `/std` holds spends **612 318 units on the elaborator** and **209 777 on the kernel**. Thirty million keeps a forty-eightfold margin over the elaborator's; the constant is chosen to keep roughly ten over the worst real declaration.
 ///
 /// The two floors are not comparable as a ratio: the elaborator solves metavariables, resolves witnesses and zonks where the kernel rechecks a finished term. `curios-prelude-archive`'s `stored_prelude_measurements` reports the kernel's per unit.
 ///
