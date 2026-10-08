@@ -1547,7 +1547,10 @@ fn elaborate_module_suffix<'s>(
         Survivors::default(),
         over,
     );
-    demand.all(context, vocabulary);
+    {
+        curios_profile::profile!("demand::all");
+        demand.all(context, vocabulary);
+    }
     let kept = demand.kept_names();
     let Demand {
         poison,
@@ -2071,7 +2074,18 @@ pub fn elaborate_and_zonk_unit_over<'s>(
             ..
         } = finalized?;
         let (traces, kept) = (elaborated.traces, elaborated.kept);
-        let module = assembled(&recompile, module, &kept, made).ordered();
+        let (module, standing) = {
+            curios_profile::profile!("assemble_unit_over");
+            assembled(&recompile, module, &kept, made)
+        };
+        // A module that is its baseline's, item for item, is in the order the baseline was given: the order is a function of what the items declare and name.
+        let module = match standing {
+            true => module,
+            false => {
+                curios_profile::profile!("order_unit_over");
+                module.ordered()
+            }
+        };
 
         raise(Finalized {
             module,
@@ -2086,7 +2100,7 @@ pub fn elaborate_and_zonk_unit_over<'s>(
     })
 }
 
-/// The declarations elaborated and the ones kept as one module: `made`, with the baseline's own item and registry entries for every declaration of `lowered` the walk `kept`. The caller puts the items in the order a module is stored in.
+/// The declarations elaborated and the ones kept as one module: `made`, with the baseline's own item and registry entries for every declaration of `lowered` the walk `kept`, the kept items in the order the baseline holds them. The caller puts the items in the order a module is stored in, which they are in already where the module is the baseline's whole, nothing made and no item of the baseline left out: the second answer.
 ///
 /// The markers follow the items, as a whole compile's do: a witness or a test naming an item that is not there would reach erasure as a marker for nothing. On a run that dropped nothing every one is admitted, which is every run that produces a unit.
 fn assembled(
@@ -2094,7 +2108,7 @@ fn assembled(
     lowered: &Module,
     kept: &BTreeSet<Global>,
     made: Module,
-) -> Module {
+) -> (Module, bool) {
     fn entries<D: Clone>(
         kept: &BTreeSet<Global>,
         baseline: &BTreeMap<Global, D>,
@@ -2108,34 +2122,39 @@ fn assembled(
             .collect()
     }
 
-    let mut items = made.items;
+    let Module {
+        mut items,
+        induct_decls,
+        struct_decls,
+        concepts,
+        ..
+    } = made;
+    let made = items.len();
     items.extend(
-        lowered
+        recompile
+            .baseline
             .items
             .iter()
-            .filter_map(|item| item.declared_names().first().copied())
-            .filter(|name| kept.contains(name))
-            .map(|name| {
-                let place = recompile
-                    .places
-                    .place(name)
-                    .expect("a kept declaration is one the baseline holds");
-
-                recompile.baseline.items[place.item()].clone()
-            }),
+            .filter(|item| {
+                item.declared_names()
+                    .first()
+                    .is_some_and(|name| kept.contains(*name))
+            })
+            .cloned(),
     );
+    let standing = made == 0 && items.len() == recompile.baseline.items.len();
     let declared = items
         .iter()
         .flat_map(Item::declared_names)
         .copied()
         .collect::<BTreeSet<_>>();
 
-    Module {
+    let module = Module {
         items,
         mounts: lowered.mounts.clone(),
-        induct_decls: entries(kept, &recompile.baseline.induct_decls, made.induct_decls),
-        struct_decls: entries(kept, &recompile.baseline.struct_decls, made.struct_decls),
-        concepts: entries(kept, &recompile.baseline.concepts, made.concepts),
+        induct_decls: entries(kept, &recompile.baseline.induct_decls, induct_decls),
+        struct_decls: entries(kept, &recompile.baseline.struct_decls, struct_decls),
+        concepts: entries(kept, &recompile.baseline.concepts, concepts),
         witnesses: lowered
             .witnesses
             .iter()
@@ -2148,5 +2167,7 @@ fn assembled(
             .filter(|name| declared.contains(*name))
             .copied()
             .collect(),
-    }
+    };
+
+    (module, standing)
 }

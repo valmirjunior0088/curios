@@ -120,6 +120,7 @@ impl<'a> Demand<'a> {
         survivors: Survivors,
         over: Option<Over<'a>>,
     ) -> Self {
+        curios_profile::profile!("demand::new");
         // A generated item names the declaration it was generated from, which is an item of the module wherever the two sit.
         let written = module
             .items
@@ -327,6 +328,35 @@ impl<'a> Demand<'a> {
         }
     }
 
+    /// Ask for every declaration the lowered forms of `declaration`'s items reach, in the order they are written.
+    fn reached(&mut self, context: &mut Context, declaration: usize) -> Result<(), Cycle> {
+        let module = self.module;
+        let dependencies = {
+            curios_profile::profile!("demand::reached");
+            let reached = self.declarations[declaration]
+                .iter()
+                .flat_map(|item| module.reaches(&module.items[*item]))
+                .collect::<Vec<_>>();
+
+            self.owners(reached, declaration)
+        };
+        for dependency in dependencies {
+            self.declaration(context, dependency)?;
+        }
+
+        Ok(())
+    }
+
+    /// Whether the baseline holds a trace of `declaration` under a lowering the new text kept: what [`Demand::recorded`] asks first, and all that is asked before anything the declaration reaches is asked for.
+    fn traced(&self, declaration: usize) -> bool {
+        self.over.is_some_and(|over| {
+            let names = self.names(declaration);
+
+            names.iter().all(|name| over.lowered.contains(*name))
+                && over.traces.held(names[0]).is_some()
+        })
+    }
+
     /// What `declaration` asked where the baseline elaborated it, where the walk may keep it by that: the lowering kept every item of it, the baseline holds each under its name, nothing it reaches is refused, and a witness it declares is alone at its key.
     ///
     /// **A witness is kept where it would register.** A witness registers under its key as its signature elaborates, and the second to register at one key is refused; a kept one registers nothing, so it is asked here what registering would have: that it is the first the unit declares at its key, and that none stands there yet. One that is not is attempted, and refused where a whole compile refuses it.
@@ -487,19 +517,21 @@ impl<'a> Demand<'a> {
         let module = self.module;
         let items = self.declarations[declaration].clone();
         let names = self.names(declaration);
-        let reached = items
-            .iter()
-            .flat_map(|item| module.reaches(&module.items[*item]))
-            .collect::<Vec<_>>();
-        for dependency in self.owners(reached, declaration) {
-            self.declaration(context, dependency)?;
+        // A declaration asked again by its trace asks for each declaration its elaboration waited for as its questions come to it, so what its lowered forms reach is asked for ahead of it only where that could be told apart: ahead of the offer of the unit's lemmas, which side of the offer a declaration is first asked for on being what one of its questions is answered by.
+        let traced = context.offers_lemmas() && self.traced(declaration);
+        if !traced {
+            self.reached(context, declaration)?;
         }
 
         if let Some(trace) = self.recorded(context, declaration)
             && self.stands(context, declaration, &trace)?
         {
+            curios_profile::sample!("demand::kept", trace.len());
             self.keep(context, declaration, trace);
             return Ok(());
+        }
+        if traced {
+            self.reached(context, declaration)?;
         }
 
         loop {
