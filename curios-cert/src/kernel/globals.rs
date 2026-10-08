@@ -10,7 +10,7 @@
 //!
 //! # What a walk starts from is read where it stands
 //!
-//! [`Globals`] is the units in scope, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, its nominal registry, and the certifier's record of its definitions' totality and of its families' polarity vectors. Nothing of a unit is brought in. A name is answered by reference into the unit that holds it, by the places the unit keeps for its names (`curios_core::Places`), so what a walk costs of its scope is what its judgments read. A caller that has units hands them to [`recheck_module_verdicts`](crate::recheck_module_verdicts) and the walk judges what the environment does not already hold. A name is one declaration: a declaration the module carries is the environment's own where its namespace holds the same terms under its name, new where no namespace holds the name, and refused otherwise — which is what the standing questions below answer, and nothing about them identifies an item by where it sits.
+//! [`Globals`] is the units in scope, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, its nominal registry, and the certifier's record of its definitions' totality and of its families' polarity vectors. Nothing of a unit is brought in. A name is answered by reference into the unit that holds it, by the places the unit keeps for its names (`curios_core::Places`), so what a walk costs of its scope is what its judgments read. A caller that has units hands them to [`recheck_module_verdicts`](crate::recheck_module_verdicts) and the walk judges the module it is handed against them. A name is one declaration: a module is refused for a name any namespace here holds, whatever it declares under it (`Globals::in_scope`), and nothing about that question identifies an item by where it sits.
 //!
 //! # What a walk reads is three layers
 //!
@@ -63,39 +63,6 @@ pub(crate) fn held<'a>(module: &'a Module, places: &'a Places, name: &Global) ->
             Item::Let(_) => unreachable!("a member's place is a group's"),
         },
     }
-}
-
-/// Whether `item` is the declaration `held` answers for under each name it declares: its type, its body and its universe context, a group member's body being its folded selection.
-fn item_is<'a>(item: &Item, held: impl Fn(&Global) -> Option<Held<'a>>) -> bool {
-    match item {
-        Item::Let(definition) => held(&definition.name).is_some_and(|held| {
-            *held.type_ == definition.type_
-                && held.value == Some(&definition.body)
-                && *held.universes == definition.universe_context
-        }),
-        Item::Rec(rec) => rec
-            .definitions
-            .iter()
-            .enumerate()
-            .all(|(member, definition)| {
-                held(&definition.name).is_some_and(|held| {
-                    *held.type_ == rec.group.member_type(member)
-                        && held.value == Some(&Term::rec_proj(rec.group.clone(), member))
-                        && held.universes == rec.group.universe_context()
-                })
-            }),
-    }
-}
-
-/// Where an environment stands toward a declaration a module carries.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Standing {
-    /// No namespace holds its name: the walk judges it.
-    New,
-    /// The environment holds this very declaration, which the walk that built the environment judged.
-    Own,
-    /// Its name is held, and it is not the environment's own: a second meaning for the name.
-    Redeclared,
 }
 
 /// Whether two `induct` registry entries are one declaration to the certifier: equal in everything it reads of one.
@@ -289,58 +256,9 @@ impl<'s> Globals<'s> {
 
     /// Whether any namespace here holds `name`.
     ///
-    /// One predicate across four namespaces, because a `Global` names one declaration. It is never what makes a declaration the environment's own: each namespace answers that for itself, by the terms it holds. It tells a new declaration from one whose name is taken elsewhere, and, of a module nothing of which is redeclared, which names stand for the environment's own.
+    /// One predicate across four namespaces, because a `Global` names one declaration: a module that declares a name any of them holds is refused for it, whatever it declares there.
     pub(crate) fn in_scope(&self, name: &Global) -> bool {
         self.mounted.iter().any(|mounted| mounted.holds(name))
-    }
-
-    /// Where `item` stands: the environment's own when a definition stands under every name it declares and each equals what the item puts in scope — its type, its body and its universe context, a group member's body being its folded selection; new when no namespace holds any of its names; and redeclared otherwise, which is an unequal entry, a group held in part, or a name held only in another namespace.
-    ///
-    /// Elaboration's stamps take no part: nothing here reads one. An item declaring nothing is new, so that passing over stays the direction that needs the argument.
-    pub(crate) fn standing_of_item(&self, item: &Item) -> Standing {
-        let names = item.declared_names();
-        let held = names
-            .iter()
-            .filter(|name| self.held(name).is_some())
-            .count();
-
-        if held == 0 {
-            return match names.into_iter().any(|name| self.in_scope(name)) {
-                true => Standing::Redeclared,
-                false => Standing::New,
-            };
-        }
-
-        match held == names.len() && item_is(item, |name| self.held(name)) {
-            true => Standing::Own,
-            false => Standing::Redeclared,
-        }
-    }
-
-    /// Where an `induct` registry entry stands under `name`: the environment's own when its `induct` registry holds the same declaration, by everything the certifier reads of one; new when no namespace holds the name; and redeclared otherwise. Elaboration's stamps take no part, as they take none in an item's standing.
-    pub(crate) fn standing_of_induct(&self, name: &Global, declaration: &InductDecl) -> Standing {
-        self.standing_in(self.induct_decl(name), name, declaration, induct_alike)
-    }
-
-    /// [`Globals::standing_of_induct`] for a `struct` registry entry.
-    pub(crate) fn standing_of_struct(&self, name: &Global, declaration: &StructDecl) -> Standing {
-        self.standing_in(self.struct_decl(name), name, declaration, struct_alike)
-    }
-
-    /// Where `declaration` stands under `name` toward `held`, the entry the registry of its kind holds there, `alike` saying whether two of its entries are one declaration: a registry answers for its own entries and for no other namespace's.
-    fn standing_in<D>(
-        &self,
-        held: Option<&D>,
-        name: &Global,
-        declaration: &D,
-        alike: fn(&D, &D) -> bool,
-    ) -> Standing {
-        match held {
-            Some(held) if alike(held, declaration) => Standing::Own,
-            Some(_) => Standing::Redeclared,
-            None if self.in_scope(name) => Standing::Redeclared,
-            None => Standing::New,
-        }
     }
 
     /// What the unit that defines `name` holds it at.

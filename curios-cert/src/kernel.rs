@@ -114,7 +114,7 @@ pub enum Error {
     Unbound(Free),
     /// A nominal type with no registry entry, so its fields, constructors, and result sort are all unknown.
     Undeclared(Global),
-    /// A declaration under a name already declared: one the environment holds, where the declaration is not the environment's own; one an earlier item of its module declares; or one its module's other registry holds. A name is one declaration, so the second is refused whatever it is.
+    /// A declaration under a name already declared: one the environment holds, whatever is declared under it; one an earlier item of its module declares; or one its module's other registry holds. A name is one declaration, so the second is refused whatever it is.
     Redeclared(Free),
     /// A type whose sort the kernel could not determine. Guessing here is the unsound direction, so it refuses. See the module documentation.
     Unclassified(Term),

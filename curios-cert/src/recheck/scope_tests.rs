@@ -1,13 +1,13 @@
-//! A name already declared: the environment's own declaration passed over, any other refused before anything is judged.
+//! A name already declared: a module is refused for it before anything is judged, whether the name is its environment's or one of its own.
 
 use {
     super::test_support::*,
     crate::{Error, Globals, Verdict},
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Certification, Free, Global, Level, Places, Term, Totality},
+    curios_core::{Certification, Free, Global, Level, Places, Term},
 };
 
-/// Whether `verdicts` is the one refusal a module redeclaring `name` meets: standing is decided before anything is judged, so no other verdict stands beside it.
+/// Whether `verdicts` is the one refusal a module redeclaring `name` meets: a redeclaration is refused before anything is judged, so no other verdict stands beside it.
 fn redeclares(verdicts: &[Verdict], name: &Global) -> bool {
     matches!(
         verdicts,
@@ -20,7 +20,7 @@ fn redeclares(verdicts: &[Verdict], name: &Global) -> bool {
 ///
 /// `shadowed` is `Nat` in the environment and `Bool` in the module, and `reader : Nat = shadowed` reads it. Standing alone the module is refused, `reader` inferring `Bool` where `Nat` was declared. Passed over by name it would be certified, `reader` typed against the environment's `shadowed` while every stage below compiles the body the module holds; so the module is refused for `shadowed`, and `reader` is not judged at all.
 ///
-/// Mutation-checked against the comparison: answering that the item is the environment's own certifies the module with no refusal.
+/// Mutation-checked against the environment's question: with an item's held name never asked after, the module is judged, and `shadowed` is refused where the walk writes it and no sooner.
 #[test]
 fn a_definition_differing_from_the_environments_is_refused() {
     let module = shadowing_items();
@@ -50,7 +50,7 @@ fn a_definition_differing_from_the_environments_is_refused() {
 ///
 /// Declared over the environment's it would be the entry every rule reads, with the clauses that check a declaration passed over: a payload at `Type 5` under a family declared at `Type 0` is refused as `Oversized` standing alone, and by name alone it would be certified against an environment holding a benign `Shadowed`.
 ///
-/// Mutation-checked against the comparison: answering that the entry is the environment's own certifies the module with no refusal.
+/// Mutation-checked against the environment's question: with a held registry key never asked after, the entry is refused where the walk writes it and judged all the same, `Oversized` beside the name's refusal.
 #[test]
 fn a_registry_entry_differing_from_the_environments_is_refused() {
     let oversized = shadowing_registry(Term::type_at(Level::constant(5)));
@@ -72,53 +72,6 @@ fn a_registry_entry_differing_from_the_environments_is_refused() {
     assert!(
         redeclares(&verdicts, &shadowed_family()),
         "a registry entry differing from the environment's under its name was not refused for the name: {verdicts:?}",
-    );
-}
-
-/// A registry entry is the environment's own by what the certifier reads of it: its terms, and the variance vector a walk answers from. Elaboration's stamps take no part — the polarity vector, in whose place the environment holds the one the certifier computed, the owning module and the representation's privacy — so an entry differing from the environment's in those alone is passed over.
-///
-/// Mutation-checked against the comparison: taken over the whole entry, the family and the record are each refused for their name.
-#[test]
-fn a_registry_entry_differing_in_elaborations_stamps_alone_is_passed_over() {
-    assert_eq!(
-        fixture_verdicts(
-            &two_registry_entries(Varied::Stamps),
-            1_000_000,
-            &already_judged(&two_registry_entries(Varied::Nothing)).globals(),
-            SYNTAX,
-        ),
-        Vec::new(),
-        "an entry differing from the environment's in elaboration's stamps alone was not passed over",
-    );
-}
-
-/// What the certifier reads of a registry entry is compared in full: a family differing in its variance vector, which a later walk would answer from, and a record differing in a field's type are each refused for the name.
-///
-/// Mutation-checked against each comparison: with the variance vector left out the family is passed over and its carried vector denied instead, and with the arity left out the record is certified.
-#[test]
-fn a_registry_entry_differing_in_what_the_certifier_reads_is_refused() {
-    let environment = already_judged(&two_registry_entries(Varied::Nothing));
-
-    let verdicts = fixture_verdicts(
-        &two_registry_entries(Varied::Variance),
-        1_000_000,
-        &environment.globals(),
-        SYNTAX,
-    );
-    assert!(
-        redeclares(&verdicts, &shadowed_family()),
-        "a family differing from the environment's in its variance vector was not refused for the name: {verdicts:?}",
-    );
-
-    let verdicts = fixture_verdicts(
-        &two_registry_entries(Varied::Field),
-        1_000_000,
-        &environment.globals(),
-        SYNTAX,
-    );
-    assert!(
-        redeclares(&verdicts, &kept_record()),
-        "a record differing from the environment's in a field's type was not refused for the name: {verdicts:?}",
     );
 }
 
@@ -174,13 +127,13 @@ fn a_mounted_familys_vector_is_the_certifiers_and_not_its_entrys() {
     }
 }
 
-/// A declaration equal to the one the environment holds under its name is the environment's own: it is passed over, and the module certified.
+/// A declaration under a name the environment holds is refused for the name though it is the environment's, term for term: what an environment holds is read where it stands, and no comparison decides that two declarations under one name are one.
 ///
-/// The module carries the environment's `shadowed` and `Shadowed`, rebuilt so that neither is the environment's allocation, beside `reader : Nat = shadowed`. The walk's record names `reader` and not `shadowed`, which is what being passed over leaves: the walk that built the environment judged it.
+/// The module carries the environment's `shadowed` and `Shadowed`, rebuilt so that neither is the environment's allocation, beside `reader : Nat = shadowed`. Each held name is refused once and nothing is judged, `reader` with the rest: the walk's record is empty.
 ///
-/// Mutation-checked against the comparison: answering that an equal declaration is redeclared refuses the module.
+/// Mutation-checked against each of the environment's two questions, an item's names and a registry's keys: with either never asked, the module is refused for the other name alone.
 #[test]
-fn a_declaration_equal_to_the_environments_is_passed_over() {
+fn a_declaration_equal_to_the_environments_is_refused_for_its_name() {
     let mut module = judged_environment();
     module.items.push(reader());
 
@@ -191,24 +144,27 @@ fn a_declaration_equal_to_the_environments_is_passed_over() {
         SYNTAX,
     );
 
+    let refused = rechecked
+        .verdicts
+        .iter()
+        .map(|verdict| match &verdict.error {
+            Error::Redeclared(redeclared) => (verdict.name, Some(*redeclared)),
+            _ => (verdict.name, None),
+        })
+        .collect::<Vec<_>>();
     assert_eq!(
-        rechecked.verdicts,
-        Vec::new(),
-        "a module carrying the environment's own declarations beside a new one was refused",
+        refused,
+        [shadowed_name(), shadowed_family()].map(|name| (Some(name), Some(Free::from(&name)))),
+        "a module carrying its environment's own declarations was not refused once for each name",
     );
     assert_eq!(
         rechecked.certification.totality(&reader_name()),
-        Some(Totality::Total),
-        "the new item was not judged",
-    );
-    assert_eq!(
-        rechecked.certification.totality(&shadowed_name()),
         None,
-        "the environment's own item was judged again rather than passed over",
+        "a module refused for a name was judged all the same",
     );
 }
 
-/// A namespace answers for itself: a definition whose name the environment holds only as a registry key is refused, there being no entry it could be the environment's own by.
+/// A name is one declaration across the namespaces: a definition under a name the environment holds as a registry key and under no definition is refused for it.
 ///
 /// The definition is well typed, and standing alone it is certified, so the refusal is the name's.
 ///
@@ -235,9 +191,9 @@ fn a_definition_under_a_name_the_environment_holds_as_a_registry_key_is_refused(
     );
 }
 
-/// A group is the environment's whole or new whole: one some of whose names the environment holds is refused, named by its first member as a group is.
+/// A group one of whose names the environment holds is refused, named by its first member as a group is.
 ///
-/// Mutation-checked against the comparison: answering that the group is the environment's own certifies the module with no refusal.
+/// Mutation-checked against the environment's question: with an item's held name never asked after, the group is judged and refused where the walk writes its members, and no sooner.
 #[test]
 fn a_group_the_environment_holds_in_part_is_refused() {
     let module = group_held_in_part();

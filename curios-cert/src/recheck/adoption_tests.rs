@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{Baseline, Error, Globals, Kernel, Rechecked},
+    crate::{Baseline, Error, Globals, Kernel, Rechecked, induct_alike, struct_alike},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Certification, Certified, Free, Global, Intrinsic, Module, Nat, Places, Reads, Term,
@@ -229,5 +229,36 @@ fn a_stamp_that_says_total_over_an_adopted_partial_verdict_is_refused() {
     assert_eq!(
         rechecked.certification.totality(&global("five")),
         Some(Totality::Partial),
+    );
+}
+
+/// A registry entry is the baseline's by what the certifier reads of it: its terms, and the variance vector a walk answers from. Elaboration's stamps take no part — the polarity vector, in whose place a walk holds the one the certifier computed, the owning module and the representation's privacy — so an entry differing from the baseline's in those alone is the baseline's, and one differing in its variance vector or in a field's type is not.
+///
+/// Mutation-checked against each comparison: taken over the whole entry, the stamped pair is another declaration; with the variance vector left out the family is the baseline's; and with the arity left out the record is.
+#[test]
+fn a_registry_entry_is_the_baselines_by_what_the_certifier_reads_of_it() {
+    let held = two_registry_entries(Varied::Nothing);
+    let family = |module: &Module| module.induct_decls[&shadowed_family()].clone();
+    let record = |module: &Module| module.struct_decls[&kept_record()].clone();
+
+    let stamped = two_registry_entries(Varied::Stamps);
+    assert!(
+        induct_alike(&family(&stamped), &family(&held))
+            && struct_alike(&record(&stamped), &record(&held)),
+        "an entry differing from the baseline's in elaboration's stamps alone is another declaration",
+    );
+    assert!(
+        !induct_alike(
+            &family(&two_registry_entries(Varied::Variance)),
+            &family(&held)
+        ),
+        "a family differing from the baseline's in its variance vector is the baseline's",
+    );
+    assert!(
+        !struct_alike(
+            &record(&two_registry_entries(Varied::Field)),
+            &record(&held)
+        ),
+        "a record differing from the baseline's in a field's type is the baseline's",
     );
 }
