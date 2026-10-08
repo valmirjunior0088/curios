@@ -179,9 +179,9 @@ pub let each(@M: (Type) -> Type, @T: Type, use Monad(M), l: List(T), f: (T) -> M
         each(t, f)
     end;
 
---- `n` singles combined as a balanced tree, so `combine` nests to a depth of `log2(n)` rather than `n`. Each single is asked for with the proof that its index is below `n`, so a caller indexing `n` elements reads them without a default.
+--- `n` singles combined as a balanced tree, so `combine` nests to a depth logarithmic in `n` rather than `n`. Each single is asked for with the proof that its index is below `n`, so a caller indexing `n` elements reads them without a default.
 ---
---- The walk halves an interval, which no structural descent shows, so it descends on a fuel instead: `n` levels, of which a logarithmic number are ever spent, so the count changes no answer and is what lets the function stand in a type. The interval's end stays within `n`, since a midpoint is below the end it halves.
+--- A span of two or more is its two halves, each half its length rounded down, around the single between them where the halves leave one over. So every call is on a quotient by two, a descent the termination check reads, which is what lets the function stand in a type with no count beside it. A span stays within `n`, since its halves and the single between them lie inside it.
 pub let balanced(
     @A: Type,
     n: Nat,
@@ -189,19 +189,21 @@ pub let balanced(
     single: (i: Nat, Holds(i < n)) -> A,
     combine: (A, A) -> A,
 ) -> A =
-    let go(fuel: Nat, lo: Nat, hi: Nat, bounded: Holds(hi <= n)) -> A =
-        match fuel
-        | 0 => empty
-        | pred + 1 =>
-            choose
-            | lo + 1 < hi =>
-                let mid = (lo + hi) / 2;
-                combine(go(pred, lo, mid, True/proved()), go(pred, mid, hi, bounded))
-            | lo < hi => single(lo, True/proved())
-            | _ => empty
+    let go(lo: Nat, count: Nat, @bounded: Holds(lo + count <= n)) -> A =
+        choose
+        | 1 < count =>
+            let half = count / 2;
+            match half + half < count
+            | false => combine(go(lo, half), go(lo + half, half))
+            | true =>
+                combine(
+                    go(lo, half),
+                    combine(single(lo + half, True/proved()), go(lo + half + 1, half)))
             end
+        | 0 < count => single(lo, True/proved())
+        | _ => empty
         end;
-    go(n, 0, n, Nat/le/refl(n));
+    go(0, n);
 
 --- Whether the two hold equal elements in the same order.
 pub let eql(@A: Type, use Eql(A), a: List(A), b: List(A)) -> Bool =

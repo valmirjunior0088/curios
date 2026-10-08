@@ -610,9 +610,9 @@ fn a_proof_over_a_dependent_hypothesis_descends() {
     assert_eq!(run(source), b"ok");
 }
 
-// A walk that halves an interval shows no structural descent, so `List/balanced` descends on a fuel of `n` levels instead, of which a logarithmic number are ever spent. What that buys is (T) for everything built on it: `Str/repeat` may stand in a type, and the fuel changes no answer, which the equations state at the values the walk reaches. Each single carries the proof that its index is below `n`, and a join reads its parts through it, first and last included.
+// A walk that halves a span descends on no list, so `List/balanced` descends on the span's length, every call on its quotient by two, which the termination check reads with no count beside it. What that buys is (T) for everything built on it: `Str/repeat` may stand in a type, which the equations state at the values the walk reaches. Each single carries the proof that its index is below `n`, and a join reads its parts through it, first and last included.
 #[test]
-fn a_halving_walk_descends_on_its_fuel_and_stands_in_a_type() {
+fn a_halving_walk_descends_on_its_span_halved_and_stands_in_a_type() {
     let source = r#"
         use /std/{Str, Eq, List};
 
