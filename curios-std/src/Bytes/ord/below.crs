@@ -1,0 +1,85 @@
+use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering};
+use /std/Bool/{True, Holds};
+
+--- Whether `a` and `b` part at a byte where `a`'s is the smaller, neither running out before it.
+---
+--- It is `ord`'s `lt` where a byte decides it and no run's end does, so it stands whatever follows either run: what the encoding of one value owes another's where encodings are joined, and what a complement of every byte reverses.
+pub let below(a: Bytes, b: Bytes) -> Bool =
+    match a
+    | x[] => false
+    | x[h, ..t] =>
+        match b
+        | x[] => false
+        | x[k, ..r] =>
+            match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
+            | eq() => below(t, r)
+            | lt() => true
+            | gt() => false
+            end
+        end
+    end;
+
+--- Two runs whose heads are in order part there.
+pub let of_heads(
+    h: Byte,
+    k: Byte,
+    t: Bytes,
+    r: Bytes,
+    under: Holds(h < k),
+) -> Holds(below(x[h, ..t], x[k, ..r])) =
+    Eq/subst(
+        (o: Ordering) => Holds(match o | eq() => below(t, r) | lt() => true | gt() => false end),
+        Eq/sym(Nat/ord/of_lt(Byte/to_nat(h), Byte/to_nat(k), True/proved())),
+        True/qed());
+
+--- A run below another at a byte is `lt` to it.
+pub let lt(a: Bytes, b: Bytes, parted: Holds(below(a, b))) -> Eq()(Bytes/ord(a, b), Ordering/lt()) =
+    match a: (m) => (b: Bytes, parted: Holds(below(m, b))) -> Eq()(Bytes/ord(m, b), Ordering/lt())
+    | x[] => (_, parted) => match parted end
+    | x[h, .._]; ih =>
+        (b, parted) =>
+            match b
+            | x[] => match parted end
+            | x[k, ..r] =>
+                match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
+                | eq() => ih(r, parted)
+                | lt() => Eq/refl()
+                | gt() => match parted end
+                end
+            end
+    end(b, parted);
+
+--- Two runs that part at a byte still do with anything after each.
+pub let onto(
+    a: Bytes,
+    b: Bytes,
+    s: Bytes,
+    u: Bytes,
+    parted: Holds(below(a, b)),
+) -> Holds(below(x[..a, ..s], x[..b, ..u])) =
+    match a: (m) => (b: Bytes, parted: Holds(below(m, b))) -> Holds(below(x[..m, ..s], x[..b, ..u]))
+    | x[] => (_, parted) => match parted end
+    | x[h, .._]; ih =>
+        (b, parted) =>
+            match b
+            | x[] => match parted end
+            | x[k, ..r] =>
+                match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
+                | eq() => ih(r, parted)
+                | lt() => True/qed()
+                | gt() => match parted end
+                end
+            end
+    end(b, parted);
+
+--- Two runs that part at a byte still do behind a shared prefix.
+pub let past(
+    p: Bytes,
+    a: Bytes,
+    b: Bytes,
+    parted: Holds(below(a, b)),
+) -> Holds(below(x[..p, ..a], x[..p, ..b])) =
+    match p: (m) => Holds(below(x[..m, ..a], x[..m, ..b]))
+    | x[] => parted
+    | x[_, .._]; ih => ih
+    end;
