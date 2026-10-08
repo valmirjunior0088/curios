@@ -1040,17 +1040,17 @@ fn primitive_claim(carrier: &str, parser: &str, input: &str) -> String {
 ///
 /// # What it last printed
 ///
-/// At `85da54b97`:
+/// At `96d967b9b`:
 ///
 /// ```text
 ///   primitive            text elab      kernel  bytes elab      kernel
-///   literal                  74947       74973       18387       18413
+///   literal                  74947       74973       18390       18416
 ///   take_while               48931       48957        9910        9936
 ///   char, byte               58355       58381       31930       31956
 ///   char_if, byte_if         64538       64564       38120       38146
-///   expect                   60868       60894       35133       35159
+///   expect                   60868       60894       35136       35162
 ///   rest                      8391        6494        8699        6515
-///   until                    49208       49234
+///   until                    49214       49240
 /// ```
 ///
 /// **A text primitive costs four to five times its twin where the primitive is the walk**, `literal` and `take_while`, and under twice where each step is a parser run through `times`: `char`, `char_if` and `expect`. `rest` cuts once and reads nothing.
@@ -1131,17 +1131,17 @@ fn parse_primitive_measurements() {
 ///
 /// # What it last printed
 ///
-/// At `85da54b97`:
+/// At `96d967b9b`:
 ///
 /// ```text
 ///   claim                        units   depth      other       units   depth      other  kernel/elab
-///   Str/split                    83140      19      63684       49308       1      48284     0.6x
-///   Str/split_once               63539       3      60467       50454       2      48406     0.8x
-///   Str/lines                    54444      12      42156       36276       1      35252     0.7x
-///   Str/replace                  65974      15      50614       36669       1      35645     0.6x
+///   Str/split                    83152      19      63696       49320       1      48296     0.6x
+///   Str/split_once               63563       3      60491       50490       2      48442     0.8x
+///   Str/lines                    54456      12      42168       36288       1      35264     0.7x
+///   Str/replace                  65983      15      50623       36678       1      35654     0.6x
 ///   Str/trim                     60698       3      57626       47570       1      46546     0.8x
 ///   Str/strip_suffix             55609       3      52537       55317       2      53269     1.0x
-///   Flt/of_str                   67798       3      64726       66955       2      64907     1.0x
+///   Flt/of_str                   67810       3      64738       66967       2      64919     1.0x
 ///   Str/index_of                 42154       3      39082       41630       2      39582     1.0x
 /// ```
 ///
