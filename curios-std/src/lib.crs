@@ -7,7 +7,7 @@ pub use Ord/{let Ord, Ordering};
 
 --- A value's encoding as the bytes that identify it, and the digest of one.
 ---
---- The encoding is stable and is what `Key` proves injective; the digest over it is not, and is for dedup and cache keys rather than for anything written down.
+--- The encoding is stable and is what `Key` proves injective and in its type's own order; the digest over it is not, and is for dedup and cache keys rather than for anything written down.
 pub mod Hash;
 pub use Hash/{let Hash};
 
@@ -189,7 +189,7 @@ pub use Vec/{let Vec};
 
 --- A map from keys of one type to values, built and read under the `Key` dictionary its type names.
 ---
---- A key is held as it went in and handed back at its own type, in the order of the keys' encodings, which a `Key` witness proves injective. A map under another dictionary is a value of another type, and `rekey` moves one across.
+--- A key is held as it went in and handed back at its own type, in the keys' own order: a `Key` witness proves its encoding injective and in that order, a map holds the proof that its trie is sound, and that its keys are in order is a theorem beside `keys`. A map under another dictionary is a value of another type, and `rekey` moves one across.
 pub mod Map;
 pub use Map/{let Map};
 

@@ -14,7 +14,7 @@ The Curios standard library: the `/std` package as it is authored, in `src/` bes
 
 ### `Map` is a crit-bit trie, and its shape is its API
 
-**Decision.** `/std/Map` is a crit-bit trie shaped by the byte string a `Key` witness produces for each key, with byte-string identity and write-side injectivity stated at the `Key` boundary where they can be checked. Its canonicity is API: `Toml/encode` promises one deterministic document in the map's structural order, and same entries, same shape is what makes map equality structural, so a proof about a map binds to its entries and get-extensionality rather than its nodes.
+**Decision.** `/std/Map` is a crit-bit trie shaped by the byte string a `Key` witness produces for each key, with byte-string identity, write-side injectivity and the keys' order stated at the `Key` boundary where they can be checked ([A key's encoding is in its key's order](#a-keys-encoding-is-in-its-keys-order)). Its canonicity is API: `Toml/encode` promises one deterministic document in the map's structural order, and same entries, same shape is what makes map equality structural, so a proof about a map binds to its entries and get-extensionality rather than its nodes.
 
 **Rationale.** A map's performance is bought by the compiler classes every consumer shares ([A value costs when it is kept, not when it is named](../documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md)), and a shape that stays canonical is what lets it be a value.
 
@@ -31,6 +31,47 @@ The Curios standard library: the `/std` package as it is authored, in `src/` bes
 - **`Set` is nominal because a witness is keyed by a type's head.** As an alias of `Map(K, {})` it could carry no `Show`, `Spell` or `Eql` of its own, and a set would print as a map of units.
 
 **Rejected.** A phantom key type over the stored encoding, safe across types and still answering `Bytes`. The key beside its encoding. The dictionary carried in the value as a `use` field, which no label reads and which lets two maps of one type differ in it, leaving `union` to re-insert. The dictionary taken at each operation and named nowhere, sound only while the stored encoding is there to refuse a walk gone astray. Refusing an explicit dictionary for a key: `use value` is how a program chooses a second witness, and a type that names its dictionary makes the choice safe.
+
+### A key's encoding is in its key's order
+
+**Decision.** `/std/Map`'s `Key(K)` takes `Ord(K)` as a superclass beside `Hash(K)` and holds two laws: `injective`, that distinct keys encode distinctly, and `monotone`, that the order of two keys is `Bytes/ord` of their encodings. A natural encodes as one code (`/std/Hash/nat`): a first byte `0x80 + 16 * rank + top`, where `rank` is how many bytes follow it, below seven, and `top` the number those bytes leave, below sixteen; then the `rank` bytes, most significant first; a rank of seven or more writes a `0xFF` for every seven and then the same. An integer at or above zero encodes as its natural, and one below as the complement, byte by byte, of the code of `-1 - i` (`/std/Hash/int`). The codes' law is stated through `Bytes/ord/below`: two runs part at a byte with the first's the smaller, neither running out. No tuple and no list is a key.
+
+**Rationale.**
+
+- **The order is put where the bytes are made.** A map's trie meets its keys in the order of their encodings, so a witness whose encoding is out of its type's order enumerates a map in an order no reader of the type expects. As a law of the concept it is refused where the witness is declared, as an encoding that collides is, and every theorem about an ordered walk stands under `use Key(K)` alone. `Hash`'s bytes are the key's by `Key`'s edge, with no second field to disagree with them, so a key type has one identity as bytes and that identity is in its order.
+- **A type with no order of its own takes its encoding's**, its `monotone` being `Eq/refl()`. A key's order has its reflexivity, its flip and its transitivity from the order of bytes, each proved once for every key (`Key/refl`, `Key/flips`, `Key/transitive`), so a sort under `use Key(K)` has its law from the dictionary.
+- **The first byte holds the length and the top four bits.** A number below 16 is one byte, below 4 096 two and below `2^20` three, which is a packed immediate; the code is total over an unbounded `Nat`, and no code begins another.
+- **No byte is spent on a sign.** A natural's code leads with a byte in the upper half and a complement's with one in the lower, so every integer below zero is before every other and the more negative of two comes first. `Hash` of `Nat/to_int(n)` is `Hash` of `n`, and an integer within `2^20` of zero is an immediate.
+- **A code is built from the back.** Its bytes are appended to its first by recursion on the quotient by 256, in one walk that counts the rank on the way down, so a short code is an immediate's arithmetic and the proof follows the number's own recursion with no power. The complement is a fold a byte at a time over `Byte/not`, a subtraction the elaborator reads.
+- **`below` is the form the law is proved in.** It gives `Bytes/ord` its `lt`, stands behind a shared prefix and ahead of any two suffixes, and a complement reverses it, which is the whole of the step from the naturals' law to the integers'. A code's injectivity is its order's corollary, through `Nat/ord/eq` and `Int/ord/eq`.
+- **A composite key waits for its parts' framing.** The two codes begin no other code, so either may be a part of one; a text needs a terminator and an escape before another part can follow it.
+
+**Rejected.**
+
+- **The law as a proposition beside each witness.** A theorem would take it as a hypothesis and a caller find it by name, and a witness could still be declared without it, which is the defect.
+- **A byte for the sign.** It costs every integer a byte, and an integer past 4 095 in magnitude its immediate.
+- **A whole byte for the length.** The simplest proof, and it leaves a natural past 65 535 no immediate.
+- **The length as leading one bits, seven bits of the number a byte.** An immediate up to `2^21`, with the number's digits off the byte and a law over powers of 128.
+- **A length of the length, recursively.** Total too, and a second case in every proof for numbers no program holds.
+- **A ladder of literals for the short codes.** It states the code twice.
+- **`Bytes/not` for the complement.** An `xor` against a fill, which conversion does not carry across a cons.
+- **A tree keyed by a comparator**, for a key with an order and no encoding in it. Its shape follows its history, and a map's is its API ([`Map` is a crit-bit trie, and its shape is its API](#map-is-a-crit-bit-trie-and-its-shape-is-its-api)); a key with an order has an encoding in it or takes a dictionary that gives one.
+
+### A map holds the proof that its trie is sound
+
+**Decision.** `Map` holds, hidden, a proof over its root: at every fork, the fork's bit is the first at which the first keys of its two sides differ, the zero side's has it clear, and each side forks past it, which is what makes the bit clear in every key of the zero side and set in every key of the one side, with every key under the fork agreeing below it. `Node/insert` and `Node/remove` take their node's proof and hand back their outcome with the proof that it may stand where the node did, built in their own recursion ([A certified function hands back its result with its proofs](#a-certified-function-hands-back-its-result-with-its-proofs)); the proofs erase, and the program that runs has none of them in it. `crit` is a walk on two encodings' structure, so an insert stands in a type, and what it answers is proved of the encodings through a table of every byte decided by running it. The theorem read off the proof is `Map/keys/pairwise`: under `use Key(K)` alone, each key of a map is before every one after it in the keys' own order, and `Set/to_list/pairwise` is its corollary. `Map/least` and `Map/greatest` answer the entries at the ends of the trie's zero and one sides, each with the theorems that its key is the map's and that no key of the map is past it.
+
+**Rationale.**
+
+- **The invariant is stated through each side's first key.** No pair of keys is quantified over, and a rebuilt fork owes a fact about one key a side: a side's every key agrees with its first through any bit the side forks past.
+- **A map cannot be built without it**, so a theorem about a map takes the map alone and no caller proves anything of a map it did not build.
+- **The proof is held as a family that applies no function to the trie.** A proposition computed from the trie hides how it uses the value type, and a type that holds itself through a map, as `/std/Toml` does, would be refused as not strictly positive. The family's constructors hold the value type as plain payloads, and one lemma each way carries it to the recursive proposition the proofs read (`Node/Shaped`, `Node/shaped`, `Node/read`).
+- **The node comes back through an insertion's answer** where its leaf is still to be wedged, so no caller holds it across the call ([A value costs when it is kept, not when it is named](../documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md)), and the proof says the node that came back is the one that went in.
+- **A leaf whose encoding is the key's keeps its own key**, which is the new one by `Key/injective`. Equality of two encodings is decided by an intrinsic the logic reads nothing of, so the fast test stays where it was and the proof asks no fact of it: where it answers that they differ, the insertion branches on the walk's own answer.
+- **The bit test stays a shift and a mask**, which a proof reads through the table of every byte.
+- **A case the proof rules out is ruled out in the proof.** An impossible arm left in the function is a comparison and a trap in the program, so the case analysis stands in a lemma and the function names its conclusion.
+
+**Rejected.** The invariant as a predicate beside the map, which every theorem would take and every caller prove. A trie that stores each edge's run: its invariant is local, and its lookups compare a run a level where a crit-bit fork tests a bit. Keys read back from their paths, a decoder for every key type run at every enumeration. The bit test as a quotient's parity, which a proof reads with no table, in the walk an insert spends its time in. An insertion whose answer hands no node back, its caller using the node it passed down. Every order operation at once: the two that land are the two the trie's shape already holds, and the neighbours of a key and the keys between two wait for a program that asks for them.
 
 ### `sort` is a merge sort, proved under its comparator's laws
 
