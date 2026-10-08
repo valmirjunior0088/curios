@@ -12,7 +12,7 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 ### Predecessors are borrowed, per stage, as that stage's own type
 
-**Decision.** `Predecessors` borrows the predecessor units and hands each stage its view as the opaque type that stage owns — one `curios-text` resolution state per unit (`Predecessors::text`), one `curios-core` module per unit (`Predecessors::cores`), and one `curios-elab` erased unit per unit (`Predecessors::erased`) — rather than one merged value or anything this crate unpacks. A unit is composed of those opaque artifacts rather than flattened into their fields.
+**Decision.** `Predecessors` borrows the predecessor units and hands each stage its view as the opaque type that stage owns — one `curios-text` resolution state per unit (`Predecessors::text`), one `curios-core` module per unit (`Predecessors::cores`), and one `curios-elab` erased unit per unit (`Predecessors::erased`) — rather than one merged value or anything this crate unpacks. The kernel's environment is assembled above this crate, which stays below the kernel, from the units themselves (`Predecessors::units`), each read where it stands by the places it keeps. A unit is composed of those opaque artifacts rather than flattened into their fields.
 
 **Rationale.** Merging would copy the standard library into every compilation. Widening the stages' internals so a struct here could hold them would export a resolver's internals for no consumer.
 
