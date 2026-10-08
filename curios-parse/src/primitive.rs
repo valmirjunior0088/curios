@@ -1,4 +1,7 @@
-use super::{Mark, Parser, ParserError};
+use {
+    super::{Mark, Parser, ParserError},
+    std::borrow::Cow,
+};
 
 /// Succeeds with `a` without consuming input — the monadic return, for injecting an already-known value into a combinator chain.
 pub fn pure<'a, A>(a: A) -> Parser<'a, A>
@@ -12,7 +15,7 @@ where
 pub fn fail<'a, A, S>(message: S) -> Parser<'a, A>
 where
     A: 'a,
-    S: Into<String> + 'a,
+    S: Into<Cow<'static, str>> + 'a,
 {
     Parser::new(move |state| Err(ParserError::new(state, message)))
 }
@@ -29,7 +32,7 @@ where
 pub fn fail_from<'a, A, S>(start: &Mark, message: S) -> Parser<'a, A>
 where
     A: 'a,
-    S: Into<String> + 'a,
+    S: Into<Cow<'static, str>> + 'a,
 {
     let start = start.offset();
     Parser::new(move |state| Err(ParserError::new(state, message).from(start)))
@@ -38,7 +41,7 @@ where
 /// The failure [`fail_from`] would report here, as a value and without failing: for a grammar that reads a form it will refuse before it has read the token that makes the refusal its own, and [`raise`]s it once it has. The report covers the text from `start` to the current offset, as `fail_from`'s does.
 pub fn refusal<'a, S>(start: &Mark, message: S) -> Parser<'a, ParserError>
 where
-    S: Into<String> + 'a,
+    S: Into<Cow<'static, str>> + 'a,
 {
     let start = start.offset();
     Parser::new(move |state| Ok((ParserError::new(state, message).from(start), state)))
@@ -48,22 +51,7 @@ where
 pub fn take_exact<'a>(expected: &'static str) -> Parser<'a, ()> {
     Parser::new(move |state| match state.string.starts_with(expected) {
         true => Ok(((), state.jump_to(state.offset + expected.len()))),
-        false => {
-            let obtained: String = state
-                .string
-                .chars()
-                .take(expected.chars().count())
-                .take_while(|char| !char.is_whitespace())
-                .collect();
-
-            Err(ParserError::new(
-                state,
-                match obtained.is_empty() {
-                    true => format!("Expected '{expected}', obtained 'end-of-file'"),
-                    false => format!("Expected '{expected}', obtained '{obtained}'"),
-                },
-            ))
-        }
+        false => Err(ParserError::expected(state, expected)),
     })
 }
 
@@ -116,10 +104,7 @@ pub fn preceded_by_space<'a>() -> Parser<'a, ()> {
 /// Succeeds (consuming nothing) only when the remaining input does *not* start with `unexpected`. A negative look-ahead — e.g. to read a postfix `!` only when it is not the start of the `!=` operator.
 pub fn not_ahead<'a>(unexpected: &'static str) -> Parser<'a, ()> {
     Parser::new(move |state| match state.string.starts_with(unexpected) {
-        true => Err(ParserError::new(
-            state,
-            format!("unexpected '{unexpected}'"),
-        )),
+        true => Err(ParserError::unexpected(state, unexpected)),
         false => Ok(((), state)),
     })
 }

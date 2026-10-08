@@ -116,7 +116,7 @@ pub(super) fn parse_premise<'a>(start: Mark) -> Parser<'a, Read<Term>> {
         .and_drop(lazy(parse_term))
         .flat_map(move |_| refused(&bound, USE_HAS_NO_BINDER))
         .or(parse_wildcard()
-            .and_drop(member_ends())
+            .and_drop(member_ends)
             .flat_map(move |()| refused(&placed, USE_PLACE_STATES_NO_TYPE)))
         .or(lazy(parse_term).map(Ok))
 }
@@ -126,10 +126,10 @@ pub(super) fn parse_place<'a>(start: Mark) -> Parser<'a, Read<()>> {
     let (named, typed) = (start.clone(), start);
 
     parse_wildcard()
-        .and_drop(member_ends())
+        .and_drop(member_ends)
         .map(Ok)
         .or(parse_identifier()
-            .and_drop(member_ends())
+            .and_drop(member_ends)
             .flat_map(move |_| refused(&named, USE_BINDS_NOTHING)))
         .or(lazy(parse_term)
             .and_drop(

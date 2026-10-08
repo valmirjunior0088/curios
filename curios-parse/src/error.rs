@@ -1,8 +1,21 @@
 use {
     super::ParserState,
     curios_utilities::{Report, Source, Span},
-    std::sync::Arc,
+    std::{borrow::Cow, sync::Arc},
 };
+
+/// What a failure says.
+///
+/// **Rendered where the failure is reported, not where it is raised.** A grammar tries a literal at every position an alternative could begin, and nearly every such failure is backtracked and dropped: one that formatted its message as it was raised would allocate for each. So a missed literal holds the literal, and what stood in its place is read off the source when a report asks; a message the grammar wrote is borrowed where it is a constant.
+#[derive(Debug, Clone)]
+enum Message {
+    /// A message in hand.
+    Said(Cow<'static, str>),
+    /// A literal that was not there.
+    Expected(&'static str),
+    /// A literal that was there and must not be.
+    Unexpected(&'static str),
+}
 
 /// A parse failure: a message at a byte offset into its source. It also carries the commitment flag: an error [`commit`](crate::commit) marked aborts [`Parser::or`](crate::Parser::or) and the repetition combinators instead of being backtracked, and every other error backtracks. Outside this crate its fields are private: a report is read through [`ParserError::report`] or [`ParserError::format`], and a caller recovering past the failure reads what it was about through [`ParserError::tagged`].
 #[derive(Debug, Clone)]
@@ -11,7 +24,7 @@ pub struct ParserError {
     pub(crate) offset: usize,
     /// Where the report's span begins when the failure is about a run of text rather than a point — a keyword read and refused, whose caret then underlines the word instead of standing after it. Backtracking reads `committed` alone; `offset` only ranks two uncommitted failures against each other. The span's start feeds neither.
     from: Option<usize>,
-    message: String,
+    message: Message,
     source: Arc<Source>,
     /// What the failure was about, when an alternative said so with [`tagging`](crate::tagging): the declaration whose head it had read. Read by a caller recovering past the failure, to say what was there; nothing else consults it.
     tag: Option<String>,
@@ -20,15 +33,49 @@ pub struct ParserError {
 impl ParserError {
     pub(crate) fn new<M>(state: ParserState, message: M) -> Self
     where
-        M: Into<String>,
+        M: Into<Cow<'static, str>>,
     {
+        Self::saying(state, Message::Said(message.into()))
+    }
+
+    /// The failure of a literal that was not at `state`: `Expected '…', obtained '…'`, naming what stands there up to the literal's length or the next blank.
+    pub(crate) fn expected(state: ParserState, expected: &'static str) -> Self {
+        Self::saying(state, Message::Expected(expected))
+    }
+
+    /// The failure of a literal that is at `state` and must not be.
+    pub(crate) fn unexpected(state: ParserState, unexpected: &'static str) -> Self {
+        Self::saying(state, Message::Unexpected(unexpected))
+    }
+
+    fn saying(state: ParserState, message: Message) -> Self {
         Self {
             committed: false,
             offset: state.offset,
             from: None,
-            message: message.into(),
+            message,
             source: state.source.clone(),
             tag: None,
+        }
+    }
+
+    /// What the failure says, rendered — see [`Message`].
+    fn message(&self) -> String {
+        match &self.message {
+            Message::Said(message) => message.to_string(),
+            Message::Unexpected(unexpected) => format!("unexpected '{unexpected}'"),
+            Message::Expected(expected) => {
+                let obtained: String = self.source.text[self.offset..]
+                    .chars()
+                    .take(expected.chars().count())
+                    .take_while(|char| !char.is_whitespace())
+                    .collect();
+
+                match obtained.is_empty() {
+                    true => format!("Expected '{expected}', obtained 'end-of-file'"),
+                    false => format!("Expected '{expected}', obtained '{obtained}'"),
+                }
+            }
         }
     }
 
@@ -67,9 +114,9 @@ impl ParserError {
         }
     }
 
-    pub(crate) fn with_message<M: Into<String>>(self, message: M) -> Self {
+    pub(crate) fn with_message<M: Into<Cow<'static, str>>>(self, message: M) -> Self {
         Self {
-            message: message.into(),
+            message: Message::Said(message.into()),
             ..self
         }
     }
@@ -82,7 +129,7 @@ impl ParserError {
                 self.from.unwrap_or(self.offset),
                 self.offset,
             ),
-            self.message.clone(),
+            self.message(),
         )
     }
 

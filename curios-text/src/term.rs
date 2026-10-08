@@ -46,9 +46,7 @@ impl Term {
     fn parse(source: &Arc<Source>) -> Result<Self, ParserError> {
         curios_profile::profile!("parse", group = "term");
         run_parser(
-            parse_whitespace()
-                .and_keep(parse_term())
-                .and_drop(take_eof()),
+            parse_whitespace().and_keep(parse_term).and_drop(take_eof),
             source,
         )
     }

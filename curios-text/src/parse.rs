@@ -168,7 +168,7 @@ fn parse_doc_line<'a>() -> Parser<'a, String> {
         .and_keep(
             take_while(|char| char != '\n').map(|line| line.trim_end_matches('\r').to_string()),
         )
-        .and_drop(take_exact("\n").or(take_eof()))
+        .and_drop(take_exact("\n").or(take_eof))
         .and_drop(take_while(|char| char == ' ' || char == '\t'))
 }
 
@@ -212,7 +212,7 @@ pub(crate) fn parse_doc<'a>() -> Parser<'a, Option<Doc>> {
             // Committed: a block has been read, so a second one before the head is the diagnosis, and backtracking would hand the first to the term grammar, whose decimal reader takes `---` for a literal's head.
             false => parse_whitespace()
                 .and_keep(commit(not_ahead("---").map_err(DOC_TWICE)))
-                .and_keep(mark())
+                .and_keep(mark)
                 .map(move |end| {
                     Some(Doc {
                         lines,
@@ -223,7 +223,7 @@ pub(crate) fn parse_doc<'a>() -> Parser<'a, Option<Doc>> {
 }
 
 fn parse_literal<'a>(expected: &'static str) -> Parser<'a, ()> {
-    take_exact(expected).and_drop(parse_whitespace())
+    take_exact(expected).and_drop(parse_whitespace)
 }
 
 // The identifier characters alone, consuming no whitespace — the building block of the tight (whitespace-free) positions like a `Bits`/`Bytes` literal's `\..` spread operand.
@@ -235,7 +235,7 @@ pub(super) fn parse_identifier_raw<'a>() -> Parser<'a, &'a str> {
 }
 
 fn parse_identifier<'a>() -> Parser<'a, &'a str> {
-    parse_identifier_raw().and_drop(parse_whitespace())
+    parse_identifier_raw().and_drop(parse_whitespace)
 }
 
 // An identifier at a declaring position, carrying the span of the word alone: the trailing whitespace is consumed after the span closes, so a report about the declaration underlines the name and nothing after it.
@@ -263,7 +263,7 @@ pub(super) fn declared<'a, T: 'a>(rest: Parser<'a, T>) -> Parser<'a, (Label, T)>
 
 fn parse_label_owning<'a>(owns_the_fault: bool) -> Parser<'a, Label> {
     mark()
-        .and(spanned(parse_identifier_raw()))
+        .and(spanned(parse_identifier_raw))
         .flat_map(move |(start, (span, text))| {
             match (is_keyword(text), owns_the_fault) {
                 (false, _) => pure(Label::spanned(text, span)),
@@ -272,7 +272,7 @@ fn parse_label_owning<'a>(owns_the_fault: bool) -> Parser<'a, Label> {
                 (true, false) => fail(reserved_keyword(text)),
             }
         })
-        .and_drop(parse_whitespace())
+        .and_drop(parse_whitespace)
 }
 
 pub(super) fn reserved_keyword(word: &str) -> String {
@@ -297,7 +297,7 @@ fn parse_name<'a>() -> Parser<'a, Name> {
             .or(pure(false))
             .and(
                 parse_identifier_raw()
-                    .and(many0(|| take_exact("/").and_keep(parse_identifier_raw()))),
+                    .and(many0(|| take_exact("/").and_keep(parse_identifier_raw))),
             )
             .flat_map(|(is_abs, (first, rest))| {
                 let segments = iter::once(first)
@@ -309,7 +309,7 @@ fn parse_name<'a>() -> Parser<'a, Name> {
             }),
     )
     .map(|(span, name)| name.with_span(span))
-    .and_drop(parse_whitespace())
+    .and_drop(parse_whitespace)
 }
 
 fn parse_qualified_name<'a>() -> Parser<'a, Name> {
@@ -342,5 +342,5 @@ fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
                 ),
             },
         )
-        .and_drop(parse_whitespace())
+        .and_drop(parse_whitespace)
 }

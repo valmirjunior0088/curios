@@ -31,7 +31,7 @@ fn parse_declared_member<'a>() -> Parser<'a, (Option<String>, Term)> {
 // One Π-binder: `use Concept(args)`, or under `@` or no mark `label: type` or the type alone.
 pub(super) fn parse_func_type_param<'a>() -> Parser<'a, Read<FuncTypeParam>> {
     mark()
-        .and(parse_mark())
+        .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
             Plicity::Witness => parse_premise(start).map(|read| {
                 read.map(|type_| FuncTypeParam {
@@ -99,12 +99,12 @@ pub(super) fn parse_pattern_field<'a>() -> Parser<'a, PatternField> {
 // A tuple pattern `(p1, p2, …)` / `(label = p, …)` — the literal mirror of `parse_tuple`, with `Term` replaced by `Pattern`. A bare `(p)` with neither a comma nor a label is not a one-element tuple pattern (the language has no such thing, exactly like tuple literals) — it falls through to the parenthesized-pattern case in `parse_pattern` below.
 pub(super) fn parse_tuple_pattern<'a>() -> Parser<'a, Pattern> {
     parse_literal("(")
-        .and_keep(parse_pattern_field())
+        .and_keep(parse_pattern_field)
         .and_drop(parse_literal(","))
         .and(sep_by0_trailing(parse_pattern_field, || parse_literal(",")))
         .map(|(first, rest)| iter::once(first).chain(rest).collect::<Vec<_>>())
         .or(parse_literal("(")
-            .and_keep(parse_pattern_field_prefix())
+            .and_keep(parse_pattern_field_prefix)
             .and(lazy(parse_pattern))
             .map(|(label, value)| {
                 vec![PatternField {
@@ -128,7 +128,7 @@ const UNCLOSED_STRUCT_PATTERN: &str =
 // A struct pattern's field: [`parse_pattern_field`], under no mark. A hidden field takes no position in a pattern, so a mark there has nothing to claim, and is refused by that rule where `committed` says the text is a struct pattern's alone.
 fn parse_struct_pattern_field<'a>(committed: bool) -> Parser<'a, PatternField> {
     mark()
-        .and(parse_mark())
+        .and(parse_mark)
         .flat_map(move |(start, plicity)| match (plicity, committed) {
             (Plicity::Explicit, _) => parse_pattern_field(),
             (Plicity::Implicit | Plicity::Witness, true) => {
@@ -164,7 +164,7 @@ fn struct_pattern<'a>(committed: bool) -> Parser<'a, Pattern> {
 
 // A `let`'s binder: [`parse_pattern`], with a struct pattern committed once `Name {` is read. Nothing but a pattern follows `let`, so the brace discriminates it and an unclosed one is reported as itself rather than as the signature the plain binder `Name` would have opened. A lambda's parameters, and the definition sugar's, share the prefix with a struct literal a term may hold there — `(Name { x = 1 })`, `f(Name { x = 1 })` — and go on backtracking.
 pub(super) fn parse_let_binder<'a>() -> Parser<'a, Pattern> {
-    struct_pattern(true).or(parse_pattern())
+    struct_pattern(true).or(parse_pattern)
 }
 
 // A binder pattern at `let`, lambda-parameter, and function-definition-sugar-parameter position (see `Pattern`): a plain name, a tuple pattern, a struct pattern, or a parenthesized pattern (pure grouping, mirroring `parse_parens`). Struct and tuple forms are tried before the bare-name case — not after, as a plain identifier prefix (e.g. `Point` in `Point { z, w = ww }`) would otherwise be consumed by the binder case before the disambiguating `{`/`,`/`=` is ever seen, exactly like `parse_struct_lit` is tried before a bare name at the term level.
@@ -174,7 +174,7 @@ pub(super) fn parse_pattern<'a>() -> Parser<'a, Pattern> {
 
 fn parse_pattern_inner<'a>() -> Parser<'a, Pattern> {
     parse_struct_pattern()
-        .or(parse_tuple_pattern())
+        .or(parse_tuple_pattern)
         .or(parse_literal("(")
             .and_keep(lazy(parse_pattern))
             .and_drop(parse_literal(")")))
@@ -195,14 +195,14 @@ pub(super) fn parse_match_pattern_field<'a>() -> Parser<'a, MatchPatternField> {
 // A tuple match pattern `(p1, p2, …)` / `(label = p, …)` — the `MatchPattern` counterpart of `parse_tuple_pattern`.
 pub(super) fn parse_tuple_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     parse_literal("(")
-        .and_keep(parse_match_pattern_field())
+        .and_keep(parse_match_pattern_field)
         .and_drop(parse_literal(","))
         .and(sep_by0_trailing(parse_match_pattern_field, || {
             parse_literal(",")
         }))
         .map(|(first, rest)| iter::once(first).chain(rest).collect::<Vec<_>>())
         .or(parse_literal("(")
-            .and_keep(parse_pattern_field_prefix())
+            .and_keep(parse_pattern_field_prefix)
             .and(lazy(parse_match_pattern))
             .map(|(label, value)| {
                 vec![MatchPatternField {
@@ -219,7 +219,7 @@ pub(super) fn parse_struct_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     // Nothing but a pattern is read in an arm, so a marked field is refused by its rule where it stands, as a constructor pattern's `use` is.
     let field = || {
         mark()
-            .and(parse_mark())
+            .and(parse_mark)
             .flat_map(|(start, plicity)| match plicity {
                 Plicity::Explicit => parse_match_pattern_field(),
                 Plicity::Implicit | Plicity::Witness => {
@@ -241,7 +241,7 @@ pub(super) fn parse_struct_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 // A constructor match pattern `tag(p, …)` — `nil()` for the nullary case. The `(` immediately after the tag is the commit point, distinguishing it from a bare name. Unlike `parse_func_param`'s definition-sugar arguments, each argument here is itself a full `MatchPattern`, so a constructor's payload can nest arbitrarily (`some(some(x))`, `pair(some(x), y)`, …). Each argument retains its plicity: a payload slot the constructor declared `@` must be matched `@name`. `use` is refused where it stands — a payload is plain or `@`, and no pattern or term begins with the word, so nothing else could be meant.
 pub(super) fn parse_ctor_arg<'a>() -> Parser<'a, (Plicity, MatchPattern)> {
     mark()
-        .and(parse_mark())
+        .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
             Plicity::Witness => commit(fail_from(&start, PATTERN_TAKES_NO_USE)),
             Plicity::Explicit | Plicity::Implicit => {
@@ -298,11 +298,11 @@ pub(super) fn parse_nat_zero_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 // The `pred + 1; ih` leaf of a `Nat` match-arm pattern, with the same optional `; ih` as the `List`/`Bin` cons leaves below (`parse_cons_ih`). Tried after the constructor pattern and before the generic `Binder` fallback in `parse_match_pattern`: it shares a leading identifier with both, so `Binder` would otherwise silently swallow every `name+1;ih` input before this ever gets a chance to commit. A space is required on each side of `+` (mirroring `parse_infix_op`'s own space-sensitivity, via the same `preceded_by_space`/`require_space` intrinsics and a `take_exact` operator token that doesn't itself eat trailing whitespace), so a glued `pred+1` is no successor pattern and `refuse_glued_successor` refuses it by name.
 pub(super) fn parse_nat_succ_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     parse_label()
-        .and_drop(preceded_by_space())
+        .and_drop(preceded_by_space)
         .and_drop(take_exact("+"))
-        .and_drop(require_space())
+        .and_drop(require_space)
         .and_drop(parse_literal("1"))
-        .and(parse_cons_ih())
+        .and(parse_cons_ih)
         .map(|(pred_label, ih): (Label, Option<Pattern>)| {
             MatchPattern::Nat(NatPattern::Succ { pred_label, ih })
         })
@@ -313,7 +313,7 @@ fn refuse_glued_successor<'a>() -> Parser<'a, MatchPattern> {
     parse_label().and_drop(look_ahead(
             take_while(char::is_whitespace).and(take_exact("+")),
         ))
-    .and_keep(mark())
+    .and_keep(mark)
     .flat_map(|start| {
         // The digits are consumed too: the spaced form's own refusal, caught, sits right after the `+`, and a committed refusal that ties it on offset loses [`Parser::or`]'s tie-break.
         take_while(char::is_whitespace)
@@ -339,9 +339,9 @@ pub(super) fn parse_nat_lit_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 // A character literal leaf — a `Nat` dispatch case spelled by its scalar value, compiled exactly as the numeral it denotes.
 pub(super) fn parse_char_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     take_exact("'")
-        .and_keep(parse_char_value())
+        .and_keep(parse_char_value)
         .and_drop(take_exact("'"))
-        .and_drop(parse_whitespace())
+        .and_drop(parse_whitespace)
         .map(MatchPattern::Char)
 }
 
@@ -353,12 +353,12 @@ pub(super) fn parse_list_nil_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 // The `[head, ..tail][; ih]` leaf of a nested `List` pattern.
 pub(super) fn parse_list_cons_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     parse_literal("[")
-        .and_keep(parse_label())
+        .and_keep(parse_label)
         .and_drop(parse_literal(","))
         .and_drop(parse_literal(".."))
-        .and(parse_label())
+        .and(parse_label)
         .and_drop(parse_literal("]"))
-        .and(parse_cons_ih())
+        .and(parse_cons_ih)
         .map(|((head_label, tail_label), ih)| {
             MatchPattern::List(ListPattern::Cons {
                 head_label,
@@ -385,12 +385,12 @@ fn parse_bin_cons_match_pattern<'a>(
     prefix: &'static str,
 ) -> Parser<'a, MatchPattern> {
     parse_literal(prefix)
-        .and_keep(parse_label())
+        .and_keep(parse_label)
         .and_drop(parse_literal(","))
         .and_drop(parse_literal(".."))
-        .and(parse_label())
+        .and(parse_label)
         .and_drop(parse_literal("]"))
-        .and(parse_cons_ih())
+        .and(parse_cons_ih)
         .map(move |((head_label, tail_label), ih)| {
             MatchPattern::Bin(BinPattern::Atom {
                 grain,
@@ -408,22 +408,22 @@ pub(super) fn parse_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 
 fn parse_match_pattern_inner<'a>() -> Parser<'a, MatchPattern> {
     parse_qualified_match_pattern()
-        .or(parse_bin_byte_match_pattern())
-        .or(parse_bin_end_match_pattern())
-        .or(parse_struct_match_pattern())
-        .or(parse_ctor_match_pattern())
-        .or(parse_bool_match_pattern())
-        .or(parse_char_match_pattern())
-        .or(parse_nat_zero_match_pattern())
-        .or(parse_nat_succ_match_pattern())
-        .or(parse_nat_lit_match_pattern())
-        .or(parse_list_nil_match_pattern())
-        .or(parse_list_cons_match_pattern())
-        .or(parse_tuple_match_pattern())
+        .or(parse_bin_byte_match_pattern)
+        .or(parse_bin_end_match_pattern)
+        .or(parse_struct_match_pattern)
+        .or(parse_ctor_match_pattern)
+        .or(parse_bool_match_pattern)
+        .or(parse_char_match_pattern)
+        .or(parse_nat_zero_match_pattern)
+        .or(parse_nat_succ_match_pattern)
+        .or(parse_nat_lit_match_pattern)
+        .or(parse_list_nil_match_pattern)
+        .or(parse_list_cons_match_pattern)
+        .or(parse_tuple_match_pattern)
         .or(parse_literal("(")
             .and_keep(lazy(parse_match_pattern))
             .and_drop(parse_literal(")")))
-        .or(refuse_glued_successor())
+        .or(refuse_glued_successor)
         .or(parse_binder().map(MatchPattern::Binder))
 }
 
@@ -441,17 +441,17 @@ fn parse_bound_member<'a, B: 'a>(
     wildcard: fn() -> B,
 ) -> Parser<'a, Read<(Plicity, B, Option<Term>)>> {
     mark()
-        .and(parse_mark())
+        .and(parse_mark)
         .flat_map(move |(start, plicity)| match plicity {
             Plicity::Witness => parse_place(start)
                 .map(move |read| read.map(|()| (Plicity::Witness, wildcard(), None))),
             Plicity::Implicit => bound()
-                .and(parse_annotation())
-                .and_drop(member_ends())
+                .and(parse_annotation)
+                .and_drop(member_ends)
                 .map(|(binder, annotation)| Ok((Plicity::Implicit, binder, annotation)))
                 .or(lazy(parse_term).flat_map(move |_| refused(&start, BINDER_FOLLOWS_IMPLICIT))),
             Plicity::Explicit => bound()
-                .and(parse_annotation())
+                .and(parse_annotation)
                 .map(|(binder, annotation)| Ok((Plicity::Explicit, binder, annotation))),
         })
 }

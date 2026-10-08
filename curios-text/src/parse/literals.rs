@@ -30,7 +30,7 @@ pub(super) fn parse_num_lit<'a>() -> Parser<'a, Term> {
         .map(|()| Sign::Negative)
         .or(take_exact("+").map(|()| Sign::Positive))
         .or(pure(Sign::Unmarked))
-        .and(parse_nat_digits())
+        .and(parse_nat_digits)
         .map(|(sign, lit)| {
             let NatLiteral(magnitude, radix) = lit;
             Subterm::NumLit(NumLit {
@@ -49,9 +49,9 @@ pub(super) fn refuse_dangling_dot<'a>() -> Parser<'a, Term> {
                 true => fail("expected a numeral"),
                 false => pure(()),
             })
-            .and_keep(mark())
+            .and_keep(mark)
             .and_drop(take_exact("."))
-            .and_drop(not_ahead_digit())
+            .and_drop(not_ahead_digit)
     .flat_map(|start| {
         commit(fail_from(
             &start,
@@ -73,9 +73,9 @@ fn not_ahead_digit<'a>() -> Parser<'a, ()> {
 // A character literal is a monomorphic, proof-certified `/std/Char` value.
 pub(super) fn parse_char_lit<'a>() -> Parser<'a, Term> {
     take_exact("'")
-        .and_keep(parse_char_value())
+        .and_keep(parse_char_value)
         .and_drop(take_exact("'"))
-        .and_drop(parse_whitespace())
+        .and_drop(parse_whitespace)
         .map(|character| Subterm::ProofLiteral(ProofLiteral::Char(character)))
         .map(Into::into)
 }
@@ -114,12 +114,12 @@ pub(super) fn parse_nat_digits<'a>() -> Parser<'a, NatLiteral> {
                 }
             }),
         )
-        .and_drop(parse_whitespace())
+        .and_drop(parse_whitespace)
 }
 
 pub(super) fn parse_flt_value<'a>() -> Parser<'a, Term> {
     parse_non_finite_flt()
-        .or(parse_decimal_flt())
+        .or(parse_decimal_flt)
         .map(|value| Subterm::Literal(Literal::Flt(value)))
         .map(Into::into)
 }
@@ -134,8 +134,8 @@ fn parse_non_finite_flt<'a>() -> Parser<'a, Floating> {
                 .map(|()| Floating::infinite(false))
                 .or(take_exact("nan.0").map(|()| Floating::nan())),
         )
-        .and_drop(not_ahead_word())
-        .and_drop(parse_whitespace())
+        .and_drop(not_ahead_word)
+        .and_drop(parse_whitespace)
         .map(|(negative, value)| match negative {
             true => value.copysign(Floating::infinite(true)),
             false => value,
@@ -197,7 +197,7 @@ fn parse_decimal_flt<'a>() -> Parser<'a, Floating> {
                 )),
             }
         })
-        .and_drop(parse_whitespace())
+        .and_drop(parse_whitespace)
 }
 
 /// Split a float literal's digits into the numeral they spell and the power of ten scaling it: `12.5e3` is `125` scaled by `2`. The grammar has already established a dot with at least one digit after it, so what is left to refuse is a malformed exponent or a stray character the character class admitted.
@@ -228,7 +228,7 @@ pub(super) fn parse_string_chunk<'a>() -> Parser<'a, String> {
             true => fail("empty chunk"),
             false => pure(chunk.to_string()),
         })
-        .or(take_exact("\\").and_keep(parse_escape_tail()))
+        .or(take_exact("\\").and_keep(parse_escape_tail))
 }
 
 /// What follows a backslash, in either string spelling: the five one-letter escapes and the braced Unicode scalar translated, and any other character standing beside its backslash — an unrecognized escape is not an error, so e.g. `\%` in source yields the two literal characters `\` and `%`. `\u` alone is one of them; only `\u{` is reserved, below.
@@ -284,7 +284,7 @@ pub(super) fn parse_char_value<'a>() -> Parser<'a, char> {
                 .or(take_exact("r").map(|_| '\r'))
                 .or(take_exact("\\").map(|_| '\\'))
                 .or(take_exact("'").map(|_| '\''))
-                .or(parse_unicode_escape())
+                .or(parse_unicode_escape)
                 // The backslash discriminates the escape, so the fault is this one rather than the first alternative's tie at the same offset, and rather than the fallback below reading the backslash as an ordinary character.
                 .or(commit(fail(
                     "a character escape is one of `\\n`, `\\t`, `\\r`, `\\\\`, `\\'` or `\\u{...}`; a lone backslash is written `'\\\\'`",
@@ -301,8 +301,8 @@ pub(super) fn parse_char_value<'a>() -> Parser<'a, char> {
 pub(super) fn parse_string_literal<'a>() -> Parser<'a, Term> {
     take_exact("\"")
         .and_keep(many0(parse_string_chunk))
-        .and_drop(take_exact("\"").or(refuse_line_break_in_string()))
-        .and_drop(parse_whitespace())
+        .and_drop(take_exact("\"").or(refuse_line_break_in_string))
+        .and_drop(parse_whitespace)
         .map(|chunks| Subterm::ProofLiteral(ProofLiteral::Str(StrLit::line(chunks.concat()))))
         .map(Into::into)
 }
@@ -355,7 +355,7 @@ pub(super) fn parse_block_string_literal<'a>() -> Parser<'a, Term> {
                 // Past the opener and its newline this is a block literal and nothing else, so an unterminated one says so. Recoverable, it would backtrack to the one-line form, fail there too, and leave the enclosing term to complain at the opening quotes.
                 .and_keep(commit(
                     many0(parse_block_piece)
-                        .and(mark())
+                        .and(mark)
                         .and_drop(take_exact("\"\"\"").map_err(
                             "a block string literal closes with `\"\"\"` on a line of its own",
                         )),
@@ -365,7 +365,7 @@ pub(super) fn parse_block_string_literal<'a>() -> Parser<'a, Term> {
                     Err(message) => commit(fail_from(&close, message)),
                 })
         })
-        .and_drop(parse_whitespace())
+        .and_drop(parse_whitespace)
         .map(Into::into)
 }
 

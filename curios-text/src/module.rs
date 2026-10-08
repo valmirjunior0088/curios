@@ -455,7 +455,7 @@ impl Module {
         let module = run_parser(
             parse_whitespace()
                 .and_keep(parse_items(strict))
-                .and_drop(parse_items_end())
+                .and_drop(parse_items_end)
                 .map(into_module),
             source,
         )?;
@@ -533,7 +533,7 @@ impl Entrypoint {
                         None => fail("Expected a program's final term"),
                     };
                     lazy(parse_term)
-                        .and_drop(parse_program_end())
+                        .and_drop(parse_program_end)
                         .map(move |tail| Entrypoint::new(into_module(items), tail))
                         .or(swallowed)
                 }),
@@ -566,9 +566,9 @@ pub(crate) fn parse_for_format(source: &Arc<Source>) -> Result<FormatInput, Pars
     curios_profile::profile!("parse", group = "format");
     let (module, item_spans, tail) = run_parser(
         parse_whitespace()
-            .and_keep(many0(|| spanned(parse_top_item())))
-            .and(parse_optional_term())
-            .and_drop(parse_program_end())
+            .and_keep(many0(|| spanned(parse_top_item)))
+            .and(parse_optional_term)
+            .and_drop(parse_program_end)
             .map(|(items, tail)| {
                 let (spans, items): (Vec<_>, Vec<_>) = items.into_iter().unzip();
                 (Module::built(items), spans, tail)

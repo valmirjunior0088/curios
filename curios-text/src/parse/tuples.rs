@@ -22,15 +22,15 @@ use {
 pub(super) fn parse_intrinsic<'a>() -> Parser<'a, Term> {
     parse_bool_intrinsic()
         // A numeral's dangling dot is refused ahead of both numeral forms, then decimal floats: `5.0` is a `Flt`, not the integer `5` projected.
-        .or(refuse_dangling_dot())
-        .or(parse_flt_value())
-        .or(parse_char_lit())
-        .or(parse_num_lit())
+        .or(refuse_dangling_dot)
+        .or(parse_flt_value)
+        .or(parse_char_lit)
+        .or(parse_num_lit)
         // The block form is tried first, since its opener begins with the one-line form's.
-        .or(parse_block_string_literal())
-        .or(parse_string_literal())
-        .or(parse_bin_literal())
-        .or(parse_list_literal())
+        .or(parse_block_string_literal)
+        .or(parse_string_literal)
+        .or(parse_bin_literal)
+        .or(parse_list_literal)
 }
 
 pub(super) fn parse_parens<'a>() -> Parser<'a, Term> {
@@ -41,7 +41,7 @@ pub(super) fn parse_parens<'a>() -> Parser<'a, Term> {
 
 // A tuple type's field: [`parse_field_member`], and a mark refused where none of its forms read the field.
 pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
-    parse_field_member().or(refuse_field_mark())
+    parse_field_member().or(refuse_field_mark)
 }
 
 // A Σ-type / struct-declaration field, past whatever mark its site takes: an optional label and the field type, or the signature sugar `label(params) -> type` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar. Shared by tuple types and `struct` decls. The sugared catch spans through `->`, so a positional field that merely starts with an application (`f(x)`) backtracks cleanly.
@@ -79,13 +79,13 @@ pub(super) fn parse_field_member<'a>() -> Parser<'a, TupleTypeParam> {
             func_params: None,
             type_,
         }))
-        .or(refuse_keyword_field_label())
+        .or(refuse_keyword_field_label)
 }
 
 // A mark written where a tuple type's field is declared. Tried last, as the keyword refusal is and for its reason: no field form begins with `@` or with `use`, so reaching this means none read the field, and neither can begin a term, so the refusal commits.
 fn refuse_field_mark<'a>() -> Parser<'a, TupleTypeParam> {
     mark()
-        .and(parse_mark())
+        .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
             Plicity::Explicit => fail("not a mark written on a field"),
             Plicity::Implicit | Plicity::Witness => {
@@ -99,8 +99,8 @@ fn refuse_field_mark<'a>() -> Parser<'a, TupleTypeParam> {
 // The introducer is required, and is what keeps this from claiming a positional field that merely opens with a keyword: `{ match b | true => T end }` reaches here only if the term failed, and its `match` is followed by a scrutinee rather than by `:` or `(`, so the arm's own diagnosis stands. A term that *is* `<keyword> (` — a `let` over a tuple pattern — parses as the positional form and never reaches this alternative at all.
 fn refuse_keyword_field_label<'a>() -> Parser<'a, TupleTypeParam> {
     mark()
-        .and(parse_identifier_raw())
-        .and_drop(parse_whitespace())
+        .and(parse_identifier_raw)
+        .and_drop(parse_whitespace)
         .and_drop(look_ahead(parse_literal(":").or(parse_literal("("))))
         .flat_map(|(start, word)| match is_keyword(word) {
             true => commit(fail_from(&start, reserved_keyword(word))),
@@ -140,7 +140,7 @@ pub(super) fn parse_tuple_field_prefix<'a>() -> Parser<'a, TupleFieldPrefix> {
                 .and_drop(not_ahead("="))
                 .and_drop(not_ahead(">")),
         )
-        .and_drop(parse_whitespace())
+        .and_drop(parse_whitespace)
         .flat_map(|(label, func_params): (&str, _)| {
             let label = label.to_string();
             match func_params {
@@ -171,12 +171,12 @@ pub(super) fn parse_tuple<'a>() -> Parser<'a, Term> {
     // Two committing prefixes distinguish a tuple literal from a parenthesized term: a first field followed by a comma (`(x,` / `(a = 1,`), or a named first field alone (`(a = 1)` / `(f(x) = e)` — the `=` already disambiguates, so the one-element form needs no trailing comma).
 
     parse_literal("(")
-        .and_keep(parse_tuple_field())
+        .and_keep(parse_tuple_field)
         .and_drop(parse_literal(","))
         .and(sep_by0_trailing(parse_tuple_field, || parse_literal(",")))
         .map(|(first, rest)| iter::once(first).chain(rest).collect::<Vec<_>>())
         .or(parse_literal("(")
-            .and_keep(parse_tuple_field_prefix())
+            .and_keep(parse_tuple_field_prefix)
             .and(lazy(parse_term))
             .map(|((label, func_params), value)| {
                 vec![TupleField {

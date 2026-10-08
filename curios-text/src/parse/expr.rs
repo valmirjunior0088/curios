@@ -28,12 +28,12 @@ pub(super) fn parse_binding<'a>() -> Parser<'a, (Label, LetSignature)> {
 // One `let` statement: `let pattern (: T)? = e;`, or the group `let f … and g … and h …;` whose later members are plain labels with mandatory types.
 fn parse_let_group<'a>() -> Parser<'a, LetGroup> {
     parse_keyword("let")
-        .and_keep(parse_let_binder())
-        .and(parse_local_let_signature())
+        .and_keep(parse_let_binder)
+        .and(parse_local_let_signature)
         .map(|(binder, signature)| LetBinding { binder, signature })
         .and(many0(|| {
             parse_keyword("and")
-                .and_keep(commit(parse_binding()))
+                .and_keep(commit(parse_binding))
                 .map(|(label, signature)| LetBinding {
                     binder: Pattern::Binder(label),
                     signature,
@@ -48,7 +48,7 @@ fn parse_let_group<'a>() -> Parser<'a, LetGroup> {
 // One member of a definition telescope (`let`, `satisfy`): `use Concept(args)`, which has no binder and joins the witness scope, or under `@` or no mark a binder pattern with its type. An `@` member may be its type alone — a bound, which the body uses as a fact and never by name. A plain member may not: a parameter the body cannot name is an annotation forgotten far more often than a parameter meant, so it is read and reported.
 pub(super) fn parse_func_sugar_param<'a>() -> Parser<'a, Read<FuncSugarParam>> {
     mark()
-        .and(parse_mark())
+        .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
             Plicity::Witness => parse_premise(start).map(|read| {
                 read.map(|type_| FuncSugarParam {
@@ -145,15 +145,15 @@ pub(super) fn parse_let_signature<'a>() -> Parser<'a, LetSignature> {
 
 // Like `parse_let_signature`, but the plain form's type annotation may be omitted. Used only by local `let`, where the body's type can be inferred.
 pub(super) fn parse_local_let_signature<'a>() -> Parser<'a, LetSignature> {
-    parse_func_let_signature(false).or(parse_optional_name_signature())
+    parse_func_let_signature(false).or(parse_optional_name_signature)
 }
 
 // `let x = e; tail` / `let x : T = e; tail` / `let (x, y) = e; tail` / `let f(p : T, …) -> R = …; tail` / `let f … and g …; tail`. The binder accepts a tuple/struct pattern (see `Pattern`), desugaring at lowering into a fresh binder plus a projection-`let` chain.
 //
 // `many1` parses the whole run of `let` statements in a loop, then the tail once, and they become a single flat `Let` block — one node for the whole run, not a right-nested chain — so nothing downstream (clone, lowering) recurses once per binding. The leading `mark` on the first statement and the trailing `mark` after the tail span the block.
 pub(super) fn parse_let<'a>() -> Parser<'a, Term> {
-    many1(|| mark().and(parse_let_group()))
-        .and(lazy(parse_term).and(mark()))
+    many1(|| mark().and(parse_let_group))
+        .and(lazy(parse_term).and(mark))
         .map(|(statements, (tail, end))| {
             // `many1` guarantees at least one statement, so the span start is defined.
             let span = statements[0].0.to(&end);
@@ -175,7 +175,7 @@ pub(super) fn parse_proj_suffix_raw<'a>() -> Parser<'a, Field> {
 }
 
 pub(super) fn parse_proj_suffix<'a>() -> Parser<'a, Field> {
-    parse_proj_suffix_raw().and_drop(parse_whitespace())
+    parse_proj_suffix_raw().and_drop(parse_whitespace)
 }
 
 pub(super) enum Suffix {
@@ -203,7 +203,7 @@ pub(super) fn parse_suffix<'a>() -> Parser<'a, Suffix> {
         // A postfix `!` — but not the `!=` operator, whose `!` would otherwise be eaten here as a bang, stranding the `=`.
         .or(take_exact("!")
             .and_drop(not_ahead("="))
-            .and_drop(parse_whitespace())
+            .and_drop(parse_whitespace)
             .map(|()| Suffix::Bang))
 }
 
@@ -267,20 +267,20 @@ pub(super) fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
     with_span(
         with_span(
             parse_goal()
-                .or(parse_match())
-                .or(parse_choose())
-                .or(parse_struct_lit())
+                .or(parse_match)
+                .or(parse_choose)
+                .or(parse_struct_lit)
                 .or(parse_qualified_name().map(|n| Subterm::Name(n).into()))
-                .or(parse_type())
-                .or(parse_prop())
-                .or(parse_intrinsic())
-                .or(parse_tuple_type())
-                .or(parse_empty_tuple())
-                .or(parse_tuple())
-                .or(parse_parens())
+                .or(parse_type)
+                .or(parse_prop)
+                .or(parse_intrinsic)
+                .or(parse_tuple_type)
+                .or(parse_empty_tuple)
+                .or(parse_tuple)
+                .or(parse_parens)
                 .or(parse_name().map(|n| Subterm::Name(n).into())),
         )
-        .and(many0(|| spanned(parse_suffix())))
+        .and(many0(|| spanned(parse_suffix)))
         .map(|(head, suffixes): (Term, _)| apply_suffixes(head, suffixes)),
     )
 }
@@ -324,14 +324,14 @@ pub(super) fn require_space<'a>() -> Parser<'a, ()> {
             true => fail("expected whitespace after operator"),
             false => pure(()),
         })
-        .and_drop(parse_whitespace())
+        .and_drop(parse_whitespace)
 }
 
 // An infix operator with a space on each side, consumed without its operands.
 pub(super) fn parse_infix_op<'a>() -> Parser<'a, InfixOp> {
     preceded_by_space()
-        .and_keep(parse_infix_symbol())
-        .and_drop(require_space())
+        .and_keep(parse_infix_symbol)
+        .and_drop(require_space)
 }
 
 // Precedence-climbing over applied atoms: parse a left operand, then fold in every following operator whose precedence is at least `min_prec`. The right operand of an operator at precedence `p` is parsed at `p + 1` (left-associativity).
@@ -353,7 +353,7 @@ pub(super) fn parse_infix_rest<'a>(left: Term, min_prec: u8) -> Parser<'a, Term>
             parse_infix_expr(precedence + 1).map(move |right| (op, right))
         })
     })
-    .and_drop(refuse_asymmetric_operator())
+    .and_drop(refuse_asymmetric_operator)
     .map(move |pairs| {
         pairs.into_iter().fold(left, |left, (op, right)| {
             Subterm::Infix(Infix { op, left, right }).into()
@@ -373,8 +373,8 @@ fn refuse_asymmetric_operator<'a>() -> Parser<'a, ()> {
         preceded_by_space()
             .map(|()| true)
             .or(pure(false))
-            .and(mark())
-            .and(parse_infix_symbol())
+            .and(mark)
+            .and(parse_infix_symbol)
             .and(look_ahead(take_while(|char: char| !char.is_whitespace()))),
     )
     .map(Some)
@@ -412,13 +412,13 @@ pub(super) fn parse_term_inner<'a>() -> Parser<'a, Term> {
     with_span(
         refuse_declaration_head().and_keep(
             // At end of input there is no character for [`refuse_non_term`] to consume, so every alternative below declines at the same offset and the tie-break reports the first of them. This stands ahead of them so that tie names the input instead.
-            look_ahead(take_eof())
+            look_ahead(take_eof)
                 .and_keep(fail("expected a term, obtained 'end-of-file'"))
-                .or(parse_let())
-                .or(parse_func_type())
-                .or(parse_func())
+                .or(parse_let)
+                .or(parse_func_type)
+                .or(parse_func)
                 .or(parse_infix_expr(0))
-                .or(refuse_non_term()),
+                .or(refuse_non_term),
         ),
     )
 }

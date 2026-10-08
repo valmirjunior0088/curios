@@ -1,17 +1,17 @@
 use {
-    super::Parser,
+    super::{IntoParser, Parser},
     curios_utilities::{Source, Span},
     std::sync::Arc,
 };
 
 /// Pairs the parser's output with the [`Span`] covering exactly the bytes it consumed — how surface parsers attach source locations, so wrap the whole construct rather than its pieces.
-pub fn spanned<'a, T>(parser: Parser<'a, T>) -> Parser<'a, (Span, T)>
+pub fn spanned<'a, T>(parser: impl IntoParser<'a, T> + 'a) -> Parser<'a, (Span, T)>
 where
     T: 'a,
 {
     Parser::new(move |state| {
         let start = state.offset;
-        let (item, state) = parser.parse(state)?;
+        let (item, state) = parser.into_parser().parse(state)?;
 
         Ok((
             (Span::new(state.source.clone(), start, state.offset), item),

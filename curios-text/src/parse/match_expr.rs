@@ -40,7 +40,7 @@ pub(super) fn parse_match_prefix<'a>() -> Parser<'a, (Term, Option<Term>)> {
 pub(super) fn parse_induct_match_branch<'a>() -> Parser<'a, MatrixArm> {
     parse_literal("|")
         .and_keep(commit(
-            spanned(parse_match_pattern())
+            spanned(parse_match_pattern)
                 .and_drop(parse_literal("=>"))
                 .and(lazy(parse_term)),
         ))
@@ -54,7 +54,7 @@ pub(super) fn parse_induct_match_branch<'a>() -> Parser<'a, MatrixArm> {
 // The `; ih` induction-hypothesis tail on a `Nat` succ or `List`/`Bin` cons leaf pattern: `;` sets the hypothesis apart from the scrutinee's shape. The hypothesis binds the *fold result*, not scrutinee shape, so it takes the same irrefutable pattern grammar a `let` binder does — `; ih` a plain name, `; (cur, live)` a destructuring. A plain case-split needs no hypothesis, so the tail may be omitted — `None`, not a placeholder; lowering mints a fresh internal name for it directly.
 pub(super) fn parse_cons_ih<'a>() -> Parser<'a, Option<Pattern>> {
     parse_literal(";")
-        .and_keep(parse_pattern())
+        .and_keep(parse_pattern)
         .map(Some)
         .or(pure(None))
 }
@@ -62,13 +62,13 @@ pub(super) fn parse_cons_ih<'a>() -> Parser<'a, Option<Pattern>> {
 // A bind arm `| pattern = value => body` (Rust `if let`): the arm fires when `value` matches the refutable `pattern`. The `=` separator is guarded against `==` (equality) and `=>` (an empty value) via `not_ahead`, mirroring the `!` vs `!=` idiom. Tried *after* the condition arm, since a bind pattern like `some(x)` also parses as a condition term and the condition arm cannot take a bind arm from it: `=` is no infix operator, so a condition term stops there and the arm fails wanting its `=>`. Reading it second is what lets it keep its commitments — a pattern the grammar refuses by name, a qualified constructor above all, is then the diagnosis instead of being re-read as an ordinary call and reported at the `=` that follows it.
 pub(super) fn parse_bind_arm<'a>() -> Parser<'a, ChooseArm> {
     parse_literal("|")
-        .and_keep(parse_match_pattern())
+        .and_keep(parse_match_pattern)
         .and_drop(
             take_exact("=")
                 .and_drop(not_ahead("="))
                 .and_drop(not_ahead(">")),
         )
-        .and_drop(parse_whitespace())
+        .and_drop(parse_whitespace)
         .and(lazy(parse_term))
         .and_drop(parse_literal("=>"))
         .and(lazy(parse_term))
@@ -98,7 +98,7 @@ pub(super) fn parse_cond_arm<'a>() -> Parser<'a, ChooseArm> {
 
 // One choose arm: a condition arm first, else a bind arm. The condition arm is the reading that cannot be mistaken — its term stops at a `=`, which is no infix operator — so trying it first costs the bind arm nothing and leaves the bind arm free to commit.
 pub(super) fn parse_choose_arm<'a>() -> Parser<'a, ChooseArm> {
-    parse_cond_arm().or(parse_bind_arm())
+    parse_cond_arm().or(parse_bind_arm)
 }
 
 // The mandatory `| _ =>` default arm closing a `choose` — a `Bool` ladder is a dispatch form (it enumerates no shapes), so `_` is required, not optional — or the arm parser explaining why what stands here is no arm.
@@ -115,7 +115,7 @@ pub(super) fn parse_choose_default<'a>() -> Parser<'a, Term> {
 // `choose | test => body | … | _ => default end`. No head term — the arms are `Bool` conditions or refutable binds, tried top-to-bottom, first to fire wins. Distinguished from `match` by keyword alone, so there is no disambiguation to speak of here.
 pub(super) fn parse_choose<'a>() -> Parser<'a, Term> {
     parse_keyword("choose")
-        .and_keep(many0(parse_choose_arm).and(parse_choose_default()))
+        .and_keep(many0(parse_choose_arm).and(parse_choose_default))
         .and_drop(parse_keyword("end"))
         .map(|(arms, default)| Subterm::Choose(Choose { arms, default }).into())
 }
