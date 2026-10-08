@@ -268,7 +268,7 @@ fn a_file_rewritten_while_its_unit_compiles_leaves_the_store_as_it_was() {
 
 /// A package the store cannot take recompiles over what the session compiled last, rather than compiling whole every time: no slot can be written, so the unit a check produced is the only baseline there is.
 ///
-/// **The baseline advances without the store.** A unit is kept whether or not it is filed, so a session over a store nobody can write still recompiles the closure of each edit, and a question with no session is where it was.
+/// **The baseline advances without the store.** A unit is kept whether or not it is filed, so a session over a store nobody can write still recompiles what each edit moved, and a question with no session is where it was.
 #[test]
 fn a_session_recompiles_what_the_store_could_not_take() {
     let root = mounted_project("session-unfiled");
@@ -465,7 +465,7 @@ fn a_kept_unit_is_refused_once_a_predecessor_the_store_could_not_take_has_change
 
 /// A declaration the parser cannot read answers with its own record, over a baseline as with none.
 ///
-/// **Recovery and the item-level recompile meet here.** A question takes a baseline where a build compiles whole, so this path is the editor's and `curios lint`'s alone. A broken item withholds its dependents, and a withheld item leaves no refusal behind it — so a recompile that reassembled the lowered order expecting every item would look for items its own elaboration deliberately did not produce, and a keystroke leaving a half-written declaration with a dependent would kill the analyst instead of answering.
+/// **Recovery and the item-level recompile meet here.** A question takes a baseline where a build compiles whole, so this path is the editor's and `curios lint`'s alone. A broken item withholds its dependents, and a withheld item leaves no refusal behind it — so a recompile that expected an item of every declaration would look for items its own elaboration deliberately did not produce, and a keystroke leaving a half-written declaration with a dependent would kill the analyst instead of answering.
 ///
 /// Two declarations are the smallest shape that shows it: one broken, and one naming it, which is the one that goes missing.
 #[test]

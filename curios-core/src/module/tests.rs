@@ -331,64 +331,6 @@ fn a_struct_declaration_reaches_its_field_types() {
     assert!(reached.contains(&authored("Payload")));
 }
 
-#[test]
-fn restriction_keeps_a_rec_group_whole() {
-    let group = RecItem::new(vec![
-        definition("even", UniverseContext::empty()),
-        definition("odd", UniverseContext::empty()),
-    ]);
-    let module = over(vec![
-        Item::Rec(group),
-        Item::Let(definition("other", UniverseContext::empty())),
-    ]);
-
-    let kept = module.restricted(|name| *name != authored("other"));
-
-    assert_eq!(kept.items.len(), 1);
-    assert!(matches!(kept.items[0], Item::Rec(_)));
-}
-
-#[test]
-#[should_panic(expected = "restricted whole")]
-fn restricting_half_a_rec_group_is_refused() {
-    let group = RecItem::new(vec![
-        definition("even", UniverseContext::empty()),
-        definition("odd", UniverseContext::empty()),
-    ]);
-    let module = over(vec![Item::Rec(group)]);
-
-    let _ = module.restricted(|name| *name == authored("even"));
-}
-
-#[test]
-fn restriction_drops_the_registry_entries_witnesses_and_tests_of_excluded_names() {
-    let mut module = over(vec![
-        Item::Let(definition("Box", UniverseContext::empty())),
-        Item::Let(definition("probe", UniverseContext::empty())),
-    ]);
-    module.struct_decls.insert(
-        authored("Box"),
-        StructDecl {
-            universe_context: UniverseContext::empty(),
-            arity: Telescope::done(Telescope::done(())),
-            result_sort: Term::type_ground(),
-            module: Qualifier::empty(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        },
-    );
-    module.witnesses.insert(authored("Box"));
-    module.tests.push(authored("probe"));
-
-    let kept = module.restricted(|name| *name == authored("probe"));
-
-    assert_eq!(kept.items.len(), 1);
-    assert!(kept.struct_decls.is_empty());
-    assert!(kept.witnesses.is_empty());
-    assert_eq!(kept.tests, vec![authored("probe")]);
-}
-
 /// `name`, whose body mentions each of `mentioned`.
 fn reading(name: &str, mentioned: &[&str]) -> Item {
     let mut reading = definition(name, UniverseContext::empty());

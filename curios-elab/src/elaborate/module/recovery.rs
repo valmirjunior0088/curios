@@ -5,8 +5,6 @@
 //! **What is undone** is everything another item could read: the item's base-frame bindings, its registry entries, its witness-table entries (each key poisoned in its place), the parked work it raised, the terms it recorded for the erasure obligations, its universe constraints, and every speculative scope its unwinding left open. **What is left** is what nothing reads: term metavariables it minted, which only its own terms mention and no module walk reaches; the universe metas beside them; its totality verdict, which is recorded on the success path alone; and the caches, cleared wholesale as for a redefinition.
 //!
 //! **A void attempt is undone as a refused item is, and poisons nothing.** An attempt that read a declaration not yet elaborated concluded nothing ([`Context::need`]), so it leaves no refusal, no poisoned key and no dependent to withhold: its declaration goes back to what the unit seeded — its lowered registry entries, no binding, no table entry, a witness still declared under the key it is spelled at — and is attempted again once what it needed has elaborated.
-//!
-//! **What a run reports is not what it dropped.** A refused item reports; a withheld one reports nothing, by the decision above. So the refusals a run collects answer whether anything was said, never whether the module still mirrors the lowering it was handed — an item can leave with nothing recorded against it. [`Survivors`] keeps both answers: the refusals, for the reader, and every name no item came out for, for a caller that reassembles the lowered order and must tell an item this run deliberately dropped from one it lost.
 
 use {
     crate::{Attempted, Context, Error, GoalSite},
@@ -162,17 +160,15 @@ pub(super) struct Survived {
     pub(super) refusals: Vec<Error>,
     pub(super) obligations: Vec<Error>,
     pub(super) held: Vec<Holding>,
-    pub(super) dropped: BTreeSet<Global>,
 }
 
-/// The items elaborated so far, with the refusals and the broken erasure obligations recorded against their positions and the names of the items that did not survive.
+/// The items elaborated so far, with the refusals and the broken erasure obligations recorded against their positions.
 #[derive(Default)]
 pub(super) struct Survivors {
     kept: Vec<(ItemStamp, Item)>,
     refusals: Vec<(ItemStamp, Error)>,
     obligations: Vec<(ItemStamp, Error)>,
     held: Vec<Holding>,
-    dropped: BTreeSet<Global>,
 }
 
 impl Survivors {
@@ -181,14 +177,6 @@ impl Survivors {
         self.kept.push((stamp, item));
         self.obligations
             .extend(obligations.into_iter().map(|error| (stamp, error)));
-    }
-
-    /// Record that no item was produced for what `item` declares — it was withheld before elaborating, or refused.
-    ///
-    /// Kept beside the refusals because the two answer different questions. A refusal says something reported; this says the module no longer mirrors the lowering, which is what a caller reassembling the lowered order needs and cannot read off an absence.
-    pub(super) fn drop_item(&mut self, item: &Item) {
-        self.dropped
-            .extend(item.declared_names().into_iter().cloned());
     }
 
     /// Keep a declaration that wrote goals for their report. No item is produced for one that holds a goal: a unit that holds a goal is refused for the goal, whatever else it holds.
@@ -212,7 +200,7 @@ impl Survivors {
             .collect()
     }
 
-    /// The kept items, the refusals and the broken obligations, each in item order — the entry's refusal after every item's — with the declarations that wrote goals, whose reports are ordered where they are made, and every name an item that did not survive declared. Items elaborate when they are asked for, so the order they were kept in is not the module's.
+    /// The kept items, the refusals and the broken obligations, each in item order — the entry's refusal after every item's — with the declarations that wrote goals, whose reports are ordered where they are made. Items elaborate when they are asked for, so the order they were kept in is not the module's.
     pub(super) fn into_parts(mut self) -> Survived {
         self.kept.sort_by_key(|(stamp, _)| *stamp);
         self.refusals.sort_by_key(|(stamp, _)| *stamp);
@@ -227,7 +215,6 @@ impl Survivors {
                 .map(|(_, error)| error)
                 .collect(),
             held: self.held,
-            dropped: self.dropped,
         }
     }
 }

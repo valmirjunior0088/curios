@@ -3,16 +3,18 @@
 use {
     super::{granted, withheld},
     crate::{
-        Cache, DEFAULT_STEP_BUDGET, Fold, compile_unit, compile_unit_over, invalidated,
+        Cache, DEFAULT_STEP_BUDGET, Fold, compile_unit, compile_unit_over,
         tests::test_support::{assert_stored_alike, compile_with_units},
     },
     curios_core::{DefinitionKind, Global, Item, Module},
     curios_elab::{
-        Answered, Context, Established, Question, Recompile, Traces, elaborate_and_zonk_unit_over,
+        Context, Error, Established, Recompile, Recompiled, elaborate_and_zonk_unit_over,
     },
     curios_prelude::with_prelude,
     curios_std::std_directory,
-    curios_text::{Overlay, RootSource, SYNTAX, UnitSource, into_core_unit, into_core_unit_over},
+    curios_text::{
+        Overlay, PreparedText, RootSource, SYNTAX, UnitSource, into_core_unit, into_core_unit_over,
+    },
     curios_unit::{Predecessors, Unit},
     curios_utilities::{Qualifier, RootKind, test_support::Temporary},
     std::{
@@ -55,7 +57,7 @@ struct Edit {
     edit: fn(&str) -> String,
 }
 
-/// The two edits the standard library is measured over: a leaf, whose closure is itself, and a hub, the worst case by construction.
+/// The two edits the standard library is measured over: a leaf, which nothing reads, and a hub, which most of the library reaches.
 fn edits() -> [Edit; 2] {
     [
         Edit {
@@ -71,10 +73,36 @@ fn edits() -> [Edit; 2] {
     ]
 }
 
-/// What a question about the standard library costs after an edit to one declaration: the closure the edit reaches and the time each phase takes, for a leaf and for a hub. A measurement, so it reports rather than asserts, and its timings are the profile it was built under.
+/// `lowered`, the library's sources lowered over the archived unit `std`, elaborated over it: every declaration of `kept` is offered to the walk as one the lowering kept, and the walk keeps each whose trace stands.
+fn elaborated_over(
+    predecessors: Predecessors<'_>,
+    std: &Unit,
+    lowered: &PreparedText,
+    kept: &BTreeSet<Global>,
+) -> Result<Recompiled, Error> {
+    let established = Established::placed(&predecessors.placed()).keeping(std.core(), std.places());
+    let mut context = Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
+    context.set_imports(lowered.imports().clone());
+    context.set_broken(lowered.broken_names());
+
+    elaborate_and_zonk_unit_over(
+        &mut context,
+        &established,
+        Recompile {
+            baseline: std.core(),
+            places: std.places(),
+            traces: std.traces(),
+            lowered: kept,
+        },
+        lowered.core(),
+        lowered.minted(),
+    )
+}
+
+/// What a question about the standard library costs after an edit to one declaration: how many names are lowered again and how many elaborated again, and the time each phase takes, for a leaf and for a hub. A measurement, so it reports rather than asserts, and its timings are the profile it was built under.
 #[test]
-#[ignore = "measurement: lowers the standard library and recompiles it over the archive, reporting closure sizes and per-phase timings"]
-fn std_recompile_closure_census() {
+#[ignore = "measurement: lowers the standard library and recompiles it over the archive, reporting what is done again and per-phase timings"]
+fn std_recompile_census() {
     let directory = std_directory();
 
     with_prelude(|prelude| {
@@ -95,25 +123,34 @@ fn std_recompile_closure_census() {
             let lowered = into_core_unit_over(&unit, &predecessors.text(), &SYNTAX, std.text())
                 .expect("the edited library lowers");
             let lowered_in = start.elapsed();
+            let kept = lowered.kept_from(std.text());
             let start = Instant::now();
-            let closure = invalidated(std, &lowered);
-            let diffed_in = start.elapsed();
+            let elaborated = elaborated_over(predecessors, std, &lowered, &kept)
+                .unwrap_or_else(|error| panic!("the edited library elaborates: {error}"));
+            let elaborated_in = start.elapsed();
             let start = Instant::now();
             compile_unit_over(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit, std)
                 .expect("the edited library recompiles");
             let recompiled_in = start.elapsed();
 
+            let names = lowered
+                .core()
+                .items
+                .iter()
+                .flat_map(Item::declared_names)
+                .count();
             println!("{label}");
             println!(
-                "  closure     {:>6} names of {} items",
-                closure.len(),
-                std.core().items.len()
+                "  lowered     {:>6} names again of {names}",
+                names - kept.len()
+            );
+            println!(
+                "  elaborated  {:>6} names again of {names}",
+                names - elaborated.kept.len()
             );
             println!("  lower       {lowered_in:>10.1?}");
-            println!("  diff+close  {diffed_in:>10.1?}");
-            println!(
-                "  recompile   {recompiled_in:>10.1?}   (lower, diff, elaborate, judge, erase)"
-            );
+            println!("  elaborate   {elaborated_in:>10.1?}");
+            println!("  recompile   {recompiled_in:>10.1?}   (lower, elaborate, judge, erase)");
         }
     });
 }
@@ -209,6 +246,66 @@ fn std_recompile_reproduction() {
     });
 }
 
+/// Whether a declaration the prover's vocabulary comes to read is elaborated again with no lemma of the library on offer, as a whole compile elaborates it. `/std/Eq/sym`, a lemma of the vocabulary, is made to name `/std/Str/At/skip`, whose proofs the prover writes: compiled whole, `skip` is then asked for before the lemmas are offered. Compiled over the archive, `skip`'s text stands and its trace says the lemmas were on offer, so the walk elaborates it again where it now stands. The two compiles answer alike: with one stored unit, or with the same reports. A measurement, since each compile is the library's; it asserts, the two answers being one claim.
+#[test]
+#[ignore = "measurement: makes a lemma of the prover's vocabulary read a declaration, compiles the standard library whole and over the archive, and compares the two answers"]
+fn std_vocabulary_reach_reproduction() {
+    let directory = std_directory();
+
+    with_prelude(|prelude| {
+        let [sys, std] = prelude else {
+            panic!("the prelude has two roots")
+        };
+        let roots = [*sys];
+        let predecessors = Predecessors::over(&roots);
+        let path = directory.join("Eq.crs");
+        let written = fs::read_to_string(&path).expect("an authored source");
+        let text = written.replacen(
+            "    match p | refl() => Eq/refl() end;",
+            "    let _ = /std/Str/At/skip;\n    match p | refl() => Eq/refl() end;",
+            1,
+        );
+        assert_ne!(text, written, "the lemma is written as the edit expects");
+        let source = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
+        let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
+
+        let whole = compile_unit(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit);
+        let over = compile_unit_over(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit, std);
+
+        println!("\n=== /std with a lemma of the vocabulary reading /std/Str/At/skip ===");
+        match (whole, over) {
+            (Ok(whole), Ok(over)) => {
+                println!("  compiles either way");
+                assert_stored_alike(&whole, &over);
+            }
+            (Err(whole), Err(over)) => {
+                let (whole, over) = (String::from(whole), String::from(over));
+                println!(
+                    "  refused either way: {}",
+                    whole.lines().next().unwrap_or_default()
+                );
+                assert_eq!(
+                    whole, over,
+                    "a compile over the archive refuses the library in other words than a whole compile"
+                );
+            }
+            (whole, over) => panic!(
+                "a whole compile {} and a compile over the archive {}",
+                if whole.is_ok() {
+                    "compiles"
+                } else {
+                    "is refused"
+                },
+                if over.is_ok() {
+                    "compiles"
+                } else {
+                    "is refused"
+                },
+            ),
+        }
+    });
+}
+
 /// The kind an item was introduced as: a group's is its first member's.
 fn introduced(item: &Item) -> &DefinitionKind {
     match item {
@@ -243,31 +340,6 @@ fn declarations(module: &Module) -> Vec<BTreeSet<Global>> {
     }
 
     declarations
-}
-
-/// The names of every witness of `module` that reaches one of `names` through any number of items. A replayed witness registers by reducing its signature, which needs every type former and concept that signature reaches elaborated before it, so a former is replayed with the witnesses that reach it.
-fn witnesses_reaching(
-    module: &Module,
-    dependents: &BTreeMap<Global, Vec<usize>>,
-    names: &BTreeSet<Global>,
-) -> BTreeSet<Global> {
-    let mut reached = names.clone();
-    let mut pending = names.iter().copied().collect::<Vec<_>>();
-    let mut witnesses = BTreeSet::new();
-    while let Some(name) = pending.pop() {
-        for &index in dependents.get(&name).map_or(&[][..], Vec::as_slice) {
-            for declared in module.items[index].declared_names() {
-                if reached.insert(*declared) {
-                    pending.push(*declared);
-                    if module.witnesses.contains(declared) {
-                        witnesses.insert(*declared);
-                    }
-                }
-            }
-        }
-    }
-
-    witnesses
 }
 
 /// What differs between the items of `whole` declaring `names` and `replayed`'s, each as the definition and the part that differs.
@@ -327,9 +399,9 @@ fn differences(whole: &Module, replayed: &Module, names: &BTreeSet<Global>) -> V
 /// How many unrelated definitions the replay elaborates ahead of a declaration, one pass each.
 const PADDINGS: [usize; 2] = [0, 1];
 
-/// What each declaration of the standard library elaborates to alone: the declaration as its sources lower it, against the archived unit holding every other, compared with what the archive holds for it — and again with unrelated authored definitions elaborated ahead of it, which nothing it reads distinguishes. A declaration is a function of what it reads exactly when this reports nothing (`documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md`). A measurement, so it reports rather than asserts.
+/// What each declaration of the standard library elaborates to where it alone is elaborated again: the library as its sources lower it, compiled over the archived unit with every declaration but one offered as kept, so the walk elaborates that one and keeps the others by their traces. The declaration is compared with what the archive holds for it, and so is what it asked; what else the walk elaborated again is counted. And again with unrelated authored definitions elaborated beside it, which nothing it reads distinguishes. A declaration is a function of what it reads exactly when this reports nothing (`documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md`). A measurement, so it reports rather than asserts.
 #[test]
-#[ignore = "measurement: lowers the standard library and elaborates each of its declarations alone over the archive, reporting the ones that come out different"]
+#[ignore = "measurement: lowers the standard library and compiles it over the archive once for each of its declarations, that declaration alone elaborated again, reporting the ones that come out different"]
 fn std_replay_census() {
     with_prelude(|prelude| {
         let [sys, std] = prelude else {
@@ -343,12 +415,6 @@ fn std_replay_census() {
             into_core_unit(&unit, &predecessors.text(), &SYNTAX).expect("the library lowers");
         let (whole, lowered_core) = (std.core(), lowered.core());
 
-        let mut dependents: BTreeMap<Global, Vec<usize>> = BTreeMap::new();
-        for (index, item) in whole.items.iter().enumerate() {
-            for name in whole.reaches(item) {
-                dependents.entry(name).or_default().push(index);
-            }
-        }
         let position = lowered_core
             .items
             .iter()
@@ -359,11 +425,12 @@ fn std_replay_census() {
                     .map(move |name| (*name, index))
             })
             .collect::<BTreeMap<_, _>>();
+        let every = position.keys().copied().collect::<BTreeSet<_>>();
 
-        println!("\n=== replaying each declaration of /std alone over the archive ===");
+        println!("\n=== elaborating each declaration of /std again, alone, over the archive ===");
         let declarations = declarations(lowered_core);
         for padding in PADDINGS {
-            let (mut refused, mut differing) = (0, 0);
+            let (mut refused, mut differing, mut retraced, mut beside) = (0, 0, 0, 0);
             for names in &declarations {
                 let first = names
                     .iter()
@@ -384,17 +451,10 @@ fn std_replay_census() {
                         )
                     })
                     .expect("a declaration holds the item it is written as");
-                let mut closure = names.clone();
-                if matches!(
-                    introduced(own),
-                    DefinitionKind::InductiveType
-                        | DefinitionKind::StructType
-                        | DefinitionKind::ConceptType
-                ) {
-                    closure.extend(witnesses_reaching(whole, &dependents, names));
-                }
+                let written = *own.declared_names()[0];
+                let mut again = names.clone();
                 let reach = lowered_core.reaches(own);
-                closure.extend(
+                again.extend(
                     lowered_core.items[..first]
                         .iter()
                         .rev()
@@ -410,205 +470,44 @@ fn std_replay_census() {
                         .take(padding),
                 );
 
-                let changed = lowered_core.restricted(|name| closure.contains(name));
-                let established = Established::placed(&predecessors.placed()).keeping(
-                    whole,
-                    std.places(),
-                    &closure,
-                );
-                let mut context = Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
-                context.set_imports(lowered.imports().clone());
-                context.set_broken(lowered.broken_names());
-                let replayed = elaborate_and_zonk_unit_over(
-                    &mut context,
-                    &established,
-                    Recompile {
-                        baseline: whole,
-                        traces: std.traces(),
-                        redone: &closure,
-                        closure: &changed,
-                        lowered: lowered_core,
-                    },
-                    lowered.minted(),
-                );
-                match replayed {
+                let kept = every.difference(&again).copied().collect::<BTreeSet<_>>();
+                match elaborated_over(predecessors, std, &lowered, &kept) {
                     Err(error) => {
                         refused += 1;
                         let refusal = error.to_string().replace('\n', " | ");
                         println!(
-                            "  after {padding}: {} is refused: {}",
+                            "  beside {padding}: {} is refused: {}",
                             own.describe(),
                             refusal.chars().take(600).collect::<String>()
                         );
                     }
-                    Ok((replayed, _)) => {
-                        let differences = differences(whole, &replayed, names);
+                    Ok(replayed) => {
+                        let differences = differences(whole, &replayed.module, names);
                         differing += usize::from(!differences.is_empty());
                         for difference in differences {
-                            println!("  after {padding}: {difference}");
+                            println!("  beside {padding}: {difference}");
+                        }
+                        if replayed.traces.of(&written) != std.traces().of(&written) {
+                            retraced += 1;
+                            println!("  beside {padding}: {}: what it asked", own.describe());
+                        }
+                        // What the walk elaborated again beyond what it was handed: a declaration that asked a part which came out another way.
+                        let others = every.len() - replayed.kept.len() - again.len();
+                        if others != 0 {
+                            beside += 1;
+                            println!(
+                                "  beside {padding}: {}: {others} other names elaborated again",
+                                own.describe()
+                            );
                         }
                     }
                 }
             }
             println!(
-                "after {padding} unrelated definitions: {differing} of {} declarations differ, {refused} are refused",
+                "beside {padding} unrelated definitions: {differing} of {} declarations differ, {refused} are refused, {retraced} ask otherwise, {beside} take another declaration with them",
                 declarations.len()
             );
         }
-    });
-}
-
-/// Whether each declaration of the standard library reads what its trace names and nothing else: the declaration as its sources lower it, elaborated alone against the archived unit answering for the names the declaration's trace holds and for no other of the library's, compared with what the archive holds for it, and its trace with the one the archive holds. A read no door noted meets a name nothing answers for, so its declaration is refused or comes out different; one a door noted that the archive's trace lacks shows in the trace. A measurement, so it reports rather than asserts.
-#[test]
-#[ignore = "measurement: lowers the standard library and elaborates each of its declarations alone over the archive, which answers for the names the declaration's trace holds alone, reporting the ones that come out different"]
-fn std_trace_census() {
-    with_prelude(|prelude| {
-        let [sys, std] = prelude else {
-            panic!("the prelude has two roots")
-        };
-        let roots = [*sys];
-        let predecessors = Predecessors::over(&roots);
-        let source = std_from_its_tree();
-        let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
-        let lowered =
-            into_core_unit(&unit, &predecessors.text(), &SYNTAX).expect("the library lowers");
-        let (whole, lowered_core) = (std.core(), lowered.core());
-
-        let mut dependents: BTreeMap<Global, Vec<usize>> = BTreeMap::new();
-        for (index, item) in whole.items.iter().enumerate() {
-            for name in whole.reaches(item) {
-                dependents.entry(name).or_default().push(index);
-            }
-        }
-        let position = lowered_core
-            .items
-            .iter()
-            .enumerate()
-            .flat_map(|(index, item)| {
-                item.declared_names()
-                    .into_iter()
-                    .map(move |name| (*name, index))
-            })
-            .collect::<BTreeMap<_, _>>();
-        let every = position.keys().copied().collect::<BTreeSet<_>>();
-
-        println!("\n=== replaying each declaration of /std alone over what its trace names ===");
-        let declarations = declarations(lowered_core);
-        let (mut refused, mut differing, mut retraced, mut asked) = (0, 0, 0, 0);
-        for names in &declarations {
-            let own = names
-                .iter()
-                .filter_map(|name| position.get(name))
-                .map(|place| &lowered_core.items[*place])
-                .find(|item| {
-                    !matches!(
-                        introduced(item),
-                        DefinitionKind::InductiveConstructor { .. }
-                            | DefinitionKind::ConceptMethod { .. }
-                    )
-                })
-                .expect("a declaration holds the item it is written as");
-            let written = *own.declared_names()[0];
-            let mut closure = names.clone();
-            if matches!(
-                introduced(own),
-                DefinitionKind::InductiveType
-                    | DefinitionKind::StructType
-                    | DefinitionKind::ConceptType
-            ) {
-                closure.extend(witnesses_reaching(whole, &dependents, names));
-            }
-
-            // The archive answers for the names the traces of the declarations elaborated here hold, and for no other of the library's.
-            let mut read = BTreeSet::new();
-            for trace in closure.iter().filter_map(|name| std.traces().of(name)) {
-                for (question, answered) in trace.asked() {
-                    read.extend(question.subject().copied());
-                    if let Answered::Witness(Some(found)) = answered {
-                        read.insert(*found);
-                    }
-                    // Whether a witness is declared at a key is answered by the witnesses declared there, which the question does not name.
-                    if let Question::WitnessDeclared(concept, key) = question {
-                        read.extend(whole.witnesses.iter().copied().filter(|name| {
-                            matches!(name, Global::Witness(id) if id.spelled() == Some((*concept, *key)))
-                        }));
-                    }
-                }
-            }
-            asked += std.traces().of(&written).map_or(0, |trace| trace.len());
-            let unanswered = every
-                .difference(&read)
-                .chain(&closure)
-                .copied()
-                .collect::<BTreeSet<_>>();
-
-            let changed = lowered_core.restricted(|name| closure.contains(name));
-            let established = Established::placed(&predecessors.placed()).keeping(
-                whole,
-                std.places(),
-                &unanswered,
-            );
-            let mut context = Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
-            context.set_imports(lowered.imports().clone());
-            context.set_broken(lowered.broken_names());
-            let replayed = elaborate_and_zonk_unit_over(
-                &mut context,
-                &established,
-                Recompile {
-                    baseline: whole,
-                    traces: std.traces(),
-                    redone: &closure,
-                    closure: &changed,
-                    lowered: lowered_core,
-                },
-                lowered.minted(),
-            );
-            match replayed {
-                Err(error) => {
-                    refused += 1;
-                    let refusal = error.to_string().replace('\n', " | ");
-                    println!(
-                        "  {} is refused: {}",
-                        own.describe(),
-                        refusal.chars().take(600).collect::<String>()
-                    );
-                }
-                Ok((replayed, traces)) => {
-                    let differences = differences(whole, &replayed, names);
-                    differing += usize::from(!differences.is_empty());
-                    for difference in differences {
-                        println!("  {difference}");
-                    }
-                    let asks = |traces: &Traces| {
-                        traces
-                            .of(&written)
-                            .map_or(&[][..], |trace| trace.asked())
-                            .to_vec()
-                    };
-                    let (now, then) = (asks(&traces), asks(std.traces()));
-                    if now != then {
-                        retraced += 1;
-                        let apart = now
-                            .iter()
-                            .zip(&then)
-                            .position(|(now, then)| now != then)
-                            .unwrap_or(now.len().min(then.len()));
-                        println!(
-                            "  {}: asks {} questions for the archive's {}, apart from the {apart}th: {:?} for {:?}",
-                            own.describe(),
-                            now.len(),
-                            then.len(),
-                            now.get(apart),
-                            then.get(apart),
-                        );
-                    }
-                }
-            }
-        }
-        println!(
-            "{differing} of {} declarations differ, {refused} are refused, {retraced} ask otherwise; the library's traces hold {asked} questions",
-            declarations.len()
-        );
     });
 }
 

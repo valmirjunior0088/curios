@@ -2,7 +2,7 @@
 //!
 //! **One trace for each declaration, under the name it is written as.** A declaration is an item with every item the lowering generated from it, attempted together in one state, so what the attempt that stood asked is the declaration's. It is filed under the first name its written item declares, which a later lowering of the same text gives it again.
 //!
-//! **Held by pointer.** A unit compiled over a baseline keeps the trace of every declaration it keeps, and that is a copy of a handle.
+//! **Held by pointer.** A unit compiled over a baseline keeps the trace of every declaration it keeps, and that is a copy of a handle ([`Traces::share`]).
 //!
 //! **Stored with each name written once.** A trace names the same few declarations its neighbours do: the library's traces hold some forty names each, drawn from the few thousand the library and its scope declare. A name is archived as its segments, and read back through the process's table at an allocation a segment, so the stored form holds a table of the names and of the witness keys, each once, and a question holds its place there.
 
@@ -32,9 +32,19 @@ impl Traces {
         self.declarations.insert(name, Rc::new(trace));
     }
 
+    /// File `trace` as what the declaration written as `name` asked: another unit's trace of it, held where that unit holds it.
+    pub(crate) fn share(&mut self, name: Global, trace: Rc<Trace<Question, Answered>>) {
+        self.declarations.insert(name, trace);
+    }
+
     /// What the declaration written as `name` asked, where the unit holds one.
     pub fn of(&self, name: &Global) -> Option<&Trace<Question, Answered>> {
-        self.declarations.get(name).map(Rc::as_ref)
+        self.held(name).map(Rc::as_ref)
+    }
+
+    /// The trace of the declaration written as `name`, as the unit holds it.
+    pub(crate) fn held(&self, name: &Global) -> Option<&Rc<Trace<Question, Answered>>> {
+        self.declarations.get(name)
     }
 
     /// The declarations holding a trace, by the name each is written as, with how many questions each asked.
@@ -42,20 +52,6 @@ impl Traces {
         self.declarations
             .iter()
             .map(|(name, trace)| (name, trace.len()))
-    }
-
-    /// These traces with `made` over them: the trace of every declaration `kept` holds of, as it is held here, and the ones `made` holds.
-    pub(crate) fn kept(&self, kept: impl Fn(&Global) -> bool, made: Traces) -> Traces {
-        let mut declarations = made.declarations;
-        for (name, trace) in &self.declarations {
-            if kept(name) {
-                declarations
-                    .entry(*name)
-                    .or_insert_with(|| Rc::clone(trace));
-            }
-        }
-
-        Traces { declarations }
     }
 }
 

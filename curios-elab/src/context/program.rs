@@ -196,6 +196,14 @@ impl<'s> Program<'s> {
         })
     }
 
+    /// The name of the witness registered under `(concept, key)`, the unit's own or the one a unit in scope declares there: [`Program::witness`] without the witness made.
+    pub(crate) fn witness_name(&self, concept: &Global, key: &WitnessKey) -> Option<Global> {
+        match self.witness_table.get(&(*concept, *key)) {
+            Some(witness) => Some(witness.name),
+            None => self.scope?.witness(concept, key),
+        }
+    }
+
     /// Whether a witness is registered under `(concept, key)`, the unit's own or a unit's in scope.
     pub(crate) fn witness_registered(&self, concept: &Global, key: &WitnessKey) -> bool {
         self.witness_table.contains_key(&(*concept, *key))

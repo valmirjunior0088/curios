@@ -1,4 +1,4 @@
-//! One unit compiled over a baseline: what the closure covers, what is reused untouched, and that the result agrees with a whole compile of the same text — its lints included, which a reused item's credits are carried into.
+//! One unit compiled over a baseline: what is elaborated again, what is reused untouched, and that the result agrees with a whole compile of the same text — its lints included, which a reused item's credits are carried into.
 //!
 //! Reuse is observed by allocation identity — a reused item carries the very terms the baseline holds, which no elaboration could produce twice — and agreement by the differential predicate in `test_support`. Resource verdicts are deliberately outside the predicate: a reused declaration stands on the verdict its baseline reached, under whatever budget that was, as `documentation/design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md` states.
 
@@ -39,8 +39,9 @@ fn an_unchanged_text_reuses_every_item() {
     assert_stored_alike(&baseline, &again);
 }
 
+/// An edited body is elaborated again, and a declaration that read its signature alone is reused: what `twice` asked of `double` is answered as it was.
 #[test]
-fn an_edited_body_recompiles_the_item_and_its_dependents_and_agrees_with_the_whole_compile() {
+fn an_edited_body_is_elaborated_again_and_what_read_its_signature_alone_is_reused() {
     let edited = BASE.replace("n + n", "n + n + 0");
     let baseline = unit_of(BASE);
 
@@ -48,17 +49,45 @@ fn an_edited_body_recompiles_the_item_and_its_dependents_and_agrees_with_the_who
 
     assert!(!reuses_body(&baseline, &incremental, "double"));
     assert!(
-        !reuses_body(&baseline, &incremental, "twice"),
-        "a dependent of a changed item is re-elaborated"
+        reuses_body(&baseline, &incremental, "twice"),
+        "a declaration that read the signature alone was elaborated again"
     );
     assert!(reuses_body(&baseline, &incremental, "unrelated"));
     assert_modules_agree(unit_of(&edited).core(), incremental.core());
     assert_stored_alike(&unit_of(&edited), &incremental);
 }
 
-/// A renamed parameter is a change, to its item and to every item that reaches it: a binder's name is in what is stored, the item's own and a dependent's that was handed its signature.
+/// An edited body reaches the declaration that unfolded it: `two` is checked by computing `double(1)`, so what it asked of `double`'s body is answered another way, and it is elaborated again. `four` reads `two` by its signature, which came out as it was, and is reused: the edit stops where what it changed was read.
+#[test]
+fn an_edited_body_reaches_the_declaration_that_unfolded_it_and_stops_there() {
+    let base = "use /std/{Nat, Eq};
+
+pub let double(n: Nat) -> Nat = n + n;
+
+pub let two: Eq()(double(1), 2) = Eq/refl();
+
+pub let four: Eq()(double(1), 2) = two;
+
+pub let unrelated: Nat = 7;
+";
+    let edited = base.replace("n + n", "n + n + 0");
+    let baseline = unit_of(base);
+
+    let incremental = recompile_over(&edited, &baseline).unwrap();
+
+    assert!(!reuses_body(&baseline, &incremental, "double"));
+    assert!(
+        !reuses_body(&baseline, &incremental, "two"),
+        "a declaration that unfolded the edited body was reused"
+    );
+    assert!(reuses_body(&baseline, &incremental, "unrelated"));
+    assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert_stored_alike(&unit_of(&edited), &incremental);
+}
+
+/// A renamed parameter is a change, to its item and to every item that read its signature: a binder's name is in what is stored, the item's own and a dependent's that was handed its signature.
 ///
-/// Mutation-checked: with the diff reading terms up to their binders' names, nothing is elaborated again and the unit is stored under the old ones.
+/// Mutation-checked: with a part compared up to its binders' names, the dependents are reused and the unit is stored under the old ones.
 #[test]
 fn a_renamed_parameter_is_elaborated_again_with_its_dependents() {
     let edited = BASE.replace(
@@ -134,7 +163,7 @@ fn a_renamed_item_leaves_no_entry_under_its_old_name() {
     );
 }
 
-/// A moved declaration changes the lowering's order and nothing about any item, so everything is reused and only reassembled.
+/// A moved declaration changes the lowering's order and nothing about any item, so everything is reused.
 #[test]
 fn an_item_moved_past_another_reuses_every_item() {
     let moved = "use /std/{Nat};
@@ -195,7 +224,7 @@ pub let measured: Nat = Measured/measure(2);
     assert_stored_alike(&unit_of(&inserted), &incremental);
 }
 
-/// A lowering numbers its universe metavariables and holes in lowering order, so an item inserted ahead renumbers every polymorphic item after it; the diff identifies them by position and leaves those items reused.
+/// A lowering numbers a declaration's universe metavariables and holes from zero, so an item inserted ahead renumbers none after it: their lowerings are kept, what each asked stands, and they are reused.
 #[test]
 fn inserting_a_polymorphic_item_leaves_the_items_after_it_unchanged() {
     let base = "use /std/{Nat};
@@ -225,7 +254,7 @@ pub let twice: Nat = apply(double, 2);
     assert_stored_alike(&unit_of(&inserted), &incremental);
 }
 
-/// A struct literal names its declaration in the registry rather than the variable graph, so an item building one depends on the declaration through the reach edge `mentions` cannot see — and a changed registry entry marks its declaring item changed.
+/// A struct literal names its declaration in the registry rather than by a variable, so an item building one asked for the declaration's entry, and is elaborated again where the entry came out another way.
 #[test]
 fn an_edited_struct_recompiles_the_items_that_construct_it() {
     let base = "use /std/{Nat};
@@ -246,7 +275,7 @@ pub let unrelated: Nat = 7;
     assert!(!reuses_body(&baseline, &incremental, "unbox"));
     assert!(
         !reuses_body(&baseline, &incremental, "value_of_boxed"),
-        "an item constructing the struct is in the closure"
+        "an item constructing the struct was reused"
     );
     assert!(reuses_body(&baseline, &incremental, "unrelated"));
     assert_modules_agree(unit_of(&sealed).core(), incremental.core());
@@ -272,7 +301,7 @@ pub let unrelated: Nat = 7;
 
     assert!(
         !reuses_body(&baseline, &incremental, "n_of"),
-        "an item reading the struct is in the closure"
+        "an item reading the struct was reused"
     );
     assert!(reuses_body(&baseline, &incremental, "unrelated"));
     assert_modules_agree(unit_of(&hidden).core(), incremental.core());
@@ -313,9 +342,9 @@ pub let unrelated: Nat = 7;
     assert_stored_alike(&unit_of(&pinned), &incremental);
 }
 
-/// A baseline from unrelated text invalidates everything, and the recompile is then a whole compile by another route.
+/// A baseline from unrelated text keeps nothing, and the recompile is then a whole compile by another route.
 #[test]
-fn an_all_changed_closure_equals_the_whole_compile() {
+fn a_baseline_of_another_text_keeps_nothing_and_equals_the_whole_compile() {
     let baseline = unit_of("use /std/{Nat};\n\npub let other: Nat = 1;\n");
 
     let incremental = recompile_over(BASE, &baseline).unwrap();
@@ -325,9 +354,7 @@ fn an_all_changed_closure_equals_the_whole_compile() {
     assert_stored_alike(&unit_of(BASE), &incremental);
 }
 
-/// An item the parser could not read withholds its dependents, which report nothing and leave no refusal behind them — so a recompile reassembling the lowered order has items in it that the closure's elaboration never produced. It leaves them out, exactly as a whole compile of the same text does, and answers with the parse error either way.
-///
-/// This is where the two features cross: recovery lets a withheld item fall out of a whole unit's module, and the recompile reassembles a run that either kept everything or refused something.
+/// An item the parser could not read withholds its dependents, which report nothing and leave no refusal behind them — so a unit compiled over a baseline holds declarations its walk made no item for. It leaves them out, exactly as a whole compile of the same text does, and answers with the parse error either way.
 #[test]
 fn a_broken_item_withholds_its_dependents_and_reports_as_the_whole_compile_does() {
     let baseline = unit_of(BASE);
@@ -393,7 +420,7 @@ pub let above(i: Nat, q: Holds(limit < i)) -> Holds(limit <= i) = True/proved();
 
 /// A unit's credited binders are stored alike whichever pass credited them.
 ///
-/// A recompile credits the closure's binders and then the ones the baseline's proofs read in what it reused, where a whole compile credits in reading order: `above` is elaborated again and `below`, over it in the text, is reused, so the two passes run in the other order than the text. Mutation-checked: kept as a list, the two units' text parts differ.
+/// A recompile credits the binders of what it elaborates again and then the ones the baseline's proofs read in what it reused, where a whole compile credits in reading order: `above` is elaborated again and `below`, over it in the text, is reused, so the two passes run in the other order than the text. Mutation-checked: kept as a list, the two units' text parts differ.
 #[test]
 fn credited_binders_are_stored_alike_whichever_pass_credited_them() {
     let baseline = unit_of(CREDITED_TWICE);
@@ -488,22 +515,57 @@ fn a_kept_declaration_is_placed_where_an_edit_above_moved_it() {
     );
 }
 
-/// A kept declaration whose own text changed without changing what it lowers to is placed at the declaration: the offsets its terms hold lay on the earlier text, and are not read against another.
-///
-/// Mutation-checked against the stamp: read by their offsets alone, the positions land on other words of the respaced text.
+/// A declaration whose own text changed is elaborated again, whatever it lowers to, so its terms are placed in the text it now has; and what read it is reused, the declaration having come out as it was.
 #[test]
-fn a_kept_declaration_whose_text_changed_is_placed_at_the_declaration() {
+fn a_declaration_whose_text_changed_is_elaborated_again_and_placed_in_its_new_text() {
     let baseline = unit_of(BASE);
     let edited = BASE.replace("= n + n;", "=\n    n + n;");
 
     let incremental = recompile_over(&edited, &baseline).unwrap();
 
-    assert!(reuses_body(&baseline, &incremental, "double"));
-    assert_eq!(
-        placed(&incremental, "double"),
-        vec![(3, "pub let double(n: Nat) -> Nat =\n    n + n;".to_string())],
+    assert!(!reuses_body(&baseline, &incremental, "double"));
+    assert!(
+        reuses_body(&baseline, &incremental, "twice"),
+        "a respaced declaration moved the declaration that reads it"
+    );
+    let placed = placed(&incremental, "double");
+    assert!(
+        placed
+            .iter()
+            .any(|(line, text)| (*line, text.as_str()) == (4, "n + n")),
+        "the body is placed on its new line: {placed:?}"
     );
     assert_modules_agree(unit_of(&edited).core(), incremental.core());
+    assert_stored_alike(&unit_of(&edited), &incremental);
+}
+
+/// A witness declared where none stood reaches the declaration that asked: `boxed` checks a call at `Box(Nat)`, so it asked whether `Box` is a monad's head, to embed the call where it is, and was told no. It is elaborated again once the unit declares `Monad(Box)`, and a declaration that never asked is reused.
+#[test]
+fn a_witness_declared_where_none_stood_reaches_the_declaration_that_asked() {
+    let base = "use /std/{Monad, Nat};
+
+pub struct Box(A: Type): pub Type { value: A }
+
+pub let make(n: Nat) -> Box(Nat) = Box { value = n };
+
+pub let boxed: Box(Nat) = make(1);
+
+pub let unrelated: Nat = 7;
+";
+    let witnessed = format!(
+        "{base}\nsatisfy Monad(Box) {{ pure(@_, a) = Box {{ value = a }}, bind(@_, @_, m, f) = f(m.value) }}\n"
+    );
+    let baseline = unit_of(base);
+
+    let incremental = recompile_over(&witnessed, &baseline).unwrap();
+
+    assert!(
+        !reuses_body(&baseline, &incremental, "boxed"),
+        "a declaration told no witness stood at a key was reused once one did"
+    );
+    assert!(reuses_body(&baseline, &incremental, "unrelated"));
+    assert_modules_agree(unit_of(&witnessed).core(), incremental.core());
+    assert_stored_alike(&unit_of(&witnessed), &incremental);
 }
 
 /// Two modules each declaring `x`, a declaration reading the one a `use` above it brings in, and one that reads neither.

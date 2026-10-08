@@ -1,7 +1,6 @@
 //! What one run reports when an item is refused: every independent refusal in item order, nothing from an item that reaches a refused one, and a context with nothing of the refused item left in it — and what finalization reads off a declaration's value.
 
 use {
-    super::{Keeping, vocabulary_reach},
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
@@ -236,77 +235,4 @@ fn a_refused_item_leaves_no_binding_parked_work_need_or_constraint_behind() {
     assert_eq!(context.parked_len(), 0);
     assert!(context.take_needs().is_empty());
     assert_eq!(context.universes().constraint_count(), 0);
-}
-
-/// A lemma of the prover's vocabulary, as the registry spells it.
-fn lemma() -> Global {
-    Global::Authored(SYNTAX.entailment.sym.qualifier())
-}
-
-/// The names of a unit, each at the place it is written.
-fn written(names: &[Global]) -> BTreeMap<Global, usize> {
-    names
-        .iter()
-        .enumerate()
-        .map(|(place, name)| (*name, place))
-        .collect()
-}
-
-/// A baseline holding the lemma, which reads `between`, which reads `read`.
-fn baseline_reading_through() -> Module {
-    module(vec![
-        Item::Let(Definition {
-            name: lemma(),
-            kind: DefinitionKind::Authored,
-            universe_context: UniverseContext::empty(),
-            island: Qualifier::empty(),
-            totality: Totality::default(),
-            variances: Vec::new(),
-            type_: nat(),
-            body: mention("between"),
-        }),
-        let_item("between", nat(), mention("read")),
-    ])
-}
-
-/// What the prover's vocabulary reads through the items a recompile reuses is asked for with it: nothing asks for a reused item, so the declarations it reads would otherwise be elaborated with the unit's lemmas on offer, where a whole compile elaborates them with none.
-///
-/// Mutation-checked against the walk through the baseline's items: stopped at the vocabulary's own names, `between` and `read` are not reached.
-#[test]
-fn the_vocabulary_reaches_what_it_reads_through_a_baselines_items() {
-    let baseline = baseline_reading_through();
-    let order = written(&[
-        lemma(),
-        nominal("between"),
-        nominal("read"),
-        nominal("apart"),
-    ]);
-
-    // A recompile that elaborates none of the baseline again keeps all of it.
-    let kept = Keeping {
-        baseline: &baseline,
-        redone: &BTreeSet::new(),
-    };
-
-    assert_eq!(
-        vocabulary_reach(&context(), Some(kept), &order),
-        BTreeSet::from([lemma(), nominal("between"), nominal("read")]),
-    );
-}
-
-/// A unit that declares none of the vocabulary asks for nothing first, whatever it reuses.
-#[test]
-fn a_unit_declaring_none_of_the_vocabulary_asks_for_nothing_first() {
-    let reused = baseline_reading_through();
-    let order = written(&[nominal("read"), nominal("apart")]);
-
-    let kept = Keeping {
-        baseline: &reused,
-        redone: &BTreeSet::new(),
-    };
-
-    assert_eq!(
-        vocabulary_reach(&context(), Some(kept), &order),
-        BTreeSet::new(),
-    );
 }

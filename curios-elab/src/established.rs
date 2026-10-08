@@ -4,7 +4,7 @@
 //!
 //! **Nothing of a scope is brought in.** A context is handed the scope and reads through to it where its own stores miss, so what a compile costs of its scope is what its declarations read: no definition is defined again, no registry entry cloned, no witness registered again by reducing a signature its own unit already keyed. A unit in scope answers for its names by the places its own unit keeps for it (`curios_core::Places`), made once for as long as the unit is held.
 //!
-//! **A baseline is one more layer.** A unit compiled over a baseline reads the declarations it keeps where the baseline holds them, above its scope and beneath its own stores, and the layer answers for none of the names being elaborated again ([`Established::keeping`]).
+//! **A baseline is one more layer.** A unit compiled over a baseline reads the declarations it keeps where the baseline holds them, above its scope and beneath its own stores. Which it keeps is decided as its declarations are asked for, so the layer answers for none of them at first and for each from where the walk keeps it ([`Established::keeping`], [`Established::keep`]).
 //!
 //! **A witness in scope is found by its name**, which states its concept and its key (`curios_core::WitnessId`): a unit's witnesses are an ordered set of names, so the witnesses at a concept and a key are the names from there on.
 
@@ -15,7 +15,7 @@ use {
         StructDecl, WitnessId, WitnessKey,
     },
     curios_utilities::Qualifier,
-    std::collections::{BTreeSet, HashMap},
+    std::{cell::RefCell, collections::HashMap},
 };
 
 /// The places of one unit's names: its unit's own, or made here for a module nothing keeps them with.
@@ -30,8 +30,8 @@ enum Placed<'a> {
 struct Standing<'a> {
     module: &'a Module,
     places: Placed<'a>,
-    /// The names this unit does not answer for: a baseline's declarations that are being elaborated again. `None` for a unit in scope, which answers for every name it holds.
-    redone: Option<&'a BTreeSet<Global>>,
+    /// Which of its items this unit answers for, by each one's place among them: the items of a baseline that a walk has kept so far. `None` for a unit in scope, which answers for every name it holds.
+    kept: Option<RefCell<Vec<bool>>>,
 }
 
 impl<'a> Standing<'a> {
@@ -44,7 +44,20 @@ impl<'a> Standing<'a> {
 
     /// Whether this unit answers for `name`, where it holds it.
     fn answers(&self, name: &Global) -> bool {
-        !self.redone.is_some_and(|redone| redone.contains(name))
+        let Some(kept) = &self.kept else {
+            return true;
+        };
+
+        self.places()
+            .place(name)
+            .is_some_and(|place| kept.borrow()[place.item()])
+    }
+
+    /// Answer for the item declaring `name` from here on.
+    fn keep(&self, name: &Global) {
+        if let (Some(kept), Some(place)) = (&self.kept, self.places().place(name)) {
+            kept.borrow_mut()[place.item()] = true;
+        }
     }
 
     /// The group the item at `item` is.
@@ -202,7 +215,7 @@ impl<'a> Established<'a> {
                 .map(|module| Standing {
                     module,
                     places: Placed::Made(Places::of(module)),
-                    redone: None,
+                    kept: None,
                 })
                 .collect(),
             modules: modules.to_vec(),
@@ -217,27 +230,31 @@ impl<'a> Established<'a> {
                 .map(|(module, places)| Standing {
                     module,
                     places: Placed::Kept(places),
-                    redone: None,
+                    kept: None,
                 })
                 .collect(),
             modules: units.iter().map(|(module, _)| *module).collect(),
         }
     }
 
-    /// This scope with `baseline` above it: the unit being compiled, as an earlier text of it elaborated, answering for every declaration it holds but those `redone` names, which are elaborated again. Nothing of it is brought in: a kept declaration is read where the baseline holds it, as a scope's is.
-    pub fn keeping(
-        mut self,
-        baseline: &'a Module,
-        places: &'a Places,
-        redone: &'a BTreeSet<Global>,
-    ) -> Self {
+    /// This scope with `baseline` above it: the unit being compiled, as an earlier text of it elaborated, answering for the declarations a walk keeps of it and for none until it keeps one (`Established::keep`). Nothing of it is brought in: a kept declaration is read where the baseline holds it, as a scope's is.
+    pub fn keeping(mut self, baseline: &'a Module, places: &'a Places) -> Self {
         self.units.push(Standing {
             module: baseline,
             places: Placed::Kept(places),
-            redone: Some(redone),
+            kept: Some(RefCell::new(vec![false; baseline.items.len()])),
         });
 
         self
+    }
+
+    /// Keep the baseline's declaration declaring `names`: the baseline answers for them from here on. Asked by the walk, where it finds that everything the declaration read stands.
+    pub(crate) fn keep(&self, names: &[&Global]) {
+        for unit in &self.units {
+            for name in names {
+                unit.keep(name);
+            }
+        }
     }
 
     /// The modules in scope, in dependency order.

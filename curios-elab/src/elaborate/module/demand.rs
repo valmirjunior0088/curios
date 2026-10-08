@@ -6,19 +6,22 @@
 //!
 //! **The prover's vocabulary is asked for first.** A proof the elaborator writes applies lemmas no declaration names, so nothing a declaration writes says it reads them. The walk therefore begins with the declarations of the vocabulary the unit declares, which brings in every declaration they read, with no lemma of the unit on offer — and, compiled over a baseline, with the declarations the vocabulary reads through an item the baseline holds, which no walk asks for; and only then offers them ([`Context::offer_lemmas`]) and asks for the rest. A declaration the vocabulary reads is thereby proved without it, every other finds all of it elaborated, and no proof makes one declaration wait on another.
 //!
+//! **Over a baseline, a declaration is kept where everything it asked is answered as it was.** A unit compiled over an earlier text of itself is walked whole, and a declaration the lowering kept is not attempted at once: the questions its elaboration put to the declarations around it are asked again, in the order it asked them ([`Traces`]), each after the declaration it is about has been asked for. Where every one is answered as it was, the declaration is the baseline's, and the baseline answers for it from there on ([`Established::keep`]); at the first that is not, it is attempted as any other. A question about a declaration that was itself kept is answered as it was; one about a declaration elaborated again is answered as it was where the part asked came out equal, so an edit redoes what read the part it changed and nothing behind that.
+//!
 //! **A cycle is refused by its members.** A declaration asked for while it is being asked for closes a cycle, through a name it wrote or a witness a goal of its resolves to alike. Every member is refused, the report is raised once, at the first member in source order, naming them all, and what reaches a member is withheld as a dependent of any refusal is.
 
 use {
     super::{
-        Elaborated, Holding, ItemMark, ItemStamp, Poison, Survivors, elaborate_module_item,
-        withhold,
+        Elaborated, Holding, ItemMark, ItemStamp, Poison, Same, Survivors, concepts_alike,
+        elaborate_module_item, entries_alike, inducts_alike, structs_alike, withhold,
     },
-    crate::{Context, Error, GoalSite, Traces},
-    curios_core::{DefinitionKind, Enter, Extent, Global, Item, Module, Term},
+    crate::{Answered, Context, Error, Established, GoalSite, Question, Traces},
+    curios_core::{DefinitionKind, Enter, Extent, Global, Item, Module, Places, Term, Trace},
     curios_utilities::recurse,
     std::{
-        collections::{BTreeMap, BTreeSet, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         ops::ControlFlow,
+        rc::Rc,
     },
 };
 
@@ -45,20 +48,38 @@ enum Outcome {
     Withheld,
 }
 
+/// The baseline a unit is compiled over, as its walk reads it: an earlier text of the unit as it elaborated, what each of its declarations asked, and the names the new text's lowering kept.
+#[derive(Clone, Copy)]
+pub(super) struct Over<'a> {
+    pub(super) baseline: &'a Module,
+    pub(super) places: &'a Places,
+    pub(super) traces: &'a Traces,
+    /// The names whose lowered item is the baseline's own (`PreparedText::kept_from`).
+    pub(super) lowered: &'a BTreeSet<Global>,
+    /// The scope, whose baseline layer answers for a declaration from where the walk keeps it.
+    pub(super) established: &'a Established<'a>,
+}
+
 /// The walk over one unit's declarations.
 pub(super) struct Demand<'a> {
     module: &'a Module,
     /// The positions of each declaration's items, the item a written declaration lowers to first and the items generated from it after, in item order.
     declarations: Vec<Vec<usize>>,
-    /// The declaration declaring each name.
-    owner: BTreeMap<Global, usize>,
+    /// The declaration declaring each name. Never iterated, and asked at every question a kept declaration's trace holds.
+    owner: HashMap<Global, usize>,
     standing: Vec<Standing>,
     /// The declarations being asked for, outermost first.
     demanded: Vec<usize>,
     pub(super) poison: Poison,
     pub(super) survivors: Survivors,
-    /// What each declaration's standing attempt asked of the declarations around it.
+    /// What each declaration's standing attempt asked of the declarations around it, and what each kept declaration's did where the baseline elaborated it.
     pub(super) traces: Traces,
+    /// The baseline the unit is compiled over, where it is compiled over one.
+    over: Option<Over<'a>>,
+    /// The declarations kept as the baseline holds them.
+    kept: Vec<bool>,
+    /// What each name elaborated again over a baseline left as the baseline holds it.
+    same: HashMap<Global, Same>,
 }
 
 /// The first position written anywhere in `term`, outermost first, each node of its graph visited once.
@@ -90,7 +111,12 @@ fn introduced(item: &Item) -> &DefinitionKind {
 }
 
 impl<'a> Demand<'a> {
-    pub(super) fn new(module: &'a Module, poison: Poison, survivors: Survivors) -> Self {
+    pub(super) fn new(
+        module: &'a Module,
+        poison: Poison,
+        survivors: Survivors,
+        over: Option<Over<'a>>,
+    ) -> Self {
         // A generated item names the declaration it was generated from, which is an item of the module wherever the two sit.
         let written = module
             .items
@@ -140,13 +166,27 @@ impl<'a> Demand<'a> {
         Self {
             module,
             standing: vec![Standing::Pending; declarations.len()],
+            kept: vec![false; declarations.len()],
             declarations,
             owner,
             demanded: Vec::new(),
             poison,
             survivors,
             traces: Traces::default(),
+            over,
+            same: HashMap::new(),
         }
+    }
+
+    /// Every name of a declaration the walk kept as the baseline holds it.
+    pub(super) fn kept_names(&self) -> BTreeSet<Global> {
+        self.kept
+            .iter()
+            .enumerate()
+            .filter(|(_, kept)| **kept)
+            .flat_map(|(declaration, _)| self.names(declaration))
+            .copied()
+            .collect()
     }
 
     /// Elaborate every declaration, each after what it reads: the declarations of `vocabulary` and what they read first, then the rest with the unit's lemmas on offer.
@@ -212,7 +252,6 @@ impl<'a> Demand<'a> {
                     let item = &module.items[*item];
                     withhold(context, item);
                     self.poison.declare(item);
-                    self.survivors.drop_item(item);
                 }
                 let first = |member: &usize| self.declarations[*member][0];
                 if cycle.0.iter().map(first).min() == Some(first(&declaration)) {
@@ -272,7 +311,175 @@ impl<'a> Demand<'a> {
         owners
     }
 
-    /// Elaborate `declaration` after what it reads, attempt by attempt, until one reads nothing unfinished.
+    /// Ask for the declaration declaring `name`, where the unit declares it in another declaration than `declaration`.
+    fn ask(
+        &mut self,
+        context: &mut Context,
+        name: &Global,
+        declaration: usize,
+    ) -> Result<(), Cycle> {
+        match self.owner.get(name) {
+            Some(&owner) if owner != declaration => self.declaration(context, owner),
+            _ => Ok(()),
+        }
+    }
+
+    /// What `declaration` asked where the baseline elaborated it, where the walk may keep it by that: the lowering kept every item of it, the baseline holds each under its name, nothing it reaches is refused, and a witness it declares is alone at its key.
+    ///
+    /// **A witness is kept where it would register.** A witness registers under its key as its signature elaborates, and the second to register at one key is refused; a kept one registers nothing, so it is asked here what registering would have: that it is the first the unit declares at its key, and that none stands there yet. One that is not is attempted, and refused where a whole compile refuses it.
+    fn recorded(
+        &self,
+        context: &Context,
+        declaration: usize,
+    ) -> Option<Rc<Trace<Question, Answered>>> {
+        let over = self.over?;
+        let module = self.module;
+        let names = self.names(declaration);
+        let kept = names
+            .iter()
+            .all(|name| over.lowered.contains(*name) && over.places.place(name).is_some());
+        let poisoned = self.declarations[declaration]
+            .iter()
+            .any(|item| self.poison.reaches(module, &module.items[*item]));
+        let alone = names
+            .iter()
+            .all(|name| match context.spelled_witness(name) {
+                Some(Some((concept, key))) => {
+                    context.witness_pending(concept, key) == Some(**name)
+                        && context.witness_standing(concept, key).is_none()
+                }
+                Some(None) => false,
+                None => true,
+            });
+        if !(kept && alone) || poisoned {
+            return None;
+        }
+
+        over.traces.held(names[0]).cloned()
+    }
+
+    /// Whether every question of `trace`, `declaration`'s where the baseline elaborated it, is answered as it was, each asked after the declaration it is about: the first that is not ends the asking.
+    ///
+    /// **Asked again as it was asked.** A read of a declaration's part waited for the declaration, and is asked again after it; one that waited for nothing — whether a witness is declared at a key, whether lemmas are on offer — is asked of the walk as it stands. So asking a trace again asks for no declaration its elaboration did not wait for, and closes no cycle that elaboration would not.
+    fn stands(
+        &mut self,
+        context: &mut Context,
+        declaration: usize,
+        trace: &Trace<Question, Answered>,
+    ) -> Result<bool, Cycle> {
+        for (question, answered) in trace.asked() {
+            match question {
+                // Asked of the unit as it stands, and waiting for no declaration.
+                Question::Lemmas | Question::WitnessDeclared(..) => {}
+                // A goal waits for the witness the unit declares at its key, and reads nothing of the concept it is keyed under.
+                Question::Witness(concept, key) => {
+                    if let Some(declared) = context.witness_pending(concept, key) {
+                        self.ask(context, &declared, declaration)?;
+                    }
+                    if let Answered::Witness(Some(found)) = answered {
+                        self.ask(context, found, declaration)?;
+                    }
+                }
+                part => {
+                    if let Some(subject) = part.subject() {
+                        self.ask(context, subject, declaration)?;
+                    }
+                }
+            }
+            if !self.answered(context, question, answered) {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Whether `question` is answered `answered` now, every declaration it is about having finished.
+    fn answered(&self, context: &Context, question: &Question, answered: &Answered) -> bool {
+        match question {
+            Question::Lemmas => *answered == Answered::Whether(context.offers_lemmas()),
+            Question::WitnessDeclared(concept, key) => {
+                *answered == Answered::Whether(context.witness_stands(concept, key))
+            }
+            // The witness found is read by its signature, which the table holds beside its name.
+            Question::Witness(concept, key) => {
+                let found = context.witness_standing(concept, key);
+
+                *answered == Answered::Witness(found)
+                    && found.is_none_or(|witness| self.held(&Question::Signature(witness)))
+            }
+            part => self.held(part),
+        }
+    }
+
+    /// Whether the part of a declaration that `question` asks is as the baseline holds it: a kept declaration's is, one elaborated again where it came out equal, and one neither the unit nor the baseline declares is another unit's or no one's, which the baseline was compiled after as this unit is.
+    fn held(&self, question: &Question) -> bool {
+        let over = self.over.expect("a trace is asked again over a baseline");
+        let Some(name) = question.subject() else {
+            return false;
+        };
+
+        match self.owner.get(name) {
+            None => over.places.place(name).is_none(),
+            Some(&owner) if self.kept[owner] => true,
+            Some(_) => self
+                .same
+                .get(name)
+                .is_some_and(|same| same.answers(question)),
+        }
+    }
+
+    /// Keep `declaration` as the baseline holds it: what the unit seeded for it is taken out, so a read of it falls through to the baseline, which answers for it from here on, and its trace is the baseline's own. No item is made for it: the unit takes the baseline's where it is assembled.
+    fn keep(
+        &mut self,
+        context: &mut Context,
+        declaration: usize,
+        trace: Rc<Trace<Question, Answered>>,
+    ) {
+        let over = self.over.expect("a declaration is kept over a baseline");
+        let names = self.names(declaration);
+        for name in &names {
+            context.remove_induct(name);
+            context.remove_struct(name);
+            context.remove_concept(name);
+        }
+        over.established.keep(&names);
+        self.traces.share(*names[0], trace);
+        self.kept[declaration] = true;
+    }
+
+    /// Note which parts of `made`, an item elaborated again over a baseline, came out as the baseline holds them.
+    fn compare(&mut self, context: &Context, made: &Item) {
+        let Some(over) = self.over else {
+            return;
+        };
+        for (member, name) in made.declared_names().into_iter().enumerate() {
+            let Some(place) = over.places.place(name) else {
+                continue;
+            };
+            let baseline = over.baseline;
+            let same = Same::of(made, &baseline.items[place.item()], member).keying(
+                entries_alike(
+                    context.induct_decl(name),
+                    baseline.induct_decls.get(name),
+                    inducts_alike,
+                ),
+                entries_alike(
+                    context.struct_decl(name),
+                    baseline.struct_decls.get(name),
+                    structs_alike,
+                ),
+                entries_alike(
+                    context.concept(name),
+                    baseline.concepts.get(name),
+                    concepts_alike,
+                ),
+            );
+            self.same.insert(*name, same);
+        }
+    }
+
+    /// Elaborate `declaration` after what it reads: kept as its baseline holds it where everything it asked there is answered as it was, and otherwise attempt by attempt, until one reads nothing unfinished.
     fn settle(&mut self, context: &mut Context, declaration: usize) -> Result<(), Cycle> {
         let module = self.module;
         let items = self.declarations[declaration].clone();
@@ -283,6 +490,13 @@ impl<'a> Demand<'a> {
             .collect::<Vec<_>>();
         for dependency in self.owners(reached, declaration) {
             self.declaration(context, dependency)?;
+        }
+
+        if let Some(trace) = self.recorded(context, declaration)
+            && self.stands(context, declaration, &trace)?
+        {
+            self.keep(context, declaration, trace);
+            return Ok(());
         }
 
         loop {
@@ -337,24 +551,17 @@ impl<'a> Demand<'a> {
                 self.poison = poison;
                 let mut holding = Vec::new();
                 for (position, outcome) in items.iter().zip(outcomes) {
-                    let item = &module.items[*position];
                     match outcome {
                         Outcome::Kept(elaborated, obligations) => {
+                            self.compare(context, &elaborated);
                             self.survivors
                                 .keep(ItemStamp(*position), elaborated, obligations);
                         }
-                        Outcome::Held(elaborated, sites) => {
-                            self.survivors.drop_item(item);
-                            holding.push((elaborated, sites));
-                        }
+                        Outcome::Held(elaborated, sites) => holding.push((elaborated, sites)),
                         Outcome::Refused(error) => {
-                            self.survivors.drop_item(item);
                             self.survivors.refuse(ItemStamp(*position), error);
                         }
-                        Outcome::Withheld => {
-                            withhold(context, item);
-                            self.survivors.drop_item(item);
-                        }
+                        Outcome::Withheld => withhold(context, &module.items[*position]),
                     }
                 }
                 // The goals are known in this attempt's state alone, which is kept for their report.

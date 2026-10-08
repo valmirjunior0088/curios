@@ -454,7 +454,7 @@ pub fn erase_unit(
 
 /// [`erase_unit`] for a unit compiled over a baseline: an item none of whose names `redone` holds keeps the erased form `baseline` has for it, the baseline's own and no copy of it, and every other is erased.
 ///
-/// What is redone is closed under what an item's erasure reads — the types and registry entries of the names it reaches, and how each of them is bound — which is the caller's to guarantee, as it is for the items elaborated again. The universes held to their schemes are those of the items erased: a kept item's were held where the baseline was compiled.
+/// What is redone is closed under what an item's erasure reads — the types and registry entries of the names it reaches, and how each of them is bound — which is the caller's to guarantee. The universes held to their schemes are those of the items erased: a kept item's were held where the baseline was compiled.
 pub fn erase_unit_over(
     budget: u64,
     syntax: SyntaxRegistry,

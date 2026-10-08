@@ -325,6 +325,11 @@ impl<'s> Context<'s> {
         self.underway.offering = true;
     }
 
+    /// Whether the unit's lemmas are on offer: what a trace's question about them is asked again by.
+    pub(crate) fn offers_lemmas(&self) -> bool {
+        self.underway.offering
+    }
+
     /// Begin an attempt at the declaration declaring `names`, with nothing needed yet and in a state of its own ([`Context::begin_state`]).
     pub(crate) fn attempt(&mut self, names: &[&Global]) {
         self.underway.needs.attempt(names);
@@ -530,21 +535,23 @@ impl<'s> Context<'s> {
     }
 
     /// Whether a proof the elaborator writes for the declaration being elaborated may apply `name`. A name another unit declares is applied wherever it is in scope. A name this unit declares is one of the prover's vocabulary, which the unit's walk elaborates before anything else, with every declaration it reads, and offers only from then on: so the vocabulary and what it reads are proved without it, every other declaration finds all of it elaborated, and what a declaration's proof is built from follows what the vocabulary reads, never where either is written or which of them was asked for first. A lemma that is on offer and not in scope was refused, and is applied by nothing.
+    ///
+    /// **A lemma of the unit is read only where the unit's lemmas are on offer.** Before that the answer is no whatever the lemma is, so what is noted is that none was on offer and nothing of the lemma: a trace asked again then waits for no lemma its elaboration did not read.
     pub(crate) fn proof_may_apply(&self, name: &Global) -> bool {
-        self.asks(&Free::Global(*name), Question::Signature);
-        let assumed = self
-            .typing
-            .frames
-            .assumption(&Free::Global(*name))
-            .is_some();
-        let own = self.underway.order.contains_key(name);
-        if own {
+        if self.underway.order.contains_key(name) {
             self.typing
                 .traced
                 .note(Question::Lemmas, Answered::Whether(self.underway.offering));
+            if !self.underway.offering {
+                return false;
+            }
         }
+        self.asks(&Free::Global(*name), Question::Signature);
 
-        assumed && (self.underway.offering || !own)
+        self.typing
+            .frames
+            .assumption(&Free::Global(*name))
+            .is_some()
     }
 
     /// Name the declarations a lowering could not read. Their dependents are withheld from elaboration before the first item is checked, so a parse failure in one declaration reports as that declaration's and nothing else's.
@@ -1761,14 +1768,29 @@ impl<'s> Context<'s> {
 
     /// Whether a witness stands under `(concept, key)`: one registered, or one the unit declares there and has not elaborated. A question of membership, answered the same whichever witnesses have elaborated.
     pub(crate) fn witness_declared(&self, concept: &Global, key: &WitnessKey) -> bool {
-        let declared = self.typing.program.witness_registered(concept, key)
-            || self.underway.witnesses.at(concept, key).is_some();
+        let declared = self.witness_stands(concept, key);
         self.typing.traced.note(
             Question::WitnessDeclared(*concept, *key),
             Answered::Whether(declared),
         );
 
         declared
+    }
+
+    /// What [`Context::witness_declared`] answers, noted in no trace: asked by the unit's walk, where it asks a trace's question again.
+    pub(crate) fn witness_stands(&self, concept: &Global, key: &WitnessKey) -> bool {
+        self.typing.program.witness_registered(concept, key)
+            || self.underway.witnesses.at(concept, key).is_some()
+    }
+
+    /// The witness [`Context::witness`] finds at `(concept, key)`, by its name and noted in no trace: asked by the unit's walk, where it asks a trace's question again.
+    pub(crate) fn witness_standing(&self, concept: &Global, key: &WitnessKey) -> Option<Global> {
+        self.typing.program.witness_name(concept, key)
+    }
+
+    /// The witness the unit declares at `(concept, key)` and has not finished: the one that registers there once it elaborates ([`DeclaredWitnesses::at`]).
+    pub(crate) fn witness_pending(&self, concept: &Global, key: &WitnessKey) -> Option<Global> {
+        self.underway.witnesses.at(concept, key)
     }
 
     /// Whether the table's miss at `(concept, key)` is a witness the unit declares there and has not elaborated: the attempt needs it, and is void. `false` is a miss no other declaration answers — the one being attempted registers on its signature, so a miss on its own key is its signature asking for itself.

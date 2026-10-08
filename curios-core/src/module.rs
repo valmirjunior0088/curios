@@ -667,65 +667,6 @@ impl Module {
         self
     }
 
-    /// This module narrowed to the names `keep` admits: the items every one of whose declared names it admits, the registry entries keyed by such a name, and the witness and test markers naming one, with the mounts, the seed table, the floor and the entry carried whole.
-    ///
-    /// A recursive group is one node — its members share one scheme — so a predicate admitting some of a group's names and not others is a caller's mistake, refused rather than resolved either way.
-    pub fn restricted(&self, keep: impl Fn(&Global) -> bool) -> Module {
-        let items = self
-            .items
-            .iter()
-            .filter(|item| {
-                let names = item.declared_names();
-                let kept = names.iter().filter(|name| keep(name)).count();
-                assert!(
-                    kept == 0 || kept == names.len(),
-                    "a recursive group is restricted whole: {}",
-                    item.describe()
-                );
-
-                kept > 0
-            })
-            .cloned()
-            .collect();
-        let entries = |declarations: &BTreeMap<Global, InductDecl>| {
-            declarations
-                .iter()
-                .filter(|(name, _)| keep(name))
-                .map(|(name, declaration)| (*name, declaration.clone()))
-                .collect()
-        };
-
-        Module {
-            items,
-            mounts: self.mounts.clone(),
-            induct_decls: entries(&self.induct_decls),
-            struct_decls: self
-                .struct_decls
-                .iter()
-                .filter(|(name, _)| keep(name))
-                .map(|(name, declaration)| (*name, declaration.clone()))
-                .collect(),
-            concepts: self
-                .concepts
-                .iter()
-                .filter(|(name, _)| keep(name))
-                .map(|(name, concept)| (*name, concept.clone()))
-                .collect(),
-            witnesses: self
-                .witnesses
-                .iter()
-                .filter(|name| keep(name))
-                .cloned()
-                .collect(),
-            tests: self
-                .tests
-                .iter()
-                .filter(|name| keep(name))
-                .cloned()
-                .collect(),
-        }
-    }
-
     /// Every global qualified name in `self`: each definition (`let`/`rec`), each inductive type, each struct type. The universe a global is shortened *against*.
     pub fn module_symbols(&self) -> Vec<Global> {
         let mut symbols = Vec::new();

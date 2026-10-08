@@ -1,29 +1,27 @@
-//! One unit compiled over a baseline: the items its new text changed, closed over what the baseline's elaboration reached, elaborated, judged and erased alone, with everything outside the closure read where the baseline holds it, as a predecessor's items are, and its erased form the baseline's own.
+//! One unit compiled over a baseline: lowered whole, walked whole, and each declaration kept as the baseline holds it where everything its elaboration asked there is answered as it was, with every other elaborated, judged and erased.
 //!
-//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its items are elaborated and erased again is this module's closure, and which of its verdicts stand is not: the kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed, so a closure that stopped one edge short costs a judgment and admits nothing ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). The closure is transitive all the same — conversion unfolds bodies, so a dependent's elaboration reaches through what it names — since an item it leaves out is stored as the baseline elaborated it.
+//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its declarations stand is decided by no one stage for another. The lowering keeps a declaration whose text and resolutions stand (`PreparedText::kept_from`). The elaborator keeps one of those where every question its elaboration put to the declarations around it is answered as it was, asked again in order as the unit is walked (`curios_elab::Traces`), so an edit elaborates again what read the part it changed and nothing behind that: a declaration elaborated again that came out as it was moves none of its readers. The kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)).
 //!
-//! **The diff is over the declarations lowered again, modulo what a lowering mints.** A declaration the lowering kept from the baseline is the baseline's, and is not compared (`PreparedText::kept_from`). A lowering numbers every written `Type` and every elided annotation from zero for each declaration, so a declaration its text leaves alone carries the ids it carried whatever was written around it, and an edit inside one renumbers that one alone; [`Term::equal_modulo_metas`] pairs the ids by position, which is how an edited declaration whose edit only shifted them is still found unchanged. Everything else compares exactly, extents excepted, so a moved declaration is not a change — and a renamed parameter is one: a binder's name is in what is stored, the item's own and every dependent's that was handed its signature, so an item reused under the old name would be another unit than a whole compile's.
+//! **A declaration lowered again is elaborated again.** Nothing compares two lowerings: an edit that leaves a declaration's meaning alone costs that declaration's elaboration, and what it comes to is compared part by part with what the baseline holds, by whatever read it.
 
 use {
     crate::{CompileError, anchors_of, globals, kernel_refusal, with_broken},
     curios_cert::{Baseline, Rechecked, certify_module_over},
-    curios_core::{
-        Bound, ConceptDecl, Global, InductDecl, Item, MetaRenaming, Module, StructDecl, Telescope,
-        Term, Zonked,
-    },
+    curios_core::{Global, Module, Zonked},
     curios_elab::{
-        Context, Erasures, Established, Recompile, elaborate_and_zonk_unit_over, erase_unit_over,
+        Context, Erasures, Established, Recompile, Recompiled, elaborate_and_zonk_unit_over,
+        erase_unit_over,
     },
-    curios_text::{PreparedText, UnitSource, into_core_unit_over},
+    curios_text::{UnitSource, into_core_unit_over},
     curios_unit::{Predecessors, Uncertified, Unit},
-    curios_utilities::{SyntaxRegistry, grown},
+    curios_utilities::SyntaxRegistry,
     std::{
         collections::{BTreeMap, BTreeSet},
         rc::Rc,
     },
 };
 
-/// Compile one unit against `predecessors` over `baseline`: lower whole, diff, then elaborate, judge and erase the closure.
+/// Compile one unit against `predecessors` over `baseline`: lower whole, then elaborate, judge and erase what does not stand.
 ///
 /// The result is a unit like [`compile_unit`](crate::compile_unit)'s — the same lowering, a core module holding every item in the order a module is stored in, an erased form for each — differing in which items were elaborated, judged and erased now and which were taken from the baseline. An item's erased form is its own, in identities of its own, so one taken from the baseline is the one a whole compile makes.
 pub fn compile_unit_over(
@@ -40,31 +38,34 @@ pub fn compile_unit_over(
     let mut lowered = into_core_unit_over(source, &text, syntax, baseline.text())
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
-    let closure = invalidated(baseline, &lowered);
-    // The seeds are the new lowering's, handed to elaboration with its counts.
-    let changed = lowered.core().restricted(|name| closure.contains(name));
+    // A mount says how every name of the unit is spelled, so a unit whose mounts moved keeps nothing.
+    let kept = match baseline.core().mounts == lowered.core().mounts {
+        true => lowered.kept_from(baseline.text()),
+        false => BTreeSet::new(),
+    };
 
-    // A kept item is exactly as the baseline elaborated it, and is read where the baseline holds it: the scope's last layer, answering for every name outside the closure.
-    let established = Established::placed(&predecessors.placed()).keeping(
-        baseline.core(),
-        baseline.places(),
-        &closure,
-    );
+    // The baseline is the scope's last layer, answering for each declaration from where the walk keeps it.
+    let established =
+        Established::placed(&predecessors.placed()).keeping(baseline.core(), baseline.places());
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
-    let (core, traces) = with_broken(
+    let Recompiled {
+        module: core,
+        traces,
+        kept,
+    } = with_broken(
         lowered.broken(),
         elaborate_and_zonk_unit_over(
             &mut context,
             &established,
             Recompile {
                 baseline: baseline.core(),
+                places: baseline.places(),
                 traces: baseline.traces(),
-                redone: &closure,
-                closure: &changed,
-                lowered: lowered.core(),
+                lowered: &kept,
             },
+            lowered.core(),
             lowered.minted(),
         )
         .map_err(|error| {
@@ -81,21 +82,30 @@ pub fn compile_unit_over(
             })
         }),
     )?;
-    // What the closure's proofs read, and what the baseline's read in the declarations reused from it.
+    // What the proofs written now read, and what the baseline's read in the declarations kept from it.
     lowered.credit(&context.credited());
-    lowered.credit_reused(baseline.text(), |name| !closure.contains(name));
+    lowered.credit_reused(baseline.text(), |name| kept.contains(name));
 
     let core =
         Zonked::project(&core).map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
-    // The kernel is told nothing of the closure: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped.
+    // The kernel is told nothing of what was kept: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped.
     let rechecked = recheck_over(&core, budget, predecessors, baseline, syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
         return Err(kernel_refusal(verdict, core.as_module(), &cores, syntax));
     }
     let certification = rechecked.certification;
 
-    // An item's erasure reads the types and registry entries of the names it reaches and how each is bound, every one of which the closure holds where it moved: the closure is the reverse of reaching, and transitive.
+    // An item's erasure reads the types and registry entries of the names it reaches and how each is bound, so it is erased again where it reaches, through any number of items, one that was elaborated again.
+    let made = core
+        .as_module()
+        .items
+        .iter()
+        .flat_map(|item| item.declared_names())
+        .filter(|name| !kept.contains(*name))
+        .copied()
+        .collect();
+    let redone = reverse_closure(core.as_module(), made);
     let erased = predecessors.erased();
     let ersd = erase_unit_over(
         budget,
@@ -103,7 +113,7 @@ pub fn compile_unit_over(
         Erasures::of(&cores, &erased),
         &core,
         baseline.erased(),
-        &|name| closure.contains(name),
+        &|name| redone.contains(name),
     )
     .map_err(|error| {
         CompileError::Failure(error.reports_with(
@@ -119,7 +129,7 @@ pub fn compile_unit_over(
 
 /// [`recheck`](crate::recheck) for a unit compiled over `baseline`: the walk is handed the units in scope as its environment and the baseline's module and record whole, and adopts each of the baseline's verdicts that still stands, by the reads its own walk filed (`curios_cert::Baseline`).
 ///
-/// Nothing here says which declarations are kept. A declaration elaborated again that came out as the baseline holds it, reading nothing that moved, is adopted like one never touched, and one kept by a closure cut short is judged where what it read has changed: the verdicts that are filed rest on the certifier's record, and on one claim of the fold's, that `baseline` was compiled after these `predecessors`, which is what a cache offers one by ([`Cache::baseline`](crate::Cache::baseline)).
+/// Nothing here says which declarations are kept. A declaration elaborated again that came out as the baseline holds it, reading nothing that moved, is adopted like one never touched, and one the elaborator kept is judged where what the kernel's own walk read for it has changed: the verdicts that are filed rest on the certifier's record, and on one claim of the fold's, that `baseline` was compiled after these `predecessors`, which is what a cache offers one by ([`Cache::baseline`](crate::Cache::baseline)).
 pub(crate) fn recheck_over(
     module: &Zonked<Module>,
     budget: u64,
@@ -138,71 +148,6 @@ pub(crate) fn recheck_over(
         },
         *syntax,
     )
-}
-
-/// The names the new text invalidates: every declared name whose item was lowered again and differs from the baseline's modulo the identities lowering mints, every registry key whose entry differs, every name only one side declares, and every name whose witness or test membership moved — closed backwards over the baseline's elaborated graph.
-pub(crate) fn invalidated(baseline: &Unit, lowered: &PreparedText) -> BTreeSet<Global> {
-    grown(|| invalidated_within(baseline, lowered))
-}
-
-fn invalidated_within(baseline: &Unit, lowered: &PreparedText) -> BTreeSet<Global> {
-    let kept = lowered.kept_from(baseline.text());
-    let seeds = changed_names(baseline.text().core(), lowered.core(), &kept);
-
-    reverse_closure(baseline.core(), seeds)
-}
-
-/// The names an edit changed, read off the two lowered modules; see [`invalidated`]. `kept` are the names whose lowering is the baseline's own, which stand without being read.
-///
-/// Items are paired by their first declared name, and a pair is unchanged when it is kept, or declares the same names, agrees on every scalar field and has every term position equal modulo one renaming — so a metavariable shared between an item's type and body is shared on both sides. A mount that moved invalidates everything, since every name's spelling depends on it.
-fn changed_names(before: &Module, after: &Module, kept: &BTreeSet<Global>) -> BTreeSet<Global> {
-    if before.mounts != after.mounts {
-        return declared(before).union(&declared(after)).cloned().collect();
-    }
-
-    let (these, those) = (by_name(before), by_name(after));
-    let mut changed = BTreeSet::new();
-
-    for (name, item) in &those {
-        match these.get(name) {
-            Some(previous) if kept.contains(name) || item_unchanged(previous, item) => {}
-            _ => changed.extend(item.declared_names().into_iter().cloned()),
-        }
-    }
-    for (name, item) in &these {
-        if !those.contains_key(name) {
-            changed.extend(item.declared_names().into_iter().cloned());
-        }
-    }
-
-    changed.extend(entries_changed(
-        &before.induct_decls,
-        &after.induct_decls,
-        kept,
-        induct_unchanged,
-    ));
-    changed.extend(entries_changed(
-        &before.struct_decls,
-        &after.struct_decls,
-        kept,
-        struct_unchanged,
-    ));
-    changed.extend(entries_changed(
-        &before.concepts,
-        &after.concepts,
-        kept,
-        concept_unchanged,
-    ));
-    changed.extend(
-        before
-            .witnesses
-            .symmetric_difference(&after.witnesses)
-            .cloned(),
-    );
-    let tests = |module: &Module| module.tests.iter().cloned().collect::<BTreeSet<_>>();
-    changed.extend(tests(before).symmetric_difference(&tests(after)).cloned());
-
-    changed
 }
 
 /// The reverse transitive closure of `seeds` over what `core`'s items reach: every item that reaches a seed, transitively, by every name it declares. A seed `core` does not declare — an added name — is in the closure with no dependents.
@@ -239,193 +184,4 @@ fn reverse_closure(core: &Module, seeds: BTreeSet<Global>) -> BTreeSet<Global> {
     }
 
     closure
-}
-
-fn declared(module: &Module) -> BTreeSet<Global> {
-    module
-        .items
-        .iter()
-        .flat_map(Item::declared_names)
-        .cloned()
-        .collect()
-}
-
-fn by_name(module: &Module) -> BTreeMap<Global, &Item> {
-    module
-        .items
-        .iter()
-        .map(|item| {
-            let name = item
-                .declared_names()
-                .first()
-                .cloned()
-                .cloned()
-                .expect("an item declares a name");
-            (name, item)
-        })
-        .collect()
-}
-
-/// The keys on either side whose entries are not `unchanged`, or that only one side holds. A key of `kept` is a kept declaration's, whose entry is the baseline's own.
-fn entries_changed<'a, D>(
-    before: &'a BTreeMap<Global, D>,
-    after: &'a BTreeMap<Global, D>,
-    kept: &'a BTreeSet<Global>,
-    unchanged: impl Fn(&D, &D) -> bool + 'a,
-) -> impl Iterator<Item = Global> + 'a {
-    before
-        .keys()
-        .chain(after.keys())
-        .filter(move |name| match (before.get(*name), after.get(*name)) {
-            (Some(this), Some(that)) => !kept.contains(*name) && !unchanged(this, that),
-            _ => true,
-        })
-        .cloned()
-}
-
-fn item_unchanged(before: &Item, after: &Item) -> bool {
-    let mut renaming = MetaRenaming::default();
-
-    match (before, after) {
-        (Item::Let(this), Item::Let(that)) => {
-            this.name == that.name
-                && this.kind == that.kind
-                && this.island == that.island
-                && this.universe_context == that.universe_context
-                && this.totality == that.totality
-                && this.variances == that.variances
-                && this.type_.equal_modulo_metas(&that.type_, &mut renaming)
-                && this.body.equal_modulo_metas(&that.body, &mut renaming)
-        }
-        (Item::Rec(this), Item::Rec(that)) => {
-            this.definitions == that.definitions
-                && this.group.universe_context() == that.group.universe_context()
-                && this.group.iter().len() == that.group.iter().len()
-                && this
-                    .group
-                    .iter()
-                    .zip(that.group.iter())
-                    .all(|(this, that)| {
-                        this.type_.arity() == that.type_.arity()
-                            && this.body.arity() == that.body.arity()
-                            && this
-                                .type_
-                                .body()
-                                .equal_modulo_metas(that.type_.body(), &mut renaming)
-                            && this
-                                .body
-                                .body()
-                                .equal_modulo_metas(that.body.body(), &mut renaming)
-                    })
-        }
-        _ => false,
-    }
-}
-
-fn induct_unchanged(this: &InductDecl, that: &InductDecl) -> bool {
-    let mut renaming = MetaRenaming::default();
-
-    this.universe_context == that.universe_context
-        && this.module == that.module
-        && this.rep_public == that.rep_public
-        && this.polarities == that.polarities
-        && this.variances == that.variances
-        && this.constructors.len() == that.constructors.len()
-        && arity_unchanged(&this.arity, &that.arity, &mut renaming)
-        && this
-            .result_sort
-            .equal_modulo_metas(&that.result_sort, &mut renaming)
-        && this.constructors.iter().zip(&that.constructors).all(
-            |((this_tag, this_payload), (that_tag, that_payload))| {
-                this_tag == that_tag
-                    && telescope_unchanged(
-                        &this_payload.telescope,
-                        &that_payload.telescope,
-                        &mut renaming,
-                        &mut |these: &Vec<Term>, those: &Vec<Term>, renaming| {
-                            these.len() == those.len()
-                                && these
-                                    .iter()
-                                    .zip(those)
-                                    .all(|(this, that)| this.equal_modulo_metas(that, renaming))
-                        },
-                    )
-            },
-        )
-}
-
-fn struct_unchanged(this: &StructDecl, that: &StructDecl) -> bool {
-    let mut renaming = MetaRenaming::default();
-
-    this.universe_context == that.universe_context
-        && this.module == that.module
-        && this.rep_public == that.rep_public
-        && this.polarities == that.polarities
-        && this.variances == that.variances
-        && arity_unchanged(&this.arity, &that.arity, &mut renaming)
-        && this
-            .result_sort
-            .equal_modulo_metas(&that.result_sort, &mut renaming)
-}
-
-fn concept_unchanged(this: &ConceptDecl, that: &ConceptDecl) -> bool {
-    let mut renaming = MetaRenaming::default();
-
-    this.universe_context == that.universe_context
-        && this.fields == that.fields
-        && this.supers == that.supers
-        && fields_unchanged(&this.params, &that.params, &mut renaming)
-}
-
-fn fields_unchanged(
-    this: &Telescope<()>,
-    that: &Telescope<()>,
-    renaming: &mut MetaRenaming,
-) -> bool {
-    telescope_unchanged(this, that, renaming, &mut |_: &(), _: &(), _| true)
-}
-
-fn arity_unchanged(
-    this: &Telescope<Telescope<()>>,
-    that: &Telescope<Telescope<()>>,
-    renaming: &mut MetaRenaming,
-) -> bool {
-    telescope_unchanged(
-        this,
-        that,
-        renaming,
-        &mut |these: &Telescope<()>, those: &Telescope<()>, renaming| {
-            fields_unchanged(these, those, renaming)
-        },
-    )
-}
-
-/// Whether two telescopes agree entry by entry — each under the same mark and the same name, its type equal modulo `renaming` — ending in payloads `done` agrees on. A mark is part of what an entry declares: a parameter's decides how a call writes it, and a field's what a literal leaves out and what a position counts.
-fn telescope_unchanged<B: Bound>(
-    before: &Telescope<B>,
-    after: &Telescope<B>,
-    renaming: &mut MetaRenaming,
-    done: &mut dyn FnMut(&B, &B, &mut MetaRenaming) -> bool,
-) -> bool {
-    let (mut before, mut after) = (before, after);
-    loop {
-        match (before, after) {
-            (
-                Telescope::Cons(this_mark, this, this_rest),
-                Telescope::Cons(that_mark, that, that_rest),
-            ) => {
-                if this_mark != that_mark
-                    || this_rest.arity() != that_rest.arity()
-                    || !this_rest.spelled_as(that_rest)
-                    || !this.equal_modulo_metas(that, renaming)
-                {
-                    return false;
-                }
-                before = this_rest.body();
-                after = that_rest.body();
-            }
-            (Telescope::Done(this), Telescope::Done(that)) => return done(this, that, renaming),
-            _ => return false,
-        }
-    }
 }
