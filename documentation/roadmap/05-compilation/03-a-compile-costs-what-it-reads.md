@@ -13,6 +13,8 @@ It rests on [A declaration is a function of what it reads](../../design/compilat
 - **The certifier records what it read.** `curios_core::Reads` holds, per definition, the items whose type, universe scheme or registry entry a judgment read and the bodies it asked for, and `curios-pipeline`'s `the_prelude_reads_along_the_graph_its_definitions_reach` holds the reads inside the elaborated graph. Every unit files them, and no stage reads them.
 - **A witness is named by its module, its concept and the key its signature is spelled at** (`curios-core/src/witness.rs`), which the lowering reads before anything elaborates, and registration refuses one whose elaborated signature keys anywhere else.
 - **An erased form is its item's, and a program links what it reaches**, decisions 7 and 8 ([`curios-unit`'s README](../../../curios-unit/README.md#an-erased-form-is-its-items), `curios-elab/src/into_ersd/erased.rs`, `link.rs`, `curios_ersd::Module::link`): each item erases into a fragment on a budget restored for it, a unit compiled over a baseline erases the items it elaborates again (`erase_unit_over`), and the optimizer's prune decides what a linked program keeps (`prune_unreachable`, `curios-ersd/src/optimize/prune.rs`).
+- **Elaboration and erasure read a scope where it stands** (`InScope`, `curios-elab/src/context/in_scope.rs`): a context asks the units in scope where its own stores hold nothing under a name, and is answered by reference into the unit that holds the declaration, so no definition of a scope is defined again, no registry entry cloned and no witness registered again (`Established`), and erasure projects a declaration out of its universes when an item first reads it (`Projected`). A recompile's reused items are still replayed into the base frame, being the unit's own.
+- **A structural type's runtime shape is its telescope's** ([`curios-elab`'s README](../../../curios-elab/README.md#a-structural-types-runtime-shape-is-its-telescopes)): a function has a parameter for each binder and an anonymous tuple a field for each member, so an erased form is one shape at every type its value stands at, and only a nominal declaration drops, by its own signature.
 - **A file is parsed once for each text a process holds of it** (`parsed`, `curios-text/src/root_source.rs`), and the lowering reads its predecessors as layers, copying none (`Scoped`, `curios-text/src/into_core/scoped.rs`).
 
 ## The gap
@@ -37,7 +39,7 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 
 **A reused verdict rests on a closure the certifier does not check.** The kernel passes a reused declaration over where its terms are the mounted ones (`recheck_over`, `Judged::of`), and which declarations are reused is the pipeline's closure: one cut short files the baseline's verdict beside a declaration it no longer describes, the finding in [`01-soundness`](../01-soundness/00-findings.md).
 
-**Every compile brings in its whole scope.** Elaboration defines every definition of every predecessor and registers each witness again by reducing its signature to a key the unit that declared it had in hand (`Established::replay_definitions`); `Globals::of` copies each registry and maps each definition, and the kernel copies the result again (`Kernel::seed`); erasure projects every predecessor's Core and defines it a third time (`seed`, `curios-elab/src/into_ersd/lower.rs`); and before any of it a process validates and restores both of the prelude's images whole. Compiling `programs/hello_world.crs` makes 0.13 M allocations elaborating and 0.06 M in the kernel, after it restores the prelude.
+**The kernel and the lowering bring in the whole scope.** `Globals::of` copies each registry of every predecessor and maps each of its definitions, and the kernel copies the result again (`Kernel::seed`): 0.06 M allocations compiling `programs/hello_world.crs`, counted at `bf21a9065`. The lowering lists every path of every unit in scope for a table only a report reads (`writable_paths`, `curios-text/src/into_core.rs`). And before any of it a process validates and restores both of the prelude's images whole.
 
 **A unit is addressed by the units before it.** A slot names every unit placed ahead of it in the fold and its record vouches for what each contained, where `curios-package` has the dependency graph and flattens it into that line (`curios_package::order`). Over a package depending on `alpha` and on `beta`, neither naming the other, an edit to `alpha` compiles `/beta` again, whole, and an edit to `beta` leaves `/alpha` reused.
 
@@ -71,7 +73,7 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 8. **A program links what it reaches and what is observable.** Its entry's imports, transitively, and every declaration in scope whose evaluation at initialization something can observe, with what each reaches. Whether a declaration's top-level statement is observable is decided once, where its unit is certified, since totality is the certifier's: a summary is a cell of a declaration's erased form — an exported function's behaviour, and what a callee's resolution reads of an exported value — composed as the optimizer's own summary composes them, and a unit stores which of its declarations are observable. The prune then keeps what is reached or observable, as it did, so what a program runs at initialization does not follow what it links.
 9. **A module whose text and interfaces stand is not lowered again.** Its lowered declarations, registry entries, mints and lints are the baseline's, and what the lowering decides of a unit as a whole is decided from its modules' parts. A file's text stands where the source it was lowered from is the source its tree has now, and that is one test in every process: a file's source is one allocation for a path and a text for as long as anything holds it, through every door a source comes in by, a stored unit's among them.
 10. **A witness is named by its module, its concept and the key it is spelled at.** Where it sits among its module's witnesses is no part of it, and a unit's witness table is its witnesses' names.
-11. **A unit's scope is a view.** `Established`, `Globals` and erasure's scope read through to the units, and nothing of a scope is copied, replayed or keyed again.
+11. **A unit's scope is a view at every stage.** The kernel's environment reads through to the units as elaboration's and erasure's scope do, and a report spells a name of a unit in scope by that unit's own paths: nothing of a scope is copied, replayed or keyed again.
 12. **A unit is addressed by what it depends on.** Its slot, its record and the units it is compiled against name its dependencies' closure, and no unit it could not have read.
 13. **Invalidation is within a unit.** A baseline is offered only after the same dependencies, so a read of another unit stands on the unit's address and is not revalidated.
 14. **A unit's documentation record is built where it is asked for.** By the commands that document, from the unit's stored tables and its sources; no unit carries one. The prelude's records are an image of their own, made by the build that lowers its roots and restored by nothing that compiles.
@@ -94,7 +96,7 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 | Reads | Recorded where the environment is asked, per cell and per key, in order, hits as misses, and stored with the unit | Records |
 | Invalidation | By recorded reads, revalidated in order, stopping where a cell comes out equal; `invalidated`'s reverse closure and `vocabulary_reach` are deleted | Records |
 | Verdicts | Adopted by the certifier from the baseline by its own reads | Records |
-| Scope | `Established`, `Globals` and erasure's scope are views | Views |
+| Scope | `Globals` is a view, and the lowering's path table holds the unit's own paths | Views |
 | Addresses | A slot, a record and a unit's predecessors are its dependencies' | Addresses |
 
 ## Stages
@@ -103,7 +105,7 @@ Each lands alone, on its own check, and says what it expects to move; a move out
 
 1. **Lowering.** Decisions 9 and 14. Expected to move: a recompile's lowering, a stored unit's bytes, by the record it no longer carries, and what restoring the prelude costs.
 2. **Records.** Decisions 1 to 6. Expected to move: a stored unit's bytes, by its records; what elaboration costs, by the recording; and which declarations a recompile redoes.
-3. **Views.** Decision 11, erasure's view read through the reader erasure makes for itself (`Retyping`, `curios-elab`). Expected to move: what a compile costs before its first declaration.
+3. **Views.** Decision 11. Expected to move: what the kernel and the lowering cost before a compile's first declaration.
 4. **Addresses.** Decisions 12 and 13. Expected to move: every slot's address, and which units an edit to a dependency compiles.
 5. **Linking.** Decision 8. Expected to move: a stored unit's bytes, by its summaries, what a program links, and every row of a program's compile behind its erasure.
 
@@ -114,7 +116,7 @@ Each lands alone, on its own check, and says what it expects to move; a move out
 - **Linking.** An ignored measurement over the prelude: every declaration the whole-program summary calls observable, the stored one does too, and the count the other way is its precision. `hello_world`'s rows are retaken. Counted.
 - **The record is complete.** An ignored measurement beside `std_replay_census`: each declaration of `/std` elaborated against the declarations its record names and no other gives the declaration the library holds. Counted.
 - **Invalidation.** A recompile over a baseline redoes exactly the declarations whose recorded reads changed, held by fixtures over a signature change, a body change, a witness added at a key a goal found empty, and a declaration moved into what the prover's vocabulary reaches; a module handed to the certifier with a changed dependency is judged again where it read it; a unit compiled over a baseline is still the bytes it is compiled whole; and `std_recompile_closure_census` is retaken for its hub.
-- **Views.** `budget_tests` holds a program to the budget it takes whatever its scope holds, and the program's rows are retaken.
+- **Views.** `budget_tests` holds a program to the budget it takes whatever its scope holds, a report names a declaration of a unit in scope as it does today, and the program's rows are retaken.
 - **Addresses.** Over a package depending on two packages that do not name each other, an edit to either leaves the other reused, held by a test.
 - **The graph's figures.** The nodes are `/std`'s declarations, an item with the items generated from it. An edge is a name `Module::reaches` gives for an item of one, declared by another: lowered, over the module `into_core_unit` gives for the library's tree, and elaborated, over the restored prelude's. Counted.
 - **The closure's figures.** The nodes are the restored prelude's items and an edge is a name `Module::reaches`; the reverse closure is `invalidated`'s; body readers are the items whose `Certification::reads` hold the name among their bodies. Counted.
@@ -128,7 +130,7 @@ Each lands alone, on its own check, and says what it expects to move; a move out
 - [Reused payloads](../../design/soundness/reused-payloads.md): the ordered slots of a payload's predecessors. Addresses.
 - [A declaration is a function of what it reads](../../design/compilation/a-declaration-is-a-function-of-what-it-reads.md): what a recompile asks for with the vocabulary. Records.
 - [A module is a compilation unit, and the prelude is an environment](../../design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md): a compilation as units folded over one order. Addresses.
-- [`curios-unit`'s README](../../../curios-unit/README.md): *Predecessors are borrowed, per stage*, with `Predecessors`' own documentation. Views.
+- [`curios-unit`'s README](../../../curios-unit/README.md): *Predecessors are borrowed, per stage*, with `Predecessors`' own documentation, for the kernel's environment. Views.
 - [A library is documented for its consumers, from the compilation that builds it](../../design/tools/a-library-is-documented-for-its-consumers-from-the-compilation-that-builds-it.md): the record riding on the unit. Lowering.
 
 ## Rejected
