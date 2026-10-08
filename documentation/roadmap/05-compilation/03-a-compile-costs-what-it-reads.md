@@ -15,11 +15,12 @@ It rests on [A declaration is a function of what it reads](../../design/compilat
 - **An erased form is its item's, and a program links what it reaches** ([`curios-unit`'s README](../../../curios-unit/README.md#an-erased-form-is-its-items), `curios-elab/src/into_ersd/erased.rs`, `link.rs`).
 - **Elaboration and erasure read a scope where it stands** (`InScope`, `curios-elab/src/context/in_scope.rs`): a context asks the units in scope where its own stores hold nothing under a name, and is answered by reference.
 - **A stored elaborated module holds no position** ([`curios-unit`'s README](../../../curios-unit/README.md#a-stored-unit-says-what-its-items-mean-not-where-they-were-written-or-how-they-were-come-by)): one node for each structure as it is spelled (`curios_core::Sharing`), which is what lets a recompiled unit be held to the bytes of a whole one.
+- **A unit is handed over, never copied** ([`curios-unit`'s README](../../../curios-unit/README.md#a-unit-is-handed-over-never-copied)): its lowered state, its elaborated module, its erased forms and its certification are each held by pointer, a unit compiled over a baseline keeps the baseline's own erased form for every item it does not erase again, and where a unit holds each name (`curios_core::Places`) is made once and kept with it. Elaboration reads the declarations a recompile keeps where the baseline holds them (`Established::keeping`, `curios-elab/src/established.rs`).
 - **A file is parsed once for each text a process holds of it** (`parsed`, `curios-text/src/root_source.rs`), and the lowering reads its predecessors as layers, copying none (`Scoped`, `curios-text/src/into_core/scoped.rs`).
 
 ## The gap
 
-What a question about `/std` costs, compiled over the archived unit, in allocations. Counted at `c98e44af9`, as *Verification* states; a count moves in its fifth digit from one run to the next.
+What a question about `/std` costs, compiled over the archived unit, in allocations. Counted at `01fc36712`, as *Verification* states; a count moves in its fifth digit from one run to the next.
 
 | What a compile does | What it follows today | Nothing edited | `/std/Bool/not`'s body respelled |
 | --- | --- | --- | --- |
@@ -27,24 +28,24 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 | Parses | every file of the unit, once for each process | 76.37 M | 76.37 M |
 | Lowers | the unit | 2.66 M | 2.66 M |
 | Decides what to redo | every declaration of the unit | 0.73 M | 0.71 M |
-| Elaborates | what reaches the edit, and a replay of the rest | 0.27 M | 108.96 M |
+| Elaborates | what reaches the edit | 0.15 M | 105.94 M |
 | Judges | what reaches the edit | 0.02 M | 29.08 M |
-| Erases | what reaches the edit, and a copy of the rest | 2.30 M | 7.04 M |
-| Stores | the unit | 0.75 M | 0.92 M |
+| Erases | what reaches the edit | 0.01 M | 5.21 M |
+| Stores | the unit | 0.60 M | 0.77 M |
 
-**A recompile walks the unit it does not redo.** With nothing edited, a unit compiled over a baseline lowers every module again, compares every lowered declaration with the baseline's (`invalidated`, `curios-pipeline/src/recompile.rs`, whose comparison walks both sides of each, `Term::equal_modulo_metas`), replays every reused declaration into the elaborator's base frame (`replay_reused`, `curios-elab/src/established.rs`), holds every universe of the module to its scheme and copies every erased form it keeps (`erase_unit_over`), and serializes all of it. Most of what the lowering costs beyond its parse is the documentation record (`document`, 1.62 M), built for every question and read by the two commands that document.
+**A recompile walks the unit it does not redo.** With nothing edited, a unit compiled over a baseline lowers every module again, compares every lowered declaration with the baseline's (`invalidated`, `curios-pipeline/src/recompile.rs`, whose comparison walks both sides of each, `Term::equal_modulo_metas`), puts the items it keeps and the ones it made again back into one module and orders it (`reassemble`, `curios-elab/src/elaborate/module.rs`, `Module::ordered`), and serializes all of it. Most of what the lowering costs beyond its parse is the documentation record (`document`, 1.62 M), built for every question and read by the two commands that document.
 
 **A cell is tied to a text.** Every occurrence of a term holds a position and the source it lies in (`Span`, `curios-utilities/src/span.rs`), so a declaration lowers to another form wherever an edit above it moves it, two lowered forms are compared up to their positions, an elaborated declaration a recompile keeps points at lines that have since moved, and a stored unit holds the text of every file it was lowered from.
 
-**An edit redoes everything that reaches it.** Respelling `/std/Bool/not`'s body elaborates and judges 1,260 declarations again, 138.04 M allocations between the two checkers. The closure `invalidated` takes is over names an item reaches, whatever it read of them, and transitive, since nothing says where a re-elaborated item came out the same.
+**An edit redoes everything that reaches it.** Respelling `/std/Bool/not`'s body elaborates and judges 1,260 declarations again, 135.02 M allocations between the two checkers. The closure `invalidated` takes is over names an item reaches, whatever it read of them, and transitive, since nothing says where a re-elaborated item came out the same.
 
 **Nothing records what the elaborator read.** What elaboration read and left no name for — a body unfolded while a candidate was tried, a key at which no witness stands, whether a proof was offered the unit's lemmas — is in no term, and elaboration adds 3,018 edges to the 6,488 the lowered forms of `/std`'s declarations name, 1,881 of them to a witness, counted at `0283c7242`. Whether the prover's vocabulary reads a declaration is read off the baseline's elaborated graph (`vocabulary_reach`, `curios-elab/src/elaborate/module.rs`), so an edit that changes what the vocabulary reads leaves a reused declaration elaborated under the other answer.
 
 **A reused verdict rests on a closure the certifier does not check.** The kernel passes a reused declaration over where its terms are the mounted ones (`recheck_over`, `Judged::of`), and which declarations are reused is the pipeline's closure: one cut short files the baseline's verdict beside a declaration it no longer describes, the finding in [`01-soundness`](../01-soundness/00-findings.md).
 
-**A unit is a value.** `Unit` derives `Clone` over its tables, its erased fragments and its certification, and the cache seam passes it by value: a session copies its unit once to take it as a baseline and once to keep it (`Verdicts::kept`, `Verdicts::hold`, `curios-verdicts/src/verdicts.rs`). Filing serializes all of it, hash-consed in one table, and a hit decodes all of it. Every process validates and restores both of the prelude's images before its first declaration, the erased form of every item of the library among them: about half of the stacks sampled inside `restore_archives` stand in erased forms (sixteen samples, timed), where `programs/hello_world.crs` links 570 of them.
+**A unit is stored and restored whole.** Filing serializes all of a unit, hash-consed in one table, and a hit decodes all of it. Every process validates and restores both of the prelude's images before its first declaration, the erased form of every item of the library among them: about half of the stacks sampled inside `restore_archives` stand in erased forms (sixteen samples, timed, at `c98e44af9`), where `programs/hello_world.crs` links 570 of them.
 
-**The kernel and the lowering bring in the whole scope.** `Globals::of` copies each registry of every predecessor and maps each of its definitions, and the kernel copies the result again (`Kernel::seed`): 0.05 M allocations of a question about `programs/hello_world.crs`. The lowering lists every path of every unit in scope for a table only a report reads (`writable_paths`, `curios-text/src/into_core.rs`), 0.04 M.
+**The kernel and the lowering bring in the whole scope.** `Globals::of` copies each registry of every predecessor and maps each of its definitions, and the kernel copies the result again (`Kernel::seed`): 0.05 M allocations of a question about `programs/hello_world.crs`. The lowering lists every path of every unit in scope for a table only a report reads (`writable_paths`, `curios-text/src/into_core.rs`), 0.04 M. A unit compiled over a baseline hands the kernel a copy of every item it keeps (`Module::restricted`, `Globals::mount`), and erasure keys every unit in scope again for each compile (`Projected::over`, `curios-elab/src/into_ersd/projected.rs`).
 
 **A unit is addressed by the units before it, and believed whole or not at all.** A slot names every unit placed ahead of it in the fold and its record vouches for what each contained. Over a package depending on `alpha` and on `beta`, neither naming the other, an edit to `alpha` compiles `/beta` again, whole; under an umbrella one of whose members reaches `beta` after `alpha` and another `beta` alone, `/beta` is compiled once for each and filed in two slots; and a unit compiled against an edited dependency is compiled whole, a baseline being offered only after the units it was compiled after.
 
@@ -105,8 +106,6 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 
 | Component | Treatment | Stage |
 | --- | --- | --- |
-| Units | A shared index of cells at the cache seam, in a session and in a fold; a name index made once for each unit | Held |
-| Erasure over a baseline | Kept forms shared, universes validated for the declarations erased | Held |
 | Verdicts | Adopted by the certifier from the baseline by its own reads; its environment a view | Certifier |
 | Positions | An extent of a declaration in every term; resolved where a report is made | Positions |
 | Scans | One for each file, by its text; a standing file not parsed | Lowering |
@@ -114,6 +113,7 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 | Documentation, path table | Built where asked for | Lowering |
 | Reads | Recorded where the environment is asked, in order, hits as misses, stored with the cell | Records |
 | Invalidation | By trace, revalidated in order, stopping where a cell comes out the same; `invalidated` and `vocabulary_reach` are deleted | Records |
+| Erasure's view | A unit's declarations out of their universes by the places it keeps, nothing keyed for a compile | Records |
 | Builds | Compile a moved unit over its baseline, as a question does | Records |
 | The store | Written and read by cell; a digest for each node | Storage |
 | Addresses | A slot is its unit's own; a read of another unit carries a digest | Units |
@@ -124,22 +124,20 @@ What a question about `/std` costs, compiled over the archived unit, in allocati
 
 Each lands alone, on its own check, and says what it expects to move; a move outside that is a finding.
 
-1. **Held.** Decision 3, and decision 12 for elaboration's and erasure's baseline. Expected to move: erasure and the replay where nothing is redone, what a session copies for each question, and a stored unit's bytes, by how an erased form is held.
-2. **Certifier.** Decision 8, and decision 12 for the kernel. Expected to move: what the kernel judges of a recompile, and what it costs before a compile's first declaration.
-3. **Positions.** Decision 2. Expected to move: a stored unit's bytes, by the positions and sources its lowered module no longer holds, and nothing a report says.
-4. **Lowering.** Decisions 10, 11 and 17, and decision 12 for the path table. Expected to move: a recompile's parse, its lowering and what deciding costs, a stored unit's bytes, by its scans, traces and the record it no longer carries, and what restoring the prelude costs.
-5. **Records.** Decisions 5 to 7 and 9. Expected to move: a stored unit's bytes, by its traces; what elaboration costs, by the recording; which declarations a recompile redoes; and what a build compiles of a moved unit.
-6. **Storage.** Decisions 4 and 15. Expected to move: what filing and restoring cost, and every stored byte.
-7. **Units.** Decision 16, and decision 6 across units. Expected to move: every slot's address, and which declarations an edit to a dependency compiles.
-8. **Linking.** Decision 13. Expected to move: a stored unit's bytes, by its summaries, what a program links, and every row of a program's compile behind its erasure.
-9. **Program.** Decision 14. Expected to move: which declarations a question about a program redoes, and what a question files.
+1. **Certifier.** Decision 8, and decision 12 for the kernel. Expected to move: what the kernel judges of a recompile, and what it costs before a compile's first declaration.
+2. **Positions.** Decision 2. Expected to move: a stored unit's bytes, by the positions and sources its lowered module no longer holds, and nothing a report says.
+3. **Lowering.** Decisions 10, 11 and 17, and decision 12 for the path table. Expected to move: a recompile's parse, its lowering and what deciding costs, a stored unit's bytes, by its scans, traces and the record it no longer carries, and what restoring the prelude costs.
+4. **Records.** Decisions 5 to 7 and 9, and decision 12 for erasure's view. Expected to move: a stored unit's bytes, by its traces; what elaboration costs, by the recording; which declarations a recompile redoes; and what a build compiles of a moved unit.
+5. **Storage.** Decisions 4 and 15. Expected to move: what filing and restoring cost, and every stored byte.
+6. **Units.** Decision 16, and decision 6 across units. Expected to move: every slot's address, and which declarations an edit to a dependency compiles.
+7. **Linking.** Decision 13. Expected to move: a stored unit's bytes, by its summaries, what a program links, and every row of a program's compile behind its erasure.
+8. **Program.** Decision 14. Expected to move: which declarations a question about a program redoes, and what a question files.
 
 ## Verification
 
-- **The cost rows.** `cargo xtask profile programs/hello_world.crs --profile release` builds the compiler and files the program's rows. For the library, a copy of `curios-std/src` with no `.curios` beside it, and `target/release/curios --profile <stream> wonder diagnostics <copy>/Nat.crs`, folded by `curios profile <stream>`: as it is; with `pub let _census_probe(a: Nat) -> Nat = a;` appended to `Nat.crs`; and with `xor(b, true)` respelled `xor(true, b)` in `Bool.crs`, asked of `Bool.crs`. The rows are `restore_archives`, `parse` over its modules, `into_core_unit` less it, `compile_unit_over` less its children, `elaborate_and_zonk_unit_over`, `recheck_module`, `erase_unit`, `verdicts::put`, and for a program `compile_entrypoint`, `elaborate_and_zonk`, `recheck` with `recheck_module` beneath it, `erase_unit`, `link_program`, `writable_paths` and `lower_from_ersd`, each by its allocations. Counted. Their durations are a second measurement, timed, the median of repeated readings on a quiet machine, and no stage quotes one it has not taken so.
+- **The cost rows.** `cargo xtask profile programs/hello_world.crs --profile release` builds the compiler and files the program's rows. For the library, a copy of `curios-std/src` with no `.curios` beside it, and `target/release/curios --profile <stream> wonder diagnostics <copy>/Nat.crs`, folded by `curios profile <stream>`: as it is; with `pub let _census_probe(a: Nat) -> Nat = a;` appended to `Nat.crs`; and with `xor(b, true)` respelled `xor(true, b)` in `Bool.crs`, asked of `Bool.crs`. The rows are `restore_archives`, `parse` over its modules, `into_core_unit` less it, `compile_unit_over` less its children, `elaborate_and_zonk_unit_over`, `recheck_module`, `erase_unit`, `cache::baseline`, `cache::put`, and for a program `compile_entrypoint`, `elaborate_and_zonk`, `recheck` with `recheck_module` beneath it, `erase_unit`, `link_program`, `writable_paths` and `lower_from_ersd`, each by its allocations. Counted. Their durations are a second measurement, timed, the median of repeated readings on a quiet machine, and no stage quotes one it has not taken so.
 - **What a row's own time is.** Where a span's children do not account for it, the release compiler is run under `gdb -batch -ex run -ex bt` and interrupted at a delay stepped across the span, one stack a run, and the stacks are counted by the function that stands beneath the span. Timed, and good for naming a span's halves, no finer.
 - **Reproduction.** `std_unit_reproduction` and `std_recompile_reproduction` after every stage that changes what a unit stores: a unit compiled over a baseline is the bytes it is compiled whole.
-- **Held.** The unedited question's `erase_unit` and `elaborate_and_zonk_unit_over` rows are retaken, with a span on `Cache::baseline` and on `Cache::put` in a session's profile.
 - **Certifier.** A module handed to the certifier over a baseline with a dependency changed and its dependent presented unchanged is judged again where it read the dependency, held in `curios-cert/src/recheck/`; `budget_tests` holds a program to the budget it takes whatever its scope holds; the hub's `recheck_module` row and a program's `recheck` row are retaken.
 - **Positions.** A declaration moved by an edit above it and then refused by a later pass is reported at its new line, and every report of `curios-pipeline/src/tests/` and the corpus is what it was.
 - **Lowering.** A unit lowered over a baseline is the unit lowered whole, its lints and reports with it, held by `incremental_tests` over an edited body, an added declaration, a `pub use` moved and a glob whose module gains a member; a file whose text stands is not parsed, held by the `parse` rows of a question in a process that had read nothing; the pages a library's build writes are the ones it wrote from the record its unit carried, held by `curios/src/tests/document.rs`.
@@ -153,7 +151,7 @@ Each lands alone, on its own check, and says what it expects to move; a move out
 
 ## Design decisions this overturns or corrects
 
-- [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md): the unit lowered whole and diffed, invalidation by a reverse closure, the replay, a build recompiling whole on a miss. Held, Lowering, Records.
+- [A stored unit is a baseline for an item-level recompile](../../design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md): the unit lowered whole and diffed, invalidation by a reverse closure, a build recompiling whole on a miss. Lowering, Records.
 - [Cached verdicts](../../design/soundness/cached-verdicts.md): the per-item argument restated over the certifier's record, then the address's ordered predecessors and a unit believed whole. Certifier, Units.
 - [An independent kernel re-checks what the elaborator accepts](../../design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md): which declarations a walk passes over. Certifier.
 - [Reused payloads](../../design/soundness/reused-payloads.md): the ordered slots of a payload's predecessors. Units.
