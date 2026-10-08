@@ -16,7 +16,7 @@ use {
 ///
 /// The sizing check walks a constructor telescope's **domains** — each must sit at or below the family's declared level — and stops there, so the terminal the telescope ends in, `Family(params, indices)`, is typed by clause 9 of [`check_induct_decl`](crate::check_induct_decl). In a module the elaborator built, a constructor wrapper's declared type ends in that terminal too, so checking the wrapper's body types the targets again — but a module need not carry the wrappers.
 ///
-/// The module below carries the registry entry and no items at all, and its index target is an unsolved metavariable — precisely what `zonk_module` promises has been eliminated. Relying on the lowering to type it would make the guarantee the elaborator's word rather than the kernel's, which is the dependency the two-checker split exists to remove.
+/// The module below carries the registry entry and no items at all, and its index target is an unsolved metavariable — precisely what the elaborator's strict zonk promises has been eliminated. Relying on the lowering to type it would make the guarantee the elaborator's word rather than the kernel's, which is the dependency the two-checker split exists to remove.
 ///
 /// It is reachable from no surface program — the elaborator builds registry and bindings from one declaration — which is why it belongs here rather than in `curios/src/tests`. The diagnostic is asserted rather than bare failure, since a module this small could fail for unrelated reasons and still look guarded.
 ///

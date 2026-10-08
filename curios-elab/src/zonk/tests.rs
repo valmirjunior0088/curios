@@ -190,33 +190,6 @@ fn reports_an_unsolved_goal_as_undetermined() {
     ));
 }
 
-#[test]
-fn two_items_with_unsolved_holes_are_both_reported() {
-    let mut context = context();
-    context.birth_metavar(MetavarId(0), Vec::new(), nat());
-    context.birth_metavar(MetavarId(1), Vec::new(), nat());
-    let item = |path: &str, body: Term| {
-        Item::Let(Definition {
-            name: Global::Authored(Qualifier::from([path])),
-            kind: DefinitionKind::Authored,
-            universe_context: UniverseContext::empty(),
-            island: Qualifier::empty(),
-            totality: Totality::default(),
-            variances: Vec::new(),
-            type_: nat(),
-            body,
-        })
-    };
-    let module = Module {
-        items: vec![item("a", Term::hole(0)), item("b", Term::hole(1))],
-        ..lowered_module(nat_lit(0))
-    };
-
-    let error = zonk_module(&context, &module).unwrap_err();
-
-    assert_eq!(error.each().count(), 2, "{error}");
-}
-
 /// Materializing a solved metavariable at the base of a graph costs the graph, not its tree: each level sums the one below with itself, so the tree doubles per level, and sixty levels are past anything a tree walk finishes. The result stays a graph — both operands of its root are one node.
 #[test]
 fn materializes_a_shared_graph_once_per_node() {

@@ -19,7 +19,7 @@ use {
         decide_polarities, definition_variances, family_levels, goal_sites, hold_variances,
         is_prop, record_definition_totality, record_superclasses, record_variances, reduce_with,
         register_witness, report_goals, sort_term, stamp_totality, state_proof_binders,
-        superclass_targets, test_program_tail, zonk, zonk_arity, zonk_entry, zonk_module,
+        superclass_targets, test_program_tail, validate_universes, zonk, zonk_arity, zonk_entry,
         zonk_published, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
@@ -1458,7 +1458,7 @@ struct ElaboratedSuffix {
 
 /// Elaborate a [`Module`] against an already-elaborated scope, returning what it added. Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint's body and the type it states. Returns the rebuilt suffix, its entry stating the type its body was judged at, reduced through the accumulated definitions.
 ///
-/// Elaboration is authoritative: the returned module — not the lowered input — is what `zonk_module` then makes meta-free for `erase`.
+/// Elaboration is authoritative: the returned module — not the lowered input — is what `erase` reads, each item zonked where it was published ([`zonk_published`]).
 ///
 /// **One protocol serves both entry points**, and that is the point. `established` is [`Established::nothing`] for a from-scratch elaboration and the units in scope otherwise; every step below degenerates to the whole-module reading when it is empty, so there is no second implementation to keep in agreement by reading — the shape of a configuration-dependent defect, a rule correct in the configuration its author was looking at and wrong in the other one.
 ///
@@ -1624,7 +1624,7 @@ fn elaborate_module_suffix<'s>(
         }
     };
 
-    // The output carries the *rebuilt* registry entries (pulled back from the context, where the per-group rebuild re-registered them), so `zonk_module` and `erase` see elaborated telescopes. An entry the context no longer holds was a refused or withheld item's, taken out with it: the module carries the survivors' entries and no other, since an entry whose declaring item is absent would reach zonk and erasure in its lowered form, and `zonk_module` refuses an unsolved universe meta wherever it finds one.
+    // The output carries the *rebuilt* registry entries (pulled back from the context, where the per-group rebuild re-registered them), so `erase` sees elaborated telescopes, zonked where their declarations were published. An entry the context no longer holds was a refused or withheld item's, taken out with it: the module carries the survivors' entries and no other, since an entry whose declaring item is absent would reach the kernel and erasure in its lowered form, which nothing zonked.
     let names = survivors.names();
     // A kept declaration's entries are the baseline's, taken where the unit is assembled.
     let induct_decls = induct_keys
@@ -1732,13 +1732,15 @@ pub struct FinalizedProgram {
     pub obligations: Vec<Error>,
 }
 
-/// Finalize an elaborated module, and a program's entry beside it: report the goals the unit wrote, zonk what is left to zonk, and decide the entry's erasure obligations.
+/// Finalize an elaborated module, and a program's entry beside it: report the goals the unit wrote, hold the module's universes to their schemes, put it in the order it is stored in, and zonk the entry and decide its erasure obligations.
 ///
 /// Every check of a declaration the consistency claim rests on was applied as the declaration was published ([`settle_published`]), and every entry point that produces an elaborated module comes through there and through here. What is left for this function is what belongs to no declaration: the goals, reported once every declaration has finished, and the entry, which is no item.
 ///
+/// **No item is zonked here, or searched for a goal.** An item is published zonked, strictly, with the registry entries it declares ([`zonk_published`]), and a declaration that wrote a goal is held out of the module, so a second pass over the items would find what the first left: nothing.
+///
 /// The order is load-bearing, in two places:
 ///
-/// - `default_universes` then `zonk_module` and `zonk_entry` come first, which is what makes the entry metavariable-free by construction — both error on an unsolved hole, so no metavariable can later be solved to a partial term. Both also validate universes.
+/// - `default_universes` then `zonk_entry` come first, which is what makes the entry metavariable-free by construction — it errors on an unsolved hole, so no metavariable can later be solved to a partial term — and it holds the entry's universes to the module's schemes, as [`validate_universes`] holds the module's own before it.
 /// - [`Context::restore_budget`] precedes the entry's obligations because they reduce, and they have to spend on the same footing as an item's rather than on whatever the entry's check left.
 ///
 /// `obligations` are the ones the items broke, in item order; the entry's follow them.
@@ -1765,8 +1767,17 @@ fn finalize_and_check(
             .map(|_| entry_terms.next().expect("entry type was finalized")),
     });
 
+    let nothing = Module {
+        items: Vec::new(),
+        mounts: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    };
     // Written goals report as one complete batch before zonking: the items', each found as its item finished (`held`), then the entry's, whose collection meets exactly the set strict zonk would (committed solutions included), so a goal-bearing program fails with every goal located rather than with the first (`goal_sites`).
-    let sites = goal_sites(context, &module, entry.as_ref());
+    let sites = goal_sites(context, &nothing, entry.as_ref());
     if !(held.is_empty() && sites.is_empty()) {
         return Err(Error::goals(report_written_goals(
             context,
@@ -1777,8 +1788,9 @@ fn finalize_and_check(
         )));
     }
 
+    validate_universes(&module)?;
     // The order the unit is stored in, given once: every walk after this one takes the items as they come.
-    let module = zonk_module(context, &module)?.ordered();
+    let module = module.ordered();
     let entry = entry
         .map(|entry| zonk_entry(context, &module, &entry))
         .transpose()?;
@@ -1787,15 +1799,6 @@ fn finalize_and_check(
     // Reported rather than raised. `curios-cert` decides these same two obligations independently, and a fixture this checker refuses must still be able to reach it — a short circuit here would return no module at all, leaving "would the kernel have caught it?" unobservable, which is exactly the quadrant the trusted base most needs to see. The public entry points raise the first verdict, so nothing on the compile path is weakened.
     //
     // The entry's alone: every item's were decided as it was published, and took the terms it recorded, so what is left recorded is the entry's. One cache across both, which are seeded from the same recorded entries.
-    let nothing = Module {
-        items: Vec::new(),
-        mounts: Vec::new(),
-        induct_decls: BTreeMap::new(),
-        struct_decls: BTreeMap::new(),
-        concepts: BTreeMap::new(),
-        witnesses: BTreeSet::new(),
-        tests: Vec::new(),
-    };
     let mut zonked = Zonked::default();
     obligations.extend(
         [

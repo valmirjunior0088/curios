@@ -141,7 +141,7 @@ fn archive(
         panic!("elaborated /{root} carries a positional identity: {found}")
     });
 
-    // The archive's own zonk evidence, taken where the module is final: erasure below consumes it, and it is the same claim `zonk_module` just enforced, restated as a checked value rather than inherited.
+    // The archive's own zonk evidence, taken where the module is final: erasure below consumes it, and it is the same claim strict zonking enforced as each item was published, restated as a checked value rather than inherited.
     let zonked = Zonked::project(&core)
         .unwrap_or_else(|refusal| panic!("elaborated /{root} is not zonked: {refusal}"));
 

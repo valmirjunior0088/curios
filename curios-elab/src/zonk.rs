@@ -181,57 +181,6 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
     )
 }
 
-/// Zonk a whole [`Module`]: substitute metavariable solutions throughout every top-level item and registry entry, yielding a meta-free module for `erase`. A program's entry is zonked beside it by `zonk_entry`.
-///
-/// Every item is zonked before any refusal is raised, so a program whose second item holds an unsolved hole is told about its fifth's in the same run; the registries are zonked only once every item has, since a refusal among the items stands on its own.
-pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> {
-    curios_profile::profile!("zonk_module");
-    // One pass for the whole module, so a solution its items share is zonked once.
-    let context = &Zonk::new(context);
-    let mut items = Vec::with_capacity(module.items.len());
-    let mut refusals = Vec::new();
-    for item in &module.items {
-        match zonk_item(context, item) {
-            Ok(item) => items.push(item),
-            Err(error) => refusals.push(error),
-        }
-    }
-    if !refusals.is_empty() {
-        return Err(Error::batch(refusals));
-    }
-
-    // The registry's telescopes flow into `erase`, which runs meta-free with its own (solution-less) context — so they are zonked like everything else.
-    let induct_decls = module
-        .induct_decls
-        .iter()
-        .map(|(name, induct_decl)| Ok((*name, zonk_induct_decl(context, induct_decl)?)))
-        .collect::<Result<_, Error>>()?;
-
-    // Struct field telescopes flow into `erase` the same way — zonk them too.
-    let struct_decls = module
-        .struct_decls
-        .iter()
-        .map(|(name, struct_decl)| Ok((*name, zonk_struct_decl(context, struct_decl)?)))
-        .collect::<Result<_, Error>>()?;
-
-    let module = Module {
-        items,
-        mounts: module.mounts.clone(),
-        induct_decls,
-        struct_decls,
-        // Witness markers carry no terms; a concept carries only its parameter telescope, zonked here — its field telescopes live in `struct_decls`, zonked above.
-        concepts: module
-            .concepts
-            .iter()
-            .map(|(name, concept)| Ok((*name, zonk_concept_decl(context, concept)?)))
-            .collect::<Result<_, Error>>()?,
-        witnesses: module.witnesses.clone(),
-        tests: module.tests.clone(),
-    };
-    validate_universes(&module)?;
-    Ok(module)
-}
-
 fn zonk_induct_decl(context: &Zonk, induct_decl: &InductDecl) -> Result<InductDecl, Error> {
     Ok(InductDecl {
         universe_context: induct_decl.universe_context.clone(),
@@ -285,7 +234,7 @@ pub(crate) struct Published {
     pub(crate) concepts: Vec<(Global, ConceptDecl)>,
 }
 
-/// Zonk one finished item and the registry entries it declares, as [`zonk_module`] zonks a module's: strictly, so what is published holds no metavariable of the declaration that wrote it, and a hole the declaration left unsolved is refused where it stands rather than once every item has elaborated.
+/// Zonk one finished item and the registry entries it declares: strictly, so what is published holds no metavariable of the declaration that wrote it, and a hole the declaration left unsolved is refused where it stands rather than once every item has elaborated.
 pub(crate) fn zonk_published(context: &Context, item: &Item) -> Result<Published, Error> {
     let zonk = &Zonk::new(context);
     let published = zonk_item(zonk, item)?;
@@ -869,7 +818,7 @@ pub(crate) type GoalSite = (MetavarId, Option<Extent>, Option<Global>);
 
 /// Find every written goal one successful elaboration reached — the same set strict zonking would meet — in discovery order.
 ///
-/// The walk mirrors [`zonk_module`]'s coverage in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once with its first occurrence's extent. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
+/// The walk covers what strict zonking covers, in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once with its first occurrence's extent. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
 pub(crate) fn goal_sites(
     context: &Context,
     module: &Module,
