@@ -124,6 +124,7 @@ When an item lands, its contracts go to the owning rustdoc, `README.md` and test
 
 ## Theory
 
+- [ ] [A term is admitted whichever of its parts is read first](roadmap/theory/100-a-term-is-admitted-whichever-of-its-parts-is-read-first.md) — a numeral commits to its default where it is read, so `Option/some(5)` is refused where an `Option(Int)` is expected; two literals parked on one type are settled in written order, and a lambda passed through a call has no type until its item ends; so a call, a list literal, a structure literal or a match is admitted or refused by the order of its parts
 - [ ] [A declaration carries the levels it uses](roadmap/theory/200-a-declaration-carries-the-levels-it-uses.md) — not refined yet; a member of a group takes the group's levels whether or not its telescopes mention them, and a signature that names an associated type through a witness takes the witness's level, each a parameter no caller can use
 - [ ] [Strict positivity through a type former](roadmap/theory/201-positivity-through-a-type-former.md) — not refined yet; `induct Mu(F : (Type) -> Type)` is refused, since its body cannot say how `F` uses its argument, and so is a type that holds itself through a container whose hidden proof applies a function to the payload
 - [ ] [Flex–flex problems with distinct heads](roadmap/theory/202-flex-flex-intersection.md) — not refined yet; `?0(x) ~ ?1(x)` parks undecided, with no intersection
