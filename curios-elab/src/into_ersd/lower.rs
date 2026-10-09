@@ -418,13 +418,25 @@ impl ErasedProgram {
     /// Mark every function a definition `certification` classifies `Total` erased to as total — see [`curios_ersd::Function::total`]. Each is found through where its name was linked, so a definition that erased to anything but a function, or that the program does not reach, has nothing to mark, and a function no record names keeps the conservative `false`.
     ///
     /// Run on the linked program, once per record of what it was erased from: every unit's in scope and the entry's own. Nothing reads the flag before the back half lowers what this leaves.
+    ///
+    /// **Asked by the names the program linked, never walked.** A record classifies every definition of its unit and a program links a few of them, so each linked name is asked of the record, and the record is read for what the program took of its unit.
     pub fn mark_total(&mut self, certification: &Certification) {
-        for (name, totality) in certification.iter() {
-            if totality.is_total()
-                && let Some(curios_ersd::Atom::Function(id)) = self.bound.get(name)
-            {
-                self.module.mark_total(*id);
-            }
+        let total = self
+            .bound
+            .iter()
+            .filter_map(|(name, atom)| match atom {
+                curios_ersd::Atom::Function(id)
+                    if certification
+                        .totality(name)
+                        .is_some_and(|totality| totality.is_total()) =>
+                {
+                    Some(*id)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for id in total {
+            self.module.mark_total(id);
         }
     }
 
