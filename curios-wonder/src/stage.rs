@@ -10,18 +10,17 @@ use {
     curios_verdicts::Verdicts,
 };
 
-/// One rung, reprinted.
+/// One rung, reprinted and handed on where the driver emitted it.
 #[derive(Debug)]
 pub struct Rendering {
     pub name: &'static str,
-    pub text: String,
     /// What stopped the compilation *after* this rung was reached, if anything. A rung the driver already emitted is an answer, and a later failure does not unmake it — the transport prints these beside the rendering rather than in place of it.
     pub diagnostics: Vec<Diagnosis>,
 }
 
 /// What asking for a rung reached.
 pub enum Reached {
-    /// The rung, rendered by the driver's own `Display` for it.
+    /// The rung, rendered by the driver's own `Display` for it and handed to the asker's `shown`.
     Rendered(Rendering),
     /// The rung past the driver: the emitted module, for the transport that owns Binaryen to optimize and render.
     Wasm(Box<curios_wasm::Module>),
@@ -36,7 +35,8 @@ pub enum Refusal {
     Diagnostics(Vec<Diagnosis>),
 }
 
-/// `program`'s representation at the rung `name`, compiled against `units` and the prelude.
+/// `program`'s representation at the rung `name`, compiled against `units` and the prelude, handed to `shown` where the driver emits it: nothing a later rung does unmakes a rung already handed on, a panic on an invariant of its own among it.
+#[allow(clippy::too_many_arguments)]
 pub fn stage(
     budget: u64,
     units: Vec<RootSource>,
@@ -45,6 +45,7 @@ pub fn stage(
     overlay: &Overlay,
     cache: Option<&Verdicts>,
     name: &str,
+    mut shown: impl FnMut(&str),
 ) -> Result<Reached, Refusal> {
     let Some(name) = Stage::NAMES.into_iter().find(|known| *known == name) else {
         return Err(Refusal::NoSuchStage {
@@ -57,31 +58,30 @@ pub fn stage(
     let reached = cache.map(|cache| Overlaid::over(cache, overlay));
     let cache = reached.as_ref().map(|cache| cache as &dyn Cache);
 
-    let mut text = None;
+    let mut reached = false;
     let compiled = Fold::new(budget, &units, cache).compile(
         &entrypoint,
         &loader,
         |stage| {
             if stage.name() == name {
-                text = Some(stage.to_string());
+                shown(&stage.to_string());
+                reached = true;
             }
         },
         |_| {},
     );
 
     // A rung the driver emitted has been answered, whatever happens downstream of it. Asking for `core` on a program that fails to elaborate is asking what the lowering produced — which is most of why one asks — and discarding it because a later stage refused answers a question nobody put. What the transport's contract refuses is a program that stopped *before* the rung, which is exactly the case where nothing was observed.
-    match (text, compiled) {
-        (Some(text), Ok(_)) => Ok(Reached::Rendered(Rendering {
+    match (reached, compiled) {
+        (true, Ok(_)) => Ok(Reached::Rendered(Rendering {
             name,
-            text,
             diagnostics: Vec::new(),
         })),
-        (Some(text), Err(error)) => Ok(Reached::Rendered(Rendering {
+        (true, Err(error)) => Ok(Reached::Rendered(Rendering {
             name,
-            text,
             diagnostics: of_error(error),
         })),
-        (None, Ok((module, _foreigns))) => Ok(Reached::Wasm(Box::new(module))),
-        (None, Err(error)) => Err(Refusal::Diagnostics(of_error(error))),
+        (false, Ok((module, _foreigns))) => Ok(Reached::Wasm(Box::new(module))),
+        (false, Err(error)) => Err(Refusal::Diagnostics(of_error(error))),
     }
 }

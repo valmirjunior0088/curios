@@ -209,12 +209,15 @@ pub fn wonder_stage(
     };
     let cache = store.as_ref();
 
-    let reached = stage(budget, units, origin, declares, &overlay, cache, name);
+    // The rung is the answer and goes to stdout, where the driver emits it.
+    let shown = |text: &str| println!("{text}");
+    let reached = stage(
+        budget, units, origin, declares, &overlay, cache, name, shown,
+    );
     let unstored = refused(cache);
     let answered = match reached {
         Ok(Reached::Rendered(rendering)) => {
-            println!("{}", rendering.text);
-            // The rung is the answer and goes to stdout; what stopped the compilation afterwards is context and goes to stderr, so a pipeline reading the rendering is unaffected by it.
+            // What stopped the compilation after the rung is context and goes to stderr, so a pipeline reading the rendering is unaffected by it.
             for diagnostic in &rendering.diagnostics {
                 eprintln!("{}", diagnostic.render());
             }
