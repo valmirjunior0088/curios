@@ -146,6 +146,11 @@ impl<'a> Baseline<'a> {
         }
     }
 
+    /// The unit lowered over.
+    pub(super) fn unit(&self) -> &'a PreparedText {
+        self.unit
+    }
+
     /// The declaration of this unit that the one `context` stands at was lowered as, by its place: the one lowered from the text that declaration is written in, where every name it resolved resolves here as it did.
     pub(super) fn standing(&self, context: &Context) -> Option<usize> {
         let index = context.sited(|key, text| {

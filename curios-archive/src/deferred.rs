@@ -152,9 +152,9 @@ impl<T> Deferred<T> {
         self.value.get()
     }
 
-    /// Whether the value was restored from bytes, which it is then stored as again.
-    pub fn was_stored(&self) -> bool {
-        self.stored.is_some()
+    /// The bytes the value was restored from, where it was: what it is stored as again, by whoever holds it or keeps it of another.
+    pub fn as_stored(&self) -> Option<&Bytes> {
+        self.stored.as_ref()
     }
 }
 

@@ -407,6 +407,9 @@ pub struct PreparedText {
     /// The unit's lowered items where it was restored, each the bytes it was stored as until something reads it: `core` holds them where the unit was lowered in this process.
     #[archived_with(curios_archive::Skip)]
     items: Option<Vec<curios_archive::Deferred<curios_core::Item>>>,
+    /// The bytes a baseline stored an item as, for each item this unit took from one whole ([`PreparedText::taken_from`]), by the item's place: what the item is stored as again, since it is the baseline's. Empty for a unit lowered over none.
+    #[archived_with(curios_archive::Skip)]
+    carried: Vec<Option<curios_archive::Bytes>>,
     /// What this unit's lowering minted, which its elaboration's counters start above. A count within the unit: nothing here resumes above a predecessor.
     minted: curios_core::Minted,
     /// Every bare name that resolved to nothing, by the binder it lowered to, with what it could have meant — see `Context::unbound_binder`. Empty for any unit that compiles, the prelude included.
@@ -666,8 +669,20 @@ impl PreparedText {
                 .core
                 .items
                 .iter()
-                .map(curios_archive::to_bytes)
-                .collect::<Result<Vec<_>, _>>()
+                .enumerate()
+                .map(|(place, item)| match self.carried.get(place) {
+                    Some(Some(carried)) => {
+                        debug_assert!(
+                            curios_archive::to_bytes(item)
+                                .is_ok_and(|made| *made == *carried.as_slice()),
+                            "an item taken from a baseline whole is stored as the baseline stored it"
+                        );
+
+                        Ok(Cow::Borrowed(carried.as_slice()))
+                    }
+                    _ => curios_archive::to_bytes(item).map(|made| Cow::Owned(made.to_vec())),
+                })
+                .collect::<Result<Vec<_>, String>>()
                 .map(|parts| joined(&parts)),
         }
     }
@@ -699,6 +714,15 @@ impl PreparedText {
     ///
     /// **By the record, never by the text.** A declaration is the baseline's where this unit holds the very record the baseline does, which only a kept lowering leaves behind; and under the same name, since a kept witness is named anew and may take the name another held.
     pub fn kept_from(&self, baseline: &PreparedText) -> BTreeSet<curios_core::Global> {
+        self.taken_from(baseline)
+            .into_iter()
+            .flat_map(|(ours, _)| self.lowered_item(ours).declared_names())
+            .copied()
+            .collect()
+    }
+
+    /// The places of the items this unit took from `baseline` whole, each beside the baseline's place for it: an item of a declaration whose record is the baseline's own, under the names the baseline holds it under.
+    fn taken_from(&self, baseline: &PreparedText) -> Vec<(usize, usize)> {
         let mut held = HashMap::with_capacity(baseline.lowerings().len());
         let mut first = 0;
         for declaration in baseline.lowerings() {
@@ -706,7 +730,7 @@ impl PreparedText {
             first += declaration.facts().len();
         }
 
-        let mut kept = BTreeSet::new();
+        let mut taken = Vec::new();
         let mut first = 0;
         for declaration in self.lowerings() {
             let count = declaration.facts().len();
@@ -715,14 +739,31 @@ impl PreparedText {
                     let ours = self.lowered_item(first + place);
                     let theirs = baseline.lowered_item(from + place);
                     if ours.declared_names() == theirs.declared_names() {
-                        kept.extend(ours.declared_names().into_iter().copied());
+                        taken.push((first + place, from + place));
                     }
                 }
             }
             first += count;
         }
 
-        kept
+        taken
+    }
+
+    /// The bytes the item at `place` was stored as, where this unit holds them: the ones it was restored from, or the ones it carries of a baseline.
+    fn item_stored(&self, place: usize) -> Option<curios_archive::Bytes> {
+        match &self.items {
+            Some(items) => items[place].as_stored().cloned(),
+            None => self.carried.get(place).cloned().flatten(),
+        }
+    }
+
+    /// Carry, for each item this unit took from `baseline` whole, the bytes the baseline stored it as: what [`PreparedText::items_bytes`] stores it as again.
+    fn carry(&mut self, baseline: &PreparedText) {
+        let mut carried = vec![None; self.core.items.len()];
+        for (ours, theirs) in self.taken_from(baseline) {
+            carried[ours] = baseline.item_stored(theirs);
+        }
+        self.carried = carried;
     }
 
     /// What each `use` brought into scope, where, and under which spelling — the table `curios-elab`'s goal suggestions draw imported candidates from and spell them by.
@@ -2364,13 +2405,14 @@ fn into_core_unit_within(
         .collect::<Vec<_>>();
 
     curios_profile::sample!("into_core_unit::imports", imports.borrow().entries.len());
-    let unit = PreparedText {
+    let mut unit = PreparedText {
         mounts: own.clone(),
         foreigns,
         table: table.into_own().into_iter().collect(),
         public: public.into_own().into_iter().collect(),
         declared: declared_in(&items),
         items: None,
+        carried: Vec::new(),
         core: curios_core::Module {
             items: items.into(),
             mounts: own,
@@ -2403,6 +2445,9 @@ fn into_core_unit_within(
             scans,
         }),
     };
+    if let Some(baseline) = &baseline {
+        unit.carry(baseline.unit());
+    }
 
     Ok((unit, entry))
 }
