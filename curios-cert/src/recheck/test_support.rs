@@ -2589,7 +2589,7 @@ pub(super) fn statement_name() -> Global {
     Global::Authored(Qualifier::from(["p"]))
 }
 
-/// `thm : p = Holds/qed()` and `p : Prop = Holds`, closed with `thm` stated at `Absurd` — led, when `twice`, by a second `p : Prop = ((x : Holds) => Absurd)(thm)`.
+/// `p : Prop = Holds` and `thm : p = Holds/qed()`, closed with `thm` stated at `Absurd` — followed, when `twice`, by a second `p : Prop = ((x : Holds) => Absurd)(thm)`.
 pub(super) fn statement_declared(twice: bool) -> Program {
     let holds_name = Global::Authored(Qualifier::from(["Holds"]));
     let absurd_name = Global::Authored(Qualifier::from(["Absurd"]));
@@ -2624,8 +2624,8 @@ pub(super) fn statement_declared(twice: bool) -> Program {
     Program {
         module: collision_module(
             match twice {
-                true => vec![refuted, proved, stated],
-                false => vec![proved, stated],
+                true => vec![stated, proved, refuted],
+                false => vec![stated, proved],
             },
             BTreeMap::from([
                 (holds_name, proposition(vec![qed])),

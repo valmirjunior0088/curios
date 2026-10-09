@@ -87,9 +87,9 @@ fn a_registry_entry_under_the_preludes_false() -> (Module, Term) {
     )
 }
 
-/// `p : Prop = ((x : Holds) => False)(thm)`, then `thm : p = Holds/qed()`, then `p : Prop = Holds`, closed with `thm`.
+/// `p : Prop = Holds`, then `thm : p = Holds/qed()`, then `p : Prop = ((x : Holds) => False)(thm)`, closed with `thm`.
 ///
-/// A walk orders items by what each names, and a name declared twice has two owners: `thm` waits for one `p` and is typed while `p` is `Holds`, and the other `p` names `thm`, so it is judged after it and defined where the first stood. The closing term is then read at a `p` that reduces to `False`.
+/// A walk takes items as they are stored, and a name declared twice is written twice: `thm` is typed while `p` is `Holds`, and the second `p`, which names `thm`, is defined where the first stood. The closing term is then read at a `p` that reduces to `False`.
 fn a_statement_declared_twice() -> (Module, Term) {
     let holds = Global::Authored(Qualifier::from(["Holds"]));
     let statement = Global::Authored(Qualifier::from(["p"]));
@@ -100,23 +100,20 @@ fn a_statement_declared_twice() -> (Module, Term) {
     let module = Module {
         items: vec![
             declared(holds, Nominal::Inductive(family(Term::prop(), &["qed"]))),
-            authored(
-                &statement,
-                Term::prop(),
-                Term::apply(
-                    Term::func(
-                        [(Free::local(900, Some("x")), holds_type.clone())],
-                        false_type(),
-                    ),
-                    [named(&theorem)],
-                ),
-            ),
+            authored(&statement, Term::prop(), holds_type.clone()),
             authored(
                 &theorem,
                 named(&statement),
                 Term::variant(holds, Vec::<Term>::new(), "qed", Vec::<Term>::new()),
             ),
-            authored(&statement, Term::prop(), holds_type),
+            authored(
+                &statement,
+                Term::prop(),
+                Term::apply(
+                    Term::func([(Free::local(900, Some("x")), holds_type)], false_type()),
+                    [named(&theorem)],
+                ),
+            ),
         ]
         .into(),
         ..Module::default()

@@ -220,7 +220,7 @@ fn a_group_the_environment_holds_in_part_is_refused() {
 
 /// A name is declared by one item of a module: a second item under it is refused, and so is a group naming one member twice.
 ///
-/// The walk orders items by what each names, and a name declared twice has two owners: `thm : p` is typed while `p` is `Holds`, the other `p` names `thm` and so is judged after it, and its definition would stand where the first did — the closing `thm` then read at a `p` that reduces to `Absurd`. With `p` declared once the closing term is the `Mismatch` it should be.
+/// The walk takes items as they are stored, and a name declared twice is written twice: `thm : p` is typed while `p` is `Holds`, the second `p` names `thm`, and its definition would stand where the first did — the closing `thm` then read at a `p` that reduces to `Absurd`. With `p` declared once the closing term is the `Mismatch` it should be.
 ///
 /// Mutation-checked against the set of names already declared: with it never consulted the module is judged, and `p` is refused where the walk writes it again and no sooner.
 #[test]
