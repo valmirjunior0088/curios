@@ -4,7 +4,7 @@
 
 use {
     super::{
-        AliasEdge, Audiences, Entry, FlatItem, LoweredItem, ModuleInfo, PublicInterface, Scoped,
+        AliasEdge, AudienceScope, Audiences, Entry, FlatItem, LoweredItem, PublicInterface, Scoped,
         aliases, globals,
     },
     crate::Error,
@@ -124,7 +124,7 @@ fn alias_sources(
 
 /// Everyone who can see `referent`, whether by its own name or through a transparent alias that stands for it.
 fn referent_audience(
-    audiences: &Audiences,
+    audiences: AudienceScope<'_>,
     sources: &HashMap<curios_core::Global, HashSet<curios_core::Global>>,
     referent: &curios_core::Global,
 ) -> Vec<Qualifier> {
@@ -146,7 +146,7 @@ fn referent_audience(
 
 /// Every consumer of `item` — an item exposed to `exposure` — must be able to see everything `item`'s signature names. Checked against audiences rather than the declaration path, so an item re-exported out of a private module counts as visible exactly where the re-export puts it.
 fn audit_dependencies(
-    audiences: &Audiences,
+    audiences: AudienceScope<'_>,
     sources: &HashMap<curios_core::Global, HashSet<curios_core::Global>>,
     exposure: &[Qualifier],
     item: &str,
@@ -170,7 +170,7 @@ fn audit_dependencies(
 /// The declared type of every definition is audited here rather than during lowering: only the converged interface graph knows where a name ends up visible, so a signature naming an item re-exported out of a private child is accepted, while one naming something its own consumers cannot reach is not.
 pub(super) fn audit_public_exposures(
     public: &Scoped<'_, PublicInterface>,
-    table: &Scoped<'_, ModuleInfo>,
+    audiences: AudienceScope<'_>,
     items: &[FlatItem],
     facts: &[&LoweredItem],
     scope: NominalScope<'_>,
@@ -178,7 +178,6 @@ pub(super) fn audit_public_exposures(
     curios_profile::profile!("audit_public_exposures");
     let aliases = aliases(items, facts);
     let sources = alias_sources(&aliases);
-    let audiences = Audiences::compute(public, table);
 
     let definitions = items
         .iter()
@@ -197,7 +196,7 @@ pub(super) fn audit_public_exposures(
 
         let exposure = audiences.binding(path);
         audit_dependencies(
-            &audiences,
+            audiences,
             &sources,
             &exposure,
             &name.symbol(),
@@ -216,7 +215,7 @@ pub(super) fn audit_public_exposures(
             for alias in traversed {
                 if let Some(dependencies) = &alias.dependencies {
                     audit_dependencies(
-                        &audiences,
+                        audiences,
                         &sources,
                         &exposure,
                         &item,
@@ -227,11 +226,11 @@ pub(super) fn audit_public_exposures(
 
             if let Some(induct_decl) = scope.induct(&nominal) {
                 let nominal_dependencies = globals(induct_decl.arity.free_vars());
-                audit_dependencies(&audiences, &sources, &exposure, &item, nominal_dependencies)?;
+                audit_dependencies(audiences, &sources, &exposure, &item, nominal_dependencies)?;
 
                 if induct_decl.rep_public {
                     audit_dependencies(
-                        &audiences,
+                        audiences,
                         &sources,
                         &exposure,
                         &item,
@@ -252,7 +251,7 @@ pub(super) fn audit_public_exposures(
                     walk = rest.body();
                 }
                 audit_dependencies(
-                    &audiences,
+                    audiences,
                     &sources,
                     &exposure,
                     &item,
@@ -261,7 +260,7 @@ pub(super) fn audit_public_exposures(
 
                 if struct_decl.rep_public {
                     audit_dependencies(
-                        &audiences,
+                        audiences,
                         &sources,
                         &exposure,
                         &item,

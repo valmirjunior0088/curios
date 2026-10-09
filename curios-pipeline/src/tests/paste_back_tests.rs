@@ -327,9 +327,9 @@ fn standard_declarations() -> Vec<Qualifier> {
             |prelude, _| {
                 let (unit, earlier) = prelude.split_last().expect("the prelude has roots");
                 let scope = earlier.iter().map(|root| root.text()).collect::<Vec<_>>();
-                Ok(unit
-                    .text()
-                    .spellings(&scope)
+                let spellings = unit.text().spellings(&scope);
+                let own = spellings.units.last().expect("the unit's own paths");
+                Ok(own
                     .paths
                     .iter()
                     .filter(|(global, _)| matches!(global, Global::Authored(_)))

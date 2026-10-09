@@ -12,7 +12,7 @@ mod tests;
 use {
     crate::{UniverseSeed, WitnessId},
     curios_utilities::{InfixOp, Qualifier, Symbol, name},
-    std::{cmp::Ordering, collections::BTreeMap, fmt, hash},
+    std::{cmp::Ordering, collections::BTreeMap, fmt, hash, rc::Rc},
 };
 
 name!(Atom; archive);
@@ -429,12 +429,23 @@ impl Imports {
     }
 }
 
-/// How a unit's names can be written, and where: what each definition's `use` lines brought into scope, and every absolute path the unit may write for each global — its declaration path and each re-export, with the subtrees whose modules may name it. The text stage makes one where a report asks, because only the text stage sees re-exports and visibility, and no unit stores one; a report reads it to spell a global the way resolution would find it from where the reader stands ([`Spellings::spell`]).
+/// How a unit's names can be written, and where: what each definition's `use` lines brought into scope, and every absolute path a unit of its scope gives each global — its declaration path and each re-export, with the subtrees whose modules may name it. The text stage makes one where a report asks, because only the text stage sees re-exports and visibility, and no unit stores one; a report reads it to spell a global the way resolution would find it from where the reader stands ([`Spellings::spell`]).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Spellings {
     pub imports: Imports,
-    /// Each canonical global's absolute paths, the prefixes the unit may not name already dropped.
-    pub paths: BTreeMap<Global, Vec<WritablePath>>,
+    /// The paths each unit in scope gives a global, in dependency order, the reader's own unit last.
+    pub units: Vec<UnitPaths>,
+    /// The prefixes in scope the reader's unit may not name: a path under one is written nowhere in it.
+    pub closed: Vec<Qualifier>,
+}
+
+/// The absolute paths one unit gives each global, as a reader's unit holds them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnitPaths {
+    /// Each global's paths in the unit — a declaration of the unit's own at its own path first, then each path a module of the unit exports it at, by path. Made once for the unit and shared by every reader, so nothing in it is a reader's.
+    pub paths: Rc<BTreeMap<Global, Vec<WritablePath>>>,
+    /// Whether the unit is the reader's own, where a module may also reach a path relatively, through its own declarations.
+    pub own: bool,
 }
 
 /// One absolute path reaching a global, and who may write it.
@@ -443,8 +454,6 @@ pub struct WritablePath {
     pub path: Qualifier,
     /// The subtree roots whose modules may name the path — a non-`pub` declaration's own module, a `pub` one's module's audience.
     pub audience: Vec<Qualifier>,
-    /// Whether the path lies in the unit's own mounts, where a module may also reach it relatively, through its own declarations.
-    pub own: bool,
 }
 
 impl Spellings {
@@ -455,13 +464,29 @@ impl Spellings {
         owner: Option<&Global>,
         global: &Global,
     ) -> Option<String> {
-        let paths = self.paths.get(global).into_iter().flatten();
-        let reachable =
-            paths.filter(|written| written.audience.iter().any(|root| island.is_within(root)));
+        let mut reachable = self
+            .units
+            .iter()
+            .flat_map(|unit| {
+                let paths = unit.paths.get(global).into_iter().flatten();
+
+                paths.map(move |written| (written, unit.own))
+            })
+            .filter(|(written, _)| {
+                !self
+                    .closed
+                    .iter()
+                    .any(|prefix| written.path.is_within(prefix))
+            })
+            .filter(|(written, _)| written.audience.iter().any(|root| island.is_within(root)))
+            .collect::<Vec<_>>();
+        // A declaration's own path, then each path it is exported at, by path, whichever unit gives it: a reader takes the first of two spellings equally short.
+        reachable
+            .sort_by_key(|(written, _)| (Global::Authored(written.path) != *global, written.path));
 
         let mut candidates = Vec::new();
-        for written in reachable {
-            if written.own && written.path.is_within(island) && written.path != *island {
+        for (written, own) in reachable {
+            if own && written.path.is_within(island) && written.path != *island {
                 candidates.push(written.path.segments()[island.segments().len()..].join("/"));
             }
             candidates.push(written.path.join());

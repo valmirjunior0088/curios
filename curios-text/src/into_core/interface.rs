@@ -1,5 +1,5 @@
 use {
-    super::{Head, Headed, Loaded, ModuleInfo, Reach, Scoped},
+    super::{Head, Headed, Loaded, ModuleInfo, PreparedText, Reach, Scoped},
     crate::{Error, GroupItem, Name, UseGroup},
     curios_utilities::{Mount, Qualifier},
     std::{
@@ -59,26 +59,40 @@ struct PubUse {
 //
 // Globs are deliberately *not* relaxed — `resolvable` reads the public interface alone, so `use M/*` imports M's exported surface and `pub use M/*` can never widen a subtree-private item's audience. Reaching a non-`pub` declaration always requires naming it.
 
-/// Who can see each declaration, as a set of subtree roots: a declaration is visible to consumer `C` when `C` lies within any of them.
+/// Who can see each declaration of one unit, as a set of subtree roots: a declaration is visible to consumer `C` when `C` lies within any of them.
 ///
 /// The audience of a non-`pub` declaration in `M` is `M` itself. The audience of anything the interface graph exposes at `M` — a `pub` declaration or a re-export target — is `M`'s own audience, so `pub` inside a private module reaches exactly that module's audience and no further. Re-exports can expose one declaration at several unrelated points, which is why an audience is a set rather than a single qualifier.
 ///
 /// Module audiences are a fixed point (a `pub use` chain may cycle, and cyclic module dependencies are supported); binding audiences read off the converged module map in one pass.
+///
+/// **A unit decides the audience of each name it declares, and of no other.** Its audiences are a function of its own direct interface and export view ([`Audiences::of`]), so they are made once for the unit and kept with it, and a unit lowered after it reads them as they stand ([`AudienceScope`]): no later unit widens one. None needs to: a unit reaches another's name through public hops from the compilation root alone, and its own unit already shows a name so reached to everyone, which every lowering asserts of its exports ([`AudienceScope::widens_nothing`]).
+#[derive(Clone)]
 pub(super) struct Audiences {
     modules: HashMap<Qualifier, Vec<Qualifier>>,
     bindings: HashMap<Qualifier, Vec<Qualifier>>,
 }
 
 impl Audiences {
-    pub(super) fn compute(
-        public: &Scoped<'_, PublicInterface>,
-        table: &Scoped<'_, ModuleInfo>,
+    /// The audiences of the unit whose direct interface is `table` and whose export view is `public`, each the unit's own layer.
+    pub(super) fn of<'t>(
+        table: impl IntoIterator<Item = (&'t Qualifier, &'t ModuleInfo)> + Copy,
+        public: impl IntoIterator<Item = (&'t Qualifier, &'t PublicInterface)> + Copy,
     ) -> Self {
+        curios_profile::profile!("audiences::of");
+        // What the unit declares. The compilation root every unit seeds lists each mounted prefix as a child, an earlier unit's among them, and an export may name an earlier unit's declaration: neither is this unit's to decide.
+        let declared = table.into_iter().collect::<HashMap<_, _>>();
+        let declares_module = |module: &Qualifier| declared.contains_key(module);
+        let declares_binding = |binding: &Qualifier| {
+            declared
+                .get(&binding.without_last())
+                .is_some_and(|info| info.get_binding(binding.last()).is_some())
+        };
+
         let mut modules: HashMap<Qualifier, Vec<Qualifier>> = HashMap::new();
         // The compilation root is visible to the whole program.
         modules.insert(Qualifier::empty(), vec![Qualifier::empty()]);
 
-        for (module, info) in table.iter() {
+        for (module, info) in table {
             for (label, vis_pub) in info.children() {
                 if !vis_pub {
                     widen(&mut modules, module.with(label), *module);
@@ -88,9 +102,13 @@ impl Audiences {
 
         loop {
             let mut changed = false;
-            for (module, interface) in public.iter() {
+            for (module, interface) in public {
                 let exposure = modules.get(module).cloned().unwrap_or_default();
-                for entry in interface.children.values() {
+                let exported = interface
+                    .children
+                    .values()
+                    .filter(|entry| declares_module(&entry.target));
+                for entry in exported {
                     for root in &exposure {
                         changed |= widen(&mut modules, entry.target, *root);
                     }
@@ -104,7 +122,7 @@ impl Audiences {
 
         let mut bindings: HashMap<Qualifier, Vec<Qualifier>> = HashMap::new();
 
-        for (module, info) in table.iter() {
+        for (module, info) in table {
             for (label, vis_pub) in info.bindings() {
                 if !vis_pub {
                     widen(&mut bindings, module.with(label), *module);
@@ -112,16 +130,20 @@ impl Audiences {
             }
         }
 
-        for (module, interface) in public.iter() {
+        for (module, interface) in public {
             let exposure = modules.get(module).cloned().unwrap_or_default();
-            for entry in interface.bindings.values() {
+            let exported = interface
+                .bindings
+                .values()
+                .filter(|entry| declares_binding(&entry.target));
+            for entry in exported {
                 for root in &exposure {
                     widen(&mut bindings, entry.target, *root);
                 }
             }
         }
 
-        // An audience is a set, and the walks above reach its roots in a hash's order: listed by root, so the list a unit stores is the same from every compilation.
+        // An audience is a set, and the walks above reach its roots in a hash's order: listed by root, so the list is the same from every compilation.
         for audience in modules.values_mut().chain(bindings.values_mut()) {
             audience.sort();
         }
@@ -129,7 +151,7 @@ impl Audiences {
         Self { modules, bindings }
     }
 
-    /// The audience of the module `qualifier` names. A namespace the interface never mentions (a synthetic one built during lowering) inherits its parent's audience.
+    /// The audience of the module `qualifier` names, one of the unit's. A namespace the interface never mentions (a synthetic one built during lowering) inherits its parent's audience.
     pub(super) fn module(&self, qualifier: &Qualifier) -> Vec<Qualifier> {
         match self.modules.get(qualifier) {
             Some(audience) => audience.clone(),
@@ -138,7 +160,7 @@ impl Audiences {
         }
     }
 
-    /// The audience of the binding `qualifier` names, falling back to its namespace for compiler-built bindings the interface never registered.
+    /// The audience of the binding `qualifier` names, one of the unit's, falling back to its namespace for compiler-built bindings the interface never registered.
     pub(super) fn binding(&self, qualifier: &Qualifier) -> Vec<Qualifier> {
         match self.bindings.get(qualifier) {
             Some(audience) => audience.clone(),
@@ -151,6 +173,69 @@ impl Audiences {
         audience
             .iter()
             .all(|root| referent.iter().any(|reach| root.is_within(reach)))
+    }
+}
+
+/// Who can see each declaration in a unit's scope: the audiences the unit decided, over the ones each unit lowered before it decided for itself.
+///
+/// A *scope*, not a merged map. A name is asked of the unit that declares it, found by the prefix it lies under, so an earlier unit's audiences are made only where a lowering asks about one of that unit's names.
+#[derive(Clone, Copy)]
+pub(super) struct AudienceScope<'a> {
+    own: &'a Audiences,
+    /// The units already lowered, in dependency order.
+    earlier: &'a [&'a PreparedText],
+}
+
+impl<'a> AudienceScope<'a> {
+    pub(super) fn over(own: &'a Audiences, earlier: &'a [&'a PreparedText]) -> Self {
+        Self { own, earlier }
+    }
+
+    /// The earlier unit that declares `qualifier`, where one does: the one it lies under a prefix of. The compilation root is every unit's, so a name under no earlier unit's prefix is the unit's own.
+    fn declaring(&self, qualifier: &Qualifier) -> Option<&'a PreparedText> {
+        self.earlier.iter().copied().find(|unit| {
+            unit.mounts
+                .iter()
+                .any(|mount| !mount.prefix.is_root() && qualifier.is_within(&mount.prefix))
+        })
+    }
+
+    /// The audience of the module `qualifier` names — see [`Audiences::module`].
+    pub(super) fn module(&self, qualifier: &Qualifier) -> Vec<Qualifier> {
+        match self.declaring(qualifier) {
+            Some(unit) => unit.audiences().module(qualifier),
+            None => self.own.module(qualifier),
+        }
+    }
+
+    /// The audience of the binding `qualifier` names — see [`Audiences::binding`].
+    pub(super) fn binding(&self, qualifier: &Qualifier) -> Vec<Qualifier> {
+        match self.declaring(qualifier) {
+            Some(unit) => unit.audiences().binding(qualifier),
+            None => self.own.binding(qualifier),
+        }
+    }
+
+    /// Whether no export of `public`, the unit's own export view, shows an earlier unit's name to anyone its own unit does not: what lets every unit decide its audiences alone.
+    pub(super) fn widens_nothing<'t>(
+        &self,
+        public: impl IntoIterator<Item = (&'t Qualifier, &'t PublicInterface)>,
+    ) -> bool {
+        public.into_iter().all(|(module, interface)| {
+            let exposure = self.own.module(module);
+            let children = interface.children.values().all(|entry| {
+                self.declaring(&entry.target).is_none_or(|unit| {
+                    Audiences::covers(&exposure, &unit.audiences().module(&entry.target))
+                })
+            });
+            let bindings = interface.bindings.values().all(|entry| {
+                self.declaring(&entry.target).is_none_or(|unit| {
+                    Audiences::covers(&exposure, &unit.audiences().binding(&entry.target))
+                })
+            });
+
+            children && bindings
+        })
     }
 }
 

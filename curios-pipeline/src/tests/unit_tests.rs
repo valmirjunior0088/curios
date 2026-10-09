@@ -1,8 +1,13 @@
 //! Mounts and prefixes across compilation units, the orphan rule that fires between them, and the bytes a unit stores whatever came before it and whichever compilation made it.
 
 use {
-    super::test_support::*, curios_core::Module, curios_prelude::with_prelude,
-    curios_text::RootSource,
+    super::test_support::*,
+    curios_core::{Global, Module},
+    curios_prelude::with_prelude,
+    curios_text::{PreparedText, RootSource},
+    curios_unit::Unit,
+    curios_utilities::Qualifier,
+    std::rc::Rc,
 };
 
 /// Two ordinary units mounting one prefix is refused where the registry knows both, naming the prefix.
@@ -180,6 +185,71 @@ fn a_units_stored_bytes_do_not_depend_on_what_was_compiled_before_it() {
     );
 }
 
+/// The texts of the prelude's roots and then of `earlier`: what a unit compiled after them was lowered against.
+fn scope_of<'a>(prelude: &[&'a Unit], earlier: &'a [Unit]) -> Vec<&'a PreparedText> {
+    let prelude = prelude.iter().map(|root| root.text());
+
+    prelude.chain(earlier.iter().map(Unit::text)).collect()
+}
+
+/// The paths a unit gives its names are listed once for the unit, and every report over it reads the one list: two units compiled after `/lib` are handed the very table the first of them to ask had made.
+#[test]
+fn a_units_paths_are_listed_once_for_every_report_over_it() {
+    let lib = mounted("lib", "pub let x: /std/Nat = 1;");
+    let one = mounted("one", "pub let a: /std/Nat = /lib/x;");
+    let two = mounted("two", "pub let b: /std/Nat = /lib/x;");
+    let units = compile_in_order(&[&lib, &one, &two]);
+
+    with_prelude(|prelude| {
+        let first = units[1].text().spellings(&scope_of(prelude, &units[..1]));
+        let second = units[2].text().spellings(&scope_of(prelude, &units[..2]));
+
+        for place in 0..=prelude.len() {
+            assert!(
+                Rc::ptr_eq(&first.units[place].paths, &second.units[place].paths),
+                "the unit at {place} listed its paths again for a second reader"
+            );
+        }
+    });
+}
+
+/// A name one unit declares and a later one exports is written by the path either gives it, read in one order whichever unit the reader stands in: the facade's own module reaches it by its label, a unit after both by the facade's path, the shorter, and a unit that may not name the facade by the declaring unit's alone.
+#[test]
+fn a_name_a_later_unit_exports_is_spelled_by_either_units_path() {
+    let lib = mounted("lib", "pub mod deep\n    pub let x: /std/Nat = 1;\nend");
+    let facade = mounted("facade", "pub use /lib/deep/{x};");
+    let reader = mounted("reader", "pub let read: /std/Nat = /facade/x;");
+    let units = compile_in_order(&[&lib, &facade, &reader]);
+    let x = Global::Authored(Qualifier::from(["lib", "deep", "x"]));
+
+    with_prelude(|prelude| {
+        let inside = units[1].text().spellings(&scope_of(prelude, &units[..1]));
+        assert_eq!(
+            inside
+                .spell(&Qualifier::from(["facade"]), None, &x)
+                .as_deref(),
+            Some("x")
+        );
+
+        let after = units[2].text().spellings(&scope_of(prelude, &units[..2]));
+        assert_eq!(
+            after
+                .spell(&Qualifier::from(["reader"]), None, &x)
+                .as_deref(),
+            Some("/facade/x")
+        );
+
+        let mut closed = after.clone();
+        closed.closed.push(Qualifier::from(["facade"]));
+        assert_eq!(
+            closed
+                .spell(&Qualifier::from(["reader"]), None, &x)
+                .as_deref(),
+            Some("/lib/deep/x")
+        );
+    });
+}
+
 /// A name exported along several paths is listed the same by every compilation.
 ///
 /// `/lib/a/x` is written four ways, its own path and three re-exports, and the lowering reaches the modules exporting it through tables it walks in a hash's order. The paths a report is handed for a name are listed its own first and then by path, so sixteen compilations hand over one list; in the order they were reached, two would agree one time in six.
@@ -189,17 +259,19 @@ fn a_name_exported_along_several_paths_is_listed_the_same_every_time() {
 
     for _ in 0..16 {
         let unit = unit_of(source);
-        let written = with_prelude(|prelude| {
+        let spellings = with_prelude(|prelude| {
             let scope = prelude.iter().map(|root| root.text()).collect::<Vec<_>>();
             unit.text().spellings(&scope)
-        })
-        .paths
-        .values()
-        .find(|written| written.len() > 1)
-        .expect("a name written several ways")
-        .iter()
-        .map(|written| written.path.join())
-        .collect::<Vec<_>>();
+        });
+        let own = spellings.units.last().expect("the unit's own paths");
+        let written = own
+            .paths
+            .values()
+            .find(|written| written.len() > 1)
+            .expect("a name written several ways")
+            .iter()
+            .map(|written| written.path.join())
+            .collect::<Vec<_>>();
 
         assert_eq!(written, ["/lib/a/x", "/lib/b/x", "/lib/c/x", "/lib/d/x"]);
     }

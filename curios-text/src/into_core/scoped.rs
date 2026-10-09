@@ -52,7 +52,7 @@ impl<'a, V> Scoped<'a, V> {
 
     /// Every entry in scope, the unit's own first, then each base's that nothing nearer shadows.
     ///
-    /// The union, because the passes that iterate are the ones that reason about *visibility* — who can see what, and what a public entry exposes — and those cross the boundary by nature: a unit's public item may hand out a type from its scope. A pass that only reports on the unit's own declarations wants [`Scoped::own`] instead.
+    /// The union, because the walks that iterate ask what the whole scope offers — every interface that carries a label an unresolved name could have meant, every page a documentation record exposes a name on — and those cross the boundary by nature. A pass that decides or reports on the unit's own declarations wants [`Scoped::own`] instead: who can see a name is decided by the unit that declares it.
     ///
     /// Deduplicated against nearer halves rather than against a merged set, which is the same shadowing rule [`Scoped::get`] answers by and is likewise unreachable while mount sets stay disjoint.
     pub(super) fn iter(&self) -> impl Iterator<Item = (&Qualifier, &V)> {
