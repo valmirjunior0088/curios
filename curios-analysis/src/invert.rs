@@ -10,7 +10,7 @@ mod tests;
 use {
     crate::{Judge, locals_beneath},
     curios_algebra::Deduction,
-    curios_core::{Free, Subterm, Telescope, Term, peel_intrinsic},
+    curios_core::{Free, Instance, InstanceHead, Subterm, Telescope, Term, peel_intrinsic},
     std::collections::BTreeSet,
 };
 
@@ -226,6 +226,19 @@ fn consolidate<J: Judge>(judge: &mut J, solutions: Vec<(Free, Term)>) -> Result<
     Ok(Invert::Solved(kept))
 }
 
+/// Whether `actual` has the shape of a key index refinement refines: a variable, bare or at a universe instance, or a projection. An instance whose head is a variable is one occurrence of that variable, its levels spelling the occurrence, and forcing leaves it standing where the variable is a local, so it is the key the bare variable is.
+fn key_shaped(actual: &Term) -> bool {
+    matches!(
+        &**actual,
+        Subterm::Var(_)
+            | Subterm::Proj(_)
+            | Subterm::Instance(Instance {
+                head: InstanceHead::Var(_),
+                ..
+            })
+    )
+}
+
 fn unify_index<J: Judge>(
     judge: &mut J,
     actual: &Term,
@@ -246,9 +259,7 @@ fn unify_index<J: Judge>(
         let binder = *var.unwrap();
 
         // At the top of a position a key-shaped actual is index refinement's: it was refined *to* this binder, and solving the binder back to it would tie a reduction cycle. A flex actual (metavariable) is refused outright.
-        if (top && !solve_keys) && matches!(&*actual, Subterm::Var(_) | Subterm::Proj(_))
-            || matches!(&*actual, Subterm::Metavar(_))
-        {
+        if (top && !solve_keys) && key_shaped(&actual) || matches!(&*actual, Subterm::Metavar(_)) {
             return Ok(Step::Refuse);
         }
         // The forced value must be *rigid*: a key-shaped actual that index refinement already refined reduces back into this very arm's binders, and aliasing a binder to a term mentioning the arm's binders (itself included — `m := m`) would tie a reduction cycle.

@@ -17,8 +17,8 @@ use {
     curios_core::{
         Apply, Argument, Atom, Bang, Carrier, Cases, Classes, Exhaustion, Field, Free, Global,
         InductArm, InductDecl, InductParam, InductType, Infix, Instance, InstanceHead, Intrinsic,
-        Many, Match, MatchResult, Metavar, MetavarId, MetavarOrigin, Nat, Polarity, Proj, Rec,
-        Scope, Struct, StructDecl, StructEntry, StructType, Subterm, Telescope, Term, Three,
+        Level, Many, Match, MatchResult, Metavar, MetavarId, MetavarOrigin, Nat, Polarity, Proj,
+        Rec, Scope, Struct, StructDecl, StructEntry, StructType, Subterm, Telescope, Term, Three,
         Totality, Transient, Tuple, Two, UniverseContext, Var, Variant,
     },
     curios_num::{Grain, Natural, Rounding},
@@ -1316,6 +1316,48 @@ fn a_let_alias_of_the_arm_payload_descends() {
         panic!("the fixture changed shape");
     };
     assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Partial));
+}
+
+/// A key at a universe instance is the key the bare variable is. At the top of a position the first direction leaves a key to index refinement, which may have refined it to the very binder it stands against, and a variable under an instance is that key: solved against, the binder would be aliased to what reduces back to it.
+///
+/// Mutation-checked: with the guard reading a bare variable and a projection alone, the binder is solved to the instance.
+#[test]
+fn a_key_at_a_universe_instance_is_left_to_index_refinement() {
+    let mut kernel = kernel();
+    let n = Free::local(900, Some("n"));
+    let k = Free::local(901, Some("k"));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    kernel.assume(&n, &nat_type);
+    kernel.assume(&k, &nat_type);
+    // At a level, since forcing spells an instance that states none as its bare head.
+    let instance: Term = Subterm::Instance(Instance {
+        head: InstanceHead::Var(Var::free(n)),
+        levels: vec![Level::zero()],
+    })
+    .into();
+    let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
+
+    for (label, actual, solved) in [
+        ("a bare variable", Term::free_var(&n), None),
+        ("a variable at an instance", instance, None),
+        ("a literal", literal.clone(), Some(literal)),
+    ] {
+        let Invert::Solved(solutions) = invert_indices(
+            &mut kernel,
+            slice::from_ref(&actual),
+            &[Term::free_var(&k)],
+            slice::from_ref(&k),
+        )
+        .expect("inversion is a total function of finished terms") else {
+            panic!("{label}: a reachable case was reported unreachable");
+        };
+
+        let expected = solved
+            .map(|value| (k, value))
+            .into_iter()
+            .collect::<Vec<_>>();
+        assert_eq!(solutions, expected, "{label}");
+    }
 }
 
 /// The outer direction reaches a variable inside an index, and only a local's.
