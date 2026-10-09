@@ -224,11 +224,12 @@ fn a_filter_matching_nothing_exits_one_naming_it() {
         stderr(&output)
     );
 
-    // A filter names whole segments, so the start of a test's name selects nothing.
+    // A filter names whole segments, so the start of a test's name selects nothing, and the refusal names the paths nearest what was asked for, the test it is the start of first.
     let partial = curios(&root, &["test", "--filter", "/app/addition"]);
     assert_eq!(partial.status.code(), Some(1));
     assert!(
-        stderr(&partial).contains("no test matches '/app/addition'"),
+        stderr(&partial)
+            .contains("no test matches '/app/addition'; the nearest are '/app/addition_passes'"),
         "stderr: {}",
         stderr(&partial)
     );

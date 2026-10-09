@@ -19,7 +19,7 @@ use {
     curios_utilities::Source,
     curios_verdicts::{Program, Verdicts},
     curios_wonder::{STDIN_LABEL, STDIN_MOUNT},
-    std::{path::Path, sync::Arc},
+    std::{cmp::Reverse, path::Path, sync::Arc},
 };
 
 /// What stands in for a library's entry text when the payload is keyed. A library is compiled through [`Entrypoint::trivial`], which is built rather than parsed and so has no text of its own; the key has to be *something* constant, and naming it here says which constant and why. The library's own content reaches the address through the unit chain, so nothing depends on this being the program.
@@ -74,7 +74,7 @@ pub(crate) fn run_tests(
         access,
         filter,
         totals: Totals::default(),
-        matched_any: false,
+        met: Met::default(),
         refusal: None,
     };
 
@@ -154,13 +154,77 @@ struct Declared<'a> {
     manifest: &'a Path,
 }
 
+/// What a filter met among the tests of the targets compiled so far: whether any stood at or under it, and the paths of the tests it passed over, which a filter that matched nothing is answered with.
+#[derive(Default)]
+struct Met {
+    any: bool,
+    passed: Vec<String>,
+}
+
+impl Met {
+    /// How many of the nearest paths a refusal names.
+    const NAMED: usize = 3;
+
+    /// The refusal of a `filter` no test stands at or under, naming the paths nearest it: those sharing the most of its trailing segments, then those the fewest edits away.
+    fn refusal(&self, filter: &str) -> String {
+        let mut nearest = self.passed.iter().collect::<Vec<_>>();
+        nearest.sort_by_key(|path| {
+            (
+                Reverse(shared_tail(path, filter)),
+                edits(path, filter),
+                path.as_str(),
+            )
+        });
+        nearest.dedup();
+        nearest.truncate(Self::NAMED);
+
+        let named = nearest
+            .iter()
+            .map(|path| format!("'{path}'"))
+            .collect::<Vec<_>>();
+        match named.as_slice() {
+            [] => format!("no test matches '{filter}'"),
+            [only] => format!("no test matches '{filter}'; the nearest is {only}"),
+            [rest @ .., last] => format!(
+                "no test matches '{filter}'; the nearest are {} and {last}",
+                rest.join(", ")
+            ),
+        }
+    }
+}
+
+/// How many trailing segments two test paths share.
+fn shared_tail(path: &str, filter: &str) -> usize {
+    path.rsplit('/')
+        .zip(filter.trim_end_matches('/').rsplit('/'))
+        .take_while(|(this, that)| this == that && !this.is_empty())
+        .count()
+}
+
+/// The edits that turn one path into the other: insertions, deletions and substitutions of a character.
+fn edits(path: &str, filter: &str) -> usize {
+    let filter = filter.chars().collect::<Vec<_>>();
+    let mut row = (0..=filter.len()).collect::<Vec<_>>();
+    for (i, left) in path.chars().enumerate() {
+        let mut diagonal = row[0];
+        row[0] = i + 1;
+        for (j, right) in filter.iter().enumerate() {
+            let substituted = diagonal + usize::from(left != *right);
+            diagonal = row[j + 1];
+            row[j + 1] = substituted.min(row[j] + 1).min(diagonal + 1);
+        }
+    }
+
+    row[filter.len()]
+}
+
 /// One `curios test` invocation as it goes: how each target is compiled, which of its tests run, and what has been tallied.
 struct Run<'a> {
     budget: u64,
     access: Access,
     filter: Option<&'a str>,
     totals: Totals,
-    matched_any: bool,
+    met: Met,
     /// The first reason a store refused filing, since a store nobody can write refuses every target for one reason.
     refusal: Option<String>,
 }
@@ -320,7 +384,7 @@ impl Run<'_> {
             subject,
             self.filter,
             &mut self.totals,
-            &mut self.matched_any,
+            &mut self.met,
             root,
             foreigns,
         )
@@ -336,9 +400,9 @@ impl Run<'_> {
         }
 
         if let Some(filter) = self.filter
-            && !self.matched_any
+            && !self.met.any
         {
-            return Err(CompileError::failure(format!("no test matches '{filter}'")));
+            return Err(CompileError::failure(self.met.refusal(filter)));
         }
 
         println!("{}", self.totals.line());
@@ -425,7 +489,7 @@ fn run_selected(
     subject: &Subject,
     filter: Option<&str>,
     totals: &mut Totals,
-    matched_any: &mut bool,
+    met: &mut Met,
     root: Option<&Path>,
     foreigns: &ForeignStore,
 ) -> Result<(), CompileError> {
@@ -437,9 +501,13 @@ fn run_selected(
 
     // A unit with nothing to run reports its compile and nothing more: a tally of zeros would only restate the absence of lines above it.
     if selected.is_empty() {
+        if filter.is_some() {
+            met.passed
+                .extend(records.iter().map(|record| record.path.clone()));
+        }
         return Ok(());
     }
-    *matched_any = true;
+    met.any = true;
 
     // SAFETY: the payload was precompiled in this process, or read back from the project's own store where a compilation of this compiler filed it.
     let compiled = unsafe { Compiled::deserialize(cwasm) }.map_err(CompileError::failure)?;
