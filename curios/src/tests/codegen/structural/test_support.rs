@@ -4,7 +4,7 @@
 
 use {
     curios_pipeline::compile_with_prelude,
-    curios_runtime::{ForeignBindings, MockHost, precompile, run_bytes},
+    curios_runtime::{Compiled, ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
     curios_wasm::{Module, to_bytes},
     std::collections::BTreeSet,
@@ -492,26 +492,27 @@ pub(super) fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
     set
 }
 
-/// Run the raw (Binaryen-free) module: Cranelift-precompile the raw bytes directly — validation, including control-flow well-formedness, happens here, so a module Binaryen would have had to repair fails — then execute it and return captured stdout. `args` seeds `proc/args!`, which drives the taint.
+/// Run the raw (Binaryen-free) module: Cranelift-compile the raw bytes directly — validation, including control-flow well-formedness, happens here, so a module Binaryen would have had to repair fails — then execute it and return captured stdout. `args` seeds `proc/args!`, which drives the taint.
 pub(super) fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
     let module = compile_raw(source);
-    let cwasm = precompile(&to_bytes(&module))
+    let compiled = Compiled::compile(&to_bytes(&module))
         .expect("raw module validates and Cranelift-compiles without Binaryen");
 
     let (system, io) = MockHost::builder().args(args).build();
-    // SAFETY: `cwasm` was precompiled just above, in this process.
-    unsafe { run_bytes(&cwasm, system, ForeignBindings::empty()) }.expect("raw module executes");
+    compiled
+        .run(system, ForeignBindings::empty())
+        .expect("raw module executes");
     io.output()
 }
 
 /// Run the module through the ordinary Binaryen + Cranelift path, for the same input — the reference the raw path must agree with.
 pub(super) fn run_binaryen(source: &str, args: &[&str]) -> Vec<u8> {
     let module = compile_raw(source);
-    let cwasm = crate::to_cwasm(&module).expect("binaryen path precompiles");
+    let compiled = crate::to_compiled(&module).expect("binaryen path compiles");
 
     let (system, io) = MockHost::builder().args(args).build();
-    // SAFETY: `cwasm` was precompiled just above, in this process.
-    unsafe { run_bytes(&cwasm, system, ForeignBindings::empty()) }
+    compiled
+        .run(system, ForeignBindings::empty())
         .expect("optimized module executes");
     io.output()
 }

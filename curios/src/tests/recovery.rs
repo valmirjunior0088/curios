@@ -2,9 +2,9 @@
 
 use {
     super::{error, run_entrypoint},
-    crate::to_cwasm,
+    crate::to_compiled,
     curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold},
-    curios_runtime::{ForeignBindings, MockHost, run_bytes},
+    curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::RootKind,
 };
@@ -191,12 +191,11 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
             |_| {},
         )
         .expect("the unit's test program compiles");
-    let cwasm = to_cwasm(&module).expect("the test program precompiles");
+    let compiled = to_compiled(&module).expect("the test program compiles");
     assert_eq!(records.len(), 1);
 
     let (system, io) = MockHost::builder().args(["test", "0"]).build();
-    // SAFETY: `cwasm` was precompiled in this process, immediately above.
-    let outcome = unsafe { run_bytes(&cwasm, system, ForeignBindings::empty()) };
+    let outcome = compiled.run(system, ForeignBindings::empty());
 
     assert!(matches!(outcome, Ok(0)), "the test ran to {outcome:?}");
     assert_eq!(

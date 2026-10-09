@@ -3,7 +3,7 @@
 use {
     super::{LISTING_PROGRAM, assert_listing, compile, listing_host},
     curios_profile::{Destination, fold, trace},
-    curios_runtime::{MockHost, MockIo},
+    curios_runtime::{ForeignBindings, MockHost, MockIo},
     std::{
         fs::{File, create_dir_all, write},
         io::{BufReader, BufWriter},
@@ -125,7 +125,7 @@ fn host_boundary_measurements() {
             trace(Destination::Stream(Box::new(sink)), || {
                 let compiled = curios_profile::profile!("host_boundary_compile" => compile(source))
                     .expect("workload compiles");
-                let status = curios_profile::profile!("host_boundary_run" => compiled.run(host))
+                let status = curios_profile::profile!("host_boundary_run" => compiled.run(host, ForeignBindings::empty()))
                     .expect("workload runs");
                 assert_eq!(status, 0);
             })

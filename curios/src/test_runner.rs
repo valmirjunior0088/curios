@@ -14,7 +14,7 @@ use {
     curios_abi::ForeignStore,
     curios_package::{Entry, LIBRARY, Selection, Spelling, order},
     curios_pipeline::{Cache, CompileError, EntryTail, Fold, TestRecord},
-    curios_runtime::{OsHost, run_bytes},
+    curios_runtime::{Compiled, OsHost},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_utilities::Source,
     curios_verdicts::{Program, Verdicts},
@@ -441,6 +441,9 @@ fn run_selected(
     }
     *matched_any = true;
 
+    // SAFETY: the payload was precompiled in this process, or read back from the project's own store where a compilation of this compiler filed it.
+    let compiled = unsafe { Compiled::deserialize(cwasm) }.map_err(CompileError::failure)?;
+
     step(Heading::Testing, subject);
     // argv[0] is the entry as `run` passes it: the path's bytes, since `/std/proc/args` promises opaque byte strings.
     let argv0 = entry.as_os_str().as_encoded_bytes().to_vec();
@@ -448,12 +451,10 @@ fn run_selected(
 
     for (index, record) in selected {
         let arguments = vec![argv0.clone(), index.to_string().into_bytes()];
-        // SAFETY: the payload was precompiled in this process, or read back from the project's own store where a compilation of this compiler filed it.
-        // Built per test rather than once: `run_bytes` takes the registry by value, and a fresh set is a fresh plugin instance — which is what keeps one test's marks in a plugin's memory out of the next one's, the isolation a test run is entitled to.
+        // Built per test rather than once: a run takes the registry by value, and a fresh set is a fresh plugin instance — which is what keeps one test's marks in a plugin's memory out of the next one's, the isolation a test run is entitled to.
         let bindings = bindings_of(root, foreigns.clone()).map_err(CompileError::failure)?;
 
-        let outcome = unsafe { run_bytes(cwasm, OsHost::with_args(arguments), bindings) };
-        match outcome {
+        match compiled.run(OsHost::with_args(arguments), bindings) {
             // The guest printed `path: proved` or `path: passed` and returned.
             Ok(0) => unit.passed += 1,
             // The guest printed `path: failed` and its report, then exited 1; the body as written is what only the records know.

@@ -1,10 +1,10 @@
 //! Scalar replacement of structural tuples whose runtime-dependent type changes their width.
 
 use {
-    crate::{tests::Compiled, to_cwasm},
+    crate::to_compiled,
     curios_cont::{FieldGroup, Intrinsic, Node, ValueExpr},
     curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
-    curios_runtime::MockHost,
+    curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -96,16 +96,14 @@ fn a_runtime_dependent_tuple_width_is_split_into_fields() {
         "neither entering nor iterating the loop materializes the wider tuple: {module}"
     );
 
-    let compiled = Compiled {
-        cwasm: to_cwasm(&wasm).expect("the scalarized program precompiles"),
-    };
+    let compiled = to_compiled(&wasm).expect("the scalarized program compiles");
     for (args, expected) in [
         (&[][..], b"0".as_slice()),
         (&["program"][..], b"2".as_slice()),
         (&["program", "argument"][..], b"4".as_slice()),
     ] {
         let (system, io) = MockHost::builder().args(args.iter().copied()).build();
-        assert_eq!(compiled.run(system), Ok(0));
+        assert_eq!(compiled.run(system, ForeignBindings::empty()), Ok(0));
         assert_eq!(io.output(), expected);
     }
 }

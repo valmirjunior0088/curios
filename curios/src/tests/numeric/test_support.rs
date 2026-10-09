@@ -5,8 +5,8 @@
 //! The differential harness: each scalar expression runs twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and the two answers must be identical, pinning the folders and the backend to one semantics.
 
 use {
-    crate::tests::{Compiled, compile},
-    curios_runtime::MockHost,
+    crate::tests::compile,
+    curios_runtime::{Compiled, ForeignBindings, MockHost},
 };
 
 /// One program holding every row of a table, the row chosen by the host: its stdin line is two bytes, the first read as the runtime zero `n` (`'A' − 65`) with its `Int` twin `i`, which is what keeps every row out of the folder's reach, and the second naming the row. One compile therefore serves the whole table, and a run costs milliseconds — the reason this is a selector rather than one program per row. With `taint` false, `n` and `i` are literal zeros instead, so every row folds to a literal while the selection alone stays runtime, which is what "folded" asserts.
@@ -47,7 +47,7 @@ pub(super) fn table(rows: &[&str], taint: bool) -> String {
 pub(super) fn run_row(compiled: &Compiled, index: usize) -> Result<Vec<u8>, String> {
     let row = u8::try_from(index).expect("a table of under 95 rows") + b' ';
     let (system, io) = MockHost::builder().stdin_lines([[b'A', row]]).build();
-    compiled.run(system)?;
+    compiled.run(system, ForeignBindings::empty())?;
     Ok(io.output())
 }
 

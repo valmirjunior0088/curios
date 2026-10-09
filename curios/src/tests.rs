@@ -67,9 +67,9 @@ mod universes;
 mod wasm_conformance;
 
 use {
-    crate::{run_wasm, to_cwasm},
+    crate::{run_wasm, to_compiled},
     curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold, Stage, compile_with_prelude},
-    curios_runtime::{ForeignBindings, HostOps, MockHost, run_bytes},
+    curios_runtime::{Compiled, ForeignBindings, HostOps, MockHost},
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -102,12 +102,7 @@ fn run(source: &str) -> Vec<u8> {
     io.output().to_vec()
 }
 
-/// A program compiled once — pipeline, Binaryen, Cranelift — for a fixture that runs it under more than one host. The compile is what a fixture pays for, seconds over the prelude; a run of the `.cwasm` is milliseconds. So a table whose rows the host input selects costs one compile rather than one per row, which is the difference between `numeric.rs` taking a minute and taking eight.
-struct Compiled {
-    cwasm: Vec<u8>,
-}
-
-/// Parse `source` (no external modules) and compile it to its `.cwasm`, without running it.
+/// Parse `source` (no external modules) and compile it, without running it: a program compiled once — pipeline, Binaryen, Cranelift — for a fixture that runs it under more than one host. The compile is what a fixture pays for, seconds over the prelude; a run of what it made is milliseconds. So a table whose rows the host input selects costs one compile rather than one per row, which is the difference between `numeric.rs` taking a minute and taking eight.
 fn compile(source: &str) -> Result<Compiled, String> {
     let entrypoint = source
         .parse::<Entrypoint>()
@@ -119,17 +114,7 @@ fn compile(source: &str) -> Result<Compiled, String> {
         |_| {},
     )?;
 
-    Ok(Compiled {
-        cwasm: to_cwasm(&module)?,
-    })
-}
-
-impl Compiled {
-    /// Run the compiled program under `host` — the deserialize-and-execute half of [`run_wasm`].
-    fn run<H: HostOps + Send + Sync + 'static>(&self, host: H) -> Result<u8, String> {
-        // SAFETY: `cwasm` was precompiled in this process when `self` was built.
-        unsafe { run_bytes(&self.cwasm, host, ForeignBindings::empty()) }
-    }
+    to_compiled(&module)
 }
 
 /// Compile-only, for the programs whose point is that they are refused.

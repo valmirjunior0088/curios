@@ -7,8 +7,8 @@
 //! The documents are literals and reach the decoder as written. The evaluator does not unroll a closed decode — the stage profile of such a program puts its cost in the fixpoint, not in elaboration or `evaluate_closed_terms` — so nothing here needs a taint to reach the emitted codec. The long binary literals still use one, digit runs repeated a `(opaque + 1) * n` number of times, because a literal of thirty digits is the thing a reader should not have to count.
 
 use {
-    super::{Compiled, compile, run},
-    curios_runtime::MockHost,
+    super::{compile, run},
+    curios_runtime::{Compiled, ForeignBindings, MockHost},
     std::sync::OnceLock,
 };
 
@@ -634,7 +634,9 @@ fn codec() -> &'static Compiled {
 /// What row `index` prints.
 fn run_row(index: usize) -> String {
     let (system, io) = MockHost::builder().stdin_lines([index.to_string()]).build();
-    codec().run(system).expect("a row runs");
+    codec()
+        .run(system, ForeignBindings::empty())
+        .expect("a row runs");
     String::from_utf8(io.output()).expect("a row prints text")
 }
 

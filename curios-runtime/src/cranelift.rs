@@ -5,15 +5,24 @@
 //! `validate` deliberately stays in `engine`: it is a wasmparser pass over bytes rather than a compilation, so a runtime-only build can decide it. The split here follows wasmtime's own.
 
 use {
-    super::shared_engine,
+    super::{Compiled, shared_engine},
     std::hash::{Hash, Hasher},
 };
 
-/// AOT-compile `bytes` to the `.cwasm` payload [`run_bytes`](super::run_bytes) deserializes.
+/// AOT-compile `bytes` to the `.cwasm` payload [`Compiled::deserialize`] reads back: what a bundle carries and a store files.
 pub fn precompile(bytes: &[u8]) -> Result<Vec<u8>, String> {
     shared_engine()
         .precompile_module(bytes)
         .map_err(|error| format!("failed to precompile module: {error}"))
+}
+
+impl Compiled {
+    /// Compile `bytes`, a WebAssembly module, to the program this process runs. Nothing is read back, so nothing is vouched for: the machine code is what this engine made of `bytes` just now.
+    pub fn compile(bytes: &[u8]) -> Result<Self, String> {
+        wasmtime::Module::new(shared_engine(), bytes)
+            .map(Self)
+            .map_err(|error| format!("failed to compile module: {error}"))
+    }
 }
 
 /// The names `bytes` exports, for a caller describing a module it is about to pin.

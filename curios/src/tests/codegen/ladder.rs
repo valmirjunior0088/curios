@@ -16,7 +16,7 @@
 
 use {
     super::{compile_raw, functions, user_allocations, wat},
-    curios_runtime::{ForeignBindings, MockHost, precompile, run_bytes},
+    curios_runtime::{Compiled, ForeignBindings, MockHost},
     curios_wasm::to_bytes,
     std::time::Instant,
 };
@@ -352,8 +352,8 @@ fn walk_mirror_attribution_measurements() {
     .map(|(label, source)| {
         let module = compile_raw(source);
         let counts = mirror_counts(&module.to_string());
-        let raw = precompile(&to_bytes(&module)).expect("raw module precompiles");
-        let optimized = crate::to_cwasm(&module).expect("binaryen path precompiles");
+        let raw = Compiled::compile(&to_bytes(&module)).expect("raw module compiles");
+        let optimized = crate::to_compiled(&module).expect("binaryen path compiles");
 
         (label, counts, raw, optimized)
     });
@@ -367,11 +367,11 @@ fn walk_mirror_attribution_measurements() {
     for round in 0..WARMUP + ROUNDS {
         // A round over the whole family, so a disturbance during the sitting reaches every member alike.
         for (member, (label, _, raw, optimized)) in prepared.iter().enumerate() {
-            for (kind, cwasm) in [(0, raw), (1, optimized)] {
+            for (kind, compiled) in [(0, raw), (1, optimized)] {
                 let (system, io) = MockHost::builder().stdin_lines([input]).build();
                 let start = Instant::now();
-                // SAFETY: both payloads were precompiled above, in this process.
-                unsafe { run_bytes(cwasm, system, ForeignBindings::empty()) }
+                compiled
+                    .run(system, ForeignBindings::empty())
                     .expect("mirror executes");
                 let elapsed = start.elapsed().as_secs_f64();
 
@@ -461,7 +461,7 @@ fn decoder_doubling_slope() {
     const DECODERS: [&str; 3] = ["json", "html", "tokens"];
 
     let module = compile_raw(DECODER_DOUBLING);
-    let cwasm = crate::to_cwasm(&module).expect("binaryen path precompiles");
+    let compiled = crate::to_compiled(&module).expect("binaryen path compiles");
 
     let mut taken = vec![vec![Vec::new(); SIZES.len()]; DECODERS.len()];
     for round in 0..WARMUP + ROUNDS {
@@ -472,8 +472,8 @@ fn decoder_doubling_slope() {
                     .stdin_lines([mode.to_string(), size.to_string()])
                     .build();
                 let start = Instant::now();
-                // SAFETY: the payload was precompiled above, in this process.
-                unsafe { run_bytes(&cwasm, system, ForeignBindings::empty()) }
+                compiled
+                    .run(system, ForeignBindings::empty())
                     .expect("the decoder executes");
                 let elapsed = start.elapsed().as_secs_f64();
 

@@ -3,10 +3,10 @@
 //! What the sixteen-mebibyte initial heap buys: under death-birth churn an unsized heap parks within a doubling of the live set and the collector recopies it continually; sized, those collections are gone, the allocation-free `churn` does not move — the empirical pin on its exit from the churn class — and `trees` gains little, because an all-live tree must outgrow any constant.
 
 use {
-    crate::to_cwasm,
+    crate::to_compiled,
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_profile::capture_host_records,
-    curios_runtime::{ForeignBindings, MockHost, run_bytes},
+    curios_runtime::{Compiled, ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
     std::time::Instant,
 };
@@ -81,7 +81,7 @@ const GC_TARGET: &str = "wasmtime::runtime::store::gc";
 /// The churn phase is measured as T(K) − T(0) at this K, which subtracts startup, the initial build, and — in the ballast arms — the whole ballast phase.
 const ROUNDS: u64 = 400;
 
-fn cwasm_of(source: &str) -> Vec<u8> {
+fn compiled_of(source: &str) -> Compiled {
     let entrypoint = source
         .parse::<Entrypoint>()
         .map_err(|error| error.format())
@@ -94,16 +94,16 @@ fn cwasm_of(source: &str) -> Vec<u8> {
     )
     .expect("the workload compiles");
 
-    to_cwasm(&module).expect("the workload precompiles")
+    to_compiled(&module).expect("the workload compiles")
 }
 
-/// One run: milliseconds around `run_bytes` — deserialize, instantiate, and the whole call — and what the program printed.
-fn run(cwasm: &[u8], k: u64) -> (f64, Vec<u8>) {
+/// One run: milliseconds around it — instantiate, and the whole call — and what the program printed.
+fn run(compiled: &Compiled, k: u64) -> (f64, Vec<u8>) {
     let (host, io) = MockHost::builder().stdin_lines([k.to_string()]).build();
     let start = Instant::now();
-    // SAFETY: the caller precompiled `cwasm` in this process.
-    let code =
-        unsafe { run_bytes(cwasm, host, ForeignBindings::empty()) }.expect("the workload runs");
+    let code = compiled
+        .run(host, ForeignBindings::empty())
+        .expect("the workload runs");
     let elapsed = start.elapsed().as_secs_f64() * 1000.0;
     assert_eq!(code, 0, "the workload exits cleanly");
 
@@ -111,15 +111,15 @@ fn run(cwasm: &[u8], k: u64) -> (f64, Vec<u8>) {
 }
 
 /// Best of three, since a timing floor is what the decomposition subtracts.
-fn timed(cwasm: &[u8], k: u64) -> f64 {
+fn timed(compiled: &Compiled, k: u64) -> f64 {
     (0..3)
-        .map(|_| run(cwasm, k).0)
+        .map(|_| run(compiled, k).0)
         .fold(f64::INFINITY, f64::min)
 }
 
 /// Collections and the heap's final size during one run at `k`, from the engine's own records. The counted run's duration is discarded: the raised log level prices every suppressed record, so timing and counting are separate runs.
-fn collections(cwasm: &[u8], k: u64) -> (usize, Option<String>) {
-    let (_, records) = capture_host_records(GC_TARGET, || run(cwasm, k));
+fn collections(compiled: &Compiled, k: u64) -> (usize, Option<String>) {
+    let (_, records) = capture_host_records(GC_TARGET, || run(compiled, k));
     let begins = records
         .iter()
         .filter(|message| message.contains("Begin GC"))
@@ -159,7 +159,7 @@ fn collections(cwasm: &[u8], k: u64) -> (usize, Option<String>) {
 #[test]
 #[ignore = "measurement, mixed: times the churn workload and counts its collections rather than asserting"]
 fn chain_collection_decomposition() {
-    let stock = cwasm_of(CHAIN);
+    let stock = compiled_of(CHAIN);
 
     // The documented cross-language anchor, so a mistranslation fails before any figure is read.
     let (_, output) = run(&stock, 8);
@@ -174,14 +174,13 @@ fn chain_collection_decomposition() {
     ];
 
     for (label, ballast) in arrangements {
-        let cwasm = match ballast {
-            None => stock.clone(),
-            Some(cells) => cwasm_of(&CHAIN_BALLAST.replace("BALLAST_CELLS", &cells.to_string())),
-        };
+        let ballasted = ballast
+            .map(|cells| compiled_of(&CHAIN_BALLAST.replace("BALLAST_CELLS", &cells.to_string())));
+        let compiled = ballasted.as_ref().unwrap_or(&stock);
 
-        let churn_ms = timed(&cwasm, ROUNDS) - timed(&cwasm, 0);
-        let (gc_churn, heap) = collections(&cwasm, ROUNDS);
-        let (gc_base, _) = collections(&cwasm, 0);
+        let churn_ms = timed(compiled, ROUNDS) - timed(compiled, 0);
+        let (gc_churn, heap) = collections(compiled, ROUNDS);
+        let (gc_base, _) = collections(compiled, 0);
 
         println!(
             "  {label}: churn {:.3} ms/round, {:.3} collections/round, {}",
@@ -195,9 +194,9 @@ fn chain_collection_decomposition() {
 /// The `churn` workload's threaded record travels as fields: over a million spread-update steps the emitted program allocates so little that the collector never runs, because continuation scalar replacement and the known-function field split erase the reconstruction the source spells. The workload's Curios column therefore prices dispatch and checked arithmetic rather than allocation, and a record update worth measuring is a record at rest — what `spines` and the census reach. Collection counts are deterministic, which is what makes the absence assertable rather than merely measurable; the anchor is cross-checked against the Rust and Node contestants.
 #[test]
 fn threaded_record_allocates_nothing() {
-    let cwasm = cwasm_of(CHURN);
+    let compiled = compiled_of(CHURN);
 
-    let ((_, output), records) = capture_host_records(GC_TARGET, || run(&cwasm, 1_000_000));
+    let ((_, output), records) = capture_host_records(GC_TARGET, || run(&compiled, 1_000_000));
 
     assert_eq!(output, b"863718\n", "churn(1000000) anchor");
 
@@ -282,7 +281,7 @@ end
 #[test]
 #[ignore = "measurement, mixed: times the spines workload and counts its collections rather than asserting"]
 fn spines_collection_decomposition() {
-    let stock = cwasm_of(SPINES);
+    let stock = compiled_of(SPINES);
 
     // The documented cross-language anchor, so a mistranslation fails before any figure is read.
     let (_, output) = run(&stock, 8);
@@ -298,14 +297,13 @@ fn spines_collection_decomposition() {
     ];
 
     for (label, ballast, inserts) in arrangements {
-        let cwasm = match ballast {
-            None => stock.clone(),
-            Some(cells) => cwasm_of(&SPINES_BALLAST.replace("BALLAST_CELLS", &cells.to_string())),
-        };
+        let ballasted = ballast
+            .map(|cells| compiled_of(&SPINES_BALLAST.replace("BALLAST_CELLS", &cells.to_string())));
+        let compiled = ballasted.as_ref().unwrap_or(&stock);
 
-        let churn_ms = timed(&cwasm, inserts) - timed(&cwasm, 0);
-        let (gc_churn, heap) = collections(&cwasm, inserts);
-        let (gc_base, _) = collections(&cwasm, 0);
+        let churn_ms = timed(compiled, inserts) - timed(compiled, 0);
+        let (gc_churn, heap) = collections(compiled, inserts);
+        let (gc_base, _) = collections(compiled, 0);
 
         println!(
             "  {label}: churn {:.2} us/insert, {:.1} collections per 1000 inserts, {}",

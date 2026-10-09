@@ -1,7 +1,7 @@
 //! The guest's own checks of a host's reply: a host that answers outside its row — a status the row never answers, a success its checks refuse, a value its wire type cannot be — is refused by the program itself, whichever host it is, while a failure's inert padding is accepted. Each reply is written raw, past the native adapter, which would refuse it first.
 
 use {
-    crate::{tests::compile, to_cwasm},
+    crate::{tests::compile, to_compiled},
     curios_abi::{ChildExit, HostOp, status},
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_runtime::{
@@ -18,15 +18,7 @@ const REFUSED: &str = "the host answered a call with a value outside that call's
 fn answering(source: &str, host: MockHost, op: HostOp, reply: Vec<RawValue>) -> Result<u8, String> {
     let compiled = compile(source).expect("the program compiles");
 
-    // SAFETY: precompiled in this process by `compile`.
-    unsafe {
-        run_raw(
-            &compiled.cwasm,
-            host,
-            vec![(op, reply)],
-            ForeignBindings::empty(),
-        )
-    }
+    run_raw(&compiled, host, vec![(op, reply)], ForeignBindings::empty())
 }
 
 fn refused(result: Result<u8, String>) {
@@ -328,13 +320,12 @@ fn embedded(source: &str, name: &str, reply: Vec<RawValue>) -> Result<u8, String
         |_| {},
     )
     .expect("the program compiles");
-    let cwasm = to_cwasm(&module).expect("the module precompiles");
+    let compiled = to_compiled(&module).expect("the module compiles");
     let mut bindings = ForeignBindings::new(foreigns);
 
     raw_reply(&mut bindings, name, reply);
 
-    // SAFETY: precompiled in this process just above.
-    unsafe { run_raw(&cwasm, mock(), vec![], bindings) }
+    run_raw(&compiled, mock(), vec![], bindings)
 }
 
 /// An embedder's row is held to what its wire types can be: a `Bool` is `0` or `1`, and so is every element of a `List(Bool)`.

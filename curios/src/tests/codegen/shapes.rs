@@ -1,11 +1,12 @@
 //! The typed-fields census: what the recorded field shapes say about the corpus, and what the uniform representation's box/unbox and cast classes cost statically and dynamically. `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` is the decision these instrument; the figures live here, in the `stored_prelude_measurements` pattern — the command and what each probe last printed, beside the code that retakes it.
 
 use {
-    super::{cwasm_of, run, timed},
+    super::{compiled_of, run, timed},
     crate::{optimize, tests::ersd_optm},
     curios_ersd::{FieldShape, Module},
     curios_num::Grain,
     curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
+    curios_runtime::Compiled,
     curios_text::{Entrypoint, RootSource},
     std::collections::BTreeMap,
 };
@@ -308,8 +309,8 @@ fn boxed_field_read_measurements() {
     const LOW: u64 = 100;
     const HIGH: u64 = 300;
 
-    let bare = cwasm_of(FOLD_BARE);
-    let payload = cwasm_of(FOLD_PAYLOAD);
+    let bare = compiled_of(FOLD_BARE);
+    let payload = compiled_of(FOLD_PAYLOAD);
 
     // Outputs are pinned before any figure is read, so a fixture drift fails loudly.
     let (_, bare_out) = run(&bare, HIGH);
@@ -320,9 +321,9 @@ fn boxed_field_read_measurements() {
         String::from_utf8_lossy(&payload_out).trim(),
     );
 
-    let slope = |cwasm: &[u8]| {
-        let low = timed(cwasm, LOW);
-        let high = timed(cwasm, HIGH);
+    let slope = |compiled: &Compiled| {
+        let low = timed(compiled, LOW);
+        let high = timed(compiled, HIGH);
         (high - low) * 1e6 / ((HIGH - LOW) as f64 * ELEMENTS)
     };
 

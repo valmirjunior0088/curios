@@ -55,15 +55,12 @@ Async/run(fiber)
     let source = format!("{PRELUDE}{}", tail.replace("SUBJECT", subject));
     let compiled = compile(&source).expect("the fixture compiles");
 
-    // SAFETY: precompiled in this process by `compile`.
-    unsafe {
-        run_raw(
-            &compiled.cwasm,
-            MockHost::builder().build().0,
-            replies,
-            ForeignBindings::empty(),
-        )
-    }
+    run_raw(
+        &compiled,
+        MockHost::builder().build().0,
+        replies,
+        ForeignBindings::empty(),
+    )
     .unwrap_or_else(|error| panic!("the fixture runs to its exit: {error}"))
 }
 
@@ -434,9 +431,7 @@ fn an_empty_variable_is_set_and_an_absent_one_is_not() {
     )
     .expect("the program compiles");
 
-    // SAFETY: precompiled in this process by `compile`.
-    unsafe { run_raw(&compiled.cwasm, host, vec![], ForeignBindings::empty()) }
-        .expect("the program runs");
+    run_raw(&compiled, host, vec![], ForeignBindings::empty()).expect("the program runs");
 
     assert_eq!(io.output(), b"empty unset");
 }
@@ -454,15 +449,12 @@ fn a_bytes_payload_arrives_whole() {
     )
     .expect("the program compiles");
 
-    // SAFETY: precompiled in this process by `compile`.
-    unsafe {
-        run_raw(
-            &compiled.cwasm,
-            host,
-            vec![(HostOp::ProcCwd, ok(vec![bytes(b"/work")]))],
-            ForeignBindings::empty(),
-        )
-    }
+    run_raw(
+        &compiled,
+        host,
+        vec![(HostOp::ProcCwd, ok(vec![bytes(b"/work")]))],
+        ForeignBindings::empty(),
+    )
     .expect("the program runs");
 
     assert_eq!(io.output(), b"/work");

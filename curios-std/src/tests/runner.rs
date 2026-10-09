@@ -2,9 +2,9 @@
 
 use {
     crate::std_directory,
-    curios::to_cwasm,
+    curios::to_compiled,
     curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold},
-    curios_runtime::{ForeignBindings, MockHost, run_bytes},
+    curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::RootKind,
     std::path::PathBuf,
@@ -39,7 +39,7 @@ pub(super) fn run_unit(unit: &str) {
             |_| {},
         )
         .unwrap_or_else(|error| panic!("`{unit}` failed to compile:\n{error}"));
-    let cwasm = to_cwasm(&module).expect("the test program precompiles");
+    let compiled = to_compiled(&module).expect("the test program compiles");
 
     assert!(!records.is_empty(), "`{unit}` declares no tests");
 
@@ -49,8 +49,7 @@ pub(super) fn run_unit(unit: &str) {
         let (system, io) = MockHost::builder()
             .args([b"corpus".as_slice(), index.to_string().as_bytes()])
             .build();
-        // SAFETY: `cwasm` was precompiled in this process, immediately above.
-        let outcome = unsafe { run_bytes(&cwasm, system, ForeignBindings::empty()) };
+        let outcome = compiled.run(system, ForeignBindings::empty());
         let reported = String::from_utf8_lossy(&io.output()).into_owned();
 
         match outcome {

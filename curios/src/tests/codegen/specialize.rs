@@ -1,6 +1,9 @@
 //! Constructor specialization preserves nominal row identity across runtime-dependent types.
 
-use {crate::tests::compile, curios_runtime::MockHost};
+use {
+    crate::tests::compile,
+    curios_runtime::{ForeignBindings, MockHost},
+};
 
 /// Both families have the same constructor tags and padded width. The dependent consumer reads the corresponding nominal row under each `Bool` arm; sharing a clone between those rows would rebuild one family where the other is read.
 #[test]
@@ -29,7 +32,7 @@ fn distinct_families_with_matching_tags_and_widths_compile_and_run() {
         (&["program", "argument"][..], b"5".as_slice()),
     ] {
         let (system, io) = MockHost::builder().args(args.iter().copied()).build();
-        assert_eq!(compiled.run(system), Ok(0));
+        assert_eq!(compiled.run(system, ForeignBindings::empty()), Ok(0));
         assert_eq!(io.output(), expected);
     }
 }

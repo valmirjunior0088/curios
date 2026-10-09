@@ -1,8 +1,8 @@
 //! HTTP: the messages a program is refused where it writes them, a server's connection from the request it reads to the close, and a client's reply read as its framing delimits it.
 
 use {
-    crate::tests::{Compiled, compile, typecheck},
-    curios_runtime::{MockHost, MockHostBuilder, SocketEvent},
+    crate::tests::{compile, typecheck},
+    curios_runtime::{Compiled, ForeignBindings, MockHost, MockHostBuilder, SocketEvent},
 };
 
 /// A program that makes one message and performs nothing.
@@ -83,7 +83,9 @@ const SERVER: &str = r#"
 fn served(server: &Compiled, host: MockHostBuilder) -> (String, Vec<SocketEvent>) {
     let (system, io) = host.build();
 
-    server.run(system).expect("the server runs to its end");
+    server
+        .run(system, ForeignBindings::empty())
+        .expect("the server runs to its end");
     assert_eq!(io.output(), b"", "the session fails nowhere");
 
     let written = io.captures().concat();
@@ -400,7 +402,9 @@ fn got(client: &Compiled, host: MockHostBuilder) -> String {
 fn told(client: &Compiled, host: MockHostBuilder) -> (String, String) {
     let (system, io) = host.build();
 
-    client.run(system).expect("the client runs to its end");
+    client
+        .run(system, ForeignBindings::empty())
+        .expect("the client runs to its end");
 
     let said = String::from_utf8(io.output()).expect("lines of text");
     let (got, headed) = said.split_once('\n').expect("a line for each request");

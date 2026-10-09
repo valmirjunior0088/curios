@@ -2,7 +2,7 @@
 
 use {
     curios_runtime::{
-        Bundle, DeclaredModule, ModuleBytes, OsHost, extract_bundle, plugin_bindings, run_bytes,
+        Bundle, Compiled, DeclaredModule, ModuleBytes, OsHost, extract_bundle, plugin_bindings,
     },
     std::{env, ffi::OsString, fs, process::ExitCode},
 };
@@ -40,7 +40,9 @@ fn main() -> ExitCode {
         let bindings = plugin_bindings(bundle.foreigns, declared)?;
 
         // SAFETY: the payload is what this executable's own tail carries, appended by the compiler that embedded this launcher.
-        unsafe { run_bytes(&bundle.program, OsHost::with_args(args), bindings) }
+        let program = unsafe { Compiled::deserialize(&bundle.program) }?;
+
+        program.run(OsHost::with_args(args), bindings)
     };
 
     match launch() {

@@ -1,8 +1,8 @@
 //! What `/std/Cli` refuses at compile time, and what `Cli/main` writes where. The surface `parse` and `help` *accept* is the corpus unit's; neither a refusal nor a stream nor an exit status is a `Test` a program can declare, so those stay here.
 
 use {
-    super::{Compiled, compile, error},
-    curios_runtime::MockHost,
+    super::{compile, error},
+    curios_runtime::{Compiled, ForeignBindings, MockHost},
 };
 
 /// A name the specification does not contain is refused where it is written: `Has` walks to `False` and the bound holding `get` up cannot be discharged. The binding is unannotated so the bound is what fails — an expected type would report `Lookup`'s `{}` first and say nothing about why.
@@ -65,7 +65,7 @@ fn a_good_line_runs_the_handler_and_exits_zero() {
         .args(["serve", "--port", "9090", "/srv"])
         .build();
 
-    assert_eq!(serve().run(system), Ok(0));
+    assert_eq!(serve().run(system, ForeignBindings::empty()), Ok(0));
     assert_eq!(io.output(), b"serving /srv on 9090\n");
     assert!(
         io.errors().is_empty(),
@@ -80,7 +80,7 @@ fn help_answers_on_stdout_and_exits_zero() {
         .args(["serve", "--port", "1", "--help"])
         .build();
 
-    assert_eq!(serve().run(system), Ok(0));
+    assert_eq!(serve().run(system, ForeignBindings::empty()), Ok(0));
     assert!(io.errors().is_empty(), "help is not a failure");
     assert!(
         String::from_utf8_lossy(&io.output())
@@ -97,7 +97,7 @@ fn a_refused_line_reports_on_stderr_and_exits_two() {
         .args(["serve", "--prot", "/srv"])
         .build();
 
-    assert_eq!(serve().run(system), Ok(2));
+    assert_eq!(serve().run(system, ForeignBindings::empty()), Ok(2));
     // `output` is both streams in write order, so "nothing reached stdout" is "everything written was the stderr half".
     assert_eq!(
         io.output(),
@@ -122,7 +122,7 @@ fn a_non_utf8_argument_is_refused_by_its_position() {
         ])
         .build();
 
-    assert_eq!(serve().run(system), Ok(2));
+    assert_eq!(serve().run(system, ForeignBindings::empty()), Ok(2));
     assert!(
         String::from_utf8_lossy(&io.errors()).contains("argument 1 is not valid UTF-8"),
         "the refusal names which argument:\n{}",
@@ -179,7 +179,7 @@ fn a_subcommand_two_groups_down_runs_its_handler() {
         .args(["deps", "registry", "add", "curios"])
         .build();
 
-    assert_eq!(deps().run(system), Ok(0));
+    assert_eq!(deps().run(system, ForeignBindings::empty()), Ok(0));
     assert_eq!(io.output(), b"adding curios\n");
 }
 
@@ -190,7 +190,7 @@ fn help_inside_a_subcommand_names_the_path_that_reaches_it() {
         .args(["deps", "registry", "add", "--help"])
         .build();
 
-    assert_eq!(deps().run(system), Ok(0));
+    assert_eq!(deps().run(system, ForeignBindings::empty()), Ok(0));
     let help = String::from_utf8_lossy(&io.output()).into_owned();
     assert!(
         help.contains("\n\nUsage: deps registry add <NAME>\n\n"),
@@ -205,7 +205,7 @@ fn a_refusal_inside_a_subcommand_names_the_path_that_reaches_it() {
         .args(["deps", "registry", "add"])
         .build();
 
-    assert_eq!(deps().run(system), Ok(2));
+    assert_eq!(deps().run(system, ForeignBindings::empty()), Ok(2));
     let refusal = String::from_utf8(io.errors()).expect("the refusal is text");
     assert!(
         refusal.contains(
@@ -222,7 +222,7 @@ fn a_repeated_flag_name_parses_with_its_second_entry_absent() {
         .args(["deps", "flags", "--verbose"])
         .build();
 
-    assert_eq!(deps().run(system), Ok(0));
+    assert_eq!(deps().run(system, ForeignBindings::empty()), Ok(0));
     assert_eq!(io.output(), b"ran\n");
 }
 
@@ -233,7 +233,7 @@ fn a_repeated_option_name_reports_the_supplied_argument_as_missing() {
         .args(["deps", "ports", "--port", "9090"])
         .build();
 
-    assert_eq!(deps().run(system), Ok(2));
+    assert_eq!(deps().run(system, ForeignBindings::empty()), Ok(2));
     let refusal = String::from_utf8(io.errors()).expect("the refusal is text");
     assert!(
         refusal.contains("error: the argument 'PORT' is required"),

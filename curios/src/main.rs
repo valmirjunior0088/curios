@@ -32,8 +32,8 @@ use {
     },
     curios_pipeline::CompileError,
     curios_runtime::{
-        Bundle, BundledPlugin, DeclaredModule, ForeignBindings, ModuleBytes, OsHost,
-        module_exports, plugin_bindings, precompile, run_bytes,
+        Bundle, BundledPlugin, Compiled, DeclaredModule, ForeignBindings, ModuleBytes, OsHost,
+        module_exports, plugin_bindings, precompile,
     },
     curios_text::Formatted,
     curios_utilities::Source,
@@ -255,17 +255,15 @@ fn dispatch() -> Result<(), Failure> {
             step(Heading::Running, &subject);
 
             // SAFETY: `payload_of` precompiled the payload in this process or read it back from the project's own store, where a compilation of this compiler filed it.
-            let code = unsafe {
-                run_bytes(
-                    &cwasm,
-                    OsHost::with_args(
-                        iter::once(entry)
-                            .chain(args.into_iter().map(OsString::into_encoded_bytes))
-                            .collect(),
-                    ),
-                    bindings,
-                )
-            }?;
+            let compiled = unsafe { Compiled::deserialize(&cwasm) }?;
+            let code = compiled.run(
+                OsHost::with_args(
+                    iter::once(entry)
+                        .chain(args.into_iter().map(OsString::into_encoded_bytes))
+                        .collect(),
+                ),
+                bindings,
+            )?;
 
             if code != 0 {
                 process::exit(i32::from(code));

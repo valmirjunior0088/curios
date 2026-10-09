@@ -2,9 +2,9 @@
 //!
 //! `curios` is the only crate that turns Cranelift on (through `curios-runtime`'s `cranelift` feature) and the only one that links Binaryen (via `curios-binaryen`); `curios-runtime` stays slim by default, and `curios-pipeline` stays clear of both. Everything here is downstream of a `curios_wasm::Module` and indifferent to where one came from — the compiling half is `curios_pipeline::compile_with_prelude` and its siblings, next to the fold it configures.
 //!
-//! Neither wasmtime operation below is spelled here. `curios_runtime::validate` and `curios_runtime::precompile` are, because they belong beside the engine whose configuration decides what a valid module is and what a `.cwasm` is compatible with; this crate names no wasmtime type at all, and its `curios-runtime` dependency row is a feature switch rather than an API dependency.
+//! No wasmtime operation below is spelled here. `curios_runtime::validate`, `curios_runtime::precompile` and `Compiled::compile` are, because they belong beside the engine whose configuration decides what a valid module is and what a `.cwasm` is compatible with; this crate names no wasmtime type at all, and its `curios-runtime` dependency row is a feature switch rather than an API dependency.
 
-use {curios_utilities::Fingerprint, std::sync::LazyLock};
+use {curios_runtime::Compiled, curios_utilities::Fingerprint, std::sync::LazyLock};
 
 /// What decides whether a payload compiled on this machine runs on another, as a key part — computed once, since it is a property of the process, and handed to `curios-verdicts`'s payload family beside every program it files.
 ///
@@ -46,22 +46,31 @@ where
     })
 }
 
-/// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm` payload the runtime deserializes — the same payload a bundled executable carries. Uses `curios-runtime`'s shared engine so the precompiled artifact matches the configuration `run_bytes` deserializes against.
-pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
+/// `module` optimized with Binaryen, as the bytes Cranelift is handed.
+fn optimized(module: &curios_wasm::Module) -> Vec<u8> {
     // Keep the name section only when this build is a profiling one: it is what lets a sampling profiler name emitted wasm functions, and it is dead weight in a shipped binary. Same flag as the guest-side perf map in `curios-runtime` and the compiler spans in `curios-profile`, so one feature makes a whole compile-and-run legible.
-    let bytes = optimize(module, cfg!(feature = "profile"), |_| {});
+    optimize(module, cfg!(feature = "profile"), |_| {})
+}
+
+/// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm` payload a bundled executable carries and a store files, which leaves this process and is read back by [`Compiled::deserialize`]. Uses `curios-runtime`'s shared engine so the precompiled artifact matches the configuration it is deserialized against.
+pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
+    let bytes = optimized(module);
 
     curios_profile::profile!("precompile" => curios_runtime::precompile(&bytes))
 }
 
-/// Run a compiled module in-process: precompile to `.cwasm`, then deserialize and run it on the shared runtime engine — the identical path a bundled executable takes. `bindings` supplies the `ffi`-tier implementations for the module's own `foreign` declarations (pass [`curios_runtime::ForeignBindings::empty`] for a program that declares none). Returns the process exit code.
+/// Optimize (Binaryen) and compile (Cranelift) a module to the program this process runs, on `curios-runtime`'s shared engine: [`to_cwasm`]'s machine code, held rather than written out, so running it reads nothing back.
+pub fn to_compiled(module: &curios_wasm::Module) -> Result<Compiled, String> {
+    let bytes = optimized(module);
+
+    curios_profile::profile!("precompile" => Compiled::compile(&bytes))
+}
+
+/// Compile a module and run it in-process on the shared runtime engine. `bindings` supplies the `ffi`-tier implementations for the module's own `foreign` declarations (pass [`curios_runtime::ForeignBindings::empty`] for a program that declares none). Returns the process exit code.
 pub fn run_wasm<H: curios_runtime::HostOps + Send + Sync + 'static>(
     module: &curios_wasm::Module,
     host: H,
     bindings: curios_runtime::ForeignBindings,
 ) -> Result<u8, String> {
-    let cwasm = to_cwasm(module)?;
-
-    // SAFETY: the payload was precompiled on the line above, by the engine that deserializes it.
-    unsafe { curios_runtime::run_bytes(&cwasm, host, bindings) }
+    to_compiled(module)?.run(host, bindings)
 }

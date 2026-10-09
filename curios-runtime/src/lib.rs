@@ -2,7 +2,7 @@
 //!
 //! **This crate is the workspace's only `wasmtime` dependency**, and nothing above it names a wasmtime type at all. The pin and the feature set live in its manifest — the arrangement `curios-archive` and `curios-num` use for rkyv and num-bigint — so the version `curios` precompiles a `.cwasm` against and the version the launcher deserializes it with cannot drift: there is only one row to change.
 //!
-//! Nothing is re-exported to achieve that. The wasmtime vocabulary appears in [`Lift`] and [`Lower`], which no crate outside this one implements, and every operation an outside caller needs has a wasmtime-free signature: [`validate`], [`precompile`], [`run_bytes`], [`engine_compatibility`], and — under `test-support`, so it carries no link here — `test_support::GuestInstance` for driving a module by hand.
+//! Nothing is re-exported to achieve that. The wasmtime vocabulary appears in [`Lift`] and [`Lower`], which no crate outside this one implements, and every operation an outside caller needs has a wasmtime-free signature: [`validate`], [`precompile`], [`Compiled`], [`engine_compatibility`], and — under `test-support`, so it carries no link here — `test_support::GuestInstance` for driving a module by hand.
 //!
 //! **Runtime-only is a property of the default build, and it is checked.** The `cranelift` feature is never in `default`, so the isolated `cargo build -p curios-runtime` that `cargo xtask runtime` runs cannot reach a compiler; `curios` turns it on for itself to get [`precompile`]. What holds it is `README.md`'s "The launcher is slim by exclusion": the guards in `curios/src/bundle.rs` scan the launcher image that ships.
 //!
@@ -50,6 +50,6 @@ pub use lower::*;
 mod engine;
 pub use engine::*;
 
-/// Deliberately a namespace rather than flattened into the root, and one of the places in this workspace that keep one — `curios-ersd`'s, `curios-core`'s, `curios-utilities`'s and `curios-analysis`'s `test_support` are the others, for the same reason, which is not ambiguity at all. `curios_runtime::test_support::GuestInstance` says at its use site that the caller reached for scaffolding rather than product API, which a flat `curios_runtime::GuestInstance` beside `run_bytes` would not. The path is the warning label.
+/// Deliberately a namespace rather than flattened into the root, and one of the places in this workspace that keep one — `curios-ersd`'s, `curios-core`'s, `curios-utilities`'s and `curios-analysis`'s `test_support` are the others, for the same reason, which is not ambiguity at all. `curios_runtime::test_support::GuestInstance` says at its use site that the caller reached for scaffolding rather than product API, which a flat `curios_runtime::GuestInstance` beside `Compiled` would not. The path is the warning label.
 #[cfg(feature = "test-support")]
 pub mod test_support;

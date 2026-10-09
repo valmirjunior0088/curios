@@ -1,9 +1,9 @@
 //! The `spines` insert slope, the end-to-end instrument behind `documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md`, kept in the `stored_prelude_measurements` pattern — the command and what it last printed, beside the code so a number cannot drift from the thing that would check it.
 
 use {
-    crate::to_cwasm,
+    crate::to_compiled,
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
-    curios_runtime::{ForeignBindings, MockHost, run_bytes},
+    curios_runtime::{Compiled, ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
     std::time::Instant,
 };
@@ -14,7 +14,7 @@ const SPINES: &str = include_str!(concat!(
     "/../programs/spines/spines.crs"
 ));
 
-pub(super) fn cwasm_of(source: &str) -> Vec<u8> {
+pub(super) fn compiled_of(source: &str) -> Compiled {
     let entrypoint = source
         .parse::<Entrypoint>()
         .map_err(|error| error.format())
@@ -27,16 +27,16 @@ pub(super) fn cwasm_of(source: &str) -> Vec<u8> {
     )
     .expect("the workload compiles");
 
-    to_cwasm(&module).expect("the workload precompiles")
+    to_compiled(&module).expect("the workload compiles")
 }
 
-/// One run: milliseconds around `run_bytes` — deserialize, instantiate, and the whole call — and what the program printed.
-pub(super) fn run(cwasm: &[u8], n: u64) -> (f64, Vec<u8>) {
+/// One run: milliseconds around it — instantiate, and the whole call — and what the program printed.
+pub(super) fn run(compiled: &Compiled, n: u64) -> (f64, Vec<u8>) {
     let (host, io) = MockHost::builder().stdin_lines([n.to_string()]).build();
     let start = Instant::now();
-    // SAFETY: the caller precompiled `cwasm` in this process.
-    let code =
-        unsafe { run_bytes(cwasm, host, ForeignBindings::empty()) }.expect("the workload runs");
+    let code = compiled
+        .run(host, ForeignBindings::empty())
+        .expect("the workload runs");
     let elapsed = start.elapsed().as_secs_f64() * 1000.0;
     assert_eq!(code, 0, "the workload exits cleanly");
 
@@ -44,9 +44,9 @@ pub(super) fn run(cwasm: &[u8], n: u64) -> (f64, Vec<u8>) {
 }
 
 /// Best of five: a timing floor is what the slope subtracts.
-pub(super) fn timed(cwasm: &[u8], n: u64) -> f64 {
+pub(super) fn timed(compiled: &Compiled, n: u64) -> f64 {
     (0..5)
-        .map(|_| run(cwasm, n).0)
+        .map(|_| run(compiled, n).0)
         .fold(f64::INFINITY, f64::min)
 }
 
@@ -79,16 +79,16 @@ pub(super) fn timed(cwasm: &[u8], n: u64) -> f64 {
 #[test]
 #[ignore = "measurement, timed: reports timings rather than asserting"]
 fn map_wall_spines_slope() {
-    let cwasm = cwasm_of(SPINES);
+    let compiled = compiled_of(SPINES);
 
     // The documented cross-language anchor, so a mistranslation fails before any figure is read.
-    let (_, output) = run(&cwasm, 8);
+    let (_, output) = run(&compiled, 8);
     assert_eq!(output, b"28\n", "spines(8) anchor");
 
     println!("== map wall: spines insert slope");
 
     let (n1, n2) = (25_000u64, 75_000u64);
-    let (t1, t2) = (timed(&cwasm, n1), timed(&cwasm, n2));
+    let (t1, t2) = (timed(&compiled, n1), timed(&compiled, n2));
     println!(
         "  N={n1}: {t1:.1} ms, N={n2}: {t2:.1} ms, slope {:.0} ns/insert",
         (t2 - t1) * 1_000_000.0 / (n2 - n1) as f64,
@@ -162,8 +162,8 @@ end
 #[test]
 #[ignore = "measurement, timed: reports timings rather than asserting"]
 fn map_wall_key_share() {
-    let encoded = cwasm_of(KEY_ENCODED);
-    let control = cwasm_of(KEY_CONTROL);
+    let encoded = compiled_of(KEY_ENCODED);
+    let control = compiled_of(KEY_CONTROL);
 
     // Self-pinned outputs: the two arms legitimately differ (the lengths versus the constant), so each pins its own.
     let (_, encoded_out) = run(&encoded, 1000);
@@ -175,8 +175,9 @@ fn map_wall_key_share() {
     );
 
     let (n1, n2) = (25_000u64, 75_000u64);
-    let slope =
-        |cwasm: &[u8]| (timed(cwasm, n2) - timed(cwasm, n1)) * 1_000_000.0 / (n2 - n1) as f64;
+    let slope = |compiled: &Compiled| {
+        (timed(compiled, n2) - timed(compiled, n1)) * 1_000_000.0 / (n2 - n1) as f64
+    };
     let encoded_ns = slope(&encoded);
     let control_ns = slope(&control);
     println!(

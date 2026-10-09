@@ -147,7 +147,7 @@ impl ForeignBindings {
         }
     }
 
-    /// No bindings — the store every no-FFI caller passes through [`run_bytes`]/`instantiate`, since a program with no `foreign` declarations imports nothing under `ffi`.
+    /// No bindings — the store every no-FFI caller passes through [`Compiled::run`], since a program with no `foreign` declarations imports nothing under `ffi`.
     pub fn empty() -> Self {
         Self::new(ForeignStore::new())
     }
@@ -315,26 +315,40 @@ impl fmt::Display for PanicTrap {
 
 impl Error for PanicTrap {}
 
-/// Run a precompiled module — `.cwasm` bytes produced by `Engine::precompile_module` for this exact wasmtime version and engine configuration — returning the process exit code (`0` when `main` returns normally, otherwise the code passed to `proc/exit`).
+/// A program's machine code as this engine holds it, ready to run.
 ///
-/// # Safety
-///
-/// `payload` must be unmodified output of [`precompile`](super::precompile) for this engine: `Module::deserialize` performs only light validation, so a foreign blob could execute arbitrary code. The keyword is what carries that obligation to each caller, which names its provenance where it takes it on — the launcher its own footer, the compiler what it just compiled or filed in the project's store.
-pub unsafe fn run_bytes<H: HostOps + Send + Sync + 'static>(
-    payload: &[u8],
-    host: H,
-    bindings: ForeignBindings,
-) -> Result<u8, String> {
-    let engine = shared_engine();
+/// **Holding one is what makes a run safe.** Machine code read back from bytes is run on trust, since nothing can check that the bytes are a compiler's output. So the trust is taken once, where a `Compiled` is made, and a run takes none: a program is either compiled on this engine ([`Compiled::compile`](Self::compile), where a compiler is linked) or read back by [`Compiled::deserialize`], whose caller vouches for the bytes.
+pub struct Compiled(pub(crate) Module);
 
-    // SAFETY: the caller's, restated in this function's contract — `payload` is our own precompiled output.
-    let module = unsafe { Module::deserialize(engine, payload) }
-        .map_err(|error| format!("failed to load wasm module: {error}"))?;
+impl Compiled {
+    /// Read back a precompiled module — `.cwasm` bytes [`precompile`](super::precompile) produced for this exact wasmtime version and engine configuration.
+    ///
+    /// # Safety
+    ///
+    /// `payload` must be unmodified output of [`precompile`](super::precompile) for this engine: `Module::deserialize` performs only light validation, so a foreign blob could execute arbitrary code. The keyword is what carries that obligation to each caller, which names its provenance where it takes it on — the launcher its own footer, the compiler what it precompiled or filed in the project's store.
+    pub unsafe fn deserialize(payload: &[u8]) -> Result<Self, String> {
+        // SAFETY: the caller's, restated in this function's contract — `payload` is our own precompiled output.
+        unsafe { Module::deserialize(shared_engine(), payload) }
+            .map(Self)
+            .map_err(|error| format!("failed to load wasm module: {error}"))
+    }
 
-    instantiate(engine, &module, sys_impls(Arc::new(host)), bindings)
+    /// Run the program under `host`, returning the process exit code: `0` when `main` returns normally, otherwise the code passed to `proc/exit`. `bindings` implements the program's own `foreign` declarations (pass [`ForeignBindings::empty`] for a program that declares none).
+    pub fn run<H: HostOps + Send + Sync + 'static>(
+        &self,
+        host: H,
+        bindings: ForeignBindings,
+    ) -> Result<u8, String> {
+        instantiate(
+            shared_engine(),
+            &self.0,
+            sys_impls(Arc::new(host)),
+            bindings,
+        )
+    }
 }
 
-/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning the process exit code. `impls` supplies the `sys`-tier implementations, every builtin row's, and `bindings` the `ffi`-tier ones for the module's own `foreign` declarations (pass [`ForeignBindings::empty`] for a program that declares none). The deserialize/instantiate split [`run_bytes`] factors out.
+/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning the process exit code. `impls` supplies the `sys`-tier implementations, every builtin row's, and `bindings` the `ffi`-tier ones for the module's own `foreign` declarations. What [`Compiled::run`] does once it has the builtin rows' implementations.
 pub(crate) fn instantiate(
     engine: &Engine,
     module: &Module,

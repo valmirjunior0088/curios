@@ -12,8 +12,8 @@
 
 use {
     super::{
-        ForeignBindings, HostOps, Lower, instantiate, lower_scalars, on_guest_stack, shared_engine,
-        sys_impls, words_array_type,
+        Compiled, ForeignBindings, HostOps, Lower, instantiate, lower_scalars, on_guest_stack,
+        shared_engine, sys_impls, words_array_type,
     },
     curios_abi::HostOp,
     std::sync::Arc,
@@ -201,22 +201,13 @@ pub fn raw_reply(bindings: &mut ForeignBindings, name: &str, values: Vec<RawValu
     });
 }
 
-/// Run the precompiled `payload` under `host`, except that each builtin row in `raw` answers its values on every call, raw — the checked adapter bypassed, so what reaches the guest is exactly what the test wrote. `bindings` implements the program's own `foreign` declarations, as [`run_bytes`](super::run_bytes)'s does.
-///
-/// # Safety
-///
-/// As [`run_bytes`](super::run_bytes): `payload` must be unmodified output of [`precompile`](super::precompile) for this engine.
-pub unsafe fn run_raw<H: HostOps + Send + Sync + 'static>(
-    payload: &[u8],
+/// Run `compiled` under `host`, except that each builtin row in `raw` answers its values on every call, raw — the checked adapter bypassed, so what reaches the guest is exactly what the test wrote. `bindings` implements the program's own `foreign` declarations, as [`Compiled::run`]'s does.
+pub fn run_raw<H: HostOps + Send + Sync + 'static>(
+    compiled: &Compiled,
     host: H,
     raw: Vec<(HostOp, Vec<RawValue>)>,
     bindings: ForeignBindings,
 ) -> Result<u8, String> {
-    let engine = shared_engine();
-
-    // SAFETY: the caller's, restated in this function's contract.
-    let module = unsafe { Module::deserialize(engine, payload) }
-        .map_err(|error| format!("failed to load wasm module: {error}"))?;
     let mut impls = sys_impls(Arc::new(host));
 
     for (op, values) in raw {
@@ -225,5 +216,5 @@ pub unsafe fn run_raw<H: HostOps + Send + Sync + 'static>(
         });
     }
 
-    instantiate(engine, &module, impls, bindings)
+    instantiate(shared_engine(), &compiled.0, impls, bindings)
 }
