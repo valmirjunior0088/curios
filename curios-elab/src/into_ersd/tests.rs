@@ -373,6 +373,7 @@ fn a_record_marks_the_functions_its_total_definitions_erased_to() {
                 )],
                 [],
                 [],
+                [],
             ),
             true,
         ),
@@ -386,6 +387,7 @@ fn a_record_marks_the_functions_its_total_definitions_erased_to() {
                         ..Certified::default()
                     },
                 )],
+                [],
                 [],
                 [],
             ),

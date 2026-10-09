@@ -188,7 +188,7 @@ pub(crate) fn check_rec_group(
 /// 8. Every constructor states as many index targets as the family declares indices — `check_constructed`.
 /// 9. Every index target inhabits the index telescope at the constructor's own parameters — `check_constructed`. A target is read by inversion and by the arm rule, so this is the judgment that types it.
 /// 10. The declaration is strictly positive modulo polarity. That one is *deliberately* not here: the occurrence relation closes transitively across declarations, so it is decided over the whole set at once by [`positivity_vectors`](curios_analysis::positivity_vectors) rather than per entry.
-/// 11. Its variance vector calls no universe level irrelevant that a constructor payload, index target or index type mentions, except through a position itself irrelevant. Not here either, and for clause 10's reason: a level's variance composes through the families a telescope reaches, so a module's vectors are recomputed together by [`variance_vectors`](curios_analysis::variance_vectors) and held against the carried ones in `recheck`, a unit in scope's having been held when it was certified.
+/// 11. Its variance vector calls no universe level irrelevant that a constructor payload, index target or index type mentions, except through a position itself irrelevant. Not here either, and for clause 10's reason: a level's variance composes through the families a telescope reaches, so a declaration's vectors are computed together by [`variance_vectors`](curios_analysis::variance_vectors) in `recheck`, which files them, compares two instances by them from then on, and refuses a carried vector that claims an irrelevance past them.
 ///
 /// # What is unspellable rather than checked
 ///

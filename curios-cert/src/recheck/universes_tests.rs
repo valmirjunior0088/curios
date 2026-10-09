@@ -460,9 +460,9 @@ fn an_invariant_level_is_compared() {
     }
 }
 
-// The lie that would read `box(Type 0) : Box.{1}` back at `Box.{0}`: the walk believes it and lets the coercion through, and the reconciliation refuses the module. An entry past the declaration's count is denied the same way.
+// The lie that would read `box(Type 0) : Box.{1}` back at `Box.{0}`: the walk compares two instances by the vector it computed, so the coercion is refused, and the entry carrying the lie is denied where it is declared, since the elaborator of a later unit reads what an entry carries. An entry past the declaration's count is denied the same way.
 #[test]
-fn a_carried_irrelevance_the_recomputation_denies_refuses_the_module() {
+fn a_carried_irrelevance_the_walk_denies_is_refused_and_read_by_no_comparison() {
     let boxed = Global::Authored(Qualifier::from(["Box"]));
 
     let believed = refusals(&coercion_module(
@@ -472,7 +472,7 @@ fn a_carried_irrelevance_the_recomputation_denies_refuses_the_module() {
         level_one(),
         Level::zero(),
     ));
-    assert!(!coercion_refused(&believed));
+    assert!(coercion_refused(&believed));
     assert!(denied(&believed, boxed, 0));
 
     let overlong = refusals(&coercion_module(
@@ -485,9 +485,9 @@ fn a_carried_irrelevance_the_recomputation_denies_refuses_the_module() {
     assert!(denied(&overlong, boxed, 1));
 }
 
-// `Wrap` carried as invariant in a level its declaration never mentions, which is what a family read before its payload was known carries: the reconciliation says nothing, and the walk compares the level it was told to.
+// `Wrap` carried as invariant in a level its declaration never mentions, which is what a family read before its payload was known carries: the walk compares two instances by the vector it computed, in which the level is irrelevant, so the coercion between them stands, and a carried vector that claims less is denied nothing.
 #[test]
-fn a_carried_invariance_the_recomputation_would_grant_is_compared_and_not_refused() {
+fn a_carried_invariance_the_walk_would_grant_is_read_by_no_comparison() {
     let wrap = Global::Authored(Qualifier::from(["Wrap"]));
     let carried = |to: Level| {
         refusals(&coercion_module(
@@ -501,9 +501,7 @@ fn a_carried_invariance_the_recomputation_would_grant_is_compared_and_not_refuse
 
     assert_eq!(carried(Level::zero()), Vec::new());
 
-    let apart = carried(level_one());
-    assert!(coercion_refused(&apart));
-    assert!(!denied(&apart, wrap, 0));
+    assert_eq!(carried(level_one()), Vec::new());
 }
 
 // `Fam`'s first level reaches no payload and no index type, and its constructor's target puts it at `Box`'s invariant position: two instances apart in it have different inhabitants at one index. Carried honestly the coercion is refused; carried as irrelevant the declaration is.
@@ -531,9 +529,9 @@ fn a_concepts_method_level_is_compared() {
     assert!(denied(&refusals(&lying), name, 0));
 }
 
-// `Held` reaches a family a unit in scope declares, which answers from the vector it carries: that vector was held to its own declarations when its unit was certified, and the item walk reads it on the same word. So an irrelevance `Held` carries is granted over a scope's irrelevant `Wrap` and denied over its invariant `Box`, and over a scope whose `Box` carries a lie it is granted too, the lie being its own unit's to be refused for.
+// `Held` reaches a family a unit in scope declares, which answers from the vector the certifier filed for it: its unit's record's, or the one this walk computes before it judges anything where the record files none, as here. So an irrelevance `Held` carries is granted over a scope's irrelevant `Wrap` and denied over its invariant `Box`, and over a scope whose `Box` carries a lie it is denied as well, what an entry carries being read by no judgment.
 #[test]
-fn a_family_of_a_unit_in_scope_answers_from_the_vector_it_carries() {
+fn a_family_of_a_unit_in_scope_answers_from_what_the_certifier_filed() {
     let level = Level::param(UniverseParam(0));
     let wrap = Global::Authored(Qualifier::from(["Wrap"]));
     let boxed = Global::Authored(Qualifier::from(["Box"]));
@@ -583,13 +581,14 @@ fn a_family_of_a_unit_in_scope_answers_from_the_vector_it_carries() {
         held,
         0
     ));
-    assert_eq!(
-        judged(
+    assert!(denied(
+        &judged(
             &module,
             scope_of(boxed, box_declaration(vec![Variance::Irrelevant]))
         ),
-        Vec::new()
-    );
+        held,
+        0
+    ));
 }
 
 // `Uses` mentions its level only on `Alias.{u}(A)`, which unfolds to `A`: the recomputation reads the reduct and grants the irrelevance the entry carries.

@@ -144,6 +144,7 @@ fn a_record_that_does_not_cover_its_unit_is_not_read() {
         )],
         [],
         [],
+        [],
     );
     assert!(!forged.covers(&stamp_trial_module(Totality::Total, false)));
 

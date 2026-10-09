@@ -21,7 +21,7 @@ use {
     crate::Baseline,
     curios_core::{
         Certification, Free, Global, InductDecl, Item, Module, Place, Places, Polarity, StructDecl,
-        Term, Totality, UniverseContext,
+        Term, Totality, UniverseContext, Variance,
     },
     std::collections::{BTreeMap, HashMap, HashSet},
 };
@@ -67,7 +67,7 @@ pub(crate) fn held<'a>(module: &'a Module, places: &'a Places, name: &Global) ->
 
 /// Whether two `induct` registry entries are one declaration to the certifier: equal in everything it reads of one.
 ///
-/// That is the declaration's terms — its universe context, its arity, its constructors and its result sort — and its variance vector, which a walk answers from for a family of a unit in scope. The polarity vector an entry carries is elaboration's record, which no judgment here reads: the one an environment answers a family's polarity from is the certifier's own, filed by the walk that accepted the entry. The owning module and the representation's privacy are the elaborator's to read. The entry is taken apart in full, so a field added to it is classified here or does not compile.
+/// That is the declaration's terms — its universe context, its arity, its constructors and its result sort. The polarity vector and the variance vector an entry carries are elaboration's record, which no judgment here reads: the ones an environment answers a family's polarity and its variance from are the certifier's own, filed by the walk that accepted the entry. The owning module and the representation's privacy are the elaborator's to read. The entry is taken apart in full, so a field added to it is classified here or does not compile.
 pub(crate) fn induct_alike(this: &InductDecl, that: &InductDecl) -> bool {
     let InductDecl {
         universe_context,
@@ -77,14 +77,13 @@ pub(crate) fn induct_alike(this: &InductDecl, that: &InductDecl) -> bool {
         module: _,
         rep_public: _,
         polarities: _,
-        variances,
+        variances: _,
     } = this;
 
     *universe_context == that.universe_context
         && *arity == that.arity
         && *constructors == that.constructors
         && *result_sort == that.result_sort
-        && *variances == that.variances
 }
 
 /// [`induct_alike`] for two `struct` registry entries, whose fields its arity ends in.
@@ -96,13 +95,12 @@ pub(crate) fn struct_alike(this: &StructDecl, that: &StructDecl) -> bool {
         module: _,
         rep_public: _,
         polarities: _,
-        variances,
+        variances: _,
     } = this;
 
     *universe_context == that.universe_context
         && *arity == that.arity
         && *result_sort == that.result_sort
-        && *variances == that.variances
 }
 
 /// One unit in scope, read where it stands: its module, the places its unit keeps for the module's names, and the record the certifier's walk over it filed.
@@ -153,6 +151,13 @@ impl<'s> Mounted<'s> {
     fn polarities(&self, name: &Global) -> Option<&'s [Polarity]> {
         self.certification
             .polarities(name)
+            .filter(|_| self.module.nominal(self.places, name).is_some())
+    }
+
+    /// The variance vector this unit's record files for the registry entry it holds under `name`.
+    fn variances(&self, name: &Global) -> Option<&'s [Variance]> {
+        self.certification
+            .variances(name)
             .filter(|_| self.module.nominal(self.places, name).is_some())
     }
 }
@@ -247,8 +252,21 @@ impl<'s> Globals<'s> {
             .flat_map(|mounted| &mounted.module.items)
     }
 
-    /// The registry entries in scope here that no record files a vector for, as the two maps strict positivity is handed: a walk computes these for itself before it judges anything.
+    /// The registry entries in scope here that no record files a polarity vector for, as the two maps strict positivity is handed: a walk computes these for itself before it judges anything.
     fn unvectored(&self) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
+        self.unfiled(|record, name| record.polarities(name).is_some())
+    }
+
+    /// The registry entries in scope here that no record files a variance vector for, which a walk computes as it computes [`Globals::unvectored`]'s.
+    fn unvaried(&self) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
+        self.unfiled(|record, name| record.variances(name).is_some())
+    }
+
+    /// The registry entries in scope here whose unit's record does not answer `filed` for them.
+    fn unfiled(
+        &self,
+        filed: impl Fn(&Certification, &Global) -> bool,
+    ) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
         let mut inducts = BTreeMap::new();
         let mut structs = BTreeMap::new();
         for mounted in &self.mounted {
@@ -257,7 +275,7 @@ impl<'s> Globals<'s> {
                 .module
                 .formers()
                 .into_iter()
-                .filter(|(name, _)| mounted.certification.polarities(name).is_none());
+                .filter(|(name, _)| !filed(mounted.certification, name));
             for (name, _) in unfiled {
                 let Some(nominal) = mounted.module.nominal(mounted.places, &name) else {
                     continue;
@@ -304,6 +322,13 @@ impl<'s> Globals<'s> {
             .iter()
             .find_map(|mounted| mounted.polarities(name))
     }
+
+    /// The variance vector the record of the unit holding the registry entry `name` files for it.
+    pub(crate) fn variances(&self, name: &Global) -> Option<&'s [Variance]> {
+        self.mounted
+            .iter()
+            .find_map(|mounted| mounted.variances(name))
+    }
 }
 
 /// A top-level name a walk wrote: what it is, and what it unfolds to if anything.
@@ -327,6 +352,8 @@ pub(super) struct Environment<'s> {
     structs: BTreeMap<Global, StructDecl>,
     /// The polarity vector the walk filed for each registry entry it accepted or adopted, and for each entry of its scope no record files one for: what strict positivity composes through where a family it analyzes mentions this one. The vector an entry carries is elaboration's, which nothing here reads; an entry with no vector filed answers `Mixed`.
     vectors: BTreeMap<Global, Vec<Polarity>>,
+    /// The variance vector the walk filed for each registry entry it accepted or adopted, and for each entry of its scope no record files one for: what a comparison of two instances of the family reads. The vector an entry carries is elaboration's, which the walk holds to this one and reads nowhere else.
+    variances: BTreeMap<Global, Vec<Variance>>,
 }
 
 impl<'s> Environment<'s> {
@@ -438,6 +465,30 @@ impl<'s> Environment<'s> {
         structs.retain(|name, _| !self.vectors.contains_key(name));
 
         (inducts, structs)
+    }
+
+    /// The registry entries of the scope this walk was seeded with that no record files a variance vector for and the walk has filed none for either.
+    pub(super) fn unvaried(&self) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
+        let (mut inducts, mut structs) = self.scope.map(Globals::unvaried).unwrap_or_default();
+        inducts.retain(|name, _| !self.variances.contains_key(name));
+        structs.retain(|name, _| !self.variances.contains_key(name));
+
+        (inducts, structs)
+    }
+
+    /// File `vector` as the variance vector of the registry entry under `name`: what the walk in progress computed for it, or adopted, written as it accepts the entry and read from then on by every comparison of two of the family's instances.
+    pub(super) fn file_variances(&mut self, name: &Global, vector: Vec<Variance>) {
+        self.variances.insert(*name, vector);
+    }
+
+    /// How two instances of the family `name` compare in its `index`th universe parameter, by the vector this walk filed for it or the record of its unit files: [`Variance::Invariant`] where neither holds one, and past the end of one, which is the equality every level was compared at before a vector existed.
+    pub(super) fn variance(&self, name: &Global, index: usize) -> Variance {
+        self.variances
+            .get(name)
+            .map(Vec::as_slice)
+            .or_else(|| self.scope.and_then(|scope| scope.variances(name)))
+            .and_then(|vector| vector.get(index).copied())
+            .unwrap_or(Variance::Invariant)
     }
 
     /// File `vector` as the polarity vector of the registry entry under `name`: what the walk in progress computed for it, or adopted, written as it accepts the entry and read from then on by every judgment that composes through the family.

@@ -150,7 +150,7 @@ impl Former {
     }
 }
 
-/// `induct Wrap.{u}(A: Type u): Type u | wrap(a: A) end`, declared carrying `variances`, with its former `Wrap.{u} = (A: Type u) => Wrap.{u}(A)` defined under the name it answers in the spelling `former` names: a level only its parameter's type mentions.
+/// `induct Wrap.{u}(A: Type u): Type u | wrap(a: A) end`, declared with `variances` filed for it, with its former `Wrap.{u} = (A: Type u) => Wrap.{u}(A)` defined under the name it answers in the spelling `former` names: a level only its parameter's type mentions.
 pub(super) fn declare_wrap(
     kernel: &mut Kernel,
     variances: Vec<Variance>,
@@ -186,10 +186,12 @@ pub(super) fn declare_wrap(
                 module: Qualifier::default(),
                 rep_public: true,
                 polarities: Vec::new(),
-                variances,
+                variances: variances.clone(),
             },
         )
         .expect("a name is declared once");
+    // What a comparison reads is the vector the walk that accepted the entry filed, which a fixture declaring one by hand files for it.
+    kernel.file_variances(&name, variances);
     let type_ = Term::func_type([(carrier, sort.clone())], sort.clone());
     let value = Term::func(
         [(carrier, sort)],
@@ -208,7 +210,7 @@ pub(super) fn declare_wrap(
     name
 }
 
-/// `induct Leaf.{u}: Type | leaf() end`, declared carrying `variances`, with its former defined under the name it answers in the spelling `former` names: a family with no parameter, which its bare name applies in full.
+/// `induct Leaf.{u}: Type | leaf() end`, declared with `variances` filed for it, with its former defined under the name it answers in the spelling `former` names: a family with no parameter, which its bare name applies in full.
 pub(super) fn declare_leaf(
     kernel: &mut Kernel,
     variances: Vec<Variance>,
@@ -234,10 +236,12 @@ pub(super) fn declare_leaf(
                 module: Qualifier::default(),
                 rep_public: true,
                 polarities: Vec::new(),
-                variances,
+                variances: variances.clone(),
             },
         )
         .expect("a name is declared once");
+    // What a comparison reads is the vector the walk that accepted the entry filed, which a fixture declaring one by hand files for it.
+    kernel.file_variances(&name, variances);
     let type_ = Term::type_ground();
     let node = Term::induct_type_at(
         name,
@@ -253,7 +257,7 @@ pub(super) fn declare_leaf(
     name
 }
 
-/// `induct Box.{u}: Type (u + 1) | box(T: Type u) end`, declared carrying `variances`: a level its payload's `Type` mentions.
+/// `induct Box.{u}: Type (u + 1) | box(T: Type u) end`, declared with `variances` filed for it: a level its payload's `Type` mentions.
 pub(super) fn declare_box(kernel: &mut Kernel, variances: Vec<Variance>) -> Global {
     let name = Global::Authored(Qualifier::from(["Box"]));
     let level = Level::param(UniverseParam(0));
@@ -279,10 +283,12 @@ pub(super) fn declare_box(kernel: &mut Kernel, variances: Vec<Variance>) -> Glob
                 module: Qualifier::default(),
                 rep_public: true,
                 polarities: Vec::new(),
-                variances,
+                variances: variances.clone(),
             },
         )
         .expect("a name is declared once");
+    // What a comparison reads is the vector the walk that accepted the entry filed, which a fixture declaring one by hand files for it.
+    kernel.file_variances(&name, variances);
 
     name
 }

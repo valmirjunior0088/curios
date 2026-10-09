@@ -151,18 +151,12 @@ struct Vectors {
 }
 
 impl Vectors {
-    /// `name`'s variance in its `index`th universe parameter. A name outside the analyzed set answers from the registry, and one no registry holds is invariant, never irrelevant.
+    /// `name`'s variance in its `index`th universe parameter. A name outside the analyzed set answers as its driver holds it ([`Env::variance`]), and one the driver holds no vector for is invariant, never irrelevant.
     fn at<E: Env>(&self, env: &E, name: &Global, index: usize) -> Variance {
         if let Some(vector) = self.computed.get(name) {
             return vector.get(index).copied().unwrap_or(Variance::Invariant);
         }
-        env.induct_decl(name)
-            .map(|declaration| declaration.variance(index))
-            .or_else(|| {
-                env.struct_decl(name)
-                    .map(|declaration| declaration.variance(index))
-            })
-            .unwrap_or(Variance::Invariant)
+        env.variance(name, index)
     }
 }
 

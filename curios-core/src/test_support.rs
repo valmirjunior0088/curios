@@ -10,7 +10,10 @@ use {
         MatchResult, Module, Nominal, Program, RecItem, StructDecl, Subterm, Term,
     },
     curios_utilities::Qualifier,
-    std::{collections::BTreeMap, rc::Rc},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        rc::Rc,
+    },
 };
 
 /// Re-fold the program's flat module into a nested `Let`/`Rec` [`Term`] around the entry's body (items are already in binding order).
@@ -40,6 +43,24 @@ pub fn match_ambient(head: impl Into<Term>, goal: impl Into<Term>, cases: Cases)
         result: MatchResult::Ambient(goal.into()),
         cases,
     }))
+}
+
+/// The formers stored at one place, each after the formers of the families its entry reaches, as the order a unit is stored in has them: a walk files what it computes of a family as it accepts it, and reads the next family's entry by what it filed. Two that reach each other keep the order they came in.
+fn after_what_each_reaches(mut pending: Vec<(Global, BTreeSet<Global>, Item)>) -> Vec<Item> {
+    let mut stored = Vec::with_capacity(pending.len());
+    while !pending.is_empty() {
+        let next = (0..pending.len())
+            .find(|&at| {
+                pending
+                    .iter()
+                    .enumerate()
+                    .all(|(other, (name, ..))| other == at || !pending[at].1.contains(name))
+            })
+            .unwrap_or(0);
+        stored.push(pending.remove(next).2);
+    }
+
+    stored
 }
 
 /// `module` declaring each of `inducts`, `structs` and `concepts`: carried by the definition of its name where the module holds one, and where it holds none by the former spelled from it ([`Definition::former`]), a family's in a group of its own as the lowering writes one, stored as a module stores an item ([`Module::ordered`]): after the items its entry names, so ahead of the module's own or just past the last of them it reaches. A concept takes the record `structs` holds under its name.
@@ -86,7 +107,7 @@ pub fn declaring(
         }
     }
     // Each former by the place it is stored ahead of: a walk takes the items as they come, and an entry may name a definition the module holds.
-    let mut formers: BTreeMap<usize, Vec<Item>> = BTreeMap::new();
+    let mut formers: BTreeMap<usize, Vec<(Global, BTreeSet<Global>, Item)>> = BTreeMap::new();
     for (name, nominal) in entries {
         let reach = nominal.reaches();
         let place = items
@@ -104,17 +125,20 @@ pub fn declaring(
             .unwrap_or_default();
         let former = Definition::former(name, island, nominal);
 
-        formers.entry(place).or_default().push(match grouped {
+        let item = match grouped {
             true => Item::Rec(RecItem::new(vec![former])),
             false => Item::Let(former),
-        });
+        };
+        formers.entry(place).or_default().push((name, reach, item));
     }
     let mut stored = Vec::new();
     for (place, item) in items.into_iter().enumerate() {
-        stored.extend(formers.remove(&place).into_iter().flatten());
+        stored.extend(after_what_each_reaches(
+            formers.remove(&place).unwrap_or_default(),
+        ));
         stored.push(item);
     }
-    stored.extend(formers.into_values().flatten());
+    stored.extend(formers.into_values().flat_map(after_what_each_reaches));
 
     Module {
         items: stored.into(),

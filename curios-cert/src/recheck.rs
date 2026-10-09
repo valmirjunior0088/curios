@@ -580,6 +580,7 @@ fn verdicts_within<'s>(
 
     // A unit in scope whose record files no vector for an entry of its own: this walk's to compute, before any judgment composes through one.
     file_scope_polarities(kernel, &mut verdicts);
+    file_scope_variances(kernel, &mut verdicts);
 
     // Whether each part the baseline's walk read of a unit that moved is the part in scope now: asked once, a part being read by every declaration that names it.
     let abroad = RefCell::new(HashMap::<(Global, bool), bool>::new());
@@ -591,6 +592,7 @@ fn verdicts_within<'s>(
     let mut local_memo = HashMap::new();
     // The vector the walk filed for each registry entry it accepted.
     let mut polarities: BTreeMap<Global, Vec<Polarity>> = BTreeMap::new();
+    let mut variances: BTreeMap<Global, Vec<Variance>> = BTreeMap::new();
 
     // The items as the module stores them, which is every item after the items it reaches where the module was made by the elaborator (`Module::ordered`). The walk sorts nothing: an item that names one stored after it finds the name unbound, and a family it stores in one accepted after it finds no vector filed, each of which refuses.
     for (index, item) in module.items.iter().enumerate() {
@@ -611,6 +613,9 @@ fn verdicts_within<'s>(
             }
             for (name, vector) in adopted.vectors {
                 polarities.insert(name, vector);
+            }
+            for (name, vector) in adopted.variances {
+                variances.insert(name, vector);
             }
             adopting.adopted(item);
             continue;
@@ -727,11 +732,12 @@ fn verdicts_within<'s>(
             &mut verdicts,
             &mut reads,
             &mut polarities,
+            &mut variances,
         );
 
         // How the item came out against the baseline's, for the declarations that read it.
         if let Some(adopting) = &mut adopting {
-            adopting.judged(item, |name| totals.partial(name), &polarities);
+            adopting.judged(item, |name| totals.partial(name), &polarities, &variances);
         }
     }
 
@@ -806,6 +812,7 @@ fn verdicts_within<'s>(
                 (*name, Certified { totality, reads })
             }),
         polarities,
+        variances,
         read_abroad,
     );
 
@@ -865,6 +872,7 @@ struct Adopted {
     reads: Vec<(Global, Reads)>,
     partial: Vec<Global>,
     vectors: Vec<(Global, Vec<Polarity>)>,
+    variances: Vec<(Global, Vec<Variance>)>,
 }
 
 /// Take the baseline's verdict on `item`: each of its names stands as the walk leaves an item it does not judge, at its type with its real body, read where the baseline holds it; its registry entries' polarity vectors are filed in the environment; and what the baseline's record holds for it is handed back. A stamp that says `Total` where the adopted verdict does not is refused as it is for a judged item, the stamp being this text's and the verdict the baseline's.
@@ -897,6 +905,7 @@ fn adopt(
         reads: Vec::new(),
         partial: Vec::new(),
         vectors: Vec::new(),
+        variances: Vec::new(),
     };
 
     for ((name, stamp), (totality, reads)) in names.into_iter().zip(stamps).zip(certified) {
@@ -921,6 +930,13 @@ fn adopt(
                 .to_vec();
             kernel.file_polarities(name, vector.clone());
             adopted.vectors.push((*name, vector));
+            let vector = baseline
+                .certification
+                .variances(name)
+                .expect("an adopted declaration's registry entries were filed vectors")
+                .to_vec();
+            kernel.file_variances(name, vector.clone());
+            adopted.variances.push((*name, vector));
         }
     }
 
@@ -981,13 +997,37 @@ fn file_scope_polarities(kernel: &mut Kernel, verdicts: &mut Vec<Verdict>) {
     kernel.take_reads();
 }
 
+/// Compute and file the variance vector of every registry entry in scope that no record files one for, as [`file_scope_polarities`] files their polarity vectors, and before anything is judged, since a comparison of two instances reads one. A walk the budget cuts short files nothing, and its entries answer invariant.
+fn file_scope_variances(kernel: &mut Kernel, verdicts: &mut Vec<Verdict>) {
+    let (inducts, structs) = kernel.unvaried();
+    if inducts.is_empty() && structs.is_empty() {
+        return;
+    }
+
+    kernel.restore_budget();
+    let found = variance_vectors(kernel, Declarations::of(&inducts, &structs));
+    match found.exhausted {
+        Some((walked, error)) => verdicts.push(Verdict {
+            name: Some(walked),
+            error,
+        }),
+        None => {
+            for (name, vector) in found.vectors {
+                kernel.file_variances(&name, vector);
+            }
+        }
+    }
+    // What this read is no judged item's.
+    kernel.take_reads();
+}
+
 /// Accept the registry entries one declaration declares: their strict positivity, their variance and their sizing, each a judgment of its own on a budget restored for it, so whether one fits is a fact about these entries and never about what the module's others cost.
 ///
-/// **Over these entries alone.** A group's formers are one item, so the families that mention one another arrive together; every other family the telescopes mention belongs to a declaration judged before this one — the item follows what its entries reach — or to a unit in scope, and answers from what the kernel holds of it: the vector it filed for strict positivity, the vector the walk reconciled for variance.
+/// **Over these entries alone.** A group's formers are one item, so the families that mention one another arrive together; every other family the telescopes mention belongs to a declaration judged before this one — the item follows what its entries reach — or to a unit in scope, and answers from what the kernel holds of it: the vectors it filed for strict positivity and for variance.
 ///
 /// **Strict positivity** is recomputed here and filed, in the environment for the declarations judged after this one and in `polarities` for the walk's record; the vector an entry carries is elaboration's and is read by nothing. An entry the analysis refuses is filed no vector, and answers `Mixed` from then on.
 ///
-/// **Variance** is reconciled as it is decided: the item's own check compared instances on each carried vector's word, so the vectors are recomputed, and a carried irrelevance the recomputation denies refuses the entry. A carried invariance it would have granted costs an acceptance and admits nothing. A family of a unit in scope answers from the vector it carries, which was held to its own declaration when that unit was certified.
+/// **Variance** is computed here and filed, as strict positivity is: in the environment, where every comparison of two instances judged after this one reads it, and in `variances` for the walk's record. The vector an entry carries is elaboration's, which the elaborator of a later unit compares by, so an irrelevance it claims past the computed one refuses the entry, and a carried invariance the walk would have granted is denied nothing. A walk the budget cut short files nothing and is reported as the budget's. A family of a unit in scope answers from the vector its unit's record files.
 ///
 /// **Sizing** — a literal result sort, sized constructors, each index target typed against the arity — is the clause the item's typing cannot supply, because it computes each signature's sort and compares it to nothing.
 ///
@@ -999,6 +1039,7 @@ fn accept(
     verdicts: &mut Vec<Verdict>,
     reads: &mut BTreeMap<Global, Reads>,
     polarities: &mut BTreeMap<Global, Vec<Polarity>>,
+    variances: &mut BTreeMap<Global, Vec<Variance>>,
 ) {
     if inducts.is_empty() && structs.is_empty() {
         return;
@@ -1017,35 +1058,41 @@ fn accept(
 
     kernel.restore_budget();
     let recomputed = variance_vectors(kernel, Declarations::of(inducts, structs));
-    let mut exhausted = recomputed.exhausted;
-    let carried = inducts
-        .iter()
-        .map(|(name, declaration)| (name, &declaration.variances))
-        .chain(
-            structs
+    match recomputed.exhausted {
+        // A refused reduction read its term as invariant throughout, so what the walk computed past it may be the budget's: nothing is filed, the entries answer invariant from then on, and the budget is what is reported.
+        Some((walked, error)) => verdicts.push(Verdict {
+            name: Some(walked),
+            error,
+        }),
+        None => {
+            let carried = inducts
                 .iter()
-                .map(|(name, declaration)| (name, &declaration.variances)),
-        );
-    for (name, carried) in carried {
-        let granted = recomputed.vectors.get(name);
-        let denied = carried.iter().enumerate().find(|(level, variance)| {
-            **variance == Variance::Irrelevant
-                && granted.and_then(|vector| vector.get(*level)) != Some(&Variance::Irrelevant)
-        });
-        let Some((level, _)) = denied else {
-            continue;
-        };
-        // A refused reduction read its term as invariant throughout, so the denial may be the budget's alone, and the budget is what is reported.
-        verdicts.push(match exhausted.take() {
-            Some((walked, error)) => Verdict {
-                name: Some(walked),
-                error,
-            },
-            None => Verdict {
-                name: Some(*name),
-                error: Error::VarianceDenied { name: *name, level },
-            },
-        });
+                .map(|(name, declaration)| (name, &declaration.variances))
+                .chain(
+                    structs
+                        .iter()
+                        .map(|(name, declaration)| (name, &declaration.variances)),
+                );
+            // The carried vector is the one the elaborator of a later unit reads, so an irrelevance it claims past the walk's own is refused where it is declared.
+            for (name, carried) in carried {
+                let granted = recomputed.vectors.get(name);
+                let denied = carried.iter().enumerate().find(|(level, variance)| {
+                    **variance == Variance::Irrelevant
+                        && granted.and_then(|vector| vector.get(*level))
+                            != Some(&Variance::Irrelevant)
+                });
+                if let Some((level, _)) = denied {
+                    verdicts.push(Verdict {
+                        name: Some(*name),
+                        error: Error::VarianceDenied { name: *name, level },
+                    });
+                }
+            }
+            for (name, vector) in recomputed.vectors {
+                kernel.file_variances(&name, vector.clone());
+                variances.insert(name, vector);
+            }
+        }
     }
 
     kernel.restore_budget();

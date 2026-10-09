@@ -387,9 +387,9 @@ fn a_carried_vector_is_recomputed_rather_than_believed() {
     assert_eq!(vector("Box", lying), "=");
 }
 
-// A family registered and not analyzed is a unit in scope's: its vector was settled when that unit was taken, and a level composes through it as carried, an irrelevance and an invariance alike. A family no registry holds is invariant.
+// A family registered and not analyzed answers as its driver holds it (`Env::variance`). The kernel holds the vector its own walk filed for a family and none for one it was only handed, so a level composes through such a family as invariant whatever its entry carries, an irrelevance it claims among it. A family no registry holds is invariant.
 #[test]
-fn a_family_outside_the_set_answers_from_the_vector_it_carries() {
+fn a_family_outside_the_set_answers_as_its_driver_holds_it() {
     let holder = || {
         family(
             1,
@@ -401,7 +401,7 @@ fn a_family_outside_the_set_answers_from_the_vector_it_carries() {
     };
 
     for (carried, expected) in [
-        (Some(Variance::Irrelevant), "*"),
+        (Some(Variance::Irrelevant), "="),
         (Some(Variance::Invariant), "="),
         (None, "="),
     ] {
@@ -436,7 +436,7 @@ fn held(kernel: &mut Kernel, parts: &[Term]) -> Vec<usize> {
         .collect()
 }
 
-/// A kernel declaring `Wrap`, irrelevant in its level, and `Box`, invariant in its.
+/// A kernel handed `Wrap`, carried as irrelevant in its level, and `Box`, carried as invariant in its. It has filed a vector for neither, so it reads both as invariant.
 fn with_wrap_and_box() -> Kernel<'static> {
     let mut kernel = kernel();
     kernel
@@ -475,7 +475,7 @@ fn a_body_applied_at_its_binders_holds_what_its_reduct_does() {
     assert_eq!(held(&mut kernel(), &[applied]), [1]);
 }
 
-// `(A: Type u) => Box.{v}` and `(A: Type u) => Wrap.{v}(A)`, each a family passed as an argument. Two of them met at no function type are compared binder by binder, so the annotation's level is held, and the body's own by its family's vector.
+// `(A: Type u) => Box.{v}` and `(A: Type u) => Wrap.{v}(A)`, each a family passed as an argument. Two of them met at no function type are compared binder by binder, so the annotation's level is held, and the body's own by what the driver holds of its family: the kernel was only handed these two, so it reads each as invariant, and `curios-cert`'s `a_lambdas_body_is_read_by_the_vector_filed_for_its_family` holds the body to a vector the kernel filed.
 #[test]
 fn a_lambda_is_read_with_its_binders() {
     let carrier = Free::local(1, Some("A"));
@@ -485,7 +485,7 @@ fn a_lambda_is_read_with_its_binders() {
     let mut kernel = with_wrap_and_box();
 
     assert_eq!(held(&mut kernel, &[invariant]), [0, 1]);
-    assert_eq!(held(&mut kernel, &[irrelevant]), [0]);
+    assert_eq!(held(&mut kernel, &[irrelevant]), [0, 1]);
 }
 
 // A family's name with no argument: its instance is compared level by level, as two formers met at no function type are, whatever its vector says of the node it builds once applied.

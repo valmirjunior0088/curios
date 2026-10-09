@@ -3,8 +3,9 @@
 use {
     super::test_support::*,
     crate::{Kernel, convert, whnf},
+    curios_analysis::held_levels,
     curios_core::{
-        Free, Intrinsic, Level, Reducer, Term, UniverseContext, UniverseParam, Variance,
+        Free, Intrinsic, Level, LevelHead, Reducer, Term, UniverseContext, UniverseParam, Variance,
     },
 };
 
@@ -192,4 +193,31 @@ fn a_case_equation_answers_at_another_instance_of_an_irrelevant_level() {
             .expect("the equation records");
         assert_eq!(whnf(kernel, boxing(1)), Ok(boxing(1)));
     });
+}
+
+// A lambda's body is read by the vector the kernel filed for its family: `(A: Type u) => Wrap.{v}(A)` holds `u`, its binder's, and not `v`, which `Wrap` is irrelevant in, where over `Box`, invariant in its level, both are held.
+#[test]
+fn a_lambdas_body_is_read_by_the_vector_filed_for_its_family() {
+    let mut kernel = kernel();
+    let wrap = declare_wrap(&mut kernel, vec![Variance::Irrelevant], Former::Projected);
+    let boxed = declare_box(&mut kernel, vec![Variance::Invariant]);
+    let carrier = binder(90, "A");
+    let level = |index: usize| Level::param(UniverseParam(index));
+    let over = |body: Term| Term::func([(carrier, Term::type_at(level(0)))], body);
+    let held = |kernel: &mut Kernel, term: Term| {
+        let found = held_levels(kernel, &[term]);
+
+        [0, 1].map(|index| found.holds(LevelHead::Param(UniverseParam(index))))
+    };
+
+    let wrapped = Term::induct_type_at(
+        wrap,
+        [level(1)],
+        [Term::free_var(&carrier)],
+        Vec::<Term>::new(),
+    );
+    assert_eq!(held(&mut kernel, over(wrapped)), [true, false]);
+
+    let boxing = Term::induct_type_at(boxed, [level(1)], Vec::<Term>::new(), Vec::<Term>::new());
+    assert_eq!(held(&mut kernel, over(boxing)), [true, true]);
 }

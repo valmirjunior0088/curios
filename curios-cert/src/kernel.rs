@@ -450,6 +450,10 @@ impl Env for Kernel<'_> {
     fn polarity(&self, name: &Global, index: usize) -> Polarity {
         Kernel::polarity(self, name, index)
     }
+
+    fn variance(&self, name: &Global, index: usize) -> Variance {
+        Kernel::variance(self, name, index)
+    }
 }
 
 impl Judge for Kernel<'_> {
@@ -719,15 +723,20 @@ impl<'s> Kernel<'s> {
                 })
     }
 
-    /// The family `name`'s variance in its `index`th universe parameter, as its registry entry carries it.
+    /// The family `name`'s variance in its `index`th universe parameter, by the vector this walk or the walk over its unit filed for it: a read of the family's signature, as a read of its registry entry is. The vector the entry carries is elaboration's and is read by no comparison.
     fn variance(&self, name: &Global, index: usize) -> Variance {
-        self.induct_decl(name)
-            .map(|declaration| declaration.variance(index))
-            .or_else(|| {
-                self.struct_decl(name)
-                    .map(|declaration| declaration.variance(index))
-            })
-            .unwrap_or(Variance::Invariant)
+        self.reads.signature(name);
+        self.globals.variance(name, index)
+    }
+
+    /// The registry entries of the scope this kernel was seeded with that no record files a variance vector for, which a walk computes before it judges anything.
+    pub(crate) fn unvaried(&self) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
+        self.globals.unvaried()
+    }
+
+    /// File the variance vector the walk computed, or adopted, for the registry entry under `name`: what every later comparison of two of the family's instances reads.
+    pub(crate) fn file_variances(&mut self, name: &Global, vector: Vec<Variance>) {
+        self.globals.file_variances(name, vector);
     }
 
     /// Verify a stated instance satisfies its scheme's constraint set: each declared `lower ≤ upper`, instantiated at this occurrence's levels, must hold under the assumed constraints of the item being checked.

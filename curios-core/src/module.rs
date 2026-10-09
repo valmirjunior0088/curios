@@ -53,6 +53,8 @@ pub struct Certification {
     totalities: BTreeMap<Global, Totality>,
     /// How each `induct` and `struct` entry the walk accepted uses its parameters, as the walk computed it: what a later walk composes through where a family it judges mentions this one. The vector the entry itself carries is elaboration's, which no walk reads.
     polarities: BTreeMap<Global, Vec<Polarity>>,
+    /// How two instances of each `induct` and `struct` entry the walk accepted compare in each of its universe parameters, as the walk computed it: what a later walk compares two instances of the family by. The vector the entry itself carries is elaboration's, which the walk holds to this one and no judgment reads.
+    variances: BTreeMap<Global, Vec<Variance>>,
     /// What judging each definition read of other items: what a later walk over the unit decides by which of these verdicts stand, and what nothing compiled after the unit reads.
     ///
     /// **Of the unit's baseline half**, as its traces are: skipped where the record is stored, stored beside it ([`Certification::reads_bytes`]), handed back as bytes where it is restored ([`Certification::with_reads`]), and read out of them when a walk over the unit first asks.
@@ -83,6 +85,7 @@ impl PartialEq for Certification {
     fn eq(&self, other: &Self) -> bool {
         self.totalities == other.totalities
             && self.polarities == other.polarities
+            && self.variances == other.variances
             && self.read() == other.read()
     }
 }
@@ -122,10 +125,11 @@ impl Reads {
 }
 
 impl Certification {
-    /// A record of each of `definitions`, of the vector of each entry in `polarities`, and of what the walk read of each declaration of another unit, `abroad`.
+    /// A record of each of `definitions`, of the vectors of each entry in `polarities` and in `variances`, and of what the walk read of each declaration of another unit, `abroad`.
     pub fn of(
         definitions: impl IntoIterator<Item = (Global, Certified)>,
         polarities: impl IntoIterator<Item = (Global, Vec<Polarity>)>,
+        variances: impl IntoIterator<Item = (Global, Vec<Variance>)>,
         abroad: impl IntoIterator<Item = (Global, Abroad)>,
     ) -> Self {
         let (mut totalities, mut by) = (BTreeMap::new(), BTreeMap::new());
@@ -137,6 +141,7 @@ impl Certification {
         Self {
             totalities,
             polarities: polarities.into_iter().collect(),
+            variances: variances.into_iter().collect(),
             reads: curios_archive::Deferred::held(Read {
                 by,
                 abroad: abroad.into_iter().collect(),
@@ -176,6 +181,11 @@ impl Certification {
     /// The polarity vector the certifier computed for the registry entry `name`, when this record holds one.
     pub fn polarities(&self, name: &Global) -> Option<&[Polarity]> {
         self.polarities.get(name).map(Vec::as_slice)
+    }
+
+    /// The variance vector the certifier computed for the registry entry `name`, when this record holds one.
+    pub fn variances(&self, name: &Global) -> Option<&[Variance]> {
+        self.variances.get(name).map(Vec::as_slice)
     }
 
     /// The certifier's classification of `name`, when this record covers it.

@@ -21,7 +21,7 @@
 //! Both traits report through an associated [`Env::Error`] rather than through [`ReduceError`](curios_core::ReduceError). The kernel's failures are `curios_cert::Error`s and the elaborator's are spanned diagnostics that name the offending term, and a shared analysis should not have to know which. This is the rule `ReduceError` already states from the other direction — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 
 use curios_core::{
-    Bound, Exhaustion, Free, Global, InductDecl, Polarity, StructDecl, Subterm, Term,
+    Bound, Exhaustion, Free, Global, InductDecl, Polarity, StructDecl, Subterm, Term, Variance,
 };
 
 /// Whether it is both meaningful and *safe* to hand `term` to [`Env::force`] — the guard a shared analysis takes before spending a reduction on a term it only wants to read.
@@ -80,6 +80,19 @@ pub trait Env {
     ///
     /// Asked of the checker rather than read off the entry it hands back, because which vector a family answers with is the checker's own record. The elaborator's is the one its entry carries; the kernel's is the one its own walk filed, which no entry holds, so reading the entry would have it keep a second copy of every registry entry in scope to put its vector there.
     fn polarity(&self, name: &Global, index: usize) -> Polarity;
+
+    /// How two instances of the family `name` compare in its `index`th universe parameter, as this checker holds it: [`Variance::Invariant`], never irrelevant, where it holds no vector for the name or the vector ends before `index`.
+    ///
+    /// Asked of the checker for the reason [`Env::polarity`] is. The elaborator's vector is the one its entry carries, which is what this answers unless a checker says otherwise; the kernel's is the one its own walk filed.
+    fn variance(&self, name: &Global, index: usize) -> Variance {
+        self.induct_decl(name)
+            .map(|declaration| declaration.variance(index))
+            .or_else(|| {
+                self.struct_decl(name)
+                    .map(|declaration| declaration.variance(index))
+            })
+            .unwrap_or(Variance::Invariant)
+    }
 }
 
 /// [`Env`], plus the one judgment a shared analysis is allowed to borrow.

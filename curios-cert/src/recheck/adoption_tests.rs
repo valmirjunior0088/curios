@@ -113,6 +113,7 @@ fn doctored(
         }),
         [],
         [],
+        [],
     )
 }
 
@@ -231,9 +232,9 @@ fn a_stamp_that_says_total_over_an_adopted_partial_verdict_is_refused() {
     );
 }
 
-/// A registry entry is the baseline's by what the certifier reads of it: its terms, and the variance vector a walk answers from. Elaboration's stamps take no part — the polarity vector, in whose place a walk holds the one the certifier computed, the owning module and the representation's privacy — so an entry differing from the baseline's in those alone is the baseline's, and one differing in its variance vector or in a field's type is not.
+/// A registry entry is the baseline's by what the certifier reads of it, its terms. Elaboration's stamps take no part — the polarity vector and the variance vector, in whose place a walk holds the ones the certifier computed, the owning module and the representation's privacy — so an entry differing from the baseline's in those alone is the baseline's, and one differing in its variance vector or in a field's type is not.
 ///
-/// Mutation-checked against each comparison: taken over the whole entry, the stamped pair is another declaration; with the variance vector left out the family is the baseline's; and with the arity left out the record is.
+/// Mutation-checked against each comparison: taken over the whole entry, the stamped pair is another declaration, and so is the family carrying another variance vector; and with the arity left out the record is the baseline's.
 #[test]
 fn a_registry_entry_is_the_baselines_by_what_the_certifier_reads_of_it() {
     let held = two_registry_entries(Varied::Nothing);
@@ -247,11 +248,11 @@ fn a_registry_entry_is_the_baselines_by_what_the_certifier_reads_of_it() {
         "an entry differing from the baseline's in elaboration's stamps alone is another declaration",
     );
     assert!(
-        !induct_alike(
+        induct_alike(
             &family(&two_registry_entries(Varied::Variance)),
             &family(&held)
         ),
-        "a family differing from the baseline's in its variance vector is the baseline's",
+        "a family differing from the baseline's in the variance vector it carries alone is another declaration",
     );
     assert!(
         !struct_alike(

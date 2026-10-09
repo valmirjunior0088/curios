@@ -12,7 +12,7 @@ use {
     super::{held, induct_alike, struct_alike},
     curios_core::{
         Certification, Global, InductDecl, Item, Module, Nominal, Places, Polarity, Reads, Term,
-        Totality,
+        Totality, Variance,
     },
     std::collections::{BTreeMap, HashMap},
 };
@@ -115,12 +115,14 @@ pub(crate) fn read_digest(
         module: Qualifier::default(),
         rep_public: false,
         polarities: Vec::new(),
+        variances: Vec::new(),
         ..declaration.shared(&sharing)
     });
     let record = globals.struct_decl(name).map(|declaration| StructDecl {
         module: Qualifier::default(),
         rep_public: false,
         polarities: Vec::new(),
+        variances: Vec::new(),
         ..declaration.shared(&sharing)
     });
     let part = (
@@ -130,6 +132,7 @@ pub(crate) fn read_digest(
         record,
         globals.partial(name),
         globals.polarities(name).map(<[Polarity]>::to_vec),
+        globals.variances(name).map(<[Variance]>::to_vec),
     );
 
     curios_archive::to_bytes(&part).map(|bytes| Some(digest(&bytes)))
@@ -184,8 +187,9 @@ impl<'a> Adopting<'a> {
             .map(|name| {
                 let totality = certification.totality(name)?;
                 let reads = certification.reads(name)?;
-                let vectored =
-                    item.nominal(name).is_none() || certification.polarities(name).is_some();
+                let vectored = item.nominal(name).is_none()
+                    || (certification.polarities(name).is_some()
+                        && certification.variances(name).is_some());
 
                 (vectored
                     && reads
@@ -220,6 +224,7 @@ impl<'a> Adopting<'a> {
         item: &Item,
         partial: impl Fn(&Global) -> bool,
         polarities: &BTreeMap<Global, Vec<Polarity>>,
+        variances: &BTreeMap<Global, Vec<Variance>>,
     ) {
         for (index, name) in item.declared_names().into_iter().enumerate() {
             let stood = match held(self.baseline.module, self.baseline.places, name) {
@@ -232,7 +237,8 @@ impl<'a> Adopting<'a> {
                     let verdict = partial(name)
                         == (certification.totality(name) != Some(Totality::Total))
                         && polarities.get(name).map(Vec::as_slice)
-                            == certification.polarities(name);
+                            == certification.polarities(name)
+                        && variances.get(name).map(Vec::as_slice) == certification.variances(name);
                     let (same_type, same_body, same_universes) = match item {
                         Item::Let(definition) => (
                             definition.type_ == *held.type_,
