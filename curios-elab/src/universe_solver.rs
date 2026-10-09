@@ -128,6 +128,13 @@ impl Potential {
         }
     }
 
+    /// Forget every node past the first `count`. No arc the potential holds names one.
+    fn truncate_nodes(&mut self, count: usize) {
+        self.outgoing.truncate(count);
+        self.distance.truncate(count);
+        self.predecessor.truncate(count);
+    }
+
     fn push_arc(&mut self, arc: Arc) -> usize {
         let index = self.arcs.len();
         self.arcs.push(arc);
@@ -310,10 +317,155 @@ impl Search {
     }
 }
 
+/// Bounding the search is what makes the decision procedure total.
+///
+/// Accepting is always justified: a satisfying branch assignment is a model of the original constraints, so any `Ok` is sound however few branches were explored. Only *refuting* needs the whole tree, so exhausting the budget means "not decided", and the caller reports it rather than continuing an exponential walk.
+const SEARCH_BUDGET: u64 = 200_000;
+
+/// `budget` bounds the nodes this search may visit. Exhausting it is reported as `Err(None)`, distinct from a refuted branch, so the caller can name the clause shape instead of spinning.
+///
+/// Reaching the last clause needs no final check: feasibility is the search's invariant, so an assignment that committed is a model.
+///
+/// Guarded by [`recurse`], because depth here is the number of *branching* clauses and the budget does not bound it — the budget counts visits, so a constraint set wide enough to need many decisions would overflow the native stack before the budget ever noticed. That depth is a function of how many constraints reached the declaration, which is the data-shaped kind.
+///
+/// The recursion is what pairs a committed arc with its revert: the alternative that committed one owns it for exactly the call it is exploring, and reverts before reading that call's verdict.
+fn choose(
+    clauses: &[(usize, Vec<Option<Arc>>)],
+    clause: usize,
+    search: &mut Search,
+    budget: &mut u64,
+) -> Result<(), Option<Vec<usize>>> {
+    recurse(|| {
+        match budget.checked_sub(1) {
+            None => return Err(None),
+            Some(remaining) => *budget = remaining,
+        }
+
+        if clause == clauses.len() {
+            return Ok(());
+        }
+
+        let mut best_failure = None;
+
+        for choice in clauses[clause].1.iter().copied() {
+            let undo = match choice {
+                // A clause alternative that needs no arc is already satisfied by the committed potential.
+                None => None,
+                Some(arc) => match search.commit(arc) {
+                    Ok(undo) => Some(undo),
+                    Err(path) => {
+                        record_failure(&mut best_failure, path);
+                        continue;
+                    }
+                },
+            };
+
+            let explored = choose(clauses, clause + 1, search, budget);
+            if let Some(undo) = undo {
+                search.revert(undo);
+            }
+
+            match explored {
+                Ok(()) => return Ok(()),
+                Err(None) => return Err(None),
+                Err(Some(path)) => record_failure(&mut best_failure, path),
+            }
+        }
+
+        Err(Some(
+            best_failure.unwrap_or_else(|| vec![clauses[clause].0]),
+        ))
+    })
+}
+
+/// Keep the longest refutation seen for a clause: the deeper path names more of what forced the contradiction, which is what the caller renders.
+fn record_failure(best: &mut Option<Vec<usize>>, path: Vec<usize>) {
+    if best.as_ref().is_none_or(|kept| path.len() > kept.len()) {
+        *best = Some(path);
+    }
+}
+
+/// What a store was last found consistent from, kept while the store stands: the potential its forced arcs leave feasible, and the clauses its genuine maxima leave to branch on, narrowest first. A store whose every constraint is forced has no clause and is extended a constraint at a time; either is asked what one more constraint would do with nothing built again ([`ConsistencyCache::refuses`]).
 #[derive(Debug, Clone)]
 struct ConsistencyCache {
     constraint_len: usize,
     graph: DifferenceGraph,
+    branches: Vec<(usize, Vec<Option<Arc>>)>,
+}
+
+impl ConsistencyCache {
+    /// Whether the store this was decided from is refused with `constraint` added as its constraint `index`, the cache left as it was. `None` where the constraint holds a genuine maximum of its own, a clause the search would place among the store's: that question is the store's to decide.
+    ///
+    /// **The answer deciding the longer store from nothing gives.** The constraint's forced arcs are committed over the potential the store's own left feasible, each write journalled, the store's clauses are searched under them on a budget of their own, and every write is undone, with the nodes the constraint alone names. Whether a set of arcs is feasible does not depend on the order they were committed in, so the search visits what a search from nothing visits and runs out where it does.
+    fn refuses(&mut self, constraint: &UniverseConstraint, index: usize) -> Option<bool> {
+        let edges = match forced_difference_edges(constraint, index) {
+            Ok(Some((_, edges))) => edges,
+            Ok(None) => return None,
+            Err(_) => return Some(true),
+        };
+
+        let zero = self.graph.positions[&DifferenceNode::Zero];
+        let nodes = self.graph.positions.len();
+        let mut search = Search(std::mem::take(&mut self.graph.potential));
+        let mut committed = Vec::new();
+        let mut named = Vec::new();
+        let mut commit = |search: &mut Search, arc: Arc| match search.commit(arc) {
+            Ok(undo) => {
+                committed.push(undo);
+                true
+            }
+            Err(_) => false,
+        };
+        let feasible = edges.into_iter().all(|edge| {
+            let mut ends = [zero; 2];
+            for (end, node) in ends.iter_mut().zip([edge.from, edge.to]) {
+                *end = match self.graph.positions.get(&node) {
+                    Some(&position) => position,
+                    None => {
+                        let position = self.graph.positions.len();
+                        self.graph.positions.insert(node, position);
+                        named.push(node);
+                        search.0.ensure_nodes(position + 1);
+                        // Universe heads range over naturals: `0 - head ≤ 0`.
+                        let grounded = Arc {
+                            from: position,
+                            to: zero,
+                            weight: 0,
+                            origin: None,
+                        };
+                        if !commit(&mut search, grounded) {
+                            return false;
+                        }
+                        position
+                    }
+                };
+            }
+            commit(
+                &mut search,
+                Arc {
+                    from: ends[0],
+                    to: ends[1],
+                    weight: edge.weight,
+                    origin: edge.origin,
+                },
+            )
+        });
+        let refused = !feasible || {
+            let mut budget = SEARCH_BUDGET;
+            choose(&self.branches, 0, &mut search, &mut budget).is_err()
+        };
+
+        for undo in committed.into_iter().rev() {
+            search.revert(undo);
+        }
+        search.0.truncate_nodes(nodes);
+        for node in named {
+            self.graph.positions.remove(&node);
+        }
+        self.graph.potential = search.0;
+
+        Some(refused)
+    }
 }
 
 fn atomic_difference_edge(
@@ -744,7 +896,7 @@ impl UniverseSolver {
 
     /// Join every weak equation the store can hold that decides no level the declaration holds, and drop the rest.
     ///
-    /// Asked where a declaration's levels are about to settle, so every requirement its elaboration raised is in the store. A pair with no open level on either side names no level to choose and is dropped unread: two constants, or a constant and a parameter. The rest are tried together, one check for the declaration; where that is refused they are retaken one at a time in the order they were met, each kept where the store stays consistent and says of the held levels what it said.
+    /// Asked where a declaration's levels are about to settle, so every requirement its elaboration raised is in the store. A pair with no open level on either side names no level to choose and is dropped unread: two constants, or a constant and a parameter. The rest are tried together, one check for the declaration; where that is refused they are retaken in the order they were met, each kept where the store stays consistent and says of the held levels what it said, a run of them at a time ([`Self::join_run`]).
     ///
     /// Where every pair is kept, the store that results is the one an equation at each of those positions would have given, so a declaration that elaborates with those equations required elaborates to the same levels with them weak. Where one is not, dropping it refuses nothing and decides nothing a checker reads: the two instances it came from convert as they stand. What the order chooses, there alone, is which level an irrelevant occurrence lands on.
     ///
@@ -766,39 +918,90 @@ impl UniverseSolver {
             return;
         }
         curios_profile::sample!("universe::weak_equations", pairs.len());
-        let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion);
+        curios_profile::sample!("universe::held_levels", held.len());
 
         let before = self.held_relations(held);
+        self.join_run(&pairs, held, &before);
+    }
+
+    /// Join the pairs of `pairs` the store can hold, in order: each is kept where the store, with the pairs kept before it, stays consistent and says of the held levels what `before` says.
+    ///
+    /// **A run the store holds whole is kept whole, and one it does not is halved.** Whether a store holds a set of equations only falls as the set grows, so a run that is held together is one each of whose pairs would have been kept in its turn, and nothing is asked of them one by one; a run that is not held is tried as its two halves, the first before the second, down to the pair that is dropped. The pairs kept are the ones trying each alone in order keeps, and a declaration with a few hundred of them, a handful of which the store refuses, asks a few dozen times where it asked once for each.
+    fn join_run(
+        &mut self,
+        pairs: &[(Level, Level)],
+        held: &BTreeSet<UniverseMetaId>,
+        before: &[Option<u32>],
+    ) {
+        curios_profile::sample!("universe::weak_run", pairs.len());
+        let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion);
         let mark = self.mark();
         let joined = pairs.iter().all(|(left, right)| {
             self.add_eq(left.clone(), right.clone(), origin.clone())
                 .is_ok()
-        });
-        if joined && self.check_consistent().is_ok() && self.held_relations(held) == before {
+        }) && self.check_consistent().is_ok()
+            && self.relations_stand(held, before);
+        if joined {
             self.release(mark);
             return;
         }
         self.rollback(mark);
         self.release(mark);
 
-        for (left, right) in pairs {
-            let mark = self.mark();
-            let joined = self
-                .add_eq(left.clone(), right.clone(), origin.clone())
-                .is_ok()
-                && self.check_consistent().is_ok()
-                && self.held_relations(held) == before;
-            if !joined {
-                self.rollback(mark);
-                curios_profile::note!(
-                    target: "curios_elab::universe",
-                    left = %left,
-                    right = %right,
-                    "dropped a weak equation the store refuses",
-                );
-            }
-            self.release(mark);
+        // The empty run is held, so a run that is not holds a pair: alone it is the one dropped.
+        if pairs.len() > 1 {
+            let (first, rest) = pairs.split_at(pairs.len() / 2);
+            self.join_run(first, held, before);
+            self.join_run(rest, held, before);
+        } else {
+            curios_profile::note!(
+                target: "curios_elab::universe",
+                left = %pairs[0].0,
+                right = %pairs[0].1,
+                "dropped a weak equation the store refuses",
+            );
         }
+    }
+
+    /// The levels a declaration holds, zero before them: what [`Self::held_relations`] relates, in the order it relates them.
+    fn held_levels(held: &BTreeSet<UniverseMetaId>) -> Vec<Level> {
+        std::iter::once(Level::zero())
+            .chain(held.iter().map(|meta| Level::meta(*meta)))
+            .collect()
+    }
+
+    /// Whether the store says of the held levels what `before`, their relations as [`Self::held_relations`] read them of an earlier store this one extends, says.
+    ///
+    /// **One refutation a pair.** A store that extends another entails all it did, so a relation can only have widened: it stands where the store does not entail the step past the gap it had, and the first that does not stand ends the asking.
+    fn relations_stand(&mut self, held: &BTreeSet<UniverseMetaId>, before: &[Option<u32>]) -> bool {
+        if held.is_empty() {
+            return true;
+        }
+        curios_profile::profile!("universe::relations_stand");
+        let levels = Self::held_levels(held);
+        let mut relation = before.iter();
+        for (below, lower) in levels.iter().enumerate() {
+            for (above, upper) in levels.iter().enumerate() {
+                if below == above {
+                    continue;
+                }
+                let next = match relation.next().expect("a relation for each ordered pair") {
+                    Some(gap) => gap + 1,
+                    None => 0,
+                };
+                // Past the cap a gap is not looked for, before or after.
+                if next > GAP_CAP {
+                    continue;
+                }
+                if let Ok(raised) = lower.checked_add(next)
+                    && self.entails(&raised, upper)
+                {
+                    return false;
+                }
+            }
+        }
+
+        true
     }
 
     /// What the store says of the levels a declaration holds, one against another and each against zero: for each ordered pair, the widest gap it entails between them ([`Self::gap`]). Two stores that answer alike here leave a caller the same choice of those levels.
@@ -807,9 +1010,7 @@ impl UniverseSolver {
             return Vec::new();
         }
         curios_profile::profile!("universe::held_relations");
-        let levels = std::iter::once(Level::zero())
-            .chain(held.iter().map(|meta| Level::meta(*meta)))
-            .collect::<Vec<_>>();
+        let levels = Self::held_levels(held);
         let mut relations = Vec::with_capacity(levels.len() * (levels.len() - 1));
         for (below, lower) in levels.iter().enumerate() {
             for (above, upper) in levels.iter().enumerate() {
@@ -838,11 +1039,14 @@ impl UniverseSolver {
         widest
     }
 
-    /// Whether the store entails `lower ≤ upper`: its negation, `upper + 1 ≤ lower`, is one the store refuses.
+    /// Whether the store entails `lower ≤ upper`: its negation, `upper + 1 ≤ lower`, is one the store refuses. Asked of what the store was last decided from where that can say ([`Self::refused_as_decided`]), and of the store with the negation added and taken back where it cannot.
     fn entails(&mut self, lower: &Level, upper: &Level) -> bool {
         let Ok(above) = upper.succ() else {
             return false;
         };
+        if let Some(refused) = self.refused_as_decided(&above, lower) {
+            return refused;
+        }
         let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion);
         let mark = self.mark();
         let refused =
@@ -851,6 +1055,30 @@ impl UniverseSolver {
         self.release(mark);
 
         refused
+    }
+
+    /// Whether the store refuses `lower ≤ upper`, asked of what a consistent store was decided from ([`ConsistencyCache::refuses`]) and writing nothing to it: what adding the constraint, deciding the store and taking the constraint back answers. `None` where the store is not consistent, or the constraint is a clause of its own.
+    ///
+    /// A declaration asks this of every ordered pair of the levels it holds, each time it tries a run of its weak equations ([`Self::relations_stand`]). Deciding the store again for each is what made those questions most of what elaborating the library allocates.
+    fn refused_as_decided(&mut self, lower: &Level, upper: &Level) -> Option<bool> {
+        self.check_consistent().ok()?;
+        let lower = self.zonk(lower).ok()?;
+        let upper = self.zonk(upper).ok()?;
+        // What `add_constraint` settles before it stores anything.
+        if lower.structurally_leq(&upper) {
+            return Some(false);
+        }
+        if lower.atoms.is_empty() && upper.atoms.is_empty() {
+            return Some(lower.constant > upper.constant);
+        }
+
+        let index = self.constraints.len();
+        let constraint = UniverseConstraint {
+            lower,
+            upper,
+            origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+        };
+        self.consistency.as_mut()?.refuses(&constraint, index)
     }
 
     /// Default an equation whose zonked sides differ at exactly one meta atom with a shared offset: `max(s, α+k) = max(s, β+k)` pins one meta to the other instead of parking two inequalities the bound propagators cannot decompose. Without this, independently instantiated spellings of one written annotation meet only here, both metas survive to declaration finalization, and the scheme generalizes two parameters where the program wrote one universe.
@@ -1846,7 +2074,8 @@ impl UniverseSolver {
                 self.consistency = Some(cache);
                 return Ok(());
             }
-            if cache.constraint_len + 1 == self.constraints.len() {
+            // A constraint added to a store with clauses to branch on is decided with them, from nothing.
+            if cache.constraint_len + 1 == self.constraints.len() && cache.branches.is_empty() {
                 let index = cache.constraint_len;
                 match forced_difference_edges(
                     self.constraints
@@ -1895,80 +2124,19 @@ impl UniverseSolver {
             self.consistency = Some(ConsistencyCache {
                 constraint_len: constraints.len(),
                 graph,
+                branches: Vec::new(),
             });
             return Ok(());
         }
 
-        self.check_consistent_full()
+        self.consistency = Some(self.check_consistent_full()?);
+        Ok(())
     }
 
-    /// Decide consistency from scratch, branching on genuine right-hand maxima. Reads the store directly: every stored constraint is already normalized, so there is no separate zonked copy to drift from.
-    fn check_consistent_full(&self) -> Result<(), UniverseError> {
+    /// Decide consistency from scratch, branching on genuine right-hand maxima, and hand back what a consistent store was decided from. Reads the store directly: every stored constraint is already normalized, so there is no separate zonked copy to drift from.
+    fn check_consistent_full(&self) -> Result<ConsistencyCache, UniverseError> {
         curios_profile::profile!("universe::check_consistent_full");
         let constraints = self.constraints.as_slice();
-
-        /// `budget` bounds the nodes this search may visit. Exhausting it is reported as `Err(None)`, distinct from a refuted branch, so the caller can name the clause shape instead of spinning.
-        ///
-        /// Reaching the last clause needs no final check: feasibility is the search's invariant, so an assignment that committed is a model.
-        ///
-        /// Guarded by [`recurse`], because depth here is the number of *branching* clauses and the budget does not bound it — the budget counts visits, so a constraint set wide enough to need many decisions would overflow the native stack before the budget ever noticed. That depth is a function of how many constraints reached the declaration, which is the data-shaped kind.
-        ///
-        /// The recursion is what pairs a committed arc with its revert: the alternative that committed one owns it for exactly the call it is exploring, and reverts before reading that call's verdict.
-        fn choose(
-            clauses: &[(usize, Vec<Option<Arc>>)],
-            clause: usize,
-            search: &mut Search,
-            budget: &mut u64,
-        ) -> Result<(), Option<Vec<usize>>> {
-            recurse(|| {
-                match budget.checked_sub(1) {
-                    None => return Err(None),
-                    Some(remaining) => *budget = remaining,
-                }
-
-                if clause == clauses.len() {
-                    return Ok(());
-                }
-
-                let mut best_failure = None;
-
-                for choice in clauses[clause].1.iter().copied() {
-                    let undo = match choice {
-                        // A clause alternative that needs no arc is already satisfied by the committed potential.
-                        None => None,
-                        Some(arc) => match search.commit(arc) {
-                            Ok(undo) => Some(undo),
-                            Err(path) => {
-                                record_failure(&mut best_failure, path);
-                                continue;
-                            }
-                        },
-                    };
-
-                    let explored = choose(clauses, clause + 1, search, budget);
-                    if let Some(undo) = undo {
-                        search.revert(undo);
-                    }
-
-                    match explored {
-                        Ok(()) => return Ok(()),
-                        Err(None) => return Err(None),
-                        Err(Some(path)) => record_failure(&mut best_failure, path),
-                    }
-                }
-
-                Err(Some(
-                    best_failure.unwrap_or_else(|| vec![clauses[clause].0]),
-                ))
-            })
-        }
-
-        /// Keep the longest refutation seen for a clause: the deeper path names more of what forced the contradiction, which is what the caller renders.
-        fn record_failure(best: &mut Option<Vec<usize>>, path: Vec<usize>) {
-            if best.as_ref().is_none_or(|kept| path.len() > kept.len()) {
-                *best = Some(path);
-            }
-        }
 
         // A maximum on the left is conjunctive. A maximum on the right is a finite disjunction: under any satisfying valuation, each left atom is dominated by at least one right atom. Enumerating those symbolic choices and checking their difference graphs decides consistency without searching numeric universe assignments.
         let mut nodes = BTreeSet::from([DifferenceNode::Zero]);
@@ -2039,18 +2207,23 @@ impl UniverseSolver {
             .collect::<Vec<_>>();
         branches.sort_by_key(|(_, choices)| choices.len());
 
-        // Bounding the search is what makes this decision procedure total.
-        //
-        // Accepting is always justified: a satisfying branch assignment is a model of the original constraints, so any `Ok` here is sound however few branches were explored. Only *refuting* needs the whole tree, so exhausting the budget means "not decided", and the caller reports it rather than continuing an exponential walk.
-        const SEARCH_BUDGET: u64 = 200_000;
         let mut budget = SEARCH_BUDGET;
         let consistency = curios_profile::profile!(
             "universe::choose" => choose(&branches, 0, &mut search, &mut budget)
         );
 
-        consistency.map_err(|path| match path {
-            Some(path) => self.inconsistency_from_path(path),
-            None => UniverseError::SearchExhausted {
+        match consistency {
+            // Every arc the search committed it reverted, so the potential is the one the forced arcs left.
+            Ok(()) => Ok(ConsistencyCache {
+                constraint_len: constraints.len(),
+                graph: DifferenceGraph {
+                    positions,
+                    potential: search.0,
+                },
+                branches,
+            }),
+            Err(Some(path)) => Err(self.inconsistency_from_path(path)),
+            Err(None) => Err(UniverseError::SearchExhausted {
                 constraints: constraints.len(),
                 branches: branches.len(),
                 widths: branches
@@ -2058,8 +2231,8 @@ impl UniverseSolver {
                     .map(|(_, choices)| choices.len())
                     .take(16)
                     .collect(),
-            },
-        })
+            }),
+        }
     }
 }
 
