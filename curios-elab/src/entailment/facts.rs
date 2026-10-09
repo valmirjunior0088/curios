@@ -1319,6 +1319,8 @@ pub(super) fn binders(context: &Context) -> Vec<(Free, Term)> {
 }
 
 /// What a hypothesis states, each statement beside the proof that inhabits it and where it came from: the hypothesis itself, or the fields of a tuple or a structure, one level down and in their order.
+///
+/// A local nobody named that stands for a term, as a structure update's base does, states its facts through that term: a statement and where it came from are read by a report, and the term is the one spelling its author has for the local.
 pub(super) fn statements(
     context: &mut Context,
     name: &Free,
@@ -1351,29 +1353,36 @@ pub(super) fn statements(
             arity.open(&params.iter().collect::<Vec<_>>())
         }
         _ => {
-            let hypothesis = Term::free_var(name);
             return Ok(vec![(
                 type_.clone(),
-                hypothesis.clone(),
-                Origin::Hypothesis(hypothesis),
+                Term::free_var(name),
+                Origin::Hypothesis(subject_of(context, name)),
             )]);
         }
     };
+    let subject = subject_of(context, name);
     let mut stated = Vec::with_capacity(telescope.len());
     let mut cursor = telescope.cursor();
     let mut index = 0;
     while let Some((label, domain)) = cursor.entry() {
-        let field = Term::proj(Term::free_var(name), index);
         let label = label.map_or_else(|| index.to_string(), str::to_string);
         stated.push((
             domain,
-            field.clone(),
-            Origin::Field(Term::free_var(name), label),
+            Term::proj(Term::free_var(name), index),
+            Origin::Field(subject.clone(), label),
         ));
-        cursor.advance(field);
+        cursor.advance(Term::proj(subject.clone(), index));
         index += 1;
     }
     Ok(stated)
+}
+
+/// The term a report names the hypothesis `name` by: the term it stands for where the compiler bound it and wrote no name, and the hypothesis itself otherwise.
+fn subject_of(context: &Context, name: &Free) -> Term {
+    match (name.hint(), context.var_reduct(name)) {
+        (None, Some(value)) => value.clone(),
+        _ => Term::free_var(name),
+    }
 }
 
 pub(super) fn negated(

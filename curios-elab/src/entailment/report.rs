@@ -73,12 +73,14 @@ impl Refusal {
         outcome: SearchOutcome,
         absurd: bool,
     ) -> Self {
-        let considered = facts
-            .facts
-            .iter()
-            .filter(|fact| fact.origin.is_reported())
-            .map(|fact| (fact.origin.clone(), fact.stated.clone()))
-            .collect();
+        // A fact two hypotheses state as one, as a structure update's base and the term it stands for do, is listed once.
+        let mut considered: Vec<(Origin, Term)> = Vec::new();
+        for fact in facts.facts.iter().filter(|fact| fact.origin.is_reported()) {
+            let stated = (fact.origin.clone(), fact.stated.clone());
+            if !considered.contains(&stated) {
+                considered.push(stated);
+            }
+        }
         let outcome = match outcome {
             SearchOutcome::Counterexample(assignment) => {
                 Conclusion::Counterexample(counterexample(views, &assignment))

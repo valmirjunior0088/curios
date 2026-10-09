@@ -1,3 +1,1 @@
 # Surface: findings
-
-- **A refusal inside a structure update names the update's base by a name nobody wrote.** A spread binds its base to a hintless local (`elaborate_struct_spread`, `curios-elab/src/elaborate/struct_.rs`), and that local's proof fields are facts in scope like any hypothesis's. Over `struct Positive: Type { n: Nat, @ok: Holds(0 < n) }` and `p: Positive`, `Positive { ..p, n = 0 }` is refused with `the facts in scope do not refute each other: x.ok: 0 < (x).0`, where the author wrote `p` and the printer minted `x`. Fix direction: a fact read off the spread's base is spelled through the base term, `p.ok`. Size: small.

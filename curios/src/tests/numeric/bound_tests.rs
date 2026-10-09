@@ -422,6 +422,24 @@ fn a_refused_bound_reduction_does_not_move_is_said_once() {
     assert!(!error.contains("which reduces to"), "{error}");
 }
 
+// A fact read off a structure update's base is spelled through the base as its author wrote it. The update binds its base to a local of its own, which has no name for a report to print, and what the base and that local state alike is listed once.
+#[test]
+fn a_fact_of_an_updates_base_is_spelled_through_the_base() {
+    let error = typecheck(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+        struct Positive: pub Type { n: Nat, @ok: Holds(0 < n) }
+        let zeroed(p: Positive) -> Positive = Positive { ..p, n = 0 };
+        /std/print("unreachable")
+        "#,
+    )
+    .expect_err("zero is not above zero");
+
+    assert_eq!(error.matches("p.ok: 0 < (p).0").count(), 1, "{error}");
+    assert!(!error.contains("x.ok"), "{error}");
+}
+
 // A late fill is a metavariable solution, decided under the refinements its slot was born under: a bound true only under `m < 10` is filled when its subject arrives late inside that arm, as it is when written first — `need(@m, …)`. The control is the same bound with its slot born outside the arm, at a call whose witness is the match: the guard is not one the slot was born under, so the bound is refused.
 #[test]
 fn a_late_pinned_bound_holds_under_the_guard_its_slot_was_born_under() {
