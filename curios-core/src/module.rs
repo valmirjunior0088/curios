@@ -9,7 +9,7 @@
 use {
     super::{
         Atom, Bound, ConceptDecl, Enter, FieldSpelling, Free, FuncType, Global, InductDecl, Items,
-        Lexicon, Many, Outline, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope, Sharing,
+        Lexicon, Many, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope, Sharing,
         Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
         UniverseError, Variance, WitnessId, WitnessSpelling, build_shorten,
     },
@@ -20,6 +20,9 @@ use {
         rc::Rc,
     },
 };
+
+#[cfg(feature = "archive")]
+use super::Outline;
 
 /// Whether a definition is known to terminate on every input.
 ///

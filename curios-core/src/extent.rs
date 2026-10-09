@@ -16,7 +16,6 @@ mod tests;
 use {
     curios_utilities::{Qualifier, Source, Span, Table, intern},
     std::{
-        cell::RefCell,
         cmp::Ordering,
         collections::{BTreeMap, HashMap},
         fmt,
@@ -25,6 +24,9 @@ use {
         sync::{Arc, LazyLock, Mutex},
     },
 };
+
+#[cfg(feature = "archive")]
+use std::cell::RefCell;
 
 /// What an anchor is the text of.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
