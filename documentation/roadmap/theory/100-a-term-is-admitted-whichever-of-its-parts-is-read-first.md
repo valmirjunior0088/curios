@@ -21,6 +21,10 @@ The programs below are over `let id(@A: Type, a: A) -> A = a;`, `let g(@A: Type,
 
 **A lambda waits for its item's end, or is forced before a sibling could type it.** `let z = id((x: Nat) => x);` leaves `z` at an unsolved type until the drain, so `z(3)` on the next line is refused as `applied a non-function`; and the force tier checks `(y) => y` at a domain nothing gave it before it reads the annotated lambda beside it, so `g((y) => y, (x: Nat) => x)` is refused where `g((x: Nat) => x, (y) => y)` compiles.
 
+**A `use` slot takes the dictionary its key had when the walk reached it.** `elaborate_apply` attempts a slot where it stands (`insert_auto_argument`, `curios-elab/src/elaborate/apply.rs`), so a premise whose concept arguments are already known resolves before a later argument's type can name another dictionary. With `struct Slot(K: Type, use Key(K), V: Type)`, a value `b: Slot(Nat, use other, Str)` and `holds(@K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K)`, `holds(b, 3)` takes `b`'s dictionary, while `holds(@Nat, b, 3)`, a premise over a closed type and a key pinned by an earlier argument each resolve the registered one and refuse `b` as a type mismatch (`a_key_type_fixed_before_the_slot_takes_the_registered_dictionary`, `curios/src/tests/concepts/premise_tests.rs`).
+
+**Two spines that agree solve an implicit where they are first met.** `compare_same_global_apply` (`curios-elab/src/convert.rs`) decides two applications of one definition by their spines ahead of reduction, and a function that is not injective has other solutions, so the verdict follows the order of the parameters. Over `let rest(xs: List(Nat)) -> List(Nat) = match xs | [] => [] | [_, ..t] => t end;`, `induct Tagged: (List(Nat)) -> Type | tag(xs: List(Nat)): (xs) end`, `both(@xs: List(Nat), a: Tagged(rest(xs)), b: Tagged(xs))` and `first: Tagged(rest([1, 2]))`, `both(first, Tagged/tag([9, 2]))` reports `Tagged([9, 2])` against `Tagged([1, 2])`, and compiles with `b` declared ahead of `a`. And the rule declines a head that carries an instance where either side holds a metavariable, the solving staying with the heads it was measured on, so whether a call infers its implicit follows a level the definition's body holds and the argument never reads: over `let make(@c: Bool, h: Wrap(c)) -> Nat = 0;`, with `let Wrap(c: Bool) -> Type = match c | true => List(Type) | false => Nat end;` and `let given: Wrap(true) = [Nat];`, `make(given)` is refused, `never solved: the implicit argument 'c' of '/make'`, and with `List(Nat)` in the arm and `[1]` given it is accepted.
+
 ## Decisions
 
 **A metavariable is awaited at a depth, and a term that settles hands outward what is still held to an enclosing term's.** The depth is how many awaiting terms enclose the one that awaits it. Where a term has read its parts, a metavariable it awaited that is still unsolved, and that a solution or a parked conversion holds to one awaited further out, is awaited from then on by that enclosing term; the rest are the term's to settle. The relation is read once, where the term settles, with every problem in the store, and kept, so whether something still awaits a metavariable is a lookup. GHC's floating does the same to an equality an implication could not solve.
@@ -28,6 +32,10 @@ The programs below are over `let id(@A: Type, a: A) -> A = a;`, `let g(@A: Type,
 **A term settles in three steps.** A tuple or a list literal still parked on a metavariable the term settles gives the metavariable its own shape with its parts left open — a non-dependent product of one open type a field, labelled as the literal is, or `List` of one open type — and is checked at it, the open parts awaited by the settling term; so a second literal parked on the same metavariable is checked against the first's shape and each fills what the other left open. Then the choices are taken: a `Prop` nothing raised, a numeral nothing pinned. Then a lambda still parked is checked, at its annotated domains where it has them. The item is the outermost such term, and its drain settles what no term awaited.
 
 **A numeral waits as a proposition does.** Checked at a type stuck on an unsolved metavariable that some term awaits, it parks as a checking problem, is realized where a solution wakes it, and takes its shape default where the term that awaits its type settles. Where no term awaits the type the default is taken at once, as today, and the comparison with a type stuck on a metavariable parks. Numerals a term settles together take a default each of them realizes at: a signed one is decided first, whose default is `Int`, and a character last, so `Char` is the default only where every one is a character. An operator awaits its operand type as any term does, and its two phases and `infix_default_type` go; `'a' == 'b'` is then compared at `Char`, as [the reference](../../syntax.md#character-and-string-literals) has a character nothing pins realize.
+
+**A `use` slot is resolved where its call settles.** The registered witness is the slot's own answer, taken where the call has read its arguments and met its expectation and nothing solved the slot: a later argument whose type holds a dictionary names it whichever of the two the walk reaches first. A slot a definition drops its premise under is left to resolution as it is today, the spine approximation passing over one that is open.
+
+**The spine approximation is taken only where nothing else decides.** Two spines that agree are one solution among those a function that is not injective has, so the approximation is no rule of conversion's: it is tried over the raw spellings a parked problem keeps, where a term settles what it leaves open, under a monomorphic head and an instance alike, and solves only what would otherwise be refused.
 
 **A problem is not handed its answer.** Retried where nothing awaits it, it takes it, as a `Prop` bound does today. What the store asks of a parked problem is the step at which a settling term answers it, stated once on `ParkedWork` in place of a shape matched by each consumer.
 
@@ -41,6 +49,8 @@ The programs below are over `let id(@A: Type, a: A) -> A = a;`, `let g(@A: Type,
 
 **Whether a metavariable no term awaits is awaited once a parked conversion holds it to one a term does**: a lambda's unannotated domain, held to a call's implicit by its body.
 
+**What moving the spine approximation changes across `/std`, and whether anything that cannot park needs its solution sooner.** Lifting the restriction on an instance head where the rule stands is not the fix: tried at `8a3227187`, `/std` no longer elaborates, `/std/List/sort_by/push_layered` refused as a mismatch between `Layered(@T, second)(rest)` and `Layered(@T, second)([Option/none, ..rest])`, an implicit solved where two spines agreed and the declaration's other argument gives `rest`; which application's spine solved it was not traced.
+
 ## Stages
 
 Each lands alone, on its own check.
@@ -49,7 +59,9 @@ Each lands alone, on its own check.
 2. **A call settles its literals by shape, ahead of its choices.** Needs the first open question answered. Check: the call programs above in either order, and the image compared.
 3. **Every term that awaits settles as a call does**: a match, a list literal, a structure literal, an operator, an intrinsic's operand, and the item. Check: the list, structure and match programs above, and a literal nested in one, `g(((5, 1), c), ((b, b), c))`.
 4. **A lambda is settled by the term that awaits its type.** Needs the second open question answered. Check: the two lambda programs.
-5. **What the missing owner made necessary goes.** The force tier's synthesis and `SettleTier`, the drain's sweep of the whole store, the list of structures `blocked_on_metavar` parks whole, and the parked projection and match where nothing reaches them. Check: each counted at zero over `/std` and the test suite before it is removed.
+5. **A `use` slot is resolved where its call settles.** Needs the first stage, since a numeral read at a type stuck on the witness must wait for it. Check: `holds(b, 3)` and `holds(@Nat, b, 3)` run under one dictionary, as a fixture beside `a_key_type_fixed_before_the_slot_takes_the_registered_dictionary`, whose refusal ends.
+6. **The spine approximation is a term's last resort.** Needs the question on what it moves answered. Check: `make(given)` compiles and `both` is accepted in either order of its parameters, as fixtures in `curios-elab`'s `convert/solve_tests.rs`, and the image compared.
+7. **What the missing owner made necessary goes.** The force tier's synthesis and `SettleTier`, the drain's sweep of the whole store, the list of structures `blocked_on_metavar` parks whole, and the parked projection and match where nothing reaches them. Check: each counted at zero over `/std` and the test suite before it is removed.
 
 ## Verification
 
@@ -68,11 +80,12 @@ Each lands alone, on its own check.
 
 ## Non-goals
 
-Solving one metavariable to another ([Flex–flex problems with distinct heads](202-flex-flex-intersection.md)); which metavariables a parked problem watches; the order a call resolves its `use` slots in; the spine approximation. Each has an entry of its own.
+Solving one metavariable to another ([Flex–flex problems with distinct heads](202-flex-flex-intersection.md)), and which metavariables a parked problem watches. Each has an entry of its own.
 
 ## Completion and retirement
 
 - Every program under *The gap* compiles in either order of its parts, and a numeral nothing pins is its default where the next line reads it.
+- A call takes one dictionary and infers one implicit whichever of its parameters is declared first.
 - One function settles a term, and no consumer of the store recognizes a problem by its shape.
 
-Before this specification is deleted, `curios-elab`'s README states the settling of a parked problem in its decision on postponement, the two decisions it is held to state the rule for a numeral and for a literal with their rejected alternatives, [the reference](../../syntax.md#numeric-literals) says where a numeral is unconstrained, the finding on which dictionary a call uses no longer cites the numeral's eagerness, the roadmap entry is a checked summary, and no reference to this filename remains.
+Before this specification is deleted, `curios-elab`'s README states the settling of a parked problem in its decision on postponement, the two decisions it is held to state the rule for a numeral and for a literal with their rejected alternatives, [the reference](../../syntax.md#numeric-literals) says where a numeral is unconstrained, the roadmap entry is a checked summary, and no reference to this filename remains.
