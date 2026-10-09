@@ -8,8 +8,12 @@ pub struct Instant: Type {
 
 --- The clock now.
 pub let now() -> Io(Instant) =
-    let e = Duration/now()!;
-    Io/pure(Instant { elapsed = e });
+    let r = /sys/clock/mono!;
+    Io/pure(Instant { elapsed = Duration/of(r.secs, r.nanos) });
+
+--- The moment `d` after `t`.
+pub let add(t: Instant, d: Duration) -> Instant =
+    Instant { elapsed = Duration/add(t.elapsed, d) };
 
 --- `a - b`, and zero when `a` is not after `b`.
 pub let diff(a: Instant, b: Instant) -> Duration =

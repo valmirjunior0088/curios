@@ -133,9 +133,11 @@ fn a_timestamp_reads_the_wall_clock_canonicalises_and_shows_as_epoch_seconds() {
 
 #[test]
 fn clock_mono_reads_scripted_elapsed() {
-    let (system, io) = MockHost::builder().mono([(2, 7)]).build();
+    let (system, io) = MockHost::builder().mono([(2, 7), (5, 9)]).build();
     run_text(r#"
-        let e = /std/time/Duration/now()!;
+        let earlier = /std/time/Instant/now()!;
+        let later = /std/time/Instant/now()!;
+        let e = /std/time/Instant/diff(later, earlier);
         let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(e))))!;
         /std/Io/pure(())
         "#,
@@ -143,7 +145,7 @@ fn clock_mono_reads_scripted_elapsed() {
     )
     .expect("expected result");
 
-    assert_eq!(io.output(), b"2");
+    assert_eq!(io.output(), b"3");
 }
 
 #[test]

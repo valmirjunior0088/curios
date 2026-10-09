@@ -1,6 +1,6 @@
 use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Io, Handle,
     print_err};
-use /std/time/{Duration};
+use /std/time/{Duration, Instant};
 use /std/Handle/{Interest, Readiness};
 use /std/Bool/{Holds};
 
@@ -281,7 +281,7 @@ struct Parked: Type {
 }
 
 struct Sleeper: Type {
-    due: Duration,
+    due: Instant,
     slot: Slot,
 }
 
@@ -394,14 +394,14 @@ let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parke
     walk(blocked, reports, [], []);
 
 let sleep_timeout(sleeping: List(Sleeper)) -> Io(Int) =
-    let earliest(rest: List(Sleeper), best: Option(Duration)) -> Option(Duration) =
+    let earliest(rest: List(Sleeper), best: Option(Instant)) -> Option(Instant) =
         match rest
         | [] => best
         | [s, ..more] =>
             match best
             | none() => earliest(more, Option/some(s.due))
             | some(b) =>
-                match Duration/before(s.due, b)
+                match Instant/before(s.due, b)
                 | true => earliest(more, Option/some(s.due))
                 | false => earliest(more, best)
                 end
@@ -410,8 +410,8 @@ let sleep_timeout(sleeping: List(Sleeper)) -> Io(Int) =
     match earliest(sleeping, Option/none())
     | none() => Io/pure(-1)
     | some(due) =>
-        let now = Duration/now()!;
-        let remaining = Duration/sub(due, now);
+        let now = Instant/now()!;
+        let remaining = Instant/diff(due, now);
         let whole = Duration/to_millis(remaining);
         Io/pure(
             match Duration/nanos(remaining) % 1000000 > 0
@@ -421,7 +421,7 @@ let sleep_timeout(sleeping: List(Sleeper)) -> Io(Int) =
     end;
 
 let expire_sleepers(sleeping: List(Sleeper)) -> Io({List(Job), List(Sleeper)}) =
-    let now = Duration/now()!;
+    let now = Instant/now()!;
     let walk(
         rest: List(Sleeper),
         woken: List(Job),
@@ -441,7 +441,7 @@ let expire_sleepers(sleeping: List(Sleeper)) -> Io({List(Job), List(Sleeper)}) =
                     let _ = run_guards(j.guards)!;
                     walk(tail, woken, still)
                 | false =>
-                    match Duration/before(now, s.due)
+                    match Instant/before(now, s.due)
                     | true => walk(tail, woken, [s, ..still])
                     | false =>
                         let taken = claim(s.slot)!;
@@ -484,11 +484,11 @@ let register_wait(q: Queues, slot: Slot, w: Wait) -> Io(Queues) =
                 ..q,
                 blocked = [..q.blocked, Parked { handle = h, interest = interest, slot = slot }] })
     | elapsed(d) =>
-        let now = Duration/now()!;
+        let now = Instant/now()!;
         Io/pure(
             Queues {
                 ..q,
-                sleeping = [..q.sleeping, Sleeper { due = Duration/add(now, d), slot = slot }] })
+                sleeping = [..q.sleeping, Sleeper { due = Instant/add(now, d), slot = slot }] })
     | probe(p) =>
         Io/pure(Queues { ..q, probes = [..q.probes, Probed { ready = p.0, slot = slot }] })
     end;
@@ -745,19 +745,19 @@ pub let select(@A: Type, offers: List(Offer(A))) -> Async({Nat, A}) =
 
 --- An offer that yields once `d` has passed.
 pub let after(d: Duration) -> Io(Offer({})) =
-    let start = Duration/now()!;
-    let due = Duration/add(start, d);
+    let start = Instant/now()!;
+    let due = Instant/add(start, d);
     Io/pure(
         Offer/new(
             Io/bind(
-                Duration/now(),
+                Instant/now(),
                 (t) =>
                     Io/pure(
-                        match Duration/before(t, due)
+                        match Instant/before(t, due)
                         | true => Option/none()
                         | false => Option/some(())
                         end)),
-            Io/bind(Duration/now(), (t) => Io/pure(Wait/elapsed(Duration/sub(due, t))))));
+            Io/bind(Instant/now(), (t) => Io/pure(Wait/elapsed(Instant/diff(due, t))))));
 
 --- An offer that yields the task's answer once it has one.
 pub let joined(@A: Type, task: Task(A)) -> Offer(A) =

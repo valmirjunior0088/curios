@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Io};
+use /std/{Nat, Bool};
 
 --- A length of time, with no sign.
 pub struct Duration: Type {
@@ -21,11 +21,6 @@ pub let of_secs(secs: Nat) -> Duration =
 --- `ms` milliseconds.
 pub let of_millis(ms: Nat) -> Duration =
     Duration { secs = ms / 1000, nanos = ms % 1000 * 1000000 };
-
---- The monotonic clock, as the time since an arbitrary origin.
-pub let now() -> Io(Duration) =
-    let r = /sys/clock/mono!;
-    Io/pure(of(r.secs, r.nanos));
 
 --- The whole seconds.
 pub let secs(d: Duration) -> Nat =
