@@ -8,7 +8,7 @@
 //!
 //! Identities are spelled by the naming scheme shared with `curios-cont` and `curios-wasm` — see `documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md` — `~{kind}{index}`, with the stored debug name appended as `$hint`. The scheme requires the hint at definition sites; this printer also repeats it at every reference, deliberately, so a use far from its binder stays self-describing in a dump nobody scrolls back through. Constants print inline as literals, carrier and all (`2`, `2:int`, `7:byte`), for the reason scalar operations print named (`Nat/add`, never `+`): Ersd keeps its shapes distinct and has no types left to recover a carrier from, so the spelling is where the carrier lives.
 //!
-//! Equal modules print byte-identically, so a diff reads without cross-referencing arenas. The renderer walks with an explicit job stack and prints a deep module on the default test-thread stack; indentation saturates at a fixed depth so the output stays linear in module size instead of quadratic in nesting depth.
+//! Equal modules print byte-identically, so a diff reads without cross-referencing arenas. The renderer recurses as the blocks nest, under `recurse`, so a deep module is printed on a stack that grows for it; indentation saturates at a fixed depth so the output stays linear in module size instead of quadratic in nesting depth.
 
 #[cfg(test)]
 mod tests;
@@ -21,6 +21,7 @@ use {
         ValueId,
     },
     curios_num::{Grain, Rounding},
+    curios_utilities::{grown, recurse},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
@@ -31,13 +32,15 @@ impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let reach = Reach::of(self);
         let uses = Analysis::analyze(self);
-        Printer {
-            module: self,
-            reach: &reach,
-            uses: &uses,
-            out: f,
-        }
-        .print()
+        grown(|| {
+            Printer {
+                module: self,
+                reach: &reach,
+                uses: &uses,
+                out: f,
+            }
+            .print()
+        })
     }
 }
 
@@ -250,21 +253,6 @@ impl Reach {
 
 // === The renderer ============================================================
 
-/// One rendering step; sequences are pushed in output order.
-enum Job {
-    /// An indented line of text.
-    Line(String),
-    /// A block's statements followed by its tail, one level deeper. `suffix` closes the tail line — `;` where a binding owns the body, nothing where a match arm does.
-    Body(BlockId, &'static str),
-    /// One statement, expanded into lines and nested bodies. A module-scope item breaks after its `=` even where a statement inside a block would ride the line, so every top-level declaration has the same shape.
-    Statement {
-        id: StatementId,
-        top: bool,
-    },
-    Indent,
-    Dedent,
-}
-
 struct Printer<'m, 'a, 'f, 'o> {
     module: &'m Module,
     reach: &'a Reach,
@@ -274,19 +262,20 @@ struct Printer<'m, 'a, 'f, 'o> {
 
 impl Printer<'_, '_, '_, '_> {
     fn print(&mut self) -> fmt::Result {
-        let mut jobs = Vec::new();
-
         for (index, schema) in self.module.products().iter().enumerate() {
             let id = ProductId(index as u32);
             if !self.reach.products.contains(&id) {
                 continue;
             }
             let shared = if schema.shared { " shared" } else { "" };
-            jobs.push(Job::Line(format!(
-                "product {id}{}({}){shared}",
-                hint(&schema.debug_name),
-                fields(&schema.fields)
-            )));
+            self.line(
+                0,
+                format!(
+                    "product {id}{}({}){shared}",
+                    hint(&schema.debug_name),
+                    fields(&schema.fields)
+                ),
+            )?;
         }
         for (index, family) in self.module.families().iter().enumerate() {
             let id = FamilyId(index as u32);
@@ -306,32 +295,31 @@ impl Printer<'_, '_, '_, '_> {
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
-            jobs.push(Job::Line(format!(
-                "family {id}{} {{ {constructors} }}",
-                hint(&family.debug_name)
-            )));
+            self.line(
+                0,
+                format!(
+                    "family {id}{} {{ {constructors} }}",
+                    hint(&family.debug_name)
+                ),
+            )?;
         }
         for (index, row) in self.module.foreigns().iter().enumerate() {
             let id = ForeignId(index as u32);
             if !self.reach.foreigns.contains(&id) {
                 continue;
             }
-            jobs.push(Job::Line(format!(
-                "foreign {id} {}/{}",
-                row.namespace(),
-                row.name()
-            )));
+            self.line(
+                0,
+                format!("foreign {id} {}/{}", row.namespace(), row.name()),
+            )?;
         }
 
         for &item in self.module.items() {
-            jobs.push(Job::Statement {
-                id: item,
-                top: true,
-            });
+            self.statement(item, true, 0)?;
         }
         if let Some(entry) = self.module.entry() {
-            jobs.push(Job::Line("entry =".into()));
-            jobs.push(Job::Body(entry, ";"));
+            self.line(0, "entry =")?;
+            self.body(entry, ";", 0)?;
         }
 
         // A live function no statement binds has nowhere to nest, which `verify.rs` rules out — but this printer is also how a malformed module is read, so an orphan is shown rather than dropped.
@@ -341,49 +329,41 @@ impl Printer<'_, '_, '_, '_> {
             if self.reach.bound.contains(&id) {
                 continue;
             }
-            jobs.push(Job::Line(format!(
-                "unbound {}{} =",
-                self.function(id),
-                self.params(&function.params)
-            )));
-            jobs.push(Job::Body(function.body, ";"));
+            self.line(
+                0,
+                format!(
+                    "unbound {}{} =",
+                    self.function(id),
+                    self.params(&function.params)
+                ),
+            )?;
+            self.body(function.body, ";", 0)?;
         }
 
-        jobs.reverse();
-        let mut stack = jobs;
-        let mut indent = 0usize;
-        while let Some(job) = stack.pop() {
-            match job {
-                Job::Line(line) => {
-                    for _ in 0..indent.min(INDENT_SATURATION) {
-                        self.out.write_str("    ")?;
-                    }
-                    self.out.write_str(&line)?;
-                    self.out.write_str("\n")?;
-                }
-                Job::Indent => indent += 1,
-                Job::Dedent => indent -= 1,
-                Job::Statement { id, top } => self.expand_statement(&mut stack, id, top),
-                Job::Body(block, suffix) => {
-                    let contents = self.module.block(block).expect("live block");
-                    let mut sequence = Vec::with_capacity(contents.statements.len() + 3);
-                    sequence.push(Job::Indent);
-                    sequence.extend(
-                        contents
-                            .statements
-                            .iter()
-                            .map(|&id| Job::Statement { id, top: false }),
-                    );
-                    sequence.push(Job::Line(format!(
-                        "{}{suffix}",
-                        self.tail(&contents.terminator)
-                    )));
-                    sequence.push(Job::Dedent);
-                    push_sequence(&mut stack, sequence);
-                }
-            }
-        }
         Ok(())
+    }
+
+    /// One line of text at `indent`.
+    fn line(&mut self, indent: usize, text: impl AsRef<str>) -> fmt::Result {
+        for _ in 0..indent.min(INDENT_SATURATION) {
+            self.out.write_str("    ")?;
+        }
+        self.out.write_str(text.as_ref())?;
+        self.out.write_str("\n")
+    }
+
+    /// A block's statements followed by its tail, one level deeper than `indent`. `suffix` closes the tail line — `;` where a binding owns the body, nothing where a match arm does.
+    fn body(&mut self, block: BlockId, suffix: &str, indent: usize) -> fmt::Result {
+        recurse(|| {
+            let module = self.module;
+            let contents = module.block(block).expect("live block");
+            for &id in &contents.statements {
+                self.statement(id, false, indent + 1)?;
+            }
+            let tail = self.tail(&contents.terminator);
+
+            self.line(indent + 1, format!("{tail}{suffix}"))
+        })
     }
 
     /// How a block leaves, as the tail term of its let-chain. `halt` and `unreachable` have no surface spelling; everything else is the atom the chain evaluates to.
@@ -413,169 +393,135 @@ impl Printer<'_, '_, '_, '_> {
     }
 
     /// An arm: its pattern and either the tail it rides or the body it opens.
-    fn arm(&self, sequence: &mut Vec<Job>, pattern: String, block: BlockId) {
+    fn arm(&mut self, indent: usize, pattern: String, block: BlockId) -> fmt::Result {
         match self.rides(block) {
-            Some(tail) => sequence.push(Job::Line(format!("| {pattern} => {tail}"))),
+            Some(tail) => self.line(indent, format!("| {pattern} => {tail}")),
             None => {
-                sequence.push(Job::Line(format!("| {pattern} =>")));
-                sequence.push(Job::Body(block, ""));
+                self.line(indent, format!("| {pattern} =>"))?;
+                self.body(block, "", indent)
             }
         }
     }
 
     /// A `let … and …` group: one member per keyword, the last closing the binding.
     fn group(
-        &self,
-        sequence: &mut Vec<Job>,
+        &mut self,
+        indent: usize,
         first: &'static str,
         functions: &[FunctionId],
         values: &[RecValue],
-    ) {
+    ) -> fmt::Result {
+        let module = self.module;
         let total = functions.len() + values.len();
         let mut emitted = 0;
         let header = |emitted: usize| if emitted == 0 { first } else { "and" };
+        let closing = |emitted: usize| if emitted == total { ";" } else { "" };
 
         for &function in functions {
-            let Some(definition) = self.module.function(function) else {
+            let Some(definition) = module.function(function) else {
                 continue;
             };
             let keyword = header(emitted);
-            sequence.push(Job::Line(format!(
+            let head = format!(
                 "{keyword} {}{} =",
                 self.function(function),
                 self.params(&definition.params)
-            )));
+            );
+            self.line(indent, head)?;
             emitted += 1;
-            sequence.push(Job::Body(
-                definition.body,
-                if emitted == total { ";" } else { "" },
-            ));
+            self.body(definition.body, closing(emitted), indent)?;
         }
         for member in values {
             let keyword = header(emitted);
-            sequence.push(Job::Line(format!(
-                "{keyword} {} =",
-                self.binder(member.value)
-            )));
+            let head = format!("{keyword} {} =", self.binder(member.value));
+            self.line(indent, head)?;
             emitted += 1;
-            sequence.push(Job::Body(
-                member.init,
-                if emitted == total { ";" } else { "" },
-            ));
+            self.body(member.init, closing(emitted), indent)?;
         }
+
+        Ok(())
     }
 
-    fn expand_statement(&self, stack: &mut Vec<Job>, id: StatementId, top: bool) {
-        let statement = self.module.statement(id).expect("live statement");
-        let mut sequence = Vec::new();
-        match statement {
-            Statement::Functions { functions } => {
-                self.group(&mut sequence, "let", functions, &[]);
-            }
+    /// `let x =`, then `match` over the scrutinee one level deeper: how every eliminator opens.
+    fn scrutinized(&mut self, indent: usize, bound: &str, scrutinee: Atom) -> fmt::Result {
+        self.line(indent, format!("let {bound} ="))?;
+        let scrutinee = self.atom(scrutinee);
+
+        self.line(indent + 1, format!("match {scrutinee}"))
+    }
+
+    /// One statement, as its lines and the bodies nested in it. A module-scope item breaks after its `=` even where a statement inside a block would ride the line, so every top-level declaration has the same shape.
+    fn statement(&mut self, id: StatementId, top: bool, indent: usize) -> fmt::Result {
+        let module = self.module;
+        match module.statement(id).expect("live statement") {
+            Statement::Functions { functions } => self.group(indent, "let", functions, &[]),
             Statement::Rec { group } => {
-                let definition = self.module.rec_group(*group).expect("live group");
-                self.group(
-                    &mut sequence,
-                    "let rec",
-                    &definition.functions,
-                    &definition.values,
-                );
+                let definition = module.rec_group(*group).expect("live group");
+                self.group(indent, "let rec", &definition.functions, &definition.values)
             }
             Statement::Let { result, rhs } => {
                 let bound = self.binder(*result);
-                // One match over every form, so a new `Rhs` cannot reach the printer without an arm: the one-line forms fill `simple` and are laid out below, the eliminators push their own `match … end;` here.
-                let mut simple = None;
-                match rhs {
-                    Rhs::Alias(atom) => simple = Some(self.atom(*atom)),
+                let inner = indent + 1;
+                // One match over every form, so a new `Rhs` cannot reach the printer without an arm: the one-line forms answer their text and are laid out below, the eliminators print their own lines and return.
+                let simple = match rhs {
+                    Rhs::Alias(atom) => self.atom(*atom),
                     Rhs::Apply { callee, arguments } => {
-                        simple = Some(format!("{}({})", self.atom(*callee), self.atoms(arguments)));
+                        format!("{}({})", self.atom(*callee), self.atoms(arguments))
                     }
                     Rhs::Operation {
                         operation,
                         operands,
                     } => {
-                        simple = Some(format!(
-                            "{}({})",
-                            operation_name(*operation),
-                            self.atoms(operands)
-                        ));
+                        format!("{}({})", operation_name(*operation), self.atoms(operands))
                     }
                     Rhs::Sequence {
                         operation,
                         operands,
                     } => {
-                        simple = Some(format!(
-                            "{}({})",
-                            sequence_name(*operation),
-                            self.atoms(operands)
-                        ));
+                        format!("{}({})", sequence_name(*operation), self.atoms(operands))
                     }
                     Rhs::Product { schema, fields } => {
-                        simple = Some(format!(
-                            "{}{}",
-                            self.product(*schema),
-                            self.row(*schema, fields)
-                        ));
+                        format!("{}{}", self.product(*schema), self.row(*schema, fields))
                     }
                     Rhs::Construct {
                         constructor,
                         fields,
                     } => {
-                        simple = Some(format!(
-                            "{}({})",
-                            self.constructor(*constructor),
-                            self.atoms(fields)
-                        ));
+                        format!("{}({})", self.constructor(*constructor), self.atoms(fields))
                     }
                     Rhs::Project {
                         schema,
                         product,
                         field,
                     } => {
-                        simple = Some(format!(
-                            "{}.{}",
-                            self.atom(*product),
-                            self.field(*schema, *field)
-                        ));
+                        format!("{}.{}", self.atom(*product), self.field(*schema, *field))
                     }
                     Rhs::Cell {
                         operation,
                         operands,
                     } => {
-                        simple = Some(format!(
-                            "{}({})",
-                            cell_name(*operation),
-                            self.atoms(operands)
-                        ));
+                        format!("{}({})", cell_name(*operation), self.atoms(operands))
                     }
                     Rhs::Channel {
                         operation,
                         operands,
                     } => {
-                        simple = Some(format!(
-                            "{}({})",
-                            channel_name(*operation),
-                            self.atoms(operands)
-                        ));
+                        format!("{}({})", channel_name(*operation), self.atoms(operands))
                     }
                     Rhs::Foreign { foreign, operands } => {
                         let row = self.module.foreign(*foreign).expect("live foreign");
-                        simple = Some(format!(
+                        format!(
                             "{}/{}({})",
                             row.namespace(),
                             row.name(),
                             self.atoms(operands)
-                        ));
+                        )
                     }
                     Rhs::Intrinsic {
                         intrinsic,
                         operands,
                     } => {
-                        simple = Some(format!(
-                            "{}({})",
-                            intrinsic_name(*intrinsic),
-                            self.atoms(operands)
-                        ));
+                        format!("{}({})", intrinsic_name(*intrinsic), self.atoms(operands))
                     }
 
                     // The eliminators: `let x =`, then an indented `match … end;`.
@@ -585,9 +531,7 @@ impl Printer<'_, '_, '_, '_> {
                         default,
                         ..
                     } => {
-                        sequence.push(Job::Line(format!("let {bound} =")));
-                        sequence.push(Job::Indent);
-                        sequence.push(Job::Line(format!("match {}", self.atom(*scrutinee))));
+                        self.scrutinized(indent, &bound, *scrutinee)?;
                         for arm in arms {
                             let binders = arm
                                 .bindings
@@ -595,67 +539,52 @@ impl Printer<'_, '_, '_, '_> {
                                 .map(|&binder| self.binder(binder))
                                 .collect::<Vec<_>>()
                                 .join(", ");
-                            self.arm(
-                                &mut sequence,
-                                format!("{}({binders})", self.constructor(arm.constructor)),
-                                arm.block,
-                            );
+                            let pattern =
+                                format!("{}({binders})", self.constructor(arm.constructor));
+                            self.arm(inner, pattern, arm.block)?;
                         }
                         if let Some(default) = default {
-                            self.arm(&mut sequence, "_".into(), *default);
+                            self.arm(inner, "_".into(), *default)?;
                         }
-                        sequence.push(Job::Line("end;".into()));
-                        sequence.push(Job::Dedent);
+                        return self.line(inner, "end;");
                     }
                     Rhs::SwitchBool {
                         scrutinee,
                         if_false,
                         if_true,
                     } => {
-                        sequence.push(Job::Line(format!("let {bound} =")));
-                        sequence.push(Job::Indent);
-                        sequence.push(Job::Line(format!("match {}", self.atom(*scrutinee))));
+                        self.scrutinized(indent, &bound, *scrutinee)?;
                         // True first, as the surface writes a `Bool` match.
-                        self.arm(&mut sequence, "true".into(), *if_true);
-                        self.arm(&mut sequence, "false".into(), *if_false);
-                        sequence.push(Job::Line("end;".into()));
-                        sequence.push(Job::Dedent);
+                        self.arm(inner, "true".into(), *if_true)?;
+                        self.arm(inner, "false".into(), *if_false)?;
+                        return self.line(inner, "end;");
                     }
                     Rhs::SwitchNat {
                         scrutinee,
                         cases,
                         default,
                     } => {
-                        sequence.push(Job::Line(format!("let {bound} =")));
-                        sequence.push(Job::Indent);
-                        sequence.push(Job::Line(format!("match {}", self.atom(*scrutinee))));
+                        self.scrutinized(indent, &bound, *scrutinee)?;
                         for case in cases {
-                            self.arm(&mut sequence, format!("{}", case.key), case.block);
+                            self.arm(inner, format!("{}", case.key), case.block)?;
                         }
-                        self.arm(&mut sequence, "_".into(), *default);
-                        sequence.push(Job::Line("end;".into()));
-                        sequence.push(Job::Dedent);
+                        self.arm(inner, "_".into(), *default)?;
+                        return self.line(inner, "end;");
                     }
                     Rhs::FoldNat {
                         scrutinee,
                         zero,
                         step,
                     } => {
-                        sequence.push(Job::Line(format!("let {bound} =")));
-                        sequence.push(Job::Indent);
-                        sequence.push(Job::Line(format!("match {}", self.atom(*scrutinee))));
-                        self.arm(&mut sequence, "0".into(), *zero);
-                        self.arm(
-                            &mut sequence,
-                            format!(
-                                "{} + 1; {}",
-                                self.binder(step.predecessor),
-                                self.binder(step.hypothesis)
-                            ),
-                            step.block,
+                        self.scrutinized(indent, &bound, *scrutinee)?;
+                        self.arm(inner, "0".into(), *zero)?;
+                        let pattern = format!(
+                            "{} + 1; {}",
+                            self.binder(step.predecessor),
+                            self.binder(step.hypothesis)
                         );
-                        sequence.push(Job::Line("end;".into()));
-                        sequence.push(Job::Dedent);
+                        self.arm(inner, pattern, step.block)?;
+                        return self.line(inner, "end;");
                     }
                     Rhs::FoldSequence {
                         grain,
@@ -664,22 +593,16 @@ impl Printer<'_, '_, '_, '_> {
                         step,
                     } => {
                         let g = grain_prefix(grain);
-                        sequence.push(Job::Line(format!("let {bound} =")));
-                        sequence.push(Job::Indent);
-                        sequence.push(Job::Line(format!("match {}", self.atom(*scrutinee))));
-                        self.arm(&mut sequence, format!("{g}[]"), *empty);
-                        self.arm(
-                            &mut sequence,
-                            format!(
-                                "{g}[{}, ..{}]; {}",
-                                self.binder(step.element),
-                                self.binder(step.suffix),
-                                self.binder(step.accumulator)
-                            ),
-                            step.block,
+                        self.scrutinized(indent, &bound, *scrutinee)?;
+                        self.arm(inner, format!("{g}[]"), *empty)?;
+                        let pattern = format!(
+                            "{g}[{}, ..{}]; {}",
+                            self.binder(step.element),
+                            self.binder(step.suffix),
+                            self.binder(step.accumulator)
                         );
-                        sequence.push(Job::Line("end;".into()));
-                        sequence.push(Job::Dedent);
+                        self.arm(inner, pattern, step.block)?;
+                        return self.line(inner, "end;");
                     }
                     Rhs::UnconsSequence {
                         grain,
@@ -688,37 +611,27 @@ impl Printer<'_, '_, '_, '_> {
                         cons,
                     } => {
                         let g = grain_prefix(grain);
-                        sequence.push(Job::Line(format!("let {bound} =")));
-                        sequence.push(Job::Indent);
-                        sequence.push(Job::Line(format!("match {}", self.atom(*scrutinee))));
-                        self.arm(&mut sequence, format!("{g}[]"), *empty);
-                        self.arm(
-                            &mut sequence,
-                            format!(
-                                "{g}[{}, ..{}]",
-                                self.binder(cons.element),
-                                self.binder(cons.suffix)
-                            ),
-                            cons.block,
+                        self.scrutinized(indent, &bound, *scrutinee)?;
+                        self.arm(inner, format!("{g}[]"), *empty)?;
+                        let pattern = format!(
+                            "{g}[{}, ..{}]",
+                            self.binder(cons.element),
+                            self.binder(cons.suffix)
                         );
-                        sequence.push(Job::Line("end;".into()));
-                        sequence.push(Job::Dedent);
+                        self.arm(inner, pattern, cons.block)?;
+                        return self.line(inner, "end;");
                     }
-                }
+                };
                 // A one-line form rides its `=` inside a block, and breaks under it at module scope, so every top-level declaration opens the same way.
-                if let Some(text) = simple {
-                    if top {
-                        sequence.push(Job::Line(format!("let {bound} =")));
-                        sequence.push(Job::Indent);
-                        sequence.push(Job::Line(format!("{text};")));
-                        sequence.push(Job::Dedent);
-                    } else {
-                        sequence.push(Job::Line(format!("let {bound} = {text};")));
+                match top {
+                    true => {
+                        self.line(indent, format!("let {bound} ="))?;
+                        self.line(inner, format!("{simple};"))
                     }
+                    false => self.line(indent, format!("let {bound} = {simple};")),
                 }
             }
         }
-        push_sequence(stack, sequence);
     }
 
     // === Spellings ===========================================================
@@ -841,11 +754,6 @@ pub(crate) fn spell_function(module: &Module, id: FunctionId) -> String {
         Some(definition) => format!("{id}{}", hint(&definition.debug_name)),
         None => format!("{id}"),
     }
-}
-
-/// Push a job sequence given in output order.
-fn push_sequence(stack: &mut Vec<Job>, sequence: Vec<Job>) {
-    stack.extend(sequence.into_iter().rev());
 }
 
 fn hint(debug_name: &Option<String>) -> String {

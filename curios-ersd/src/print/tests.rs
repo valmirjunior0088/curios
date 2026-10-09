@@ -168,9 +168,9 @@ fn printing_is_deterministic_across_constructions() {
     assert_eq!(doubling_module().to_string(), doubling_module().to_string());
 }
 
-/// Printing a deep module costs heap, not native stack.
+/// A module nested fifty thousand blocks deep prints from a thread of the default stack: the walk recurses as the blocks nest, on a stack that grows for it.
 #[test]
-fn a_deep_module_prints_without_native_stack() {
+fn a_deep_module_prints_on_a_stack_that_grows_for_it() {
     let mut builder = ErsdBuilder::new();
     let zero = builder.constant(nat(0));
     let scrutinee = builder.item_value(Some("scrutinee".into()), Rhs::Alias(Atom::Constant(zero)));
