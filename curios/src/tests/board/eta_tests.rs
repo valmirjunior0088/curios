@@ -1,4 +1,4 @@
-//! Eta at a function, a record and a unit, and where irrelevance takes over from comparison.
+//! Eta at a function and a record, what the unit type has in its place, and where irrelevance takes over from comparison.
 
 use {super::test_support::*, crate::tests::run};
 
@@ -78,12 +78,44 @@ fn a_struct_that_swaps_a_stuck_eliminations_fields_is_not_its_eta() {
     );
 }
 
-// **Unit eta is the type's, in both checkers.** A type with no field — the empty Σ, a nominal struct that declares none — has one inhabitant, so any two terms convert at it, and each checker decides the goal by its type ahead of every structural rule. The elaborator reached the rule only between two sides no structural rule claimed and the kernel had it against a literal alone, so two variables elaborated and were refused by the kernel, and two applications or two stuck matches were refused by the elaborator, which held each equal to a variable. The first two programs are the ones that reached the kernel's refusal; the rest are the shapes, and the two eta rules that carry a goal to a unit.
+// **The unit type has no eta, in either checker.** A type with no field — the empty Σ, a nominal struct that declares none — has one inhabitant by its shape, and no rule reads that: two neutrals at it are compared by their heads, and its literal's walk, which would compare nothing, is not taken against a neutral. Read off the type, the verdict held inside an arm that fixed a variable and was remembered past it, at a type that is the unit under one case and `Nat` under another, and proved `False` there. The shapes below are the ones a rule of that kind reached: two neutrals, the literal against one, a struct with no field, a function into a unit, and two stuck matches at a record of units, where eta projects both sides and each projection meets a unit.
 //
-// The refusal beside it is what keeps the acceptance from reading as "any two records convert": one relevant field keeps two neutrals apart.
+// A record with a relevant field keeps two neutrals apart as it did.
 #[test]
-fn any_two_terms_convert_at_a_type_with_no_field() {
-    assert_eq!(run(ANY_TWO_TERMS_CONVERT_AT_A_TYPE_WITH_NO_FIELD), b"1");
+fn two_neutrals_at_the_unit_type_stay_apart() {
+    rejected_by(TWO_NEUTRALS_AT_THE_UNIT_TYPE_STAY_APART, "type mismatch");
+}
+
+#[test]
+fn a_neutral_at_the_unit_type_is_not_its_literal() {
+    rejected_by(
+        A_NEUTRAL_AT_THE_UNIT_TYPE_IS_NOT_ITS_LITERAL,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn two_neutrals_at_a_struct_with_no_field_stay_apart() {
+    rejected_by(
+        TWO_NEUTRALS_AT_A_STRUCT_WITH_NO_FIELD_STAY_APART,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn two_neutrals_at_a_function_into_a_unit_stay_apart() {
+    rejected_by(
+        TWO_NEUTRALS_AT_A_FUNCTION_INTO_A_UNIT_STAY_APART,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn two_stuck_matches_at_a_record_of_units_stay_apart() {
+    rejected_by(
+        TWO_STUCK_MATCHES_AT_A_RECORD_OF_UNITS_STAY_APART,
+        "type mismatch",
+    );
 }
 
 #[test]
@@ -94,15 +126,29 @@ fn two_neutrals_at_a_record_with_a_relevant_field_stay_apart() {
     );
 }
 
-// **A nominal struct has no eta by its type, and what eta would decide is read off the type.** Two neutrals at a struct have no literal to open, so neither checker expands them: any two terms convert at a struct every field of which has one inhabitant — a unit, a proof, a function into a unit, a record or a struct of such — and are left to their heads otherwise. The elaborator projected two neutrals at a struct and compared the projections with no type, which decided nothing, and the kernel compared their heads; once a lookup typed those projections the elaborator accepted two variables at a struct of a unit and the kernel refused them, which is the first program.
+// **A nominal struct has no eta by its type, and two neutrals at one are made one by nothing but a proposition.** Two neutrals at a struct have no literal to open, so neither checker expands them, and a struct every field of which has one inhabitant — a unit, a proof — has one by its shape, which no rule reads: its two neutrals stay apart. A struct meant to have one inhabitant is declared a proposition, and any two terms at it convert unread: two variables, two applications, two stuck matches, and a cast between two instances of a family over it.
 //
-// The refusals beside it are the rule's bounds: one relevant field keeps two neutrals apart, under whatever nesting, and a struct that reaches itself answers no where it is met again, which is what ends the walk — by its own fields or through another struct's, and asked inside its own declaration as after it.
-//
-// A struct nested in its own parameter is met again too, and is judged again: both checkers refused two variables at `Pair(Pair({}))` where they converged at `Pair(Other({}))`, a verdict that followed which name wrapped a unit.
+// The refusals after it are structs over data, under whatever nesting and however a declaration names itself.
 #[test]
-fn any_two_terms_convert_at_a_struct_with_one_inhabitant() {
+fn two_neutrals_at_a_struct_of_a_unit_stay_apart() {
+    rejected_by(
+        TWO_NEUTRALS_AT_A_STRUCT_OF_A_UNIT_STAY_APART,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn two_neutrals_at_a_struct_of_a_proof_stay_apart() {
+    rejected_by(
+        TWO_NEUTRALS_AT_A_STRUCT_OF_A_PROOF_STAY_APART,
+        "type mismatch",
+    );
+}
+
+#[test]
+fn any_two_terms_convert_at_a_struct_declared_a_proposition() {
     assert_eq!(
-        run(ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_WITH_ONE_INHABITANT),
+        run(ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_DECLARED_A_PROPOSITION),
         b"1"
     );
 }
@@ -147,9 +193,9 @@ fn two_neutrals_at_a_struct_that_reaches_itself_stay_apart_inside_its_declaratio
     );
 }
 
-// **A goal's type is read forced in both checkers.** A struct declared with `and` is referred to through its group, and a type a recursive definition computes is a call of it: weak-head reduction leaves both folded, and every rule a type directs is keyed on the type's own shape. The elaborator read a goal's type in weak-head form and refused two variables at such a struct where the same struct declared alone, or written out, converged, where the kernel, which forces the type, accepts them, and where its own lookup, which forces what it reads, accepted them at a child no type was handed for.
+// **A goal's type is read forced in both checkers.** A struct declared with `and` is referred to through its group, which weak-head reduction leaves folded, and what a type directs is keyed on the type's own shape and sort. Read in weak-head form, two proofs of a proposition declared in a group are compared by their heads where the same struct declared alone converges, and where a lookup, which forces what it reads, converges at a child no type was handed for.
 //
-// The refusal beside it is a group's member with a relevant field.
+// The refusal beside it is a group's member that is data.
 #[test]
 fn a_goals_type_is_read_forced() {
     assert_eq!(run(A_GOALS_TYPE_IS_READ_FORCED), b"1");
@@ -163,14 +209,22 @@ fn two_neutrals_at_a_groups_member_with_a_relevant_field_stay_apart() {
     );
 }
 
-// **Where a child is compared with no type, what a type directs between two neutrals is read off the type a lookup gives both.** A tuple literal's component inside a stuck elimination's arm is such a child, and two variables there at a record of units, at a function into a unit or at a struct of a unit were refused by both checkers, which each equate them wherever a type reaches them. Neither side is expanded: eta between two neutrals decides nothing the type's shape does not, and the goal it would pose at a looked-up type is one the recurrence rule assumes. The last program is two proofs of a proposition whose implicit the elaborator solved, which it refused where the same proposition written out converged.
+// **Where a child is compared with no type, two neutrals a lookup types at one proposition convert.** A tuple literal's component inside a stuck elimination's arm is such a child, and two proofs there were refused by both checkers, which each equate them wherever a type reaches them. Neither side is expanded: eta between two neutrals decides nothing irrelevance does not, and the goal it would pose at a looked-up type is one the recurrence rule assumes. The last program is two proofs of a proposition whose implicit the elaborator solved, which it refused where the same proposition written out converged.
 //
-// The refusal beside it is the same pair at a record with a relevant field.
+// The refusals beside it are the same pair at a record of units, whose shape decides nothing, and at a record with a relevant field.
 #[test]
-fn two_neutrals_convert_where_a_lookup_gives_them_a_type_with_one_inhabitant() {
+fn two_neutrals_convert_where_a_lookup_gives_them_a_proposition() {
     assert_eq!(
-        run(TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_ONE_INHABITANT),
+        run(TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_PROPOSITION),
         b"1"
+    );
+}
+
+#[test]
+fn two_neutrals_stay_apart_where_a_lookup_gives_them_a_record_of_units() {
+    rejected_by(
+        TWO_NEUTRALS_STAY_APART_WHERE_A_LOOKUP_GIVES_THEM_A_RECORD_OF_UNITS,
+        "type mismatch",
     );
 }
 
@@ -268,14 +322,17 @@ fn still_compares_a_records_relevant_component() {
     );
 }
 
-// **What this pins is the vacuous walk, and the invariant that licenses it.** Every field of `Sealed` is a proposition, so `struct_eta`'s walk compares *nothing at all* and answers `true` on the strength of the neutral restriction alone. That is sound because `other` inhabits `Sealed` — conversion is only ever asked about two terms of one type — and because eta for a single-constructor record equates any inhabitant with the literal of its projections.
+// **A struct literal with no field of data has no eta.** Every field of `Sealed` is a proposition, so the literal's walk against a neutral compares nothing at all, and answering `true` there would make any neutral the literal by the shape of its type: two neutrals would be one through it where their heads keep them apart. Declared in `Type`, the literal and the neutral stay apart; declared a proposition, irrelevance decides the pair before any walk is taken.
 //
-// The restriction is a proxy for that invariant rather than a second guarantee: a `Var` is as arbitrary a term as any other, and the invariant is a property of the *callers* rather than of this function. `struct_eta` says so in its own documentation.
-//
-// Its comparison is `Sealed { one = p, two = q }` against `b` as arguments of `f`, and a spine's arguments take the telescope their head carries, so the position is typed: the fixture reaches `struct_eta` from a typed goal, and what it holds is the vacuous walk itself.
+// The comparison is `Sealed { one = p, two = q }` against `b` as arguments of `f`, and a spine's arguments take the telescope their head carries, so the position is typed.
 #[test]
-fn a_nominal_structs_eta_is_not_forfeited_there() {
-    assert_eq!(run(A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE), b"1");
+fn a_struct_literal_of_proofs_alone_has_no_eta() {
+    rejected_by(A_STRUCT_LITERAL_OF_PROOFS_ALONE_HAS_NO_ETA, "type mismatch");
+}
+
+#[test]
+fn a_struct_declared_a_proposition_meets_its_literal() {
+    assert_eq!(run(A_STRUCT_DECLARED_A_PROPOSITION_MEETS_ITS_LITERAL), b"1");
 }
 
 // **Where the forfeiture ends.** A struct literal's fields and a constructor's payload have a typed context the opaque head's arguments lack: the declaration's own telescope, which `struct_eta` already reads on the neutral side. Both checkers compare fields and payloads at the telescope; compared at `Type`, every proof-carrying value built from a different proof of the same fact would be refused, and `Str/concat` would not associate. The four equations below are those shapes: a field, a payload, a standard-library constructor, and the string law.

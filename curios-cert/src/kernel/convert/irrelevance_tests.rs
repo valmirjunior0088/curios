@@ -198,13 +198,13 @@ fn a_spines_arguments_are_typed_under_a_curried_and_a_projected_head() {
     assert_eq!(judged(Term::type_ground()), [Ok(false), Ok(false)]);
 }
 
-/// Where a child is compared with no type, what a type directs between two neutrals is read off the type a lookup gives both: two proofs of one proposition converge at `Type`, and so do two variables at the empty record, at a record of units, at a function into a unit, at a struct that declares no field, at a struct of a unit and at a recursive definition's call that unfolds to one of these, at whatever depth; and two eliminations of two such proofs, whose scrutinees are compared with no type, are one term. It is what keeps a verdict from following whether a definition's call was unfolded before the pair was posed. The elaborator's twin of this proposition shares the name.
+/// Where a child is compared with no type, what a type directs between two neutrals is read off the type a lookup gives both: two proofs of one proposition converge at `Type`, and so do two variables at a record of propositions, at a function into one and at a recursive definition's call that unfolds to one of these, at whatever depth; and two eliminations of two such proofs, whose scrutinees are compared with no type, are one term. It is what keeps a verdict from following whether a definition's call was unfolded before the pair was posed. The elaborator's twin of this proposition shares the name.
 ///
-/// Neither side is expanded, and the refusals say what that keeps apart: two variables at a record with a relevant field, two proofs of two propositions and two numbers.
+/// Neither side is expanded, and nothing is read but the sort: two variables stay apart at a type with one inhabitant by its shape — the empty record, a record of units, a function into a unit, a struct that declares no field and a struct of a unit — at a record with a relevant field, at two propositions and at `Nat`.
 ///
-/// Mutation-checked: without the lookup the nine held goals are refused; with the two looked-up types left uncompared, two proofs of two propositions converge; and with eta taken at the looked-up type in place of reading it, two variables at a record with a relevant field converge, the projections' heads asking the pair again and the recurrence rule assuming it.
+/// Mutation-checked: without the lookup the six held goals are refused; with the two looked-up types left uncompared, two proofs of two propositions converge; and with eta taken at the looked-up type in place of reading it, two variables at a record with a relevant field converge, the projections' heads asking the pair again and the recurrence rule assuming it.
 #[test]
-fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() {
+fn two_neutrals_converge_where_a_lookup_gives_them_a_proposition() {
     let mut kernel = kernel();
     let proposition = declare(&mut kernel, "P", Term::prop());
     let another = declare(&mut kernel, "Q", Term::prop());
@@ -223,20 +223,25 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
         (binder(90, "a"), unit.clone()),
         (binder(91, "b"), unit.clone()),
     ]);
-    let function = Term::func_type([(binder(92, "x"), nat_type())], unit.clone());
-    // `rec F : (Nat) -> Type = (n) => match n | 0 => {} | pred + 1 => {a: F(pred)}; F`. `F(0)` unfolds to the unit, and `F(1)` to a record of it.
+    let proofs = Term::tuple_type([
+        (binder(90, "a"), proposition.clone()),
+        (binder(91, "b"), proposition.clone()),
+    ]);
+    let into_a_unit = Term::func_type([(binder(92, "x"), nat_type())], unit.clone());
+    let into_a_proof = Term::func_type([(binder(92, "x"), nat_type())], proposition.clone());
+    // `rec F : (Nat) -> Prop = (n) => match n | 0 => P | pred + 1 => {a: F(pred)}; F`. `F(0)` unfolds to the proposition, and `F(1)` to a record of it.
     let nested = {
         let (f, n, motive) = (binder(93, "F"), binder(94, "n"), binder(95, "m"));
         let (pred, ih) = (binder(96, "pred"), binder(97, "ih"));
         let again = Term::apply(Term::free_var(&f), [Term::free_var(&pred)]);
-        let family = Term::func_type([(n, nat_type())], Term::type_ground());
+        let family = Term::func_type([(n, nat_type())], Term::prop());
         let body = Term::func(
             [(n, nat_type())],
             Term::nat_match(
                 Term::free_var(&n),
                 Some(&motive),
-                Term::type_ground(),
-                unit.clone(),
+                Term::prop(),
+                proposition.clone(),
                 &pred,
                 &ih,
                 Term::tuple_type([(binder(98, "a"), again)]),
@@ -259,7 +264,10 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
     let (u, v) = (assumed(3, "u", &unit), assumed(4, "v", &unit));
     let (s, t) = (assumed(5, "s", &field_less), assumed(6, "t", &field_less));
     let (x, y) = (assumed(7, "x", &record), assumed(8, "y", &record));
-    let (f, g) = (assumed(9, "f", &function), assumed(10, "g", &function));
+    let (f, g) = (
+        assumed(9, "f", &into_a_unit),
+        assumed(10, "g", &into_a_unit),
+    );
     let (a, b) = (assumed(11, "a", &nat_type()), assumed(12, "b", &nat_type()));
     let (c, d) = (assumed(13, "c", &units), assumed(14, "d", &units));
     let (w, z) = (assumed(15, "w", &of_a_unit), assumed(16, "z", &of_a_unit));
@@ -267,6 +275,11 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
     let (i, j) = (
         assumed(19, "i", &folded_twice),
         assumed(20, "j", &folded_twice),
+    );
+    let (l, m) = (assumed(21, "l", &proofs), assumed(22, "m", &proofs));
+    let (n, o) = (
+        assumed(23, "n", &into_a_proof),
+        assumed(24, "o", &into_a_proof),
     );
 
     let eliminated = |proof: &Term| {
@@ -285,26 +298,23 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
     assert_eq!(
         [
             at(&ground, &p, &q),
+            at(&ground, &l, &m),
+            at(&ground, &n, &o),
+            at(&ground, &h, &k),
+            at(&ground, &i, &j),
+            at(&number, &eliminated(&p), &eliminated(&q)),
+        ],
+        [Ok(true), Ok(true), Ok(true), Ok(true), Ok(true), Ok(true)]
+    );
+    assert_eq!(
+        [
             at(&ground, &u, &v),
             at(&ground, &s, &t),
             at(&ground, &c, &d),
             at(&ground, &f, &g),
             at(&ground, &w, &z),
-            at(&ground, &h, &k),
-            at(&ground, &i, &j),
-            at(&number, &eliminated(&p), &eliminated(&q)),
         ],
-        [
-            Ok(true),
-            Ok(true),
-            Ok(true),
-            Ok(true),
-            Ok(true),
-            Ok(true),
-            Ok(true),
-            Ok(true),
-            Ok(true)
-        ]
+        [Ok(false), Ok(false), Ok(false), Ok(false), Ok(false)]
     );
     assert_eq!(
         [
@@ -316,9 +326,9 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
     );
 }
 
-/// A stuck elimination is typed by its result at its scrutinee: an ambient goal as written, and a family opened at the indices its scrutinee's type carries and then at the scrutinee. So where a child is compared with no type, an elimination at a proposition converges with a variable at it and with an elimination of another scrutinee, one at a record of units with a variable at it, and an indexed family's elimination is read at its scrutinee's index. The elaborator's twin of this proposition shares the name.
+/// A stuck elimination is typed by its result at its scrutinee: an ambient goal as written, and a family opened at the indices its scrutinee's type carries and then at the scrutinee. So where a child is compared with no type, an elimination at a proposition converges with a variable at it and with an elimination of another scrutinee, one at a record of propositions with a variable at it, and an indexed family's elimination is read at its scrutinee's index. The elaborator's twin of this proposition shares the name.
 ///
-/// The refusals are what the type does not decide: an elimination at a relevant type against a variable at it, and one at a proposition against a variable at another.
+/// The refusals are what the type does not decide: an elimination at a relevant type against a variable at it, one at a record of units against a variable at it, and one at a proposition against a variable at another.
 ///
 /// Mutation-checked: with no type read off an elimination the four held goals are refused, and with a family read at its scrutinee alone the indexed one is.
 #[test]
@@ -331,6 +341,10 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
     let units = Term::tuple_type([
         (binder(90, "a"), unit.clone()),
         (binder(91, "b"), unit.clone()),
+    ]);
+    let proofs = Term::tuple_type([
+        (binder(90, "a"), proposition.clone()),
+        (binder(91, "b"), proposition.clone()),
     ]);
     // `induct Ix : (n : Nat) -> Type`, a family with one index and no constructor.
     let indexed = Global::Authored(Qualifier::from(["Ix"]));
@@ -358,7 +372,8 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
     };
     let (c, d) = (assumed(0, "c", &empty), assumed(1, "d", &empty));
     let (p, q) = (assumed(2, "p", &proposition), assumed(3, "q", &another));
-    let r = assumed(4, "r", &units);
+    let r = assumed(4, "r", &proofs);
+    let t = assumed(7, "t", &units);
     let n = assumed(5, "n", &nat_type());
     let s = assumed(
         6,
@@ -394,7 +409,7 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
         [
             at(&eliminated(&c, &proposition), &p),
             at(&eliminated(&c, &proposition), &eliminated(&d, &proposition)),
-            at(&eliminated(&c, &units), &r),
+            at(&eliminated(&c, &proofs), &r),
             at(&over_its_index, &p),
         ],
         [Ok(true), Ok(true), Ok(true), Ok(true)]
@@ -402,9 +417,10 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
     assert_eq!(
         [
             at(&eliminated(&c, &nat_type()), &n),
+            at(&eliminated(&c, &units), &t),
             at(&eliminated(&c, &proposition), &q),
         ],
-        [Ok(false), Ok(false)]
+        [Ok(false), Ok(false), Ok(false)]
     );
 }
 

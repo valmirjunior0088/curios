@@ -4,7 +4,7 @@
 //!
 //! The rules, in the order they are tried:
 //!
-//! 1. **Proof irrelevance.** A goal at a `Prop`-sorted type is discharged without looking at either side. Any two inhabitants of a proposition are definitionally equal, which is what lets erasure drop them wholesale. 2. **One definition's spines.** Two applications of one definition are compared argument by argument before either is unfolded; agreeing spines decide the goal and disagreeing ones decide nothing. 3. **Eta.** At a function type both sides are applied to fresh binders and compared at the codomain; at a Σ type both are projected and compared componentwise, so at the empty Σ nothing is left to compare and any two inhabitants convert. So `f` and `(x) => f(x)` convert, and so do `p` and `(p.0, p.1)`, without either side having to be in that shape. A nominal struct has no eta by its type — its literal opens one — so between two neutrals at one the goal is decided where the struct has one inhabitant by its shape (`one_inhabitant`), which is all eta would decide between them. 4. **Structure.** Both sides are reduced to weak-head normal form and their heads compared, recursing on the children.
+//! 1. **Proof irrelevance.** A goal at a `Prop`-sorted type is discharged without looking at either side. Any two inhabitants of a proposition are definitionally equal, which is what lets erasure drop them wholesale. 2. **One definition's spines.** Two applications of one definition are compared argument by argument before either is unfolded; agreeing spines decide the goal and disagreeing ones decide nothing. 3. **Eta.** At a function type both sides are applied to fresh binders and compared at the codomain; at a Σ type with a field both are projected and compared componentwise. So `f` and `(x) => f(x)` convert, and so do `p` and `(p.0, p.1)`, without either side having to be in that shape. The Σ with no field has no eta, and a nominal struct has none by its type — its literal opens one, where it holds a field that is no proof — so no type but a proposition makes two neutrals one: that a type has one inhabitant by its shape is read nowhere, since a substitution can make it so of a type it was not so of. 4. **Structure.** Both sides are reduced to weak-head normal form and their heads compared, recursing on the children.
 //!
 //! # Termination, and the recurrence rule
 //!
@@ -20,7 +20,7 @@
 //!
 //! # Where a child has no type of its own, and why refusing is the safe direction
 //!
-//! Some child positions are handed no type: a stuck elimination's scrutinee, its motive and its arms' bodies, and a projection's or an instance's head are compared at `Type`. Nothing a type directs is forfeited there. Between two sides a lookup types — a neutral by its head, a stuck elimination by its result at its scrutinee, a constructor's value by its declaration (`looked_up`) — what the type directs is read off it (`by_their_own_type`): that it is a proposition, or has one inhabitant by its shape. Eta by a literal needs no type — a lambda, a tuple literal or a struct literal against a neutral inhabitant states what the type would have, and fires there as it does anywhere (`function_eta`, `tuple_eta`, `struct_eta`) — and two literals are compared by their parts. And a binder a motive or an arm opens is opened at the type its position gives it, read off the scrutinee's looked-up type (`motive_binders`, `ground_cases`), so a lookup under it reads what the elimination's typing read. The stand-in `Type` is what such a binder keeps where no lookup types the scrutinee, which no checked term reaches and which can only refuse. Everything else is typed. An application spine's arguments compare at the telescope its head carries — a variable, a universe instance of one or a projection of a `rec` group, and an application or a record projection of one, and a stuck elimination, each read by `synth_neutral` as a lookup rather than an inference (`compare_arguments`). An inductive type-former's arguments compare at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P)(p, q)` at a `Prop`-sorted `P` convert with `Eq(@P)(p, p)`; a struct type's, a struct literal's and a constructor's parameters at the declaration's outer telescope (`params_at`); and a struct literal's fields and a constructor's payload at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read, so two `Str`s built from different proofs of the same bytes are one value. Two applications of one definition are compared by their spines *before* either is unfolded and ahead of eta by the goal's type, as the elaborator compares them (`one_definition_by_its_spines`), which keeps the two calls folded: unfolded first a proof argument lands in a stuck scrutinee, where the type a lookup gives it is what equates it, and after eta the pair is no application of the definition at its head. A nominal node, a type or a value of it, compares its levels where its family is invariant in them and at nothing where it is irrelevant (`Kernel::instances_eq`). Two instances of one `rec` group are decided by their levels under the item's hypotheses (`rec_instances`), every one of them, the equation a definition's instance takes, and two different groups are refused; two instances of a family's former that part in a level are left to the nodes they build (`projects_a_former`).
+//! Some child positions are handed no type: a stuck elimination's scrutinee, its motive and its arms' bodies, and a projection's or an instance's head are compared at `Type`. Nothing a type directs is forfeited there. Between two sides a lookup types — a neutral by its head, a stuck elimination by its result at its scrutinee, a constructor's value by its declaration (`looked_up`) — what the type directs is read off it (`by_their_own_type`): that it is a proposition. Eta by a literal needs no type — a lambda, a tuple literal or a struct literal against a neutral inhabitant states what the type would have, and fires there as it does anywhere (`function_eta`, `tuple_eta`, `struct_eta`) — and two literals are compared by their parts. And a binder a motive or an arm opens is opened at the type its position gives it, read off the scrutinee's looked-up type (`motive_binders`, `ground_cases`), so a lookup under it reads what the elimination's typing read. The stand-in `Type` is what such a binder keeps where no lookup types the scrutinee, which no checked term reaches and which can only refuse. Everything else is typed. An application spine's arguments compare at the telescope its head carries — a variable, a universe instance of one or a projection of a `rec` group, and an application or a record projection of one, and a stuck elimination, each read by `synth_neutral` as a lookup rather than an inference (`compare_arguments`). An inductive type-former's arguments compare at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P)(p, q)` at a `Prop`-sorted `P` convert with `Eq(@P)(p, p)`; a struct type's, a struct literal's and a constructor's parameters at the declaration's outer telescope (`params_at`); and a struct literal's fields and a constructor's payload at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read, so two `Str`s built from different proofs of the same bytes are one value. Two applications of one definition are compared by their spines *before* either is unfolded and ahead of eta by the goal's type, as the elaborator compares them (`one_definition_by_its_spines`), which keeps the two calls folded: unfolded first a proof argument lands in a stuck scrutinee, where the type a lookup gives it is what equates it, and after eta the pair is no application of the definition at its head. A nominal node, a type or a value of it, compares its levels where its family is invariant in them and at nothing where it is irrelevant (`Kernel::instances_eq`). Two instances of one `rec` group are decided by their levels under the item's hypotheses (`rec_instances`), every one of them, the equation a definition's instance takes, and two different groups are refused; two instances of a family's former that part in a level are left to the nodes they build (`projects_a_former`).
 //!
 //! Where a lookup gives no type, the direction is deliberate. An incomplete conversion refuses programs; an unsound one admits them. A refusal is visible — it is a disagreement between the two checkers, which is precisely the signal this kernel exists to produce — whereas an over-eager acceptance is silent and is exactly what a second opinion is supposed to catch. A refusal can be strengthened later against a real program that needs it, and none can be strengthened back from having been wrong.
 
@@ -40,10 +40,7 @@ mod variance_tests;
 
 use {
     super::{Counted, Error, Kernel, Sort, synth_neutral, unfold_spelling},
-    crate::{
-        case_target_indices, instantiate_universe_levels_scoped, pinned_instance,
-        struct_reaches_itself,
-    },
+    crate::{case_target_indices, instantiate_universe_levels_scoped, pinned_instance},
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, Classes, Cost, Cursor, Field, Func, FuncType, Global,
         InductType, Instance, InstanceHead, Level, Lockstep, Many, Match, MatchResult, Probe, Proj,
@@ -198,22 +195,13 @@ fn by_the_type(
         Subterm::FuncType(FuncType { telescope, .. }) => {
             eta_function(kernel, history, telescope.clone(), this, that)
         }
-        Subterm::TupleType(TupleType { telescope }) => {
+        // The Σ with no field has no eta: nothing is left to project, and that a neutral at `{}` is `()` is a claim about the type's shape, which no rule here makes.
+        Subterm::TupleType(TupleType { telescope }) if !telescope.is_empty() => {
             eta_tuple(kernel, history, telescope.clone(), this, that)
         }
         _ => {
             let forced_this = kernel.reduce_forced(this.clone())?;
             let forced_that = kernel.reduce_forced(that.clone())?;
-
-            // A nominal struct has no eta by its type: a literal opens one, against a neutral (`struct_eta`) and field by field against another, and two neutrals have none to open. What eta would decide between them is read off the type instead, and they are left to their heads where it has more than one inhabitant.
-            let literal = |term: &Term| matches!(&**term, Subterm::Struct(_));
-            if matches!(&*at, Subterm::StructType(_))
-                && !literal(&forced_this)
-                && !literal(&forced_that)
-                && one_inhabitant(kernel, &at)?
-            {
-                return Ok(true);
-            }
 
             // A side that was a redex as posed is a neutral a lookup types only now.
             if matches!(&*at, Subterm::Type(_) | Subterm::Prop(_))
@@ -228,11 +216,11 @@ fn by_the_type(
     }
 }
 
-/// What a type directs between two terms, asked of the type a lookup reads where the position handed none: two terms a lookup types at one type that has one inhabitant are equal.
+/// What a type directs between two terms, asked of the type a lookup reads where the position handed none: two terms a lookup types at one proposition are equal.
 ///
 /// **It is the typed rule, with the type looked up.** Conversion is asked about two terms of one type, and here that is checked rather than assumed: each side's type is read by [`looked_up`], a lookup, a substitution and a reduction, and the two are compared. Without it a stuck elimination's scrutinee is compared at `Type`, two eliminations of two proofs of one proposition stay apart, and two calls of one definition that differ in a proof part wherever reduction unfolds them before the pair is posed, their verdict following a spelling.
 ///
-/// **It is all a type directs between two neutrals.** Eta between two neutrals decides nothing [`one_inhabitant`] does not: where a field or the codomain has a second inhabitant, the two sides' projections or applications are equal only where their heads are, which the structural rules decide. So nothing is forfeited by reading the type and expanding neither side, and expanding is what cannot be done here. Eta at a looked-up type would apply or project both sides; the projections' heads are compared with no type, this lookup would type them again, and the goal it posed would be one already in progress, which the recurrence rule assumes: any two variables at a record type would convert. Reading the type poses no goal about the two sides, so nothing can recur.
+/// **It is all a type directs between two neutrals.** Eta between two neutrals decides nothing irrelevance does not: where a field or the codomain is no proposition, the two sides' projections or applications are equal only where their heads are, which the structural rules decide. So nothing is forfeited by reading the type and expanding neither side, and expanding is what cannot be done here. Eta at a looked-up type would apply or project both sides; the projections' heads are compared with no type, this lookup would type them again, and the goal it posed would be one already in progress, which the recurrence rule assumes: any two variables at a record type would convert. Reading the type poses no goal about the two sides, so nothing can recur.
 ///
 /// A lookup that fails for any reason but a spent budget is no answer, and the pair goes on untyped; so does a pair one side of which is a lambda or a tuple literal, which is decided by its parts.
 fn by_their_own_type(
@@ -245,8 +233,11 @@ fn by_their_own_type(
     else {
         return Ok(false);
     };
+    let proposition = Sort::of(kernel, &this_type)
+        .probed()?
+        .is_some_and(|sort| sort.is_prop());
 
-    Ok(one_inhabitant(kernel, &this_type)?
+    Ok(proposition
         && compare(
             kernel,
             history,
@@ -287,96 +278,6 @@ fn looked_up(kernel: &mut Kernel, term: &Term) -> Result<Option<Term>, Error> {
         _ if names_a_type(term) => Ok(synth_neutral(kernel, term).probed()?.flatten()),
         _ => Ok(None),
     }
-}
-
-/// Whether `type_` has one inhabitant by its shape: a proposition, the empty Σ, a Σ or a nominal struct whose every field's type has one, or a function type whose codomain has one.
-///
-/// **It is what the rules above derive, read off the type.** Any two inhabitants of such a type convert by them: irrelevance at the proposition, eta at the function and at the record down to each field, and at a struct the eta its literal has against a neutral, taken on both sides. Read off the type it poses no goal about the two sides, so it answers where eta cannot be fired: between two neutrals at a struct, and at the type a lookup gives ([`by_their_own_type`]).
-///
-/// **It ends at a struct that reaches itself.** A struct met again while it is being judged answers no where its declaration reaches itself ([`struct_reaches_itself`]): a declaration is opened by this walk and by no reduction, so nothing else would end it, and the answer is the refusing one. One met again through a parameter it was instantiated at is judged again: its declaration abbreviates a record of its fields, and the parameter is a part of the type the walk began at, or what a definition that ends made of one. Every other type is forced as eta by the goal's type forces it, a recursive definition's call unfolding as far as it computes, and is bounded as that walk is, by the budget.
-///
-/// A field's type is judged under the fields before it, opened at binders, so one that computes from an earlier field counts only where it reduces whatever that field is. A type no sort judgment classifies, and an occurrence its declaration refuses, answer no.
-fn one_inhabitant(kernel: &mut Kernel, type_: &Term) -> Result<bool, Error> {
-    curios_profile::profile!("convert::one_inhabitant");
-    inhabited_once(kernel, type_, &mut Vec::new())
-}
-
-/// [`one_inhabitant`], inside the structs in `entered`, whose fields this type was reached through.
-///
-/// A function type is a proposition where its codomain is one and a record where every field is, so each is read through to what it ends in, and a sort is asked only of what is neither: no part of the type is walked twice.
-fn inhabited_once(
-    kernel: &mut Kernel,
-    type_: &Term,
-    entered: &mut Vec<Global>,
-) -> Result<bool, Error> {
-    recurse(|| {
-        kernel.spend(Cost::STEP)?;
-
-        let Some(at) = kernel.reduce_forced(type_.clone()).probed()? else {
-            return Ok(false);
-        };
-        let proposition = |kernel: &mut Kernel| -> Result<bool, Error> {
-            Ok(Sort::of(kernel, &at)
-                .probed()?
-                .is_some_and(|sort| sort.is_prop()))
-        };
-
-        match &*at {
-            Subterm::FuncType(FuncType { telescope, .. }) => kernel.scoped(|kernel| {
-                let mut cursor = telescope.cursor();
-                while let Some((_, domain)) = cursor.entry() {
-                    kernel.advance_assumed(&mut cursor, &domain);
-                }
-                let codomain = cursor.body().expect("a cursor past every entry");
-
-                inhabited_once(kernel, &codomain, entered)
-            }),
-            Subterm::TupleType(TupleType { telescope }) => {
-                fields_inhabited_once(kernel, telescope.clone(), entered)
-            }
-            Subterm::StructType(StructType {
-                name,
-                universes,
-                params,
-            }) => {
-                if proposition(kernel)? {
-                    return Ok(true);
-                }
-                if entered.contains(name) && struct_reaches_itself(kernel, name) {
-                    return Ok(false);
-                }
-                let Ok(declared) = kernel.struct_at(name, universes, params) else {
-                    return Ok(false);
-                };
-
-                entered.push(*name);
-                let verdict = fields_inhabited_once(kernel, declared.fields(), entered);
-                entered.pop();
-
-                verdict
-            }
-            _ => proposition(kernel),
-        }
-    })
-}
-
-/// Whether every field of `telescope` has one inhabitant, each judged under the fields before it.
-fn fields_inhabited_once(
-    kernel: &mut Kernel,
-    telescope: Telescope<()>,
-    entered: &mut Vec<Global>,
-) -> Result<bool, Error> {
-    kernel.scoped(|kernel| {
-        let mut cursor = telescope.cursor();
-        while let Some((_, field)) = cursor.entry() {
-            if !inhabited_once(kernel, &field, entered)? {
-                return Ok(false);
-            }
-            kernel.advance_assumed(&mut cursor, &field);
-        }
-
-        Ok(true)
-    })
 }
 
 /// Two applications of one definition, decided by their spines before either is unfolded — congruence, which is sufficient and never necessary, so a mismatch decides nothing and the pair goes on to eta and to be forced.
@@ -463,7 +364,7 @@ fn eta_function(
 ///
 /// A later field's type may mention an earlier one, and names it by a projection of the *left* side — sound because the earlier components have already been shown equal by the time that type is used.
 ///
-/// **At the empty Σ this is unit eta.** No component is left to compare, so any two terms convert at `{}` without either being read: the type has one inhabitant, and conversion is asked about two terms of the goal's type, the invariant irrelevance discharges a proposition on. It composes with the rules above it — two terms at a record of units, or two functions into one, convert by the eta that reaches the unit — and where a child is compared at `Type` the same verdict is read off the type a lookup gives ([`one_inhabitant`]).
+/// **Never at the empty Σ.** [`by_the_type`] fires this where the Σ has a field. With none there is no component to compare, and answering `true` would be unit eta: two neutrals at `{}`, at a record of units or at a function into one would convert by nothing but their type's shape.
 fn eta_tuple(
     kernel: &mut Kernel,
     history: &mut History,
@@ -952,13 +853,17 @@ fn function_eta(
 
 /// Eta at a record, by the literal: a tuple literal against a *neutral* inhabitant, each field compared at `Type` with the neutral's projection, under the invariant and the restriction [`function_eta`] has. [`compare`] fires the rule by the goal's type at a Σ ([`eta_tuple`]), and this is the same rule where no such type is at hand.
 ///
-/// A literal with no field compares nothing and answers `true`, as an empty struct's does at [`struct_eta`]: `{}` has one inhabitant, and a neutral of the literal's type is it.
+/// A literal with no field has no eta, as a struct's with no field that is data has none at [`struct_eta`]: there is no projection to compare, and answering `true` would say that every neutral at `{}` is `()`, which makes two neutrals one through the literal where their heads keep them apart.
 fn tuple_eta(
     kernel: &mut Kernel,
     history: &mut History,
     literal: &Tuple,
     other: &Term,
 ) -> Result<bool, Error> {
+    if literal.fields.is_empty() {
+        return Ok(false);
+    }
+
     for (index, field) in literal.fields.iter().enumerate() {
         if !ground(kernel, history, field, &Term::proj(other.clone(), index))? {
             return Ok(false);
@@ -972,7 +877,9 @@ fn tuple_eta(
 ///
 /// **What licenses the projection is an invariant about the callers, not the shape of `other`.** Conversion is only ever asked whether two terms *of one type* are equal: the entry point carries the type, every typed recursion passes the one its position assigns — a field's from this telescope, an argument's from its head's, an index's from the family's — and [`ground`] discards the kernel's *knowledge* of that type without changing the fact. So `other` inhabits the struct type the literal is a value of, and eta for a single-constructor record — every inhabitant `x` equals `S { x.0, …, x.(n-1) }` — is what decides the pair.
 ///
-/// That invariant is checked where the goal states a type and nowhere else. At a goal whose type is a former other than the literal's own struct, [`structural`] refuses the rule before it reaches here ([`another_struct`]). Under [`ground`] the goal's type is `Type`, which says nothing, and there the walk is restricted to neutrals as a proxy, not a second guarantee: a `Var` is as arbitrary a term as any other, so what the restriction buys is that a pair arriving from a caller that broke the invariant is unlikely to be *shaped* like an inhabitant — thin, and worth knowing it is thin, because an all-`Prop` or empty struct's field walk compares nothing and answers `true`.
+/// That invariant is checked where the goal states a type and nowhere else. At a goal whose type is a former other than the literal's own struct, [`structural`] refuses the rule before it reaches here ([`another_struct`]). Under [`ground`] the goal's type is `Type`, which says nothing, and there the walk is restricted to neutrals as a proxy, not a second guarantee: a `Var` is as arbitrary a term as any other, so what the restriction buys is that a pair arriving from a caller that broke the invariant is unlikely to be *shaped* like an inhabitant — thin, and worth knowing it is thin.
+///
+/// **A literal holding no field that is data has no eta.** Its walk would compare nothing, every field a proof or none there at all, and answer `true` of any neutral: two neutrals would then be one through the literal where their heads keep them apart, by nothing but the shape of their type. A struct meant to have one inhabitant is declared a proposition, where irrelevance decides the pair before it comes here.
 fn struct_eta(
     kernel: &mut Kernel,
     history: &mut History,
@@ -986,6 +893,7 @@ fn struct_eta(
 
     let fields = at.fields();
     let mut cursor = fields.cursor();
+    let mut data = false;
     for (index, field) in literal.fields.iter().enumerate() {
         let Some((_, type_)) = cursor.entry() else {
             return Ok(false);
@@ -995,6 +903,7 @@ fn struct_eta(
         if Sort::of(kernel, &type_)?.is_prop() {
             continue;
         }
+        data = true;
 
         let projection = Term::from(Subterm::Proj(Proj {
             head: other.clone(),
@@ -1007,7 +916,7 @@ fn struct_eta(
     }
 
     // The walk is driven by the literal's fields, so a literal shorter than the declaration ends it early; whether the telescope was consumed is what says the walk covered the type. Anything left standing is a field the neutral was never asked about, and accepting there would equate a malformed literal with any neutral at all.
-    Ok(cursor.is_done())
+    Ok(data && cursor.is_done())
 }
 
 /// The last chance before a structural refusal: grant each side the one definitional unfolding `force` withheld, and compare the results. A refusal when neither side has a folded recursive spelling to open.

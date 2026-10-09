@@ -1,4 +1,4 @@
-//! The seeds: one equation for each rule of conversion no law table states — beta, delta, zeta, iota at each elimination, eta at a function, a record, a struct and a unit, and irrelevance — and the near miss beside it.
+//! The seeds: one equation for each rule of conversion no law table states — beta, delta, zeta, iota at each elimination, eta at a function, a record and a struct, and irrelevance — and the near miss beside it, the unit type's among them, which has no eta.
 //!
 //! A seed is two sides at one type, under one list of binders. A held seed's right side is a neutral of that type, a binder or a call of one, so two held seeds at one type meet at it and chain, and a seed placed under a context keeps a side the context cannot reduce. A near miss differs from the held seed beside it in the one thing its rule must not let pass: a binder dropped, two components swapped, the other arm taken.
 //!
@@ -229,130 +229,113 @@ pub(super) const SEEDS: &[Seeds] = &[
             ),
         ],
     },
+    // The type with no field has no eta, and no type but a proposition makes two neutrals one. Each row below would hold by the shape of its type alone: its literal has no field of data to compare with a neutral's, and its two neutrals differ in their heads.
     Seeds {
         type_: "{}",
         binders: "u: {}, v: {}, f: (Nat) -> {}, e: (Nat) -> {}, n: Nat",
-        compound: Some(Compound {
-            binder: "u: {}",
-            term: "()",
-            binders: "",
-        }),
+        compound: None,
         seeds: &[
-            held("unit eta, the literal", "()", "u"),
-            held("unit eta, two neutrals", "v", "u"),
-            // Two sides of one shape, which a structural rule compares head against head: the type decides them, and no shape does.
-            held("unit eta, two applications", "f(n)", "e(n)"),
+            miss("a neutral at the unit type, against the literal", "()", "u"),
+            miss("two neutrals at the unit type", "v", "u"),
+            miss("two applications at the unit type", "f(n)", "e(n)"),
         ],
     },
-    // A function into a unit has one inhabitant too, and no rule says so but two composed: eta at the function carries the goal to the unit, whose type decides it.
+    // Eta at the function carries each goal to the unit, which decides nothing there.
     Seeds {
         type_: "(Nat) -> {}",
         binders: "f: (Nat) -> {}, e: (Nat) -> {}",
-        compound: Some(Compound {
-            binder: "f: (Nat) -> {}",
-            term: "(x: Nat) => ()",
-            binders: "",
-        }),
+        compound: None,
         seeds: &[
-            held(
-                "unit eta at a function into a unit, the literal",
+            miss(
+                "a neutral at a function into a unit, against the literal",
                 "(x: Nat) => ()",
                 "f",
             ),
-            held("unit eta at a function into a unit, two neutrals", "e", "f"),
+            miss("two neutrals at a function into a unit", "e", "f"),
         ],
     },
-    // A record whose fields each have one inhabitant has one too. The literal meets a neutral by its shape and two neutrals meet by nothing but the type, so a checker that takes the first and not the second holds `r` and `s` each equal to the literal and not to each other.
+    // A record of units has fields, so eta projects both sides, and each projection meets a unit.
     Seeds {
         type_: "{{}, {}}",
         binders: "r: {{}, {}}, s: {{}, {}}",
-        compound: Some(Compound {
-            binder: "r: {{}, {}}",
-            term: "((), ())",
-            binders: "",
-        }),
+        compound: None,
         seeds: &[
-            held(
-                "unit eta at a record of units, the literal",
+            miss(
+                "a neutral at a record of units, against the literal",
                 "((), ())",
                 "r",
             ),
-            held("unit eta at a record of units, two neutrals", "s", "r"),
+            miss("two neutrals at a record of units", "s", "r"),
         ],
     },
     Seeds {
         type_: "Empty",
         binders: "u: Empty, v: Empty",
-        compound: Some(Compound {
-            binder: "u: Empty",
-            term: "Empty {}",
-            binders: "",
-        }),
+        compound: None,
         seeds: &[
-            held("unit eta at a struct, the literal", "Empty {}", "u"),
-            held("unit eta at a struct, two neutrals", "v", "u"),
+            miss(
+                "a neutral at a struct with no field, against the literal",
+                "Empty {}",
+                "u",
+            ),
+            miss("two neutrals at a struct with no field", "v", "u"),
         ],
     },
-    // A struct whose fields each have one inhabitant has one too, and a nominal struct has no eta by its type: the literal meets a neutral by its shape, and two neutrals by nothing but the shape of the type.
+    // A struct of a unit and a proof holds a field of data, so its literal's eta fires, and compares the unit with the neutral's projection.
     Seeds {
         type_: "Unital",
         binders: "u: Unital, v: Unital, f: (Nat) -> Unital, e: (Nat) -> Unital, n: Nat, p: Holds(0 < 10)",
         compound: None,
         seeds: &[
-            held(
-                "one inhabitant at a struct, the literal",
+            miss(
+                "a neutral at a struct of a unit and a proof, against the literal",
                 "Unital { unit = (), proof = p }",
                 "u",
             ),
-            held("one inhabitant at a struct, two neutrals", "v", "u"),
-            held(
-                "one inhabitant at a struct, two applications",
+            miss("two neutrals at a struct of a unit and a proof", "v", "u"),
+            miss(
+                "two applications at a struct of a unit and a proof",
                 "f(n)",
                 "e(n)",
             ),
         ],
     },
-    // A struct nested in its own parameter is met again while its inhabitants are read, and is judged again: its declaration names no struct.
     Seeds {
         type_: "Box(Box(Empty))",
         binders: "u: Box(Box(Empty)), v: Box(Box(Empty)), f: (Nat) -> Box(Box(Empty)), e: (Nat) -> Box(Box(Empty)), n: Nat",
         compound: None,
         seeds: &[
-            held(
-                "one inhabitant at a struct nested in its own parameter, the literal",
+            miss(
+                "a neutral at a struct nested in its own parameter, against the literal",
                 "Box { held = Box { held = Empty {} } }",
                 "u",
             ),
-            held(
-                "one inhabitant at a struct nested in its own parameter, two neutrals",
+            miss(
+                "two neutrals at a struct nested in its own parameter",
                 "v",
                 "u",
             ),
-            held(
-                "one inhabitant at a struct nested in its own parameter, two applications",
+            miss(
+                "two applications at a struct nested in its own parameter",
                 "f(n)",
                 "e(n)",
             ),
         ],
     },
-    // A struct declared in a group is referred to through the group, which weak-head reduction leaves folded: each checker reads a goal's type forced, so its inhabitants are read there as anywhere.
+    // A struct declared in a group is referred to through the group, which weak-head reduction leaves folded: each checker reads a goal's type forced, and reads no more off it there than anywhere.
     Seeds {
         type_: "Holder",
         binders: "u: Holder, v: Holder, f: (Nat) -> Holder, e: (Nat) -> Holder, n: Nat",
         compound: None,
         seeds: &[
-            held(
-                "one inhabitant at a struct declared in a group, the literal",
+            miss(
+                "a neutral at a struct declared in a group, against the literal",
                 "Holder { member = Member { unit = () }, unit = () }",
                 "u",
             ),
-            held(
-                "one inhabitant at a struct declared in a group, two neutrals",
-                "v",
-                "u",
-            ),
-            held(
-                "one inhabitant at a struct declared in a group, two applications",
+            miss("two neutrals at a struct declared in a group", "v", "u"),
+            miss(
+                "two applications at a struct declared in a group",
                 "f(n)",
                 "e(n)",
             ),

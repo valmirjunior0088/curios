@@ -656,48 +656,49 @@ pub(super) const AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA_IN_AN_ARM: &s
         /std/Io/pure(())
         "#;
 
-pub(super) const ANY_TWO_TERMS_CONVERT_AT_A_TYPE_WITH_NO_FIELD: &str = r#"
-        use /std/{Eq, Nat, Bool};
+pub(super) const TWO_NEUTRALS_AT_THE_UNIT_TYPE_STAY_APART: &str = r#"
+        use /std/{Eq};
+
+        let apart(r : {}, s : {}) -> Eq(@({}))(r, s) = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const A_NEUTRAL_AT_THE_UNIT_TYPE_IS_NOT_ITS_LITERAL: &str = r#"
+        use /std/{Eq};
+
+        let apart(r : {}) -> Eq(@({}))(r, ()) = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const TWO_NEUTRALS_AT_A_STRUCT_WITH_NO_FIELD_STAY_APART: &str = r#"
+        use /std/{Eq};
 
         struct U: pub Type {}
 
-        let at_the_unit(F : ({}) -> Type, r : {}, s : {}, x : F(r)) -> F(s) = x;
+        let apart(F : (U) -> Type, r : U, s : U, x : F(r)) -> F(s) = x;
 
-        let at_a_struct(F : (U) -> Type, r : U, s : U, x : F(r)) -> F(s) = x;
+        /std/Io/pure(())
+        "#;
 
-        let at_a_record_of_units(r : {a: {}, b: {}}, s : {a: {}, b: {}})
-            -> Eq(@({a: {}, b: {}}))(r, s)
-            = Eq/refl();
+pub(super) const TWO_NEUTRALS_AT_A_FUNCTION_INTO_A_UNIT_STAY_APART: &str = r#"
+        use /std/{Eq, Nat};
 
-        let at_a_function_into_a_unit(f : (Nat) -> {}, g : (Nat) -> {})
-            -> Eq(@((Nat) -> {}))(f, g)
-            = Eq/refl();
+        let apart(f : (Nat) -> {}, g : (Nat) -> {}) -> Eq(@((Nat) -> {}))(f, g) = Eq/refl();
 
-        let two_applications(f : (Nat) -> {}, g : (Nat) -> {}, n : Nat)
-            -> Eq(@({}))(f(n), g(n))
-            = Eq/refl();
+        /std/Io/pure(())
+        "#;
 
-        let two_stuck_matches(b : Bool, r : {}, s : {})
-            -> Eq(@({}))(match b: (_) => {} | true => r | false => r end,
-                         match b: (_) => {} | true => s | false => s end)
-            = Eq/refl();
+pub(super) const TWO_STUCK_MATCHES_AT_A_RECORD_OF_UNITS_STAY_APART: &str = r#"
+        use /std/{Eq, Bool};
 
-        let two_stuck_matches_at_a_struct(b : Bool, r : U, s : U)
-            -> Eq(@(U))(match b: (_) => U | true => r | false => r end,
-                        match b: (_) => U | true => s | false => s end)
-            = Eq/refl();
-
-        let two_stuck_matches_at_a_record_of_units(b : Bool, r : {{}, {}}, s : {{}, {}})
+        let apart(b : Bool, r : {{}, {}}, s : {{}, {}})
             -> Eq(@({{}, {}}))(match b: (_) => {{}, {}} | true => r | false => r end,
                                match b: (_) => {{}, {}} | true => s | false => s end)
             = Eq/refl();
 
-        let two_stuck_matches_at_a_function_into_a_unit(b : Bool, f : (Nat) -> {}, g : (Nat) -> {})
-            -> Eq(@((Nat) -> {}))(match b: (_) => (Nat) -> {} | true => f | false => f end,
-                                  match b: (_) => (Nat) -> {} | true => g | false => g end)
-            = Eq/refl();
-
-        /std/print(Nat/to_str(1))
+        /std/Io/pure(())
         "#;
 
 pub(super) const TWO_NEUTRALS_AT_A_RECORD_WITH_A_RELEVANT_FIELD_STAY_APART: &str = r#"
@@ -708,42 +709,42 @@ pub(super) const TWO_NEUTRALS_AT_A_RECORD_WITH_A_RELEVANT_FIELD_STAY_APART: &str
         /std/Io/pure(())
         "#;
 
-pub(super) const ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_WITH_ONE_INHABITANT: &str = r#"
-        use /std/{Eq, Nat, Bool};
+pub(super) const TWO_NEUTRALS_AT_A_STRUCT_OF_A_UNIT_STAY_APART: &str = r#"
+        use /std/{Eq};
 
         struct W: pub Type { u: {} }
 
+        let apart(r : W, s : W) -> Eq(@(W))(r, s) = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const TWO_NEUTRALS_AT_A_STRUCT_OF_A_PROOF_STAY_APART: &str = r#"
+        use /std/{Eq};
+
         struct Proved: pub Type { p: Eq()(0, 0) }
 
-        struct N: pub Type { w: W, f: (Nat) -> {}, r: {a: {}, b: Proved} }
+        let apart(r : Proved, s : Proved) -> Eq(@(Proved))(r, s) = Eq/refl();
 
-        struct Pair(A: Type): pub Type { a: A, b: A }
+        /std/Io/pure(())
+        "#;
 
-        struct Other(A: Type): pub Type { held: A }
+pub(super) const ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_DECLARED_A_PROPOSITION: &str = r#"
+        use /std/{Eq, Nat, Bool};
 
-        let at_a_struct_of_a_unit(r : W, s : W) -> Eq(@(W))(r, s) = Eq/refl();
+        struct Proved: pub Prop { p: Eq()(0, 0) }
 
-        let by_a_cast(F : (W) -> Type, r : W, s : W, x : F(r)) -> F(s) = x;
+        let two_neutrals(r : Proved, s : Proved) -> Eq(@(Proved))(r, s) = Eq/refl();
 
-        let at_a_struct_of_a_proof(r : Proved, s : Proved) -> Eq(@(Proved))(r, s) = Eq/refl();
+        let by_a_cast(F : (Proved) -> Type, r : Proved, s : Proved, x : F(r)) -> F(s) = x;
 
-        let at_a_struct_of_such(r : N, s : N) -> Eq(@(N))(r, s) = Eq/refl();
-
-        let two_applications(f : (Nat) -> W, g : (Nat) -> W, n : Nat)
-            -> Eq(@(W))(f(n), g(n))
+        let two_applications(f : (Nat) -> Proved, g : (Nat) -> Proved, n : Nat)
+            -> Eq(@(Proved))(f(n), g(n))
             = Eq/refl();
 
-        let two_stuck_matches(b : Bool, r : W, s : W)
-            -> Eq(@(W))(match b: (_) => W | true => r | false => r end,
-                        match b: (_) => W | true => s | false => s end)
-            = Eq/refl();
-
-        let at_a_struct_nested_in_its_own_parameter(r : Pair(Pair({})), s : Pair(Pair({})))
-            -> Eq(@(Pair(Pair({}))))(r, s)
-            = Eq/refl();
-
-        let at_a_struct_nested_under_another(r : Pair(Other(Pair({}))), s : Pair(Other(Pair({}))))
-            -> Eq(@(Pair(Other(Pair({})))))(r, s)
+        let two_stuck_matches(b : Bool, r : Proved, s : Proved)
+            -> Eq(@(Proved))(match b: (_) => Proved | true => r | false => r end,
+                             match b: (_) => Proved | true => s | false => s end)
             = Eq/refl();
 
         /std/print(Nat/to_str(1))
@@ -808,22 +809,14 @@ pub(super) const TWO_NEUTRALS_AT_A_STRUCT_THAT_REACHES_ITSELF_STAY_APART_INSIDE_
 pub(super) const A_GOALS_TYPE_IS_READ_FORCED: &str = r#"
         use /std/{Eq, Nat, Bool};
 
-        struct Outer: pub Type { inner: Inner, u: {} }
-        and Inner: pub Type { u: {} }
-
-        struct Pair(A: Type): pub Type { a: A, b: A }
-
-        let Tower(n : Nat) -> Type = match n: (_) => Type | 0 => {} | p + 1 => Pair(Tower(p)) end;
+        struct Outer: pub Prop { inner: Inner, p: Eq()(0, 0) }
+        and Inner: pub Prop { p: Eq()(0, 0) }
 
         let at_a_member(r : Inner, s : Inner) -> Eq(@(Inner))(r, s) = Eq/refl();
 
         let at_a_member_that_holds_another(r : Outer, s : Outer) -> Eq(@(Outer))(r, s) = Eq/refl();
 
         let by_a_cast(F : (Inner) -> Type, r : Inner, s : Inner, x : F(r)) -> F(s) = x;
-
-        let at_a_struct_a_definition_computes(r : Tower(2), s : Tower(2))
-            -> Eq(@(Tower(2)))(r, s)
-            = Eq/refl();
 
         let where_a_lookup_reads_the_type(b : Bool, r : Outer, s : Outer)
             -> Eq(@(Nat))((match b: (_) => {Outer, Nat} | true => (r, 1) | false => (r, 2) end).1,
@@ -844,24 +837,19 @@ pub(super) const TWO_NEUTRALS_AT_A_GROUPS_MEMBER_WITH_A_RELEVANT_FIELD_STAY_APAR
         /std/Io/pure(())
         "#;
 
-pub(super) const TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_ONE_INHABITANT: &str = r#"
+pub(super) const TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_PROPOSITION: &str = r#"
         use /std/{Eq, Nat, Bool};
 
-        struct W: pub Type { u: {} }
+        struct Proved: pub Prop { p: Eq()(0, 0) }
 
-        let at_a_record_of_units(b : Bool, r : {{}, {}}, s : {{}, {}})
-            -> Eq(@(Nat))((match b: (_) => {{{}, {}}, Nat} | true => (r, 1) | false => (r, 2) end).1,
-                          (match b: (_) => {{{}, {}}, Nat} | true => (s, 1) | false => (s, 2) end).1)
+        let at_a_struct_declared_a_proposition(b : Bool, r : Proved, s : Proved)
+            -> Eq(@(Nat))((match b: (_) => {Proved, Nat} | true => (r, 1) | false => (r, 2) end).1,
+                          (match b: (_) => {Proved, Nat} | true => (s, 1) | false => (s, 2) end).1)
             = Eq/refl();
 
-        let at_a_function_into_a_unit(b : Bool, r : (Nat) -> {}, s : (Nat) -> {})
-            -> Eq(@(Nat))((match b: (_) => {(Nat) -> {}, Nat} | true => (r, 1) | false => (r, 2) end).1,
-                          (match b: (_) => {(Nat) -> {}, Nat} | true => (s, 1) | false => (s, 2) end).1)
-            = Eq/refl();
-
-        let at_a_struct_of_a_unit(b : Bool, r : W, s : W)
-            -> Eq(@(Nat))((match b: (_) => {W, Nat} | true => (r, 1) | false => (r, 2) end).1,
-                          (match b: (_) => {W, Nat} | true => (s, 1) | false => (s, 2) end).1)
+        let at_a_function_into_a_proposition(b : Bool, r : (Nat) -> Proved, s : (Nat) -> Proved)
+            -> Eq(@(Nat))((match b: (_) => {(Nat) -> Proved, Nat} | true => (r, 1) | false => (r, 2) end).1,
+                          (match b: (_) => {(Nat) -> Proved, Nat} | true => (s, 1) | false => (s, 2) end).1)
             = Eq/refl();
 
         let at_a_proposition_whose_implicit_is_solved(b : Bool, p : Eq()(0, 0), q : Eq()(0, 0))
@@ -870,6 +858,17 @@ pub(super) const TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_ONE_
             = Eq/refl();
 
         /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const TWO_NEUTRALS_STAY_APART_WHERE_A_LOOKUP_GIVES_THEM_A_RECORD_OF_UNITS: &str = r#"
+        use /std/{Eq, Nat, Bool};
+
+        let apart(b : Bool, r : {{}, {}}, s : {{}, {}})
+            -> Eq(@(Nat))((match b: (_) => {{{}, {}}, Nat} | true => (r, 1) | false => (r, 2) end).1,
+                          (match b: (_) => {{{}, {}}, Nat} | true => (s, 1) | false => (s, 2) end).1)
+            = Eq/refl();
+
+        /std/Io/pure(())
         "#;
 
 pub(super) const TWO_NEUTRALS_STAY_APART_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_A_RELEVANT_FIELD:
@@ -901,13 +900,6 @@ pub(super) const A_STUCK_ELIMINATION_IS_TYPED_BY_ITS_RESULT_AT_ITS_SCRUTINEE: &s
                           (match c: (_) => {Eq()(0, 0), Nat}
                            | true => (match b: (_) => Eq()(0, 0) | true => q | false => p end, 1)
                            | false => (p, 2) end).1)
-            = Eq/refl();
-
-        let at_a_record_of_units(b : Bool, c : Bool, r : {{}, {}}, s : {{}, {}})
-            -> Eq(@(Nat))((match c: (_) => {{{}, {}}, Nat}
-                           | true => (match b: (_) => {{}, {}} | true => r | false => s end, 1)
-                           | false => (r, 2) end).1,
-                          (match c: (_) => {{{}, {}}, Nat} | true => (r, 1) | false => (r, 2) end).1)
             = Eq/refl();
 
         /std/print(Nat/to_str(1))
@@ -1515,10 +1507,24 @@ pub(super) const A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS: &str = r#"
         /std/print(Nat/to_str(1))
         "#;
 
-pub(super) const A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE: &str = r#"
+pub(super) const A_STRUCT_LITERAL_OF_PROOFS_ALONE_HAS_NO_ETA: &str = r#"
         use /std/{Eq, Nat};
 
         struct Sealed : pub Type {
+            one : Eq()(0, 0),
+            two : Eq()(1, 1)
+        }
+
+        let apart(f : (Sealed) -> Nat, b : Sealed, p : Eq()(0, 0), q : Eq()(1, 1))
+            -> Eq()(f(Sealed { one = p, two = q }), f(b)) = Eq/refl();
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const A_STRUCT_DECLARED_A_PROPOSITION_MEETS_ITS_LITERAL: &str = r#"
+        use /std/{Eq, Nat};
+
+        struct Sealed : pub Prop {
             one : Eq()(0, 0),
             two : Eq()(1, 1)
         }
