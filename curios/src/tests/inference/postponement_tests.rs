@@ -104,7 +104,7 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
     assert_eq!(run(source), b"2");
 }
 
-// A postponed argument keeps its *raw* surface spelling when `elaborate_apply` opens the rest of the telescope, and that spelling is load-bearing: reducing through it is what lets the result `expect` pin the metavariables the slot is waiting on. But `elaborate_proj` only resolves a label projection on the *checked* form, so beta-reducing a raw lambda body through the result type manufactures `head.label` where the settled spelling is `head.index`. The result `expect` is therefore two-phase: best-effort through the raw spelling, then authoritative through the settled arguments.
+// A label projection in a postponed lambda's body is resolved on the checked form. The walk opens the rest of the telescope through the argument's placeholder, so no raw body reaches the call's result type, where a `head.label` would stand for what the settled argument spells `head.index`.
 #[test]
 fn postponed_lambda_projecting_by_label_elaborates() {
     let source = r#"
