@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::{HeadKey, NumLit, Subterm, Transient, WitnessId, WitnessKey},
+    crate::{HeadKey, Level, NumLit, Subterm, Transient, UniverseMetaId, WitnessId, WitnessKey},
     curios_utilities::{RootKind, Sign},
     std::cell::RefCell,
 };
@@ -260,6 +260,41 @@ fn a_surviving_transient_refuses_the_zonked_projection() {
 
     let refusal = Zonked::project(&module).expect_err("the transient must refuse the projection");
     assert!(refusal.to_string().contains("infixed"), "{refusal}");
+}
+
+/// A level that holds a universe metavariable refuses the projection, in the two places `curios-cert`'s `a_level_holding_an_unsolved_universe_metavariable_is_refused` puts one: a definition's declared type and a registry entry's result sort. The level stands in a term's node and in no metavariable a term holds, so the evidence reads a flag of its own for it; the same two places at a ground level project.
+#[test]
+fn a_surviving_universe_metavariable_refuses_the_zonked_projection() {
+    let at = |level: Level| {
+        let mut typed = definition("typed", UniverseContext::empty());
+        typed.type_ = Term::type_at(level.clone());
+
+        let mut family = definition("Levelled", UniverseContext::empty());
+        family.kind = DefinitionKind::Nominal(Rc::new(Nominal::Inductive(InductDecl {
+            universe_context: UniverseContext::default(),
+            arity: Telescope::done(Telescope::done(())),
+            constructors: Vec::new(),
+            result_sort: Term::type_at(level),
+            module: Qualifier::default(),
+            rep_public: true,
+            polarities: Vec::new(),
+            variances: Vec::new(),
+        })));
+
+        [("typed", typed), ("Levelled", family)]
+    };
+
+    for (name, item) in at(Level::meta(UniverseMetaId::from(0usize))) {
+        let refusal = Zonked::project(&over(vec![Item::Let(item)]))
+            .expect_err("the level must refuse the projection");
+        assert!(refusal.to_string().contains(name), "{refusal}");
+    }
+    for (name, item) in at(Level::zero()) {
+        assert!(
+            Zonked::project(&over(vec![Item::Let(item)])).is_ok(),
+            "{name}"
+        );
+    }
 }
 
 /// A module with no registry and no entry, over `items`.

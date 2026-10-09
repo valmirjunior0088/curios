@@ -173,6 +173,9 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     /// Whether any elaboration-transient node survives in this value — the sibling of [`Bound::has_metavar`], asked by the same zonk-evidence boundary.
     fn has_transient(&self) -> bool;
 
+    /// Whether a level in this value holds a universe metavariable: the third answer the zonk-evidence boundary asks, since a level stands in a term's node and in no metavariable of its own.
+    fn has_universe_meta(&self) -> bool;
+
     /// `true` iff the term has no loose de Bruijn indices — i.e. it's not floating inside some outer scope.
     fn closed(&self) -> bool {
         self.reach() == 0
@@ -255,6 +258,10 @@ impl Bound for Vec<Term> {
     fn has_transient(&self) -> bool {
         self.iter().any(Bound::has_transient)
     }
+
+    fn has_universe_meta(&self) -> bool {
+        self.iter().any(Bound::has_universe_meta)
+    }
 }
 
 impl Bound for () {
@@ -273,6 +280,10 @@ impl Bound for () {
     }
 
     fn has_transient(&self) -> bool {
+        false
+    }
+
+    fn has_universe_meta(&self) -> bool {
         false
     }
 }

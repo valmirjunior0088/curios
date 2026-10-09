@@ -768,4 +768,17 @@ impl<B: Bound> Bound for Telescope<B> {
             }
         }
     }
+
+    fn has_universe_meta(&self) -> bool {
+        let mut current = self;
+        loop {
+            match current {
+                Telescope::Cons(_, ty, rest) => match ty.has_universe_meta() {
+                    true => return true,
+                    false => current = rest.body(),
+                },
+                Telescope::Done(body) => return body.has_universe_meta(),
+            }
+        }
+    }
 }

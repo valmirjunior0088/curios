@@ -1578,7 +1578,7 @@ pub fn free_locals_outside(
     found
 }
 
-/// Evidence that a module is finished with elaboration's own syntax — the kernel's whole `NotCore` class: no `Metavar` and no `Transient` node survives in any term-bearing position, and a program's entry states the type it was judged at. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar` and `has_transient` are per-node cached derivations.
+/// Evidence that a module is finished with elaboration's own syntax — the kernel's whole `NotCore` class: no `Metavar` and no `Transient` node survives in any term-bearing position, no level in one holds a universe metavariable, and a program's entry states the type it was judged at. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar`, `has_transient` and `has_universe_meta` are per-node cached derivations.
 ///
 /// The wrapper is interface-level evidence, never a license to trust: the kernel keeps its own metavariable refusals, so a `Zonked` constructed wrongly is still caught where soundness lives.
 #[derive(Debug, Clone)]
@@ -1600,7 +1600,9 @@ impl Zonkable for Program {
     /// The module's first unfinished place, then the entry's: a program is finished when its module is and its entry states the type it was judged at, meta-free.
     fn unfinished(&self) -> Option<String> {
         zonked_refusal(&self.module).or_else(|| {
-            let unfinished = |term: &Term| term.has_metavar() || term.has_transient();
+            let unfinished = |term: &Term| {
+                term.has_metavar() || term.has_transient() || term.has_universe_meta()
+            };
             match &self.entry.type_ {
                 None => Some("the entrypoint states no type it was judged at".to_owned()),
                 Some(type_) if unfinished(&self.entry.body) || unfinished(type_) => {
@@ -1675,13 +1677,13 @@ impl fmt::Display for ZonkedRefusal {
     }
 }
 
-/// The term-bearing places of a module elaboration and zonk are answerable for — a definition's type and body and the telescopes of the entry a former carries — walked with the cached `has_metavar`/`has_transient` bits, first offender wins.
+/// The term-bearing places of a module elaboration and zonk are answerable for — a definition's type and body and the telescopes of the entry a former carries — walked with the cached `has_metavar`, `has_transient` and `has_universe_meta` bits, first offender wins.
 fn zonked_refusal(module: &Module) -> Option<String> {
     fn unfinished(term: &Term) -> bool {
-        term.has_metavar() || term.has_transient()
+        term.has_metavar() || term.has_transient() || term.has_universe_meta()
     }
     fn unfinished_bound<B: Bound>(value: &B) -> bool {
-        value.has_metavar() || value.has_transient()
+        value.has_metavar() || value.has_transient() || value.has_universe_meta()
     }
 
     for item in &module.items {

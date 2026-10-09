@@ -816,9 +816,9 @@ fn universe_erasure_is_a_validated_structural_projection() {
         )],
         nat_lit(0),
     );
-    assert!(
-        super::lower::projected(Erasures::nothing(), zonked(&invalid.module).as_module()).is_err()
-    );
+    // The zonk evidence refuses a level that holds a metavariable, so the module is handed over as it stands: the projection's own validation is what answers here.
+    assert!(Zonked::project(&invalid.module).is_err());
+    assert!(super::lower::projected(Erasures::nothing(), &invalid.module).is_err());
 }
 
 #[test]

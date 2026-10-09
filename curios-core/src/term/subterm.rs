@@ -990,6 +990,10 @@ impl Bound for Subterm {
     fn has_transient(&self) -> bool {
         Subterm::has_transient(self)
     }
+
+    fn has_universe_meta(&self) -> bool {
+        Subterm::has_universe_meta(self)
+    }
 }
 
 fn max_reach<'a>(terms: impl IntoIterator<Item = &'a Term>) -> usize {
