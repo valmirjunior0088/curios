@@ -326,7 +326,7 @@ fn a_match_nothing_types_is_refused_as_its_eliminator_refuses() {
 
 // A candidate re-validation cannot judge yet waits, so what compiles does not follow the order parked work woke in. The claim's two lambdas park against the claim's type, and `Eq/refl()`'s own implicit `z : ?A` meets the first of them at the item's drain while `?A` is still unsolved, one retry short of the equation that solves it. Checking the lambda against a type that is not known yet judges nothing: the solution waits, the drain's next sweep solves `?A`, and the lambda checks.
 //
-// The refusal beside it is what says the wait is no acceptance: the same claim over two lambdas that differ is a type mismatch, as it was.
+// The refusal beside it is what says the wait is no acceptance: the same claim over two lambdas that differ is a mismatch, as it was.
 #[test]
 fn reflexivity_at_a_lambda_waits_for_the_type_the_drain_settles() {
     let source = r#"
@@ -347,7 +347,7 @@ fn reflexivity_at_two_lambdas_that_differ_is_a_mismatch() {
         /std/print("unreachable")
         "#,
     );
-    assert!(report.contains("type mismatch"), "{report}");
+    assert!(report.contains("terms differ"), "{report}");
 }
 
 // A written argument is checked as written, and then held to its call's type. A list or a tuple at a slot whose type is still a metavariable waits behind a placeholder, and the call's expected type states the slot's value before the argument is checked. Conversion waits on the placeholder as it waits on a recursive group's slot, so nothing but the argument's own check fills it, and the value the type states meets the argument that was written. Mutation-checked: letting conversion solve a placeholder accepts both, with the type's list standing where the argument was written.
@@ -363,7 +363,7 @@ fn a_hidden_argument_is_held_to_the_value_its_calls_type_states() {
         /std/print("unreachable")
         "#,
     );
-    assert!(tagged.contains("type mismatch"), "{tagged}");
+    assert!(tagged.contains("terms differ"), "{tagged}");
 
     let reflexive = error(
         r#"
@@ -372,7 +372,7 @@ fn a_hidden_argument_is_held_to_the_value_its_calls_type_states() {
         /std/print("unreachable")
         "#,
     );
-    assert!(reflexive.contains("type mismatch"), "{reflexive}");
+    assert!(reflexive.contains("terms differ"), "{reflexive}");
 }
 
 // A plain argument as well, where what would stand in its place is a value the program runs with. Mutation-checked, as above: the payload read back is the type's.
@@ -388,7 +388,7 @@ fn a_plain_argument_is_held_to_the_value_its_calls_type_states() {
         /std/print("unreachable")
         "#,
     );
-    assert!(list.contains("type mismatch"), "{list}");
+    assert!(list.contains("terms differ"), "{list}");
 
     let tuple = error(
         r#"
@@ -400,7 +400,7 @@ fn a_plain_argument_is_held_to_the_value_its_calls_type_states() {
         /std/print("unreachable")
         "#,
     );
-    assert!(tuple.contains("type mismatch"), "{tuple}");
+    assert!(tuple.contains("terms differ"), "{tuple}");
 }
 
 // A literal that parks inside an argument — a match arm's tuple, a `let` body's — is no pending of the call's own, so no force tier runs it and only its retry does. It is held to the type as the argument itself is. Mutation-checked, as above.
@@ -417,7 +417,7 @@ fn a_literal_inside_an_argument_is_held_to_the_value_its_calls_type_states() {
         /std/print("unreachable")
         "#,
     );
-    assert!(arm.contains("type mismatch"), "{arm}");
+    assert!(arm.contains("terms differ"), "{arm}");
 
     let body = error(
         r#"
@@ -429,7 +429,7 @@ fn a_literal_inside_an_argument_is_held_to_the_value_its_calls_type_states() {
         /std/print("unreachable")
         "#,
     );
-    assert!(body.contains("type mismatch"), "{body}");
+    assert!(body.contains("terms differ"), "{body}");
 }
 
 // What the wait gives: the argument is checked first, so what it says reaches the metavariables its call's type leaves open — `h` and `l` are read off the written list — and an argument that agrees with the type up to conversion is the one the program holds. Mutation-checked: with conversion solving the placeholder, the written list is never compared and `h` is reported as not inferred.

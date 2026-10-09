@@ -279,6 +279,7 @@ impl fmt::Display for Displayed<'_> {
                 inferred,
                 expected,
                 declined,
+                terms,
             } => {
                 // Reports erase universe instances and splice nested concatenations, which reads better everywhere except here: when the instances or the grouping *are* the disagreement, both sides render as one string and the message states nothing. Detected on the rendering rather than on the terms, so it covers every axis that could collapse two sides into one spelling and not merely the ones that are known to. Grouping is tried first because it changes nothing where no nesting is present, whereas two polymorphic instances always differ once their levels are shown, so trying the universes first would answer with two metavariable ids where the nesting was the difference.
                 let plain = (
@@ -308,14 +309,20 @@ impl fmt::Display for Displayed<'_> {
                     Some(detailed) => detailed,
                     None => plain,
                 };
-                write!(
-                    f,
-                    "type mismatch\n  inferred: {shown_inferred}\n  expected: {shown_expected}"
-                )?;
+                match terms {
+                    true => write!(
+                        f,
+                        "terms differ\n  written: {shown_inferred}\n  expected: {shown_expected}"
+                    )?,
+                    false => write!(
+                        f,
+                        "type mismatch\n  inferred: {shown_inferred}\n  expected: {shown_expected}"
+                    )?,
+                }
                 // The collision every beginner meets once: a type handed over where a value of it belonged — `Eq/cong(f, Eq()(a, b))` with the statement in the proof's seat. The mismatch line already says `Prop` against `Eq()(…)`, but only to a reader who knows a proposition is a type and a proof is its inhabitant, which is the very thing they have not learned yet. One sentence names the level confusion; the `Type` twin is the same mistake with a type where a value belonged.
                 let inferred_is_sort = matches!(&***inferred, Subterm::Type(_) | Subterm::Prop(_));
                 let expected_is_sort = matches!(&***expected, Subterm::Type(_) | Subterm::Prop(_));
-                if inferred_is_sort && !expected_is_sort {
+                if !terms && inferred_is_sort && !expected_is_sort {
                     let (what, held) = match &***inferred {
                         Subterm::Prop(_) => ("a proposition", "a proof of it"),
                         _ => ("a type", "a value of it"),

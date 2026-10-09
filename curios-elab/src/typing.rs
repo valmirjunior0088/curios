@@ -827,8 +827,18 @@ fn retry_one(context: &mut Context, parked: ParkedProblem) -> Result<(), Error> 
             match problem_outcome(context, goal.clone(), origin.extent())? {
                 Outcome::Converts => Retry::Converts,
                 // Built here, inside the restored frame, rather than at the report below: `display_mismatch` reads the sides through whatever solutions have landed, so they name the actual disagreement rather than the metavariables it arrived wrapped in (see `resolved_for_display`). A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
+                // What was compared is read off the type the problem is posed at: at a sort the two are types, one inferred and one expected, and anywhere else they are terms a type states at one position.
                 Outcome::Mismatch(declined) => Retry::Mismatch(
-                    display_mismatch(context, &origin, &goal.this, &goal.that).declined(declined),
+                    match &*goal.type_ {
+                        Subterm::Type(_) | Subterm::Prop(_) => {
+                            display_mismatch(context, &origin, &goal.this, &goal.that)
+                        }
+                        _ => Error::terms_differ(
+                            resolved_for_display(context, &goal.this),
+                            resolved_for_display(context, &goal.that),
+                        ),
+                    }
+                    .declined(declined),
                 ),
                 Outcome::Blocked(goals) => Retry::Blocked(goals),
             },

@@ -217,6 +217,8 @@ pub enum Error {
         expected: Box<Term>,
         /// What conversion declined to compare on the way here, where it declined anything.
         declined: Option<Declined>,
+        /// Whether the two are terms a type states at one position, where neither is a type and neither was inferred: the argument a call was written with against what its declared type holds in that argument's place. A report then says that two terms differ, and names the one the program wrote as that.
+        terms: bool,
     },
     /// The `/std/Monad/bind` application a postfix `!` desugars to, checked against a region that has nothing to sequence in: `bind` produces `M(B)` and the region's type stands over no result at all.
     ///
@@ -706,6 +708,17 @@ impl Error {
             inferred: Box::new(inferred.into()),
             expected: Box::new(expected.into()),
             declined: None,
+            terms: false,
+        }
+    }
+
+    /// Two terms a type states at one position, which differ: `written` the program's, `expected` what the type it is held to states there.
+    pub(crate) fn terms_differ<U: Into<Term>, V: Into<Term>>(written: U, expected: V) -> Self {
+        Self::TypeMismatch {
+            inferred: Box::new(written.into()),
+            expected: Box::new(expected.into()),
+            declined: None,
+            terms: true,
         }
     }
 
@@ -713,11 +726,15 @@ impl Error {
     pub(crate) fn declined(self, declined: Option<Declined>) -> Self {
         match self {
             Self::TypeMismatch {
-                inferred, expected, ..
+                inferred,
+                expected,
+                terms,
+                ..
             } => Self::TypeMismatch {
                 inferred,
                 expected,
                 declined,
+                terms,
             },
             other => other,
         }
