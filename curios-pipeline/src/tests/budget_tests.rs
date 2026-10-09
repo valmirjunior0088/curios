@@ -85,8 +85,8 @@ fn checks(source: &str, budget: u64, scope: &[&Unit]) -> bool {
         budget,
         Predecessors::over(scope),
         &SYNTAX,
-        &entrypoint,
-        &RootSource::none(),
+        &UnitSource::entry(&entrypoint, &RootSource::none()),
+        None,
         EntryTail::Authored,
     )
     .is_ok()

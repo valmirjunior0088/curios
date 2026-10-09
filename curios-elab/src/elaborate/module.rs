@@ -19,8 +19,8 @@ use {
         decide_polarities, definition_variances, family_levels, goal_sites, hold_variances,
         is_prop, record_definition_totality, record_superclasses, record_variances, reduce_with,
         register_witness, report_goals, sort_term, stamp_totality, state_proof_binders,
-        superclass_targets, test_program_tail, validate_universes, zonk, zonk_arity, zonk_entry,
-        zonk_published, zonk_solved_term_metas,
+        superclass_targets, test_program_tail, validate_entry_universes, validate_universes, zonk,
+        zonk_arity, zonk_entry, zonk_published, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_core::{
@@ -1929,8 +1929,22 @@ pub fn elaborate_and_zonk_program<'s>(
     minted: &Minted,
     tail: Tail<'_>,
 ) -> Result<(Module, Option<Entrypoint>), Error> {
-    let (finalized, _) = elaborate_and_zonk(context, established, module, minted, Some(tail))?;
-    raise(finalized)
+    elaborate_and_zonk_entry(context, established, module, minted, tail)
+        .map(|(module, entry, _)| (module, entry))
+}
+
+/// [`elaborate_and_zonk_program`] with what each declaration of `module` asked beside it: what a program's declarations are compiled by where they are a unit, kept and compiled over like any other, and the term that closes the program is elaborated in their walk.
+///
+/// One walk and not two, so what is reported of a program holding a refused declaration is every refusal and what the entry said beside them, as it is of a program compiled whole.
+pub fn elaborate_and_zonk_entry<'s>(
+    context: &mut Context<'s>,
+    established: &'s Established<'_>,
+    module: &Module,
+    minted: &Minted,
+    tail: Tail<'_>,
+) -> Result<(Module, Option<Entrypoint>, Traces), Error> {
+    let (finalized, traces) = elaborate_and_zonk(context, established, module, minted, Some(tail))?;
+    raise(finalized).map(|(module, entry)| (module, entry, traces))
 }
 
 /// [`elaborate_and_zonk_program`] with the erasure obligations *reported* rather than raised.
@@ -2026,6 +2040,31 @@ pub fn elaborate_and_zonk_unit_over<'s>(
     module: &Module,
     minted: &Minted,
 ) -> Result<Recompiled, Error> {
+    elaborate_and_zonk_over(context, established, recompile, module, minted, None)
+        .map(|(recompiled, _)| recompiled)
+}
+
+/// [`elaborate_and_zonk_entry`] for a program's declarations compiled over a baseline: the walk [`elaborate_and_zonk_unit_over`] makes, with the term `tail` closes the program with elaborated at its end, as it is where nothing is kept. The entry is elaborated on every compile: it has no name to be kept under.
+pub fn elaborate_and_zonk_entry_over<'s>(
+    context: &mut Context<'s>,
+    established: &'s Established<'_>,
+    recompile: Recompile<'_>,
+    module: &Module,
+    minted: &Minted,
+    tail: Tail<'_>,
+) -> Result<(Recompiled, Option<Entrypoint>), Error> {
+    elaborate_and_zonk_over(context, established, recompile, module, minted, Some(tail))
+}
+
+/// The walk a unit compiled over a baseline is elaborated by, with the term `tail` closes a program with where there is one.
+fn elaborate_and_zonk_over<'s>(
+    context: &mut Context<'s>,
+    established: &'s Established<'_>,
+    recompile: Recompile<'_>,
+    module: &Module,
+    minted: &Minted,
+    tail: Option<Tail<'_>>,
+) -> Result<(Recompiled, Option<Entrypoint>), Error> {
     curios_profile::profile!("elaborate_and_zonk_unit_over");
     grown(|| {
         let over = Over {
@@ -2036,11 +2075,11 @@ pub fn elaborate_and_zonk_unit_over<'s>(
             established,
         };
         let elaborated =
-            elaborate_module_suffix(context, Some(established), Some(over), module, minted, None)?;
+            elaborate_module_suffix(context, Some(established), Some(over), module, minted, tail)?;
         let finalized = finalize_and_check(
             context,
             elaborated.module,
-            None,
+            elaborated.entry,
             elaborated.held,
             elaborated.obligations,
         );
@@ -2049,8 +2088,8 @@ pub fn elaborate_and_zonk_unit_over<'s>(
         }
         let Finalized {
             module: made,
+            entry,
             obligations,
-            ..
         } = finalized?;
         let (traces, kept) = (elaborated.traces, elaborated.kept);
         let (module, standing) = {
@@ -2066,15 +2105,25 @@ pub fn elaborate_and_zonk_unit_over<'s>(
             }
         };
 
+        // What was finalized holds the declarations elaborated now, so the entry's universes were held to their schemes alone: here to every declaration's, the kept ones' with them.
+        if let Some(entry) = &entry {
+            validate_entry_universes(&module, entry)?;
+        }
+
         raise(Finalized {
             module,
-            entry: None,
+            entry,
             obligations,
         })
-        .map(|(module, _)| Recompiled {
-            module,
-            traces,
-            kept,
+        .map(|(module, entry)| {
+            (
+                Recompiled {
+                    module,
+                    traces,
+                    kept,
+                },
+                entry,
+            )
         })
     })
 }

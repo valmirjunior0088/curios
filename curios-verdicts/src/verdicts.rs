@@ -15,7 +15,7 @@ mod tests;
 
 use {
     crate::replace,
-    curios_package::{Store, compiler, unit_slot},
+    curios_package::{Store, compiler, entry_slot, unit_slot},
     curios_pipeline::{After, Cache, Earlier},
     curios_text::{Overlay, UnitSource},
     curios_unit::{Record, Unit, digested, read_within, segments},
@@ -95,6 +95,8 @@ pub(crate) struct Taken {
     unit: Option<Unit>,
     /// The digest of the bytes the unit's slot holds, where it has a place: what a record of a unit that could have read it vouches for. `None` for a unit the store may not place, and for one a question compiled and did not file.
     pub(crate) contained: Option<String>,
+    /// Whether it is the unit of an entry's own declarations: the last a fold takes, which no unit reads and no payload counts among the units it was made after.
+    entry: bool,
 }
 
 /// The key a record names the unit `source` is by: the prefixes it claims, in the order it claims them.
@@ -152,6 +154,8 @@ pub struct Verdicts {
     pub(crate) refused: RefCell<Option<String>>,
     /// What the session this handle belongs to has in hand — `None` for a handle nobody attached one to, a one-shot question's or a build's, which keeps nothing and so copies nothing.
     session: Option<Session>,
+    /// The executable the entry this handle's fold ends in is, by its package's name and its own — `None` for a handle told of none, which files no entry's unit. See [`Verdicts::executing`].
+    executable: Option<(String, String)>,
 }
 
 impl Verdicts {
@@ -165,7 +169,14 @@ impl Verdicts {
             taken: RefCell::new(Vec::new()),
             refused: RefCell::new(None),
             session: None,
+            executable: None,
         }
+    }
+
+    /// This handle, told that the entry its fold ends in is `package`'s `executable`: the identity the unit of the entry's own declarations is filed under, as its payload is (`curios_package::entry_slot`). An entry claims the empty prefix whichever program it is, so a handle told of none files no entry's unit.
+    pub fn executing(mut self, package: &str, executable: &str) -> Self {
+        self.executable = Some((package.to_string(), executable.to_string()));
+        self
     }
 
     /// Consult `session` for a baseline ahead of the store, and keep in it what is compiled and what is restored — see [`Session`].
@@ -263,6 +274,7 @@ impl Verdicts {
             reads,
             unit,
             contained,
+            entry: source.is_entry(),
         });
     }
 
@@ -321,12 +333,17 @@ impl Verdicts {
 
     /// The slot `source` is filed in, or `None` when it may not be filed at all.
     ///
-    /// A source with nothing on disk has no reads to verify against, so a record of it would confirm nothing. That is the fixed prelude, which has an archive of its own.
+    /// A source with nothing on disk has no reads to verify against, so a record of it would confirm nothing. That is the fixed prelude, which has an archive of its own. And an entry is filed as the executable this handle was told it is, so one it was told nothing of has no slot.
     fn slot(&self, source: &UnitSource<'_>) -> Option<String> {
         let compiler = self.compiler()?;
 
         if source.directories().is_empty() {
             return None;
+        }
+        if source.is_entry() {
+            let (package, executable) = self.executable.as_ref()?;
+
+            return Some(entry_slot(compiler, package, executable, source.declared()));
         }
 
         Some(unit_slot(compiler, &source.claims(), source.declared()))
@@ -359,17 +376,19 @@ impl Verdicts {
                 reads: record.reads,
                 unit: None,
                 contained: Some(record.unit),
+                entry: false,
             });
         }
 
         taken.into_iter().map(|taken| taken.contained).collect()
     }
 
-    /// What every unit this fold has taken is filed as, in fold order: `None` where one of them has no place.
+    /// What every unit this fold has taken before its entry is filed as, in fold order: `None` where one of them has no place. The unit of the entry's own declarations is not among them: a payload vouches for its entry by the text it was compiled from.
     pub(crate) fn filed(&self) -> Option<Vec<String>> {
         self.taken
             .borrow()
             .iter()
+            .filter(|taken| !taken.entry)
             .map(|taken| taken.contained.clone())
             .collect()
     }

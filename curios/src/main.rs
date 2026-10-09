@@ -242,9 +242,11 @@ fn dispatch() -> Result<(), Failure> {
                 Entry::File(path) => path.as_os_str().as_encoded_bytes().to_vec(),
             };
             let subject = subject_of(&program);
-            let store = program
-                .home()
-                .and_then(|home| contract.access.filed(&home.root));
+            let store = program.home().and_then(|home| {
+                let store = contract.access.filed(&home.root)?;
+
+                Some(store.executing(&home.package, &home.executable))
+            });
             // Kept before the program is consumed: binding needs the governing root, and `payload_of` takes the program by value.
             let root = program.home().map(|home| home.root.clone());
             let (cwasm, foreigns) = payload_of(elaboration.budget, program, store)?;
@@ -311,9 +313,11 @@ fn dispatch() -> Result<(), Failure> {
                     "`compile` admits a program no package declares only with `--output`"
                 ),
             };
-            let store = program
-                .home()
-                .and_then(|home| contract.access.filed(&home.root));
+            let store = program.home().and_then(|home| {
+                let store = contract.access.filed(&home.root)?;
+
+                Some(store.executing(&home.package, &home.executable))
+            });
             // Kept before the program is consumed: resolving the declared modules needs the governing root, and `payload_of` takes the program by value.
             let root = program.home().map(|home| home.root.clone());
 

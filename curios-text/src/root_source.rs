@@ -36,6 +36,8 @@ pub struct RootSource {
     ///
     /// Interior mutability because resolution is a `&self` operation everywhere above this, and recording what was read is not a reason to thread `&mut` through the lowering. Nothing here is `Send` — a surface module is an `Rc` tree — so this costs no bound that was not already spent.
     reads: RefCell<BTreeMap<PathBuf, Arc<Source>>>,
+    /// The file an entry was opened from, by canonical path: the one file of its unit that lies outside the directory its modules are read from. See [`RootSource::opened`].
+    opened: Option<PathBuf>,
 }
 
 /// Where one mount's modules are.
@@ -69,6 +71,22 @@ impl RootSource {
                     .join(header.file_stem().unwrap_or_default()),
             },
         )])
+    }
+
+    /// [`entry`](Self::entry) for an entry whose text is in hand: `source` is what was parsed from `header`, and is logged as read.
+    ///
+    /// The header is never read through this source, so nothing else would log it, and a store that verifies a unit against what it was compiled from finds the entry's own text among them only if it is put there: the text that was parsed, never a re-read of the path, which races an edit landing between the parse and the digest and records newer text against an older artifact.
+    pub(crate) fn opened(header: &Path, source: &Arc<Source>) -> Self {
+        let opened = header
+            .canonicalize()
+            .unwrap_or_else(|_| header.to_path_buf());
+        let unit = Self {
+            opened: Some(opened.clone()),
+            ..Self::entry(header)
+        };
+        unit.reads.borrow_mut().insert(opened, Arc::clone(source));
+
+        unit
     }
 
     /// A unit mounted at `prefix`, declared in `header` and holding its modules under `directory`.
@@ -131,6 +149,7 @@ impl RootSource {
             declares: None,
             overlay: Overlay::default(),
             reads: RefCell::new(BTreeMap::new()),
+            opened: None,
         }
     }
 
@@ -227,7 +246,7 @@ impl RootSource {
             .collect()
     }
 
-    /// The directories this source reads its modules from.
+    /// Where this source reads from: the directory each mount's modules are under, and the file an entry was opened from, which lies beside its directory and not in it. Every file the source logs as read lies under one of them.
     ///
     /// Empty for a source supplied already parsed: there is nothing on disk, which is why the fixed prelude has an archive of its own.
     pub fn directories(&self) -> Vec<&Path> {
@@ -237,6 +256,7 @@ impl RootSource {
                 Base::Disk { directory, .. } => Some(directory.as_path()),
                 Base::Supplied(_) => None,
             })
+            .chain(self.opened.as_deref())
             .collect()
     }
 

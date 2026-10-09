@@ -73,8 +73,8 @@ impl<'a> Fold<'a> {
                 self.budget,
                 predecessors,
                 &SYNTAX,
-                entrypoint,
-                loader,
+                &UnitSource::entry(entrypoint, loader),
+                self.cache,
                 observe,
             )
         })
@@ -98,8 +98,8 @@ impl<'a> Fold<'a> {
                 self.budget,
                 predecessors,
                 &SYNTAX,
-                entrypoint,
-                loader,
+                &UnitSource::entry(entrypoint, loader),
+                self.cache,
                 tail,
                 observe,
             )
@@ -118,7 +118,14 @@ impl<'a> Fold<'a> {
         P: FnMut(Progress<'_>),
     {
         self.under_entry(progress, |predecessors| {
-            check_entrypoint(self.budget, predecessors, &SYNTAX, entrypoint, loader, tail)
+            check_entrypoint(
+                self.budget,
+                predecessors,
+                &SYNTAX,
+                &UnitSource::entry(entrypoint, loader),
+                self.cache,
+                tail,
+            )
         })
     }
 
@@ -196,7 +203,7 @@ impl<'a> Fold<'a> {
         })
     }
 
-    /// The fold with an entry on top: the prelude, the units, then `entry` over all of them, bracketed by the progress events the entry step cannot announce for itself.
+    /// The fold with an entry on top: the prelude, the units, then `entry` over all of them, bracketed by the progress events the entry step cannot announce for itself. The entry's declarations are a unit as the ones before it are, taken from the cache or handed to it by the step itself, which knows the term that closes the program beside them.
     fn under_entry<P, E, T>(self, progress: P, entry: E) -> Result<T, CompileError>
     where
         P: FnMut(Progress<'_>),

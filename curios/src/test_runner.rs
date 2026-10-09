@@ -211,7 +211,11 @@ impl Run<'_> {
         declared: &Declared<'_>,
     ) -> Result<(), CompileError> {
         let subject = Subject::Executable(name.to_string());
-        let store = self.access.filed(declared.root);
+        // The executable's own name, under which `run` files the unit of its declarations too: the tests' payload is another product, and the declarations are the same unit.
+        let store = self
+            .access
+            .filed(declared.root)
+            .map(|store| store.executing(declared.package, name));
         let (entrypoint, loader, source) = open(Some(entry))?;
         let (records, cwasm, foreigns) = tests_payload(
             self.budget,

@@ -2161,8 +2161,13 @@ impl<'a> UnitSource<'a> {
     }
 
     /// The entrypoint this source carries, for the one unit that has one.
-    fn entrypoint(&self) -> Option<&Entrypoint> {
+    pub fn entrypoint(&self) -> Option<&'a Entrypoint> {
         self.entrypoint
+    }
+
+    /// Whether this is the entry program: the unit that carries a final term and owns the empty prefix.
+    pub fn is_entry(&self) -> bool {
+        self.entrypoint.is_some()
     }
 
     /// The items of the compilation root: the entry's own, and none for a unit with no entrypoint — whose headers sit under its own prefixes, the root belonging to no unit at all.
@@ -2195,6 +2200,23 @@ pub fn into_core_unit_over(
     baseline: &PreparedText,
 ) -> Result<PreparedText, Error> {
     lower_unit(source, predecessors, syntax, Some(baseline)).map(|(unit, _)| unit)
+}
+
+/// Lower the entry program `source` is, against the units already lowered and over `baseline` where there is one: its declarations as the unit they are ([`into_core_unit`], [`into_core_unit_over`]), and the term it closes with beside them.
+///
+/// The term is lowered on every compile: it is no declaration, and nothing of a unit holds it.
+pub fn into_core_entry(
+    source: &UnitSource<'_>,
+    predecessors: &[&PreparedText],
+    syntax: &SyntaxRegistry,
+    baseline: Option<&PreparedText>,
+) -> Result<(PreparedText, curios_core::Entrypoint), Error> {
+    let (unit, entry) = lower_unit(source, predecessors, syntax, baseline)?;
+
+    Ok((
+        unit,
+        entry.expect("an entry source's parse holds its final term"),
+    ))
 }
 
 /// [`into_core_unit`], with the final term an entry source closes with, lowered beside the unit.

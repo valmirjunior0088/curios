@@ -63,7 +63,8 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
     let root = home.root.clone();
     scope.extend(program.into_units());
 
-    let verdicts = Verdicts::at(root);
+    // Told which executable its entry is, as the command line tells it: the unit of the entry's own declarations is filed too, and is none of the units the payload counts.
+    let verdicts = Verdicts::at(root).executing(&package, &name);
     let (entrypoint, loader, source) = Entrypoint::opened(&entry).expect("the entry parses");
     let program = Program {
         package: &package,

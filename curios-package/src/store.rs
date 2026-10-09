@@ -151,6 +151,37 @@ pub fn unit_slot(compiler: &str, mounts: &[Mount], declared: Option<&[Qualifier]
     for mount in mounts {
         fingerprint.feed(mount.prefix.join());
     }
+    feed_declared(&mut fingerprint, declared);
+
+    fingerprint.hex()
+}
+
+/// The slot the unit of an entry's own declarations is filed under: `package`'s `executable`, compiled by `compiler` and declaring `declared`.
+///
+/// **An entry claims the empty prefix, as every entry does**, so [`unit_slot`] would file every program of a project in one place, each overwriting the last. What tells two entries apart is what tells their payloads apart ([`payload_slot`]): the package's name and the executable's, the one identity in a compilation that cannot collide. A program no package declares has none, and its unit is filed nowhere.
+///
+/// What was compiled is verified when the slot is opened, as a unit's is, the entry's own file among what it read.
+pub fn entry_slot(
+    compiler: &str,
+    package: &str,
+    executable: &str,
+    declared: Option<&[Qualifier]>,
+) -> String {
+    let mut fingerprint = Fingerprint::new();
+
+    fingerprint.feed(SCHEMA);
+    fingerprint.feed(compiler);
+    // Where a unit's slot states how many prefixes it claims, which no word spells.
+    fingerprint.feed("executable");
+    fingerprint.feed(package);
+    fingerprint.feed(executable);
+    feed_declared(&mut fingerprint, declared);
+
+    fingerprint.hex()
+}
+
+/// What a unit declared it could see, as a slot states it.
+fn feed_declared(fingerprint: &mut Fingerprint, declared: Option<&[Qualifier]>) {
     match declared {
         // Two distinguishable shapes rather than one, so "declared nothing" and "declared none" cannot collide: a length-prefixed list can never spell the sentinel.
         None => fingerprint.feed("*"),
@@ -161,8 +192,6 @@ pub fn unit_slot(compiler: &str, mounts: &[Mount], declared: Option<&[Qualifier]
             }
         }
     }
-
-    fingerprint.hex()
 }
 
 /// The slot the precompiled payload of `package`'s `executable`, built by `compiler` and run by the engine `engine` fingerprints, is filed under.

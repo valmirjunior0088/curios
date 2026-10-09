@@ -51,7 +51,9 @@ impl Asked {
             },
             Entry::File(path) => Origin::File(path.clone()),
         };
-        let store = program.home().map(|home| Verdicts::at(home.root.clone()));
+        let store = program
+            .home()
+            .map(|home| Verdicts::at(home.root.clone()).executing(&home.package, &home.executable));
         let declares = program.declares();
         let unlinked = program.unlinked().cloned();
 

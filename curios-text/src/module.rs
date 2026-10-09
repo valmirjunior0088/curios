@@ -623,11 +623,12 @@ impl Entrypoint {
     ///
     /// The pairing is the point: [`from_path`](Self::from_path) leaves a parsed entrypoint's file-backed `mod` declarations unresolved, and every caller that opens a file then has to know which `RootSource` goes with it. That is one answer, not a caller's choice, so it lives beside the two calls it makes.
     ///
-    /// **The source comes back because the entry's own header is the one file no loader records.** A `RootSource` logs what it resolves, and the entry's header is deliberately never resolved through it — the caller already has the body. A cache that verifies a compilation against what it read therefore has to be handed the entry separately, and it must be *this* text rather than a re-read of the path: re-reading races an edit landing between the parse and the digest, and records newer text against an older artifact, which is the one direction that admits stale.
+    /// **The loader logs the entry's own header as read, from the text parsed here.** A `RootSource` logs what it resolves, and the entry's header is deliberately never resolved through it — the caller already has the body — so it is logged where the two are paired (`RootSource::opened`), and a cache that verifies a compilation against what it read finds the entry among the rest. It must be *this* text rather than a re-read of the path: re-reading races an edit landing between the parse and the digest, and records newer text against an older artifact, which is the one direction that admits stale. The source comes back too, for a caller that files what the whole program compiled to.
     pub fn opened(path: &Path) -> Result<(Self, RootSource, Arc<Source>), LoadError> {
         let (entrypoint, source) = Self::sourced(path)?;
+        let loader = RootSource::opened(path, &source);
 
-        Ok((entrypoint, RootSource::entry(path), source))
+        Ok((entrypoint, loader, source))
     }
 
     /// The trivial program `Io/pure(())`, built rather than parsed.
@@ -671,8 +672,9 @@ impl Entrypoint {
     ) -> Result<(Self, RootSource, Arc<Source>), ParserError> {
         let source = Source::held(path, text);
         let entrypoint = Self::parse(&source)?;
+        let loader = RootSource::opened(path, &source);
 
-        Ok((entrypoint, RootSource::entry(path), source))
+        Ok((entrypoint, loader, source))
     }
 }
 

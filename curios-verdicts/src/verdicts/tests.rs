@@ -143,7 +143,7 @@ fn write(root: &Path, path: &str, contents: &str) {
     fs::write(path, contents).unwrap();
 }
 
-/// The store read and written through, noting the certifier's record of each unit filed into it and of each unit handed back.
+/// The store read and written through, noting the certifier's record of each mounted unit filed into it and of each one handed back. The unit of the entry's own declarations passes through unnoted: the store is told of no executable here, so it files none.
 struct Recorded<'a> {
     store: &'a Verdicts,
     filed: RefCell<Vec<Certification>>,
@@ -153,12 +153,16 @@ struct Recorded<'a> {
 impl Cache for Recorded<'_> {
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
         let unit = Cache::get(self.store, source)?;
-        self.taken.borrow_mut().push(unit.certification().clone());
+        if !source.is_entry() {
+            self.taken.borrow_mut().push(unit.certification().clone());
+        }
         Some(unit)
     }
 
     fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
-        self.filed.borrow_mut().push(unit.certification().clone());
+        if !source.is_entry() {
+            self.filed.borrow_mut().push(unit.certification().clone());
+        }
         Cache::put(self.store, source, unit);
     }
 }
@@ -423,4 +427,115 @@ fn another_projects_slot_is_no_baseline() {
         folded_overlaid(&mine, &Overlay::default()),
         ["compiling /shape"]
     );
+}
+
+/// An entry with a declaration of its own, so the unit of its declarations holds something.
+const DECLARING_ENTRY: &str = "use /std/{Fmt, Str};\nuse /shape/{message};\n\nlet twice: Str = Str/concat(message, message);\n\nFmt/print(\"%\\n\")(twice)\n";
+
+/// The store, saying what a fold did with the unit of its entry's own declarations: `reused` where the store handed it back, `recompiled` where it was compiled over a baseline, `compiled` otherwise.
+struct Watching<'a> {
+    store: &'a Verdicts,
+    entry: RefCell<Option<&'static str>>,
+}
+
+impl Cache for Watching<'_> {
+    fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
+        let hit = Cache::get(self.store, source);
+        if source.is_entry() {
+            *self.entry.borrow_mut() = Some(match hit {
+                Some(_) => "reused",
+                None => "compiled",
+            });
+        }
+
+        hit
+    }
+
+    fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Earlier> {
+        let earlier = Cache::baseline(self.store, source, offered);
+        if source.is_entry() && earlier.is_some() {
+            *self.entry.borrow_mut() = Some("recompiled");
+        }
+
+        earlier
+    }
+
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
+        Cache::put(self.store, source, unit);
+    }
+}
+
+/// What a build's fold did with the unit of the entry `root` holds in `entry`, through a store told the entry is the executable `executable`, or told nothing.
+fn entered(root: &Path, entry: &str, executable: Option<&str>) -> &'static str {
+    let store = Verdicts::at(root.to_path_buf());
+    let store = match executable {
+        Some(executable) => store.executing("app", executable),
+        None => store,
+    };
+    let watching = Watching {
+        store: &store,
+        entry: RefCell::new(None),
+    };
+    let governing = Governing::of(&root.join("shape")).expect("a governed package");
+    let library = order(&governing).expect("a resolvable library");
+    let (entrypoint, loader, _source) =
+        Entrypoint::opened(&root.join(entry)).expect("an openable entrypoint");
+
+    Fold::new(1_000_000, &library, Some(&watching))
+        .compile(&entrypoint, &loader, |_| {}, |_| {})
+        .expect("a compiling program");
+
+    watching
+        .entry
+        .take()
+        .expect("the entry's unit is asked for")
+}
+
+/// A program's declarations are a unit, filed by the executable it is. Two entries each claim the empty prefix and are filed apart, so each finds its own unit where it left it; an edit to one's declarations compiles it over the unit it filed, and leaves the other's where it was.
+///
+/// Mutation-checked: with an entry filed by the prefix it claims, as any unit is, the second entry's unit takes the first one's place and the first is compiled whole again.
+#[test]
+fn an_entrys_declarations_are_filed_by_the_executable_it_is() {
+    let root = project("entries");
+    write(&root, "exe.crs", DECLARING_ENTRY);
+    write(&root, "tool.crs", DECLARING_ENTRY);
+
+    assert_eq!(entered(&root, "exe.crs", Some("exe")), "compiled");
+    assert_eq!(entered(&root, "tool.crs", Some("tool")), "compiled");
+    assert_eq!(
+        entered(&root, "exe.crs", Some("exe")),
+        "reused",
+        "another entry's unit took this one's place"
+    );
+    assert_eq!(entered(&root, "tool.crs", Some("tool")), "reused");
+
+    write(
+        &root,
+        "exe.crs",
+        &DECLARING_ENTRY.replace("concat(message, message)", "concat(message, \"!\")"),
+    );
+    assert_eq!(entered(&root, "exe.crs", Some("exe")), "recompiled");
+    assert_eq!(entered(&root, "tool.crs", Some("tool")), "reused");
+}
+
+/// An entry's unit rests on the units it could have read, as any unit does: an edit to its dependency compiles it over the unit it filed.
+#[test]
+fn an_edited_dependency_recompiles_the_entry_over_its_unit() {
+    let root = project("entry-after");
+    write(&root, "exe.crs", DECLARING_ENTRY);
+
+    assert_eq!(entered(&root, "exe.crs", Some("exe")), "compiled");
+    write(&root, "shape/lib.crs", &library("second"));
+    assert_eq!(entered(&root, "exe.crs", Some("exe")), "recompiled");
+    assert_eq!(entered(&root, "exe.crs", Some("exe")), "reused");
+}
+
+/// A handle told of no executable files no entry's unit: an entry claims the empty prefix whichever program it is, and nothing else says which.
+#[test]
+fn an_entry_no_executable_names_is_filed_nowhere() {
+    let root = project("entry-unnamed");
+    write(&root, "exe.crs", DECLARING_ENTRY);
+
+    assert_eq!(entered(&root, "exe.crs", None), "compiled");
+    assert_eq!(entered(&root, "exe.crs", None), "compiled");
 }

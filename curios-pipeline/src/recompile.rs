@@ -5,14 +5,14 @@
 //! **A declaration lowered again is elaborated again.** Nothing compares two lowerings: an edit that leaves a declaration's meaning alone costs that declaration's elaboration, and what it comes to is compared part by part with what the baseline holds, by whatever read it.
 
 use {
-    crate::{CompileError, anchors_of, globals_after, kernel_refusal, with_broken},
+    crate::{Closing, CompileError, anchors_of, globals_after, kernel_refusal, with_broken},
     curios_cert::{Baseline, Rechecked, certify_module_over},
-    curios_core::{Module, Zonked},
+    curios_core::{Entrypoint, Module, Zonked},
     curios_elab::{
         Context, ErasedBaseline, Erasures, Established, Recompile, Recompiled,
-        elaborate_and_zonk_unit_over, erase_unit_over,
+        elaborate_and_zonk_entry_over, elaborate_and_zonk_unit_over, erase_unit_over,
     },
-    curios_text::{UnitSource, into_core_unit_over},
+    curios_text::{PreparedText, UnitSource, into_core_unit_over},
     curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::SyntaxRegistry,
     std::{collections::BTreeSet, rc::Rc},
@@ -32,11 +32,33 @@ pub fn compile_unit_over(
     moved: &[bool],
 ) -> Result<Unit, CompileError> {
     curios_profile::profile!("compile_unit_over");
+    let lowered = into_core_unit_over(source, &predecessors.text(), syntax, baseline.text())
+        .map_err(|error| CompileError::Failure(vec![error.report()]))?;
+
+    compile_lowered_over(budget, predecessors, syntax, lowered, baseline, moved, None)
+        .map(|(unit, _)| unit)
+}
+
+/// [`compile_unit_over`] from the unit's lowering on, which was made over `baseline`'s: elaborate, judge and erase what does not stand. With `closing`, the unit is a program's declarations and the term that closes the program is elaborated in their walk and handed back beside the unit ([`Closing`]).
+pub(crate) fn compile_lowered_over(
+    budget: u64,
+    predecessors: Predecessors<'_>,
+    syntax: &SyntaxRegistry,
+    mut lowered: PreparedText,
+    baseline: &Unit,
+    moved: &[bool],
+    closing: Option<Closing<'_>>,
+) -> Result<(Unit, Option<Entrypoint>), CompileError> {
     let text = predecessors.text();
     let cores = predecessors.cores();
-
-    let mut lowered = into_core_unit_over(source, &text, syntax, baseline.text())
-        .map_err(|error| CompileError::Failure(vec![error.report()]))?;
+    let (tail, mut elaborated, mut refused) = match closing {
+        Some(Closing {
+            tail,
+            elaborated,
+            refused,
+        }) => (Some(tail), Some(elaborated), Some(refused)),
+        None => (None, None, None),
+    };
 
     // A mount says how every name of the unit is spelled, so a unit whose mounts moved keeps nothing.
     let kept = match baseline.core().mounts == lowered.core().mounts {
@@ -53,25 +75,33 @@ pub fn compile_unit_over(
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
-    let Recompiled {
-        module: core,
-        traces,
-        kept,
-    } = with_broken(
-        lowered.broken(),
-        elaborate_and_zonk_unit_over(
+    let recompile = Recompile {
+        baseline: baseline.core(),
+        places: baseline.places(),
+        traces: baseline.traces(),
+        lowered: &kept,
+    };
+    let walked = match tail {
+        Some(tail) => elaborate_and_zonk_entry_over(
             &mut context,
             &established,
-            Recompile {
-                baseline: baseline.core(),
-                places: baseline.places(),
-                traces: baseline.traces(),
-                lowered: &kept,
-            },
+            recompile,
+            lowered.core(),
+            lowered.minted(),
+            tail,
+        ),
+        None => elaborate_and_zonk_unit_over(
+            &mut context,
+            &established,
+            recompile,
             lowered.core(),
             lowered.minted(),
         )
-        .map_err(|error| {
+        .map(|recompiled| (recompiled, None)),
+    };
+    let walked = with_broken(
+        lowered.broken(),
+        walked.map_err(|error| {
             let spellings = Rc::new(lowered.spellings(&text));
             CompileError::of(&error, |member| {
                 member.reports_with_hints(
@@ -84,23 +114,43 @@ pub fn compile_unit_over(
                 )
             })
         }),
-    )?;
-    // What the proofs written now read, and what the baseline's read in the declarations kept from it.
+    );
+    // What the proofs written now read, whatever elaboration said: a lint is no part of its verdict.
     lowered.credit(&context.credited());
-    lowered.credit_reused(baseline.text(), |name| kept.contains(name));
+    let mut refuse = |lowered: &PreparedText, error: CompileError| {
+        if let Some(refused) = &mut refused {
+            refused(lowered);
+        }
 
-    let core =
-        Zonked::project(&core).map_err(|refusal| CompileError::failure(refusal.to_string()))?;
+        error
+    };
+    let (
+        Recompiled {
+            module: core,
+            traces,
+            kept,
+        },
+        entry,
+    ) = walked.map_err(|error| refuse(&lowered, error))?;
+    // And what the baseline's read in the declarations kept from it.
+    lowered.credit_reused(baseline.text(), |name| kept.contains(name));
+    if let (Some(elaborated), Some(entry)) = (&mut elaborated, &entry) {
+        elaborated(&core, entry);
+    }
+
+    let core = Zonked::project(&core)
+        .map_err(|refusal| refuse(&lowered, CompileError::failure(refusal.to_string())))?;
 
     // The kernel is told nothing of what was kept: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped.
     let rechecked = recheck_over(&core, budget, predecessors, baseline, moved, syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
-        return Err(kernel_refusal(
+        let refusal = kernel_refusal(
             verdict,
             core.as_module(),
             &predecessors.lexicons(syntax),
             syntax,
-        ));
+        );
+        return Err(refuse(&lowered, refusal));
     }
     let certification = rechecked.certification;
 
@@ -123,15 +173,20 @@ pub fn compile_unit_over(
         },
     )
     .map_err(|error| {
-        CompileError::Failure(error.reports_with(
+        let reports = error.reports_with(
             core.as_module(),
             &predecessors.lexicons(syntax),
             syntax,
             &anchors_of(&lowered, predecessors),
-        ))
+        );
+
+        refuse(&lowered, CompileError::Failure(reports))
     })?;
 
-    Ok(Uncertified::new(lowered, core.into_module(), ersd, traces).certified(certification))
+    Ok((
+        Uncertified::new(lowered, core.into_module(), ersd, traces).certified(certification),
+        entry,
+    ))
 }
 
 /// [`recheck`](crate::recheck) for a unit compiled over `baseline`: the walk is handed the units in scope as its environment and the baseline's module and record whole, and adopts each of the baseline's verdicts that still stands, by the reads its own walk filed (`curios_cert::Baseline`).

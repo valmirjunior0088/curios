@@ -156,8 +156,8 @@ pub(crate) fn compile_with_units(
             DEFAULT_STEP_BUDGET,
             Predecessors::over(&predecessors),
             &SYNTAX,
-            &entry,
-            &RootSource::none(),
+            &UnitSource::entry(&entry, &RootSource::none()),
+            None,
             |_| {},
         )
         .map(|(module, _foreigns)| module)
