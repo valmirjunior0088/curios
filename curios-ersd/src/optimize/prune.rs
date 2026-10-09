@@ -65,45 +65,48 @@ pub(super) fn prune_unreachable(module: &mut Module, analysis: &Analysis) {
 
     // Roots: whatever the entry block references, plus every item whose eager evaluation is observable.
     let summary = Summary::analyze(module, analysis);
-    let mut kept = BTreeSet::<usize>::new();
-    let mut work = Vec::<usize>::new();
-    for function in entry_subtree.free_functions() {
-        if let Some(&binder) = binder_function.get(&function) {
-            work.push(binder);
-        }
-    }
-    for value in entry_subtree.free_values() {
-        if let Some(&binder) = binder_value.get(&value) {
-            work.push(binder);
-        }
-    }
-    for (index, &item) in items.iter().enumerate() {
-        if let Some(statement) = module.statement(item)
-            && summary
-                .statement_behavior(module, statement)
-                .is_observable()
-        {
-            work.push(index);
-        }
-    }
+    // The items binding what `subtree` references and does not bind itself.
+    let binders = |subtree: &Subtree| {
+        let functions = subtree
+            .free_functions()
+            .filter_map(|function| binder_function.get(&function));
+        let values = subtree
+            .free_values()
+            .filter_map(|value| binder_value.get(&value));
 
-    // Close over the item reference graph.
-    while let Some(index) = work.pop() {
-        if !kept.insert(index) {
-            continue;
-        }
-        let subtree = &subtrees[index];
-        for function in subtree.free_functions() {
-            if let Some(&binder) = binder_function.get(&function) {
-                work.push(binder);
+        functions.chain(values).copied().collect::<Vec<_>>()
+    };
+    // What `roots` reach over the item reference graph, themselves among it.
+    let closed = |roots: Vec<usize>| {
+        let mut kept = BTreeSet::<usize>::new();
+        let mut work = roots;
+        while let Some(index) = work.pop() {
+            if kept.insert(index) {
+                work.extend(binders(&subtrees[index]));
             }
         }
-        for value in subtree.free_values() {
-            if let Some(&binder) = binder_value.get(&value) {
-                work.push(binder);
-            }
-        }
-    }
+
+        kept
+    };
+    let reached = binders(&entry_subtree);
+    let observable = items
+        .iter()
+        .enumerate()
+        .filter(|&(_, &item)| {
+            module.statement(item).is_some_and(|statement| {
+                summary
+                    .statement_behavior(module, statement)
+                    .is_observable()
+            })
+        })
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    curios_profile::sample!("prune::items", items.len());
+    curios_profile::sample!("prune::observable", observable.len());
+    curios_profile::sample!("prune::reached", closed(reached.clone()).len());
+
+    let kept = closed(reached.into_iter().chain(observable).collect());
+    curios_profile::sample!("prune::kept", kept.len());
 
     // Retain the kept items in order and everything they (or the entry block's own region) own; tombstone the rest.
     let mut keep_functions = entry_subtree.bound_functions.clone();
