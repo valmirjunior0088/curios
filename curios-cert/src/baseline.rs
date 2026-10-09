@@ -10,9 +10,7 @@
 
 use {
     super::{held, induct_alike, struct_alike},
-    curios_core::{
-        Certification, Certified, Global, Item, Module, Places, Polarity, Term, Totality,
-    },
+    curios_core::{Certification, Global, Item, Module, Places, Polarity, Reads, Term, Totality},
     std::collections::{BTreeMap, HashMap},
 };
 
@@ -112,7 +110,7 @@ impl<'a> Adopting<'a> {
         item: &Item,
         module: &Module,
         in_scope: impl Fn(&Global) -> bool,
-    ) -> Option<Vec<&'a Certified>> {
+    ) -> Option<Vec<(Totality, &'a Reads)>> {
         let names = item.declared_names();
         let certification = self.baseline.certification;
         let stands = |read: &Global, part: fn(&Stood) -> bool| match self.stood.get(read) {
@@ -124,11 +122,11 @@ impl<'a> Adopting<'a> {
         names
             .iter()
             .map(|name| {
-                let certified = certification.certified(name)?;
+                let totality = certification.totality(name)?;
+                let reads = certification.reads(name)?;
                 let vectored = (!module.induct_decls.contains_key(name)
                     && !module.struct_decls.contains_key(name))
                     || certification.polarities(name).is_some();
-                let reads = &certified.reads;
 
                 (vectored
                     && reads
@@ -139,7 +137,7 @@ impl<'a> Adopting<'a> {
                         .bodies
                         .iter()
                         .all(|read| names.contains(&read) || stands(read, |stood| stood.body)))
-                .then_some(certified)
+                .then_some((totality, reads))
             })
             .collect()
     }

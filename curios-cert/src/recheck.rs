@@ -819,7 +819,7 @@ fn adopt(
     baseline: Baseline<'_>,
     item: &Item,
     module: &Module,
-    certified: &[&Certified],
+    certified: &[(Totality, &Reads)],
 ) -> Adopted {
     let names = item.declared_names();
     let stamps = match item {
@@ -844,9 +844,9 @@ fn adopt(
         vectors: Vec::new(),
     };
 
-    for ((name, stamp), certified) in names.into_iter().zip(stamps).zip(certified) {
-        adopted.reads.push((*name, certified.reads.clone()));
-        if certified.totality != Totality::Total {
+    for ((name, stamp), (totality, reads)) in names.into_iter().zip(stamps).zip(certified) {
+        adopted.reads.push((*name, (*reads).clone()));
+        if *totality != Totality::Total {
             adopted.partial.push(*name);
             if stamp.is_total() {
                 adopted.refusals.push(Verdict {

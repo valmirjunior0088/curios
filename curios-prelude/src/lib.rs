@@ -7,6 +7,7 @@
 //! Depend on *this* crate, never on `curios-prelude-archive` directly: that one hands out an image no kernel has seen, and its uncertified restoration and its own `with_prelude` are for the build script, not for anything this crate lends.
 
 use {
+    curios_archive::{Bytes, parted},
     curios_core::Certification,
     curios_document::Documentation,
     curios_prelude_archive::{restore_archives, restore_documentation},
@@ -17,6 +18,9 @@ use {
 /// The certifier's record of each root, in the fold's order — filed under `OUT_DIR` by this crate's build script as it certified the images.
 const CERTIFICATION_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/certification.rkyv"));
 
+/// What judging each definition of each root read, the roots' one after the other behind their lengths: read by a walk over a root as a baseline and by no other, so each stays the slice of the executable it is until one asks.
+const READS_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/reads.rkyv"));
+
 thread_local! {
     /// The restored fixed prelude, each root's unit carrying the record its certification filed. Per thread for the reason the archive's own restoration is: a `Unit` is not `Send`.
     static PRELUDE: LazyCell<[Unit; 2]> = LazyCell::new(|| {
@@ -26,9 +30,15 @@ thread_local! {
             certifications.try_into().unwrap_or_else(|filed: Vec<_>| {
                 panic!("the prelude's certification holds {} records for two roots", filed.len())
             });
+        let [sys_reads, std_reads]: [Bytes; 2] = parted(&Bytes::from(READS_BYTES))
+            .and_then(|filed| filed.try_into().ok())
+            .unwrap_or_else(|| panic!("the prelude's reads are not two roots'"));
         let [sys, std] = restore_archives();
 
-        [sys.unit.certified(sys_record), std.unit.certified(std_record)]
+        [
+            sys.unit.certified(sys_record.with_reads(sys_reads)),
+            std.unit.certified(std_record.with_reads(std_reads)),
+        ]
     });
 }
 

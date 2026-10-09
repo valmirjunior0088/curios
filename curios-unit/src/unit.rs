@@ -13,7 +13,7 @@ use {
 #[cfg(feature = "archive")]
 use {
     crate::{apart_parts, halved, halves},
-    curios_archive::{Bytes, joined},
+    curios_archive::{Bytes, joined, parted},
     curios_core::Sharing,
 };
 
@@ -223,7 +223,7 @@ impl Unit {
         self.unit.traces()
     }
 
-    /// The bytes this unit is stored as: itself, its elaborated module hash-consed in a table of its own ([`Module::shared`]), then what it stores apart from itself ([`Uncertified::apart_bytes`]).
+    /// The bytes this unit is stored as: itself, its elaborated module hash-consed in a table of its own ([`Module::shared`]), then what it stores apart from itself ([`Uncertified::apart_bytes`]) and what the certifier's record does, what judging each definition read ([`Certification::reads_bytes`]), each behind its length.
     ///
     /// **A stored unit says what its items mean, not where they were written or how they were come by.** A consed module is one node for each structure as it is spelled, under no position, so an item elaborated now and the same item reused from a baseline are the same nodes, and one moved by an edit above it is stored as it was. The fixed prelude's images are consed by the same pass, where they are built.
     ///
@@ -235,7 +235,10 @@ impl Unit {
             certification: Rc::clone(&self.certification),
         })?;
 
-        Ok(halved(&unit, &self.unit.apart_bytes()?))
+        let apart = self.unit.apart_bytes()?;
+        let reads = self.certification.reads_bytes()?;
+
+        Ok(halved(&unit, &joined(&[&apart[..], &reads[..]])))
     }
 
     /// The unit stored as `artifact` ([`Unit::stored`]): decoded, what it stores apart from itself kept as the bytes it is, for whoever asks. `Err` is bytes that hold no unit.
@@ -243,10 +246,13 @@ impl Unit {
     pub fn restored(artifact: &[u8]) -> Result<Self, String> {
         let (unit, apart) = halves(artifact).ok_or("not a unit's artifact")?;
         let restored = curios_archive::from_bytes::<Unit>(unit)?;
+        let [apart, reads]: [Bytes; 2] = parted(&Bytes::from(apart.to_vec()))
+            .and_then(|parts| parts.try_into().ok())
+            .ok_or("not what a certified unit stores apart from itself")?;
 
         Ok(Self {
-            unit: restored.unit.with_apart(apart.to_vec())?,
-            certification: restored.certification,
+            unit: restored.unit.with_apart(apart)?,
+            certification: Rc::new(Rc::unwrap_or_clone(restored.certification).with_reads(reads)),
         })
     }
 }

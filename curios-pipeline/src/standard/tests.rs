@@ -214,9 +214,9 @@ fn std_unit_reproduction() {
         println!("  items       {}", first.core().items.len());
         println!("  differing   {differing:?}");
         assert!(
-            stored!(&first) == stored!(&second)
-                && stored!(first.traces()) == stored!(second.traces())
-                && erasures(&first) == erasures(&second),
+            first.stored().expect("a unit serializes")
+                == second.stored().expect("a unit serializes")
+                && stored!(&first) == stored!(&second),
             "two compilations of the standard library store two units, differing in {differing:?}"
         );
     });
@@ -318,10 +318,14 @@ fn std_image_division() {
 
         let stored = std.stored().expect("the library's unit serializes");
         let (unit, apart) = halves(&stored).expect("a unit's artifact");
-        let [lowered, forms, records, asked, erasures] =
-            apart_parts(&curios_archive::Bytes::from(apart.to_vec()))
-                .expect("what a unit stores apart")
-                .map(|part| part.as_slice().len());
+        let [apart, reads]: [curios_archive::Bytes; 2] =
+            curios_archive::parted(&curios_archive::Bytes::from(apart.to_vec()))
+                .and_then(|parts| parts.try_into().ok())
+                .expect("what a certified unit stores apart");
+        let reads = reads.as_slice().len();
+        let [lowered, forms, records, asked, erasures] = apart_parts(&apart)
+            .expect("what a unit stores apart")
+            .map(|part| part.as_slice().len());
 
         println!("\n=== how /std's stored unit divides ===");
         row("the artifact", stored.len(), None);
@@ -361,9 +365,10 @@ fn std_image_division() {
         row("  its erased forms, each stored alone", forms, None);
         row(
             "what a recompile alone restores",
-            records + asked + erasures,
+            records + asked + erasures + reads,
             None,
         );
+        row("  what its verdicts stand on", reads, None);
         row(
             "  the lowering's records and scans",
             std.text()

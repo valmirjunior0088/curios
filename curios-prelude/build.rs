@@ -85,4 +85,14 @@ fn file_certifications(certifications: &Vec<Certification>) {
     let path = out.join("certification.rkyv");
     fs::write(&path, &*bytes)
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
+
+    // What judging each definition read, each root's behind its length: a record is filed without them, and only a walk over a root as a baseline reads them.
+    let reads = certifications
+        .iter()
+        .map(Certification::reads_bytes)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_else(|error| panic!("the prelude's reads failed to serialize: {error}"));
+    let path = out.join("reads.rkyv");
+    fs::write(&path, curios_archive::joined(&reads))
+        .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
 }

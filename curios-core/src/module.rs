@@ -43,13 +43,30 @@ impl Totality {
 /// What the certifier concluded about the declarations one of its walks judged: each definition's totality, closed over everything it mentions, with what judging it read of other items, and each `induct` and `struct` entry's polarity vector.
 ///
 /// Only the certifier's walk makes one — `curios_cert::certify_module` — and a later walk reads it as the verdicts on the definitions it covers, rather than the stamp elaboration writes onto each [`Definition`]. It is filed with the unit whose definitions it covers, and that unit's address is its identity: a stored unit is found only under the compiler that judged it, and the fixed prelude's record is a constant of the build that certified it. It is read only where it [covers](Certification::covers) its unit, never one name at a time — one naming fewer definitions than its unit holds was not made by a walk over that unit, so none of its entries is known to be the closure it claims — and a unit without a covering record is one the reading walk classifies for itself, never one it takes elaboration's word for.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Certification {
-    certified: BTreeMap<Global, Certified>,
+    /// Each judged definition's totality, closed over everything it mentions.
+    totalities: BTreeMap<Global, Totality>,
     /// How each `induct` and `struct` entry the walk accepted uses its parameters, as the walk computed it: what a later walk composes through where a family it judges mentions this one. The vector the entry itself carries is elaboration's, which no walk reads.
     polarities: BTreeMap<Global, Vec<Polarity>>,
+    /// What judging each definition read of other items: what a later walk over the unit decides by which of these verdicts stand, and what nothing compiled after the unit reads.
+    ///
+    /// **Of the unit's baseline half**, as its traces are: skipped where the record is stored, stored beside it ([`Certification::reads_bytes`]), handed back as bytes where it is restored ([`Certification::with_reads`]), and read out of them when a walk over the unit first asks.
+    #[archived_with(curios_archive::Skip)]
+    reads: curios_archive::Deferred<BTreeMap<Global, Reads>>,
 }
+
+/// Two records are one where they conclude the same of every definition and every entry and judging each read the same: a record's reads are part of what it says, wherever they are held.
+impl PartialEq for Certification {
+    fn eq(&self, other: &Self) -> bool {
+        self.totalities == other.totalities
+            && self.polarities == other.polarities
+            && self.read() == other.read()
+    }
+}
+
+impl Eq for Certification {}
 
 /// What the certifier concluded about one definition it judged.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -89,10 +106,46 @@ impl Certification {
         definitions: impl IntoIterator<Item = (Global, Certified)>,
         polarities: impl IntoIterator<Item = (Global, Vec<Polarity>)>,
     ) -> Self {
-        Self {
-            certified: definitions.into_iter().collect(),
-            polarities: polarities.into_iter().collect(),
+        let (mut totalities, mut reads) = (BTreeMap::new(), BTreeMap::new());
+        for (name, certified) in definitions {
+            totalities.insert(name, certified.totality);
+            reads.insert(name, certified.reads);
         }
+
+        Self {
+            totalities,
+            polarities: polarities.into_iter().collect(),
+            reads: curios_archive::Deferred::held(reads),
+        }
+    }
+
+    /// What judging each definition read, read out of its bytes now where the record was restored and no walk has asked before.
+    fn read(&self) -> &BTreeMap<Global, Reads> {
+        #[cfg(feature = "archive")]
+        let reads = self
+            .reads
+            .get()
+            .unwrap_or_else(|error| panic!("a certifier's reads failed to restore: {error}"));
+        #[cfg(not(feature = "archive"))]
+        let reads = self
+            .reads
+            .peek()
+            .expect("a record that was never stored holds its reads");
+
+        reads
+    }
+
+    /// The bytes of what judging each definition read: stored apart from the record, since only a walk over its unit as a baseline reads them.
+    #[cfg(feature = "archive")]
+    pub fn reads_bytes(&self) -> Result<std::borrow::Cow<'_, [u8]>, String> {
+        self.reads.bytes()
+    }
+
+    /// This record with `bytes` as what judging each definition read ([`Certification::reads_bytes`]), read when a walk over its unit first asks: what a restored record is given, since restoring it leaves it with none.
+    #[cfg(feature = "archive")]
+    pub fn with_reads(mut self, bytes: impl Into<curios_archive::Bytes>) -> Self {
+        self.reads = curios_archive::Deferred::stored(bytes);
+        self
     }
 
     /// The polarity vector the certifier computed for the registry entry `name`, when this record holds one.
@@ -100,24 +153,19 @@ impl Certification {
         self.polarities.get(name).map(Vec::as_slice)
     }
 
-    /// What the certifier concluded about `name`, when this record covers it.
-    pub fn certified(&self, name: &Global) -> Option<&Certified> {
-        self.certified.get(name)
-    }
-
     /// The certifier's classification of `name`, when this record covers it.
     pub fn totality(&self, name: &Global) -> Option<Totality> {
-        self.certified.get(name).map(|certified| certified.totality)
+        self.totalities.get(name).copied()
     }
 
     /// What judging `name` read of other items, when this record covers it.
     pub fn reads(&self, name: &Global) -> Option<&Reads> {
-        self.certified.get(name).map(|certified| &certified.reads)
+        self.read().get(name)
     }
 
     /// Whether this record classifies every definition `module` holds.
     pub fn covers(&self, module: &Module) -> bool {
-        let classified = |name: &Global| self.certified.contains_key(name);
+        let classified = |name: &Global| self.totalities.contains_key(name);
 
         module.items.iter().all(|item| match item {
             Item::Let(definition) => classified(&definition.name),
@@ -130,9 +178,9 @@ impl Certification {
 
     /// Every classification this record holds.
     pub fn iter(&self) -> impl Iterator<Item = (&Global, Totality)> {
-        self.certified
+        self.totalities
             .iter()
-            .map(|(name, certified)| (name, certified.totality))
+            .map(|(name, totality)| (name, *totality))
     }
 }
 
