@@ -350,6 +350,41 @@ fn reflexivity_at_two_lambdas_that_differ_is_a_mismatch() {
     assert!(report.contains("terms differ"), "{report}");
 }
 
+// A parked problem that fails where its item is drained is the item's refusal as much as one raised while the item is elaborated: the report leads with the declaration. And what failed is a comparison of two terms the declared type states at one position, neither a type and neither inferred, so the report says that two terms differ and names the one the program wrote as written; with the position's type written out the same fault is one between two whole types, and keeps a mismatch's words.
+#[test]
+fn a_comparison_that_fails_at_the_drain_names_its_declaration_and_what_was_compared() {
+    let boxed = error(
+        r#"
+        use /std/{Nat};
+        induct Boxed(@A : Type) : (A) -> Type
+        | box(z : A) : (z)
+        end
+        let boxed : Boxed()((n : Nat) => n + 7) = Boxed/box((n : Nat) => n + 1);
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(boxed.starts_with("while elaborating /boxed:"), "{boxed}");
+    assert!(
+        boxed.contains("terms differ") && boxed.contains("written: (n) => n + 1"),
+        "{boxed}"
+    );
+
+    let typed = error(
+        r#"
+        use /std/{List, Nat};
+        induct Tagged(@A : Type) : (A) -> Type
+        | tag(@z : A) : (z)
+        end
+        let relevant : Tagged()([7, 8, 9]) = Tagged/tag(@List(Nat), @[1]);
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        typed.contains("type mismatch") && typed.contains("inferred: Tagged(@List(Nat))([1])"),
+        "{typed}"
+    );
+}
+
 // A written argument is checked as written, and then held to its call's type. A list or a tuple at a slot whose type is still a metavariable waits behind a placeholder, and the call's expected type states the slot's value before the argument is checked. Conversion waits on the placeholder as it waits on a recursive group's slot, so nothing but the argument's own check fills it, and the value the type states meets the argument that was written. Mutation-checked: letting conversion solve a placeholder accepts both, with the type's list standing where the argument was written.
 #[test]
 fn a_hidden_argument_is_held_to_the_value_its_calls_type_states() {

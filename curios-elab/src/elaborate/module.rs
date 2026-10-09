@@ -1289,7 +1289,9 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     // Attribute *every* failure to the item that caused it, not only universe invariants. A whole-module diagnostic with no declaration name — an exhausted budget or an effect reduced at the type level — costs a full prelude rebuild to localize, which is the expensive way to learn one string.
     .map_err(|error| error.in_declaration(&item_names, owner))?;
 
-    context.drain_parked()?;
+    context
+        .drain_parked()
+        .map_err(|error| error.in_declaration(&item_names, owner))?;
     context.finish_universe_transaction();
 
     if context.holds_goals() {
