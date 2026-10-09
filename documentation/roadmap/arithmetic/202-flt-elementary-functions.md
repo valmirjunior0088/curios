@@ -1,6 +1,6 @@
 # Correctly rounded elementary functions
 
-Working specification for the correctly rounded elementary functions IEEE 754-2019 §9.2 recommends. [Alternate exception handling](05-flt-exception-handling.md) is a separate, independently retirable capability. The float laws — the [declared](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md) identities and `/std/Flt`'s theorems over the bits, `eq_of_le_bytes` and `total_key_injective` — are independent of this delivery; the elementary functions consume them only in their proofs, never in their execution. The fuel and exhaustion contract below remains a decision required before dependent implementation.
+Working specification for the correctly rounded elementary functions IEEE 754-2019 §9.2 recommends. [Alternate exception handling](201-flt-exception-handling.md) is a separate, independently retirable capability. The float laws — the [declared](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md) identities and `/std/Flt`'s theorems over the bits, `eq_of_le_bytes` and `total_key_injective` — are independent of this delivery; the elementary functions consume them only in their proofs, never in their execution. The fuel and exhaustion contract below remains a decision required before dependent implementation.
 
 ## What this builds on
 

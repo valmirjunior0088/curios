@@ -4,7 +4,7 @@ argument-hint: "[autonomous | supervised]"
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*)
 ---
 
-Fix entries of the findings files, each area's `documentation/roadmap/<area>/00-findings.md` and the workspace's `documentation/roadmap/00-findings.md`, in the mode `$ARGUMENTS` names, `autonomous` or `supervised`. With no mode given, work supervised.
+Fix entries of the findings files, each area's `documentation/roadmap/<area>/000-findings.md` and the workspace's `documentation/roadmap/000-findings.md`, in the mode `$ARGUMENTS` names, `autonomous` or `supervised`. With no mode given, work supervised.
 
 ## What every fix is
 

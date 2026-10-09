@@ -17,7 +17,7 @@ pub(super) enum Audit {
     Substituted,
 }
 
-/// One row a checker puts on the other side than derived: the audit that states it, its name as that audit spells it, what each checker says, and the finding that holds why, by its heading in `documentation/roadmap/soundness/00-findings.md`.
+/// One row a checker puts on the other side than derived: the audit that states it, its name as that audit spells it, what each checker says, and the finding that holds why, by its heading in `documentation/roadmap/soundness/000-findings.md`.
 pub(super) type Parted = (Audit, String, Answers, &'static str);
 
 /// Every row listed. There is none: both checkers put every row where its seed derives.

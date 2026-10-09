@@ -1,0 +1,14 @@
+# Strict positivity through a type former
+
+**Not refined yet.** This specification reserves positivity for two declarations the analysis refuses because it cannot see through a type former: one that takes a type former as a parameter, and one that holds itself through a container whose hidden proof applies a function to the payload. It is not an implementation plan.
+
+## What is missing
+
+**A type former taken as a parameter.** `induct Mu(F : (Type) -> Type) | fix(F(Mu(F))) end` cannot be judged from its own body: whether `Mu(F)` occurs positively depends on what `F` does with its argument, which only an instance knows. The analysis answers *a position the checker cannot see through* rather than `Unused`, so the declaration is refused ([Strict positivity, modulo polarity](../../design/theory/strict-positivity-modulo-polarity.md)).
+
+**A type cannot hold itself through a container whose hidden proof applies a function to the payload.** Over `struct Box(V: Type): Type { items: List(V), @ok: Holds(List/len(items) < 9) }`, `induct Tree: Type | node(Box(Tree)) | tip() end` is refused, "not strictly positive: through 'node(0) : Box(Tree)' it occurs in itself in a position the checker cannot see through". The walk (`curios-analysis/src/positivity.rs`) descends into a form it cannot see through at `Mixed`, and `List/len(@V, items)` holds `V` as an implicit argument, so `Box` reads `Mixed` in `V` though the proof stores no `V` and the functor is the list's with a predicate over it. The same bound stated as a family indexed by the payload, whose constructors hold `V` as plain payloads alone, reads `Strict` and is accepted, which is the form `/std/Map` holds its soundness in, with one lemma each way to the recursive proposition its proofs read (`Node/Shaped`, `Node/shaped`, `Node/read`, `curios-std/src/Map/Node.crs`), since `/std/Toml` holds itself through a map.
+
+## Refinement
+
+- **A polarity obligation on a binder.** An inferred per-binder polarity obligation recorded on the declaration, generalized onto enclosing signatures that bind the parameter, instantiated freshly at each external occurrence and discharged against the argument's own vector — the architecture `UniverseContext` already has for levels — kept in a side store keyed by declaration and binder rather than as a field of `FuncType`, so conversion stays free of polarity. It waits for a consumer, and is scheduled with `Mu` itself.
+- **A parameter that stands only in a proposition's term.** A decision first, of the trusted base: whether a parameter that stands only as an argument of a term, in a field typed at a proposition, may read below `Mixed`, and by what the walk would know the term stores none of it. Check: the two declarations above, and a refusal test for a field that does use the parameter left of an arrow under a function.

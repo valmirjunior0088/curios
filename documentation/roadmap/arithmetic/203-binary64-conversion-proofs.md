@@ -1,6 +1,6 @@
 # Proofs of rational–binary64 conversion
 
-**Not refined yet.** This specification preserves the formal boundary theorems deferred from [exact rationals](04-exact-rationals.md). Their targets are recorded below, but the connection between primitive floating-point results and their exact interpretation still lacks a specified foundation. This is not an implementation plan until that foundation and the proof obligations are refined.
+**Not refined yet.** This specification preserves the formal boundary theorems deferred from [exact rationals](200-exact-rationals.md). Their targets are recorded below, but the connection between primitive floating-point results and their exact interpretation still lacks a specified foundation. This is not an implementation plan until that foundation and the proof obligations are refined.
 
 ## Scope and dependencies
 
@@ -26,10 +26,10 @@ The proof library isolates the field interpretation, the grid spacing and adjace
 ## Decisions required before implementation
 
 - Specify the connection between the primitive floating-point model and the exact values the proofs read, identify its owner, and state which facts are trusted and which are proved. A model reflected into Curios is one proposal, not an interface [the declared operations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) supply.
-- Give the rounding a right shift the logic reads. `/std/Flt/exact`'s `round_in` keeps `Nat/shr(m, s)` and drops `m - Nat/shl(kept, s)`, and conversion ties a right shift to no quotient ([what the carriers' algebra leaves undecided](09-left-undecided-by-the-carriers-algebra.md)), so no statement about what it keeps is provable: either the shift's law lands first, or the rounding is written over a quotient by a power of two, which `/std/Nat/DivMod` already certifies.
+- Give the rounding a right shift the logic reads. `/std/Flt/exact`'s `round_in` keeps `Nat/shr(m, s)` and drops `m - Nat/shl(kept, s)`, and conversion ties a right shift to no quotient ([what the carriers' algebra leaves undecided](205-left-undecided-by-the-carriers-algebra.md)), so no statement about what it keeps is provable: either the shift's law lands first, or the rounding is written over a quotient by a power of two, which `/std/Nat/DivMod` already certifies.
 - Give each theorem its precise premises and equality notion, including negative zero, finite results, overflow and all rounding directions. The target descriptions above do not replace elaborated theorem statements.
 - Identify the reusable lemmas for grid spacing, adjacent values, quotient bounds and guard/sticky reasoning. Keep integer facts in `/std/Nat` and `/std/Int`, beside the numeric laws there, and implementation contracts with the eventual permanent owner of exact rationals.
-- Establish proof sequencing, resource bounds and focused validation before implementation. Stronger conversion than [the declared operations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) give — [the relational layer](08-relational-layer.md), if its consumer appears — is available only when that capability lands.
+- Establish proof sequencing, resource bounds and focused validation before implementation. Stronger conversion than [the declared operations](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) give — [the relational layer](204-relational-layer.md), if its consumer appears — is available only when that capability lands.
 
 ## Verification to refine
 

@@ -5,7 +5,7 @@
 - **`runtime`** is a prerequisite rather than a check: it builds the slim launcher in its own Cargo invocation, which `curios` embeds.
 - **`fmt-check`** alone fails on formatting drift.
 - **`clippy`** compiles the workspace over every target and feature with warnings denied, the same compilation as `cargo check` with more lints. It stops at erasure and certification, over the whole standard library.
-- **`test`** alone reaches `curios-cont`, `curios-emit` and `curios-wasm`, through the cross-stage corpus, and renders `/std`'s pages end to end through `curios document --std`.
+- **`test`** alone reaches `curios-cont`, `curios-emit` and `curios-wasm`, through the cross-stage corpus, renders `/std`'s pages end to end through `curios document --std`, and holds `documentation/roadmap.md` to the directory beside it.
 - **`doctest`** alone compiles and runs what a `///` block asserts, since cargo's every target excludes doctests. It passes over an empty set, so the first example written is run the day it is written.
 - **`docs`** alone runs rustdoc, under `[workspace.lints.rustdoc] all = "deny"` inherited through `[lints] workspace = true`, over private items because the crates state their invariants on `pub(crate)` ones; a broken intra-doc link is checked nowhere else.
 - **`js-test`** alone runs a compiled program under a JavaScript engine against the browser harness's own host, building the bundle for `wasm32-unknown-unknown` first.

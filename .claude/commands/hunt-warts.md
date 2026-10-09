@@ -25,7 +25,7 @@ What is written down already is known: an entry in a findings file, an open line
 
 ## Where a find goes
 
-A bug or a quick win is an entry in the findings file of its area, or in the workspace's for what belongs to no area. A departure from a rule that is no quick win is an open line of `documentation/roadmap.md` with a spec not yet refined, placed where the roadmap's opening paragraphs order a broken rule — after the findings, before every capability and cost — among its area's specs, or among the workspace's, loose in `roadmap/`, for what belongs to no area.
+A bug or a quick win is an entry in the findings file of its area, or in the workspace's for what belongs to no area. A departure from a rule that is no quick win is an open line of `documentation/roadmap.md` with a spec not yet refined, numbered as the roadmap's opening paragraphs number a broken rule — from `100`, after the findings and before every capability and cost — among its area's specs, or among the workspace's, loose in `roadmap/`, for what belongs to no area.
 
 A closed term the checkers admit at `/std/Bool/False` is never set aside: it is an open ticket on the soundness board, filed as `/hunt-unsoundness`'s **The open ticket** files one, and it joins the batch like any entry. A term admitted that should be refused, from which no `False` is built, is a finding, in soundness's findings file.
 
