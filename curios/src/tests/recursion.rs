@@ -308,3 +308,43 @@ fn a_rec_group_over_a_dependent_family_closes_without_expanding_its_own_members(
 
     assert_eq!(run(source), b"7");
 }
+
+#[test]
+fn a_descent_through_a_local_definition_is_graded_wherever_the_call_stands() {
+    // The call's argument names a `let` bound before it. In the tail the walk reads it as its value; in a later binding's value it once read the binding as stored, and refused a proof the kernel accepts.
+    let source = r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
+        let halved(n: Nat) -> Holds(0 <= n) =
+            match n < 2
+            | true => True/qed()
+            | false => let half = n / 2; let _inner = halved(half); True/qed()
+            end;
+        let depth(n: Nat) -> Nat =
+            match n < 2
+            | true => 0
+            | false => let half = n / 2; let below = depth(half); below + 1
+            end;
+        let Chosen: Type = match depth(5) | 2 => Nat | _ => Bool end;
+        let chosen: Chosen = 7;
+        /std/print(Nat/to_str(chosen + depth(9)))
+        "#;
+
+    assert_eq!(run(source), b"10");
+}
+
+#[test]
+fn a_call_through_a_local_definition_that_does_not_descend_is_refused() {
+    let source = r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
+        let grown(n: Nat) -> Holds(0 <= n) =
+            match n < 2
+            | true => True/qed()
+            | false => let more = n + 1; let _inner = grown(more); True/qed()
+            end;
+        /std/print("unreachable")
+        "#;
+
+    assert!(error(source).contains("not known to terminate"));
+}

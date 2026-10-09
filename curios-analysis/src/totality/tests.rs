@@ -438,8 +438,13 @@ fn member(argument: Term) -> (RecGroup, Term) {
     )
 }
 
-/// The calls a walk of `body` records for the one member of `group`, whose parameter is `n`.
+/// How many calls a walk of `body` records for the one member of `group`, whose parameter is `n`.
 fn calls_in(group: &RecGroup, n: Free, body: &Term) -> usize {
+    graded_in(group, n, body).len()
+}
+
+/// The calls a walk of `body` records for the one member of `group`, whose parameter is `n`, each as it was graded.
+fn graded_in(group: &RecGroup, n: Free, body: &Term) -> Vec<Call> {
     let mut kernel = Probe::default();
     let params = [n];
     let arities = vec![1];
@@ -456,7 +461,7 @@ fn calls_in(group: &RecGroup, n: Free, body: &Term) -> usize {
     };
     walk.walk(body);
 
-    walk.calls.len()
+    walk.calls
 }
 
 /// Sixty `let`s over `first`, each binding `line` of the one before, closed by `tail` of the last.
@@ -531,6 +536,27 @@ fn a_tower_handed_to_the_member_is_read_in_its_size() {
     );
 
     assert_eq!(calls_in(&group, n, &body), 1);
+}
+
+/// A call in a `let`'s value reads the bindings before it, as one in its tail does. `let same = n; let r = f(same); r` hands the member its own parameter, so the call is graded `Same`; a value walked as it is stored names the binding before it by a position nothing stands at, and the call reads as unrelated to every parameter.
+///
+/// Mutation-checked: with a binding's value walked as stored, the call is graded as unrelated.
+#[test]
+fn a_call_in_a_lets_value_reads_the_bindings_before_it() {
+    let n = Free::local(2, Some("n"));
+    let same = Free::local(3, Some("same"));
+    let r = Free::local(4, Some("r"));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let (group, _) = member(Term::free_var(&n));
+    let call = Term::apply(Term::rec_proj(group.clone(), 0), [Term::free_var(&same)]);
+    let body = Term::let_block(
+        vec![(same, nat.clone(), Term::free_var(&n)), (r, nat, call)],
+        Term::free_var(&r),
+    );
+
+    let calls = graded_in(&group, n, &body);
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].matrix.entry(0, 0), Size::Same);
 }
 
 /// A walked value is passed over in its own `let`'s tail and nowhere else: a sibling position holds the same call under another context, which the value's walk did not grade it under.

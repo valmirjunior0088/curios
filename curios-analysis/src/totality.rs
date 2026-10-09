@@ -138,7 +138,7 @@ struct Walk<'a, E: Env> {
     context: SizeContext,
     /// The nested groups whose bodies the walk is currently inside, entered and left with them. A group reached from within itself would regenerate its own bodies without end, since every member reference materializes as a projection carrying the whole group.
     entered: Vec<RecGroup>,
-    /// The `let` values the walk is in the tail of, each walked where its `let` binds it, and how many `let`s bind each. The walk reads a tail with each binder standing for its value, so the tail holds a copy at every use; a copy is the value's calls again, with the same arguments, and what held where the `let` binds it still holds wherever the tail puts one. So the matrix graded at the binding describes every copy, and a copy is passed over. Scoped to the tail: past it the same term is another position, read under what holds there.
+    /// The `let` values the walk is past, in a later binding of their `let` or in its tail, each walked where its `let` binds it, and how many `let`s bind each. The walk reads a later binding and the tail with each binder standing for its value, so they hold a copy at every use; a copy is the value's calls again, with the same arguments, and what held where the `let` binds it still holds wherever one stands. So the matrix graded at the binding describes every copy, and a copy is passed over. Scoped to the `let`: past it the same term is another position, read under what holds there.
     walked: HashMap<Term, usize>,
     calls: Vec<Call>,
 }
@@ -497,25 +497,31 @@ impl<E: Env> Walk<'_, E> {
 
             Subterm::Foreign(_, args) => self.walks(args),
 
-            // The tail is walked with each binder standing for its value, for the reason an applied lambda is: a `let` is a redex, and a binder aliasing an arm's payload is below the scrutinee exactly as the payload is. Binding `i` is stored under the `i` binders before it, so each value is released against the values already in hand.
+            // A binding's type and value, and then the tail, are each walked with every binder before them standing for its value, for the reason an applied lambda is: a `let` is a redex, and a binder aliasing an arm's payload is below the scrutinee exactly as the payload is. Binding `i` is stored under the `i` binders before it, so it is released against the values already in hand before it is walked, as the kernel checks it against the binders before it: a call in a binding's value reads what an earlier binding stands for as a call in the tail does.
             Subterm::Let(Let { bindings, tail }) => {
                 let mut values: Vec<Term> = Vec::with_capacity(bindings.len());
-                for binding in bindings {
-                    self.walk_term(binding.type_())?;
-                    self.walk_term(binding.value())?;
-                    let refs = values.iter().collect::<Vec<_>>();
-                    values.push(binding.value().release(&refs));
-                }
-                let refs = values.iter().collect::<Vec<_>>();
-                let tail = tail.open(&refs);
-
                 // Only a value that holds a group is worth remembering: the rest are passed over as they stand. Counted, since two `let`s may bind one term and the inner one leaves first.
-                values.retain(Term::has_group);
-                for value in &values {
-                    *self.walked.entry(value.clone()).or_default() += 1;
+                let mut remembered: Vec<Term> = Vec::new();
+                let mut walked = Ok(());
+                for binding in bindings {
+                    let refs = values.iter().collect::<Vec<_>>();
+                    let type_ = binding.type_().release(&refs);
+                    let value = binding.value().release(&refs);
+                    walked = self.walks([&type_, &value]);
+                    if walked.is_err() {
+                        break;
+                    }
+                    if value.has_group() {
+                        *self.walked.entry(value.clone()).or_default() += 1;
+                        remembered.push(value.clone());
+                    }
+                    values.push(value);
                 }
-                let walked = self.walk_term(&tail);
-                for value in &values {
+                if walked.is_ok() {
+                    let refs = values.iter().collect::<Vec<_>>();
+                    walked = self.walk_term(&tail.open(&refs));
+                }
+                for value in &remembered {
                     if let Entry::Occupied(mut standing) = self.walked.entry(value.clone()) {
                         *standing.get_mut() -= 1;
                         if *standing.get() == 0 {
