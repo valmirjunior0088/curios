@@ -215,6 +215,37 @@ fn a_shared_level_walk_asks_each_level_once_per_node() {
     assert!(root_operands_shared(&rewritten));
 }
 
+/// The shared level walk answers as the per-occurrence walk does. Over a term holding two levels under shared nodes, small enough to walk per occurrence, what it remembers of a node is what asking again would have answered: the two rewrites are one term.
+#[test]
+fn the_shared_level_walk_answers_as_the_per_occurrence_walk_does() {
+    let x = Free::local(0, Some("x"));
+    let (first, second) = (UniverseMetaId(0), UniverseMetaId(1));
+    let base = Term::apply(
+        Term::free_var(&x),
+        [
+            Term::type_at(Level::meta(first)),
+            Term::type_at(Level::meta(second)),
+        ],
+    );
+    let term = doubled(base, 4);
+    let settled = move |_: usize, level: &Level| {
+        level.substitute(|head| match head {
+            LevelHead::Meta(found) if found == first => Some(Level::zero()),
+            LevelHead::Meta(found) if found == second => Some(Level::constant(1)),
+            _ => None,
+        })
+    };
+
+    let shared: Term = rewrite_universe_levels_scoped_shared(&term, settled)
+        .expect("substituting a ground level cannot overflow");
+    let walked: Term = rewrite_universe_levels_scoped(&term, settled)
+        .expect("substituting a ground level cannot overflow");
+
+    assert_eq!(shared, walked);
+    assert!(shared.universe_metas().is_empty());
+    assert!(root_operands_shared(&shared));
+}
+
 /// The per-occurrence level walk asks its hook at every occurrence, in walk order: the sequence two spellings are aligned by has one entry per occurrence, so a shared level at the base of three doublings is asked eight times.
 #[test]
 fn the_per_occurrence_level_walk_asks_every_occurrence() {
