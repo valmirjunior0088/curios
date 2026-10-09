@@ -48,7 +48,10 @@ impl ClosedHost for Context<'_> {
     ) -> Result<Option<Vec<Term>>, ReduceError> {
         let head = structural(self, head.clone())?;
 
-        Ok(stated(self, &head, tag)?.map(|stated| stated.payload))
+        Ok(match stated(self, &head, tag)? {
+            Said::Stated(stated) => Some(stated.payload),
+            Said::Silent | Said::Open => None,
+        })
     }
 
     fn closed_body_at(&self, name: &Free) -> Option<&Term> {
@@ -560,36 +563,44 @@ struct Stated {
     payload: Vec<Term>,
 }
 
-/// What `head`'s type states of `tag`'s payload, `head` not reduced: the family instance read off binders and declarations ([`synth_neutral`]), where that family is a proposition and its indices pin every component. `None` where no lookup types `head`, its family is no such proposition, or a side still holds a metavariable, which is left to the ordinary rule: what conversion would answer of it moves with the solver.
-fn stated(context: &mut Context, head: &Term, tag: &Atom) -> Result<Option<Stated>, ReduceError> {
+/// What a scrutinee's type says of a match with one arm.
+enum Said {
+    /// Nothing: no lookup types the scrutinee, or its family is no proposition whose indices pin every component, and the match is any other match.
+    Silent,
+    /// The scrutinee proves a proposition, and it or its type still holds a metavariable no solution has landed for: what the type states moves with the solver, so the match stands until it has, its proof unreduced.
+    Open,
+    /// What the type states.
+    Stated(Stated),
+}
+
+/// What `head`'s type states of `tag`'s payload, `head` not reduced: the family instance read off binders and declarations ([`synth_neutral`]), where that family is a proposition and its indices pin every component.
+fn stated(context: &mut Context, head: &Term, tag: &Atom) -> Result<Said, ReduceError> {
     // Read through the solutions that have landed: a type under elaboration holds a solved metavariable where its solution will stand, an implicit argument's among them, and only one still open is the solver's to move.
     let head = zonk_solved_term_metas(context, head);
-    if head.has_metavar() {
-        return Ok(None);
-    }
     let Some(type_) = synth_neutral(context, &Binders::default(), &[], &head)? else {
-        return Ok(None);
+        return Ok(Said::Silent);
     };
     let type_ = reduce_forced(context, type_)?;
     let type_ = zonk_solved_term_metas(context, &type_);
-    if type_.has_metavar() {
-        return Ok(None);
-    }
     let Subterm::InductType(family) = &*type_ else {
-        return Ok(None);
+        return Ok(Said::Silent);
     };
     let Some(declaration) = context.induct_decl(&family.name).cloned() else {
-        return Ok(None);
+        return Ok(Said::Silent);
     };
     let Ok(declaration) = context.instantiate_induct_decl_at(&declaration, &family.universes)
     else {
-        return Ok(None);
+        return Ok(Said::Silent);
     };
     if !matches!(&*declaration.result_sort, Subterm::Prop(_)) {
-        return Ok(None);
+        return Ok(Said::Silent);
+    }
+    // Left to the ordinary rule, such a match would have its proof reduced to a constructor, which no judgment reads.
+    if head.has_metavar() || type_.has_metavar() {
+        return Ok(Said::Open);
     }
     let Some(signature) = declaration.instantiate(tag, &family.params) else {
-        return Ok(None);
+        return Ok(Said::Silent);
     };
 
     let binders = (0..signature.len())
@@ -598,7 +609,7 @@ fn stated(context: &mut Context, head: &Term, tag: &Atom) -> Result<Option<State
     let opened = binders.iter().map(Term::free_var).collect::<Vec<_>>();
     let targets = case_target_indices(signature, &opened);
     let Some((payload, indices)) = pinned_instance(&binders, &targets, &family.indices) else {
-        return Ok(None);
+        return Ok(Said::Silent);
     };
     let built = Term::induct_type_at(
         family.name,
@@ -607,7 +618,7 @@ fn stated(context: &mut Context, head: &Term, tag: &Atom) -> Result<Option<State
         indices,
     );
 
-    Ok(Some(Stated {
+    Ok(Said::Stated(Stated {
         type_,
         built,
         payload,
@@ -624,13 +635,14 @@ fn unread_payload(
     head: &Term,
     tag: &Atom,
 ) -> Result<Option<Option<Vec<Term>>>, ReduceError> {
-    let Some(Stated {
+    let Stated {
         type_,
         built,
         payload,
-    }) = stated(context, head, tag)?
-    else {
-        return Ok(None);
+    } = match stated(context, head, tag)? {
+        Said::Silent => return Ok(None),
+        Said::Open => return Ok(Some(None)),
+        Said::Stated(stated) => stated,
     };
 
     let fires = match context.plain() {
@@ -1364,8 +1376,11 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                             let payload = match closed {
                                 true => match m.cases.unread() {
                                     Some(_) => Some(Some(Vec::new())),
-                                    None => stated(context, &stepped, tag)?
-                                        .map(|stated| Some(stated.payload)),
+                                    None => match stated(context, &stepped, tag)? {
+                                        Said::Stated(stated) => Some(Some(stated.payload)),
+                                        Said::Open => Some(None),
+                                        Said::Silent => None,
+                                    },
                                 },
                                 false => unread_payload(context, &stepped, tag)?,
                             };
