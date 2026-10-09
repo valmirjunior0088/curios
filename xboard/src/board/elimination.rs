@@ -69,6 +69,16 @@ pub(super) const ELIMINATION: Part = Part {
                     proof: Proof::Module(a_guard_settled_where_its_operands_are_proofs),
                     expect: refused![kernel],
                 },
+                Witness {
+                    what: "a guard decided by the unit type's one inhabitant under one case of a split, and answered after the split",
+                    proof: Proof::Program(A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_UNITS),
+                    expect: refused![elaborator],
+                },
+                Witness {
+                    what: "the same guard settled where its operands are units and answered where they are not, as a term",
+                    proof: Proof::Module(a_guard_settled_where_its_operands_are_units),
+                    expect: refused![kernel],
+                },
             ],
         },
     ],
@@ -153,6 +163,30 @@ const A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_PROOFS: &str = r#"
     use /std/Bool/{True, False, Holds};
     induct Two: Prop | a() | b() end
     let F(c: Bool) -> Type = match c | true => Two | false => Nat end;
+    let f(
+        c: Bool,
+        h: (F(c)) -> Nat,
+        k: (Nat) -> Bool,
+        p: F(c),
+        q: F(c),
+        guard: Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> Holds(k(0)) =
+        match (match h(p) == h(q) | true => k(0) | false => k(1) end)
+        | false => match guard end
+        | true =>
+            let split: {} = match c
+                | false => ()
+                | true => (let settled: Holds(k(0)) = True/qed(); ())
+                end;
+            True/qed()
+        end;
+    f(false, (n: Nat) => n, (n: Nat) => n == 1, 0, 1, True/qed())
+    "#;
+
+/// [`A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_PROOFS`] with no proposition in it: `F(c)` is the unit type at `true`, where any two inhabitants are one by the type's shape, so the comparison is decided inside that arm as it was there and the guard's spelling is settled the same way. What the settlement read of the split is that a type has one inhabitant, which a proposition is one case of.
+const A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_UNITS: &str = r#"
+    use /std/{Nat, Bool};
+    use /std/Bool/{True, False, Holds};
+    let F(c: Bool) -> Type = match c | true => {} | false => Nat end;
     let f(
         c: Bool,
         h: (F(c)) -> Nat,
@@ -330,11 +364,6 @@ fn a_guard_settled_under_one_case_of_a_split() -> (Module, Term) {
 /// The `true` arm of the match on `read` assumes `read` is `true`, an equation recorded under `read`, which names `h`, `p`, `q` and `k` and not `c`. The `true` arm of the split re-types `h`, `p` and `q` at `Two`, where conversion holds `h(p)` and `h(q)` one term, the comparison folds to `true` and `read` is `k(0)`: the `qed` that arm binds at `Holds(k(0))` settles the equation's reduced spelling there, as `k(0)`. The settled spelling stays with the equation when the split is left, so the `qed` after it, typed with `c` open, is checked at a `Holds(k(0))` that still answers `True`, and at `false`, where `read` is `k(1)`, what it proves is `Holds(false)`. With the `true` arm of the split a bare `qed`, the spelling is settled with `c` open, as `read` stands there, and the kernel refuses the term.
 fn a_guard_settled_where_its_operands_are_proofs() -> (Module, Term) {
     let two = Global::Authored(Qualifier::from(["Two"]));
-    let two_type = || Term::induct_type(two, Vec::<Term>::new(), Vec::<Term>::new());
-    let bool_type = || Term::intrinsic(Intrinsic::BoolType);
-    let nat_type = || Term::intrinsic(Intrinsic::NatType);
-    let literal = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
-    let nat = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
@@ -360,6 +389,26 @@ fn a_guard_settled_where_its_operands_are_proofs() -> (Module, Term) {
         ..Module::default()
     };
 
+    a_guard_settled_where_its_operands_are_one(module, &|| {
+        Term::induct_type(two, Vec::<Term>::new(), Vec::<Term>::new())
+    })
+}
+
+/// [`a_guard_settled_where_its_operands_are_proofs`] with the unit type `{}` where `Two` stood, and no declaration: at `true` the operands' type has one inhabitant by its shape, and conversion holds `h(p)` and `h(q)` one term there as it does at a proposition.
+fn a_guard_settled_where_its_operands_are_units() -> (Module, Term) {
+    a_guard_settled_where_its_operands_are_one(Module::default(), &Term::tuple_type_unit)
+}
+
+/// The term both of those close with, over `module`, with `single` the type `F(c)` is at `true`.
+fn a_guard_settled_where_its_operands_are_one(
+    module: Module,
+    single: &dyn Fn() -> Term,
+) -> (Module, Term) {
+    let bool_type = || Term::intrinsic(Intrinsic::BoolType);
+    let nat_type = || Term::intrinsic(Intrinsic::NatType);
+    let literal = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+    let nat = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
+
     let truth = Global::Authored(SYNTAX.proof.true_type.qualifier());
     let true_type = || Term::induct_type(truth, Vec::<Term>::new(), Vec::<Term>::new());
     let qed = || Term::variant(truth, Vec::<Term>::new(), "qed", Vec::<Term>::new());
@@ -377,14 +426,14 @@ fn a_guard_settled_where_its_operands_are_proofs() -> (Module, Term) {
     let right = Free::local(974, Some("q"));
     let guard = Free::local(975, Some("guard"));
 
-    // match c : (_) => Type | false => Nat | true => Two end
+    // match c : (_) => Type | false => Nat | true => single end
     let carried = || {
         Term::bool_match(
             Term::free_var(&decided),
             None,
             Term::type_ground(),
             nat_type(),
-            two_type(),
+            single(),
         )
     };
     let measured =
