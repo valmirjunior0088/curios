@@ -113,7 +113,7 @@ pub fn segments(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
 ///
 /// **Two halves by reader, in the one segment a record vouches for.** A slot's record digests its artifact, so both halves are believed together, and a slot stays one file replaced by one rename. What differs is who decodes which: opening a unit decodes the first and keeps the second as bytes.
 ///
-/// What a unit stores apart is a part for each reader, every one behind its length ([`Uncertified::apart_bytes`], [`apart_parts`]): its lowered items, each on its own, read by whoever names its declaration; then its baseline half, which only a later compile of the same unit reads, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
+/// What a unit stores apart is a part for each reader, every one behind its length ([`Uncertified::apart_bytes`], [`apart_parts`]): its lowered items and its erased forms, each on its own, read by whoever names its declaration or links it; then its baseline half, which only a later compile of the same unit reads, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
 pub fn halved(unit: &[u8], baseline: &[u8]) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(8 + unit.len() + baseline.len());
     bytes.extend_from_slice(&(unit.len() as u64).to_le_bytes());
@@ -131,7 +131,7 @@ pub fn halves(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
     (length <= rest.len()).then(|| rest.split_at(length))
 }
 
-/// The four parts of what a unit stores apart from itself ([`Uncertified::apart_bytes`]), each a run of the buffer `stored` is in: its lowered items, then the text's, the elaborator's and erasure's parts of its baseline half. `None` for bytes that are no such layout, one cut short among them: every part states its length, and together they are the bytes.
-pub fn apart_parts(stored: &Bytes) -> Option<[Bytes; 4]> {
+/// The five parts of what a unit stores apart from itself ([`Uncertified::apart_bytes`]), each a run of the buffer `stored` is in: its lowered items, its erased forms, then the text's, the elaborator's and erasure's parts of its baseline half. `None` for bytes that are no such layout, one cut short among them: every part states its length, and together they are the bytes.
+pub fn apart_parts(stored: &Bytes) -> Option<[Bytes; 5]> {
     parted(stored)?.try_into().ok()
 }

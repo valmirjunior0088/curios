@@ -318,7 +318,7 @@ fn std_image_division() {
 
         let stored = std.stored().expect("the library's unit serializes");
         let (unit, apart) = halves(&stored).expect("a unit's artifact");
-        let [lowered, records, asked, erasures] =
+        let [lowered, forms, records, asked, erasures] =
             apart_parts(&curios_archive::Bytes::from(apart.to_vec()))
                 .expect("what a unit stores apart")
                 .map(|part| part.as_slice().len());
@@ -345,15 +345,20 @@ fn std_image_division() {
         let consed = std.core().shared(&Sharing::new());
         part!("  the elaborated module, consed", Module, &consed);
         items!("    its items", &consed);
-        part!("  the erased forms", ErasedUnit, std.erased());
+        part!("  its erased forms' index", ErasedUnit, std.erased());
         part!(
             "  the certifier's record",
             Certification,
             std.certification()
         );
 
-        row("what a reader of a declaration restores", lowered, None);
+        row(
+            "what a reader of a declaration restores",
+            lowered + forms,
+            None,
+        );
         row("  its lowered items, each stored alone", lowered, None);
+        row("  its erased forms, each stored alone", forms, None);
         row(
             "what a recompile alone restores",
             records + asked + erasures,

@@ -108,15 +108,22 @@ impl Uncertified {
         traces
     }
 
-    /// The bytes this unit stores apart from itself, each part behind its length ([`joined`]) and read by whoever asks for it: its lowered items, one on its own for each ([`PreparedText::items_bytes`]), then its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
+    /// The bytes this unit stores apart from itself, each part behind its length ([`joined`]) and read by whoever asks for it: its lowered items and its erased forms, one on its own for each ([`PreparedText::items_bytes`], [`ErasedUnit::items_bytes`]), then its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
     #[cfg(feature = "archive")]
     pub fn apart_bytes(&self) -> Result<Vec<u8>, String> {
         let items = self.text.items_bytes()?;
+        let forms = self.erased.items_bytes()?;
         let text = self.text.baseline_bytes()?;
         let traces = self.traces.bytes()?;
         let erased = self.erased.baseline_bytes()?;
 
-        Ok(joined(&[&items[..], &text[..], &traces[..], &erased[..]]))
+        Ok(joined(&[
+            &items[..],
+            &forms[..],
+            &text[..],
+            &traces[..],
+            &erased[..],
+        ]))
     }
 
     /// The bytes this unit is imaged as: itself, then what it stores apart from itself ([`halved`]).
@@ -130,7 +137,7 @@ impl Uncertified {
     /// This unit with `bytes` as what it stores apart from itself ([`Uncertified::apart_bytes`]), each part a run of the buffer they are in and read when something first asks for it — see [`PreparedText::with_items`] and [`PreparedText::with_baseline`]. `Err` is bytes that are no such thing.
     #[cfg(feature = "archive")]
     pub fn with_apart(self, bytes: impl Into<Bytes>) -> Result<Self, String> {
-        let [items, text, traces, erased] =
+        let [items, forms, text, traces, erased] =
             apart_parts(&bytes.into()).ok_or("not what a unit stores apart from itself")?;
 
         Ok(Self {
@@ -139,7 +146,11 @@ impl Uncertified {
                     .with_baseline(text)
                     .with_items(items)?,
             ),
-            erased: Rc::new(Rc::unwrap_or_clone(self.erased).with_baseline(erased)),
+            erased: Rc::new(
+                Rc::unwrap_or_clone(self.erased)
+                    .with_baseline(erased)
+                    .with_items(forms)?,
+            ),
             traces: Rc::new(Deferred::stored(traces)),
             ..self
         })

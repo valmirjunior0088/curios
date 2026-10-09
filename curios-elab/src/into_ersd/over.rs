@@ -7,7 +7,7 @@
 //! **A part is the elaborated declaration's, a binding the erased item's.** A question about a name's type, body or registry entry is answered as it was where the elaborator kept the declaration, and for one elaborated again where that part came out equal as it is stored ([`Same`]). A question about how a name is bound is answered as it was where the item declaring it kept its erased form, and for one erased again where an item naming it reads the two alike (`ErasedItem::read_alike`). A name neither the unit nor its baseline declares is another unit's, which the baseline was erased after as this unit is.
 
 use {
-    super::{ErasedItem, ErasedUnit},
+    super::{ErasedUnit, Held},
     crate::{
         Answered, Question, Same, concepts_alike, entries_alike, inducts_alike, structs_alike,
     },
@@ -28,7 +28,7 @@ pub struct ErasedBaseline<'a> {
 }
 
 /// An erased form the unit keeps of its baseline, with what erasing it asked.
-pub(super) type Kept = (Rc<ErasedItem>, Rc<Trace<Question, Answered>>);
+pub(super) type Kept = (Held, Rc<Trace<Question, Answered>>);
 
 /// What an erasure over a baseline has decided, as it walks the unit's items in the order they are stored in.
 pub(super) struct ErasedOver<'a> {
@@ -88,7 +88,7 @@ impl<'a> ErasedOver<'a> {
             }
         }
 
-        Some((Rc::clone(erased), Rc::clone(trace)))
+        Some((erased, Rc::clone(trace)))
     }
 
     /// Whether `question` is answered `answered` now.

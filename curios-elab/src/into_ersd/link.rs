@@ -146,7 +146,7 @@ fn reached<'a>(scope: Erasures<'_>, roots: impl Iterator<Item = &'a ErasedItem>)
     }
     while let Some((unit, place)) = items.pop() {
         if reached.items[unit].insert(place) {
-            let erased = &units[unit].items()[place];
+            let erased = units[unit].item(place);
             items.extend(places(
                 scope,
                 erased.values().iter().chain(erased.functions()),
@@ -157,7 +157,7 @@ fn reached<'a>(scope: Erasures<'_>, roots: impl Iterator<Item = &'a ErasedItem>)
     // A row's fields name other rows, which the declaring fragment imports in its turn.
     while let Some((unit, place)) = rows.pop() {
         if reached.rows[unit].insert(place) {
-            let erased = &units[unit].items()[place];
+            let erased = units[unit].item(place);
             rows.extend(places(scope, erased.environment().imported_rows()));
         }
     }
@@ -172,10 +172,7 @@ pub(super) fn link(
     entry: &ErasedItem,
 ) -> Result<ErasedProgram, Error> {
     curios_profile::profile!("link_program");
-    let reached = reached(
-        scope,
-        own.items().iter().map(|erased| &**erased).chain([entry]),
-    );
+    let reached = reached(scope, own.forms().chain([entry]));
     curios_profile::sample!(
         "link::computing",
         scope
@@ -197,14 +194,14 @@ pub(super) fn link(
     {
         // In the order the unit stores its items, which puts a declaration ahead of whatever imports its rows.
         for &place in items.union(rows) {
-            let erased = &unit.items()[place];
+            let erased = unit.item(place);
             match items.contains(&place) {
                 true => linking.add(erased),
                 false => linking.add_rows(erased),
             }
         }
     }
-    for erased in own.items() {
+    for erased in own.forms() {
         linking.add(erased);
     }
     linking.add(entry);

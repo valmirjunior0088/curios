@@ -541,8 +541,12 @@ pub(super) fn erase_items<'s>(
     for (place, item) in module.items.iter().enumerate() {
         let names = item.declared_names();
         let kept = over.as_mut().and_then(|over| over.keep(item, &unit));
-        let (erased, trace) = match kept {
-            Some(kept) => kept,
+        let trace = match kept {
+            Some((held, trace)) => {
+                unit.keep(item, held);
+
+                trace
+            }
             None => {
                 let read = RefCell::new(Vec::new());
                 let externals = |name: &Global| {
@@ -558,13 +562,14 @@ pub(super) fn erase_items<'s>(
                 // One sample for each item erased, with how much its erasure asked.
                 curios_profile::sample!("erase::asked", trace.len());
 
-                (Rc::new(erased), Rc::new(trace))
+                unit.push(item, erased);
+
+                Rc::new(trace)
             }
         };
         if let Some(name) = names.first() {
             asked.share(**name, trace);
         }
-        unit.push(item, erased);
     }
 
     Ok(unit.asking(asked))
