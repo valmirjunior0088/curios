@@ -893,9 +893,15 @@ impl fmt::Display for Displayed<'_> {
                 let why = match proposition {
                     true => {
                         let nothing = match reduct {
+                            // An inductive proposition as written reduces to itself, and a report that said so would say the bound twice.
                             Some(reduct) => {
-                                let reduct = reduct.spelled(spelling);
-                                format!("nothing discharged {bound}, which reduces to {reduct}")
+                                let reduct = reduct.spelled(spelling).to_string();
+                                match reduct == bound.to_string() {
+                                    true => format!("nothing discharged {bound}"),
+                                    false => format!(
+                                        "nothing discharged {bound}, which reduces to {reduct}"
+                                    ),
+                                }
                             }
                             None => format!("nothing discharged {bound}"),
                         };

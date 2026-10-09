@@ -404,6 +404,24 @@ fn a_late_pinned_bound_that_fails_reports_what_it_reduces_to() {
     );
 }
 
+// A bound that is an inductive proposition as written reduces to itself, and the report says it once: the clause that tells a decided bound from the `False` it reduces to has nothing to add where reduction moved nothing.
+#[test]
+fn a_refused_bound_reduction_does_not_move_is_said_once() {
+    let error = typecheck(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+        induct Even: (Nat) -> Prop | zero(): (0) end
+        let other(n: Nat, m: Nat, p: Even(m)) -> Even(n) = True/proved();
+        /std/print("unreachable")
+        "#,
+    )
+    .expect_err("nothing proves an arbitrary number even");
+
+    assert!(error.contains("nothing discharged Even(n)"), "{error}");
+    assert!(!error.contains("which reduces to"), "{error}");
+}
+
 // A late fill is a metavariable solution, decided under the refinements its slot was born under: a bound true only under `m < 10` is filled when its subject arrives late inside that arm, as it is when written first — `need(@m, …)`. The control is the same bound with its slot born outside the arm, at a call whose witness is the match: the guard is not one the slot was born under, so the bound is refused.
 #[test]
 fn a_late_pinned_bound_holds_under_the_guard_its_slot_was_born_under() {
