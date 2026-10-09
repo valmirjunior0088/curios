@@ -1,1 +1,3 @@
 # Findings
+
+- **The gate's decision says `test` holds the roadmap to its directory, and no test does.** [Every gate step catches what no other step does](../design/every-gate-step-catches-what-no-other-step-does.md) states that `test` holds `documentation/roadmap.md` to the directory beside it. No test of the workspace reads `documentation/roadmap.md` or a file under `documentation/roadmap/`, so an open line that links no spec and a spec no line links both pass the gate. Fix: the test the sentence describes, or the clause dropped. Check: the test fails on a spec filed with no line. Size: quick.
