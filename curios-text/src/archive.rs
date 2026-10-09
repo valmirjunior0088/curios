@@ -1,4 +1,4 @@
-//! How a resolver map is archived: as its entries, sorted by key.
+//! How the lowering's own shapes are archived: a resolver map as its entries, sorted by key, and a lowered module without its items.
 //!
 //! Sorted because a `HashMap`'s iteration order is not deterministic, and the prelude image is compared byte-for-byte against a second serialization of the same value to prove it is. An unordered archive would fail that check on some runs and pass on others, which is the worst way for it to fail.
 
@@ -33,3 +33,28 @@ where
 }
 
 pub(crate) type OrderedMap = Via<SortedEntries>;
+
+/// A lowered module archived without its items: what a unit's lowering keeps for every unit lowered after it, which reads the registry entries it wrote. An item is stored on its own, beside the unit, and read by whoever names it.
+pub(crate) struct Itemless;
+
+impl Proxy<curios_core::Module> for Itemless {
+    type Archivable = curios_core::Module;
+
+    fn to_archivable(module: &curios_core::Module) -> impl Borrow<curios_core::Module> {
+        curios_core::Module {
+            items: Vec::new(),
+            mounts: module.mounts.clone(),
+            induct_decls: module.induct_decls.clone(),
+            struct_decls: module.struct_decls.clone(),
+            concepts: module.concepts.clone(),
+            witnesses: module.witnesses.clone(),
+            tests: module.tests.clone(),
+        }
+    }
+
+    fn from_archivable(module: curios_core::Module) -> Result<curios_core::Module, String> {
+        Ok(module)
+    }
+}
+
+pub(crate) type WithoutItems = Via<Itemless>;

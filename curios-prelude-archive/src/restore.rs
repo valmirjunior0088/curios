@@ -1,11 +1,13 @@
 //! One-time validation and per-thread restoration of the generated images: two units, `/sys` then `/std`, each framed by the build script as a store slot frames one — a record of what the root was compiled from, ahead of the [`Uncertified`] unit, since no certifier has walked it yet.
 
 use {
+    curios_archive::Bytes,
     curios_document::Documentation,
     curios_unit::{
-        ArchivedRecord, ArchivedUncertified, Record, Stored, Uncertified, halves, segments,
+        ArchivedRecord, ArchivedUncertified, Record, Stored, Uncertified, apart_parts, halves,
+        segments,
     },
-    std::{borrow::Cow, cell::LazyCell, sync::OnceLock},
+    std::{cell::LazyCell, sync::OnceLock},
 };
 
 // From `OUT_DIR`, where the build script files them.
@@ -20,7 +22,7 @@ const DOCUMENTATION_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/doc
 /// The prelude's roots in dependency order, as the build script folded them: `/sys` is lowered against nothing and `/std` against `/sys`, so restoring them in any other order would hand a successor a scope its own names were never resolved in.
 const ROOTS: [(&str, &[u8]); 2] = [("sys", SYS_BYTES), ("std", STD_BYTES)];
 
-/// One image validated: its record and its unit, each as the zero-copy view bytecheck confirmed, and the unit's baseline half as the bytes it is, which nothing here reads.
+/// One image validated: its record and its unit, each as the zero-copy view bytecheck confirmed, and what the unit stores apart from itself as the bytes it is, which nothing here reads.
 type Validated = Result<
     (
         &'static ArchivedRecord,
@@ -51,14 +53,17 @@ fn validate_archives() -> [Validated; 2] {
 fn validate_bytes(root: &str, bytes: &'static [u8]) -> Validated {
     let (record, artifact) =
         segments(bytes).ok_or_else(|| format!("invalid archived /{root}: not a stored unit"))?;
-    let (unit, baseline) = halves(artifact)
+    let (unit, apart) = halves(artifact)
         .ok_or_else(|| format!("invalid archived /{root}: not a unit's artifact"))?;
+    // Read lazily, so its layout is confirmed here: an image cut short anywhere is refused where it is opened.
+    apart_parts(&Bytes::from(apart))
+        .ok_or_else(|| format!("invalid archived /{root}: not what a unit stores apart"))?;
     let record = curios_archive::access::<ArchivedRecord>(record)
         .map_err(|error| format!("invalid archived /{root} record: {error}"))?;
     let unit = curios_archive::access::<ArchivedUncertified>(unit)
         .map_err(|error| format!("invalid archived /{root}: {error}"))?;
 
-    Ok((record, unit, baseline))
+    Ok((record, unit, apart))
 }
 
 fn archived() -> &'static [Validated; 2] {
@@ -73,7 +78,7 @@ fn archived() -> &'static [Validated; 2] {
 pub fn restore_archives() -> [Stored; 2] {
     curios_profile::profile!("restore_archives");
     let mut units = archived().iter().zip(ROOTS).map(|(archived, (root, _))| {
-        let (record, unit, baseline) = match archived {
+        let (record, unit, apart) = match archived {
             Ok(archived) => *archived,
             Err(error) => panic!("{error}"),
         };
@@ -82,13 +87,15 @@ pub fn restore_archives() -> [Stored; 2] {
             record: curios_archive::deserialize::<Record>(record).unwrap_or_else(|error| {
                 panic!("validated archived /{root} record failed to restore: {error}")
             }),
-            // The baseline half stays the slice of the executable it is: a compilation that lowers nothing over this root never reads it.
+            // What the unit stores apart from itself stays the slice of the executable it is: a compilation reads a lowered item where it names its declaration, and the baseline half where it lowers over this root.
             unit: curios_archive::deserialize::<Uncertified>(unit)
                 .unwrap_or_else(|error| {
                     panic!("validated archived /{root} failed to restore: {error}")
                 })
-                .with_baseline(Cow::Borrowed(baseline))
-                .unwrap_or_else(|error| panic!("archived /{root} holds no baseline half: {error}")),
+                .with_apart(apart)
+                .unwrap_or_else(|error| {
+                    panic!("archived /{root} holds nothing stored apart: {error}")
+                }),
         }
     });
 

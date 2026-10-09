@@ -16,7 +16,7 @@ use {
     curios_text::{
         Overlay, PreparedText, RootSource, SYNTAX, UnitSource, into_core_unit, into_core_unit_over,
     },
-    curios_unit::{Predecessors, Unit, halves},
+    curios_unit::{Predecessors, Unit, apart_parts, halves},
     curios_utilities::{Qualifier, RootKind, digest, test_support::Temporary},
     std::{
         cell::RefCell,
@@ -317,7 +317,11 @@ fn std_image_division() {
         }
 
         let stored = std.stored().expect("the library's unit serializes");
-        let (unit, baseline) = halves(&stored).expect("a unit's artifact");
+        let (unit, apart) = halves(&stored).expect("a unit's artifact");
+        let [lowered, records, asked, erasures] =
+            apart_parts(&curios_archive::Bytes::from(apart.to_vec()))
+                .expect("what a unit stores apart")
+                .map(|part| part.as_slice().len());
 
         println!("\n=== how /std's stored unit divides ===");
         row("the artifact", stored.len(), None);
@@ -327,8 +331,6 @@ fn std_image_division() {
             Some(restored!(Unit, unit)),
         );
         let text = part!("  the lowering's state", PreparedText, std.text());
-        let lowered = part!("    its lowered module", Module, std.text().core());
-        items!("      its items", std.text().core());
         let imports = part!("    its import scopes", Imports, std.text().imports());
         let anchors = part!(
             "    where its declarations lie",
@@ -336,8 +338,8 @@ fn std_image_division() {
             std.text().anchors()
         );
         row(
-            "    its tables, lints and the rest",
-            text - lowered - imports - anchors,
+            "    its registry entries, tables and lints",
+            text - imports - anchors,
             None,
         );
         let consed = std.core().shared(&Sharing::new());
@@ -350,7 +352,13 @@ fn std_image_division() {
             std.certification()
         );
 
-        row("what a recompile alone restores", baseline.len(), None);
+        row("what a reader of a declaration restores", lowered, None);
+        row("  its lowered items, each stored alone", lowered, None);
+        row(
+            "what a recompile alone restores",
+            records + asked + erasures,
+            None,
+        );
         row(
             "  the lowering's records and scans",
             std.text()

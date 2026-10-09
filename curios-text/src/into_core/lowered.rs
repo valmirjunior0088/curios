@@ -168,7 +168,8 @@ impl<'a> Baseline<'a> {
         let first = self.first[index];
 
         let mut names = Vec::new();
-        for item in &self.unit.core.items[first..first + declaration.items.len()] {
+        for place in first..first + declaration.items.len() {
+            let item = self.unit.lowered_item(place);
             let kept = match item {
                 curios_core::Item::Let(definition) => {
                     FlatItem::Let(self.kept_let(definition, context, lowered))

@@ -11,7 +11,7 @@
 use {
     super::{Binding, Environment},
     crate::{Answered, Question, Traces},
-    curios_archive::Deferred,
+    curios_archive::{Bytes, Deferred},
     curios_core::{Extent, Free, Global, Item, Module, Trace},
     std::{collections::BTreeMap, rc::Rc},
 };
@@ -287,7 +287,7 @@ impl ErasedUnit {
 
     /// This unit with `bytes` as its baseline half, read when an erasure over the unit first asks: what a unit restored without one is given, since restoring it leaves the half empty.
     #[cfg(feature = "archive")]
-    pub fn with_baseline(mut self, bytes: Cow<'static, [u8]>) -> Self {
+    pub fn with_baseline(mut self, bytes: impl Into<Bytes>) -> Self {
         self.asked = Deferred::stored(bytes);
         self
     }

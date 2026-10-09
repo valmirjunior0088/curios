@@ -7,6 +7,7 @@ mod tests;
 
 use {
     crate::Uncertified,
+    curios_archive::{Bytes, parted},
     curios_utilities::{Source, digest},
     std::{
         path::{Path, PathBuf},
@@ -108,11 +109,11 @@ pub fn segments(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
     (length <= rest.len()).then(|| rest.split_at(length))
 }
 
-/// The bytes of a unit's artifact: the unit as what is compiled after it restores it, then its baseline half, which only a later compile of the same unit reads — behind the first's length, since each half is an archive read from its end.
+/// The bytes of a unit's artifact: the unit as what is compiled after it restores it, then what it stores apart from itself, read by whoever asks — behind the first's length, since each half is an archive read from its end.
 ///
 /// **Two halves by reader, in the one segment a record vouches for.** A slot's record digests its artifact, so both halves are believed together, and a slot stays one file replaced by one rename. What differs is who decodes which: opening a unit decodes the first and keeps the second as bytes.
 ///
-/// A baseline half is framed the same way, a part for each stage that keeps a record: the text's, the elaborator's, then erasure's, each behind the length of the one before ([`Uncertified::baseline_bytes`]).
+/// What a unit stores apart is a part for each reader, every one behind its length ([`Uncertified::apart_bytes`], [`apart_parts`]): its lowered items, each on its own, read by whoever names its declaration; then its baseline half, which only a later compile of the same unit reads, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
 pub fn halved(unit: &[u8], baseline: &[u8]) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(8 + unit.len() + baseline.len());
     bytes.extend_from_slice(&(unit.len() as u64).to_le_bytes());
@@ -122,10 +123,15 @@ pub fn halved(unit: &[u8], baseline: &[u8]) -> Vec<u8> {
     bytes
 }
 
-/// The unit and the baseline half of the artifact `bytes`, or `None` for bytes that are not a unit's artifact. The one place [`halved`]'s layout is read.
+/// The two halves [`halved`] laid out in `bytes`, or `None` for bytes that are no such layout. The one place [`halved`]'s layout is read.
 pub fn halves(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
     let (length, rest) = bytes.split_first_chunk::<8>()?;
     let length = usize::try_from(u64::from_le_bytes(*length)).ok()?;
 
     (length <= rest.len()).then(|| rest.split_at(length))
+}
+
+/// The four parts of what a unit stores apart from itself ([`Uncertified::apart_bytes`]), each a run of the buffer `stored` is in: its lowered items, then the text's, the elaborator's and erasure's parts of its baseline half. `None` for bytes that are no such layout, one cut short among them: every part states its length, and together they are the bytes.
+pub fn apart_parts(stored: &Bytes) -> Option<[Bytes; 4]> {
+    parted(stored)?.try_into().ok()
 }

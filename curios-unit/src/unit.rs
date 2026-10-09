@@ -12,9 +12,9 @@ use {
 
 #[cfg(feature = "archive")]
 use {
-    crate::{halved, halves},
+    crate::{apart_parts, halved, halves},
+    curios_archive::{Bytes, joined},
     curios_core::Sharing,
-    std::borrow::Cow,
 };
 
 /// A unit as its compilation produced it, before the kernel has judged it: everything a [`Unit`] holds except the certifier's record.
@@ -108,40 +108,37 @@ impl Uncertified {
         traces
     }
 
-    /// The bytes of this unit's baseline half, a part for each stage that keeps a record: the text's, then the elaborator's, then erasure's, each behind the length of the one before ([`halved`]).
+    /// The bytes this unit stores apart from itself, each part behind its length ([`joined`]) and read by whoever asks for it: its lowered items, one on its own for each ([`PreparedText::items_bytes`]), then its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
     #[cfg(feature = "archive")]
-    pub fn baseline_bytes(&self) -> Result<Vec<u8>, String> {
-        let later = halved(&self.traces.bytes()?, &self.erased.baseline_bytes()?);
+    pub fn apart_bytes(&self) -> Result<Vec<u8>, String> {
+        let items = self.text.items_bytes()?;
+        let text = self.text.baseline_bytes()?;
+        let traces = self.traces.bytes()?;
+        let erased = self.erased.baseline_bytes()?;
 
-        Ok(halved(&self.text.baseline_bytes()?, &later))
+        Ok(joined(&[&items[..], &text[..], &traces[..], &erased[..]]))
     }
 
-    /// The bytes this unit is imaged as: itself, then its baseline half ([`halved`]).
+    /// The bytes this unit is imaged as: itself, then what it stores apart from itself ([`halved`]).
     #[cfg(feature = "archive")]
     pub fn stored(&self) -> Result<Vec<u8>, String> {
         let unit = curios_archive::to_bytes(self)?;
 
-        Ok(halved(&unit, &self.baseline_bytes()?))
+        Ok(halved(&unit, &self.apart_bytes()?))
     }
 
-    /// This unit with `bytes` as its baseline half ([`Uncertified::baseline_bytes`]), each part read when a compile over the unit first asks — see [`PreparedText::with_baseline`]. `Err` is bytes that hold no baseline half.
+    /// This unit with `bytes` as what it stores apart from itself ([`Uncertified::apart_bytes`]), each part a run of the buffer they are in and read when something first asks for it — see [`PreparedText::with_items`] and [`PreparedText::with_baseline`]. `Err` is bytes that are no such thing.
     #[cfg(feature = "archive")]
-    pub fn with_baseline(self, bytes: Cow<'static, [u8]>) -> Result<Self, String> {
-        /// The three parts of a baseline half, as slices of it.
-        fn parts(bytes: &[u8]) -> Result<[&[u8]; 3], String> {
-            let (text, later) = halves(bytes).ok_or("not a unit's baseline half")?;
-            let (traces, erased) = halves(later).ok_or("not a unit's baseline half")?;
-
-            Ok([text, traces, erased])
-        }
-
-        let [text, traces, erased] = match bytes {
-            Cow::Borrowed(bytes) => parts(bytes)?.map(Cow::Borrowed),
-            Cow::Owned(bytes) => parts(&bytes)?.map(|part| Cow::Owned(part.to_vec())),
-        };
+    pub fn with_apart(self, bytes: impl Into<Bytes>) -> Result<Self, String> {
+        let [items, text, traces, erased] =
+            apart_parts(&bytes.into()).ok_or("not what a unit stores apart from itself")?;
 
         Ok(Self {
-            text: Rc::new(Rc::unwrap_or_clone(self.text).with_baseline(text)),
+            text: Rc::new(
+                Rc::unwrap_or_clone(self.text)
+                    .with_baseline(text)
+                    .with_items(items)?,
+            ),
             erased: Rc::new(Rc::unwrap_or_clone(self.erased).with_baseline(erased)),
             traces: Rc::new(Deferred::stored(traces)),
             ..self
@@ -215,13 +212,7 @@ impl Unit {
         self.unit.traces()
     }
 
-    /// See [`Uncertified::baseline_bytes`].
-    #[cfg(feature = "archive")]
-    pub fn baseline_bytes(&self) -> Result<Vec<u8>, String> {
-        self.unit.baseline_bytes()
-    }
-
-    /// The bytes this unit is stored as: itself, its elaborated module hash-consed in a table of its own ([`Module::shared`]), then its baseline half ([`halved`]).
+    /// The bytes this unit is stored as: itself, its elaborated module hash-consed in a table of its own ([`Module::shared`]), then what it stores apart from itself ([`Uncertified::apart_bytes`]).
     ///
     /// **A stored unit says what its items mean, not where they were written or how they were come by.** A consed module is one node for each structure as it is spelled, under no position, so an item elaborated now and the same item reused from a baseline are the same nodes, and one moved by an edit above it is stored as it was. The fixed prelude's images are consed by the same pass, where they are built.
     ///
@@ -233,17 +224,17 @@ impl Unit {
             certification: Rc::clone(&self.certification),
         })?;
 
-        Ok(halved(&unit, &self.baseline_bytes()?))
+        Ok(halved(&unit, &self.unit.apart_bytes()?))
     }
 
-    /// The unit stored as `artifact` ([`Unit::stored`]): decoded, its baseline half kept as the bytes it is, for the lowering that asks. `Err` is bytes that hold no unit.
+    /// The unit stored as `artifact` ([`Unit::stored`]): decoded, what it stores apart from itself kept as the bytes it is, for whoever asks. `Err` is bytes that hold no unit.
     #[cfg(feature = "archive")]
     pub fn restored(artifact: &[u8]) -> Result<Self, String> {
-        let (unit, baseline) = halves(artifact).ok_or("not a unit's artifact")?;
+        let (unit, apart) = halves(artifact).ok_or("not a unit's artifact")?;
         let restored = curios_archive::from_bytes::<Unit>(unit)?;
 
         Ok(Self {
-            unit: restored.unit.with_baseline(Cow::Owned(baseline.to_vec()))?,
+            unit: restored.unit.with_apart(apart.to_vec())?,
             certification: restored.certification,
         })
     }
