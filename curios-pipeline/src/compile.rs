@@ -660,12 +660,13 @@ fn erase_checked(
     judged: &Judged,
 ) -> Result<curios_ersd::Module, CompileError> {
     let cores = predecessors.cores();
+    let kept = predecessors.projected();
     let erased = predecessors.erased();
 
     let mut linked = erase_program(
         budget,
         *syntax,
-        Erasures::of(&cores, &erased),
+        Erasures::of(&cores, &erased).keeping(&kept),
         &judged.program,
     )
     .map_err(|error| {
@@ -946,16 +947,17 @@ pub fn compile_unit(
         return Err(kernel_refusal(verdict, core.as_module(), &cores, syntax));
     }
 
+    let kept = predecessors.projected();
     let erased = predecessors.erased();
-    let ersd =
-        erase_unit(budget, *syntax, Erasures::of(&cores, &erased), &core).map_err(|error| {
-            CompileError::Failure(error.reports_with(
-                core.as_module(),
-                &cores,
-                syntax,
-                &anchors_of(&lowered, predecessors),
-            ))
-        })?;
+    let scope = Erasures::of(&cores, &erased).keeping(&kept);
+    let ersd = erase_unit(budget, *syntax, scope, &core).map_err(|error| {
+        CompileError::Failure(error.reports_with(
+            core.as_module(),
+            &cores,
+            syntax,
+            &anchors_of(&lowered, predecessors),
+        ))
+    })?;
 
     let core = core.into_module();
 

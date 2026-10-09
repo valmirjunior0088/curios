@@ -4,7 +4,7 @@ use {
     curios_abi::ForeignStore,
     curios_archive::Deferred,
     curios_core::{Certification, Module, Places},
-    curios_elab::{ErasedUnit, Traces},
+    curios_elab::{ErasedUnit, Projection, Traces},
     curios_text::PreparedText,
     curios_utilities::Mount,
     std::{cell::OnceCell, rc::Rc},
@@ -36,6 +36,9 @@ pub struct Uncertified {
     /// Where `core` holds each name it defines, made the first time the unit is read by name and kept for as long as it is held: no compilation keys the unit again. Never stored, being read off `core`.
     #[archived_with(curios_archive::Skip)]
     places: Rc<OnceCell<Places>>,
+    /// What erasure has read of `core` out of its universes, made the first time an erasure reads the unit and kept beside its places: no erasure keys the unit again, and a declaration one projected the next finds. Never stored, being read off `core`.
+    #[archived_with(curios_archive::Skip)]
+    projection: Rc<OnceCell<Projection>>,
     /// What each of the unit's items erased to, in identities of its own and naming what another item binds by its name: this unit's alone, saying nothing of the units before it. Why is the crate `README.md`'s "An erased form is its item's".
     erased: Rc<ErasedUnit>,
     /// What each of the unit's declarations asked of the declarations around it as it elaborated: what a later compile of the same sources keeps a declaration's elaboration by.
@@ -52,6 +55,7 @@ impl Uncertified {
             text: Rc::new(text),
             core: Rc::new(core),
             places: Rc::default(),
+            projection: Rc::default(),
             erased: Rc::new(erased),
             traces: Rc::new(Deferred::held(traces)),
         }
@@ -83,6 +87,11 @@ impl Uncertified {
     /// Where this unit's elaborated module holds each name it defines. See the field.
     pub fn places(&self) -> &Places {
         self.places.get_or_init(|| Places::of(&self.core))
+    }
+
+    /// What erasure has read of this unit's elaborated module out of its universes. See the field.
+    pub fn projection(&self) -> &Projection {
+        self.projection.get_or_init(|| Projection::of(&self.core))
     }
 
     /// This unit's items' erased forms — what a later unit's erasure reads how a name is bound from, what a program links, and what a recompile of this unit keeps for the items it does not redo.
@@ -159,6 +168,7 @@ impl Uncertified {
             traces: Rc::new(Deferred::stored(traces)),
             core: Rc::new(Module::stored(module)?),
             places: Rc::default(),
+            projection: Rc::default(),
         })
     }
 
@@ -169,6 +179,7 @@ impl Uncertified {
             text: Rc::clone(&self.text),
             core: Rc::new(self.core.shared(&Sharing::new())),
             places: Rc::default(),
+            projection: Rc::default(),
             erased: Rc::clone(&self.erased),
             traces: Rc::clone(&self.traces),
         }
@@ -212,6 +223,11 @@ impl Unit {
     /// See [`Uncertified::places`].
     pub fn places(&self) -> &Places {
         self.unit.places()
+    }
+
+    /// See [`Uncertified::projection`].
+    pub fn projection(&self) -> &Projection {
+        self.unit.projection()
     }
 
     /// See [`Uncertified::erased`].

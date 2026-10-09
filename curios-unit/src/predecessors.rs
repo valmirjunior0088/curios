@@ -4,7 +4,7 @@ use {
     crate::Unit,
     curios_abi::ForeignStore,
     curios_core::{Anchors, Module, Places},
-    curios_elab::ErasedUnit,
+    curios_elab::{ErasedUnit, Projection},
     curios_text::PreparedText,
 };
 
@@ -48,6 +48,14 @@ impl<'a> Predecessors<'a> {
         self.units
             .iter()
             .map(|unit| (unit.core(), unit.places()))
+            .collect()
+    }
+
+    /// What each predecessor keeps for erasure, beside [`Predecessors::cores`]: where it holds each name, and what has been read of it out of its universes. For `curios-elab`'s `Erasures`: a scope erased over, with nothing keyed for the compile.
+    pub fn projected(&self) -> Vec<(&'a Places, &'a Projection)> {
+        self.units
+            .iter()
+            .map(|unit| (unit.places(), unit.projection()))
             .collect()
     }
 

@@ -2,13 +2,16 @@
 //!
 //! Erasure reads the types its walk is directed by through a reader of its own, and what that reader holds of the unit and of its scope is their *universe-erased* form: universe arguments have no runtime identity, and projecting them out once keeps reduction from specializing a polymorphic body again at every use. [`Projected`] is that form as a scope the reader reads through (`InScope`): a declaration is projected when it is first read, or when it is erased, and never otherwise. An item erased over a unit reads what it reads, and a unit none of whose items is erased again projects nothing.
 //!
+//! **What a unit has been read out of its universes is the unit's to keep** ([`Projection`]). A unit in scope is read by the places it keeps for its names and projected into cells it keeps beside them, so nothing of it is keyed for a compile, and a declaration one erasure projected is projected for every erasure after it for as long as the unit is held.
+//!
 //! **The one door a global comes in by.** The reader starts empty and is handed this view and nothing else, so every definition and registry entry it reads is out of its universes by construction, which the walk relies on: no `Instance` reaches it.
 
 use {
+    super::Erasures,
     crate::{Defined, InScope},
     curios_core::{
-        ConceptDecl, Definition, Global, InductDecl, InductParam, Item, Module, RecGroup,
-        StructDecl, Term, WitnessKey, project_erased_universes,
+        ConceptDecl, Definition, Global, InductDecl, InductParam, Item, Module, Place, Places,
+        RecGroup, StructDecl, Term, WitnessKey, project_erased_universes,
     },
     std::{cell::OnceCell, collections::HashMap},
 };
@@ -101,31 +104,20 @@ fn project_struct(declaration: &StructDecl) -> StructDecl {
     }
 }
 
-/// One unit as erasure reads it.
-#[derive(Debug)]
-struct Unit<'a> {
-    module: &'a Module,
-    /// Where the unit holds each name: its item, and its place among the item's members.
-    places: HashMap<Global, (u32, u32)>,
+/// What erasure has read of one unit out of its universes: a cell for each of its items and each of its registry entries, filled the first time one is read.
+///
+/// **Kept with the unit, as where it holds each name is.** A unit in scope of many compilations is asked for the same declarations by each, so what one projected the next finds, and making the cells is paid once for a unit and not once for a compile. It holds no reference to the module it is of: every read hands it the module, which is its unit's.
+#[derive(Debug, Default)]
+pub struct Projection {
     items: Vec<OnceCell<Erasable>>,
     inducts: HashMap<Global, OnceCell<InductDecl>>,
     structs: HashMap<Global, OnceCell<StructDecl>>,
 }
 
-impl<'a> Unit<'a> {
-    fn of(module: &'a Module) -> Self {
-        let mut places = HashMap::with_capacity(module.items.len());
-        for place in 0..module.items.len() {
-            let item = u32::try_from(place).expect("a unit's items are counted in a u32");
-            for (member, name) in module.items.names(place).into_iter().enumerate() {
-                let member = u32::try_from(member).expect("a group's members are counted in a u32");
-                places.insert(*name, (item, member));
-            }
-        }
-
+impl Projection {
+    /// The cells of `module`, none filled.
+    pub fn of(module: &Module) -> Self {
         Self {
-            module,
-            places,
             items: (0..module.items.len()).map(|_| OnceCell::new()).collect(),
             inducts: module
                 .induct_decls
@@ -140,14 +132,54 @@ impl<'a> Unit<'a> {
         }
     }
 
-    /// The item at `place`, out of its universes.
-    fn item(&self, place: usize) -> &Erasable {
-        self.items[place].get_or_init(|| Erasable::of(&self.module.items[place]))
+    /// The item at `place` of `module`, out of its universes.
+    fn item(&self, module: &Module, place: usize) -> &Erasable {
+        self.items[place].get_or_init(|| Erasable::of(&module.items[place]))
+    }
+}
+
+/// What a unit keeps for erasure, or the same made for one erasure: where the caller holds a bare module and no unit, and for the unit being erased, which no unit holds yet.
+#[derive(Debug)]
+enum Held<'a, T> {
+    Kept(&'a T),
+    Made(Box<T>),
+}
+
+impl<T> std::ops::Deref for Held<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        match self {
+            Held::Kept(kept) => kept,
+            Held::Made(made) => made,
+        }
+    }
+}
+
+/// One unit as erasure reads it: its module, where it holds each name, and what has been read of it out of its universes.
+#[derive(Debug)]
+struct Unit<'a> {
+    module: &'a Module,
+    places: Held<'a, Places>,
+    projection: Held<'a, Projection>,
+}
+
+impl<'a> Unit<'a> {
+    /// `module` with what is made of it for this erasure alone.
+    fn made(module: &'a Module) -> Self {
+        Self {
+            module,
+            places: Held::Made(Box::new(Places::of(module))),
+            projection: Held::Made(Box::new(Projection::of(module))),
+        }
     }
 
     fn definition(&self, name: &Global) -> Option<Defined<'_>> {
-        let (item, member) = *self.places.get(name)?;
-        let erasable = self.item(item as usize);
+        let (item, member) = match self.places.place(name)? {
+            Place::Let(item) => (item, 0),
+            Place::Member { item, member, .. } => (item, member),
+        };
+        let erasable = self.projection.item(self.module, item as usize);
         let (definition, body, universe_context) = match &erasable.item {
             Item::Let(definition) => (definition, &definition.body, &definition.universe_context),
             Item::Rec(rec) => {
@@ -168,6 +200,18 @@ impl<'a> Unit<'a> {
             island: definition.island,
         })
     }
+
+    fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
+        let slot = self.projection.inducts.get(name)?;
+
+        Some(slot.get_or_init(|| project_induct(&self.module.induct_decls[name])))
+    }
+
+    fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
+        let slot = self.projection.structs.get(name)?;
+
+        Some(slot.get_or_init(|| project_struct(&self.module.struct_decls[name])))
+    }
 }
 
 /// The unit being erased and the units in its scope, read out of their universes.
@@ -178,21 +222,34 @@ pub(crate) struct Projected<'a> {
 }
 
 impl<'a> Projected<'a> {
-    /// `scope`'s units, then `unit`, the one being erased.
-    pub(crate) fn over(scope: &[&'a Module], unit: &'a Module) -> Self {
-        Self {
-            units: scope.iter().copied().chain([unit]).map(Unit::of).collect(),
-        }
+    /// `scope`'s units, each read by what its unit keeps for erasure where the scope holds that, then `unit`, the one being erased.
+    pub(crate) fn over(scope: Erasures<'a>, unit: &'a Module) -> Self {
+        let units = scope
+            .cores()
+            .iter()
+            .enumerate()
+            .map(|(place, module)| match scope.kept(place) {
+                Some((places, projection)) => Unit {
+                    module,
+                    places: Held::Kept(places),
+                    projection: Held::Kept(projection),
+                },
+                None => Unit::made(module),
+            })
+            .chain([Unit::made(unit)])
+            .collect();
+
+        Self { units }
     }
 
     /// The item at `place` of the unit being erased, out of its universes: what its erasure walks.
     pub(crate) fn own(&self, place: usize) -> &Item {
-        &self
+        let own = self
             .units
             .last()
-            .expect("the unit being erased is the view's last")
-            .item(place)
-            .item
+            .expect("the unit being erased is the view's last");
+
+        &own.projection.item(own.module, place).item
     }
 }
 
@@ -205,19 +262,17 @@ impl InScope for Projected<'_> {
     }
 
     fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
-        self.units.iter().rev().find_map(|unit| {
-            let slot = unit.inducts.get(name)?;
-
-            Some(slot.get_or_init(|| project_induct(&unit.module.induct_decls[name])))
-        })
+        self.units
+            .iter()
+            .rev()
+            .find_map(|unit| unit.induct_decl(name))
     }
 
     fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
-        self.units.iter().rev().find_map(|unit| {
-            let slot = unit.structs.get(name)?;
-
-            Some(slot.get_or_init(|| project_struct(&unit.module.struct_decls[name])))
-        })
+        self.units
+            .iter()
+            .rev()
+            .find_map(|unit| unit.struct_decl(name))
     }
 
     // Erasure resolves nothing and reports through no survey: a concept and a witness are read by elaboration alone.

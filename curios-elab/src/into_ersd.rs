@@ -37,6 +37,7 @@ mod link;
 use link::*;
 
 mod projected;
+pub use projected::Projection;
 use projected::*;
 
 mod binding;

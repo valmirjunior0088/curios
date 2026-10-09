@@ -94,11 +94,12 @@ pub fn compile_unit_over(
     let certification = rechecked.certification;
 
     // Erasure decides what it keeps by its own record: an erased form stands where the elaborator kept its declaration and what its erasure asked is answered as it was.
+    let views = predecessors.projected();
     let erased = predecessors.erased();
     let ersd = erase_unit_over(
         budget,
         *syntax,
-        Erasures::of(&cores, &erased),
+        Erasures::of(&cores, &erased).keeping(&views),
         &core,
         ErasedBaseline {
             core: baseline.core(),

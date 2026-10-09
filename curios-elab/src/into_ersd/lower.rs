@@ -470,7 +470,7 @@ pub fn erase_unit_over(
         validate_universes_of(module, &|name| {
             !baseline.kept.contains(name) || baseline.erased.held(name).is_none()
         })?;
-        let view = Projected::over(scope.cores(), module);
+        let view = Projected::over(scope, module);
         let context = &mut Retyping::over(budget, syntax, &view);
         erase_items(
             context,
@@ -525,7 +525,7 @@ pub(super) fn projected<'a>(
 ) -> Result<Projected<'a>, Error> {
     validate_universes(module)?;
 
-    Ok(Projected::over(scope.cores(), module))
+    Ok(Projected::over(scope, module))
 }
 
 /// Erase `module`'s items in the order it stores them, each into a fragment of its own and each read out of its universes through `view`, but for those `over` keeps the baseline's erased form of, which are never projected. What erasing each item asked is kept with the unit: of the declarations around it, through the reader's doors, and of each erased form it read how a name is bound in.

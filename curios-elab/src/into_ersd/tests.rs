@@ -1713,7 +1713,7 @@ fn a_proofs_body_is_withheld_from_erasures_reader() {
     )
     .module;
 
-    let view = Projected::over(&[], &unit);
+    let view = Projected::over(Erasures::nothing(), &unit);
     let unfolds = |path| {
         view.definition(&nominal(path))
             .expect("the unit declares it")

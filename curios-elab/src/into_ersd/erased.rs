@@ -9,10 +9,10 @@
 //! **A scope is the units' own, borrowed.** Erasing an item reads another's erased form for one thing, how its name is bound — to nothing at run time, to a constant, to a value or to a function of some arity and interface — and reads it where the name is first used.
 
 use {
-    super::{Binding, Environment},
+    super::{Binding, Environment, Projection},
     crate::{Answered, Question, Traces},
     curios_archive::{Bytes, Deferred},
-    curios_core::{Extent, Free, Global, Item, Module, Trace},
+    curios_core::{Extent, Free, Global, Item, Module, Places, Trace},
     std::{collections::BTreeMap, rc::Rc},
 };
 
@@ -371,6 +371,8 @@ pub(super) struct Held {
 pub struct Erasures<'a> {
     /// Universes are taken as already validated — `curios-prelude` validates the archive as it restores, which is where untrusted bytes become a `Module`, and the value is immutable from then on.
     cores: &'a [&'a Module],
+    /// What each unit keeps for erasure, where the caller holds the units and not their modules alone: where it holds each name, and what has been read of it out of its universes. `None` keys each module for this erasure.
+    kept: Option<&'a [(&'a Places, &'a Projection)]>,
     erased: &'a [&'a ErasedUnit],
 }
 
@@ -388,7 +390,30 @@ impl<'a> Erasures<'a> {
             "a scope pairs each unit's Core with its erased forms",
         );
 
-        Self { cores, erased }
+        Self {
+            cores,
+            kept: None,
+            erased,
+        }
+    }
+
+    /// These units read by what each keeps for erasure, `kept`, in the same order: nothing of a unit is keyed for the erasure, and what it projects of one stays projected.
+    pub fn keeping(self, kept: &'a [(&'a Places, &'a Projection)]) -> Self {
+        assert_eq!(
+            self.cores.len(),
+            kept.len(),
+            "a scope pairs each unit's Core with what the unit keeps for erasure",
+        );
+
+        Self {
+            kept: Some(kept),
+            ..self
+        }
+    }
+
+    /// What the unit at `place` keeps for erasure, where the scope holds it.
+    pub(super) fn kept(&self, place: usize) -> Option<(&'a Places, &'a Projection)> {
+        self.kept.map(|kept| kept[place])
     }
 
     /// The Core each unit was erased from, in dependency order.
