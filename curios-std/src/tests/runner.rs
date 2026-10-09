@@ -4,7 +4,7 @@ use {
     crate::std_directory,
     curios::to_compiled,
     curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold},
-    curios_runtime::{ForeignBindings, MockHost},
+    curios_runtime::{ForeignBindings, MockHost, TestEnd},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::RootKind,
     std::path::PathBuf,
@@ -26,6 +26,15 @@ pub(super) fn run_unit(unit: &str) {
         root.join(format!("{unit}.crs")),
         root.join(unit),
     );
+    let (passed, failures) = outcomes(unit, mounted);
+
+    eprintln!("{unit}: {passed} passed");
+
+    assert!(failures.is_empty(), "\n{failures}");
+}
+
+/// [`run_unit`]'s compile and its runs, over `unit` however it is mounted: how many of its tests passed, and the report of every one that did not.
+pub(super) fn outcomes(unit: &str, mounted: RootSource) -> (usize, String) {
     let entrypoint = Entrypoint::trivial();
     let loader = RootSource::none();
 
@@ -49,27 +58,29 @@ pub(super) fn run_unit(unit: &str) {
         let (system, io) = MockHost::builder()
             .args([b"corpus".as_slice(), index.to_string().as_bytes()])
             .build();
-        let outcome = compiled.run(system, ForeignBindings::empty());
+        let outcome = compiled.run_test(system, ForeignBindings::empty());
         let reported = String::from_utf8_lossy(&io.output()).into_owned();
 
         match outcome {
-            // The guest printed `path: passed` and returned.
-            Ok(0) => passed += 1,
+            // The guest printed `path: passed` and answered that the test held.
+            Ok(TestEnd::Answered(true)) => passed += 1,
             // The guest printed its own outcome line and its report; the body as written is what only the records know, appended beneath it.
-            Ok(_) => {
+            Ok(TestEnd::Answered(false)) => {
                 failures.push_str(&reported);
                 if !record.body.is_empty() {
                     failures.push_str(&format!("{}\n", record.body));
                 }
             }
-            // A trap or a stray exit never reaches the guest's printing, so the line is written here.
+            // An exit never reaches the guest's printing, so the line is written here, and it is a failure whatever its code: a verdict is answered, never exited with.
+            Ok(TestEnd::Exited(code)) => {
+                failures.push_str(&format!("{reported}{}: exited {code}\n", record.path));
+            }
+            // Nor does a trap reach it.
             Err(error) => {
                 failures.push_str(&format!("{reported}{}: {error}\n", record.path));
             }
         }
     }
 
-    eprintln!("{unit}: {passed} passed");
-
-    assert!(failures.is_empty(), "\n{failures}");
+    (passed, failures)
 }

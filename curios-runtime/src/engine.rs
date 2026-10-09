@@ -1,7 +1,7 @@
 use {
     super::{
         Handle, HostOps, Lift, Lower, Mode, Poll, Replied, SerialFlow, SerialOp, SerialParity,
-        StdioMode, anyref_array_type, i8_array_type, longs_array_type, words_array_type,
+        StdioMode, anyref_array_type, bool_of, i8_array_type, longs_array_type, words_array_type,
     },
     curios_abi::{
         ENTRY, ForeignFunction, ForeignStore, HostOp, Namespace, PANIC, WireLeaf, WireOperand,
@@ -315,6 +315,55 @@ impl fmt::Display for PanicTrap {
 
 impl Error for PanicTrap {}
 
+/// What a run answers of how a program ended: one reading where its entry returned, of the result it handed back, and one where `proc/exit` unwound it, of the code. A trap is neither, and is every run's error alike.
+pub(crate) trait Ended: Sized + Send {
+    /// The entry returned `result`, read while the store it lives in is open.
+    fn returned(store: &Store<()>, result: Option<Rooted<AnyRef>>) -> Result<Self, String>;
+
+    /// `proc/exit` ended the run with `code`.
+    fn exited(code: u8) -> Self;
+}
+
+/// A program's exit code: the code it exited with, and `0` where its entry returned. What the entry hands back there is the unit every program's description yields, which says nothing and is not read.
+impl Ended for u8 {
+    fn returned(_: &Store<()>, _: Option<Rooted<AnyRef>>) -> Result<Self, String> {
+        Ok(0)
+    }
+
+    fn exited(code: u8) -> Self {
+        code
+    }
+}
+
+/// How a test program's run ended: with the verdict its entry answered, or by an exit that left it unanswered. An exit is the second whatever its code, so no code is ever read as a verdict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TestEnd {
+    /// The entry returned, answering whether what it ran held.
+    Answered(bool),
+    /// `proc/exit` ended the run with this code before the entry answered.
+    Exited(u8),
+}
+
+/// A test program's entry answers a `Bool` ([`ENTRY`]), read as the reference it is handed back as, and a reference that is none is refused rather than read as a verdict. The unit a program's entry hands back is the reference `false` is, so a module that is no test program is never read as one whose tests held.
+impl Ended for TestEnd {
+    fn returned(store: &Store<()>, result: Option<Rooted<AnyRef>>) -> Result<Self, String> {
+        let refused = || format!("{ENTRY} answered no Bool");
+        let word = result
+            .ok_or_else(refused)?
+            .as_i31(store)
+            .map_err(|error| format!("failed to read what {ENTRY} answered: {error}"))?
+            .ok_or_else(refused)?;
+
+        bool_of(word.get_i32())
+            .map(TestEnd::Answered)
+            .map_err(|_| refused())
+    }
+
+    fn exited(code: u8) -> Self {
+        TestEnd::Exited(code)
+    }
+}
+
 /// A program's machine code as this engine holds it, ready to run.
 ///
 /// **Holding one is what makes a run safe.** Machine code read back from bytes is run on trust, since nothing can check that the bytes are a compiler's output. So the trust is taken once, where a `Compiled` is made, and a run takes none: a program is either compiled on this engine ([`Compiled::compile`](Self::compile), where a compiler is linked) or read back by [`Compiled::deserialize`], whose caller vouches for the bytes.
@@ -346,25 +395,39 @@ impl Compiled {
             bindings,
         )
     }
+
+    /// [`Compiled::run`] for a program compiled as a test program, returning how its run ended: the verdict its entry answered, or the exit that left it unanswered.
+    pub fn run_test<H: HostOps + Send + Sync + 'static>(
+        &self,
+        host: H,
+        bindings: ForeignBindings,
+    ) -> Result<TestEnd, String> {
+        instantiate(
+            shared_engine(),
+            &self.0,
+            sys_impls(Arc::new(host)),
+            bindings,
+        )
+    }
 }
 
-/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning the process exit code. `impls` supplies the `sys`-tier implementations, every builtin row's, and `bindings` the `ffi`-tier ones for the module's own `foreign` declarations. What [`Compiled::run`] does once it has the builtin rows' implementations.
-pub(crate) fn instantiate(
+/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `impls` supplies the `sys`-tier implementations, every builtin row's, and `bindings` the `ffi`-tier ones for the module's own `foreign` declarations. What [`Compiled::run`] does once it has the builtin rows' implementations.
+pub(crate) fn instantiate<E: Ended>(
     engine: &Engine,
     module: &Module,
     impls: ForeignBindings,
     bindings: ForeignBindings,
-) -> Result<u8, String> {
+) -> Result<E, String> {
     on_guest_stack(move || entered(engine, module, impls, bindings))?
 }
 
 /// [`instantiate`], on the thread it is called on.
-fn entered(
+fn entered<E: Ended>(
     engine: &Engine,
     module: &Module,
     impls: ForeignBindings,
     bindings: ForeignBindings,
-) -> Result<u8, String> {
+) -> Result<E, String> {
     let mut linker = Linker::new(engine);
 
     // The namespaces as the emitter spells them — `curios-abi`'s, read rather than restated, so the two ends of the wire cannot drift on the one string they link on.
@@ -415,9 +478,9 @@ fn entered(
         .map_err(|error| format!("failed to access {ENTRY}: {error}"))?;
 
     match function.call(&mut store, ()) {
-        Ok(_) => Ok(0),
+        Ok(result) => E::returned(&store, result),
         Err(error) => match error.downcast_ref::<ExitTrap>() {
-            Some(ExitTrap(code)) => Ok(*code),
+            Some(ExitTrap(code)) => Ok(E::exited(*code)),
             // The trap is the root of the chain and the backtrace a context wrapped around it, so the error's own `Display` shows only the frames; the cause — a refusal's own sentence, or the engine's for a null reference or an exhausted stack — is what a reader needs first.
             None => match error.downcast_ref::<PanicTrap>() {
                 Some(panic) => Err(format!("{panic}\n{error}")),

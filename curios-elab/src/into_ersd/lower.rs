@@ -76,9 +76,9 @@ fn seal_entry(
     lowering.into_erased(&[])
 }
 
-/// The entrypoint boundary: an `Io(T)` tail is a *description*, and the emitted `func/main` is the one place anything forces one.
+/// The entrypoint boundary: an `Io(T)` tail is a *description*, and the emitted `func/main` is the one place anything forces one, handing back what it yields.
 ///
-/// Nothing else in the language may: there is no eliminator from `Io(T)` to `T`, which is what makes every term of non-`Io` type pure by typing. The force is type-directed rather than unconditional so a non-`Io` tail erases unforced — the erasure unit tests state such tails directly. What makes it mandatory in production is `curios-pipeline`, which checks the tail against `Io({})`, so the payload the force yields there is already unit and the entry discards nothing an author wrote. The runtime ignores `func/main`'s result either way: a program's meaning is the effects its description performs.
+/// Nothing else in the language may: there is no eliminator from `Io(T)` to `T`, which is what makes every term of non-`Io` type pure by typing. The force is type-directed rather than unconditional so a non-`Io` tail erases unforced — the erasure unit tests state such tails directly. What makes it mandatory in production is `curios-pipeline`, which checks an authored tail against `Io({})` and a test program's against `Io(Bool)`. A program's meaning is the effects its description performs, so the unit it yields is read by no host; a test program's yield is its verdict, which the runner reads ([`ENTRY`](curios_abi::ENTRY)).
 fn force_entry(
     lowering: &mut Lowering<'_>,
     context: &mut Retyping,
@@ -95,15 +95,13 @@ fn force_entry(
         return Ok(Outcome::Emitted(description));
     }
 
-    let _forced = lowering.bind(
+    Ok(lowering.bind(
         None,
         curios_ersd::Rhs::Apply {
             callee: description,
             arguments: Vec::new(),
         },
-    );
-
-    Ok(Outcome::Emitted(lowering.unit()))
+    ))
 }
 
 impl<'s> Lowering<'s> {

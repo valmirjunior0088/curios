@@ -1,4 +1,4 @@
-//! `curios test`: every declared test of what the target selects — for the governing package entire its library's and then each executable's, and for a library, a program or a loose file its own — each unit compiled as a test program, the synthesized `Test/main` tail in place of the authored one, and every registered test run in an instantiation of its own, `[argv0, index]` as the program's arguments. The guest prints its own outcome line; what only the compiler knows — the failing declaration's body as written, the count line — is printed here from the records the compile hands back.
+//! `curios test`: every declared test of what the target selects — for the governing package entire its library's and then each executable's, and for a library, a program or a loose file its own — each unit compiled as a test program, the synthesized `Test/main` tail in place of the authored one, and every registered test run in an instantiation of its own, `[argv0, index]` as the program's arguments. The guest prints its own outcome line and answers its verdict, which is read off what its entry hands back and never off an exit code; what only the compiler knows — the failing declaration's body as written, the count line — is printed here from the records the compile hands back.
 //!
 //! The store is consulted exactly as `run` consults it: one payload per declared target, filed under a reserved executable name no identifier can spell (it contains `/`), holding the records beside the machine code so a warm run recompiles nothing and still reports everything. A loose program has no store, so its tests are compiled every time.
 
@@ -14,7 +14,7 @@ use {
     curios_abi::ForeignStore,
     curios_package::{Entry, LIBRARY, Selection, Spelling, order},
     curios_pipeline::{Cache, CompileError, EntryTail, Fold, TestRecord},
-    curios_runtime::{Compiled, OsHost},
+    curios_runtime::{Compiled, OsHost, TestEnd},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_utilities::Source,
     curios_verdicts::{Program, Verdicts},
@@ -62,7 +62,7 @@ impl Totals {
     }
 }
 
-/// Run the tests `selection` declares, optionally narrowed to those at or under the path `filter`, each declared target filing what it compiled into a store `access` opens. `Ok(true)` when every selected test passed or proved.
+/// Run the tests `selection` declares, optionally narrowed to those at or under the path `filter`, each declared target filing what it compiled into a store `access` opens. `Ok(true)` when every selected test passed.
 pub(crate) fn run_tests(
     budget: u64,
     selection: Selection,
@@ -454,16 +454,16 @@ fn run_selected(
         // Built per test rather than once: a run takes the registry by value, and a fresh set is a fresh plugin instance — which is what keeps one test's marks in a plugin's memory out of the next one's, the isolation a test run is entitled to.
         let bindings = bindings_of(root, foreigns.clone()).map_err(CompileError::failure)?;
 
-        match compiled.run(OsHost::with_args(arguments), bindings) {
-            // The guest printed `path: proved` or `path: passed` and returned.
-            Ok(0) => unit.passed += 1,
-            // The guest printed `path: failed` and its report, then exited 1; the body as written is what only the records know.
-            Ok(1) => {
+        match compiled.run_test(OsHost::with_args(arguments), bindings) {
+            // The guest printed `path: passed` and answered that the test held.
+            Ok(TestEnd::Answered(true)) => unit.passed += 1,
+            // The guest printed `path: failed` and its report, and answered that the test did not hold; the body as written is what only the records know.
+            Ok(TestEnd::Answered(false)) => {
                 unit.failed += 1;
                 body(record);
             }
-            // The test exited on its own, before the scheduler could report — its line is written here.
-            Ok(code) => {
+            // The test exited on its own, before the scheduler could report — its line is written here, whatever the code: a verdict is answered, never exited with.
+            Ok(TestEnd::Exited(code)) => {
                 unit.exited += 1;
                 println!("{}: exited {code}", record.path);
                 body(record);

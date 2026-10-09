@@ -17,13 +17,14 @@ fn the_description_schedules_every_rung() {
         let an_action() -> Io(Test) =
             let s = Io/pure("x")!;
             Io/pure(Test/equal(s, "x"));
-        Test/main([
+        let _ = Test/main([
             ("/tests/a_bool", () => Test/assert(1 + 1 == 2)),
             ("/tests/doubling", () => Test/equal(double(21), 42)),
             ("/tests/a_failing_equal", () => Test/equal(double(2), 5)),
             ("/tests/an_action", () => Test/perform(an_action)),
             ("/tests/a_failing_action", () => Test/perform(() => Io/pure(Test/assert(false)))),
-        ])
+        ])!;
+        Io/pure(())
         "#),
         b"/tests/a_bool: passed\n/tests/doubling: passed\n/tests/a_failing_equal: failed\n  expected 5 but got 4\n/tests/an_action: passed\n/tests/a_failing_action: failed\n  the condition was false\n"
     );
@@ -41,10 +42,11 @@ fn try_runs_a_fallible_action_and_fails_with_the_error_shown() {
         let missing() -> Try(Io, Io/Error, Test) =
             let m = fs/stat(Path/of_str("nope"))!;
             Try/pure(Test/assert(true));
-        Test/main([
+        let _ = Test/main([
             ("/tests/exists", () => Test/try(exists)),
             ("/tests/missing", () => Test/try(missing)),
-        ])
+        ])!;
+        Io/pure(())
         "#),
         b"/tests/exists: passed\n/tests/missing: failed\n  not_found\n"
     );
@@ -57,10 +59,11 @@ fn an_index_argument_selects_one_test() {
     run_text(
         r#"
         use /std/{Nat, Io, Test};
-        Test/main([
+        let _ = Test/main([
             ("/tests/first", () => Test/assert(true)),
             ("/tests/second", () => Test/assert(2 == 2)),
-        ])
+        ])!;
+        Io/pure(())
         "#,
         system,
     )
@@ -74,7 +77,8 @@ fn spelled_strings_are_quoted_and_escaped() {
     assert_eq!(
         run(r#"
         use /std/{Str, Io, Test};
-        Test/main([("/tests/newline", () => Test/equal("a\n", "a"))])
+        let _ = Test/main([("/tests/newline", () => Test/equal("a\n", "a"))])!;
+        Io/pure(())
         "#),
         b"/tests/newline: failed\n  expected \"a\" but got \"a\\n\"\n"
     );
@@ -89,13 +93,14 @@ fn a_conjunction_takes_the_weakest_rung_and_names_the_first_failure() {
         let counter() -> Io(Test) =
             let _ = /std/print("performed\n")!;
             Io/pure(Test/assert(true));
-        Test/main([
+        let _ = Test/main([
             ("/tests/passing", () => Test/all([Test/equal(1, 1), Test/equal(2, 2)])),
             ("/tests/empty", () => Test/all([])),
             ("/tests/first_failure", () => Test/all([Test/assert(true), Test/equal(2, 3), Test/equal(4, 5)])),
             ("/tests/action_then_verdict", () => Test/all([Test/perform(counter), Test/assert(true)])),
             ("/tests/failure_before_action", () => Test/all([Test/assert(false), Test/perform(counter)])),
-        ])
+        ])!;
+        Io/pure(())
         "#),
         b"/tests/passing: passed\n/tests/empty: passed\n/tests/first_failure: failed\n  case 1: expected 3 but got 2\nperformed\n/tests/action_then_verdict: passed\n/tests/failure_before_action: failed\n  case 0: the condition was false\n"
     );
@@ -234,7 +239,8 @@ fn a_structural_fixture_compares_and_spells() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Io, Option, Test};
-        Test/main([("/tests/options", () => Test/equal(Option/some(3), Option/some(4)))])
+        let _ = Test/main([("/tests/options", () => Test/equal(Option/some(3), Option/some(4)))])!;
+        Io/pure(())
         "#),
         b"/tests/options: failed\n  expected Option/some(4) but got Option/some(3)\n"
     );
@@ -317,7 +323,7 @@ fn declared_tests_schedule_through_the_synthesized_tail() {
 
 #[test]
 fn a_unit_with_no_tests_runs_nothing() {
-    // `Test/main([])`: the authored tail is replaced, nothing is scheduled, nothing is written, and the program exits cleanly.
+    // `Test/main([])`: the authored tail is replaced, nothing is scheduled and nothing is written.
     assert_eq!(run_tests_program(r#"/std/print("ran\n")"#), b"");
 }
 

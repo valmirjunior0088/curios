@@ -4,7 +4,7 @@ use {
     super::{error, run_entrypoint},
     crate::to_compiled,
     curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold},
-    curios_runtime::{ForeignBindings, MockHost},
+    curios_runtime::{ForeignBindings, MockHost, TestEnd},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::RootKind,
 };
@@ -195,9 +195,9 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
     assert_eq!(records.len(), 1);
 
     let (system, io) = MockHost::builder().args(["test", "0"]).build();
-    let outcome = compiled.run(system, ForeignBindings::empty());
+    let outcome = compiled.run_test(system, ForeignBindings::empty());
 
-    assert!(matches!(outcome, Ok(0)), "the test ran to {outcome:?}");
+    assert_eq!(outcome, Ok(TestEnd::Answered(true)));
     assert_eq!(
         String::from_utf8_lossy(&io.output()).trim_end(),
         format!("{}: passed", records[0].path)

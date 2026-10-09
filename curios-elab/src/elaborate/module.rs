@@ -1576,10 +1576,12 @@ fn elaborate_module_suffix<'s>(
                 .filter(|test| !poison.holds(&test.name))
                 .cloned()
                 .collect::<Vec<_>>();
-            // A test program is a program, so its tail is judged at the program contract, which `Test/main` is written to meet.
+            // A test program's tail is judged at what `Test/main` answers, whether its tests held: the verdict is the value the entry hands back, where a program's unit says nothing a runner could read.
             synthesized = Entrypoint {
                 body: test_program_tail(context, &scheduled),
-                type_: Some(Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit()))),
+                type_: Some(Term::intrinsic(Intrinsic::io_type(Term::intrinsic(
+                    Intrinsic::BoolType,
+                )))),
             };
             // Choosing each test's discharge reduces bodies under their telescopes; that is spent on the declarations' behalf, so the tail itself still checks on a full budget.
             context.restore_budget();

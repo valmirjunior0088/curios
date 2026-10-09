@@ -69,7 +69,7 @@ mod wasm_conformance;
 use {
     crate::{run_wasm, to_compiled},
     curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold, Stage, compile_with_prelude},
-    curios_runtime::{Compiled, ForeignBindings, HostOps, MockHost},
+    curios_runtime::{Compiled, ForeignBindings, HostOps, MockHost, TestEnd},
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -144,7 +144,7 @@ fn error(source: &str) -> String {
     }
 }
 
-/// Compile `source` as its own test program — the synthesized `Test/main` tail over its declared tests in place of the authored one — and run it under a fresh mock host with no arguments, returning what it wrote. Success is asserted: a fixture about a failing run reaches for the pieces itself.
+/// Compile `source` as its own test program — the synthesized `Test/main` tail over its declared tests in place of the authored one — and run it under a fresh mock host with no arguments, returning what it wrote. That it ran to an answer is asserted, and what it answered is not: a fixture about a verdict reaches for the pieces itself.
 fn run_tests_program(source: &str) -> Vec<u8> {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
     let (module, _foreigns, _records) = Fold::new(DEFAULT_STEP_BUDGET, &[], None)
@@ -157,8 +157,14 @@ fn run_tests_program(source: &str) -> Vec<u8> {
         )
         .expect("fixture compiles as a test program");
 
+    let compiled = to_compiled(&module).expect("the test program compiles");
+
     let (system, io) = MockHost::builder().build();
-    run_wasm(&module, system, ForeignBindings::empty()).expect("the test program runs");
+    let outcome = compiled.run_test(system, ForeignBindings::empty());
+    assert!(
+        matches!(outcome, Ok(TestEnd::Answered(_))),
+        "the test program ran to {outcome:?}"
+    );
 
     io.output().to_vec()
 }

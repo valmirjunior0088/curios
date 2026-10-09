@@ -116,22 +116,18 @@ let run_all(tests: List({Str, () -> Test})) -> Io(Bool) =
             let here = report(name, body())!;
             Io/pure(earlier && here));
 
---- The tail `curios test` runs: it performs each named test and reports what each came to.
-pub let main(tests: List({Str, () -> Test})) -> Io({}) =
+--- The tail `curios test` runs: it performs each named test, reports what each came to, and answers whether every one held.
+pub let main(tests: List({Str, () -> Test})) -> Io(Bool) =
     let arguments = proc/args!;
     match List/try_get(arguments, 1)
     | some(raw) =>
         match parse_index(raw)
         | some(index) =>
             match List/try_get(tests, index)
-            | some((name, body)) =>
-                let ok = report(name, body())!;
-                match ok | true => Io/pure(()) | false => proc/exit(1) end
-            | none() => proc/exit(1)
+            | some((name, body)) => report(name, body())
+            | none() => Io/pure(false)
             end
-        | none() => proc/exit(1)
+        | none() => Io/pure(false)
         end
-    | none() =>
-        let ok = run_all(tests)!;
-        match ok | true => Io/pure(()) | false => proc/exit(1) end
+    | none() => run_all(tests)
     end;

@@ -56,6 +56,27 @@ fn every_corpus_unit_is_mounted() {
     assert_eq!(headers, mounted);
 }
 
+/// A verdict is what a test program answers, so a corpus test that exits has reported nothing and fails whatever its code: read as a verdict, an exit of `0` would pass a test that asserts nothing.
+#[test]
+fn a_test_that_exits_before_it_reports_fails_whatever_its_code() {
+    let mut unit = RootSource::supplied();
+    unit.insert_root(
+        "exits",
+        RootKind::Ordinary,
+        "use /std/{Test, proc};\n\ntest quits_early =\n    Test/perform(() => proc/exit(@Test, 0));\n\ntest fails_quietly =\n    Test/perform(() => proc/exit(@Test, 1));\n"
+            .parse()
+            .expect("the unit parses"),
+    );
+
+    let (passed, failures) = outcomes("exits", unit);
+
+    assert_eq!(passed, 0);
+    assert_eq!(
+        failures,
+        "/exits/quits_early: exited 0\n/exits/fails_quietly: exited 1\n"
+    );
+}
+
 /// Every `.crs` file under `directory`, at any depth, in path order.
 fn sources_under(directory: PathBuf) -> Vec<PathBuf> {
     let mut sources = Vec::new();

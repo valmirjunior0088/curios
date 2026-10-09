@@ -107,7 +107,7 @@ impl Lift for u8 {
 }
 
 /// A `Bool`'s word, `0` or `1` and nothing else.
-fn bool_of(word: i32) -> Result<bool, wasmtime::Error> {
+pub(crate) fn bool_of(word: i32) -> Result<bool, wasmtime::Error> {
     match word {
         0 => Ok(false),
         1 => Ok(true),

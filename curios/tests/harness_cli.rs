@@ -149,6 +149,40 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
     assert_eq!(output.status.code(), Some(1));
 }
 
+/// A verdict is what a test program answers, so a test's own exit is never read as one: a test that exits before it reports has not passed at `0`, and at `1` is not the failure a report makes.
+#[test]
+fn a_test_that_exits_before_it_reports_is_exited_whatever_its_code() {
+    let root = temporary("exits");
+    write(
+        &root,
+        "curios.toml",
+        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+    );
+    write(
+        &root,
+        "lib.crs",
+        r#"use /std/{Test, proc};
+
+test quits_early =
+    Test/perform(() => proc/exit(@Test, 0));
+
+test fails_quietly =
+    Test/perform(() => proc/exit(@Test, 1));
+"#,
+    );
+    write(&root, "app.crs", "/std/print(\"ran\\n\")\n");
+
+    let output = curios(&root, &["test"]);
+
+    assert_eq!(
+        stdout(&output),
+        "/app/quits_early: exited 0\n    Test/perform(() => proc/exit(@Test, 0))\n/app/fails_quietly: exited 1\n    Test/perform(() => proc/exit(@Test, 1))\n0 passed, 0 failed, 2 exited\n",
+        "stderr: {}",
+        stderr(&output)
+    );
+    assert_eq!(output.status.code(), Some(1));
+}
+
 #[test]
 fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
     let root = project("filter");

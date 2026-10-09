@@ -269,7 +269,7 @@ fn dispatch() -> Result<(), Failure> {
                 process::exit(i32::from(code));
             }
         }
-        // Exit 1 on any failing, trapping or exiting test, exactly as a failing compile exits 1 and a goal batch exits 2 — 0 means every selected test passed or proved.
+        // Exit 1 on any failing, trapping or exiting test, exactly as a failing compile exits 1 and a goal batch exits 2 — 0 means every selected test passed.
         Mode::Test {
             filter,
             elaboration,

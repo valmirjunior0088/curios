@@ -257,6 +257,8 @@ pub enum Namespace {
 pub const PANIC: &str = "panic";
 
 /// The one export both ends link on: the entrypoint the emitter exports and the runtime looks up to run a program. It spells the entry function's own name under the compiler's naming scheme, so a module dump reads as it links — but the name is a contract stated here, not a consequence of that scheme or of the hint the entry happens to carry, so no debug name decides a wire string.
+///
+/// The entry takes nothing and hands back what the program's description yields, as one reference. A program's yields the unit, which no host reads. A test program's yields a `Bool`, whether every test it ran held, as the reference a `Bool` is boxed into: the i31 `0` or `1`.
 pub const ENTRY: &str = "func/main";
 
 impl Namespace {
